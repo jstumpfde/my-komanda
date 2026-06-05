@@ -9,13 +9,30 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
+import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
-import { Loader2, User, Mail, Lock, Shield, Save, Eye, EyeOff, Camera, Trash2 } from "lucide-react"
+import { Loader2, User, Mail, Lock, Shield, Save, Eye, EyeOff, Camera, Trash2, Clock } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
+import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth"
+import type { UserCustomSchedule } from "@/lib/db/schema"
 
 // ─── Helpers ──────────────────────────────────────────────────
+
+const WEEKDAY_IDS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const
+const WEEKDAY_SHORT: Record<string, string> = { mon: "Пн", tue: "Вт", wed: "Ср", thu: "Чт", fri: "Пт", sat: "Сб", sun: "Вс" }
+const HALF_HOURS = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}:00`)
+  .flatMap((h) => [h, h.replace(":00", ":30")])
+
+type ScheduleDay = { active: boolean; start: string; end: string }
+const DEFAULT_DAYS: Record<string, ScheduleDay> = {
+  mon: { active: true, start: "09:00", end: "18:00" }, tue: { active: true, start: "09:00", end: "18:00" },
+  wed: { active: true, start: "09:00", end: "18:00" }, thu: { active: true, start: "09:00", end: "18:00" },
+  fri: { active: true, start: "09:00", end: "18:00" }, sat: { active: false, start: "10:00", end: "15:00" },
+  sun: { active: false, start: "10:00", end: "15:00" },
+}
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Администратор",
@@ -40,6 +57,7 @@ interface UserProfile {
   role: string
   companyId: string | null
   avatarUrl: string | null
+  customSchedule?: UserCustomSchedule | null
 }
 
 export default function ProfileSettingsPage() {
@@ -68,6 +86,29 @@ export default function ProfileSettingsPage() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Личный рабочий график (users.custom_schedule)
+  const [scheduleDays, setScheduleDays] = useState<Record<string, ScheduleDay>>(DEFAULT_DAYS)
+  const [savingSchedule, setSavingSchedule] = useState(false)
+
+  const updateScheduleDay = (dayId: string, patch: Partial<ScheduleDay>) =>
+    setScheduleDays(prev => ({ ...prev, [dayId]: { ...(prev[dayId] ?? DEFAULT_DAYS[dayId]), ...patch } }))
+
+  const handleSaveSchedule = async () => {
+    setSavingSchedule(true)
+    try {
+      const res = await fetch("/api/auth/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customSchedule: { enabled: true, days: scheduleDays } }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) { toast.error(json.error ?? "Ошибка сохранения"); return }
+      setProfile(prev => prev ? { ...prev, customSchedule: { enabled: true, days: scheduleDays } } : prev)
+      toast.success("Рабочий график сохранён")
+    } catch { toast.error("Ошибка сети") }
+    finally { setSavingSchedule(false) }
+  }
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -106,6 +147,9 @@ export default function ProfileSettingsPage() {
         setProfile(p)
         setName(p.name ?? "")
         setAvatarUrl((p as unknown as { avatarUrl?: string }).avatarUrl ?? null)
+        if (p.customSchedule?.days) {
+          setScheduleDays({ ...DEFAULT_DAYS, ...p.customSchedule.days })
+        }
       })
       .catch(() => {
         // Fallback to session data
@@ -469,6 +513,57 @@ export default function ProfileSettingsPage() {
                     }
                     {savingPassword ? "Смена пароля..." : "Сменить пароль"}
                   </Button>
+                </CardContent>
+              </Card>
+
+              {/* ═══ Мой рабочий график ══════════════════════════
+                  Личный график сотрудника (users.custom_schedule).
+                  Раньше редактировался на /settings/schedule через
+                  несуществующий /api/team/[id] — перенесён сюда, в
+                  настройки самого сотрудника, и сохраняется через /api/auth/me. */}
+              <Card>
+                <CardHeader className="pb-2 pt-4 px-5">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Clock className="w-4 h-4" />
+                    Мой рабочий график
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-5 pb-4 pt-0">
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Индивидуальные рабочие дни и часы. Если не задавать — действует общий график компании.
+                  </p>
+                  <div className="space-y-1">
+                    {WEEKDAY_IDS.map((dayId, di) => {
+                      const d = scheduleDays[dayId] ?? DEFAULT_DAYS[dayId]
+                      return (
+                        <div key={dayId} className={cn("grid grid-cols-[44px_44px_1fr] items-center py-1.5", di % 2 !== 0 && "bg-muted/20 -mx-2 px-2 rounded")}>
+                          <Switch checked={d.active} onCheckedChange={v => updateScheduleDay(dayId, { active: v })} />
+                          <span className={cn("text-sm font-medium", !d.active && "text-muted-foreground")}>{WEEKDAY_SHORT[dayId]}</span>
+                          {d.active ? (
+                            <div className="flex items-center gap-2">
+                              <Select value={d.start} onValueChange={v => updateScheduleDay(dayId, { start: v })}>
+                                <SelectTrigger className="w-24 h-7 text-sm bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
+                                <SelectContent>{HALF_HOURS.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
+                              </Select>
+                              <span className="text-muted-foreground text-xs">—</span>
+                              <Select value={d.end} onValueChange={v => updateScheduleDay(dayId, { end: v })}>
+                                <SelectTrigger className="w-24 h-7 text-sm bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
+                                <SelectContent>{HALF_HOURS.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
+                              </Select>
+                            </div>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">Выходной</span>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div className="flex justify-end pt-3">
+                    <Button size="sm" className="gap-2" onClick={handleSaveSchedule} disabled={savingSchedule || loadingProfile}>
+                      {savingSchedule ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                      Сохранить график
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
 

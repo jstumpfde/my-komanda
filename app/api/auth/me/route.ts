@@ -19,6 +19,7 @@ export async function GET() {
         role: users.role,
         companyId: users.companyId,
         avatarUrl: users.avatarUrl,
+        customSchedule: users.customSchedule,
         createdAt: users.createdAt,
       })
       .from(users)
@@ -49,10 +50,20 @@ export async function PATCH(req: NextRequest) {
       newEmail?: unknown
       currentPassword?: unknown
       newPassword?: unknown
+      customSchedule?: unknown
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updates: Record<string, any> = {}
+
+    // ── customSchedule (личный график сотрудника, Профиль) ──
+    if (body.customSchedule !== undefined) {
+      const cs = body.customSchedule
+      if (cs !== null && (typeof cs !== "object" || Array.isArray(cs))) {
+        return apiError("'customSchedule' должен быть объектом", 400)
+      }
+      updates.customSchedule = cs
+    }
 
     // ── companyId ──────────────────────────────────────────
     if (body.companyId !== undefined) {

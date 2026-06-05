@@ -148,6 +148,29 @@ export interface CompanyHiringDefaults {
   }
 }
 
+// ── CompanyWorkSchedule (drizzle/0176) ──
+// Standalone-расписание компании (/settings/schedule). Отдельное от can-send-now
+// (vacancies.schedule_*), календаря и hiring-settings — см. memory
+// schedule-three-systems-keep-separate. Просто хранит своё значение.
+export interface CompanyWorkSchedule {
+  schedule?: { enabled: boolean; from: string; to: string }[] // 7 строк, Пн..Вс
+  timezone?: string
+  country?:  string
+  lunch?:    { enabled: boolean; from: string; to: string }
+  customHolidays?: { id: string; date: string; name: string }[]
+  absences?: {
+    id: string; employee: string; type: string
+    dateFrom: string; dateTo: string; status: string; comment: string
+  }[]
+}
+
+// Индивидуальный рабочий график сотрудника (users.custom_schedule).
+// Настраивается самим сотрудником в Профиле.
+export interface UserCustomSchedule {
+  enabled: boolean
+  days: Record<string, { active: boolean; start: string; end: string }>
+}
+
 export const companies = pgTable("companies", {
   id:                 uuid("id").primaryKey().defaultRandom(),
   name:               text("name").notNull(),
@@ -250,6 +273,10 @@ export const companies = pgTable("companies", {
   trashRetentionDays:       integer("trash_retention_days").notNull().default(30),
   // Дефолты найма (расписание/webhooks/битрикс/хранение/стоп-факторы/автоматизация) (drizzle/0156)
   hiringDefaultsJson:       jsonb("hiring_defaults_json").$type<CompanyHiringDefaults>().notNull().default({}),
+  // Standalone-расписание компании (/settings/schedule) — отдельное хранилище
+  // общего рабочего времени. НЕ связано с can-send-now (vacancies.schedule_*),
+  // календарём, hiring-settings. Миграция 0176. См. schedule-three-systems-keep-separate.
+  workScheduleJson:         jsonb("work_schedule_json").$type<CompanyWorkSchedule>().notNull().default({}),
   // Корзина компаний (миграция 0148): NULL — активна; не-NULL — в корзине,
   // cron trash-cleanup удалит навсегда через trash_retention_days. Признак
   // корзины — deleted_at (как у вакансий), отдельного статуса не вводим.
@@ -281,7 +308,7 @@ export const users = pgTable("users", {
   avatarUrl: text("avatar_url"),
   position: text("position"),                  // реальная должность (не роль в системе)
   permissions: jsonb("permissions").default("{}"), // { manage_company, manage_team, manage_billing, ... }
-  customSchedule: jsonb("custom_schedule"),          // { enabled, days: { mon: { active, start, end }, ... } }
+  customSchedule: jsonb("custom_schedule").$type<UserCustomSchedule>(),  // график сотрудника (Профиль)
   telegramChatId: text("telegram_chat_id"),
   isActive: boolean("is_active").default(true),
   // Корзина пользователей (миграция 0152): soft-delete для очистки списка
