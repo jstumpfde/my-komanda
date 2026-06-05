@@ -18,7 +18,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
-import {Settings, Clock, Save, Bell, GitBranch, MessageSquare, ShieldAlert, Plus, Pencil, Trash2, Palette, Plug, ChevronDown, ChevronUp} from "lucide-react"
+import {Settings, Clock, Save, Bell, GitBranch, MessageSquare, ShieldAlert, Plus, Pencil, Trash2, Palette, Plug, ChevronDown, ChevronUp, GripVertical} from "lucide-react"
 import { toast } from "sonner"
 import { IntegrationsContent } from "@/components/hr/integrations-content"
 import { AiAbuseModeSettings } from "@/components/company/ai-abuse-mode-settings"
@@ -214,6 +214,7 @@ export default function HiringSettingsPage() {
   // O1: компания по умолчанию ("" = основная №1, иначе id бренда).
   const [defaultBrandCompanyId, setDefaultBrandCompanyId] = useState("")
   const [brandsExpanded, setBrandsExpanded] = useState(false)
+  const [dragBrandId, setDragBrandId] = useState<string | null>(null)
   const chooseDefaultCompany = async (id: string) => {
     setDefaultBrandCompanyId(id)
     try { await patchHiringDefaults({ defaultBrandCompanyId: id }); toast.success("Компания по умолчанию сохранена") }
@@ -250,6 +251,18 @@ export default function HiringSettingsPage() {
     if (to < 0 || to >= brandCompanies.length) return
     const list = [...brandCompanies]
     ;[list[idx], list[to]] = [list[to], list[idx]]
+    persistCompanies(list)
+  }
+  // Drag-and-drop: перетащить dragBrandId на позицию targetId.
+  const dropBrandOn = (targetId: string) => {
+    if (!dragBrandId || dragBrandId === targetId) { setDragBrandId(null); return }
+    const from = brandCompanies.findIndex(c => c.id === dragBrandId)
+    const to = brandCompanies.findIndex(c => c.id === targetId)
+    setDragBrandId(null)
+    if (from < 0 || to < 0) return
+    const list = [...brandCompanies]
+    const [moved] = list.splice(from, 1)
+    list.splice(to, 0, moved)
     persistCompanies(list)
   }
 
@@ -793,41 +806,62 @@ export default function HiringSettingsPage() {
                   <Switch checked={showCompanySelector} onCheckedChange={toggleCompanySelector} />
                 </div>
 
-                {/* Основная компания: название (из профиля) + описание (кандидатам). Всегда. */}
-                <div className="rounded-lg border p-3 space-y-2 bg-muted/20">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-semibold truncate">{mainBrandName || "Основная компания"}</span>
-                    <span className="text-[10px] text-muted-foreground shrink-0">основная · название из профиля</span>
+                {/* Основная компания (название из профиля + описание кандидатам).
+                    Показываем: когда мультикомпания ВЫКЛ, либо когда список развёрнут. */}
+                {(!showCompanySelector || brandsExpanded) && (
+                  <div className="rounded-lg border p-3 space-y-2 bg-muted/20">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold truncate">{mainBrandName || "Основная компания"}</span>
+                      <span className="text-[10px] text-muted-foreground shrink-0">основная · название из профиля</span>
+                    </div>
+                    <Label className="text-xs">Описание (показывается кандидатам в блоке «О компании»)</Label>
+                    <Textarea
+                      value={companyDescription}
+                      onChange={e => setCompanyDescription(e.target.value)}
+                      placeholder="Кратко о компании для кандидатов: чем занимаетесь, чем интересны соискателю…"
+                      rows={5}
+                      className="text-sm bg-[var(--input-bg)]"
+                    />
+                    <div className="flex items-center justify-between">
+                      {showCompanySelector ? (
+                        <label className="flex items-center gap-2 text-xs cursor-pointer">
+                          <Checkbox checked={defaultBrandCompanyId === ""} onCheckedChange={() => chooseDefaultCompany("")} />
+                          По умолчанию
+                        </label>
+                      ) : <span />}
+                      <Button size="sm" className="h-8 text-xs gap-1.5" onClick={saveCompanyDescription} disabled={savingCompanyDesc}>
+                        <Save className="size-3.5" />Сохранить
+                      </Button>
+                    </div>
                   </div>
-                  <Label className="text-xs">Описание (показывается кандидатам в блоке «О компании»)</Label>
-                  <Textarea
-                    value={companyDescription}
-                    onChange={e => setCompanyDescription(e.target.value)}
-                    placeholder="Кратко о компании для кандидатов: чем занимаетесь, чем интересны соискателю…"
-                    rows={5}
-                    className="text-sm bg-[var(--input-bg)]"
-                  />
-                  <div className="flex items-center justify-between">
-                    {showCompanySelector ? (
-                      <label className="flex items-center gap-2 text-xs cursor-pointer">
-                        <Checkbox checked={defaultBrandCompanyId === ""} onCheckedChange={() => chooseDefaultCompany("")} />
-                        По умолчанию
-                      </label>
-                    ) : <span />}
-                    <Button size="sm" className="h-8 text-xs gap-1.5" onClick={saveCompanyDescription} disabled={savingCompanyDesc}>
-                      <Save className="size-3.5" />Сохранить
-                    </Button>
-                  </div>
-                </div>
+                )}
 
-                {/* Доп. компании — только при тумблере. Сворачиваемый список. */}
+                {/* Мультикомпания ВКЛ + СВЁРНУТО → показываем компанию по умолчанию (одну). */}
+                {showCompanySelector && !brandsExpanded && (() => {
+                  const defBrand = defaultBrandCompanyId ? brandCompanies.find(c => c.id === defaultBrandCompanyId) : null
+                  const dName = defBrand ? (defBrand.name || "Без названия") : (mainBrandName || "Основная компания")
+                  const dDesc = defBrand ? (defBrand.description ?? "") : companyDescription
+                  return (
+                    <div className="rounded-lg border p-3 space-y-1.5 bg-muted/20">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-semibold truncate">{dName}</span>
+                        <span className="inline-flex items-center gap-1 text-[10px] rounded px-1.5 py-0.5 bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 shrink-0">По умолчанию</span>
+                      </div>
+                      {dDesc
+                        ? <p className="text-xs text-muted-foreground line-clamp-2">{dDesc}</p>
+                        : <p className="text-xs text-muted-foreground/70 italic">Без описания</p>}
+                    </div>
+                  )
+                })()}
+
+                {/* Доп. компании — только при тумблере. Сворачиваемый список + drag-and-drop. */}
                 {showCompanySelector && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2">
                       <button type="button" onClick={() => setBrandsExpanded(e => !e)}
                         className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground">
                         <ChevronDown className={cn("w-4 h-4 transition-transform", brandsExpanded && "rotate-180")} />
-                        Дополнительные компании ({brandCompanies.length})
+                        {brandsExpanded ? "Свернуть" : `Показать все компании (${brandCompanies.length + 1})`}
                       </button>
                       <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => { setBrandsExpanded(true); addBrandCompany() }}>
                         <Plus className="w-3.5 h-3.5" />Добавить компанию
@@ -837,10 +871,25 @@ export default function HiringSettingsPage() {
                     {brandsExpanded && brandCompanies.length === 0 && (
                       <p className="text-xs text-muted-foreground/70 italic px-1">Пока нет добавленных компаний. Нажмите «Добавить компанию».</p>
                     )}
+                    {brandsExpanded && brandCompanies.length > 1 && (
+                      <p className="text-[11px] text-muted-foreground/70 px-1">Перетащите за «⠿» чтобы поменять порядок.</p>
+                    )}
 
                     {brandsExpanded && brandCompanies.map((c, i) => (
-                      <div key={c.id} className="rounded-lg border p-3 space-y-2 bg-muted/20">
+                      <div key={c.id}
+                        onDragOver={(e) => { if (dragBrandId) e.preventDefault() }}
+                        onDrop={() => dropBrandOn(c.id)}
+                        className={cn("rounded-lg border p-3 space-y-2 bg-muted/20 transition-shadow",
+                          dragBrandId === c.id && "opacity-50", dragBrandId && dragBrandId !== c.id && "ring-1 ring-primary/20")}>
                         <div className="flex items-center gap-2">
+                          <span
+                            draggable
+                            onDragStart={() => setDragBrandId(c.id)}
+                            onDragEnd={() => setDragBrandId(null)}
+                            title="Перетащить"
+                            className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground shrink-0">
+                            <GripVertical className="w-4 h-4" />
+                          </span>
                           <span className="text-[10px] font-semibold text-muted-foreground shrink-0">№{i + 2}</span>
                           <Input value={c.name} onChange={(e) => updateBrandCompany(c.id, { name: e.target.value })}
                             placeholder="Название компании *" className="h-8 text-sm flex-1" />
