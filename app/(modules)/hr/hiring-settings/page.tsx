@@ -14,10 +14,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
-import {Settings, Clock, Save, Bell, GitBranch, MessageSquare, ShieldAlert, Plus, Pencil, Trash2, Palette, Plug, ChevronDown, ChevronUp, Star} from "lucide-react"
+import {Settings, Clock, Save, Bell, GitBranch, MessageSquare, ShieldAlert, Plus, Pencil, Trash2, Palette, Plug, ChevronDown, ChevronUp} from "lucide-react"
 import { toast } from "sonner"
 import { IntegrationsContent } from "@/components/hr/integrations-content"
 import { AiAbuseModeSettings } from "@/components/company/ai-abuse-mode-settings"
@@ -212,6 +213,7 @@ export default function HiringSettingsPage() {
   }
   // O1: компания по умолчанию ("" = основная №1, иначе id бренда).
   const [defaultBrandCompanyId, setDefaultBrandCompanyId] = useState("")
+  const [brandsExpanded, setBrandsExpanded] = useState(false)
   const chooseDefaultCompany = async (id: string) => {
     setDefaultBrandCompanyId(id)
     try { await patchHiringDefaults({ defaultBrandCompanyId: id }); toast.success("Компания по умолчанию сохранена") }
@@ -778,52 +780,65 @@ export default function HiringSettingsPage() {
               </CardContent>
             </Card>
 
-            {/* General toggles */}
+            {/* Компания(и) в анкете вакансии — единый блок без дубля описания:
+                основная (название + описание, всегда) + при тумблере бренды. */}
             <Card className="mb-5 max-w-3xl">
-              <CardContent className="py-4">
+              <CardContent className="py-4 space-y-4">
+                {/* Тумблер мультикомпании */}
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium">Выбор компании в анкете вакансии</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Показывать секцию «Компания» для найма под клиентов (аутсорсинг/рекрутинг)</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Несколько компаний/брендов для найма под клиентов (аутсорсинг/рекрутинг)</p>
                   </div>
                   <Switch checked={showCompanySelector} onCheckedChange={toggleCompanySelector} />
                 </div>
 
+                {/* Основная компания: название (из профиля) + описание (кандидатам). Всегда. */}
+                <div className="rounded-lg border p-3 space-y-2 bg-muted/20">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold truncate">{mainBrandName || "Основная компания"}</span>
+                    <span className="text-[10px] text-muted-foreground shrink-0">основная · название из профиля</span>
+                  </div>
+                  <Label className="text-xs">Описание (показывается кандидатам в блоке «О компании»)</Label>
+                  <Textarea
+                    value={companyDescription}
+                    onChange={e => setCompanyDescription(e.target.value)}
+                    placeholder="Кратко о компании для кандидатов: чем занимаетесь, чем интересны соискателю…"
+                    rows={5}
+                    className="text-sm bg-[var(--input-bg)]"
+                  />
+                  <div className="flex items-center justify-between">
+                    {showCompanySelector ? (
+                      <label className="flex items-center gap-2 text-xs cursor-pointer">
+                        <Checkbox checked={defaultBrandCompanyId === ""} onCheckedChange={() => chooseDefaultCompany("")} />
+                        По умолчанию
+                      </label>
+                    ) : <span />}
+                    <Button size="sm" className="h-8 text-xs gap-1.5" onClick={saveCompanyDescription} disabled={savingCompanyDesc}>
+                      <Save className="size-3.5" />Сохранить
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Доп. компании — только при тумблере. Сворачиваемый список. */}
                 {showCompanySelector && (
-                  <div className="mt-4 pt-4 border-t space-y-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-medium text-muted-foreground">Компании для найма ({brandCompanies.length + 1}/30)</p>
-                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={addBrandCompany}>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <button type="button" onClick={() => setBrandsExpanded(e => !e)}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground">
+                        <ChevronDown className={cn("w-4 h-4 transition-transform", brandsExpanded && "rotate-180")} />
+                        Дополнительные компании ({brandCompanies.length})
+                      </button>
+                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => { setBrandsExpanded(true); addBrandCompany() }}>
                         <Plus className="w-3.5 h-3.5" />Добавить компанию
                       </Button>
                     </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      Отметьте звёздочкой компанию по умолчанию и меняйте порядок стрелками. При создании вакансии HR выбирает, под какую компанию она идёт.
-                    </p>
 
-                    {/* №1 — основная компания (из профиля), карточкой сверху */}
-                    <div className="rounded-lg border p-3 space-y-2 bg-muted/30">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-semibold text-muted-foreground shrink-0">№1</span>
-                        <span className="text-sm font-medium flex-1 truncate">{mainBrandName || "Основная компания (из профиля)"}</span>
-                        <span className="text-[10px] text-muted-foreground shrink-0 hidden sm:inline">основная</span>
-                      </div>
-                      {companyDescription
-                        ? <p className="text-xs text-muted-foreground line-clamp-2">{companyDescription}</p>
-                        : <p className="text-xs text-muted-foreground/70 italic">Описание — в блоке «Описание компании» ниже.</p>}
-                      <div className="flex items-center justify-between pt-1">
-                        <button type="button" onClick={() => chooseDefaultCompany("")}
-                          className={cn("inline-flex items-center gap-1 text-[11px] rounded-md px-2 py-1 border transition-colors",
-                            defaultBrandCompanyId === "" ? "bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/30 dark:border-amber-900" : "text-muted-foreground hover:bg-accent border-transparent")}>
-                          <Star className={cn("w-3 h-3", defaultBrandCompanyId === "" && "fill-amber-400 text-amber-400")} />
-                          {defaultBrandCompanyId === "" ? "По умолчанию" : "Сделать по умолчанию"}
-                        </button>
-                        <span className="text-[10px] text-muted-foreground">настраивается в профиле</span>
-                      </div>
-                    </div>
+                    {brandsExpanded && brandCompanies.length === 0 && (
+                      <p className="text-xs text-muted-foreground/70 italic px-1">Пока нет добавленных компаний. Нажмите «Добавить компанию».</p>
+                    )}
 
-                    {/* Дополнительные компании (№2+) — порядок ↑↓ + дефолт */}
-                    {brandCompanies.map((c, i) => (
+                    {brandsExpanded && brandCompanies.map((c, i) => (
                       <div key={c.id} className="rounded-lg border p-3 space-y-2 bg-muted/20">
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] font-semibold text-muted-foreground shrink-0">№{i + 2}</span>
@@ -845,12 +860,10 @@ export default function HiringSettingsPage() {
                         <Textarea value={c.description ?? ""} onChange={(e) => updateBrandCompany(c.id, { description: e.target.value })}
                           placeholder="Краткое описание для кандидатов" rows={2} className="text-xs" />
                         <div className="flex items-center justify-between">
-                          <button type="button" disabled={!c.name.trim()} onClick={() => chooseDefaultCompany(c.id)}
-                            className={cn("inline-flex items-center gap-1 text-[11px] rounded-md px-2 py-1 border transition-colors disabled:opacity-40",
-                              defaultBrandCompanyId === c.id ? "bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/30 dark:border-amber-900" : "text-muted-foreground hover:bg-accent border-transparent")}>
-                            <Star className={cn("w-3 h-3", defaultBrandCompanyId === c.id && "fill-amber-400 text-amber-400")} />
-                            {defaultBrandCompanyId === c.id ? "По умолчанию" : "Сделать по умолчанию"}
-                          </button>
+                          <label className={cn("flex items-center gap-2 text-xs", !c.name.trim() ? "opacity-40 pointer-events-none" : "cursor-pointer")}>
+                            <Checkbox checked={defaultBrandCompanyId === c.id} onCheckedChange={() => chooseDefaultCompany(c.id)} disabled={!c.name.trim()} />
+                            По умолчанию
+                          </label>
                           <Button size="sm" className="h-7 text-xs gap-1.5" onClick={saveBrandCompany} disabled={!c.name.trim()}>
                             <Save className="w-3.5 h-3.5" />Сохранить
                           </Button>
@@ -859,31 +872,6 @@ export default function HiringSettingsPage() {
                     ))}
                   </div>
                 )}
-              </CardContent>
-            </Card>
-
-            {/* Описание компании — показывается кандидатам в вакансии. */}
-            <Card className="mb-5 max-w-3xl">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Описание компании</CardTitle>
-                <CardDescription>
-                  Показывается кандидатам в вакансии (блок «О компании»). В анкете вакансии
-                  кнопка «Подтянуть из настроек» берёт текст отсюда.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Textarea
-                  value={companyDescription}
-                  onChange={e => setCompanyDescription(e.target.value)}
-                  placeholder="Кратко о компании для кандидатов: чем занимаетесь, чем интересны соискателю…"
-                  rows={5}
-                  className="text-sm bg-[var(--input-bg)]"
-                />
-                <div className="flex justify-end">
-                  <Button size="sm" className="h-8 text-xs gap-1.5" onClick={saveCompanyDescription} disabled={savingCompanyDesc}>
-                    <Save className="size-3.5" />Сохранить
-                  </Button>
-                </div>
               </CardContent>
             </Card>
 
