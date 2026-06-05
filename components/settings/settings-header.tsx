@@ -32,7 +32,7 @@ const navItems: { href: string; label: string; icon: typeof Building2; roles?: U
   { href: "/settings/schedule",      label: "Расписание",     icon: Clock,      group: "Профиль и компания" },
   { href: "/settings/notifications", label: "Уведомления",    icon: Bell,       group: "Служебные" },
   { href: "/settings/billing",       label: "Тариф и оплата", icon: CreditCard, group: "Служебные" },
-  { href: "/settings/legal",         label: "Юр. документы",  icon: ScrollText, roles: ["platform_admin"], group: "Служебные" },
+  { href: "/settings/legal",         label: "Юр. документы",  icon: ScrollText, roles: ["platform_admin", "director"], group: "Служебные" },
 ]
 
 const NOTIFICATIONS = [

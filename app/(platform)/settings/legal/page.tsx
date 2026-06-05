@@ -6,6 +6,7 @@ import { Building2, ScrollText } from "lucide-react"
 import { useAuth } from "@/lib/auth"
 import { LegalEditor } from "@/components/legal/legal-editor"
 import { CompanyPrivacyEditor } from "@/components/legal/company-privacy-editor"
+import { CompanyContactBlock } from "@/components/legal/company-contact-block"
 
 export default function LegalSettingsPage() {
   const { hasAccess } = useAuth()
@@ -34,6 +35,8 @@ export default function LegalSettingsPage() {
       </div>
 
       <div className="space-y-3">
+        {canEditCompanyPolicy && <CompanyContactBlock />}
+
         {canEditCompanyPolicy && (
           <Card>
             <CardHeader className="pb-2 pt-4 px-5">

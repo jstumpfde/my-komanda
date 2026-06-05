@@ -23,6 +23,7 @@ export const SETTINGS_MENU: PlatformMenuItem[] = [
   { name: 'Расписание',         href: '/settings/schedule',      icon: 'Calendar'    },
   { name: 'Уведомления',        href: '/settings/notifications', icon: 'Bell'        },
   { name: 'Тариф и оплата',     href: '/settings/billing',       icon: 'CreditCard'  },
+  { name: 'Юр. документы',      href: '/settings/legal',         icon: 'ScrollText'  },
   { name: 'Роли и доступ',      href: '/settings/roles',         icon: 'Shield'      },
 ]
 

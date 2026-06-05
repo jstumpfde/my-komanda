@@ -179,7 +179,7 @@ export function getVisibleSettings(role: UserRole): string[] {
   switch (role) {
     case "platform_admin": return ["company", "profile", "team", "branding", "integrations", "schedule", "notifications", "billing", "legal"]
     case "platform_manager": return ["profile", "notifications"]
-    case "director": return ["company", "profile", "team", "branding", "integrations", "schedule", "notifications", "billing"]
+    case "director": return ["company", "profile", "team", "branding", "integrations", "schedule", "notifications", "billing", "legal"]
     case "hr_lead": return ["company", "profile", "team", "branding", "integrations", "schedule", "notifications"]
     case "hr_manager": return ["profile", "notifications"]
     case "department_head": return ["profile", "notifications"]

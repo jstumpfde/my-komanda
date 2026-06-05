@@ -33,8 +33,8 @@
 |---|--------|--------|
 | 1 | Роли и доступ — сохранение | ✅ код на develop (ждёт наката на стейджинг) |
 | 2 | Расписание — standalone | ✅ код на develop (миграция 0176 + накат на стейджинг) |
-| — | Аудит company/profile/billing/integrations | ⏳ |
-| 3 | Юр.документы | ⏳ |
+| — | Аудит company/profile/billing/integrations | ✅ company/profile/billing честно персистят; integrations CRM = мок-прототип → в #6 (Bitrix) |
+| 3 | Юр.документы | ✅ код на develop (email-предупреждение, контакт-блок, видимость директору) |
 | 5 | Приглашения | ⏳ |
 | 6 | Единая воронка | ⏳ |
 | 7 | Редизайн hiring-settings | ⏳ |
