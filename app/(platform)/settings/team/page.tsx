@@ -466,16 +466,23 @@ export default function TeamPage() {
         </div>
       </div>
 
-      {/* Ссылка для присоединения */}
+      {/* ═══ Приглашения: часть 1 — публичная ссылка (роль: Сотрудник) ═══ */}
       <Card className="mb-4">
         <CardHeader>
-          <CardTitle className="text-base">Ссылка для присоединения к компании</CardTitle>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Link2 className="w-4 h-4" /> Публичная ссылка <span className="text-xs font-normal text-muted-foreground">(роль: Сотрудник)</span>
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Постоянная ссылка-приглашение компании (без срока). Любой сотрудник
-            присоединится по ней с ролью &laquo;Сотрудник&raquo; — настройте права в карточке.
+            Постоянная ссылка-приглашение компании (без срока и лимита). Любой, кто перейдёт,
+            присоединится с ролью &laquo;Сотрудник&raquo; — права настроите в его карточке.
             Адрес можно менять; он уникален для всего портала.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            <b>Когда использовать:</b> массовый набор сотрудников по одной ссылке. Нужна
+            конкретная роль (HR, директор) или срок/лимит — используйте{" "}
+            <button type="button" onClick={openLinkDialog} className="text-primary hover:underline">персональные приглашения</button>.
           </p>
           {/* Редактируемый код: префикс + поле + сохранить (когда изменён) */}
           <div className="flex items-center gap-2 flex-wrap">
@@ -565,15 +572,20 @@ export default function TeamPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Link2 className="w-5 h-5" />
-              Ссылки-приглашения
+              Персональные приглашения <span className="text-xs font-normal text-muted-foreground">(роль + срок)</span>
             </DialogTitle>
+            <p className="text-xs text-muted-foreground pt-1">
+              Адресные ссылки на любую роль (вплоть до HR/директора) со сроком и лимитом
+              использований. Для массового набора сотрудников проще одна публичная ссылка
+              на странице «Команда».
+            </p>
           </DialogHeader>
 
           {/* Форма создания */}
           <div className="rounded-xl border bg-muted/30 p-4 space-y-4">
             <p className="text-sm font-medium text-foreground">Создать новую ссылку</p>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs">Роль</Label>
                 <Select value={linkRole} onValueChange={v => setLinkRole(v as TeamRole)}>

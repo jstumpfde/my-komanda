@@ -1,12 +1,36 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { db } from "@/lib/db"
-import { inviteLinks, users } from "@/lib/db/schema"
+import { inviteLinks, users, companies } from "@/lib/db/schema"
 import { eq, and, desc } from "drizzle-orm"
 import { randomBytes } from "crypto"
 
 // Роли, которым разрешено создавать ссылки (включая legacy DB-имена)
 const CAN_INVITE = ["platform_admin", "platform_manager", "director", "hr_lead", "admin", "manager"]
+
+// Бренд-слаг компании для читаемого адреса приглашения /invite/{slug}-{random}.
+// Источник: subdomain → joinCode → транслит названия. Только [a-z0-9-], ≤24 симв.
+const TRANSLIT: Record<string, string> = {
+  а:"a",б:"b",в:"v",г:"g",д:"d",е:"e",ё:"e",ж:"zh",з:"z",и:"i",й:"y",к:"k",л:"l",м:"m",
+  н:"n",о:"o",п:"p",р:"r",с:"s",т:"t",у:"u",ф:"f",х:"h",ц:"c",ч:"ch",ш:"sh",щ:"sch",
+  ъ:"",ы:"y",ь:"",э:"e",ю:"yu",я:"ya",
+}
+function companySlug(c: { subdomain?: string | null; joinCode?: string | null; name?: string | null }): string {
+  let raw = (c.subdomain || c.joinCode || "").trim()
+  if (!raw) raw = (c.name || "").toLowerCase().split("").map(ch => TRANSLIT[ch] ?? ch).join("")
+  const slug = raw.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 24)
+  return slug || "team"
+}
+
+// ~10 символов base62 — против перебора достаточно (62^10 ≈ 8·10^17),
+// плюс одноразовость + срок. Не убираем случайную часть целиком.
+const BASE62 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+function shortRandom(len = 10): string {
+  const bytes = randomBytes(len)
+  let out = ""
+  for (let i = 0; i < len; i++) out += BASE62[bytes[i] % 62]
+  return out
+}
 
 // ─── GET /api/invites — список ссылок компании ────────────────────────────────
 
@@ -60,7 +84,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Неверная роль" }, { status: 400 })
   }
 
-  const token = randomBytes(18).toString("base64url") // 24 символа, URL-safe
+  // Читаемый бренд-токен: /invite/{slug}-{random}. Хранится и ищется целиком
+  // (exact match), поэтому парсинг при приёме приглашения не нужен.
+  const [company] = await db
+    .select({ subdomain: companies.subdomain, joinCode: companies.joinCode, name: companies.name })
+    .from(companies)
+    .where(eq(companies.id, session.user.companyId))
+    .limit(1)
+  const token = `${companySlug(company ?? {})}-${shortRandom(10)}`
 
   const expiresAt = expiresInDays
     ? new Date(Date.now() + expiresInDays * 86_400_000)
