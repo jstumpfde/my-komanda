@@ -79,6 +79,12 @@ export const CRON_REGISTRY: CronEntry[] = [
     description: "Обновление истёкших hh OAuth-токенов у дормантных компаний",
   },
   {
+    name: "interview-reminders",
+    endpoint: "/api/cron/interview-reminders",
+    schedule: "0 * * * *",
+    description: "Напоминания об интервью за 24ч/2ч до начала: in-app и Telegram-канал компании по записям календаря",
+  },
+  {
     name: "knowledge-freshness",
     endpoint: "/api/cron/knowledge-freshness",
     schedule: null,
