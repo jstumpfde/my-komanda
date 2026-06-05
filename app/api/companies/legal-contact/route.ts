@@ -16,6 +16,7 @@ export async function GET() {
         legalContactJson: companies.legalContactJson,
         name:             companies.name,
         fullName:         companies.fullName,
+        inn:              companies.inn,
         email:            companies.email,
         phone:            companies.phone,
         legalAddress:     companies.legalAddress,
@@ -29,6 +30,7 @@ export async function GET() {
     // Fallback-значения из основных реквизитов компании (если legalContactJson пуст).
     const fallback: CompanyLegalContact = {
       companyName:  company.fullName || company.name || undefined,
+      inn:          company.inn      || undefined,
       email:        company.email    || undefined,
       phone:        company.phone    || undefined,
       legalAddress: company.legalAddress || undefined,
@@ -53,6 +55,7 @@ export async function PUT(req: NextRequest) {
     // Принимаем только известные поля, игнорируем остальное.
     const data: CompanyLegalContact = {
       companyName:  typeof body.companyName  === "string" ? body.companyName  : undefined,
+      inn:          typeof body.inn          === "string" ? body.inn          : undefined,
       email:        typeof body.email        === "string" ? body.email        : undefined,
       phone:        typeof body.phone        === "string" ? body.phone        : undefined,
       legalAddress: typeof body.legalAddress === "string" ? body.legalAddress : undefined,

@@ -166,6 +166,7 @@ export interface CompanyHiringDefaults {
 // При отсутствии поля используется fallback на companies.* в генераторе.
 export interface CompanyLegalContact {
   companyName?:  string
+  inn?:          string  // ИНН — нужен для генерации политики конфиденциальности
   email?:        string
   phone?:        string
   legalAddress?: string

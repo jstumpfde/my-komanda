@@ -4,11 +4,8 @@ import { useState, useEffect, useCallback } from "react"
 import { Shield, Info, Trash2, ChevronDown, ChevronRight } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Switch } from "@/components/ui/switch"
-import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 
@@ -20,7 +17,7 @@ interface SectionRow {
   key: string
   label: string
   defaults: Record<RoleKey, boolean>
-  /** если задан — ячейка hr_manager читается из трекера тумблера */
+  /** если задан — ячейка hr_manager при клике сохраняет hrManagerTrashAccess */
   controlledByTrash?: true
 }
 
@@ -140,7 +137,7 @@ function useLocalStringSet(key: string): [Set<string>, (id: string, open: boolea
 
 type MatrixOverrides = Partial<Record<RoleKey, Partial<Record<string, boolean>>>>
 
-// Вычисляет итоговое значение ячейки с учётом overrides и тумблера корзины.
+// Вычисляет итоговое значение ячейки с учётом overrides и флага доступа к корзине.
 function resolveCell(
   section: SectionRow,
   role: RoleKey,
@@ -149,7 +146,7 @@ function resolveCell(
 ): boolean {
   // Для Директора — всегда true
   if (role === "director") return true
-  // Корзина — hr_manager читается из тумблера (если нет override)
+  // Корзина — hr_manager читается из hrManagerTrashAccess (если нет override)
   if (section.controlledByTrash && role === "hr_manager") {
     const override = overrides[role]?.[section.key]
     return override !== undefined ? override : trashAccess
@@ -163,10 +160,9 @@ const HIRING_DEFAULTS_URL = "/api/modules/hr/company/hiring-defaults"
 // ─── Компонент ───────────────────────────────────────────────────────────────
 
 export default function RolesPage() {
-  // Тумблер корзины
+  // Флаг доступа HR-менеджеров к корзине (hrManagerTrashAccess)
   const [trashAccessHrManager, setTrashAccessHrManager] = useState(false)
   const [loaded, setLoaded] = useState(false)
-  const [saving, setSaving] = useState(false)
 
   // Overrides матрицы (из сервера)
   const [matrixOverrides, setMatrixOverrides] = useState<MatrixOverrides>({})
@@ -196,32 +192,13 @@ export default function RolesPage() {
     return () => { cancelled = true }
   }, [])
 
-  // Тумблер корзины — оптимистичный апдейт + откат
-  const toggleTrashAccess = async (checked: boolean) => {
-    const prev = trashAccessHrManager
-    setTrashAccessHrManager(checked)
-    setSaving(true)
-    try {
-      const res = await fetch(HIRING_DEFAULTS_URL, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rolePermissions: { hrManagerTrashAccess: checked } }),
-      })
-      if (!res.ok) throw new Error("save failed")
-      toast.success(checked ? "HR-менеджеры теперь видят корзину" : "Доступ к корзине для HR-менеджеров отключён")
-    } catch {
-      setTrashAccessHrManager(prev)
-      toast.error("Не удалось сохранить — попробуйте ещё раз")
-    } finally {
-      setSaving(false)
-    }
-  }
-
   // Изменение ячейки матрицы — оптимистичный апдейт + откат
   const toggleMatrixCell = async (role: RoleKey, sectionKey: string, checked: boolean) => {
     if (role === "director") return // директор всегда включён
 
     const prevOverrides = matrixOverrides
+    const prevTrash = trashAccessHrManager
+
     const newOverrides: MatrixOverrides = {
       ...matrixOverrides,
       [role]: {
@@ -231,45 +208,31 @@ export default function RolesPage() {
     }
     setMatrixOverrides(newOverrides)
 
-    // Если это тумблер корзины + hr_manager — синхронизируем тумблер
+    // Корзина + hr_manager — сохраняем hrManagerTrashAccess
     const section = SECTIONS.find(s => s.key === sectionKey)
-    if (section?.controlledByTrash && role === "hr_manager") {
-      const prevTrash = trashAccessHrManager
+    const isTrashHrManager = section?.controlledByTrash && role === "hr_manager"
+    if (isTrashHrManager) {
       setTrashAccessHrManager(checked)
-      setMatrixSaving(true)
-      try {
-        const res = await fetch(HIRING_DEFAULTS_URL, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            rolePermissions: {
-              hrManagerTrashAccess: checked,
-              matrix: newOverrides,
-            },
-          }),
-        })
-        if (!res.ok) throw new Error("save failed")
-        toast.success(checked ? "HR-менеджеры теперь видят корзину" : "Доступ к корзине для HR-менеджеров отключён")
-      } catch {
-        setMatrixOverrides(prevOverrides)
-        setTrashAccessHrManager(prevTrash)
-        toast.error("Не удалось сохранить — попробуйте ещё раз")
-      } finally {
-        setMatrixSaving(false)
-      }
-      return
     }
 
     setMatrixSaving(true)
     try {
+      const body = isTrashHrManager
+        ? { rolePermissions: { hrManagerTrashAccess: checked, matrix: newOverrides } }
+        : { rolePermissions: { matrix: newOverrides } }
+
       const res = await fetch(HIRING_DEFAULTS_URL, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rolePermissions: { matrix: newOverrides } }),
+        body: JSON.stringify(body),
       })
       if (!res.ok) throw new Error("save failed")
+      if (isTrashHrManager) {
+        toast.success(checked ? "HR-менеджеры теперь видят корзину" : "Доступ к корзине для HR-менеджеров отключён")
+      }
     } catch {
       setMatrixOverrides(prevOverrides)
+      if (isTrashHrManager) setTrashAccessHrManager(prevTrash)
       toast.error("Не удалось сохранить — попробуйте ещё раз")
     } finally {
       setMatrixSaving(false)
@@ -287,31 +250,6 @@ export default function RolesPage() {
         <Info className="size-4 mt-0.5 shrink-0" />
         <p>Роли назначаются в разделе <strong>Настройки → Команда</strong>. Здесь отображается справочник прав доступа для каждой роли.</p>
       </div>
-
-      {/* Тумблер доступа к корзине */}
-      <Card>
-        <CardContent className="p-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center size-9 rounded-lg bg-muted shrink-0">
-                <Trash2 className="size-4 text-muted-foreground" />
-              </div>
-              <div>
-                <Label htmlFor="trash-access" className="text-sm font-medium">Разрешить HR-менеджерам доступ к корзине</Label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  По умолчанию корзина доступна только директору и главному HR. Включите, чтобы HR-менеджеры тоже могли удалять и восстанавливать вакансии.
-                </p>
-              </div>
-            </div>
-            <Switch
-              id="trash-access"
-              checked={trashAccessHrManager}
-              onCheckedChange={toggleTrashAccess}
-              disabled={!loaded || saving}
-            />
-          </div>
-        </CardContent>
-      </Card>
 
       {/* E2 — Роли: раскрываемый список */}
       <div className="space-y-2">
@@ -413,18 +351,11 @@ export default function RolesPage() {
                           <div className="flex items-center gap-1.5">
                             {section.key === "trash" && <Trash2 className="size-3 text-muted-foreground" />}
                             {section.label}
-                            {section.controlledByTrash && (
-                              <span className="text-[9px] text-muted-foreground bg-muted rounded px-1 py-0.5">
-                                тумблер выше
-                              </span>
-                            )}
                           </div>
                         </td>
                         {ROLE_KEYS.map(role => {
                           const value = resolveCell(section, role, matrixOverrides, trashAccessHrManager)
                           const isDirector = role === "director"
-                          // Корзина hr_manager управляется тумблером (и синхронизируется через toggleMatrixCell)
-                          const isControlled = section.controlledByTrash && role === "hr_manager"
                           return (
                             <td key={role} className="py-2 px-3 text-center">
                               <div className="flex items-center justify-center">
@@ -436,10 +367,7 @@ export default function RolesPage() {
                                       toggleMatrixCell(role, section.key, Boolean(checked))
                                     }
                                   }}
-                                  className={cn(
-                                    isDirector && "opacity-60 cursor-not-allowed",
-                                    isControlled && "border-primary/50",
-                                  )}
+                                  className={cn(isDirector && "opacity-60 cursor-not-allowed")}
                                   aria-label={`${section.label} — ${ROLES.find(r => r.role === role)?.label}`}
                                 />
                               </div>

@@ -80,18 +80,19 @@ export async function POST() {
 
     // legalContactJson — приоритет; fallback на основные реквизиты компании.
     const lc = (company.legalContactJson ?? {}) as {
-      companyName?: string; email?: string; phone?: string
+      companyName?: string; inn?: string; email?: string; phone?: string
       legalAddress?: string; responsible?: string
     }
 
     const resolvedEmail = lc.email || company.email
-    if (!company.inn || !resolvedEmail) {
+    const resolvedInn   = lc.inn   || company.inn
+    if (!resolvedInn || !resolvedEmail) {
       return apiError("Заполните ИНН и контактный email перед генерацией шаблона", 400)
     }
 
     const html = generateDefaultPrivacyPolicy({
       name:         lc.companyName || company.fullName || company.name,
-      inn:          company.inn,
+      inn:          resolvedInn,
       legalAddress: lc.legalAddress ?? company.legalAddress,
       email:        resolvedEmail,
       phone:        lc.phone || company.phone || null,

@@ -1,9 +1,12 @@
 "use client"
 
 // Контактный блок компании для /settings/legal: редактируемые реквизиты
-// «куда обращаться» (название/email/телефон/юр.адрес/ответственный),
+// «куда обращаться» (название/ИНН/email/телефон/юр.адрес/ответственный),
 // которые подставляются в публичную политику и документы. Хранятся в
 // companies.legal_contact_json (независимо от основных реквизитов).
+//
+// При первой загрузке (legalContactJson пуст) значения полей берутся из
+// fallback (companies.*) — через legalContact.X ?? fallback.X ?? "".
 
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,10 +17,11 @@ import { Building2, AlertTriangle, Loader2, Save } from "lucide-react"
 
 interface LegalContact {
   companyName?: string
-  email?: string
-  phone?: string
+  inn?:         string
+  email?:       string
+  phone?:       string
   legalAddress?: string
-  responsible?: string
+  responsible?:  string
 }
 
 export function CompanyContactBlock() {
@@ -26,9 +30,8 @@ export function CompanyContactBlock() {
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Значения полей (из legalContactJson; плейсхолдеры — из fallback)
+  // Значения полей инициализируются как legalContact.X ?? fallback.X ?? ""
   const [form, setForm] = useState<LegalContact>({})
-  const [fallback, setFallback] = useState<LegalContact>({})
 
   useEffect(() => {
     let cancelled = false
@@ -37,8 +40,17 @@ export function CompanyContactBlock() {
       .then((data: { ok?: boolean; data?: { legalContact?: LegalContact; fallback?: LegalContact } }) => {
         if (cancelled) return
         const d = data?.data ?? {}
-        setForm(d.legalContact ?? {})
-        setFallback(d.fallback ?? {})
+        const lc = d.legalContact ?? {}
+        const fb = d.fallback ?? {}
+        // Предзаполняем значения из fallback (реквизиты компании), если в legalContactJson ещё ничего нет
+        setForm({
+          companyName:  lc.companyName  ?? fb.companyName  ?? "",
+          inn:          lc.inn          ?? fb.inn          ?? "",
+          email:        lc.email        ?? fb.email        ?? "",
+          phone:        lc.phone        ?? fb.phone        ?? "",
+          legalAddress: lc.legalAddress ?? fb.legalAddress ?? "",
+          responsible:  lc.responsible  ?? "",
+        })
       })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false) })
@@ -70,7 +82,7 @@ export function CompanyContactBlock() {
   }
 
   const emailValue = form.email ?? ""
-  const emailPlaceholder = fallback.email ?? ""
+  const innValue   = form.inn   ?? ""
 
   return (
     <Card>
@@ -95,8 +107,18 @@ export function CompanyContactBlock() {
                 <Input
                   id="lc-company"
                   value={form.companyName ?? ""}
-                  placeholder={fallback.companyName ?? "Название компании"}
+                  placeholder="Название компании"
                   onChange={(e) => set("companyName", e.target.value)}
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="lc-inn" className="text-xs">ИНН</Label>
+                <Input
+                  id="lc-inn"
+                  value={innValue}
+                  placeholder="000000000000"
+                  onChange={(e) => set("inn", e.target.value)}
                   className="h-8 text-sm"
                 />
               </div>
@@ -116,7 +138,7 @@ export function CompanyContactBlock() {
                   id="lc-email"
                   type="email"
                   value={emailValue}
-                  placeholder={emailPlaceholder || "contact@example.ru"}
+                  placeholder="contact@example.ru"
                   onChange={(e) => set("email", e.target.value)}
                   className="h-8 text-sm"
                 />
@@ -126,7 +148,7 @@ export function CompanyContactBlock() {
                 <Input
                   id="lc-phone"
                   value={form.phone ?? ""}
-                  placeholder={fallback.phone ?? "+7 (000) 000-00-00"}
+                  placeholder="+7 (000) 000-00-00"
                   onChange={(e) => set("phone", e.target.value)}
                   className="h-8 text-sm"
                 />
@@ -136,19 +158,28 @@ export function CompanyContactBlock() {
                 <Input
                   id="lc-address"
                   value={form.legalAddress ?? ""}
-                  placeholder={fallback.legalAddress ?? "г. Москва, ул. Примерная, д. 1"}
+                  placeholder="г. Москва, ул. Примерная, д. 1"
                   onChange={(e) => set("legalAddress", e.target.value)}
                   className="h-8 text-sm"
                 />
               </div>
             </div>
 
-            {!emailValue && !emailPlaceholder && (
+            {!emailValue && (
               <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300">
                 <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                 <span>
                   Не указан контактный email — без него не сгенерировать шаблон политики
                   и не на что принимать обращения по персональным данным.
+                </span>
+              </div>
+            )}
+
+            {!innValue && (
+              <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-xs text-blue-800 dark:text-blue-300">
+                <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                <span>
+                  Не указан ИНН — он необходим для генерации шаблона политики конфиденциальности.
                 </span>
               </div>
             )}
