@@ -3,7 +3,7 @@
 // Страница сравнения ответов кандидатов: /hr/vacancies/[id]/compare?ids=a,b,c
 // Два режима: «Матрица» (вопросы × кандидаты) и «По вопросам» (один вопрос —
 // ответы всех). Данные — GET /api/modules/hr/vacancies/[id]/compare.
-import { Suspense, useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -147,6 +147,9 @@ function CompareInner() {
   const [aiGroups, setAiGroups] = useState<Record<string, { label: string; ids: string[] }[]>>({})
   const [groupSel, setGroupSel] = useState<Record<string, string[]>>({})
   const [groupingQid, setGroupingQid] = useState<string | null>(null)
+  // Свёрнутые секции вопросов в фильтре (по ключу). По умолчанию развёрнут «Тест».
+  const [filterCollapsed, setFilterCollapsed] = useState<Set<string>>(new Set())
+  const filterSectionsInit = useRef(false)
   const startColResize = (colId: string, e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation()
     const startX = e.clientX
@@ -238,6 +241,13 @@ function CompareInner() {
       }).filter((q) => q.answered + q.empty > 0),
     })).filter((s) => s.questions.length > 0)
   }, [data, candidates])
+
+  // Инициализация сворачивания секций фильтра: «Тест» развёрнут, остальные свёрнуты.
+  useEffect(() => {
+    if (filterSectionsInit.current || facets.length === 0) return
+    filterSectionsInit.current = true
+    setFilterCollapsed(new Set(facets.filter((s) => !/тест/i.test(s.title)).map((s) => s.key)))
+  }, [facets])
 
   const passesFilter = (c: CandidateHead): boolean => {
     if (testMin != null && (c.testScore == null || c.testScore < testMin)) return false
@@ -530,8 +540,14 @@ function CompareInner() {
           <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
             {facets.map((section) => (
               <div key={section.key} className="space-y-1.5">
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground/60 font-medium">{section.title}</div>
-                {section.questions.map((q) => {
+                <button type="button"
+                  onClick={() => setFilterCollapsed((prev) => { const n = new Set(prev); n.has(section.key) ? n.delete(section.key) : n.add(section.key); return n })}
+                  className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground/60 font-medium hover:text-muted-foreground">
+                  <ChevronDown className={cn("size-3 transition-transform", filterCollapsed.has(section.key) && "-rotate-90")} />
+                  {section.title}
+                  <span className="opacity-60 normal-case">({section.questions.length})</span>
+                </button>
+                {!filterCollapsed.has(section.key) && section.questions.map((q) => {
                   const sel = answerSel[q.id] ?? []
                   return (
                     <div key={q.id} className="flex flex-wrap items-center gap-1.5">
