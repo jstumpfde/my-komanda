@@ -14,6 +14,15 @@ import {
   Globe, Smartphone, Monitor, ChevronRight,
 } from "lucide-react"
 
+export interface MiniFormFieldForHtml {
+  id: string
+  label: string
+  type: string
+  required: boolean
+  placeholder?: string
+  options?: string[]
+}
+
 interface PublishTabProps {
   vacancyTitle: string
   vacancySlug: string
@@ -26,6 +35,7 @@ interface PublishTabProps {
     logo?: string
     slogan?: string
   }
+  formFields?: MiniFormFieldForHtml[]
 }
 
 interface BrandOverride {
@@ -35,10 +45,21 @@ interface BrandOverride {
   slogan?: string
 }
 
+/** Экранирует спецсимволы HTML в пользовательских строках */
+function escHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;")
+}
+
 function generateFullPageHtml(
   brand: BrandConfig,
   vacancy: { title: string; slug: string; city?: string; salaryFrom?: number; salaryTo?: number },
   override?: BrandOverride,
+  formFields?: MiniFormFieldForHtml[],
 ): string {
   const primary = override?.color || brand.primaryColor || "#3b82f6"
   const bg = override?.color ? override.color + "10" : brand.bgColor
@@ -79,8 +100,8 @@ h1{font-size:28px;font-weight:800;color:${text};margin-bottom:8px;line-height:1.
 .highlight:last-child{margin-bottom:0}
 .check{color:${primary};font-size:18px;flex-shrink:0;margin-top:1px}
 .form-card{background:#fff;border-radius:16px;padding:24px;margin-bottom:24px}
-.form-card input{width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:12px;outline:none;transition:border .2s}
-.form-card input:focus{border-color:${primary}}
+.form-card input,.form-card select{width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:12px;outline:none;transition:border .2s;background:#fff;color:${text};appearance:none;-webkit-appearance:none}
+.form-card input:focus,.form-card select:focus{border-color:${primary}}
 .btn{display:block;width:100%;padding:16px;background:${primary};color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;transition:opacity .2s}
 .btn:hover{opacity:.9}
 .footer{font-size:11px;color:${text}40;margin-top:24px}
@@ -98,8 +119,20 @@ ${slogan ? `<p class="slogan">${slogan}</p>\n` : ""}<p class="meta">${vacancy.ci
 <div class="highlight"><span class="check">✓</span>Современный офис${vacancy.city ? " в " + vacancy.city : ""}</div>
 </div>
 <div class="form-card">
-<input type="text" id="hf-name" placeholder="Ваше имя" />
-<input type="tel" id="hf-phone" placeholder="Телефон" />
+<input type="text" id="hf-name" placeholder="Ваше имя" required />
+<input type="tel" id="hf-phone" placeholder="Телефон" required />
+${(formFields ?? []).map(f => {
+  const lbl = escHtml(f.label)
+  const ph = escHtml(f.placeholder || f.label)
+  const fid = escHtml(f.id)
+  const req = f.required ? " required" : ""
+  if (f.type === "select" && f.options && f.options.length > 0) {
+    const opts = f.options.map(o => `<option value="${escHtml(o)}">${escHtml(o)}</option>`).join("")
+    return `<select id="hf-${fid}" data-field="${fid}"${req}><option value="" disabled selected>${lbl}</option>${opts}</select>`
+  }
+  const inputType = f.type === "number" ? "number" : "text"
+  return `<input type="${inputType}" id="hf-${fid}" data-field="${fid}" placeholder="${ph}${f.required ? " *" : ""}"${req} />`
+}).join("\n")}
 <button class="btn" onclick="handleSubmit()">Узнать подробнее →</button>
 </div>
 <p class="footer">Powered by Company24</p>
@@ -108,8 +141,18 @@ ${slogan ? `<p class="slogan">${slogan}</p>\n` : ""}<p class="meta">${vacancy.ci
 function handleSubmit(){
 var n=document.getElementById('hf-name').value;
 var p=document.getElementById('hf-phone').value;
-if(!n||!p){alert('Заполните все поля');return}
-window.location.href='${origin}/vacancy/${vacancy.slug}?name='+encodeURIComponent(n)+'&phone='+encodeURIComponent(p)+'&utm_source=embed';
+if(!n||!p){alert('Заполните имя и телефон');return}
+var extra={};
+document.querySelectorAll('[data-field]').forEach(function(el){
+  var key=el.getAttribute('data-field');
+  var val=el.value;
+  if(el.hasAttribute('required')&&!val){alert('Заполните все обязательные поля');extra=null;return}
+  if(extra!==null)extra[key]=val;
+});
+if(extra===null)return;
+var qs='?name='+encodeURIComponent(n)+'&phone='+encodeURIComponent(p)+'&utm_source=embed';
+if(Object.keys(extra).length>0)qs+='&extra='+encodeURIComponent(JSON.stringify(extra));
+window.location.href='${origin}/vacancy/${vacancy.slug}'+qs;
 }
 </script>
 </body>
@@ -143,7 +186,7 @@ const CMS_INSTRUCTIONS: { id: string; name: string; steps: string[] }[] = [
   ]},
 ]
 
-export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom, salaryTo, brandOverride }: PublishTabProps) {
+export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom, salaryTo, brandOverride, formFields }: PublishTabProps) {
   const [brand, setBrand] = useState<BrandConfig | null>(null)
   const [copied, setCopied] = useState(false)
   const [activeInstruction, setActiveInstruction] = useState<string | null>(null)
@@ -160,7 +203,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
 
   const handleCopyCode = async () => {
     if (!brand) return
-    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride)
+    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields)
     await navigator.clipboard.writeText(html)
     setCopied(true)
     toast.success("HTML-код скопирован в буфер обмена")
@@ -169,7 +212,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
 
   const handlePreview = () => {
     if (!brand) return
-    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride)
+    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields)
     const blob = new Blob([html], { type: "text/html" })
     const url = URL.createObjectURL(blob)
     window.open(url, "_blank")
@@ -178,7 +221,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
 
   const handleDownload = () => {
     if (!brand) return
-    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride)
+    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields)
     const blob = new Blob([html], { type: "text/html" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
@@ -190,8 +233,6 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
   }
 
   if (!brand) return null
-
-  const previewHtml = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride)
 
   return (
     <div className="space-y-6">
@@ -263,6 +304,11 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
                 <div className="space-y-1.5 bg-white rounded-lg p-3">
                   <div className="h-7 rounded-md border bg-white" />
                   <div className="h-7 rounded-md border bg-white" />
+                  {(formFields ?? []).map(f => (
+                    <div key={f.id} className="h-7 rounded-md border bg-white relative overflow-hidden">
+                      <span className="absolute inset-0 flex items-center px-2 text-[9px] text-gray-400 truncate">{f.label}{f.required ? " *" : ""}</span>
+                    </div>
+                  ))}
                   <div className="h-8 rounded-md text-white text-xs font-semibold flex items-center justify-center" style={{ backgroundColor: brand.primaryColor }}>
                     Узнать подробнее →
                   </div>
