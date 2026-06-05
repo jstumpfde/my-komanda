@@ -76,6 +76,8 @@ import { FinalScreensSettings, type FinalScreensConfig } from "@/components/vaca
 import { RecoveryMessageSettings } from "@/components/vacancies/recovery-message-settings"
 import { FirstMessagesChainEditor } from "@/components/vacancies/first-messages-chain-editor"
 import { FunnelBuilder } from "@/components/vacancies/funnel-builder"
+import { FunnelTab } from "@/components/vacancies/funnel-tab"
+import { parsePipeline, type CompanyStageHhActions } from "@/lib/stages"
 import { BrandingOverrideSwitch } from "@/components/vacancies/branding-override-switch"
 import { VacancySettingsProvider, VacancyTabPendingDot, VacancyStickySaveBar, useVacancySectionRegister, useSafeSubTabSwitch, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
 import {
@@ -223,6 +225,16 @@ export default function VacancyPage() {
 
   // ── Real API data ──────────────────────────────────────────
   const { vacancy: apiVacancy, loading: vacancyLoading, error: vacancyError, refetch: refetchVacancy } = useVacancy(id)
+
+  // Company-дефолты hh-маппинга воронки — чтобы редактор стадий показывал их
+  // (а не платформенные) для вакансий без своей воронки.
+  const [companyHhActions, setCompanyHhActions] = useState<CompanyStageHhActions | undefined>(undefined)
+  useEffect(() => {
+    fetch("/api/modules/hr/company/hiring-defaults").then(r => r.ok ? r.json() : null).then(j => {
+      const sha = j?.hiringDefaults?.stageHhActions
+      if (sha && typeof sha === "object") setCompanyHhActions(sha as CompanyStageHhActions)
+    }).catch(() => {})
+  }, [])
 
   // ── Quick-fill: paste text (AI) / from library (template) / upload file ──
   const [textDialogOpen, setTextDialogOpen] = useState(false)
@@ -3446,6 +3458,14 @@ export default function VacancyPage() {
                       </div>
                     </div>
                   )}
+                  {/* Редактор стадий воронки (стадии/цвета/названия + действие в hh.ru
+                      на каждую стадию). Дефолты hh — из company-маппинга. */}
+                  <FunnelTab
+                    key={`funnel-${companyHhActions ? "co" : "pf"}`}
+                    vacancyId={id}
+                    initialPipeline={parsePipeline((apiVacancy?.descriptionJson as { pipeline?: unknown } | undefined)?.pipeline, companyHhActions)}
+                    onSaved={() => refetchVacancy()}
+                  />
                   <AutomationSettings
                     vacancyId={id}
                     descriptionJson={apiVacancy?.descriptionJson}
