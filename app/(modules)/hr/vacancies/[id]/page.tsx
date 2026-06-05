@@ -4240,6 +4240,7 @@ function SettingsSubNavButton({
   return (
     <button
       type="button"
+      data-vacancy-tab
       onClick={() => safeSwitch(tab, onSwitch)}
       className={cn(
         "inline-flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0",
