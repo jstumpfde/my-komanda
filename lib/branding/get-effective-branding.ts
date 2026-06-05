@@ -15,6 +15,8 @@ export interface EffectiveBranding {
   textColor:       string
   accentColor:     string
   fontFamily:      string
+  slogan:          string | null
+  website:         string | null
 }
 
 export interface CompanyBrandingInput {
@@ -23,6 +25,8 @@ export interface CompanyBrandingInput {
   brandBgColor?:      string | null
   brandTextColor?:    string | null
   brandingJson?:      { accentColor?: string; fontFamily?: string } | null
+  brandSlogan?:       string | null
+  website?:           string | null
 }
 
 export interface VacancyBrandingInput {
@@ -36,8 +40,8 @@ const FALLBACK_FONT   = "inter"
 interface LegacyVacancyBranding {
   logo?:    string
   color?:   string
-  // другие поля legacy-структуры (slogan, companySlug...) игнорируем —
-  // они не относятся к цветам/логотипу.
+  slogan?:  string
+  website?: string
 }
 
 export function getEffectiveBranding(
@@ -58,6 +62,8 @@ export function getEffectiveBranding(
         textColor:       company?.brandTextColor || DEFAULT_BRAND.text,
         accentColor:     company?.brandingJson?.accentColor || FALLBACK_ACCENT,
         fontFamily:      company?.brandingJson?.fontFamily || FALLBACK_FONT,
+        slogan:          (typeof vb.slogan === "string" && vb.slogan) ? vb.slogan : (company?.brandSlogan ?? null),
+        website:         (typeof vb.website === "string" && vb.website) ? vb.website : (company?.website ?? null),
       }
     }
   }
@@ -72,6 +78,8 @@ export function getEffectiveBranding(
       textColor:       company.brandTextColor    || DEFAULT_BRAND.text,
       accentColor:     company.brandingJson?.accentColor || FALLBACK_ACCENT,
       fontFamily:      company.brandingJson?.fontFamily  || FALLBACK_FONT,
+      slogan:          company.brandSlogan ?? null,
+      website:         company.website ?? null,
     }
   }
 
@@ -84,5 +92,7 @@ export function getEffectiveBranding(
     textColor:       DEFAULT_BRAND.text,
     accentColor:     FALLBACK_ACCENT,
     fontFamily:      FALLBACK_FONT,
+    slogan:          null,
+    website:         null,
   }
 }

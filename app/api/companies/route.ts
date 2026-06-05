@@ -135,7 +135,16 @@ export async function PUT(req: NextRequest) {
     if (body.postal_code !== undefined) fieldMap.postalCode = body.postal_code
     if (body.founded_year !== undefined) fieldMap.foundedYear = body.founded_year
     if (body.revenue_range !== undefined) fieldMap.revenueRange = body.revenue_range
-    if (body.website !== undefined) fieldMap.website = body.website
+    if (body.website !== undefined) {
+      const trimmedWebsite = (body.website ?? "").trim()
+      if (trimmedWebsite === "") {
+        fieldMap.website = null
+      } else if (!/^https?:\/\/.+/i.test(trimmedWebsite)) {
+        return apiError("Адрес сайта должен начинаться с http:// или https://", 400)
+      } else {
+        fieldMap.website = trimmedWebsite
+      }
+    }
     if (body.crm_status !== undefined) fieldMap.crmStatus = body.crm_status
     if (body.crm_name !== undefined) fieldMap.crmName = body.crm_name
     if (body.sales_scripts !== undefined) fieldMap.salesScripts = body.sales_scripts

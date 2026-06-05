@@ -143,7 +143,7 @@ export interface CompanyHiringDefaults {
   // (аутсорсинг/рекрутинг). Основная компания берётся из профиля; здесь —
   // дополнительные. При создании вакансии HR выбирает компанию (vacancy-side — отдельно).
   showCompanySelector?: boolean
-  brandCompanies?: Array<{ id: string; name: string; slogan?: string; description?: string }>
+  brandCompanies?: Array<{ id: string; name: string; slogan?: string; description?: string; logo?: string; website?: string }>
   // O1: какая компания выбрана по умолчанию при создании вакансии.
   // "" = основная (№1, из профиля), иначе id из brandCompanies.
   defaultBrandCompanyId?: string

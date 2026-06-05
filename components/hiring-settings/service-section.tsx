@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import {
   ShieldAlert, Save, ChevronDown, ChevronUp, GripVertical, Plus, Trash2,
+  Upload, X, ExternalLink, Building2,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -23,6 +24,17 @@ type BrandCompany = {
   name: string
   slogan?: string
   description?: string
+  logo?: string
+  website?: string
+}
+
+// Данные основной компании, загружаемые из /api/companies
+type MainCompanyData = {
+  name: string
+  brandName: string | null
+  logoUrl: string | null
+  brandSlogan: string | null
+  website: string | null
 }
 
 // ─── Компонент ───────────────────────────────────────────────────────────────
@@ -290,9 +302,15 @@ function MultiCompanyBlock({ defaults, onPatch }: {
   const [dragBrandId, setDragBrandId] = useState<string | null>(null)
 
   // Основная компания (из /api/companies)
-  const [mainBrandName, setMainBrandName] = useState("")
+  const [mainCompany, setMainCompany] = useState<MainCompanyData | null>(null)
   const [companyDescription, setCompanyDescription] = useState("")
   const [savingCompanyDesc, setSavingCompanyDesc] = useState(false)
+
+  // Загрузка логотипа бренд-компании: refs для скрытых file input
+  const logoInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+
+  // Состояние загрузки логотипа (id компании → true/false)
+  const [logoUploading, setLogoUploading] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     fetch("/api/companies")
@@ -300,7 +318,13 @@ function MultiCompanyBlock({ defaults, onPatch }: {
       .then(j => {
         if (!j) return
         if (typeof j.companyDescription === "string") setCompanyDescription(j.companyDescription)
-        setMainBrandName((j.brandName || j.name || "").toString())
+        setMainCompany({
+          name: j.name ?? "",
+          brandName: j.brandName ?? null,
+          logoUrl: j.logoUrl ?? null,
+          brandSlogan: j.brandSlogan ?? null,
+          website: j.website ?? null,
+        })
       })
       .catch(() => {})
   }, [])
@@ -345,7 +369,7 @@ function MultiCompanyBlock({ defaults, onPatch }: {
     if (brandCompanies.length >= 30) { toast.error("Максимум 30 компаний"); return }
     persistCompanies([
       ...brandCompanies,
-      { id: `bc-${Math.random().toString(36).slice(2, 9)}`, name: "", slogan: "", description: "" },
+      { id: `bc-${Math.random().toString(36).slice(2, 9)}`, name: "", slogan: "", description: "", logo: "", website: "" },
     ])
   }
 
@@ -391,6 +415,65 @@ function MultiCompanyBlock({ defaults, onPatch }: {
     }
   }
 
+  // Загрузка логотипа бренд-компании через /api/upload (возвращает URL)
+  const handleBrandLogoFile = async (id: string, file: File) => {
+    const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"]
+    const MAX_SIZE = 2 * 1024 * 1024 // 2 МБ
+
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      toast.error("Только PNG, JPEG, WebP или SVG")
+      return
+    }
+    if (file.size > MAX_SIZE) {
+      toast.error("Размер файла превышает 2 МБ")
+      return
+    }
+
+    setLogoUploading(prev => ({ ...prev, [id]: true }))
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      const res = await fetch("/api/upload", { method: "POST", body: formData })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string }
+        toast.error(err.error || "Не удалось загрузить логотип")
+        return
+      }
+      const data = await res.json() as { url: string }
+      const url = data.url
+      // Автосохраняем сразу после загрузки
+      setBrandCompanies(prev => {
+        const updated = prev.map(c => c.id === id ? { ...c, logo: url } : c)
+        onPatch({ brandCompanies: updated }).catch(() => toast.error("Не удалось сохранить логотип"))
+        return updated
+      })
+    } catch {
+      toast.error("Ошибка при загрузке логотипа")
+    } finally {
+      setLogoUploading(prev => ({ ...prev, [id]: false }))
+    }
+  }
+
+  // Санитизация ссылки на сайт: разрешаем только http/https, остальные схемы — plain text
+  const sanitizeWebsiteHref = (website: string): string | null => {
+    const lower = website.trim().toLowerCase()
+    if (!lower) return null
+    // Если уже http/https — вернуть как есть
+    if (lower.startsWith("http://") || lower.startsWith("https://")) {
+      // Но на всякий случай отклоняем javascript: внутри (не должно быть, но вдруг)
+      if (lower.includes("javascript:")) return null
+      return website.trim()
+    }
+    // Если нет схемы вообще — подставляем https://
+    if (!lower.includes("://")) return "https://" + website.trim()
+    // Чужая схема (ftp://, javascript:, data:, ...) — не делаем ссылкой
+    return null
+  }
+
+  const mainDisplayName = mainCompany
+    ? (mainCompany.brandName || mainCompany.name || "Основная компания")
+    : "Основная компания"
+
   return (
     <Card className="max-w-3xl">
       <CardHeader className="pb-3">
@@ -407,34 +490,101 @@ function MultiCompanyBlock({ defaults, onPatch }: {
           <Switch checked={showCompanySelector} onCheckedChange={toggleCompanySelector} />
         </div>
 
-        {/* Основная компания */}
+        {/* Пояснение вверху блока */}
+        <p className="text-[11px] text-muted-foreground leading-relaxed rounded-md bg-muted/30 border px-3 py-2">
+          <strong>Первая компания</strong> — основная (из настроек компании). Можно добавить дополнительные бренды (для аутсорсинга/нескольких юрлиц): загрузите логотип, название, слоган, сайт — и сможете выбирать их на вакансии. Если что-то не заполнено — на вакансии можно указать вручную.
+        </p>
+
+        {/* Основная компания — read-only карточка */}
         {(!showCompanySelector || brandsExpanded) && (
-          <div className="rounded-lg border p-3 space-y-2 bg-muted/20">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-semibold truncate">{mainBrandName || "Основная компания"}</span>
-              <span className="text-[10px] text-muted-foreground shrink-0">основная · название из профиля</span>
-            </div>
-            <Label className="text-xs">Описание (показывается кандидатам в блоке «О компании»)</Label>
-            <Textarea
-              value={companyDescription}
-              onChange={e => setCompanyDescription(e.target.value)}
-              placeholder="Кратко о компании для кандидатов: чем занимаетесь, чем интересны соискателю…"
-              rows={5}
-              className="text-sm bg-[var(--input-bg)]"
-            />
-            <div className="flex items-center justify-between">
-              {showCompanySelector ? (
-                <label className="flex items-center gap-2 text-xs cursor-pointer">
-                  <Checkbox
-                    checked={defaultBrandCompanyId === ""}
-                    onCheckedChange={() => chooseDefaultCompany("")}
+          <div className="rounded-lg border p-3 space-y-3 bg-muted/20">
+            {/* Шапка карточки */}
+            <div className="flex items-start gap-3">
+              {/* Логотип */}
+              <div className="shrink-0">
+                {mainCompany?.logoUrl ? (
+                  <img
+                    src={mainCompany.logoUrl}
+                    alt="Логотип"
+                    className="w-10 h-10 rounded object-contain border bg-white"
                   />
-                  По умолчанию
-                </label>
-              ) : <span />}
-              <Button size="sm" className="h-8 text-xs gap-1.5" onClick={saveCompanyDescription} disabled={savingCompanyDesc}>
-                <Save className="size-3.5" />Сохранить
-              </Button>
+                ) : (
+                  <div className="w-10 h-10 rounded border bg-muted flex items-center justify-center">
+                    <Building2 className="w-5 h-5 text-muted-foreground/50" />
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-semibold truncate">{mainDisplayName}</span>
+                  <span className="inline-flex items-center gap-0.5 text-[10px] rounded px-1.5 py-0.5 bg-primary/10 text-primary shrink-0 font-medium">
+                    №1 · Основная
+                  </span>
+                </div>
+                {mainCompany?.brandSlogan ? (
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate">{mainCompany.brandSlogan}</p>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground/60 mt-0.5 italic">
+                    Слоган не заполнен —{" "}
+                    <a href="/settings/branding" className="underline underline-offset-2 text-primary/70 hover:text-primary">настроить</a>
+                  </p>
+                )}
+                {mainCompany?.website ? (() => {
+                  const safeHref = sanitizeWebsiteHref(mainCompany.website)
+                  return safeHref ? (
+                    <a
+                      href={safeHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-0.5 text-[11px] text-primary/70 hover:text-primary mt-0.5"
+                    >
+                      {mainCompany.website}
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                  ) : (
+                    <span className="text-[11px] text-muted-foreground mt-0.5">{mainCompany.website}</span>
+                  )
+                })() : (
+                  <p className="text-[11px] text-muted-foreground/60 mt-0.5 italic">
+                    Сайт не заполнен —{" "}
+                    <a href="/settings/branding" className="underline underline-offset-2 text-primary/70 hover:text-primary">добавить</a>
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Подсказка про редактирование */}
+            <p className="text-[11px] text-muted-foreground/70 flex items-center gap-1">
+              Логотип, название, слоган и сайт основной компании редактируются в{" "}
+              <a href="/settings/branding" className="underline underline-offset-2 text-primary/70 hover:text-primary font-medium">
+                настройках брендинга
+              </a>.
+            </p>
+
+            {/* Описание — редактируемое */}
+            <div className="space-y-1.5 pt-1 border-t">
+              <Label className="text-xs">Описание для кандидатов (блок «О компании»)</Label>
+              <Textarea
+                value={companyDescription}
+                onChange={e => setCompanyDescription(e.target.value)}
+                placeholder="Кратко о компании: чем занимаетесь, чем интересны соискателю…"
+                rows={4}
+                className="text-sm bg-[var(--input-bg)]"
+              />
+              <div className="flex items-center justify-between">
+                {showCompanySelector ? (
+                  <label className="flex items-center gap-2 text-xs cursor-pointer">
+                    <Checkbox
+                      checked={defaultBrandCompanyId === ""}
+                      onCheckedChange={() => chooseDefaultCompany("")}
+                    />
+                    По умолчанию
+                  </label>
+                ) : <span />}
+                <Button size="sm" className="h-8 text-xs gap-1.5" onClick={saveCompanyDescription} disabled={savingCompanyDesc}>
+                  <Save className="size-3.5" />Сохранить
+                </Button>
+              </div>
             </div>
           </div>
         )}
@@ -442,12 +592,20 @@ function MultiCompanyBlock({ defaults, onPatch }: {
         {/* Мультикомпания ВКЛ + СВЁРНУТО → компания по умолчанию */}
         {showCompanySelector && !brandsExpanded && (() => {
           const defBrand = defaultBrandCompanyId ? brandCompanies.find(c => c.id === defaultBrandCompanyId) : null
-          const dName = defBrand ? (defBrand.name || "Без названия") : (mainBrandName || "Основная компания")
+          const dName = defBrand ? (defBrand.name || "Без названия") : mainDisplayName
           const dDesc = defBrand ? (defBrand.description ?? "") : companyDescription
+          const dLogo = defBrand ? (defBrand.logo ?? "") : (mainCompany?.logoUrl ?? "")
           return (
             <div className="rounded-lg border p-3 space-y-1.5 bg-muted/20">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-semibold truncate">{dName}</span>
+              <div className="flex items-center gap-2.5">
+                {dLogo ? (
+                  <img src={dLogo} alt="" className="w-8 h-8 rounded object-contain border bg-white shrink-0" />
+                ) : (
+                  <div className="w-8 h-8 rounded border bg-muted flex items-center justify-center shrink-0">
+                    <Building2 className="w-4 h-4 text-muted-foreground/40" />
+                  </div>
+                )}
+                <span className="text-sm font-semibold truncate flex-1">{dName}</span>
                 <span className="inline-flex items-center gap-1 text-[10px] rounded px-1.5 py-0.5 bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 shrink-0">По умолчанию</span>
               </div>
               {dDesc
@@ -492,11 +650,12 @@ function MultiCompanyBlock({ defaults, onPatch }: {
                 onDragOver={e => { if (dragBrandId) e.preventDefault() }}
                 onDrop={() => dropBrandOn(c.id)}
                 className={cn(
-                  "rounded-lg border p-3 space-y-2 bg-muted/20 transition-shadow",
+                  "rounded-lg border p-3 space-y-2.5 bg-muted/20 transition-shadow",
                   dragBrandId === c.id && "opacity-50",
                   dragBrandId && dragBrandId !== c.id && "ring-1 ring-primary/20"
                 )}
               >
+                {/* Строка заголовка: drag + номер + название + стрелки + удалить */}
                 <div className="flex items-center gap-2">
                   <span
                     draggable
@@ -544,12 +703,75 @@ function MultiCompanyBlock({ defaults, onPatch }: {
                     <Trash2 className="w-3.5 h-3.5" />
                   </Button>
                 </div>
+
+                {/* Логотип */}
+                <div className="space-y-1">
+                  <Label className="text-xs">Логотип</Label>
+                  <div className="flex items-center gap-2">
+                    {c.logo ? (
+                      <>
+                        <img
+                          src={c.logo}
+                          alt="Логотип"
+                          className="w-10 h-10 rounded object-contain border bg-white shrink-0"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs gap-1 text-muted-foreground hover:text-destructive"
+                          onClick={() => {
+                            updateBrandCompany(c.id, { logo: "" })
+                            setBrandCompanies(prev => {
+                              const updated = prev.map(bc => bc.id === c.id ? { ...bc, logo: "" } : bc)
+                              onPatch({ brandCompanies: updated }).catch(() => {})
+                              return updated
+                            })
+                          }}
+                        >
+                          <X className="w-3 h-3" />Удалить
+                        </Button>
+                      </>
+                    ) : (
+                      <div className="w-10 h-10 rounded border bg-muted flex items-center justify-center shrink-0">
+                        <Building2 className="w-5 h-5 text-muted-foreground/40" />
+                      </div>
+                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1.5"
+                      disabled={!!logoUploading[c.id]}
+                      onClick={() => logoInputRefs.current[c.id]?.click()}
+                    >
+                      <Upload className="w-3 h-3" />
+                      {logoUploading[c.id] ? "Загрузка…" : (c.logo ? "Заменить" : "Загрузить")}
+                    </Button>
+                    <input
+                      ref={el => { logoInputRefs.current[c.id] = el }}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                      className="hidden"
+                      onChange={e => {
+                        const file = e.target.files?.[0]
+                        if (file) handleBrandLogoFile(c.id, file)
+                        e.target.value = ""
+                      }}
+                    />
+                    <span className="text-[10px] text-muted-foreground/60">PNG, JPG, WebP, SVG · до 2 МБ</span>
+                  </div>
+                </div>
+
+                {/* Слоган */}
                 <Input
                   value={c.slogan ?? ""}
                   onChange={e => updateBrandCompany(c.id, { slogan: e.target.value })}
                   placeholder="Слоган (необязательно)"
                   className="h-8 text-xs"
                 />
+
+                {/* Описание */}
                 <Textarea
                   value={c.description ?? ""}
                   onChange={e => updateBrandCompany(c.id, { description: e.target.value })}
@@ -557,7 +779,21 @@ function MultiCompanyBlock({ defaults, onPatch }: {
                   rows={2}
                   className="text-xs"
                 />
-                <div className="flex items-center justify-between">
+
+                {/* Сайт */}
+                <div className="space-y-1">
+                  <Label className="text-xs">Сайт компании</Label>
+                  <Input
+                    value={c.website ?? ""}
+                    onChange={e => updateBrandCompany(c.id, { website: e.target.value })}
+                    placeholder="https://example.com"
+                    type="url"
+                    className="h-8 text-xs"
+                  />
+                </div>
+
+                {/* По умолчанию + Сохранить */}
+                <div className="flex items-center justify-between pt-0.5">
                   <label className={cn("flex items-center gap-2 text-xs", !c.name.trim() ? "opacity-40 pointer-events-none" : "cursor-pointer")}>
                     <Checkbox
                       checked={defaultBrandCompanyId === c.id}

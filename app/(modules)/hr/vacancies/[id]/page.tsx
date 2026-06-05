@@ -233,6 +233,26 @@ export default function VacancyPage() {
     fetch("/api/modules/hr/company/hiring-defaults").then(r => r.ok ? r.json() : null).then(j => {
       const sha = j?.hiringDefaults?.stageHhActions
       if (sha && typeof sha === "object") setCompanyHhActions(sha as CompanyStageHhActions)
+      // Загружаем список бренд-компаний для брендинг-секции
+      const hd = j?.hiringDefaults
+      if (hd && Array.isArray(hd.brandCompanies)) {
+        setBrandCompaniesData(hd.brandCompanies.filter((c: { id: string; name: string }) => c?.name?.trim()))
+      }
+    }).catch(() => {})
+  }, [])
+
+  // Загружаем основные данные компании (brandName, logoUrl, website, subdomain)
+  useEffect(() => {
+    fetch("/api/companies").then(r => r.ok ? r.json() : null).then(j => {
+      const c = j?.data ?? j
+      if (!c) return
+      setMainCompanyData({
+        brandName: c.brandName || c.name || "",
+        logoUrl: c.logoUrl || "",
+        brandSlogan: c.brandSlogan || "",
+        website: c.website || "",
+        subdomain: c.subdomain || "",
+      })
     }).catch(() => {})
   }, [])
 
@@ -644,6 +664,12 @@ export default function VacancyPage() {
       if (branding.domainLevel) setBrandDomainLevel(branding.domainLevel as "free" | "subdomain" | "custom")
       if (branding.companySlug) setBrandCompanySlug(branding.companySlug)
       if (branding.customDomain) setBrandCustomDomain(branding.customDomain)
+      if (branding.website) setBrandWebsite(branding.website)
+    }
+    // Читаем brandCompanyId из anketa (источник правды — AnketaTab)
+    const anketa = desc?.anketa as Record<string, unknown> | undefined
+    if (typeof anketa?.brandCompanyId === "string") {
+      setVacancyBrandCompanyId(anketa.brandCompanyId)
     }
   }, [apiVacancy])
 
@@ -753,8 +779,18 @@ export default function VacancyPage() {
   const [brandDomainLevel, setBrandDomainLevel] = useState<"free" | "subdomain" | "custom">("free")
   const [brandCompanySlug, setBrandCompanySlug] = useState("")
   const [brandCustomDomain, setBrandCustomDomain] = useState("")
+  const [brandWebsite, setBrandWebsite] = useState("")
   const [editingSlug, setEditingSlug] = useState(false)
   const [brandSaving, setBrandSaving] = useState(false)
+  // Данные основной компании (для дефолтов брендинга)
+  const [mainCompanyData, setMainCompanyData] = useState<{
+    brandName: string; logoUrl: string; brandSlogan: string; website: string; subdomain: string
+  }>({ brandName: "", logoUrl: "", brandSlogan: "", website: "", subdomain: "" })
+  const [brandCompaniesData, setBrandCompaniesData] = useState<Array<{
+    id: string; name: string; slogan?: string; logo?: string; website?: string
+  }>>([])
+  // brandCompanyId вакансии (берём из descriptionJson.anketa — источник правды в AnketaTab)
+  const [vacancyBrandCompanyId, setVacancyBrandCompanyId] = useState("")
   // Дефолтный таб по статусу:
   //   active/published → «Кандидаты» (главная работа с вакансией)
   //   draft и прочее   → «Настройки» (вакансия ещё не настроена)
@@ -1238,13 +1274,14 @@ export default function VacancyPage() {
 
   const totalCandidates = columns.reduce((acc, col) => acc + col.candidates.length, 0)
 
-  const saveBranding = async (updates?: { companyName?: string; color?: string; slogan?: string; logo?: string }) => {
+  const saveBranding = async (updates?: { companyName?: string; color?: string; slogan?: string; logo?: string; website?: string }) => {
     setBrandSaving(true)
     const branding = {
       companyName: updates?.companyName ?? brandCompanyName,
       color: updates?.color ?? brandColor,
       slogan: updates?.slogan ?? brandSlogan,
       logo: updates?.logo ?? brandLogo,
+      website: updates?.website ?? brandWebsite,
       domainLevel: brandDomainLevel,
       companySlug: brandCompanySlug,
       customDomain: brandCustomDomain,
@@ -1950,14 +1987,10 @@ export default function VacancyPage() {
       return m[c] || c
     })
     .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "company"
-  // #55: раньше для free-домена показывали `company24.pro/c/{slug}/{vacancy}`,
-  // но такого роута нет — кнопка «Предпросмотр»/«Открыть» дёргала 404.
-  // Реальный публичный роут — /vacancy/[slug]. На custom/subdomain пока
-  // используем тот же путь (subdomain-роутинг будет в отдельной задаче).
-  const publicPageUrl = brandDomainLevel === "custom" && brandCustomDomain
-    ? `https://${brandCustomDomain}/vacancy/${vacancySlugOrId}`
-    : brandDomainLevel === "subdomain"
-    ? `https://${companySlugDisplay}.company24.pro/vacancy/${vacancySlugOrId}`
+  // Публичный URL вакансии: домен берётся из настроек компании (companies.subdomain).
+  // Выбор домена на вакансии убран — он настраивается в профиле компании.
+  const publicPageUrl = mainCompanyData.subdomain
+    ? `https://${mainCompanyData.subdomain}.company24.pro/vacancy/${vacancySlugOrId}`
     : `https://company24.pro/vacancy/${vacancySlugOrId}`
 
   // ── Loading / 404 guard ────────────────────────────────────
@@ -2988,6 +3021,7 @@ export default function VacancyPage() {
                         companyName: brandCompanyName,
                         color: brandColor,
                         slogan: brandSlogan,
+                        website: brandWebsite,
                         logo: "",
                         domainLevel: brandDomainLevel,
                         companySlug: brandCompanySlug,
@@ -3015,212 +3049,178 @@ export default function VacancyPage() {
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-4">
-                        <div className="space-y-1.5">
-                          <Label className="text-xs">Название компании</Label>
-                          <Input
-                            value={brandCompanyName}
-                            onChange={(e) => setBrandCompanyName(e.target.value)}
-                            placeholder="Название клиента"
-                            className="h-9 text-sm"
-                          />
-                        </div>
-                        <div className="flex gap-4">
-                          <div className="space-y-1.5 flex-1">
-                            <Label className="text-xs">Цвет бренда</Label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="color"
-                                value={brandColor}
-                                onChange={(e) => { setBrandColor(e.target.value) }}
-                                className="w-9 h-9 rounded-md border cursor-pointer p-0.5"
-                              />
-                              <Input
-                                value={brandColor}
-                                onChange={(e) => setBrandColor(e.target.value)}
-                                className="h-9 text-sm font-mono w-28"
-                                maxLength={7}
-                              />
-                              <div className="h-9 flex-1 rounded-md" style={{ backgroundColor: brandColor }} />
+                        {/* Индикатор выбранной компании-бренда */}
+                        {(() => {
+                          const selectedBrand = !vacancyBrandCompanyId || vacancyBrandCompanyId === "__main__"
+                            ? { name: mainCompanyData.brandName, logo: mainCompanyData.logoUrl, slogan: mainCompanyData.brandSlogan, website: mainCompanyData.website }
+                            : brandCompaniesData.find(c => c.id === vacancyBrandCompanyId) ?? null
+                          const brandName = selectedBrand?.name || ""
+                          return (
+                            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/40 border text-xs text-muted-foreground">
+                              <span className="font-medium text-foreground">Компания:</span>
+                              <span>{brandName || "Основная компания"}</span>
+                              <span className="ml-auto text-[10px]">Выбирается во вкладке «Вакансия»</span>
                             </div>
-                          </div>
-                        </div>
-                        {/* #56: современный UX — клик прямо на картинку
-                            открывает file dialog, hover показывает overlay
-                            с кнопками «Заменить»/«Удалить». Если пусто —
-                            плейсхолдер тоже кликабельный (label.htmlFor). */}
-                        <div className="space-y-1.5">
-                          <Label className="text-xs">Логотип</Label>
-                          <div className="flex items-center gap-3">
-                            <input
-                              id="brand-logo-input"
-                              type="file"
-                              accept="image/png,image/svg+xml,image/jpeg,image/webp"
-                              className="hidden"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0]
-                                if (!file) return
-                                if (file.size > 2 * 1024 * 1024) {
-                                  toast.error("Файл слишком большой (макс. 2 МБ)")
-                                  e.target.value = ""
-                                  return
-                                }
-                                const reader = new FileReader()
-                                reader.onload = () => {
-                                  const base64 = reader.result as string
-                                  setBrandLogo(base64)
-                                  saveBranding({ logo: base64 })
-                                }
-                                reader.readAsDataURL(file)
-                                e.target.value = ""
-                              }}
-                            />
-                            {brandLogo ? (
-                              <div className="relative group">
-                                <img
-                                  src={brandLogo}
-                                  alt="Логотип"
-                                  className="max-h-[60px] min-h-[60px] object-contain rounded-md border bg-background px-2"
+                          )
+                        })()}
+                        {/* Название компании — плейсхолдер из выбранного бренда */}
+                        {(() => {
+                          const selectedBrand = !vacancyBrandCompanyId || vacancyBrandCompanyId === "__main__"
+                            ? { name: mainCompanyData.brandName, logo: mainCompanyData.logoUrl, slogan: mainCompanyData.brandSlogan, website: mainCompanyData.website }
+                            : brandCompaniesData.find(c => c.id === vacancyBrandCompanyId) ?? null
+                          const defaultName = selectedBrand?.name || ""
+                          const defaultSlogan = selectedBrand?.slogan || ""
+                          const defaultWebsite = selectedBrand?.website || ""
+                          return (
+                            <>
+                              <div className="space-y-1.5">
+                                <Label className="text-xs">Название компании</Label>
+                                <Input
+                                  value={brandCompanyName}
+                                  onChange={(e) => setBrandCompanyName(e.target.value)}
+                                  placeholder={defaultName || "Название компании"}
+                                  className="h-9 text-sm"
                                 />
-                                <div className="absolute inset-0 rounded-md bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                  <label
-                                    htmlFor="brand-logo-input"
-                                    className="px-2 py-1 rounded bg-white/90 text-foreground text-[11px] font-medium cursor-pointer hover:bg-white"
-                                  >
-                                    Заменить
-                                  </label>
-                                  <button
-                                    type="button"
-                                    className="px-2 py-1 rounded bg-red-500 text-white text-[11px] font-medium hover:bg-red-600"
-                                    onClick={() => { setBrandLogo(""); saveBranding({ logo: "" }) }}
-                                  >
-                                    Удалить
-                                  </button>
-                                </div>
+                                {defaultName && !brandCompanyName && (
+                                  <p className="text-[10px] text-muted-foreground">Из профиля компании: {defaultName}</p>
+                                )}
                               </div>
-                            ) : (
-                              <label
-                                htmlFor="brand-logo-input"
-                                className="h-14 w-24 rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center bg-muted/50 cursor-pointer hover:bg-muted hover:border-primary/40 transition-colors"
-                              >
-                                <Upload className="w-4 h-4 text-muted-foreground mb-0.5" />
-                                <span className="text-[10px] text-muted-foreground">Загрузить</span>
-                              </label>
-                            )}
-                            <span className="text-[10px] text-muted-foreground">PNG, SVG, JPG до 2 МБ</span>
-                          </div>
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-xs">Слоган / подзаголовок</Label>
-                          <Input
-                            value={brandSlogan}
-                            onChange={(e) => setBrandSlogan(e.target.value)}
-                            placeholder="Мы строим будущее вместе"
-                            className="h-9 text-sm"
-                          />
-                        </div>
-                        {/* Домен для публичных страниц */}
-                        <div className="space-y-3">
-                          <Label className="text-xs font-medium">Домен для публичных страниц</Label>
-
-                          {/* Free */}
-                          <label className={cn("flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors", brandDomainLevel === "free" ? "border-primary bg-primary/5" : "hover:bg-muted/50")}>
-                            <input type="radio" name="domainLevel" checked={brandDomainLevel === "free"} onChange={() => setBrandDomainLevel("free")} className="mt-0.5" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium">Бесплатный</p>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                Ваши ссылки: <span className="font-mono text-foreground">company24.pro/vacancy/...</span>
-                              </p>
-                              {brandDomainLevel === "free" && (
-                                <div className="flex items-center gap-2 mt-2">
-                                  <span className="text-xs text-muted-foreground">Slug:</span>
-                                  {editingSlug ? (
-                                    <Input
-                                      value={brandCompanySlug}
-                                      onChange={(e) => setBrandCompanySlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
-                                      onBlur={() => setEditingSlug(false)}
-                                      onKeyDown={(e) => e.key === "Enter" && setEditingSlug(false)}
-                                      className="h-7 text-xs font-mono w-32"
-                                      autoFocus
-                                    />
-                                  ) : (
-                                    <>
-                                      <span className="text-xs font-mono text-foreground">{companySlugDisplay}</span>
-                                      <button className="text-xs text-primary hover:underline" onClick={() => { setBrandCompanySlug(companySlugDisplay); setEditingSlug(true) }}>Изменить</button>
-                                    </>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          </label>
-
-                          {/* Subdomain */}
-                          <label className={cn("flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors", brandDomainLevel === "subdomain" ? "border-primary bg-primary/5" : "hover:bg-muted/50")}>
-                            <input type="radio" name="domainLevel" checked={brandDomainLevel === "subdomain"} onChange={() => setBrandDomainLevel("subdomain")} className="mt-0.5" />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <p className="text-sm font-medium">Поддомен Company24</p>
-                                <span className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded-full px-2 py-0.5">Тариф Бизнес</span>
-                              </div>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                Ваши ссылки: <span className="font-mono text-foreground">{companySlugDisplay}.company24.pro/vacancy/...</span>
-                              </p>
-                              {brandDomainLevel === "subdomain" && (
-                                <div className="mt-2 space-y-1.5">
+                              <div className="flex gap-4">
+                                <div className="space-y-1.5 flex-1">
+                                  <Label className="text-xs">Цвет бренда</Label>
                                   <div className="flex items-center gap-2">
-                                    <span className="text-xs text-muted-foreground">Ваш сайт:</span>
-                                    <Input
-                                      value={brandCustomDomain}
-                                      onChange={(e) => {
-                                        setBrandCustomDomain(e.target.value)
-                                        const domain = e.target.value.replace(/^(https?:\/\/)?(www\.)?/, "").split("/")[0].split(".")[0]
-                                        if (domain) setBrandCompanySlug(domain.toLowerCase().replace(/[^a-z0-9-]/g, ""))
-                                      }}
-                                      placeholder="yourdomain.ru"
-                                      className="h-7 text-xs font-mono w-40"
+                                    <input
+                                      type="color"
+                                      value={brandColor}
+                                      onChange={(e) => { setBrandColor(e.target.value) }}
+                                      className="w-9 h-9 rounded-md border cursor-pointer p-0.5"
                                     />
+                                    <Input
+                                      value={brandColor}
+                                      onChange={(e) => setBrandColor(e.target.value)}
+                                      className="h-9 text-sm font-mono w-28"
+                                      maxLength={7}
+                                    />
+                                    <div className="h-9 flex-1 rounded-md" style={{ backgroundColor: brandColor }} />
                                   </div>
-                                  <p className="text-[11px] text-muted-foreground">
-                                    Ваш поддомен: <span className="font-mono text-foreground">{companySlugDisplay}.company24.pro</span>
-                                  </p>
                                 </div>
-                              )}
-                            </div>
-                          </label>
-
-                          {/* Custom domain */}
-                          <label className={cn("flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors", brandDomainLevel === "custom" ? "border-primary bg-primary/5" : "hover:bg-muted/50")}>
-                            <input type="radio" name="domainLevel" checked={brandDomainLevel === "custom"} onChange={() => setBrandDomainLevel("custom")} className="mt-0.5" />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <p className="text-sm font-medium">Свой домен</p>
-                                <span className="text-[10px] bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 rounded-full px-2 py-0.5">Тариф Масштаб</span>
                               </div>
-                              {brandDomainLevel === "custom" && (
-                                <div className="mt-2 space-y-2">
-                                  <Input
-                                    value={brandCustomDomain}
-                                    onChange={(e) => setBrandCustomDomain(e.target.value)}
-                                    placeholder="careers.yourdomain.ru"
-                                    className="h-8 text-xs font-mono"
+                              {/* #56: современный UX — клик прямо на картинку
+                                  открывает file dialog, hover показывает overlay
+                                  с кнопками «Заменить»/«Удалить». Если пусто —
+                                  плейсхолдер тоже кликабельный (label.htmlFor). */}
+                              <div className="space-y-1.5">
+                                <Label className="text-xs">Логотип</Label>
+                                <div className="flex items-center gap-3">
+                                  <input
+                                    id="brand-logo-input"
+                                    type="file"
+                                    accept="image/png,image/svg+xml,image/jpeg,image/webp"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0]
+                                      if (!file) return
+                                      if (file.size > 2 * 1024 * 1024) {
+                                        toast.error("Файл слишком большой (макс. 2 МБ)")
+                                        e.target.value = ""
+                                        return
+                                      }
+                                      const reader = new FileReader()
+                                      reader.onload = () => {
+                                        const base64 = reader.result as string
+                                        setBrandLogo(base64)
+                                        saveBranding({ logo: base64 })
+                                      }
+                                      reader.readAsDataURL(file)
+                                      e.target.value = ""
+                                    }}
                                   />
-                                  {brandCustomDomain && (
-                                    <>
-                                      <p className="text-[11px] text-muted-foreground">
-                                        Добавьте CNAME запись: <span className="font-mono text-foreground">{brandCustomDomain}</span> → <span className="font-mono text-foreground">company24.pro</span>
-                                      </p>
-                                      <div className="flex items-center gap-2">
-                                        <Badge variant="outline" className="text-[10px] h-5 text-muted-foreground">Не проверен</Badge>
-                                        <Button variant="outline" size="sm" className="h-6 text-[10px] px-2" onClick={() => toast.info("Проверка DNS (скоро)")}>Проверить DNS</Button>
+                                  {brandLogo ? (
+                                    <div className="relative group">
+                                      <img
+                                        src={brandLogo}
+                                        alt="Логотип"
+                                        className="max-h-[60px] min-h-[60px] object-contain rounded-md border bg-background px-2"
+                                      />
+                                      <div className="absolute inset-0 rounded-md bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                        <label
+                                          htmlFor="brand-logo-input"
+                                          className="px-2 py-1 rounded bg-white/90 text-foreground text-[11px] font-medium cursor-pointer hover:bg-white"
+                                        >
+                                          Заменить
+                                        </label>
+                                        <button
+                                          type="button"
+                                          className="px-2 py-1 rounded bg-red-500 text-white text-[11px] font-medium hover:bg-red-600"
+                                          onClick={() => { setBrandLogo(""); saveBranding({ logo: "" }) }}
+                                        >
+                                          Удалить
+                                        </button>
                                       </div>
-                                    </>
+                                    </div>
+                                  ) : selectedBrand?.logo ? (
+                                    <div className="flex flex-col gap-1">
+                                      <img
+                                        src={selectedBrand.logo}
+                                        alt="Логотип компании"
+                                        className="max-h-[60px] min-h-[60px] object-contain rounded-md border bg-background px-2 opacity-60"
+                                      />
+                                      <p className="text-[10px] text-muted-foreground text-center">Из профиля</p>
+                                    </div>
+                                  ) : (
+                                    <label
+                                      htmlFor="brand-logo-input"
+                                      className="h-14 w-24 rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center bg-muted/50 cursor-pointer hover:bg-muted hover:border-primary/40 transition-colors"
+                                    >
+                                      <Upload className="w-4 h-4 text-muted-foreground mb-0.5" />
+                                      <span className="text-[10px] text-muted-foreground">Загрузить</span>
+                                    </label>
                                   )}
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-[10px] text-muted-foreground">PNG, SVG, JPG до 2 МБ</span>
+                                    {!brandLogo && (
+                                      <label
+                                        htmlFor="brand-logo-input"
+                                        className="text-[10px] text-primary cursor-pointer hover:underline"
+                                      >
+                                        {selectedBrand?.logo ? "Загрузить своё" : "Загрузить"}
+                                      </label>
+                                    )}
+                                  </div>
                                 </div>
-                              )}
-                            </div>
-                          </label>
-
-                          {/* Ваша ссылка */}
-                          <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-muted/50 border text-xs font-mono text-muted-foreground mt-1">
+                              </div>
+                              <div className="space-y-1.5">
+                                <Label className="text-xs">Слоган / подзаголовок</Label>
+                                <Input
+                                  value={brandSlogan}
+                                  onChange={(e) => setBrandSlogan(e.target.value)}
+                                  placeholder={defaultSlogan || "Мы строим будущее вместе"}
+                                  className="h-9 text-sm"
+                                />
+                                {defaultSlogan && !brandSlogan && (
+                                  <p className="text-[10px] text-muted-foreground">Из профиля компании: {defaultSlogan}</p>
+                                )}
+                              </div>
+                              <div className="space-y-1.5">
+                                <Label className="text-xs">Сайт компании</Label>
+                                <Input
+                                  value={brandWebsite}
+                                  onChange={(e) => setBrandWebsite(e.target.value)}
+                                  placeholder={defaultWebsite || "https://example.ru"}
+                                  className="h-9 text-sm"
+                                  type="url"
+                                />
+                                {defaultWebsite && !brandWebsite && (
+                                  <p className="text-[10px] text-muted-foreground">Из профиля компании: {defaultWebsite}</p>
+                                )}
+                              </div>
+                            </>
+                          )
+                        })()}
+                        {/* Ссылка на публичную страницу */}
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-medium">Публичная страница вакансии</Label>
+                          <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-muted/50 border text-xs font-mono text-muted-foreground">
                             <Globe className="w-3.5 h-3.5 shrink-0 text-primary" />
                             <span className="truncate flex-1">{publicPageUrl}</span>
                             <button className="shrink-0 text-muted-foreground hover:text-primary" onClick={() => { navigator.clipboard.writeText(publicPageUrl); toast.success("Ссылка скопирована") }}>
@@ -3231,6 +3231,9 @@ export default function VacancyPage() {
                               Открыть
                             </Button>
                           </div>
+                          {mainCompanyData.subdomain && (
+                            <p className="text-[10px] text-muted-foreground">Домен настроен в профиле компании: <span className="font-mono">{mainCompanyData.subdomain}.company24.pro</span></p>
+                          )}
                         </div>
                         {/* Mini preview */}
                         <div className="rounded-lg border p-4 bg-muted/30">
@@ -4199,7 +4202,7 @@ function BrandingStickyRegister({
   vacancyId: string
   loaded: boolean
   branding: {
-    companyName: string; color: string; slogan: string; logo: string
+    companyName: string; color: string; slogan: string; website: string; logo: string
     domainLevel: "free" | "subdomain" | "custom"
     companySlug: string; customDomain: string
   }

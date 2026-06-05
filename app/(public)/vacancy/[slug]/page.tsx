@@ -17,7 +17,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   MapPin, Banknote, CheckCircle2, ArrowRight, Briefcase,
-  Building2, Loader2, Calendar,
+  Building2, Loader2, Globe,
 } from "lucide-react"
 import type { MiniFormField } from "@/components/vacancies/mini-form-builder"
 import { FORMAT_LABELS, EMPLOYMENT_LABELS } from "@/lib/vacancy-types"
@@ -43,6 +43,9 @@ interface VacancyData {
   // Группа 38: расширенный брендинг + флаг override.
   brandingJson?: { accentColor?: string; fontFamily?: string } | null
   brandingOverrideEnabled?: boolean | null
+  // Слоган и сайт компании (с учётом бренд-компании и override).
+  companySlogan?: string | null
+  companyWebsite?: string | null
 }
 
 type ScreenState = "loading" | "landing" | "form" | "done" | "error"
@@ -235,11 +238,34 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
               {v.companyName[0]}
             </div>
           )}
-          <div className="min-w-0">
-            <div className="font-semibold leading-tight truncate" style={{ color: textColor }}>
-              {v.companyName}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold leading-tight truncate" style={{ color: textColor }}>
+                {v.companyName}
+              </span>
+              {v.companyWebsite && (() => {
+                const raw = v.companyWebsite!
+                const href = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
+                const display = raw.replace(/^https?:\/\//i, "").replace(/\/$/, "")
+                return (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs opacity-60 hover:opacity-90 transition-opacity"
+                    style={{ color: textColor }}
+                  >
+                    <Globe className="w-3 h-3 flex-shrink-0" />
+                    <span className="truncate max-w-[160px]">{display}</span>
+                  </a>
+                )
+              })()}
             </div>
-            <div className="text-xs opacity-60">Открытая вакансия</div>
+            {v.companySlogan ? (
+              <div className="text-xs opacity-60 mt-0.5 truncate">{v.companySlogan}</div>
+            ) : (
+              <div className="text-xs opacity-60">Открытая вакансия</div>
+            )}
           </div>
         </div>
       </header>

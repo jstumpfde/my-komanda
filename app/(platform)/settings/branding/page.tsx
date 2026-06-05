@@ -37,6 +37,7 @@ export default function BrandingPage() {
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [brandName, setBrandName] = useState("")
   const [brandSlogan, setBrandSlogan] = useState("")
+  const [website, setWebsite] = useState("")
   const [customDomain, setCustomDomain] = useState("")
   const [domainStatus, setDomainStatus] = useState<"idle" | "checking" | "verified" | "error">("idle")
   const [subdomain, setSubdomain] = useState("")
@@ -70,6 +71,8 @@ export default function BrandingPage() {
       setBrandName(brandNameVal)
       setBrandSlogan(brandSloganVal)
       if (logoUrlVal) setLogoPreview(logoUrlVal)
+      const websiteVal = (c.website ?? "") as string
+      setWebsite(websiteVal)
       const subVal = (c.subdomain ?? "") as string
       setSubdomain(subVal)
       if (customThemeVal) {
@@ -168,6 +171,7 @@ export default function BrandingPage() {
         logo_url: logoPreview ?? "",
         brand_name: brandName,
         brand_slogan: brandSlogan,
+        website: website.trim(),
         custom_theme: customTheme as Record<string, unknown>,
       })
       saveBrand({ logoUrl: logoPreview, companyName: brandName })
@@ -364,7 +368,7 @@ export default function BrandingPage() {
             </div>
           </div>
 
-          {/* Название + Слоган в одну строку */}
+          {/* Название + Слоган + Сайт */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label className="text-sm">Название бренда</Label>
@@ -385,6 +389,21 @@ export default function BrandingPage() {
                 className="h-9 text-sm"
               />
               <p className="text-xs text-muted-foreground">Короткая фраза под логотипом</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Сайт компании</Label>
+              <Input
+                type="url"
+                value={website}
+                onChange={e => setWebsite(e.target.value)}
+                placeholder="https://company.ru"
+                className="h-9 text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                {website.trim() && !/^https?:\/\//i.test(website.trim())
+                  ? <span className="text-amber-500">Рекомендуется начинать с https://</span>
+                  : "Ссылка на сайт вашей компании"}
+              </p>
             </div>
           </div>
 
