@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Карта раздела HR — Company24</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root{
+    --violet:#7c3aed; --violet-d:#6d28d9; --violet-l:#ede9fe;
+    --green:#16a34a; --green-l:#dcfce7;
+    --amber:#d97706; --amber-l:#fef3c7;
+    --gray:#64748b; --gray-l:#f1f5f9;
+    --ink:#0f172a; --muted:#475569; --line:#e2e8f0;
+  }
+  *{box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Inter,sans-serif;
+    color:var(--ink); margin:0; background:#f8fafc; line-height:1.55;}
+  .wrap{max-width:1180px; margin:0 auto; padding:32px 24px 80px;}
+  header.top{display:flex; align-items:center; gap:14px; margin-bottom:6px;}
+  header.top .dot{width:42px;height:42px;border-radius:12px;background:var(--violet-l);
+    display:flex;align-items:center;justify-content:center;font-size:22px;}
+  h1{font-size:26px; margin:0; letter-spacing:-.01em;}
+  .sub{color:var(--muted); font-size:14px; margin:2px 0 22px;}
+  h2{font-size:19px; margin:40px 0 6px; display:flex; align-items:center; gap:9px;}
+  h2 .n{width:26px;height:26px;border-radius:8px;background:var(--violet);color:#fff;
+    font-size:14px;display:inline-flex;align-items:center;justify-content:center;flex:none;}
+  h2 small{font-weight:400;color:var(--muted);font-size:13px;}
+  h3.grp{font-size:15px;margin:20px 0 6px;color:var(--violet-d);display:flex;align-items:center;gap:8px;}
+  h3.grp .b{font-size:12px;font-weight:600;color:var(--muted);background:var(--gray-l);border-radius:999px;padding:2px 9px;}
+  .note{color:var(--muted); font-size:14px; margin:4px 0 14px;}
+  .card{background:#fff;border:1px solid var(--line);border-radius:16px;
+    padding:18px 18px 6px;margin:10px 0 8px;box-shadow:0 1px 2px rgba(15,23,42,.04);overflow-x:auto;}
+  .mermaid{display:flex;justify-content:center;}
+  .legend{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:13px;color:var(--muted);margin:8px 0 0;}
+  .chip{display:inline-flex;align-items:center;gap:6px;}
+  .sw{width:13px;height:13px;border-radius:4px;display:inline-block;border:1px solid rgba(0,0,0,.08)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:12px 0;}
+  @media(max-width:780px){.grid{grid-template-columns:1fr}}
+  .panel{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 18px;}
+  .panel h3{margin:0 0 8px;font-size:15px;}
+  .panel ul{margin:6px 0 0;padding-left:18px;}
+  .panel li{margin:3px 0;font-size:13.5px;color:var(--muted);}
+  .panel li b{color:var(--ink);font-weight:600;}
+  .callout{border-left:4px solid var(--amber);background:var(--amber-l);
+    padding:12px 16px;border-radius:0 10px 10px 0;margin:14px 0;font-size:13.5px;color:#7c2d12;}
+  .callout b{color:#7c2d12;}
+  /* summary bar */
+  .summary{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0 6px;}
+  .scard{flex:1;min-width:150px;border:1px solid var(--line);border-radius:13px;padding:13px 15px;background:#fff;}
+  .scard .num{font-size:24px;font-weight:700;line-height:1;}
+  .scard .lbl{font-size:12.5px;color:var(--muted);margin-top:4px;}
+  .scard.ok{background:var(--green-l);border-color:#bbf7d0}.scard.ok .num{color:#15803d}
+  .scard.new{background:var(--violet-l);border-color:#ddd6fe}.scard.new .num{color:#6d28d9}
+  .scard.dev{background:var(--amber-l);border-color:#fde68a}.scard.dev .num{color:#b45309}
+  .scard.stub{background:var(--gray-l);border-color:#e2e8f0}.scard.stub .num{color:#475569}
+  /* catalog table */
+  table.cat{width:100%;border-collapse:collapse;font-size:13px;margin:4px 0 14px;}
+  table.cat th,table.cat td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top;}
+  table.cat th{color:var(--muted);font-weight:600;background:var(--gray-l);font-size:12px;}
+  table.cat td.r{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--ink);white-space:nowrap;}
+  table.cat td.d{color:var(--gray);font-size:11.5px;white-space:nowrap;}
+  table.cat td.note{color:var(--muted);}
+  .pill{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:999px;white-space:nowrap;}
+  .p-ok{background:var(--green-l);color:#166534;}
+  .p-new{background:var(--violet-l);color:#5b21b6;}
+  .p-dev{background:var(--amber-l);color:#92400e;}
+  .p-stub{background:var(--gray-l);color:#475569;}
+  .foot{color:var(--gray);font-size:12.5px;margin-top:34px;border-top:1px solid var(--line);padding-top:14px;}
+  code{background:var(--gray-l);padding:1px 6px;border-radius:5px;font-size:12.5px;}
+  a.route{color:var(--violet-d);text-decoration:none;border-bottom:1px dashed #c4b5fd;cursor:pointer;}
+  a.route:hover{color:#fff;background:var(--violet);border-radius:4px;border-bottom-color:transparent;padding:1px 4px;margin:-1px -4px;}
+  a.route::after{content:" ↗";font-size:10px;opacity:.5;}
+  span.route-param{color:var(--gray);}
+  .basepick{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#fff;border:1px solid var(--line);
+    border-radius:12px;padding:11px 15px;margin:14px 0 4px;font-size:13px;}
+  .basepick b{font-size:13px}
+  .basepick label{display:inline-flex;align-items:center;gap:5px;cursor:pointer;color:var(--muted);
+    padding:4px 11px;border-radius:999px;border:1px solid var(--line);}
+  .basepick label:has(input:checked){background:var(--violet-l);border-color:#c4b5fd;color:var(--violet-d);font-weight:600;}
+  .basepick input{accent-color:var(--violet);}
+  .basepick .hint{color:var(--gray);font-size:12px;}
+  table.cat th.chk,table.cat td.chk{text-align:center;width:40px;}
+  table.cat td.chk input{width:17px;height:17px;accent-color:var(--violet);cursor:pointer;}
+  tr.done{opacity:.45;}
+  tr.done td.r a.route{text-decoration:line-through;}
+  .progress-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#fff;
+    border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin:10px 0 6px;font-size:14px;}
+  .progress-bar .pcount{font-weight:700;color:var(--violet-d);white-space:nowrap;}
+  .progress-bar .ptrack{flex:1;min-width:160px;height:9px;background:var(--gray-l);border-radius:999px;overflow:hidden;}
+  .progress-bar .pfill{height:100%;background:var(--violet);width:0;transition:width .25s;}
+  .progress-bar button{font-size:12px;border:1px solid var(--line);background:#fff;border-radius:8px;
+    padding:5px 12px;cursor:pointer;color:var(--muted);}
+  .progress-bar button:hover{background:var(--gray-l);}
+  .progress-bar .savehint{color:var(--gray);font-size:12px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="dot">🗺️</div>
+    <div>
+      <h1>Карта раздела HR</h1>
+      <div class="sub">Company24 · все 67 страниц со статусами · потоки и взаимосвязи · из кода develop (7eb2c3f0) · всё на проде · 05.06.2026</div>
+    </div>
+  </header>
+
+  <div class="summary">
+    <div class="scard ok"><div class="num">25</div><div class="lbl">✅ Рабочих<br>(реальные данные)</div></div>
+    <div class="scard new"><div class="num">13</div><div class="lbl">🆕 Свежих<br>(эта сессия)</div></div>
+    <div class="scard dev"><div class="num">21</div><div class="lbl">🟡 В разработке<br>(UI есть, данные частично)</div></div>
+    <div class="scard stub"><div class="num">21</div><div class="lbl">⚪ Заглушка / эксперимент<br>(нет данных / «Скоро» / редирект)</div></div>
+  </div>
+  <div class="legend">
+    <span class="chip"><span class="pill p-ok">✅ Рабочая</span> тянет данные из API, в проде</span>
+    <span class="chip"><span class="pill p-new">🆕 Свежая</span> сделана/переделана в этой сессии</span>
+    <span class="chip"><span class="pill p-dev">🟡 В разработке</span> интерфейс есть, данные частичные</span>
+    <span class="chip"><span class="pill p-stub">⚪ Заглушка</span> 0 API / «Скоро» / редирект / PoC</span>
+  </div>
+  <div class="note" style="margin-top:8px">Статус определён автоматически по коду: число обращений к API, наличие маркеров «Скоро»/mock/TODO, дата последнего коммита. «Свежая» = коммит 04–05.06.2026.</div>
+
+  <div class="basepick">
+    <b>Открывать страницы на:</b>
+    <label><input type="radio" name="base" value="https://new.company24.pro" checked> Стейджинг (new)</label>
+    <label><input type="radio" name="base" value="https://company24.pro"> Прод</label>
+    <label><input type="radio" name="base" value="http://localhost:3000"> Локально :3000</label>
+    <span class="hint">Клик по маршруту откроет страницу в новой вкладке. У маршрутов с <code>[id]</code> открывается список.</span>
+  </div>
+
+  <!-- 1. КАТАЛОГ -->
+  <h2><span class="n">1</span> Полный каталог страниц</h2>
+
+  <h3 class="grp">🟢 НАЙМ — ядро продукта <span class="b">в активном меню</span></h3>
+  <table class="cat">
+    <tr><th style="width:22%">Маршрут</th><th style="width:13%">Статус</th><th>Что это</th><th style="width:11%">Изменён</th></tr>
+    <tr><td class="r">/hr/dashboard</td><td><span class="pill p-new">🆕 Рабочая</span></td><td class="note">Дашборд найма: KPI, воронка, AI-инсайты (виджет календаря — «скоро»)</td><td class="d">04.06</td></tr>
+    <tr><td class="r">/hr/vacancies</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Список вакансий: Активные / Архив / Корзина</td><td class="d">01.06</td></tr>
+    <tr><td class="r">/hr/vacancies/[id]</td><td><span class="pill p-new">🆕 Рабочая</span></td><td class="note">Карточка вакансии — 7 вкладок (ядро, 4250 строк): кандидаты, аналитика, анкета, воронка, демо, тест, настройки</td><td class="d">05.06</td></tr>
+    <tr><td class="r">/hr/vacancies/create/wizard</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Мастер создания вакансии (пошаговый)</td><td class="d">02.04</td></tr>
+    <tr><td class="r">/hr/vacancies/[id]/compare</td><td><span class="pill p-new">🆕 Рабочая</span></td><td class="note">Сравнение кандидатов: AI-группировка ответов, сворачиваемые ячейки, ресайз колонок</td><td class="d">05.06</td></tr>
+    <tr><td class="r">/hr/vacancies/[id]/edit</td><td><span class="pill p-dev">🟡 В разработке</span></td><td class="note">Legacy-редактор вакансии (почти не используется)</td><td class="d">02.04</td></tr>
+    <tr><td class="r">/hr/vacancies/[id]/test-table</td><td><span class="pill p-dev">🟡 Debug</span></td><td class="note">Таблица тест-скоров (отладочная/админская)</td><td class="d">03.06</td></tr>
+    <tr><td class="r">/hr/vacancies/create · /new</td><td><span class="pill p-stub">⚪ Служебная</span></td><td class="note">Обёртка/редирект на мастер создания</td><td class="d">05.23</td></tr>
+    <tr><td class="r">/hr/candidates</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Список кандидатов: фильтры, сортировки, пагинация</td><td class="d">29.05</td></tr>
+    <tr><td class="r">/hr/candidates/[id]</td><td><span class="pill p-new">🆕 Рабочая</span></td><td class="note">Карточка кандидата: резюме, демо, анкета, история, заметки + диалоги «Пригласить/Отказать», инлайн-переименование имени (drawer обновлён 05.06)</td><td class="d">29.05</td></tr>
+    <tr><td class="r">/hr/talent-pool</td><td><span class="pill p-new">🆕 Рабочая</span></td><td class="note">Резерв: база, скоринг, кампании, формы, матчинг к вакансиям</td><td class="d">04.06</td></tr>
+    <tr><td class="r">/hr/calendar</td><td><span class="pill p-new">🆕 Рабочая</span></td><td class="note">Календарь: события, переговорные, конфликты, неделя/месяц</td><td class="d">04.06</td></tr>
+    <tr><td class="r">/hr/interviews</td><td><span class="pill p-new">🆕 Рабочая</span></td><td class="note">Интервью — <b>сегодня переведена с mock на реальные данные</b> (события календаря)</td><td class="d">05.06</td></tr>
+    <tr><td class="r">/hr/hiring-settings</td><td><span class="pill p-new">🆕 Рабочая</span></td><td class="note">Центральные настройки найма (1714 строк): мультибренд, воронка→hh, расписание, корзина, AI</td><td class="d">05.06</td></tr>
+    <tr><td class="r">/hr/audit-log</td><td><span class="pill p-new">🆕 Рабочая</span></td><td class="note">Журнал аудита ПДн (ФЗ-152): экспорт/удаление кандидатов</td><td class="d">05.06</td></tr>
+    <tr><td class="r">/hr/library</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Библиотека шаблонов: демо, блоки, тесты, анкеты</td><td class="d">29.05</td></tr>
+    <tr><td class="r">/hr/library/create (+ editor)</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Мастер + редактор материалов (1787 строк)</td><td class="d">17.04</td></tr>
+    <tr><td class="r">/hr/library/anketa-editor</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Конструктор анкет</td><td class="d">29.05</td></tr>
+    <tr><td class="r">/hr/library/preview/[id]</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Превью шаблона</td><td class="d">23.05</td></tr>
+    <tr><td class="r">/hr/analytics</td><td><span class="pill p-stub">⚪ Редирект</span></td><td class="note">Перенаправляет на /hr/dashboard?tab=analytics (5 строк)</td><td class="d">05.04</td></tr>
+    <tr><td class="r">/hr/demo-editor</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Редактор демо-потока вакансии (реальные данные demos)</td><td class="d">18.04</td></tr>
+  </table>
+
+  <h3 class="grp">🟡 АДАПТАЦИЯ <span class="b">частично в меню</span></h3>
+  <table class="cat">
+    <tr><th style="width:22%">Маршрут</th><th style="width:13%">Статус</th><th>Что это</th><th style="width:11%">Изменён</th></tr>
+    <tr><td class="r">/hr/adaptation/analytics</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Аналитика адаптации (воронка, проблемные шаги)</td><td class="d">04.06</td></tr>
+    <tr><td class="r">/hr/adaptation/assignments</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Назначения адаптации сотруднику</td><td class="d">04.06</td></tr>
+    <tr><td class="r">/hr/adaptation/assignments/[id]</td><td><span class="pill p-dev">🟡 В разработке</span></td><td class="note">Карточка назначения (шаги)</td><td class="d">08.04</td></tr>
+    <tr><td class="r">/hr/adaptation/plans (+[planId])</td><td><span class="pill p-dev">🟡 В разработке</span></td><td class="note">Планы адаптации и их шаги</td><td class="d">23.05</td></tr>
+    <tr><td class="r">/hr/adaptation/gamification</td><td><span class="pill p-dev">🟡 Эксперимент</span></td><td class="note">Геймификация онбординга</td><td class="d">08.04</td></tr>
+    <tr><td class="r">/hr/onboarding</td><td><span class="pill p-stub">⚪ Хаб-заглушка</span></td><td class="note">Хаб «Ввод информации» — ссылки на под-страницы (нет данных)</td><td class="d">07.04</td></tr>
+    <tr><td class="r">/hr/onboarding/channel</td><td><span class="pill p-stub">⚪ Эксперимент</span></td><td class="note">Канал сбора данных (0 API)</td><td class="d">07.04</td></tr>
+    <tr><td class="r">/hr/onboarding/smart-input</td><td><span class="pill p-stub">⚪ Эксперимент</span></td><td class="note">Автозаполнение из текста (0 API)</td><td class="d">07.04</td></tr>
+    <tr><td class="r">/hr/onboarding/voice</td><td><span class="pill p-stub">⚪ Эксперимент</span></td><td class="note">Голосовой ввод данных (0 API)</td><td class="d">07.04</td></tr>
+    <tr><td class="r">/hr/onboarding/enrichment-preview</td><td><span class="pill p-stub">⚪ Эксперимент</span></td><td class="note">Превью обогащения данных (0 API)</td><td class="d">23.05</td></tr>
+    <tr><td class="r">/hr/preboarding</td><td><span class="pill p-dev">🟡 В разработке</span></td><td class="note">Пребординг (подготовка до выхода)</td><td class="d">07.04</td></tr>
+    <tr><td class="r">/hr/offboarding</td><td><span class="pill p-dev">🟡 В разработке</span></td><td class="note">Оффбординг + exit-опрос</td><td class="d">29.03</td></tr>
+    <tr><td class="r">/hr/buddy (+[assignmentId])</td><td><span class="pill p-dev">🟡 В разработке</span></td><td class="note">Наставничество: встречи, задачи, чек-листы</td><td class="d">08.04</td></tr>
+  </table>
+
+  <h3 class="grp">🟡 ОРГСТРУКТУРА <span class="b">в меню</span></h3>
+  <table class="cat">
+    <tr><th style="width:22%">Маршрут</th><th style="width:13%">Статус</th><th>Что это</th><th style="width:11%">Изменён</th></tr>
+    <tr><td class="r">/hr/org-structure</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Оргсхема компании (847 строк)</td><td class="d">17.04</td></tr>
+    <tr><td class="r">/hr/departments</td><td><span class="pill p-new">🆕 Рабочая</span></td><td class="note">Отделы</td><td class="d">04.06</td></tr>
+    <tr><td class="r">/hr/positions</td><td><span class="pill p-new">🆕 Рабочая</span></td><td class="note">Должности</td><td class="d">04.06</td></tr>
+  </table>
+
+  <h3 class="grp">⚪ ПЕРСОНАЛ · ОБУЧЕНИЕ · УДЕРЖАНИЕ <span class="b">вне активного меню</span></h3>
+  <table class="cat">
+    <tr><th style="width:22%">Маршрут</th><th style="width:13%">Статус</th><th>Что это</th><th style="width:11%">Изменён</th></tr>
+    <tr><td class="r">/hr/flight-risk</td><td><span class="pill p-new">🆕 Рабочая</span></td><td class="note">Риск увольнения + действия удержания</td><td class="d">04.06</td></tr>
+    <tr><td class="r">/hr/pulse-surveys</td><td><span class="pill p-dev">🟡 В разработке</span></td><td class="note">Пульс-опросы вовлечённости</td><td class="d">04.06</td></tr>
+    <tr><td class="r">/hr/employees/[id]/skills</td><td><span class="pill p-dev">🟡 В разработке</span></td><td class="note">Gap-анализ навыков сотрудника</td><td class="d">23.05</td></tr>
+    <tr><td class="r">/hr/courses (+edit, learn)</td><td><span class="pill p-dev">🟡 В разработке</span></td><td class="note">Курсы: список, редактор, прохождение</td><td class="d">23.05</td></tr>
+    <tr><td class="r">/hr/courses/ai-generate</td><td><span class="pill p-dev">🟡 В разработке</span></td><td class="note">AI-генерация курса (872 строки)</td><td class="d">23.05</td></tr>
+    <tr><td class="r">/hr/assessments</td><td><span class="pill p-dev">🟡 В разработке</span></td><td class="note">Оценки/ассессменты, 360°</td><td class="d">23.05</td></tr>
+    <tr><td class="r">/hr/certificates</td><td><span class="pill p-dev">🟡 В разработке</span></td><td class="note">Сертификаты</td><td class="d">23.05</td></tr>
+    <tr><td class="r">/hr/skills</td><td><span class="pill p-dev">🟡 Эксперимент</span></td><td class="note">Каталог навыков компании</td><td class="d">29.03</td></tr>
+    <tr><td class="r">/hr/reskilling</td><td><span class="pill p-stub">⚪ Эксперимент</span></td><td class="note">Переквалификация</td><td class="d">29.03</td></tr>
+    <tr><td class="r">/hr/predictive-hiring</td><td><span class="pill p-stub">⚪ Эксперимент</span></td><td class="note">Предиктивный найм (ML-прогноз)</td><td class="d">29.03</td></tr>
+    <tr><td class="r">/hr/marketplace</td><td><span class="pill p-stub">⚪ Эксперимент</span></td><td class="note">Маркетплейс талантов</td><td class="d">29.03</td></tr>
+  </table>
+
+  <h3 class="grp">⚪ AI · ПРОЧЕЕ · СЛУЖЕБНОЕ <span class="b">вне меню / legacy</span></h3>
+  <table class="cat">
+    <tr><th style="width:22%">Маршрут</th><th style="width:13%">Статус</th><th>Что это</th><th style="width:11%">Изменён</th></tr>
+    <tr><td class="r">/hr/scoring-lab</td><td><span class="pill p-dev">🟡 Прототип</span></td><td class="note">Лаборатория скоринга (рубрики, веса)</td><td class="d">30.05</td></tr>
+    <tr><td class="r">/hr/ai-assistant</td><td><span class="pill p-dev">🟡 В разработке</span></td><td class="note">AI-ассистент HR (чат для задач)</td><td class="d">29.03</td></tr>
+    <tr><td class="r">/hr/agents</td><td><span class="pill p-stub">⚪ Заглушка</span></td><td class="note">Витрина AI-агентов (без действий, 0 API)</td><td class="d">02.05</td></tr>
+    <tr><td class="r">/hr/settings/notifications</td><td><span class="pill p-dev">🟡 Рабочая</span></td><td class="note">Уведомления HR (Telegram-токен/чат) — обёртка над компонентом</td><td class="d">23.05</td></tr>
+    <tr><td class="r">/hr/settings/schedule</td><td><span class="pill p-stub">⚪ Заглушка</span></td><td class="note">Расписание (заглушка, не синхронизируется)</td><td class="d">08.04</td></tr>
+    <tr><td class="r">/hr/settings/templates</td><td><span class="pill p-stub">⚪ «Скоро»</span></td><td class="note">Шаблоны сообщений (заглушка)</td><td class="d">08.04</td></tr>
+    <tr><td class="r">/hr/settings/sources</td><td><span class="pill p-stub">⚪ «Скоро»</span></td><td class="note">Источники найма (заглушка)</td><td class="d">08.04</td></tr>
+    <tr><td class="r">/hr/integrations</td><td><span class="pill p-stub">⚪ Служебная</span></td><td class="note">Обёртка (рендерит карточку hh.ru-интеграции)</td><td class="d">14.04</td></tr>
+    <tr><td class="r">/hr/overview</td><td><span class="pill p-stub">⚪ Legacy</span></td><td class="note">Старый дашборд v1 (0 API)</td><td class="d">06.05</td></tr>
+    <tr><td class="r">/hr/overview2</td><td><span class="pill p-stub">⚪ Orphaned</span></td><td class="note">Неиспользуемый второй обзор</td><td class="d">03.04</td></tr>
+    <tr><td class="r">/hr/funnel</td><td><span class="pill p-stub">⚪ Legacy</span></td><td class="note">Отдельная воронка (заменена дашбордом)</td><td class="d">23.05</td></tr>
+    <tr><td class="r">/hr/sources</td><td><span class="pill p-stub">⚪ Пусто</span></td><td class="note">5 строк (пустой/редирект)</td><td class="d">28.03</td></tr>
+  </table>
+
+  <div class="callout">
+    <b>Главная картина по статусам.</b> Реально работают и поддерживаются ~<b>25 страниц</b> — это группа «Найм» + оргструктура + аналитика адаптации.
+    Вся свежая работа (🆕) — внутри ядра. Большой «длинный хвост» (~21 заглушка/эксперимент) — это HR-tech фичи будущего (онбординг-каналы, предиктив, маркетплейс, reskilling),
+    у которых есть только UI без бэкенда. <b>Решение по хвосту</b> (добивать / спрятать из меню / удалить) — отдельный пункт ниже.
+  </div>
+
+  <!-- 2. МЕНЮ -->
+  <h2><span class="n">2</span> Как это сгруппировано в меню</h2>
+  <div class="note">Группы из <code>lib/sidebar/module-menus.ts</code>. Зелёное — то, что реально показывается и работает.</div>
+  <div class="card">
+    <div class="mermaid">
+flowchart LR
+  HR(["HR · Найм и команда"]):::root
+  HR --> G1["🟢 НАЙМ — ядро"]:::g
+  HR --> G2["🟡 Адаптация"]:::a
+  HR --> G3["🟡 Оргструктура"]:::a
+  HR --> G4["⚪ В разработке / Legacy<br/>(~32 страницы вне меню)"]:::x
+
+  G1 --> n1["Дашборд · Вакансии ★ · Кандидаты ★"]:::g
+  G1 --> n2["Библиотека · Резерв · Аналитика"]:::g
+  G1 --> n3["Календарь ★ · Интервью ★ · Настройки найма ★ · Аудит ★"]:::g
+  G2 --> a1["Назначения · Аналитика · Онбординг · Buddy"]:::a
+  G3 --> o1["Оргструктура · Отделы · Должности"]:::a
+  G4 --> x1["Обучение · Сотрудники · Сертификаты · Навыки"]:::x
+  G4 --> x2["Flight-Risk · Пульс · Predictive · Маркетплейс"]:::x
+  G4 --> x3["Overview · Funnel · Scoring-Lab · AI-ассистент · Agents"]:::x
+
+  classDef root fill:#7c3aed,stroke:#6d28d9,color:#fff,font-weight:bold;
+  classDef g fill:#dcfce7,stroke:#86efac,color:#166534;
+  classDef a fill:#fef3c7,stroke:#fcd34d,color:#92400e;
+  classDef x fill:#f1f5f9,stroke:#cbd5e1,color:#475569;
+    </div>
+    <div class="legend"><span class="chip">★ — трогали в последней сессии</span></div>
+  </div>
+
+  <!-- 3. СКВОЗНОЙ ПОТОК -->
+  <h2><span class="n">3</span> Сквозной поток найма <small>— путь кандидата от отклика до найма</small></h2>
+  <div class="note">Центральная механика ядра. Стадии (<code>lib/stages.ts</code>, 16 канонических) и блоки-автоматизации (<code>lib/funnel-builder</code>, ~20 блоков) — две связанные оси.</div>
+  <div class="card">
+    <div class="mermaid">
+flowchart TB
+  hh["hh.ru отклики"]:::src --> Q
+  site["Сайт / Демо"]:::src --> Q
+  man["Вручную / Telegram"]:::src --> Q
+  Q["Очередь импорта<br/><small>lib/hh/process-queue</small>"]:::proc
+  Q --> SF{"Стоп-факторы?<br/><small>город·возраст·опыт·формат·гражд.·зарплата</small>"}:::dec
+  SF -->|совпало| REJ["❌ Отказ + сообщение"]:::rej
+  SF -->|нет| AIR["AI-скоринг резюме<br/><small>Sonnet · 0-100</small>"]:::ai
+  AIR -->|низкий| REJ
+  AIR -->|ок| C1["Первичный контакт<br/><small>приглашение в hh-чат</small>"]:::stage
+  C1 --> DEMO["Демонстрация"]:::stage
+  DEMO --> ANK["Анкета"]:::stage
+  ANK --> AIA["AI-скрининг анкеты"]:::ai
+  AIA --> BOT["AI чат-бот / Дожим"]:::ai
+  BOT --> TEST["Тестовое задание"]:::stage
+  TEST --> INT["Интервью<br/><small>= событие календаря</small>"]:::stage
+  INT --> DEC{"Решение"}:::dec
+  DEC -->|да| OFF["Оффер"]:::stage
+  DEC -->|нет| REJ
+  OFF --> HIRE["✅ Нанят"]:::win
+  INT -.->|24ч / 2ч| REM["🔔 Напоминания HR"]:::side
+  BOT -.->|нарушения| ESC["⚠️ Эскалация HR"]:::side
+
+  classDef src fill:#ede9fe,stroke:#c4b5fd,color:#5b21b6;
+  classDef proc fill:#e0e7ff,stroke:#a5b4fc,color:#3730a3,font-weight:bold;
+  classDef stage fill:#dcfce7,stroke:#86efac,color:#166534;
+  classDef ai fill:#fae8ff,stroke:#e9d5ff,color:#86198f;
+  classDef dec fill:#fef9c3,stroke:#fde047,color:#854d0e;
+  classDef rej fill:#fee2e2,stroke:#fca5a5,color:#991b1b;
+  classDef win fill:#bbf7d0,stroke:#4ade80,color:#14532d,font-weight:bold;
+  classDef side fill:#f1f5f9,stroke:#cbd5e1,color:#475569;
+    </div>
+  </div>
+
+  <!-- 4. AI ЧАТ-БОТ -->
+  <h2><span class="n">4</span> AI чат-бот — 4 слоя безопасности</h2>
+  <div class="card">
+    <div class="mermaid">
+flowchart TB
+  MSG["💬 Сообщение кандидата"]:::in --> PRE["① Pre-filter · Haiku<br/><small>injection · abuse · code · offtopic</small>"]:::hk
+  PRE -->|угроза| ESC["⚠️ Эскалация / авто-отказ"]:::rej
+  PRE -->|чисто| EX["② Executor · Sonnet<br/><small>aiChatbotPrompt + SAFETY_RULES</small>"]:::sn
+  EX --> POST["③ Post-filter · Haiku<br/><small>обещания · утечка · слом роли · оффтоп</small>"]:::hk
+  POST -->|нарушение| ESC
+  POST -->|чисто| SEND["✅ Ответ кандидату + тайминг"]:::ok
+  SEND -.-> WATCH["④ Watcher · cron<br/><small>аудит 50 последних / час</small>"]:::sn
+  KILL["🛑 Kill-switch · вакансия/компания/платформа"]:::kill -.-> EX
+  SAND["🧪 Песочница (dryRun)"]:::test -.-> EX
+
+  classDef in fill:#ede9fe,stroke:#c4b5fd,color:#5b21b6,font-weight:bold;
+  classDef hk fill:#dbeafe,stroke:#93c5fd,color:#1e40af;
+  classDef sn fill:#fae8ff,stroke:#e9d5ff,color:#86198f;
+  classDef ok fill:#dcfce7,stroke:#86efac,color:#166534,font-weight:bold;
+  classDef rej fill:#fee2e2,stroke:#fca5a5,color:#991b1b;
+  classDef kill fill:#fef3c7,stroke:#fcd34d,color:#92400e;
+  classDef test fill:#f1f5f9,stroke:#cbd5e1,color:#475569;
+    </div>
+  </div>
+
+  <!-- 5. ДАННЫЕ -->
+  <h2><span class="n">5</span> Модель данных и связи</h2>
+  <div class="card">
+    <div class="mermaid">
+flowchart TB
+  CO["🏢 companies<br/><small>+ hiringDefaults</small>"]:::co --> VAC["📋 vacancies"]:::vac
+  CO --> HH["🔗 hhIntegrations · OAuth"]:::hh
+  CO --> TG["📨 Telegram-канал"]:::side
+  VAC --> CAND["👤 candidates"]:::cand
+  VAC -->|pipeline / stageHhActions| ST["Стадии воронки · 16"]:::st
+  CAND --> ST
+  CAND -->|sync-stage| HH
+  HH -->|импорт откликов| CAND
+  CAND --> CHAT["💬 ai_chatbot_messages"]:::side
+  CAND --> CAL["📅 calendar_events · interview"]:::cal
+  CAL --> REM["🔔 Напоминания 24ч/2ч"]:::side
+  CAND --> POOL["♻️ talent_pool"]:::side
+  VAC --> DEMO["🎬 demos / тесты"]:::side
+  CAND -.->|экспорт·удаление| AUD["📒 audit_log · ФЗ-152"]:::aud
+
+  classDef co fill:#7c3aed,stroke:#6d28d9,color:#fff,font-weight:bold;
+  classDef vac fill:#dcfce7,stroke:#86efac,color:#166534,font-weight:bold;
+  classDef cand fill:#dbeafe,stroke:#93c5fd,color:#1e40af,font-weight:bold;
+  classDef hh fill:#ffedd5,stroke:#fdba74,color:#9a3412;
+  classDef st fill:#fae8ff,stroke:#e9d5ff,color:#86198f;
+  classDef cal fill:#ede9fe,stroke:#c4b5fd,color:#5b21b6;
+  classDef side fill:#f1f5f9,stroke:#cbd5e1,color:#475569;
+  classDef aud fill:#fef3c7,stroke:#fcd34d,color:#92400e;
+    </div>
+  </div>
+
+  <!-- 6. КОНФИГ -->
+  <h2><span class="n">6</span> Где что настраивается</h2>
+  <div class="grid">
+    <div class="panel">
+      <h3>🏢 Настройки найма · company-level</h3>
+      <ul>
+        <li><b>Аварийное отключение AI</b> · kill-switch на компанию</li>
+        <li><b>Выбор компании в анкете</b> · мультибренд <span style="color:#6d28d9">(сессия)</span></li>
+        <li><b>Воронка → действия в hh.ru</b> <span style="color:#6d28d9">(сессия)</span></li>
+        <li><b>Расписание интервью</b> · слоты, напоминания</li>
+        <li><b>Хранение данных · Корзина</b> · ФЗ-152, сроки</li>
+        <li><b>Webhooks · Bitrix24</b> · стоп-факторы по умолчанию</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>📋 Карточка вакансии · vacancy-level</h3>
+      <ul>
+        <li><b>Кандидаты</b> · канбан/воронка/список</li>
+        <li><b>Вакансия (анкета)</b> · бренд, AI-профиль <span style="color:#6d28d9">(сессия)</span></li>
+        <li><b>Воронка</b> · стадии + действие в hh <span style="color:#6d28d9">(сессия)</span></li>
+        <li><b>Демо · Тест · Исходящий подбор</b></li>
+        <li><b>Настройки</b> · AI чат-бот (+песочница), followup, стоп-факторы</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 7. КРОНЫ -->
+  <h2><span class="n">7</span> Фоновые кроны</h2>
+  <div class="card">
+    <table class="cat">
+      <tr><th>Крон</th><th>Что делает</th><th>Outward?</th><th>Статус</th></tr>
+      <tr><td class="r">hh-import</td><td class="note">Импорт откликов → стоп-факторы → AI-скоринг → приглашение/отказ</td><td class="note">да</td><td><span class="pill p-ok">прод</span></td></tr>
+      <tr><td class="r">follow-up</td><td class="note">Дожим: касания в hh-чат</td><td class="note">да</td><td><span class="pill p-ok">прод</span></td></tr>
+      <tr><td class="r">ai-chatbot-watcher</td><td class="note">Аудит 50 последних ответов AI (раз в час)</td><td class="note">нет</td><td><span class="pill p-ok">прод</span></td></tr>
+      <tr><td class="r">interview-reminders</td><td class="note">Напоминания HR за 24ч/2ч до интервью (C6)</td><td class="note">нет</td><td><span class="pill p-dev">ждёт прод-crontab</span></td></tr>
+      <tr><td class="r">trash-cleanup</td><td class="note">Удаление вакансий из корзины старше срока</td><td class="note">нет</td><td><span class="pill p-ok">прод</span></td></tr>
+    </table>
+  </div>
+
+  <!-- 8. РЕШЕНИЯ -->
+  <h2><span class="n">8</span> Что просит внимания — точки для решений</h2>
+  <div class="grid">
+    <div class="panel">
+      <h3>🟢 Быстрое</h3>
+      <ul>
+        <li><b>Свип заголовков</b> под дизайн-эталон</li>
+        <li><b>assessment</b>-действие hh в маппинге воронки</li>
+        <li><b>Переименование стадий разом</b> (company-level)</li>
+        <li><b>Заглушки в меню</b> — спрятать «Скоро» из навигации, чтобы не путали (settings/templates, sources, schedule)</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>⚠️ Архитектурные узлы</h3>
+      <ul>
+        <li><b>B9 — две системы статусов:</b> 16 канонических + ~8 legacy-слагов в БД</li>
+        <li><b>Funnel Builder (~20 блоков) vs Pipeline (16 стадий)</b> — две оси, dual-write, нет единого источника правды</li>
+        <li><b>«Длинный хвост» ~21 страница</b> (онбординг-каналы, предиктив, маркетплейс, reskilling) — добивать / прятать / удалять</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="foot">
+    Сгенерировано анализом ветки <code>develop</code>: все 67 файлов <code>app/(modules)/hr/**/page.tsx</code> просканированы на обращения к API,
+    маркеры заглушек и дату последнего коммита; подсистемы разобраны 6 параллельными исследователями.
+    Статусы — эвристика по коду на 05.06.2026; «Рабочая» ≠ «без багов», означает «тянет реальные данные».
+    Файл самодостаточный — открывается в браузере, печатается в PDF.
+  </div>
+
+</div>
+<script>
+  mermaid.initialize({
+    startOnLoad:true, theme:'base',
+    themeVariables:{
+      primaryColor:'#ede9fe', primaryTextColor:'#0f172a', primaryBorderColor:'#c4b5fd',
+      lineColor:'#94a3b8', fontSize:'14px',
+      fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif"
+    },
+    flowchart:{curve:'basis', padding:14, nodeSpacing:40, rankSpacing:46}
+  });
+
+  // Делаем маршруты кликабельными ссылками на реальные страницы.
+  (function(){
+    function currentBase(){
+      var el = document.querySelector('input[name="base"]:checked');
+      return el ? el.value : 'https://new.company24.pro';
+    }
+    // путь для перехода: убираем динамические сегменты [id] → открываем список
+    function navPath(path){
+      return path.replace(/\/\[[^\]]+\].*$/, '');
+    }
+    var links = [];
+    document.querySelectorAll('td.r').forEach(function(td){
+      var raw = td.textContent.trim();
+      var first = raw.split(/\s/)[0];                 // первый токен — сам маршрут
+      if(first.indexOf('/hr/') !== 0) return;          // строки кронов и т.п. пропускаем
+      var rest = raw.slice(first.length);              // хвост вроде " (+edit, learn)" или " · /new"
+      var a = document.createElement('a');
+      a.className = 'route';
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.dataset.path = navPath(first);
+      a.textContent = first;
+      td.textContent = '';
+      td.appendChild(a);
+      if(rest){ var s = document.createElement('span'); s.className='route-param'; s.textContent = rest; td.appendChild(s); }
+      links.push(a);
+    });
+    function applyBase(){
+      var base = currentBase();
+      links.forEach(function(a){ a.href = base + a.dataset.path; });
+    }
+    document.querySelectorAll('input[name="base"]').forEach(function(r){ r.addEventListener('change', applyBase); });
+    applyBase();
+  })();
+
+  // Чеклист ревизии: галочка в каждой строке каталога, сохраняется в браузере.
+  (function(){
+    var STORE = 'hrmap-checklist-v1';
+    var state = {};
+    try { state = JSON.parse(localStorage.getItem(STORE) || '{}'); } catch(e) {}
+    function save(){ try { localStorage.setItem(STORE, JSON.stringify(state)); } catch(e) {} }
+    var boxes = [];
+
+    document.querySelectorAll('table.cat').forEach(function(tbl){
+      var rows = Array.prototype.slice.call(tbl.querySelectorAll('tr'));
+      // каталожная таблица = есть строки-маршруты /hr/...; таблицу кронов пропускаем
+      var isCatalog = rows.some(function(r){
+        var rc = r.querySelector('td.r');
+        return rc && rc.textContent.trim().indexOf('/hr/') === 0;
+      });
+      if(!isCatalog) return;
+
+      rows.forEach(function(r, i){
+        if(i === 0){ // строка заголовка
+          var th = document.createElement('th'); th.className = 'chk'; th.textContent = '✓';
+          r.appendChild(th); return;
+        }
+        var rc = r.querySelector('td.r');
+        var td = document.createElement('td'); td.className = 'chk';
+        if(rc){
+          var key = rc.textContent.trim();
+          var cb = document.createElement('input'); cb.type = 'checkbox'; cb.dataset.key = key;
+          cb.title = 'Отметить как просмотренное';
+          if(state[key]){ cb.checked = true; r.classList.add('done'); }
+          cb.addEventListener('change', function(){
+            if(cb.checked){ state[key] = 1; } else { delete state[key]; }
+            r.classList.toggle('done', cb.checked);
+            save(); updateProgress();
+          });
+          td.appendChild(cb); boxes.push(cb);
+        }
+        r.appendChild(td);
+      });
+    });
+
+    // полоса прогресса под заголовком раздела «Полный каталог страниц»
+    var h2 = document.querySelector('h2'); // первый h2 = раздел 1 (каталог)
+    var bar = document.createElement('div'); bar.className = 'progress-bar';
+    bar.innerHTML = '<span>Прогресс ревизии:</span>'
+      + '<span class="pcount">0 / ' + boxes.length + '</span>'
+      + '<span class="ptrack"><span class="pfill"></span></span>'
+      + '<button id="chkreset" type="button">Сбросить</button>'
+      + '<span class="savehint">отметки сохраняются в этом браузере</span>';
+    if(h2 && h2.parentNode){ h2.parentNode.insertBefore(bar, h2.nextSibling); }
+
+    function updateProgress(){
+      var done = boxes.filter(function(b){ return b.checked; }).length;
+      bar.querySelector('.pcount').textContent = done + ' / ' + boxes.length;
+      bar.querySelector('.pfill').style.width = (boxes.length ? (done / boxes.length * 100) : 0) + '%';
+    }
+    bar.querySelector('#chkreset').addEventListener('click', function(){
+      if(!confirm('Снять все отметки ревизии?')) return;
+      boxes.forEach(function(b){ b.checked = false; var tr = b.closest('tr'); if(tr) tr.classList.remove('done'); });
+      state = {}; save(); updateProgress();
+    });
+    updateProgress();
+  })();
+</script>
+</body>
+</html>
