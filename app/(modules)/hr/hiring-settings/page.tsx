@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
-import {Settings, Clock, Save, Bell, GitBranch, MessageSquare, ShieldAlert, Plus, Pencil, Trash2, Palette, Plug, ChevronDown} from "lucide-react"
+import {Settings, Clock, Save, Bell, GitBranch, MessageSquare, ShieldAlert, Plus, Pencil, Trash2, Palette, Plug, ChevronDown, ChevronUp, Star} from "lucide-react"
 import { toast } from "sonner"
 import { IntegrationsContent } from "@/components/hr/integrations-content"
 import { AiAbuseModeSettings } from "@/components/company/ai-abuse-mode-settings"
@@ -200,6 +200,13 @@ export default function HiringSettingsPage() {
   const [showCompanySelector, setShowCompanySelector] = useState(false)
   type BrandCompany = { id: string; name: string; slogan?: string; description?: string }
   const [brandCompanies, setBrandCompanies] = useState<BrandCompany[]>([])
+  // O1: компания по умолчанию ("" = основная №1, иначе id бренда).
+  const [defaultBrandCompanyId, setDefaultBrandCompanyId] = useState("")
+  const chooseDefaultCompany = async (id: string) => {
+    setDefaultBrandCompanyId(id)
+    try { await patchHiringDefaults({ defaultBrandCompanyId: id }); toast.success("Компания по умолчанию сохранена") }
+    catch { toast.error("Не удалось сохранить") }
+  }
   const toggleCompanySelector = async (checked: boolean) => {
     setShowCompanySelector(checked)
     try {
@@ -219,7 +226,20 @@ export default function HiringSettingsPage() {
   const updateBrandCompany = (id: string, patch: Partial<BrandCompany>) =>
     setBrandCompanies(prev => prev.map(c => c.id === id ? { ...c, ...patch } : c))
   const saveBrandCompany = () => persistCompanies(brandCompanies)
-  const removeBrandCompany = (id: string) => persistCompanies(brandCompanies.filter(c => c.id !== id))
+  const removeBrandCompany = (id: string) => {
+    if (defaultBrandCompanyId === id) chooseDefaultCompany("")  // удалили дефолтную → вернуть на основную
+    persistCompanies(brandCompanies.filter(c => c.id !== id))
+  }
+  // Поменять порядок брендов (вверх/вниз).
+  const moveBrandCompany = (id: string, dir: -1 | 1) => {
+    const idx = brandCompanies.findIndex(c => c.id === id)
+    if (idx < 0) return
+    const to = idx + dir
+    if (to < 0 || to >= brandCompanies.length) return
+    const list = [...brandCompanies]
+    ;[list[idx], list[to]] = [list[to], list[idx]]
+    persistCompanies(list)
+  }
 
   // ── AI-чат-бот kill switch (глобально на компанию) ──
   const [aiChatbotKilled, setAiChatbotKilled] = useState(false)
@@ -463,6 +483,7 @@ export default function HiringSettingsPage() {
         // O1: мультикомпанийность
         if (typeof hd.showCompanySelector === "boolean") setShowCompanySelector(hd.showCompanySelector)
         if (Array.isArray(hd.brandCompanies)) setBrandCompanies(hd.brandCompanies)
+        if (typeof hd.defaultBrandCompanyId === "string") setDefaultBrandCompanyId(hd.defaultBrandCompanyId)
 
         // Битрикс24
         if (hd.bitrix) {
@@ -766,16 +787,43 @@ export default function HiringSettingsPage() {
                       </Button>
                     </div>
                     <p className="text-[11px] text-muted-foreground">
-                      №1 — основная компания: <span className="font-medium text-foreground">{mainBrandName || "из профиля"}</span> (по умолчанию, настраивается в профиле). При создании вакансии HR выбирает, под какую компанию она идёт.
+                      Отметьте звёздочкой компанию по умолчанию и меняйте порядок стрелками. При создании вакансии HR выбирает, под какую компанию она идёт.
                     </p>
 
-                    {/* Дополнительные компании (№2+) */}
+                    {/* №1 — основная компания (из профиля), карточкой сверху */}
+                    <div className="rounded-lg border p-3 space-y-2 bg-muted/30">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-semibold text-muted-foreground shrink-0">№1</span>
+                        <span className="text-sm font-medium flex-1 truncate">{mainBrandName || "Основная компания (из профиля)"}</span>
+                        <span className="text-[10px] text-muted-foreground shrink-0 hidden sm:inline">основная</span>
+                      </div>
+                      {companyDescription
+                        ? <p className="text-xs text-muted-foreground line-clamp-2">{companyDescription}</p>
+                        : <p className="text-xs text-muted-foreground/70 italic">Описание — в блоке «Описание компании» ниже.</p>}
+                      <div className="flex items-center justify-between pt-1">
+                        <button type="button" onClick={() => chooseDefaultCompany("")}
+                          className={cn("inline-flex items-center gap-1 text-[11px] rounded-md px-2 py-1 border transition-colors",
+                            defaultBrandCompanyId === "" ? "bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/30 dark:border-amber-900" : "text-muted-foreground hover:bg-accent border-transparent")}>
+                          <Star className={cn("w-3 h-3", defaultBrandCompanyId === "" && "fill-amber-400 text-amber-400")} />
+                          {defaultBrandCompanyId === "" ? "По умолчанию" : "Сделать по умолчанию"}
+                        </button>
+                        <span className="text-[10px] text-muted-foreground">настраивается в профиле</span>
+                      </div>
+                    </div>
+
+                    {/* Дополнительные компании (№2+) — порядок ↑↓ + дефолт */}
                     {brandCompanies.map((c, i) => (
                       <div key={c.id} className="rounded-lg border p-3 space-y-2 bg-muted/20">
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] font-semibold text-muted-foreground shrink-0">№{i + 2}</span>
                           <Input value={c.name} onChange={(e) => updateBrandCompany(c.id, { name: e.target.value })}
                             placeholder="Название компании *" className="h-8 text-sm flex-1" />
+                          <div className="flex flex-col shrink-0">
+                            <button type="button" title="Выше" disabled={i === 0} onClick={() => moveBrandCompany(c.id, -1)}
+                              className="text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:hover:text-muted-foreground"><ChevronUp className="w-3.5 h-3.5" /></button>
+                            <button type="button" title="Ниже" disabled={i === brandCompanies.length - 1} onClick={() => moveBrandCompany(c.id, 1)}
+                              className="text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:hover:text-muted-foreground"><ChevronDown className="w-3.5 h-3.5" /></button>
+                          </div>
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
                             title="Удалить" onClick={() => removeBrandCompany(c.id)}>
                             <Trash2 className="w-3.5 h-3.5" />
@@ -785,7 +833,13 @@ export default function HiringSettingsPage() {
                           placeholder="Слоган (необязательно)" className="h-8 text-xs" />
                         <Textarea value={c.description ?? ""} onChange={(e) => updateBrandCompany(c.id, { description: e.target.value })}
                           placeholder="Краткое описание для кандидатов" rows={2} className="text-xs" />
-                        <div className="flex justify-end">
+                        <div className="flex items-center justify-between">
+                          <button type="button" disabled={!c.name.trim()} onClick={() => chooseDefaultCompany(c.id)}
+                            className={cn("inline-flex items-center gap-1 text-[11px] rounded-md px-2 py-1 border transition-colors disabled:opacity-40",
+                              defaultBrandCompanyId === c.id ? "bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/30 dark:border-amber-900" : "text-muted-foreground hover:bg-accent border-transparent")}>
+                            <Star className={cn("w-3 h-3", defaultBrandCompanyId === c.id && "fill-amber-400 text-amber-400")} />
+                            {defaultBrandCompanyId === c.id ? "По умолчанию" : "Сделать по умолчанию"}
+                          </button>
                           <Button size="sm" className="h-7 text-xs gap-1.5" onClick={saveBrandCompany} disabled={!c.name.trim()}>
                             <Save className="w-3.5 h-3.5" />Сохранить
                           </Button>

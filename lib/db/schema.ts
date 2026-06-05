@@ -132,6 +132,9 @@ export interface CompanyHiringDefaults {
   // дополнительные. При создании вакансии HR выбирает компанию (vacancy-side — отдельно).
   showCompanySelector?: boolean
   brandCompanies?: Array<{ id: string; name: string; slogan?: string; description?: string }>
+  // O1: какая компания выбрана по умолчанию при создании вакансии.
+  // "" = основная (№1, из профиля), иначе id из brandCompanies.
+  defaultBrandCompanyId?: string
 }
 
 export const companies = pgTable("companies", {

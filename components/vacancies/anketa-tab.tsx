@@ -1079,6 +1079,10 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
       if (!hd) return
       if (Array.isArray(hd.brandCompanies)) setBrandCompanies(hd.brandCompanies.filter((c: BrandCompany) => c?.name?.trim()))
       if (typeof hd.showCompanySelector === "boolean") setBrandSelectorEnabled(hd.showCompanySelector)
+      // Дефолтная компания из настроек — предвыбираем для новой вакансии (если HR ещё не выбрал).
+      if (typeof hd.defaultBrandCompanyId === "string" && hd.defaultBrandCompanyId) {
+        setData(prev => prev.brandCompanyId ? prev : { ...prev, brandCompanyId: hd.defaultBrandCompanyId })
+      }
     }).catch(() => {})
   }, [])
 
