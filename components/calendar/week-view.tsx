@@ -24,6 +24,7 @@ export interface CalendarEvent {
   endAt: string
   color?: string | null
   roomId?: string | null
+  scope?: string | null
   // Поля интервью (для событий type='interview').
   vacancyId?: string | null
   interviewer?: string | null

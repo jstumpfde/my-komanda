@@ -42,6 +42,7 @@ interface EventModalProps {
 export interface EventFormData {
   title: string
   type: string
+  scope: string
   startAt: string
   endAt: string
   description: string
@@ -85,6 +86,7 @@ export function EventModal({
   const [endAt, setEndAt] = useState("")
   const [description, setDescription] = useState("")
   const [roomId, setRoomId] = useState("")
+  const [scope, setScope] = useState("company")
   const [conflict, setConflict] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   // Поля интервью
@@ -107,6 +109,7 @@ export function EventModal({
     if (event) {
       setTitle(event.title)
       setType(event.type)
+      setScope(event.scope ?? "company")
       setStartAt(toLocalDatetime(event.startAt))
       setEndAt(toLocalDatetime(event.endAt))
       setDescription("")
@@ -120,6 +123,7 @@ export function EventModal({
       const end = new Date(start.getTime() + 60 * 60 * 1000)
       setTitle("")
       setType("meeting")
+      setScope("company")
       setStartAt(toLocalDatetime(start))
       setEndAt(toLocalDatetime(end))
       setDescription("")
@@ -176,7 +180,7 @@ export function EventModal({
     try {
       const isInterview = type === "interview"
       await onSave({
-        title, type, startAt, endAt, description, roomId,
+        title, type, scope, startAt, endAt, description, roomId,
         vacancyId:       isInterview ? (vacancyId || null) : null,
         interviewer:     isInterview ? interviewer : "",
         interviewType:   isInterview ? interviewType : "",
@@ -218,20 +222,36 @@ export function EventModal({
             />
           </div>
 
-          <div className="space-y-1">
-            <Label htmlFor="type">Тип</Label>
-            <Select value={type} onValueChange={setType}>
-              <SelectTrigger id="type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {EVENT_TYPES.map((t) => (
-                  <SelectItem key={t.value} value={t.value}>
-                    {t.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="type">Тип</Label>
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger id="type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {EVENT_TYPES.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="scope">Категория</Label>
+              <Select value={scope} onValueChange={setScope}>
+                <SelectTrigger id="scope">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="company">Компания</SelectItem>
+                  <SelectItem value="hr">HR-отдел</SelectItem>
+                  <SelectItem value="personal">Личное</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {/* Поля интервью — только для type='interview'. candidate = название события. */}

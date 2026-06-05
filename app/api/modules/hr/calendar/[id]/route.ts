@@ -58,6 +58,9 @@ export async function PATCH(
     if (body.interviewType !== undefined) updateData.interviewType = body.interviewType
     if (body.interviewFormat !== undefined) updateData.interviewFormat = body.interviewFormat
     if (body.interviewStatus !== undefined) updateData.interviewStatus = body.interviewStatus
+    if (body.scope !== undefined) {
+      updateData.scope = (body.scope === "hr" || body.scope === "personal") ? body.scope : "company"
+    }
 
     const [updated] = await db
       .update(calendarEvents)

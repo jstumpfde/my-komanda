@@ -26,6 +26,9 @@ export async function GET(req: NextRequest) {
     if (type) {
       conditions.push(eq(calendarEvents.type, type))
     }
+    if (filter === "hr") {
+      conditions.push(eq(calendarEvents.scope, "hr"))
+    }
     if (filter === "mine") {
       // «Мой» = события, где я автор ИЛИ участник (а не только созданные мной).
       const myParticipantEvents = db
@@ -59,7 +62,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
 
     const { title, description, type, startAt, endAt, allDay, roomId, color, recurrence, participants,
-            candidateId, vacancyId, interviewer, interviewType, interviewFormat, interviewStatus } = body
+            candidateId, vacancyId, interviewer, interviewType, interviewFormat, interviewStatus, scope } = body
 
     if (!title || !startAt || !endAt) {
       return apiError("Обязательные поля: title, startAt, endAt")
@@ -86,6 +89,7 @@ export async function POST(req: NextRequest) {
         interviewType:   interviewType ?? null,
         interviewFormat: interviewFormat ?? null,
         interviewStatus: interviewStatus ?? null,
+        scope: (scope === "hr" || scope === "personal") ? scope : "company",
       })
       .returning()
 
