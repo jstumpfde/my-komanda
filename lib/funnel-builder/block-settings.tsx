@@ -12,6 +12,8 @@ import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { QuestionEditor } from "@/components/vacancies/anketa-tab"
 import { AutomationSettings } from "@/components/vacancies/automation-settings"
 import { CourseTab } from "@/components/vacancies/course-tab"
+import { FunnelTab } from "@/components/vacancies/funnel-tab"
+import { VacancyTestFollowupSettings } from "@/components/vacancies/vacancy-test-followup-settings"
 import { AnketaTemplateControls } from "@/components/vacancies/anketa-template-controls"
 import { FinalScreensSettings, type FinalScreensConfig } from "@/components/vacancies/final-screens-settings"
 import { FirstMessagesChainEditor } from "@/components/vacancies/first-messages-chain-editor"
@@ -36,6 +38,7 @@ import type {
   VacancyStopFactors,
 } from "@/lib/db/schema"
 
+import { parsePipeline, type VacancyPipelineV2 } from "@/lib/stages"
 import type { FunnelBlockType } from "./blocks"
 
 export interface BlockSettingsProps {
@@ -66,7 +69,7 @@ interface VacancyShape {
   stopFactorsJson:      VacancyStopFactors | null
   stopWordsJson:        string[] | null
   requirementsJson:     VacancyRequirements | null
-  descriptionJson:      { finalScreens?: FinalScreensConfig; anketa?: AnketaShape } | null
+  descriptionJson:      { finalScreens?: FinalScreensConfig; anketa?: AnketaShape; pipeline?: unknown } | null
   recoveryMessageEnabled: boolean
   recoveryMessageText:    string
 }
@@ -300,6 +303,48 @@ function CallIntentSettingsWrapped({ vacancyId }: BlockSettingsProps) {
 
 // VacancyScheduleSettings и AiChatbotSettings — без initial-пропа, отдаём как есть.
 
+// Стадии воронки (funnel_stages): грузим descriptionJson.pipeline, парсим
+// через parsePipeline и передаём в FunnelTab. Не затрагиваем логику FunnelTab —
+// только оборачиваем для Sheet.
+function FunnelStagesSettingsWrapped({ vacancyId, onSaved }: BlockSettingsProps) {
+  const { data, loaded } = useVacancyData(vacancyId)
+  const [pipeline, setPipeline] = useState<VacancyPipelineV2 | null>(null)
+  useEffect(() => {
+    if (loaded && pipeline === null) {
+      setPipeline(parsePipeline(data?.descriptionJson?.pipeline ?? null))
+    }
+  }, [loaded, data, pipeline])
+  if (!loaded || pipeline === null) return <LoadingSpinner />
+  return (
+    <FunnelTab
+      vacancyId={vacancyId}
+      initialPipeline={pipeline}
+      onSaved={() => { onSaved?.() }}
+    />
+  )
+}
+
+// Дожим по тесту (test_followup): VacancyTestFollowupSettings — self-contained,
+// грузит данные сам через свой fetch по vacancyId.
+function TestFollowupSettingsWrapped({ vacancyId }: BlockSettingsProps) {
+  return <VacancyTestFollowupSettings vacancyId={vacancyId} />
+}
+
+// FAQ-шаблоны (faq_templates): секция "templates" из AutomationSettings,
+// по образцу CallIntentSettingsWrapped.
+function FaqTemplatesSettingsWrapped({ vacancyId }: BlockSettingsProps) {
+  const { data, loaded } = useVacancyData(vacancyId)
+  if (!loaded) return <LoadingSpinner />
+  return (
+    <AutomationSettings
+      vacancyId={vacancyId}
+      descriptionJson={data?.descriptionJson}
+      sections={["templates"]}
+      tabKey="funnel-builder"
+    />
+  )
+}
+
 // ─── Реестр ────────────────────────────────────────────────────────────────
 
 export const BLOCK_SETTINGS_REGISTRY: Partial<Record<FunnelBlockType, BlockSettingsEntry>> = {
@@ -312,6 +357,11 @@ export const BLOCK_SETTINGS_REGISTRY: Partial<Record<FunnelBlockType, BlockSetti
     component:   StopFactorsSettingsWrapped,
     title:       "Стоп-факторы по резюме",
     description: "Город / опыт / возраст → автоотказ",
+  },
+  funnel_stages: {
+    component:   FunnelStagesSettingsWrapped,
+    title:       "Стадии воронки",
+    description: "Канбан-стадии и действие в hh.ru на каждой стадии",
   },
   first_message: {
     component:   FirstMessagesChainEditor,
@@ -362,6 +412,16 @@ export const BLOCK_SETTINGS_REGISTRY: Partial<Record<FunnelBlockType, BlockSetti
     component:   DozhimSettingsWrapped,
     title:       "Дожим",
     description: "Цепочка касаний для не-открывших и не-завершивших",
+  },
+  test_followup: {
+    component:   TestFollowupSettingsWrapped,
+    title:       "Дожим по тесту",
+    description: "Касания для не открывших / не сдавших тест",
+  },
+  faq_templates: {
+    component:   FaqTemplatesSettingsWrapped,
+    title:       "FAQ-шаблоны ответов",
+    description: "Готовые ответы для ручного копирования в hh-чат",
   },
   ai_chatbot: {
     component:   AiChatbotSettings,

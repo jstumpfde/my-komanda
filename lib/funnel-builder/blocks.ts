@@ -29,6 +29,7 @@ import {
 export type FunnelBlockType =
   | "ai_resume_score"
   | "stop_factors_resume"
+  | "funnel_stages"
   | "first_message"
   | "recovery"
   | "prequalification"
@@ -39,6 +40,8 @@ export type FunnelBlockType =
   | "stop_words_chat"
   | "call_intent"
   | "dozhim"
+  | "test_followup"
+  | "faq_templates"
   | "ai_chatbot"
   | "interview"
   | "thank_you_screen"
@@ -71,6 +74,14 @@ export const BLOCK_META: Record<FunnelBlockType, FunnelBlockMeta> = {
     label:            "Стоп-факторы по резюме",
     description:      "Город / опыт / возраст → автоотказ",
     icon:             Filter,
+    required:         false,
+    incompatibleWith: [],
+  },
+  funnel_stages: {
+    type:             "funnel_stages",
+    label:            "Стадии воронки",
+    description:      "Канбан-стадии и действие в hh.ru на каждой стадии",
+    icon:             ListChecks,
     required:         false,
     incompatibleWith: [],
   },
@@ -154,6 +165,22 @@ export const BLOCK_META: Record<FunnelBlockType, FunnelBlockMeta> = {
     required:         false,
     incompatibleWith: [],
   },
+  test_followup: {
+    type:             "test_followup",
+    label:            "Дожим по тесту",
+    description:      "Касания для не открывших / не сдавших тест",
+    icon:             Repeat,
+    required:         false,
+    incompatibleWith: [],
+  },
+  faq_templates: {
+    type:             "faq_templates",
+    label:            "FAQ-шаблоны ответов",
+    description:      "Готовые ответы для ручного копирования в hh-чат",
+    icon:             MessageCircle,
+    required:         false,
+    incompatibleWith: [],
+  },
   ai_chatbot: {
     type:             "ai_chatbot",
     label:            "AI чат-бот",
@@ -223,6 +250,7 @@ export const BLOCK_META: Record<FunnelBlockType, FunnelBlockMeta> = {
 export const BLOCK_TYPES: FunnelBlockType[] = [
   "ai_resume_score",
   "stop_factors_resume",
+  "funnel_stages",
   "first_message",
   "recovery",
   "prequalification",
@@ -236,6 +264,8 @@ export const BLOCK_TYPES: FunnelBlockType[] = [
   "stop_words_chat",
   "call_intent",
   "dozhim",
+  "test_followup",
+  "faq_templates",
   "ai_chatbot",
   "interview",
   "reference_check",
@@ -262,6 +292,7 @@ export interface FunnelConfig {
 export function getDefaultFunnelConfig(): FunnelConfig {
   const defaultsByType: Partial<Record<FunnelBlockType, boolean>> = {
     ai_resume_score:  true,
+    funnel_stages:    true,
     first_message:    true,
     demo:             true,
     anketa:           true,
@@ -270,6 +301,8 @@ export function getDefaultFunnelConfig(): FunnelConfig {
     interview:        true,
     thank_you_screen: true,
     // Прочее — false (опционально, HR включит через UI).
+    test_followup:    false,
+    faq_templates:    false,
   }
   return {
     blocks: BLOCK_TYPES.map((type, idx) => ({
