@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { ArrowLeft, Columns3, Rows3, Loader2, Star, Check, X, ExternalLink, Ban, ChevronDown, Download, Share2, SlidersHorizontal, ChevronsUpDown, ChevronsDownUp } from "lucide-react"
+import { ArrowLeft, Columns3, Rows3, Loader2, Star, Check, X, ExternalLink, Ban, ChevronDown, Download, Share2, SlidersHorizontal, ChevronsUpDown, ChevronsDownUp, Sparkles } from "lucide-react"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
 
 interface QItem { id: string; text: string; points?: number; answerType?: string }
@@ -143,6 +143,10 @@ function CompareInner() {
   })
   // Ручная ширина колонок кандидатов (px). Дефолт — 260.
   const [colWidths, setColWidths] = useState<Record<string, number>>({})
+  // AI-группировка текстовых ответов в фильтре: questionId → группы / выбранные.
+  const [aiGroups, setAiGroups] = useState<Record<string, { label: string; ids: string[] }[]>>({})
+  const [groupSel, setGroupSel] = useState<Record<string, string[]>>({})
+  const [groupingQid, setGroupingQid] = useState<string | null>(null)
   const startColResize = (colId: string, e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation()
     const startX = e.clientX
@@ -252,9 +256,17 @@ function CompareInner() {
       const parts = new Set(v.split("|||").map((s) => s.trim()).filter(Boolean))
       if (!sel.some((s) => parts.has(s))) return false
     }
+    // AI-группы: кандидат должен попасть в одну из выбранных групп вопроса.
+    for (const [qid, labels] of Object.entries(groupSel)) {
+      if (!labels.length) continue
+      const groups = aiGroups[qid]
+      if (!groups) continue
+      const inAny = groups.some((g) => labels.includes(g.label) && g.ids.includes(c.id))
+      if (!inAny) return false
+    }
     return true
   }
-  const filterActive = Object.values(answerSel).some((a) => a.length) || testMin != null || demoMin != null || resumeMin != null || stageSel.length > 0
+  const filterActive = Object.values(answerSel).some((a) => a.length) || Object.values(groupSel).some((a) => a.length) || testMin != null || demoMin != null || resumeMin != null || stageSel.length > 0
   const visible = filterActive ? candidates.filter(passesFilter) : candidates
   const stageOptions = useMemo(() => {
     const set = new Set<string>()
@@ -265,6 +277,34 @@ function CompareInner() {
     setAnswerSel((prev) => {
       const cur = prev[qid] ?? []
       const next = cur.includes(val) ? cur.filter((x) => x !== val) : [...cur, val]
+      const out = { ...prev }
+      if (next.length) out[qid] = next; else delete out[qid]
+      return out
+    })
+  // AI-группировка ответов на текстовый вопрос (для фильтра).
+  const groupQuestion = async (qid: string, questionText: string) => {
+    setGroupingQid(qid)
+    try {
+      const answers = candidates
+        .map((c) => ({ id: c.id, text: answerValueOf(c.id, qid) }))
+        .filter((a) => a.text)
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/compare-group`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: questionText, answers }),
+      })
+      const json = await res.json()
+      const groups = ((json?.data ?? json)?.groups ?? []) as { label: string; ids: string[] }[]
+      setAiGroups((prev) => ({ ...prev, [qid]: groups }))
+    } catch {
+      toast.error("Не удалось сгруппировать ответы")
+    } finally {
+      setGroupingQid(null)
+    }
+  }
+  const toggleGroupSel = (qid: string, label: string) =>
+    setGroupSel((prev) => {
+      const cur = prev[qid] ?? []
+      const next = cur.includes(label) ? cur.filter((l) => l !== label) : [...cur, label]
       const out = { ...prev }
       if (next.length) out[qid] = next; else delete out[qid]
       return out
@@ -506,16 +546,39 @@ function CompareInner() {
                             </button>
                           )
                         })
+                      ) : aiGroups[q.id] ? (
+                        <>
+                          {aiGroups[q.id].map((g) => {
+                            const active = (groupSel[q.id] ?? []).includes(g.label)
+                            return (
+                              <button key={g.label} onClick={() => toggleGroupSel(q.id, g.label)}
+                                className={cn("px-2 py-0.5 rounded border text-[11px]", active ? "bg-primary/10 border-primary text-primary" : "border-border text-muted-foreground hover:border-primary/40")}>
+                                {g.label} <span className="opacity-50">· {g.ids.length}</span>
+                              </button>
+                            )
+                          })}
+                          <button onClick={() => groupQuestion(q.id, q.text)} disabled={groupingQid === q.id}
+                            title="Перегруппировать" className="px-1.5 py-0.5 rounded text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-40">
+                            {groupingQid === q.id ? <Loader2 className="size-3 animate-spin" /> : "↻"}
+                          </button>
+                        </>
                       ) : (
-                        ([["__answered__", `ответили · ${q.answered}`], ["__empty__", `без ответа · ${q.empty}`]] as const).map(([tok, lbl]) => {
-                          const active = sel.includes(tok)
-                          return (
-                            <button key={tok} onClick={() => toggleAnswerVal(q.id, tok)}
-                              className={cn("px-2 py-0.5 rounded border text-[11px]", active ? "bg-primary/10 border-primary text-primary" : "border-border text-muted-foreground hover:border-primary/40")}>
-                              {lbl}
-                            </button>
-                          )
-                        })
+                        <>
+                          {([["__answered__", `ответили · ${q.answered}`], ["__empty__", `без ответа · ${q.empty}`]] as const).map(([tok, lbl]) => {
+                            const active = sel.includes(tok)
+                            return (
+                              <button key={tok} onClick={() => toggleAnswerVal(q.id, tok)}
+                                className={cn("px-2 py-0.5 rounded border text-[11px]", active ? "bg-primary/10 border-primary text-primary" : "border-border text-muted-foreground hover:border-primary/40")}>
+                                {lbl}
+                              </button>
+                            )
+                          })}
+                          <button onClick={() => groupQuestion(q.id, q.text)} disabled={groupingQid === q.id}
+                            className="px-2 py-0.5 rounded border border-dashed text-[11px] text-primary hover:bg-primary/5 disabled:opacity-40 inline-flex items-center gap-1">
+                            {groupingQid === q.id ? <Loader2 className="size-3 animate-spin" /> : <Sparkles className="size-3" />}
+                            Сгруппировать (AI)
+                          </button>
+                        </>
                       )}
                     </div>
                   )
