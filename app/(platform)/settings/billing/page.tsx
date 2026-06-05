@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { DocumentSettings } from "@/components/billing/document-settings"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Label } from "@/components/ui/label"
@@ -284,7 +285,7 @@ export default function BillingPage() {
   const invoiceTotal = selectedInvoicePlan ? selectedInvoicePlan.price * periodMultiplier : 0
 
   return (
-    <div className="py-6 pl-14 pr-14 space-y-4">
+    <div className="space-y-4">
       <div>
         <h1 className="text-xl font-semibold text-foreground">Тариф и оплата</h1>
         <p className="text-sm text-muted-foreground mt-1">Управление подпиской и счетами</p>
@@ -334,255 +335,268 @@ export default function BillingPage() {
       )}
 
       {/* ═══ Текущий тариф ═══ */}
-      <div className="rounded-xl border border-border p-5 space-y-4">
-        <div className="flex items-center gap-2">
-          <CreditCard className="w-4 h-4 text-muted-foreground" />
-          <h2 className="text-base font-semibold text-foreground">Текущий тариф</h2>
-        </div>
-
-        {loadingSub ? (
-          <p className="text-sm text-muted-foreground">Загрузка...</p>
-        ) : (
-          <div className="space-y-4">
-            <div className="flex items-center gap-4 flex-wrap">
-              <div>
-                <p className="text-lg font-semibold text-foreground">
-                  {subscription?.plan?.name ?? "Пробный период"}
-                </p>
-                {subscription?.plan ? (
-                  <p className="text-sm text-muted-foreground">
-                    {formatKopecks(subscription.plan.price)} / месяц
+      <Card>
+        <CardHeader className="pb-2 pt-4 px-5">
+          <CardTitle className="text-base flex items-center gap-2">
+            <CreditCard className="w-4 h-4" />
+            Текущий тариф
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-5 pb-4 pt-0 space-y-4">
+          {loadingSub ? (
+            <p className="text-sm text-muted-foreground">Загрузка...</p>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center gap-4 flex-wrap">
+                <div>
+                  <p className="text-lg font-semibold text-foreground">
+                    {subscription?.plan?.name ?? "Пробный период"}
                   </p>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    {subscription?.daysRemaining != null
-                      ? `Осталось: ${subscription.daysRemaining} ${pluralDays(subscription.daysRemaining)}`
-                      : "Выберите тариф для продолжения"}
-                  </p>
+                  {subscription?.plan ? (
+                    <p className="text-sm text-muted-foreground">
+                      {formatKopecks(subscription.plan.price)} / месяц
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      {subscription?.daysRemaining != null
+                        ? `Осталось: ${subscription.daysRemaining} ${pluralDays(subscription.daysRemaining)}`
+                        : "Выберите тариф для продолжения"}
+                    </p>
+                  )}
+                </div>
+                <Badge
+                  variant="outline"
+                  className={cn("text-xs", statusBadgeClass(subscription?.status ?? "trial"))}
+                >
+                  {STATUS_LABELS[subscription?.status ?? "trial"] ?? subscription?.status ?? "Пробный"}
+                </Badge>
+                {subscription?.status === "trial" && subscription.trialEndsAt && (
+                  <span className="text-xs text-muted-foreground">
+                    Пробный до {formatDate(subscription.trialEndsAt)}
+                  </span>
                 )}
               </div>
-              <Badge
-                variant="outline"
-                className={cn("text-xs", statusBadgeClass(subscription?.status ?? "trial"))}
-              >
-                {STATUS_LABELS[subscription?.status ?? "trial"] ?? subscription?.status ?? "Пробный"}
-              </Badge>
-              {subscription?.status === "trial" && subscription.trialEndsAt && (
-                <span className="text-xs text-muted-foreground">
-                  Пробный до {formatDate(subscription.trialEndsAt)}
-                </span>
+
+              {/* Модули тарифа */}
+              {currentPlan && currentPlan.modules.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-wider font-medium text-muted-foreground">Подключённые модули</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {currentPlan.modules.map(mod => (
+                      <div key={mod.id} className="flex items-center gap-2 text-sm">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                        <span className="text-foreground">{mod.name}</span>
+                        {(mod.maxVacancies != null || mod.maxCandidates != null) && (
+                          <span className="text-xs text-muted-foreground ml-auto">
+                            {mod.maxVacancies != null && `${mod.maxVacancies} вак.`}
+                            {mod.maxVacancies != null && mod.maxCandidates != null && " / "}
+                            {mod.maxCandidates != null && `${mod.maxCandidates.toLocaleString("ru-RU")} канд.`}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!subscription?.plan && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => document.getElementById("plans-section")?.scrollIntoView({ behavior: "smooth" })}
+                >
+                  Выбрать тариф
+                </Button>
               )}
             </div>
-
-            {/* Модули тарифа */}
-            {currentPlan && currentPlan.modules.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs uppercase tracking-wider font-medium text-muted-foreground">Подключённые модули</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {currentPlan.modules.map(mod => (
-                    <div key={mod.id} className="flex items-center gap-2 text-sm">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                      <span className="text-foreground">{mod.name}</span>
-                      {(mod.maxVacancies != null || mod.maxCandidates != null) && (
-                        <span className="text-xs text-muted-foreground ml-auto">
-                          {mod.maxVacancies != null && `${mod.maxVacancies} вак.`}
-                          {mod.maxVacancies != null && mod.maxCandidates != null && " / "}
-                          {mod.maxCandidates != null && `${mod.maxCandidates.toLocaleString("ru-RU")} канд.`}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {!subscription?.plan && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => document.getElementById("plans-section")?.scrollIntoView({ behavior: "smooth" })}
-              >
-                Выбрать тариф
-              </Button>
-            )}
-          </div>
-        )}
-      </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ═══ Тарифные планы ═══ */}
-      <div id="plans-section" className="space-y-3">
-        <h2 className="text-base font-semibold text-foreground">Тарифные планы</h2>
-        {loadingPlans ? (
-          <p className="text-sm text-muted-foreground">Загрузка тарифов...</p>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {allPlans.map(plan => {
-              const isCurrent = plan.id === currentPlanId
-              const isArchived = plan.isArchived
-              const hrModule = plan.modules.find(m => m.slug === "hr")
+      <Card id="plans-section">
+        <CardHeader className="pb-2 pt-4 px-5">
+          <CardTitle className="text-base">Тарифные планы</CardTitle>
+        </CardHeader>
+        <CardContent className="px-5 pb-4 pt-0">
+          {loadingPlans ? (
+            <p className="text-sm text-muted-foreground">Загрузка тарифов...</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {allPlans.map(plan => {
+                const isCurrent = plan.id === currentPlanId
+                const isArchived = plan.isArchived
+                const hrModule = plan.modules.find(m => m.slug === "hr")
 
-              return (
-                <div
-                  key={plan.id}
-                  className={cn(
-                    "rounded-xl border border-border p-5 flex flex-col gap-3",
-                    isCurrent && "border-primary ring-1 ring-primary",
-                    isArchived && "opacity-70"
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-semibold text-foreground text-sm">{plan.name}</h3>
-                    <div className="flex flex-col gap-1 items-end">
-                      {isCurrent && (
-                        <Badge className="text-[10px] bg-primary text-primary-foreground px-1.5">
-                          Текущий
-                        </Badge>
-                      )}
-                      {isArchived && (
-                        <Badge variant="outline" className="text-[10px] border-amber-400 text-amber-700 bg-amber-50 px-1.5">
-                          Устаревший
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-
-                  <p className="text-xl font-bold text-foreground">
-                    {formatKopecks(plan.price)}
-                    <span className="text-xs font-normal text-muted-foreground"> / мес</span>
-                  </p>
-
-                  <ul className="space-y-1.5 text-xs text-muted-foreground flex-1">
-                    {plan.modules.map(mod => (
-                      <li key={mod.id} className="flex items-center gap-1.5">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
-                        {mod.name}
-                      </li>
-                    ))}
-                    {hrModule && (
-                      <>
-                        <li className="flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
-                          {hrModule.maxVacancies != null ? `${hrModule.maxVacancies} вакансий` : "Безлимит вакансий"}
-                        </li>
-                        <li className="flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
-                          {hrModule.maxCandidates != null
-                            ? `${hrModule.maxCandidates.toLocaleString("ru-RU")} кандидатов`
-                            : "Безлимит кандидатов"}
-                        </li>
-                      </>
+                return (
+                  <div
+                    key={plan.id}
+                    className={cn(
+                      "rounded-xl border border-border p-5 flex flex-col gap-3",
+                      isCurrent && "border-primary ring-1 ring-primary",
+                      isArchived && "opacity-70"
                     )}
-                  </ul>
-
-                  <Button
-                    size="sm"
-                    variant={isCurrent ? "outline" : "default"}
-                    className="w-full mt-auto"
-                    disabled={isCurrent || isArchived}
-                    onClick={() => !isCurrent && !isArchived && setConfirmPlan(plan)}
                   >
-                    {isCurrent ? "Текущий" : isArchived ? "Недоступен" : "Перейти"}
-                  </Button>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="font-semibold text-foreground text-sm">{plan.name}</h3>
+                      <div className="flex flex-col gap-1 items-end">
+                        {isCurrent && (
+                          <Badge className="text-[10px] bg-primary text-primary-foreground px-1.5">
+                            Текущий
+                          </Badge>
+                        )}
+                        {isArchived && (
+                          <Badge variant="outline" className="text-[10px] border-amber-400 text-amber-700 bg-amber-50 px-1.5">
+                            Устаревший
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+
+                    <p className="text-xl font-bold text-foreground">
+                      {formatKopecks(plan.price)}
+                      <span className="text-xs font-normal text-muted-foreground"> / мес</span>
+                    </p>
+
+                    <ul className="space-y-1.5 text-xs text-muted-foreground flex-1">
+                      {plan.modules.map(mod => (
+                        <li key={mod.id} className="flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+                          {mod.name}
+                        </li>
+                      ))}
+                      {hrModule && (
+                        <>
+                          <li className="flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+                            {hrModule.maxVacancies != null ? `${hrModule.maxVacancies} вакансий` : "Безлимит вакансий"}
+                          </li>
+                          <li className="flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+                            {hrModule.maxCandidates != null
+                              ? `${hrModule.maxCandidates.toLocaleString("ru-RU")} кандидатов`
+                              : "Безлимит кандидатов"}
+                          </li>
+                        </>
+                      )}
+                    </ul>
+
+                    <Button
+                      size="sm"
+                      variant={isCurrent ? "outline" : "default"}
+                      className="w-full mt-auto"
+                      disabled={isCurrent || isArchived}
+                      onClick={() => !isCurrent && !isArchived && setConfirmPlan(plan)}
+                    >
+                      {isCurrent ? "Текущий" : isArchived ? "Недоступен" : "Перейти"}
+                    </Button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ═══ Документы и доставка ═══ */}
       <DocumentSettings />
 
       {/* ═══ Счета ═══ */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-foreground">Счета</h2>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5 text-xs"
-            onClick={() => {
-              setInvoicePlanId(currentPlanId ?? "")
-              setInvoicePeriod("month")
-              setInvoiceDialogOpen(true)
-            }}
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Сформировать счёт
-          </Button>
-        </div>
-
-        {loadingInvoices ? (
-          <p className="text-sm text-muted-foreground">Загрузка счетов...</p>
-        ) : invoices.length === 0 ? (
-          <div className="rounded-xl border border-border p-5 text-center">
-            <FileText className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">Нет выставленных счетов</p>
-          </div>
-        ) : (
-          <TableCard>
-            <DataTable>
-              <DataHead>
-                <DataHeadCell>Номер</DataHeadCell>
-                <DataHeadCell>Тип</DataHeadCell>
-                <DataHeadCell>Дата</DataHeadCell>
-                <DataHeadCell>Период</DataHeadCell>
-                <DataHeadCell align="right">Сумма</DataHeadCell>
-                <DataHeadCell align="center">Статус</DataHeadCell>
-                <DataHeadCell width="90px" />
-              </DataHead>
-              <tbody>
-                {invoices.map(inv => {
-                  // Для оплаченных показываем «Акт» (документ закрытия) и
-                  // период от даты оплаты + 1 месяц. Для остальных статусов
-                  // (issued/pending/draft/cancelled) — «Счёт» и прочерк
-                  // в колонке периода: оплаты нет → периода ещё нет.
-                  const isPaid = inv.status === "paid"
-                  const docType = isPaid ? "Акт" : "Счёт"
-                  const periodCell = isPaid && inv.paidAt
-                    ? `${formatDate(inv.paidAt)} — ${formatDate(addDaysIso(inv.paidAt, 30))}`
-                    : "—"
-                  return (
-                  <DataRow key={inv.id}>
-                    <DataCell className="font-mono">{inv.invoiceNumber}</DataCell>
-                    <DataCell className="text-muted-foreground">{docType}</DataCell>
-                    <DataCell className="text-muted-foreground">{formatDate(inv.issuedAt ?? inv.createdAt)}</DataCell>
-                    <DataCell className="text-muted-foreground">{periodCell}</DataCell>
-                    <DataCell align="right" className="font-medium">{formatKopecks(inv.amountKopecks)}</DataCell>
-                    <DataCell align="center">
-                      <Badge variant="outline" className={cn("text-xs", invoiceStatusClass(inv.status))}>
-                        {INVOICE_STATUS_LABELS[inv.status] ?? inv.status}
-                      </Badge>
-                    </DataCell>
-                    <DataCell>
-                      <div className="flex items-center gap-1 justify-end">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Скачать счёт" asChild>
-                          <a href={`/api/billing/invoices/${inv.id}/pdf`} download>
-                            <Download className="w-3.5 h-3.5" />
-                          </a>
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                          title="Удалить счёт"
-                          disabled={deletingInvoiceId === inv.id}
-                          onClick={() => handleDeleteInvoice(inv.id, inv.invoiceNumber)}
-                        >
-                          {deletingInvoiceId === inv.id
-                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            : <Trash2 className="w-3.5 h-3.5" />}
-                        </Button>
-                      </div>
-                    </DataCell>
-                  </DataRow>
-                  )
-                })}
-              </tbody>
-            </DataTable>
-          </TableCard>
-        )}
-      </div>
+      <Card>
+        <CardHeader className="pb-2 pt-4 px-5">
+          <CardTitle className="text-base flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2">
+              <FileText className="w-4 h-4" />
+              Счета
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={() => {
+                setInvoicePlanId(currentPlanId ?? "")
+                setInvoicePeriod("month")
+                setInvoiceDialogOpen(true)
+              }}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Сформировать счёт
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-5 pb-4 pt-0">
+          {loadingInvoices ? (
+            <p className="text-sm text-muted-foreground">Загрузка счетов...</p>
+          ) : invoices.length === 0 ? (
+            <div className="py-6 text-center">
+              <FileText className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">Нет выставленных счетов</p>
+            </div>
+          ) : (
+            <TableCard>
+              <DataTable>
+                <DataHead>
+                  <DataHeadCell>Номер</DataHeadCell>
+                  <DataHeadCell>Тип</DataHeadCell>
+                  <DataHeadCell>Дата</DataHeadCell>
+                  <DataHeadCell>Период</DataHeadCell>
+                  <DataHeadCell align="right">Сумма</DataHeadCell>
+                  <DataHeadCell align="center">Статус</DataHeadCell>
+                  <DataHeadCell width="90px" />
+                </DataHead>
+                <tbody>
+                  {invoices.map(inv => {
+                    // Для оплаченных показываем «Акт» (документ закрытия) и
+                    // период от даты оплаты + 1 месяц. Для остальных статусов
+                    // (issued/pending/draft/cancelled) — «Счёт» и прочерк
+                    // в колонке периода: оплаты нет → периода ещё нет.
+                    const isPaid = inv.status === "paid"
+                    const docType = isPaid ? "Акт" : "Счёт"
+                    const periodCell = isPaid && inv.paidAt
+                      ? `${formatDate(inv.paidAt)} — ${formatDate(addDaysIso(inv.paidAt, 30))}`
+                      : "—"
+                    return (
+                    <DataRow key={inv.id}>
+                      <DataCell className="font-mono">{inv.invoiceNumber}</DataCell>
+                      <DataCell className="text-muted-foreground">{docType}</DataCell>
+                      <DataCell className="text-muted-foreground">{formatDate(inv.issuedAt ?? inv.createdAt)}</DataCell>
+                      <DataCell className="text-muted-foreground">{periodCell}</DataCell>
+                      <DataCell align="right" className="font-medium">{formatKopecks(inv.amountKopecks)}</DataCell>
+                      <DataCell align="center">
+                        <Badge variant="outline" className={cn("text-xs", invoiceStatusClass(inv.status))}>
+                          {INVOICE_STATUS_LABELS[inv.status] ?? inv.status}
+                        </Badge>
+                      </DataCell>
+                      <DataCell>
+                        <div className="flex items-center gap-1 justify-end">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" title="Скачать счёт" asChild>
+                            <a href={`/api/billing/invoices/${inv.id}/pdf`} download>
+                              <Download className="w-3.5 h-3.5" />
+                            </a>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            title="Удалить счёт"
+                            disabled={deletingInvoiceId === inv.id}
+                            onClick={() => handleDeleteInvoice(inv.id, inv.invoiceNumber)}
+                          >
+                            {deletingInvoiceId === inv.id
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <Trash2 className="w-3.5 h-3.5" />}
+                          </Button>
+                        </div>
+                      </DataCell>
+                    </DataRow>
+                    )
+                  })}
+                </tbody>
+              </DataTable>
+            </TableCard>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ═══ Модалка: сформировать счёт ═══ */}
       <Dialog open={invoiceDialogOpen} onOpenChange={setInvoiceDialogOpen}>

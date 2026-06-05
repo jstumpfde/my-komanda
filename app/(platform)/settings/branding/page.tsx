@@ -268,11 +268,14 @@ export default function BrandingPage() {
       <div className="space-y-4">
 
         {/* ═══ Логотип + Название + Слоган (объединённый блок) ═══ */}
-        <div className="rounded-xl border bg-card p-6 space-y-5">
-          <div className="flex items-center gap-2">
-            <Upload className="w-4 h-4 text-muted-foreground" />
-            <h3 className="text-base font-semibold">Логотип, название и слоган</h3>
-          </div>
+        <Card>
+          <CardHeader className="pb-2 pt-4 px-5">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Upload className="w-4 h-4" />
+              Логотип, название и слоган
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-5 pb-4 pt-0 space-y-5">
 
           {/* Логотип */}
           <div className="flex items-start gap-6">
@@ -463,13 +466,14 @@ export default function BrandingPage() {
           </div>
 
           {/* Сохранить внутри блока */}
-          <div className="flex justify-end pt-1 border-t border-border/40 -mx-6 px-6 -mb-6 pb-4 pt-4 mt-2">
+          <div className="flex justify-end border-t border-border/40 -mx-5 px-5 pb-0 pt-4 mt-2">
             <Button size="sm" onClick={handleBrandBlockSave} disabled={saving} className="gap-1.5">
               {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
               Сохранить
             </Button>
           </div>
-        </div>
+          </CardContent>
+        </Card>
 
         {/* ═══ Темы платформы ═══ */}
         <Card>

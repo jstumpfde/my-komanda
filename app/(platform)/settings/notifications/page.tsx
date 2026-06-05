@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Switch } from "@/components/ui/switch"
+import { Card, CardContent } from "@/components/ui/card"
 import { NotificationSettings } from "@/components/notification-settings"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -56,13 +57,15 @@ export default function NotificationsSettingsPage() {
       </div>
 
       {/* Global toggle — сохраняется сразу при переключении */}
-      <div className="flex items-center justify-between rounded-xl border border-border p-4 mb-4">
-        <div>
-          <p className="text-base font-medium">Все уведомления</p>
-          <p className="text-sm text-muted-foreground">Отключить все уведомления по email, Telegram и push</p>
-        </div>
-        <Switch checked={allEnabled} onCheckedChange={toggleAll} />
-      </div>
+      <Card className="mb-4">
+        <CardContent className="px-5 py-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-base font-medium">Все уведомления</p>
+            <p className="text-sm text-muted-foreground">Отключить все уведомления по email, Telegram и push</p>
+          </div>
+          <Switch checked={allEnabled} onCheckedChange={toggleAll} />
+        </CardContent>
+      </Card>
 
       <div className={cn(!allEnabled && "opacity-50 pointer-events-none select-none")}>
         <NotificationSettings />
