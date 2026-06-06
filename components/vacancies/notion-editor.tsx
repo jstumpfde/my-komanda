@@ -258,7 +258,7 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
   const switchLesson = (id: string) => setActiveLessonId(id)
 
   const addLesson = () => {
-    const l: Lesson = { id: `les-${Date.now()}`, emoji: "📝", title: "", blocks: [createBlock("text")] }
+    const l: Lesson = { id: `les-${Date.now()}`, emoji: "", title: "", blocks: [createBlock("text")] }
     save([...demo.lessons, l])
     setActiveLessonId(l.id)
     // Сразу открыть инлайн-ввод названия нового урока (поверх плашки).
@@ -3848,10 +3848,15 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
       <button
         ref={btnRef}
         onClick={openPicker}
-        className="text-[1.44rem] leading-none hover:opacity-70 transition-opacity flex-shrink-0 cursor-pointer"
-        title="Сменить эмодзи"
+        className={cn(
+          "leading-none transition-all flex-shrink-0 cursor-pointer flex items-center justify-center",
+          current
+            ? "text-[1.44rem] hover:opacity-70"
+            : "w-8 h-8 rounded-md text-muted-foreground/40 hover:text-foreground hover:bg-muted opacity-0 group-hover/title:opacity-100"
+        )}
+        title={current ? "Сменить иконку" : "Добавить иконку"}
       >
-        {current || "📝"}
+        {current || <Smile className="w-5 h-5" />}
       </button>
 
       {open && pos && typeof document !== "undefined" && (
@@ -3868,6 +3873,16 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
             placeholder="Поиск эмодзи..."
             className="w-full text-xs border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-primary/50 bg-muted/30 placeholder:text-muted-foreground/50"
           />
+
+          {/* Убрать иконку — заголовок останется без иконки */}
+          {current && (
+            <button
+              onClick={() => { onSelect(""); setOpen(false) }}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors px-1 py-1 -mb-0.5"
+            >
+              <X className="w-3.5 h-3.5" />Убрать иконку
+            </button>
+          )}
 
           {/* Быстрый доступ — скрываем при поиске */}
           {!search && (
