@@ -625,26 +625,34 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
 
               </div>
 
-              {/* Редактор кнопки «Далее» — фиксированный футер, всегда виден */}
+              {/* + Урок — над редактором кнопки, не прокручивается */}
+              <button
+                type="button"
+                title="Добавить урок"
+                onClick={addLesson}
+                className="shrink-0 w-full border-t border-dashed border-border px-2 pt-2 pb-1.5 flex items-center justify-center gap-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span className="text-xs">Урок</span>
+              </button>
+
+              {/* Редактор кнопки «Далее» — фиксированный футер под «+ Урок» */}
               {onNavButtonChange && (
                 <div className="shrink-0 border-t border-border px-2.5 py-2.5 space-y-2">
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Кнопка «Далее»</p>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider text-center">Кнопка «Далее»</p>
                   {/* Текст кнопки */}
                   <Input
                     value={localNavText}
                     onChange={(e) => setLocalNavText(e.target.value)}
                     onBlur={() => onNavButtonChange(navButtonColor ?? null, localNavText || null)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.currentTarget.blur()
-                      }
+                      if (e.key === "Enter") e.currentTarget.blur()
                     }}
                     placeholder="Далее"
-                    className="h-7 text-xs px-2"
+                    className="h-7 text-xs px-2 text-center"
                   />
-                  {/* Цветовая палитра */}
-                  <div className="flex items-center gap-1.5">
-                    {/* Бренд (сброс) */}
+                  {/* Цветовая палитра — центрированная */}
+                  <div className="flex items-center justify-center gap-1.5">
                     <button
                       title="Цвет бренда (по умолчанию)"
                       onClick={() => onNavButtonChange(null, localNavText || null)}
@@ -682,17 +690,6 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
                   </div>
                 </div>
               )}
-
-              {/* + Урок — всегда внизу, не прокручивается */}
-              <button
-                type="button"
-                title="Добавить урок"
-                onClick={addLesson}
-                className="shrink-0 w-full border-t border-dashed border-border px-2 pt-2 pb-1.5 flex items-center justify-center gap-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span className="text-xs">Урок</span>
-              </button>
             </div>
           )
         )}
