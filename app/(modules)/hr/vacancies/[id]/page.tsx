@@ -797,7 +797,11 @@ export default function VacancyPage() {
   const defaultTab = (status === "active" || status === "published") ? "candidates" : "settings"
   const rawUrlTab = searchParams?.get("tab") ?? null
   // Старая ссылка `?tab=automation` → новая `?tab=settings&section=ai`
-  const urlTab = rawUrlTab === "automation" ? "settings" : rawUrlTab
+  // Старые `?tab=course` / `?tab=test` → объединённый таб `content` (+ под-таб).
+  const urlTab = rawUrlTab === "automation" ? "settings"
+    : (rawUrlTab === "course" || rawUrlTab === "test") ? "content"
+    : rawUrlTab
+  const initialContentSubTab: "demo" | "test" = rawUrlTab === "test" ? "test" : "demo"
   const rawUrlSection = rawUrlTab === "automation" ? "ai" : (searchParams?.get("section") ?? null)
   // Миграция старых section-значений на новые 6 табов.
   // general → page (стартовая вкладка с брендингом), automation → ai.
@@ -898,6 +902,9 @@ export default function VacancyPage() {
   const testEditorRef = useRef<NotionEditorHandle>(null)
   const testTabRef = useRef<CourseTabHandle>(null)
   const [testEditorSaveStatus, setTestEditorSaveStatus] = useState<"saved" | "saving">("saved")
+
+  // Объединённый таб «Контент»: под-табы «Демонстрация» (kind=demo) / «Тест» (kind=test).
+  const [contentSubTab, setContentSubTab] = useState<"demo" | "test">(initialContentSubTab)
 
   // Anketa external save handle: AnketaTab вызывает registerHandle({save})
   // при mount, мы держим ссылку и зелёная кнопка «Сохранить» в шапке таба
@@ -2318,13 +2325,11 @@ export default function VacancyPage() {
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
                     { value: "analytics", icon: BarChart3, label: "Аналитика" },
                     { value: "anketa", icon: ClipboardList, label: "Вакансия" },
-                    { value: "course", icon: BookOpen, label: "Демонстрация" },
-                    { value: "test", icon: ListChecks, label: "Тест" },
+                    { value: "content", icon: BookOpen, label: "Контент" },
                     { value: "outbound", icon: UserSearch, label: "Исходящий подбор" },
                   ] : [
                     { value: "anketa", icon: ClipboardList, label: "Вакансия" },
-                    { value: "course", icon: BookOpen, label: "Демонстрация" },
-                    { value: "test", icon: ListChecks, label: "Тест" },
+                    { value: "content", icon: BookOpen, label: "Контент" },
                     { value: "outbound", icon: UserSearch, label: "Исходящий подбор" },
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
                     { value: "analytics", icon: BarChart3, label: "Аналитика" },
@@ -2435,7 +2440,7 @@ export default function VacancyPage() {
                     </DropdownMenu>
                   </div>
                 )}
-                {activeTab === "course" && (
+                {activeTab === "content" && contentSubTab === "demo" && (
                   <div className="flex items-center gap-1.5 shrink-0">
                     <div className="relative">
                       <div className="flex items-center">
@@ -2500,7 +2505,7 @@ export default function VacancyPage() {
                     </DropdownMenu>
                   </div>
                 )}
-                {activeTab === "test" && (
+                {activeTab === "content" && contentSubTab === "test" && (
                   <div className="flex items-center gap-1.5 shrink-0">
                     <div className="relative">
                       <div className="flex items-center">
@@ -2664,25 +2669,36 @@ export default function VacancyPage() {
                 )}
               </TabsContent>
 
-              <TabsContent value="course">
-                <CourseTab
-                  vacancyId={id}
-                  vacancyTitle={vacancyTitle}
-                  editorRef={courseEditorRef}
-                  tabRef={courseTabRef}
-                  onSaveStatusChange={setCourseEditorSaveStatus}
-                />
-              </TabsContent>
+              {/* Объединённый таб «Контент»: под-табы Демонстрация / Тест.
+                  Один и тот же CourseTab, разница только в kind (demo/test). */}
+              <TabsContent value="content">
+                <Tabs value={contentSubTab} onValueChange={(v) => setContentSubTab(v as "demo" | "test")}>
+                  <TabsList className="mb-3">
+                    <TabsTrigger value="demo" className="gap-1.5"><BookOpen className="w-3.5 h-3.5" />Демонстрация</TabsTrigger>
+                    <TabsTrigger value="test" className="gap-1.5"><ListChecks className="w-3.5 h-3.5" />Тест</TabsTrigger>
+                  </TabsList>
 
-              <TabsContent value="test">
-                <CourseTab
-                  vacancyId={id}
-                  vacancyTitle={vacancyTitle}
-                  kind="test"
-                  editorRef={testEditorRef}
-                  tabRef={testTabRef}
-                  onSaveStatusChange={setTestEditorSaveStatus}
-                />
+                  <TabsContent value="demo">
+                    <CourseTab
+                      vacancyId={id}
+                      vacancyTitle={vacancyTitle}
+                      editorRef={courseEditorRef}
+                      tabRef={courseTabRef}
+                      onSaveStatusChange={setCourseEditorSaveStatus}
+                    />
+                  </TabsContent>
+
+                  <TabsContent value="test">
+                    <CourseTab
+                      vacancyId={id}
+                      vacancyTitle={vacancyTitle}
+                      kind="test"
+                      editorRef={testEditorRef}
+                      tabRef={testTabRef}
+                      onSaveStatusChange={setTestEditorSaveStatus}
+                    />
+                  </TabsContent>
+                </Tabs>
               </TabsContent>
 
               <TabsContent value="outbound">
@@ -3627,9 +3643,9 @@ export default function VacancyPage() {
             {/* ═══ Bottom tab navigation ══════════════════ */}
             {(() => {
               const tabOrder = status === "active"
-                ? ["candidates", "analytics", "course", "test", "anketa", "settings"]
-                : ["anketa", "analytics", "candidates", "course", "test", "settings"]
-              const tabLabels: Record<string, string> = { anketa: "Вакансия", course: "Демонстрация", test: "Тест", candidates: "Кандидаты", analytics: "Аналитика", settings: "Настройки" }
+                ? ["candidates", "analytics", "content", "anketa", "settings"]
+                : ["anketa", "analytics", "candidates", "content", "settings"]
+              const tabLabels: Record<string, string> = { anketa: "Вакансия", content: "Контент", candidates: "Кандидаты", analytics: "Аналитика", settings: "Настройки" }
               const idx = tabOrder.indexOf(activeTab)
               const prevTab = idx > 0 ? tabOrder[idx - 1] : null
               const nextTab = idx < tabOrder.length - 1 ? tabOrder[idx + 1] : null
