@@ -1,13 +1,11 @@
 "use client"
 
 import { useState, useRef, useCallback, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Loader2, Plus, GripVertical, Pencil, Trash2, Sparkles, FileText, AlertCircle } from "lucide-react"
+import { Loader2, Plus, Pencil, Trash2, Sparkles, FileText, AlertCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { useContentBlocks, type ContentBlock } from "@/hooks/use-content-blocks"
@@ -48,7 +46,7 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
 
-  // Drag-reorder
+  // Drag-reorder (горизонтальный)
   const dragIdxRef = useRef<number | null>(null)
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
 
@@ -145,24 +143,26 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
           <p className="font-medium text-foreground">Блоков контента нет</p>
           <p className="text-sm text-muted-foreground mt-1">Создайте блок и наполните его чем угодно — текст, видео, вопросы, задание</p>
         </div>
-        <Button size="sm" className="gap-1.5" disabled={creating} onClick={handleAddBlock}>
+        <button
+          disabled={creating}
+          onClick={handleAddBlock}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary text-primary-foreground px-3 py-2 text-sm hover:bg-primary/90 transition-colors"
+        >
           {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
           Добавить блок
-        </Button>
+        </button>
       </div>
     )
   }
 
   return (
-    <div className="flex gap-4 min-h-0" style={{ height: "calc(100vh - 220px)" }}>
-      {/* ─── Левая панель — список блоков ─── */}
-      <div className="w-64 shrink-0 self-start max-h-full flex flex-col border border-border rounded-xl bg-card overflow-hidden">
-        <div className="px-3 py-2.5 border-b border-border">
-          <h4 className="text-sm font-semibold text-foreground">Блоки контента</h4>
-          <p className="text-[11px] text-muted-foreground mt-0.5">По порядку показа кандидату</p>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5">
+    <div className="flex flex-col gap-3 min-h-0" style={{ height: "calc(100vh - 210px)" }}>
+      {/* ─── Верхняя полоса — блоки контента (по порядку показа) ─── */}
+      <div className="shrink-0">
+        <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5 px-0.5">
+          Блоки контента · по порядку показа кандидату
+        </p>
+        <div className="flex items-stretch gap-2 overflow-x-auto pb-1">
           {blocks.map((block, idx) => {
             const isActive = selectedId === block.id
             const isRenaming = renamingId === block.id
@@ -177,15 +177,19 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
                 onDragEnd={handleDragEnd}
                 onClick={() => { if (!isRenaming) setSelectedId(block.id) }}
                 className={cn(
-                  "group flex items-center gap-1.5 rounded-lg pl-1 pr-1.5 py-2 cursor-pointer transition-colors select-none",
-                  isActive ? "bg-primary text-primary-foreground" : "hover:bg-muted/60 text-foreground",
+                  "group relative flex items-center gap-1.5 rounded-lg border px-2.5 py-2 cursor-pointer select-none shrink-0 transition-colors",
+                  isActive
+                    ? "border-primary bg-primary/10 text-foreground"
+                    : "border-border bg-card hover:bg-muted/60 text-foreground",
                   dragOverIdx === idx && dragIdxRef.current !== idx && "ring-2 ring-primary/40"
                 )}
+                title="Перетащите, чтобы изменить порядок"
               >
-                <GripVertical className={cn(
-                  "w-3.5 h-3.5 shrink-0 cursor-grab active:cursor-grabbing",
-                  isActive ? "text-primary-foreground/40" : "text-muted-foreground/30 group-hover:text-muted-foreground/60"
-                )} />
+                {/* Порядковый номер */}
+                <span className={cn(
+                  "text-[10px] font-semibold w-4 h-4 rounded flex items-center justify-center shrink-0",
+                  isActive ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                )}>{idx + 1}</span>
 
                 {isRenaming ? (
                   <input
@@ -200,60 +204,59 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
                     }}
                     onClick={(e) => e.stopPropagation()}
                     placeholder="Название блока…"
-                    className="flex-1 min-w-0 text-xs font-medium bg-transparent border-b border-primary-foreground/40 outline-none placeholder:opacity-50"
+                    className="w-40 text-xs font-medium bg-transparent border-b border-primary/50 outline-none placeholder:opacity-50"
                   />
                 ) : (
                   <span
-                    className="flex-1 min-w-0 truncate text-xs font-medium"
+                    className="text-xs font-medium truncate max-w-[180px]"
                     onDoubleClick={(e) => { e.stopPropagation(); startRenaming(block) }}
                   >{block.title}</span>
                 )}
 
-                {/* Авто-метка «ИИ-оценка» — если внутри есть вопросы/задание/запись */}
+                {/* Авто-метка «ИИ» — если внутри есть вопросы/задание/запись */}
                 {scored && !isRenaming && (
-                  <Badge
-                    variant={isActive ? "secondary" : "outline"}
-                    className="text-[9px] h-4 px-1 gap-0.5 shrink-0 group-hover:hidden"
+                  <span
+                    className="inline-flex items-center gap-0.5 text-[9px] font-medium text-primary shrink-0"
                     title="Содержит формы (вопросы/задание/запись) — оценивает ИИ"
                   >
                     <Sparkles className="w-2.5 h-2.5" />ИИ
-                  </Badge>
+                  </span>
                 )}
 
                 {/* Действия — на ховере */}
                 {!isRenaming && (
-                  <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
+                  <span className="hidden group-hover:inline-flex items-center gap-0.5 shrink-0 ml-0.5">
                     <button
                       title="Переименовать"
                       onClick={(e) => { e.stopPropagation(); startRenaming(block) }}
-                      className={cn("p-0.5 rounded hover:bg-black/10", isActive && "hover:bg-white/20")}
-                    ><Pencil className="w-3.5 h-3.5" /></button>
+                      className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted"
+                    ><Pencil className="w-3 h-3" /></button>
                     <button
                       title="Удалить"
                       onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(block.id) }}
-                      className={cn("p-0.5 rounded hover:bg-black/10", isActive ? "hover:bg-white/20" : "text-muted-foreground hover:text-destructive")}
-                    ><Trash2 className="w-3.5 h-3.5" /></button>
-                  </div>
+                      className="p-0.5 rounded text-muted-foreground hover:text-destructive hover:bg-muted"
+                    ><Trash2 className="w-3 h-3" /></button>
+                  </span>
                 )}
               </div>
             )
           })}
-        </div>
 
-        {/* Добавить блок — снизу */}
-        <button
-          type="button"
-          disabled={creating}
-          onClick={handleAddBlock}
-          className="w-full border-t border-dashed border-border px-2 py-2.5 flex items-center justify-center gap-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors text-xs"
-        >
-          {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-          Блок
-        </button>
+          {/* Добавить блок */}
+          <button
+            type="button"
+            disabled={creating}
+            onClick={handleAddBlock}
+            className="shrink-0 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-2.5 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+          >
+            {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+            Блок
+          </button>
+        </div>
       </div>
 
-      {/* ─── Правая панель — редактор выбранного блока ─── */}
-      <div className="flex-1 min-w-0 overflow-hidden">
+      {/* ─── Редактор выбранного блока (во всю ширину) ─── */}
+      <div className="flex-1 min-h-0 overflow-hidden">
         {selectedBlock ? (
           <NotionEditor
             key={selectedBlock.id}
@@ -266,7 +269,7 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
           />
         ) : (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-            Выберите блок слева
+            Выберите блок сверху
           </div>
         )}
       </div>
