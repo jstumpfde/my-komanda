@@ -160,12 +160,15 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
       .then((d) => {
         if (cancelled) return
         setEnabled(Boolean(d.funnelBuilderEnabled))
-        setBlocks(d.funnelConfigJson.blocks ?? [])
+        // Нормализуем: добавляем недостающие (новые) типы блоков — напр.
+        // «Стадии воронки»/«Дожим по тесту»/«FAQ» у вакансий, чей сохранённый
+        // funnelConfigJson создан до их появления. Иначе блоков нет в списке.
+        setBlocks(normalizeFunnelConfig(d.funnelConfigJson).blocks)
       })
       .catch(() => {
         if (cancelled) return
         setEnabled(false)
-        setBlocks([])
+        setBlocks(normalizeFunnelConfig({}).blocks)
       })
     return () => { cancelled = true }
   }, [vacancyId])
