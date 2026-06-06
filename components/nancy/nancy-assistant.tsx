@@ -370,7 +370,7 @@ export function NancyAssistant() {
       <button
         onClick={() => setOpen(true)}
         className={cn(
-          "fixed bottom-4 right-4 z-50",
+          "fixed bottom-20 md:bottom-4 right-4 z-50",
           "h-16 w-16 rounded-full shadow-lg border-2 border-primary",
           "overflow-hidden hover:scale-105 active:scale-95 transition-transform",
           "flex items-center justify-center bg-violet-600 text-white",
@@ -402,7 +402,7 @@ export function NancyAssistant() {
         "animate-in slide-in-from-bottom-4 duration-200",
         expanded
           ? "inset-4 rounded-2xl"
-          : "bottom-20 right-4 w-80 sm:w-96 rounded-2xl overflow-hidden",
+          : "bottom-[152px] md:bottom-20 right-4 w-80 sm:w-96 rounded-2xl overflow-hidden",
       )}
       style={expanded ? undefined : { maxHeight: "min(520px, calc(100vh - 96px))" }}
     >

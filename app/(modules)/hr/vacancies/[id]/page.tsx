@@ -2309,7 +2309,8 @@ export default function VacancyPage() {
 
             {/* ═══ ТАБЫ + ВИД в одной строке ══════════════════ */}
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <div className="flex items-center justify-between gap-3 mb-3 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+              <div className="mb-3 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                <div className="flex items-center justify-between gap-3 min-w-max">
                 <TabsList className="shrink-0">
                   {/* Запущенные вакансии (active|published) — фокус на работе
                       с кандидатами: Кандидаты → Аналитика → Анкета → Демо.
@@ -2447,6 +2448,7 @@ export default function VacancyPage() {
                     candidates={columns.flatMap((c) => c.candidates)}
                   />
                 )}
+                </div>
               </div>
 
               <TabsContent value="anketa">
@@ -2823,7 +2825,8 @@ export default function VacancyPage() {
               <TabsContent value="settings">
                 <VacancySettingsProvider>
                 {/* Сабнав: 6 табов настроек вакансии */}
-                <div className="flex items-center gap-1 mb-4 border-b overflow-x-auto">
+                <div className="mb-4 border-b overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                  <div className="flex items-center gap-1 min-w-max">
                   {/* #18: Воронка перед Сообщениями — HR сначала проектирует
                       стадии и AI-фильтр, потом уже настраивает тексты. */}
                   {([
@@ -2851,6 +2854,7 @@ export default function VacancyPage() {
                       }}
                     />
                   ))}
+                  </div>
                 </div>
 
                 {/* ───────── ТАБ «Страница и брендинг» ───────── */}
