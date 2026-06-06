@@ -440,8 +440,8 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
         {/* LEFT — Lesson list */}
         {showSidebar && (
           sidebarCollapsed ? (
-            /* Свёрнутый вид — узкая полоска с кнопкой раскрыть */
-            <div className="flex-shrink-0 border border-border rounded-xl bg-card overflow-hidden flex flex-col items-center py-2 gap-2" style={{ width: 36 }}>
+            /* Свёрнутый вид — узкая полоска: раскрыть сверху, добавить урок снизу */
+            <div className="flex-shrink-0 border border-border rounded-xl bg-card overflow-hidden flex flex-col items-center py-2" style={{ width: 36 }}>
               <Button
                 size="sm"
                 variant="ghost"
@@ -451,6 +451,16 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
               >
                 <ChevronRight className="w-4 h-4" />
               </Button>
+              {/* Добавить урок снизу (свёрнуто): тонкая пунктирная черта, плюс ярче при
+                  наведении. Раскрываем список — чтобы сразу был виден инлайн-ввод названия. */}
+              <button
+                type="button"
+                title="Добавить урок"
+                onClick={() => { setSidebarCollapsed(false); addLesson() }}
+                className="group/addc mt-auto w-full flex items-center justify-center pt-2 border-t border-dashed border-border text-muted-foreground/40 hover:text-foreground hover:bg-muted/40 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5 opacity-40 group-hover/addc:opacity-100 transition-opacity" />
+              </button>
             </div>
           ) : (
             <div className="w-[260px] flex-shrink-0 border border-border rounded-xl bg-card overflow-hidden flex flex-col">
@@ -578,17 +588,17 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
                 })}
               </div>
 
-              {/* Правка 2: кнопка «+ Урок» снизу списка */}
-              <div className="px-1.5 py-1.5 border-t border-border">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="w-full h-7 gap-1 text-xs justify-start px-2 text-muted-foreground hover:text-foreground"
-                  onClick={addLesson}
-                >
-                  <Plus className="w-3 h-3" />Урок
-                </Button>
-              </div>
+              {/* Добавить урок снизу: тонкая черта под последним уроком; при наведении —
+                  плюс ярче и подпись «Добавить урок». */}
+              <button
+                type="button"
+                title="Добавить урок"
+                onClick={addLesson}
+                className="group/add w-full border-t border-dashed border-border px-2 py-2 flex items-center justify-center gap-1.5 text-muted-foreground/40 hover:text-foreground hover:bg-muted/40 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5 opacity-40 group-hover/add:opacity-100 transition-opacity" />
+                <span className="text-xs opacity-0 group-hover/add:opacity-100 transition-opacity">Добавить урок</span>
+              </button>
             </div>
           )
         )}
