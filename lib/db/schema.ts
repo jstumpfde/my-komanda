@@ -2211,8 +2211,13 @@ export const hhTokens = hhIntegrations
 // AI-скоринг по сниппетам → HR отмечает лучших → приглашение через negotiations
 // → кандидат в воронке (source='hh_outbound'). См. ТЗ «Исходящий подбор».
 
-// Сохранённый поисковый запрос по вакансии. criteria — нормализованные критерии
-// (см. lib/hh/outbound.ts OutboundCriteria): text/area/experience/salary/period.
+// Сохранённый поисковый запрос / кампания по вакансии.
+// mode='manual'  — разовый поиск (текущее поведение).
+// mode='auto'    — кампания: cron периодически запускает поиск, скорит и
+//                  автоматически приглашает кандидатов с ai_score >= scoreThreshold.
+// softCriteria   — текстовое описание «мягких» пожеланий для AI-скоринга
+//                  (передаётся в screenCandidate как дополнительный контекст).
+// active=true    — кампания активна (cron её подхватывает).
 export const outboundSearches = pgTable("outbound_searches", {
   id:              uuid("id").primaryKey().defaultRandom(),
   companyId:       uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
@@ -2221,6 +2226,13 @@ export const outboundSearches = pgTable("outbound_searches", {
   createdByUserId: uuid("created_by_user_id").references(() => users.id),
   createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   lastRunAt:       timestamp("last_run_at", { withTimezone: true }),
+  // campaign fields (migration 0181)
+  mode:            text("mode").notNull().default("manual"),
+  scoreThreshold:  integer("score_threshold").notNull().default(70),
+  dailyAutoLimit:  integer("daily_auto_limit").notNull().default(10),
+  softCriteria:    text("soft_criteria"),
+  active:          boolean("active").notNull().default(false),
+  cronRunAt:       timestamp("cron_run_at", { withTimezone: true }),
 })
 
 // Найденное резюме из поиска hh. snippet — сырой сниппет из выдачи GET /resumes

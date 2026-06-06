@@ -30,6 +30,9 @@ interface ScoreBody {
   // Опционально — конкретные outbound_candidate id; иначе скорим все 'found'
   // без ai_score по вакансии.
   ids?: string[]
+  // Мягкие критерии от HR/AI-генерации — добавляются к aiIdealProfile как
+  // дополнительный контекст для скоринга.
+  softCriteria?: string
 }
 
 // Из anketa вакансии (descriptionJson.anketa) собираем vacancyAnketa для
@@ -94,6 +97,10 @@ export async function POST(req: Request) {
   const toScore = body.ids?.length ? rows : rows.filter((r) => r.aiScore == null)
 
   const anketa = buildVacancyAnketa(vac)
+  const soft = body.softCriteria?.trim()
+  const anketaWithSoft = soft
+    ? { ...anketa, aiIdealProfile: [anketa.aiIdealProfile, soft].filter(Boolean).join("\n\nДополнительные мягкие критерии:\n") }
+    : anketa
   let scored = 0
 
   for (const row of toScore) {
@@ -108,7 +115,7 @@ export async function POST(req: Request) {
           salary: snippet.salary?.amount != null ? String(snippet.salary.amount) : undefined,
           experience: snippetExperienceYears(snippet) != null ? `${snippetExperienceYears(snippet)} лет` : undefined,
         },
-        vacancyAnketa: anketa,
+        vacancyAnketa: anketaWithSoft,
       })
       const reasoning = [result.recommendation, ...(result.weaknesses ?? [])].filter(Boolean).join(" | ").slice(0, 1000)
       await db

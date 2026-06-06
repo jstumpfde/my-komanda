@@ -19,6 +19,7 @@ import { toast } from "sonner"
 import { Loader2, Search, Send, AlertCircle, CheckCircle2, ChevronDown, Wand2, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -296,9 +297,45 @@ export function OutboundSourcingTab({
     toast.success("Поля заполнены из анкеты")
   }, [anketaWorkFormats, anketaEmployment, anketaLanguages, anketaEducation])
 
+  async function generateCriteria() {
+    const desc = description.trim()
+    if (!desc) return
+    setGeneratingCriteria(true)
+    try {
+      const res = await fetch("/api/modules/hr/outbound/generate-criteria", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description: desc,
+          vacancyTitle: vacancyTitle ?? undefined,
+          vacancyCity: vacancyCity ?? undefined,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) { toast.error(data.error ?? "Ошибка генерации критериев"); return }
+      const { criteria, softCriteria: sc } = data
+      if (criteria.text) setText(criteria.text)
+      if (criteria.area) setArea(criteria.area)
+      if (criteria.experience && criteria.experience !== "any") setExperience(criteria.experience)
+      if (criteria.salaryFrom) setSalaryFrom(String(criteria.salaryFrom))
+      if (criteria.salaryTo) setSalaryTo(String(criteria.salaryTo))
+      if (sc) setSoftCriteria(sc)
+      toast.success("Критерии сгенерированы — проверьте и нажмите «Найти»")
+    } catch {
+      toast.error("Сеть недоступна при генерации критериев")
+    } finally {
+      setGeneratingCriteria(false)
+    }
+  }
+
   const [items, setItems] = useState<OutboundItem[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [status, setStatus] = useState<StatusData | null>(null)
+
+  // AI-генерация критериев из текстового описания.
+  const [description, setDescription] = useState("")
+  const [softCriteria, setSoftCriteria] = useState("")
+  const [generatingCriteria, setGeneratingCriteria] = useState(false)
 
   const [searching, setSearching] = useState(false)
   const [scoring, setScoring] = useState(false)
@@ -414,7 +451,7 @@ export function OutboundSourcingTab({
       const res = await fetch("/api/modules/hr/outbound/score", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ vacancyId, ...(ids ? { ids } : {}) }),
+        body: JSON.stringify({ vacancyId, ...(ids ? { ids } : {}), softCriteria: softCriteria.trim() || undefined }),
       })
       const data = await res.json()
       if (!res.ok) { toast.error(data.error ?? "Ошибка скоринга"); return }
@@ -504,6 +541,30 @@ export function OutboundSourcingTab({
     <div className="space-y-4">
       {/* ─── Критерии ─── */}
       <div className="rounded-lg border p-4 space-y-3">
+        {/* AI-описание → генерация критериев */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-xs">Опишите кандидата словами — AI заполнит критерии поиска</Label>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="h-7 gap-1.5 text-xs shrink-0"
+              onClick={generateCriteria}
+              disabled={generatingCriteria || !description.trim()}
+            >
+              {generatingCriteria ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+              Сгенерировать критерии
+            </Button>
+          </div>
+          <Textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder={`напр. «Продавал промышленное оборудование B2B, опыт 3+ лет, желательно работал в Siemens или Bosch, Москва»`}
+            className="min-h-[68px] text-sm resize-none"
+          />
+        </div>
+
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="lg:col-span-2 space-y-1.5">
             <Label className="text-xs">Ключевые слова</Label>
@@ -538,6 +599,17 @@ export function OutboundSourcingTab({
               Найти
             </Button>
           </div>
+        </div>
+
+        {/* Мягкие критерии для AI-скоринга (не ограничивают поиск hh) */}
+        <div className="space-y-1.5">
+          <Label className="text-xs">Мягкие критерии для AI-оценки <span className="text-muted-foreground font-normal">(не ограничивают поиск hh)</span></Label>
+          <Textarea
+            value={softCriteria}
+            onChange={(e) => setSoftCriteria(e.target.value)}
+            placeholder="напр. «Желательно опыт в крупных B2B-продажах, знание немецкого языка — плюс»"
+            className="min-h-[56px] text-sm resize-none"
+          />
         </div>
 
         {/* ─── Расширенный фильтр — раскрыт по умолчанию ─── */}
