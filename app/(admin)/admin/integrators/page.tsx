@@ -4,12 +4,12 @@ import { useState, useEffect } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { toast } from "sonner"
 import { Handshake, Plus, Loader2, ExternalLink } from "lucide-react"
 import { useRouter } from "next/navigation"
@@ -118,71 +118,65 @@ export default function AdminIntegratorsPage() {
                 <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
               </div>
             ) : (
-              <Card>
-                <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b bg-muted/50">
-                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Компания</th>
-                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Уровень</th>
-                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Контакт</th>
-                          <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
-                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Дата вступления</th>
-                          <th className="px-4 py-3" />
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {integrators.length === 0 ? (
-                          <tr>
-                            <td colSpan={6} className="text-center py-12 text-sm text-muted-foreground">
-                              Нет интеграторов
-                            </td>
-                          </tr>
-                        ) : integrators.map(int => (
-                          <tr
-                            key={int.id}
-                            className="border-b last:border-0 hover:bg-muted/20 transition-colors cursor-pointer"
-                            onClick={() => router.push(`/admin/integrators/${int.id}`)}
-                          >
-                            <td className="px-4 py-3">
-                              <span className="text-sm font-medium text-foreground">{int.companyName || int.companyId}</span>
-                            </td>
-                            <td className="px-4 py-3">
-                              {int.levelName ? (
-                                <Badge className={cn("text-xs border", LEVEL_COLORS[int.levelName] ?? "bg-muted text-muted-foreground")}>
-                                  {int.levelName}
-                                </Badge>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">—</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3">
-                              <div>
-                                <p className="text-xs font-medium text-foreground">{int.contactName || "—"}</p>
-                                <p className="text-[11px] text-muted-foreground">{int.contactEmail || ""}</p>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              <Badge className={cn("text-xs", STATUS_COLORS[int.status ?? "active"] ?? "bg-muted")}>
-                                {STATUS_LABELS[int.status ?? "active"] ?? int.status}
-                              </Badge>
-                            </td>
-                            <td className="px-4 py-3 text-xs text-muted-foreground">
-                              {int.joinedAt ? new Date(int.joinedAt).toLocaleDateString("ru-RU") : "—"}
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={e => { e.stopPropagation(); router.push(`/admin/integrators/${int.id}`) }}>
-                                <ExternalLink className="w-3.5 h-3.5" />
-                              </Button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </CardContent>
-              </Card>
+              <TableCard>
+                <DataTable>
+                  <DataHead>
+                    <DataHeadCell>Компания</DataHeadCell>
+                    <DataHeadCell>Уровень</DataHeadCell>
+                    <DataHeadCell>Контакт</DataHeadCell>
+                    <DataHeadCell align="center">Статус</DataHeadCell>
+                    <DataHeadCell>Дата вступления</DataHeadCell>
+                    <DataHeadCell align="right" />
+                  </DataHead>
+                  <tbody>
+                    {integrators.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="text-center py-12 text-sm text-muted-foreground">
+                          Нет интеграторов
+                        </td>
+                      </tr>
+                    ) : integrators.map(int => (
+                      <DataRow
+                        key={int.id}
+                        className="cursor-pointer"
+                        onClick={() => router.push(`/admin/integrators/${int.id}`)}
+                      >
+                        <DataCell>
+                          <span className="font-medium text-foreground">{int.companyName || int.companyId}</span>
+                        </DataCell>
+                        <DataCell>
+                          {int.levelName ? (
+                            <Badge className={cn("text-xs border", LEVEL_COLORS[int.levelName] ?? "bg-muted text-muted-foreground")}>
+                              {int.levelName}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </DataCell>
+                        <DataCell>
+                          <div>
+                            <p className="text-xs font-medium text-foreground">{int.contactName || "—"}</p>
+                            <p className="text-[11px] text-muted-foreground">{int.contactEmail || ""}</p>
+                          </div>
+                        </DataCell>
+                        <DataCell align="center">
+                          <Badge className={cn("text-xs", STATUS_COLORS[int.status ?? "active"] ?? "bg-muted")}>
+                            {STATUS_LABELS[int.status ?? "active"] ?? int.status}
+                          </Badge>
+                        </DataCell>
+                        <DataCell className="text-xs text-muted-foreground">
+                          {int.joinedAt ? new Date(int.joinedAt).toLocaleDateString("ru-RU") : "—"}
+                        </DataCell>
+                        <DataCell align="right">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={e => { e.stopPropagation(); router.push(`/admin/integrators/${int.id}`) }}>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </Button>
+                        </DataCell>
+                      </DataRow>
+                    ))}
+                  </tbody>
+                </DataTable>
+              </TableCard>
             )}
           </div>
         </main>

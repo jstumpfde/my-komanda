@@ -327,7 +327,7 @@ export default function CalendarPage() {
       <SidebarInset>
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
-          <div className="flex flex-col h-[calc(100vh-3.5rem)]" style={{ paddingLeft: 56, paddingRight: 56 }}>
+          <div className="flex flex-col h-[calc(100vh-3.5rem)] px-4 sm:px-14">
           {/* Top bar — Row 1: Title */}
           <div className="flex items-center gap-2 pt-3 pb-2">
             <CalendarDays className="h-5 w-5 text-violet-600" />
@@ -438,7 +438,7 @@ export default function CalendarPage() {
                 </SheetTitle>
               </SheetHeader>
 
-              <div className="space-y-6 mt-6">
+              <div className="space-y-6 mt-2 px-4 pb-6">
 
                 {/* ── Рабочее время по дням ── */}
                 <Card>
@@ -446,11 +446,11 @@ export default function CalendarPage() {
                     <CardTitle className="text-sm flex items-center gap-2"><Clock className="size-4" />Рабочее время</CardTitle>
                     <CardDescription>Настройте расписание для каждого дня недели</CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-1.5">
+                  <CardContent className="space-y-1.5 overflow-x-auto">
                     {DAYS_ORDER.map(({ day, label }) => {
                       const s = weekSchedule[day]
                       return (
-                        <div key={day} className="flex items-center gap-2">
+                        <div key={day} className="flex items-center gap-2 min-w-max">
                           <Switch checked={s.enabled} onCheckedChange={v => updateDay(day, { enabled: v })} className="scale-90" />
                           <span className={cn("w-6 text-xs font-semibold shrink-0", s.enabled ? "text-foreground" : "text-muted-foreground")}>{label}</span>
                           <Select value={s.start} onValueChange={v => updateDay(day, { start: v })} disabled={!s.enabled}>

@@ -41,18 +41,32 @@ export interface ApiVacancy {
   updatedAt: string | null
 }
 
+interface VacancyCounts {
+  active: number
+  archived: number
+  trashed: number
+}
+
 interface VacanciesResult {
   vacancies: ApiVacancy[]
   total: number
   page: number
   limit: number
+  counts?: VacancyCounts
+  trashRetentionDays?: number
 }
+
+// scope: "active" — всё кроме архива; "archive" — только архив;
+// "trash" — корзина (deleted_at IS NOT NULL); undefined — все.
+export type VacanciesScope = "active" | "archive" | "trash"
 
 // ─── useVacancies ─────────────────────────────────────────────────────────────
 
-export function useVacancies(page = 1, limit = 20) {
+export function useVacancies(page = 1, limit = 20, scope?: VacanciesScope) {
   const [vacancies, setVacancies] = useState<ApiVacancy[]>([])
   const [total, setTotal] = useState(0)
+  const [counts, setCounts] = useState<VacancyCounts>({ active: 0, archived: 0, trashed: 0 })
+  const [trashRetentionDays, setTrashRetentionDays] = useState(30)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -60,7 +74,9 @@ export function useVacancies(page = 1, limit = 20) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/modules/hr/vacancies?page=${page}&limit=${limit}`)
+      const qs = new URLSearchParams({ page: String(page), limit: String(limit) })
+      if (scope) qs.set("scope", scope)
+      const res = await fetch(`/api/modules/hr/vacancies?${qs.toString()}`)
       if (!res.ok) {
         const d = await res.json() as { error?: string }
         throw new Error(d.error ?? `HTTP ${res.status}`)
@@ -68,18 +84,20 @@ export function useVacancies(page = 1, limit = 20) {
       const data = await res.json() as VacanciesResult
       setVacancies(data.vacancies)
       setTotal(data.total)
+      if (data.counts) setCounts(data.counts)
+      if (typeof data.trashRetentionDays === "number") setTrashRetentionDays(data.trashRetentionDays)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка загрузки вакансий")
     } finally {
       setLoading(false)
     }
-  }, [page, limit])
+  }, [page, limit, scope])
 
   useEffect(() => {
     fetch_()
   }, [fetch_])
 
-  return { vacancies, total, loading, error, refetch: fetch_ }
+  return { vacancies, total, counts, trashRetentionDays, loading, error, refetch: fetch_ }
 }
 
 // ─── useVacancy ───────────────────────────────────────────────────────────────

@@ -4,13 +4,10 @@ import { useState, useEffect, useCallback } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   TrendingDown, Users, UserCheck, Clock, Target, BarChart3,
 } from "lucide-react"
-import { cn } from "@/lib/utils"
 
 interface FunnelStage {
   key: string

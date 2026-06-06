@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
         updatedAt: demos.updatedAt,
       })
       .from(demos)
-      .where(inArray(demos.vacancyId, vacancyIds))
+      .where(and(inArray(demos.vacancyId, vacancyIds), eq(demos.kind, "demo")))
       .orderBy(desc(demos.updatedAt))
 
     const latestByVacancy = new Map<string, unknown>()

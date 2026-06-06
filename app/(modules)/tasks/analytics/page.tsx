@@ -4,7 +4,7 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
-import { BarChart3, CheckCircle2, Clock, AlertTriangle, TrendingUp, Users } from "lucide-react"
+import {BarChart3, CheckCircle2, Clock, AlertTriangle, Users} from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Progress } from "@/components/ui/progress"
 
@@ -32,8 +32,8 @@ export default function TaskAnalyticsPage() {
         <div className="flex-1 overflow-auto bg-background min-w-0">
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="flex items-center gap-2 mb-6">
-              <BarChart3 className="size-5 text-sky-500" />
-              <h1 className="text-xl font-semibold">Аналитика задач</h1>
+              <BarChart3 className="size-5 text-violet-600" />
+              <h1 className="text-lg font-semibold">Аналитика задач</h1>
             </div>
 
             {/* Stats cards */}

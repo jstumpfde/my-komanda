@@ -1,7 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { Bell, Moon, Sun, Coffee, LogOut, PanelLeftClose, PanelLeft, ChevronDown, ArrowLeft, Building2, User as UserIcon, Loader2 } from "lucide-react"
+import { Bell, Moon, Sun, Coffee, LogOut, PanelLeftClose, PanelLeft, ChevronDown, ArrowLeft, Building2, User as UserIcon, Loader2, Shield } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useEffect, useRef, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
@@ -16,6 +16,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useSidebar } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
 import { useAuth, ROLE_LABELS, ROLE_ICONS, type UserRole } from "@/lib/auth"
+import { SubscriptionBanner } from "@/components/billing/subscription-banner"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 
@@ -37,7 +38,8 @@ export function DashboardHeader() {
   const [mounted, setMounted] = useState(false)
   const { state, toggleSidebar } = useSidebar()
   const { user, role, realRole, isViewingAs, setRole, returnToAdmin, logout } = useAuth()
-  const { update: updateSession } = useSession()
+  const { data: session, update: updateSession } = useSession()
+  const isPlatformAdmin = session?.user?.isPlatformAdmin === true
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const router = useRouter()
@@ -150,6 +152,10 @@ export function DashboardHeader() {
 
   return (
     <>
+      {/* Плашка подписки: обратный отсчёт пробного периода / призыв продлить.
+          В обычном состоянии (активный тариф) ничего не рендерит. */}
+      <SubscriptionBanner />
+
       {/* View-as banner */}
       {isViewingAs && (
         <div className="bg-amber-400 text-amber-950 px-4 py-1.5 flex items-center justify-between text-sm">
@@ -164,7 +170,7 @@ export function DashboardHeader() {
       )}
 
       <header className="sticky top-0 z-40 border-b border-border bg-background">
-        <div className="flex items-center justify-between h-14" style={{ paddingLeft: 56, paddingRight: 56 }}>
+        <div className="flex items-center justify-between h-14 px-4 sm:px-14">
           <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={toggleSidebar}>
             {state === "expanded" ? <PanelLeftClose className="h-5 w-5" /> : <PanelLeft className="h-5 w-5" />}
           </Button>
@@ -209,6 +215,20 @@ export function DashboardHeader() {
             {/* Theme Switcher переехал в dropdown профиля (см. ниже).
                 В хедере остался только колокольчик + аватар, чтобы освободить
                 место и не дублировать поверхностные действия. */}
+
+            {/* Platform admin shortcut — виден только тем, чей email есть в
+                PLATFORM_ADMIN_EMAILS. Сам /admin/platform защищён ещё и
+                layout-проверкой, так что это просто удобная точка входа. */}
+            {isPlatformAdmin && (
+              <Link
+                href="/admin/platform"
+                title="Настройки платформы"
+                className="relative inline-flex items-center justify-center h-9 w-9 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors"
+              >
+                <Shield className="h-5 w-5" />
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-orange-500 ring-2 ring-background" />
+              </Link>
+            )}
 
             {/* Notifications */}
             <Popover>
@@ -313,6 +333,15 @@ export function DashboardHeader() {
                   <DropdownMenuItem className="text-sm cursor-pointer" asChild>
                     <Link href="/settings/profile"><UserIcon className="w-4 h-4 mr-2" />Профиль</Link>
                   </DropdownMenuItem>
+                  {isPlatformAdmin && (
+                    <DropdownMenuItem className="text-sm cursor-pointer" asChild>
+                      <Link href="/admin/platform">
+                        <Shield className="w-4 h-4 mr-2" />
+                        Настройки платформы
+                        <span className="ml-auto w-2 h-2 rounded-full bg-orange-500" />
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
                   {/* Inline-переключатель темы — 3 варианта. Используем 3 строки
                       вместо группы кнопок, чтобы помещалось в стандартный 224px

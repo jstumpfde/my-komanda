@@ -164,15 +164,33 @@ export function MaterialEditor({
   const position = searchParams.get("position") ?? ""
   const templateId = searchParams.get("id")
 
+  // Этап 2: тип материала из ?type=. Для блока/теста длина в demo_templates
+  // фиксирована (length='block'/'test', getMaterialType различает их);
+  // для демо берётся из ?length (дефолт 'standard'). Если ?type не задан —
+  // 'demo' (обратная совместимость с мастером /hr/library/create, который
+  // передаёт ?length/?name/?position без ?type).
+  const typeParam = searchParams.get("type")
+  const materialType: "demo" | "block" | "test" =
+    typeParam === "block" ? "block" : typeParam === "test" ? "test" : "demo"
+  const effectiveLength =
+    materialType === "block" ? "block" : materialType === "test" ? "test" : length
+  const NAME_PLACEHOLDER: Record<typeof materialType, string> = {
+    demo:  "Название демонстрации",
+    block: "Название блока",
+    test:  "Название теста",
+  }
+  const defaultName =
+    initialName ||
+    (materialType === "block"
+      ? "Новый блок"
+      : materialType === "test"
+        ? "Новый тест"
+        : `Демонстрация: ${position}`)
+
   const [demo, setDemo] = useState<Demo>(() =>
-    createDemoObject(
-      initialName || `Демонстрация: ${position}`,
-      DEFAULT_LESSONS,
-    ),
+    createDemoObject(defaultName, DEFAULT_LESSONS),
   )
-  const [demoName, setDemoName] = useState(
-    initialName || `Демонстрация: ${position}`,
-  )
+  const [demoName, setDemoName] = useState(defaultName)
   const [savedId, setSavedId] = useState<string | null>(templateId)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(!!templateId)
@@ -243,7 +261,7 @@ export function MaterialEditor({
           body: JSON.stringify({
             name: demoName,
             niche: department || "universal",
-            length,
+            length: effectiveLength,
             sections: demo.lessons,
           }),
         })
@@ -285,7 +303,7 @@ export function MaterialEditor({
           body: JSON.stringify({
             name: demoName,
             niche: department || "universal",
-            length,
+            length: effectiveLength,
             sections: demo.lessons,
           }),
         })
@@ -545,7 +563,7 @@ export function MaterialEditor({
                 }}
                 maxLength={76}
                 className="text-lg font-semibold border-none shadow-none px-0 h-auto bg-transparent focus-visible:ring-0 flex-1 min-w-0"
-                placeholder="Название демонстрации"
+                placeholder={NAME_PLACEHOLDER[materialType]}
               />
             </div>
             <div className="flex items-center gap-2 shrink-0">

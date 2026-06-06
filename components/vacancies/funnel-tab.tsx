@@ -22,6 +22,7 @@ import {
   type VacancyPipelineV2,
   type VacancyStageConfig,
   type HhAction,
+  type CompanyStagePalette,
 } from "@/lib/stages"
 import { cn } from "@/lib/utils"
 
@@ -53,10 +54,11 @@ const STAGE_DOT_CLASSES: Record<StageColor, string> = {
 export interface FunnelTabProps {
   vacancyId: string
   initialPipeline: VacancyPipelineV2
+  companyPalette?: CompanyStagePalette
   onSaved?: (pipeline: VacancyPipelineV2) => void
 }
 
-export function FunnelTab({ vacancyId, initialPipeline, onSaved }: FunnelTabProps) {
+export function FunnelTab({ vacancyId, initialPipeline, companyPalette, onSaved }: FunnelTabProps) {
   const [pipeline, setPipeline] = useState<VacancyPipelineV2>(initialPipeline)
   const [editingStage, setEditingStage] = useState<StageSlug | null>(null)
   const [saving, setSaving] = useState(false)
@@ -64,7 +66,7 @@ export function FunnelTab({ vacancyId, initialPipeline, onSaved }: FunnelTabProp
   const dirty = JSON.stringify(pipeline) !== JSON.stringify(savedPipeline)
 
   const handlePresetChange = (newPreset: Exclude<FunnelPreset, "custom">) => {
-    setPipeline(getDefaultPipeline(newPreset))
+    setPipeline(getDefaultPipeline(newPreset, undefined, companyPalette))
   }
 
   const handleStageToggle = (slug: StageSlug, enabled: boolean) => {
@@ -241,7 +243,7 @@ export function FunnelTab({ vacancyId, initialPipeline, onSaved }: FunnelTabProp
                 )}
                 {cfg.hhAction && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground">
-                    {cfg.hhAction === "invitation" ? "hh: пригласить" : "hh: отказать"}
+                    {cfg.hhAction === "invitation" ? "hh: пригласить" : cfg.hhAction === "assessment" ? "hh: тест" : "hh: отказать"}
                   </span>
                 )}
                 <Popover open={editingStage === slug} onOpenChange={(open) => setEditingStage(open ? slug : null)}>
@@ -392,7 +394,7 @@ function StageEditor({
         <Label className="text-xs">Действие в hh.ru при переходе в эту стадию</Label>
         <RadioGroup
           value={localHhAction ?? "none"}
-          onValueChange={(v) => setLocalHhAction(v === "invitation" || v === "discard" ? v : null)}
+          onValueChange={(v) => setLocalHhAction(v === "invitation" || v === "discard" || v === "assessment" ? v : null)}
           className="gap-2"
         >
           <label className="flex items-center gap-2 text-sm cursor-pointer">
@@ -402,6 +404,10 @@ function StageEditor({
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <RadioGroupItem value="invitation" />
             <span>Пригласить (hh-приглашение)</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <RadioGroupItem value="assessment" />
+            <span>Тестовое задание (hh-assessment)</span>
           </label>
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <RadioGroupItem value="discard" />

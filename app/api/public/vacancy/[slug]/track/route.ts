@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { eq, and, sql } from "drizzle-orm"
+import {eq, sql} from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancyUtmLinks } from "@/lib/db/schema"
 import { apiSuccess } from "@/lib/api-helpers"

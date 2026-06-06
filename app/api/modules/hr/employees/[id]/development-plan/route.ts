@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireCompany } from "@/lib/api-helpers"
 import { db } from "@/lib/db"
 import { assessments, skillAssessments, courses } from "@/lib/db/schema"
-import { eq, and, desc, or, isNull } from "drizzle-orm"
+import {eq, and, desc} from "drizzle-orm"
 import { getRecommendations } from "@/lib/learning/ai-recommendations"
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

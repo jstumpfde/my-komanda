@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
-import { Plus, FolderKanban, CheckSquare, Clock, Users } from "lucide-react"
+import {Plus, FolderKanban, Clock} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 
@@ -46,8 +46,8 @@ export default function TaskProjectsPage() {
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
-                <FolderKanban className="size-5 text-sky-500" />
-                <h1 className="text-xl font-semibold">Проекты</h1>
+                <FolderKanban className="size-5 text-violet-600" />
+                <h1 className="text-lg font-semibold">Проекты</h1>
               </div>
               <Button className="gap-1.5" onClick={() => setShowNew(true)}>
                 <Plus className="size-4" />

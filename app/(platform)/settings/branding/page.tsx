@@ -9,11 +9,13 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { Globe, Save, Loader2, CheckCircle2, XCircle, RefreshCw, Copy, AlertCircle, Upload, Trash2, Link2, Palette } from "lucide-react"
+import { Globe, Save, Loader2, CheckCircle2, XCircle, RefreshCw, Copy, AlertCircle, Upload, Trash2, Link2, Palette, ChevronDown, Pencil, PlugZap } from "lucide-react"
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
 import { saveBrand, canCustomizeBrand, type BrandConfig } from "@/lib/branding"
 import { fetchCompanyApi, updateCompanyApi } from "@/lib/company-storage"
 import { CompanyLogo } from "@/components/company-logo"
 import { useTheme } from "next-themes"
+import { applyBrandColor } from "@/components/brand-color-injector"
 
 const THEME_PRESETS: Record<string, { label: string; emoji: string }> = {
   light: { label: "Светлая", emoji: "☀️" },
@@ -26,14 +28,31 @@ const THEME_KEYS = ["light", "dark", "warm"] as const
 export default function BrandingPage() {
   const { setTheme: applyTheme, theme: currentTheme } = useTheme()
   const [brandPlan] = useState<BrandConfig["plan"]>("business")
+  // D12: блок «Поддомен компании» (плашка «Скоро») — только платформенному админу.
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
+  useEffect(() => {
+    fetch("/api/auth/me").then(r => r.ok ? r.json() : null)
+      .then(d => setIsPlatformAdmin(!!(d?.data ?? d)?.isPlatformAdmin)).catch(() => {})
+  }, [])
   const canBrand = canCustomizeBrand(brandPlan)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [brandName, setBrandName] = useState("")
   const [brandSlogan, setBrandSlogan] = useState("")
+  const [website, setWebsite] = useState("")
   const [customDomain, setCustomDomain] = useState("")
   const [domainStatus, setDomainStatus] = useState<"idle" | "checking" | "verified" | "error">("idle")
+  const [subdomain, setSubdomain] = useState("")
+  // savedSubdomain — значение, сохранённое в БД (загружается при монте).
+  // Если subdomain === savedSubdomain && savedSubdomain !== "" — режим «зафиксирован».
+  const [savedSubdomain, setSavedSubdomain] = useState("")
+  const [subEditMode, setSubEditMode] = useState(false)
+  const [subConfirmOpen, setSubConfirmOpen] = useState(false)
+  const [subStatus, setSubStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid">("idle")
+  // Вид логотипа в сайдбаре: на белой подложке (padded) или без неё (plain).
+  const [sidebarLogoMode, setSidebarLogoMode] = useState<"padded" | "plain">("padded")
   const [verifying, setVerifying] = useState(false)
+  const [brandColor, setBrandColor] = useState("#3b82f6")
   const [saving, setSaving] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [themeEnabled, setThemeEnabled] = useState<Record<string, boolean>>(() =>
@@ -60,7 +79,15 @@ export default function BrandingPage() {
       setBrandName(brandNameVal)
       setBrandSlogan(brandSloganVal)
       if (logoUrlVal) setLogoPreview(logoUrlVal)
-      // subdomain: пока не используется (планируется позже)
+      const brandColorVal = (c.brandPrimaryColor ?? c.brand_primary_color ?? "#3b82f6") as string
+      setBrandColor(brandColorVal)
+      const websiteVal = (c.website ?? "") as string
+      setWebsite(websiteVal)
+      const subVal = (c.subdomain ?? "") as string
+      setSubdomain(subVal)
+      setSavedSubdomain(subVal)
+      // Если поддомен уже задан — сразу режим «зафиксирован», без редактирования
+      if (subVal) setSubEditMode(false)
       if (customThemeVal) {
         setThemeEnabled(prev => {
           const next = { ...prev }
@@ -69,6 +96,8 @@ export default function BrandingPage() {
           }
           return next
         })
+        const mode = (customThemeVal as Record<string, unknown>).sidebarLogoMode
+        if (mode === "plain" || mode === "padded") setSidebarLogoMode(mode)
       }
     } catch {
       // ignore
@@ -145,11 +174,21 @@ export default function BrandingPage() {
   const handleBrandBlockSave = async () => {
     setSaving(true)
     try {
+      // Сохраняем и sidebarLogoMode (вариант «с подложкой / без») — иначе выбор
+      // «Без подложки» терялся: он живёт в custom_theme, а этот блок его не слал.
+      const customTheme = {
+        ...Object.fromEntries(THEME_KEYS.map(k => [k, { enabled: themeEnabled[k] }])),
+        sidebarLogoMode,
+      }
       await updateCompanyApi({
         logo_url: logoPreview ?? "",
         brand_name: brandName,
         brand_slogan: brandSlogan,
+        website: website.trim(),
+        custom_theme: customTheme as Record<string, unknown>,
+        brand_primary_color: brandColor,
       })
+      applyBrandColor(brandColor)
       saveBrand({ logoUrl: logoPreview, companyName: brandName })
       toast.success("Сохранено")
       await loadCompany()
@@ -163,20 +202,51 @@ export default function BrandingPage() {
     }
   }
 
+  // Проверка доступности поддомена (debounce 500мс) через готовый API.
+  // НЕ проверяем, если это уже сохранённое значение (режим «зафиксирован»)
+  // или если не находимся в режиме редактирования.
+  useEffect(() => {
+    if (!subEditMode) { setSubStatus("idle"); return }
+    const s = subdomain.trim().toLowerCase()
+    if (!s) { setSubStatus("idle"); return }
+    // Если значение совпадает с сохранённым — не дёргаем API
+    if (s === savedSubdomain) { setSubStatus("idle"); return }
+    if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(s) || s.length < 3) { setSubStatus("invalid"); return }
+    setSubStatus("checking")
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/branding/check-subdomain?subdomain=${encodeURIComponent(s)}`)
+        const d = await res.json() as { available?: boolean }
+        setSubStatus(d.available ? "available" : "taken")
+      } catch { setSubStatus("idle") }
+    }, 500)
+    return () => clearTimeout(t)
+  }, [subdomain, subEditMode, savedSubdomain])
+
   const handleSave = async () => {
+    if (subStatus === "taken" || subStatus === "invalid") {
+      toast.error(subStatus === "taken" ? "Этот поддомен уже занят" : "Некорректный поддомен")
+      return
+    }
     setSaving(true)
     try {
-      const customTheme = Object.fromEntries(
-        THEME_KEYS.map(k => [k, { enabled: themeEnabled[k] }])
-      )
+      const customTheme = {
+        ...Object.fromEntries(THEME_KEYS.map(k => [k, { enabled: themeEnabled[k] }])),
+        sidebarLogoMode,
+      }
       await updateCompanyApi({
         logo_url: logoPreview ?? "",
         brand_name: brandName,
         brand_slogan: brandSlogan,
+        subdomain: subdomain.trim().toLowerCase(),
         custom_theme: customTheme as Record<string, unknown>,
       })
       saveBrand({ logoUrl: logoPreview, companyName: brandName })
       toast.success("Брендинг сохранён")
+      const newSub = subdomain.trim().toLowerCase()
+      setSavedSubdomain(newSub)
+      setSubEditMode(false)
+      setSubStatus("idle")
       // Перечитать данные чтобы форма отразила то что реально в БД
       await loadCompany()
       // Уведомить sidebar (и другие компоненты) о смене данных компании
@@ -191,18 +261,21 @@ export default function BrandingPage() {
   return (
     <>
       <div className="mb-4">
-        <h1 className="text-xl font-semibold text-foreground mb-1">Брендинг</h1>
+        <div className="flex items-center gap-2"><Palette className="h-5 w-5 text-violet-600" /><h1 className="text-lg font-semibold">Брендинг</h1></div>
         <p className="text-muted-foreground text-sm">Логотип, название, слоган и домен</p>
       </div>
 
       <div className="space-y-4">
 
         {/* ═══ Логотип + Название + Слоган (объединённый блок) ═══ */}
-        <div className="rounded-xl border bg-card p-6 space-y-5">
-          <div className="flex items-center gap-2">
-            <Upload className="w-4 h-4 text-muted-foreground" />
-            <h3 className="text-base font-semibold">Логотип, название и слоган</h3>
-          </div>
+        <Card>
+          <CardHeader className="pb-2 pt-4 px-5">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Upload className="w-4 h-4" />
+              Логотип, название и слоган
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-5 pb-4 pt-0 space-y-5">
 
           {/* Логотип */}
           <div className="flex items-start gap-6">
@@ -210,31 +283,89 @@ export default function BrandingPage() {
               onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
               onDragLeave={() => setIsDragging(false)}
               onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files?.[0]; if (f) uploadLogoFile(f) }}
-              onClick={() => canBrand && fileInputRef.current?.click()}
+              onClick={() => canBrand && !uploadingLogo && fileInputRef.current?.click()}
               className={cn(
-                "flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed transition-all w-40 h-32 shrink-0",
-                canBrand ? "cursor-pointer hover:border-primary/40 hover:bg-muted/20" : "cursor-not-allowed opacity-60",
-                isDragging && "border-primary bg-primary/5",
+                "group relative flex flex-col items-center justify-center gap-2 rounded-xl transition-all shrink-0 overflow-hidden",
+                canBrand ? "cursor-pointer" : "cursor-not-allowed opacity-60",
+                // Логотип загружен — компактно и БЕЗ рамки (рамка не идёт под
+                // прямоугольные/круглые/овальные лого). Пусто — дропзона с пунктиром.
+                logoPreview
+                  ? "p-1.5 h-20 w-auto max-w-[200px] hover:bg-muted/10"
+                  : "p-3 w-40 h-32 border-2 border-dashed hover:border-primary/40 hover:bg-muted/20",
+                isDragging && "ring-2 ring-primary ring-offset-1",
               )}
+              title={logoPreview ? "Нажмите, чтобы заменить логотип" : "Загрузить логотип"}
             >
               <input ref={fileInputRef} type="file" accept=".png,.svg,.jpg,.jpeg,.webp" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLogoFile(f) }} disabled={!canBrand} />
-              {uploadingLogo ? <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                : <Upload className="w-5 h-5 text-muted-foreground" />}
-              <p className="text-xs text-center text-muted-foreground">PNG, SVG, до 2 МБ</p>
+              {uploadingLogo ? (
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              ) : logoPreview ? (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={logoPreview} alt="Логотип" className="max-h-16 max-w-[180px] object-contain" />
+                  {/* Оверлей по наведению: Заменить / Удалить */}
+                  <div className="absolute inset-0 hidden group-hover:flex flex-col items-center justify-center gap-1.5 bg-background/85 backdrop-blur-[1px]">
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
+                      <Upload className="w-3.5 h-3.5" /> Заменить
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setLogoPreview(null); if (fileInputRef.current) fileInputRef.current.value = "" }}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-destructive hover:underline"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Удалить
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Upload className="w-5 h-5 text-muted-foreground" />
+                  <p className="text-xs text-center text-muted-foreground">PNG, SVG, до 2 МБ</p>
+                </>
+              )}
             </div>
 
             <div className="flex items-center gap-4 flex-1 min-h-[128px]">
               {logoPreview ? (
                 <>
                   <div className="flex items-start gap-4">
-                    <div className="flex flex-col items-center gap-1">
-                      <div className="w-[140px] h-10 rounded-md bg-[#1a1040] flex items-center justify-center overflow-hidden p-1">
-                        <div className="bg-white/15 rounded p-0.5 flex items-center justify-center max-w-full max-h-full">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={logoPreview} alt="" className="max-w-[120px] max-h-8 object-contain" />
+                    {/* Sidebar: два варианта (с подложкой / без) — столбиком,
+                        выбранный применяется в реальном сайдбаре. */}
+                    <div className="flex flex-col gap-2">
+                    {([
+                      { mode: "padded" as const, label: "Sidebar — с подложкой" },
+                      { mode: "plain"  as const, label: "Sidebar — без подложки" },
+                    ]).map(v => (
+                      <button
+                        key={v.mode}
+                        type="button"
+                        onClick={() => setSidebarLogoMode(v.mode)}
+                        className="flex flex-col items-center gap-1 group/sb"
+                        title={v.label}
+                      >
+                        <div className={cn(
+                          "w-[140px] h-10 rounded-md bg-[#1a1040] flex items-center justify-center overflow-hidden p-1.5 ring-2 transition-all",
+                          sidebarLogoMode === v.mode ? "ring-primary" : "ring-transparent group-hover/sb:ring-primary/30",
+                        )}>
+                          {v.mode === "padded" ? (
+                            <div className="bg-white rounded p-1 flex items-center justify-center max-w-full max-h-full">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={logoPreview} alt="" className="max-w-[110px] max-h-7 object-contain" />
+                            </div>
+                          ) : (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={logoPreview} alt="" className="max-w-[120px] max-h-8 object-contain" />
+                          )}
                         </div>
-                      </div>
-                      <span className="text-[10px] text-muted-foreground">Sidebar</span>
+                        <span className={cn(
+                          "text-[10px] flex items-center gap-1",
+                          sidebarLogoMode === v.mode ? "text-primary font-medium" : "text-muted-foreground",
+                        )}>
+                          {sidebarLogoMode === v.mode && <CheckCircle2 className="w-3 h-3" />}
+                          {v.mode === "padded" ? "С подложкой" : "Без подложки"}
+                        </span>
+                      </button>
+                    ))}
                     </div>
                     <div className="flex flex-col items-center gap-1">
                       <div className="w-[80px] h-[80px] rounded-xl border bg-muted/20 flex items-center justify-center overflow-hidden">
@@ -264,7 +395,7 @@ export default function BrandingPage() {
             </div>
           </div>
 
-          {/* Название + Слоган в одну строку */}
+          {/* Название + Слоган + Сайт */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label className="text-sm">Название бренда</Label>
@@ -286,16 +417,63 @@ export default function BrandingPage() {
               />
               <p className="text-xs text-muted-foreground">Короткая фраза под логотипом</p>
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Сайт компании</Label>
+              <Input
+                type="url"
+                value={website}
+                onChange={e => setWebsite(e.target.value)}
+                placeholder="https://company.ru"
+                className="h-9 text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                {website.trim() && !/^https?:\/\//i.test(website.trim())
+                  ? <span className="text-amber-500">Рекомендуется начинать с https://</span>
+                  : "Ссылка на сайт вашей компании"}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Цвет бренда</Label>
+              <div className="flex items-center gap-2">
+                <div className="relative shrink-0">
+                  <input
+                    type="color"
+                    value={brandColor}
+                    onChange={e => setBrandColor(e.target.value)}
+                    className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                    aria-label="Выбрать цвет бренда"
+                  />
+                  <div
+                    className="w-9 h-9 rounded-md border border-border shadow-sm cursor-pointer"
+                    style={{ backgroundColor: brandColor }}
+                  />
+                </div>
+                <Input
+                  value={brandColor}
+                  onChange={e => {
+                    const val = e.target.value
+                    setBrandColor(val)
+                  }}
+                  placeholder="#3b82f6"
+                  className="h-9 text-sm font-mono w-32"
+                  maxLength={7}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Используется как основной цвет интерфейса и публичных страниц
+              </p>
+            </div>
           </div>
 
           {/* Сохранить внутри блока */}
-          <div className="flex justify-end pt-1 border-t border-border/40 -mx-6 px-6 -mb-6 pb-4 pt-4 mt-2">
+          <div className="flex justify-end border-t border-border/40 -mx-5 px-5 pb-0 pt-4 mt-2">
             <Button size="sm" onClick={handleBrandBlockSave} disabled={saving} className="gap-1.5">
               {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
               Сохранить
             </Button>
           </div>
-        </div>
+          </CardContent>
+        </Card>
 
         {/* ═══ Темы платформы ═══ */}
         <Card>
@@ -383,32 +561,129 @@ export default function BrandingPage() {
           </CardContent>
         </Card>
 
-        {/* ═══ Поддомен ═══ */}
-        <Card className="opacity-70">
+        {/* ═══ Поддомен компании (company24.pro) ═══ */}
+        <Card>
           <CardHeader className="pb-2 pt-4 px-5">
             <CardTitle className="text-base flex items-center gap-2">
               <Link2 className="w-4 h-4" />
               Поддомен компании
-              <Badge variant="secondary" className="text-[10px] ml-1">Скоро</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent className="px-5 pb-4 pt-0 space-y-3">
             <p className="text-sm text-muted-foreground">
-              Ваш поддомен для публичных страниц вакансий и демонстраций.
+              Поддомен для публичных страниц вакансий и демонстраций — проще кастомного домена,
+              работает сразу после сохранения.
             </p>
-            <div className="flex gap-2 items-center">
-              <div className="flex-1 flex items-center max-w-lg">
-                <Input
-                  disabled
-                  placeholder="mycompany"
-                  className="h-9 font-mono text-sm rounded-r-none border-r-0"
-                />
-                <span className="h-9 px-3 flex items-center text-sm text-muted-foreground bg-muted border border-l-0 rounded-r-lg shrink-0 font-mono">
-                  .company24.pro
-                </span>
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground">Функция находится в разработке</p>
+
+            {/* Режим «зафиксирован»: поддомен уже задан и не редактируется */}
+            {savedSubdomain && !subEditMode && (
+              <>
+                {/* Подтверждение смены поддомена */}
+                {subConfirmOpen ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 p-3 space-y-2.5">
+                    <p className="text-sm text-amber-800 dark:text-amber-300 font-medium">Вы уверены?</p>
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      Смена поддомена изменит адреса всех ваших публичных ссылок — старые адреса перестанут работать.
+                    </p>
+                    <div className="flex gap-2 pt-0.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => setSubConfirmOpen(false)}
+                      >
+                        Отмена
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs gap-1.5"
+                        onClick={() => { setSubConfirmOpen(false); setSubEditMode(true) }}
+                      >
+                        <Pencil className="w-3 h-3" />Продолжить изменение
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+                      <PlugZap className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span className="text-sm">
+                        Поддомен подключён:{" "}
+                        <code className="font-mono font-medium text-foreground">{savedSubdomain}.company24.pro</code>
+                      </span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 text-xs gap-1.5 shrink-0"
+                      onClick={() => setSubConfirmOpen(true)}
+                    >
+                      <Pencil className="w-3 h-3" />Изменить поддомен
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Режим ввода: поддомен не задан (первичная установка) ИЛИ активное редактирование */}
+            {(!savedSubdomain || subEditMode) && (
+              <>
+                <div className="flex items-center max-w-lg">
+                  <Input
+                    value={subdomain}
+                    onChange={e => setSubdomain(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                    placeholder="mycompany"
+                    className="h-9 font-mono text-sm rounded-r-none border-r-0"
+                    autoFocus={subEditMode}
+                  />
+                  <span className="h-9 px-3 flex items-center text-sm text-muted-foreground bg-muted border border-l-0 rounded-r-lg shrink-0 font-mono">
+                    .company24.pro
+                  </span>
+                </div>
+                {subStatus === "checking" && (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <Loader2 className="w-3 h-3 animate-spin" />Проверяем…
+                  </p>
+                )}
+                {subStatus === "available" && (
+                  <p className="text-xs text-emerald-600 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3 h-3" />Свободен — нажмите «Сохранить»
+                  </p>
+                )}
+                {subStatus === "taken" && (
+                  <p className="text-xs text-destructive flex items-center gap-1.5">
+                    <XCircle className="w-3 h-3" />Уже занят
+                  </p>
+                )}
+                {subStatus === "invalid" && (
+                  <p className="text-xs text-destructive flex items-center gap-1.5">
+                    <XCircle className="w-3 h-3" />Минимум 3 символа: латиница, цифры, дефис
+                  </p>
+                )}
+                {subdomain.trim() && (subStatus === "available" || subStatus === "idle") && (
+                  <p className="text-xs text-muted-foreground">
+                    Адрес: <code className="font-mono text-foreground">{subdomain.trim()}.company24.pro</code>
+                  </p>
+                )}
+                {/* Кнопка «Отмена» — только в режиме редактирования (не при первичной установке) */}
+                {subEditMode && (
+                  <div className="pt-0.5">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs text-muted-foreground"
+                      onClick={() => {
+                        setSubdomain(savedSubdomain)
+                        setSubEditMode(false)
+                        setSubStatus("idle")
+                      }}
+                    >
+                      Отмена
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -442,6 +717,35 @@ export default function BrandingPage() {
                 </div>
               </div>
             )}
+            <Collapsible>
+              <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group">
+                <ChevronDown className="w-3.5 h-3.5 transition-transform group-data-[state=open]:rotate-180" />
+                Инструкция по подключению
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-2">
+                <div className="rounded-lg border bg-muted/20 p-3 space-y-2.5 text-xs text-muted-foreground">
+                  <ol className="space-y-2 list-none">
+                    <li className="flex gap-2">
+                      <span className="shrink-0 w-4 h-4 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium text-[10px]">1</span>
+                      <span>Введите желаемый адрес (например <code className="font-mono text-foreground">hr.company.ru</code>) в поле выше.</span>
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="shrink-0 w-4 h-4 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium text-[10px]">2</span>
+                      <span>В панели управления вашим доменом (у регистратора или DNS-провайдера) создайте запись типа <strong className="text-foreground font-medium">CNAME</strong>: Имя — поддомен (например <code className="font-mono text-foreground">{customDomain ? customDomain.split(".")[0] : "hr"}</code>), Значение — <code className="font-mono text-foreground">cname.company24.pro</code>.</span>
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="shrink-0 w-4 h-4 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium text-[10px]">3</span>
+                      <span>Сохраните запись. Обновление DNS может занять от нескольких минут до 24 часов.</span>
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="shrink-0 w-4 h-4 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium text-[10px]">4</span>
+                      <span>Нажмите «Проверить» — когда DNS обновится, домен подключится, и публичные страницы вакансий начнут открываться на вашем домене.</span>
+                    </li>
+                  </ol>
+                  <p className="pt-0.5 border-t">HTTPS-сертификат выпускается автоматически после успешного подтверждения домена.</p>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </CardContent>
         </Card>
 

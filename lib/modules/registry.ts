@@ -16,6 +16,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Talent Pool',      href: '/hr/talent-pool',       icon: 'Users' },
       { label: 'Аналитика найма',  href: '/hr/analytics',         icon: 'BarChart3' },
       { label: 'Календарь',        href: '/hr/calendar',          icon: 'Calendar' },
+      { label: 'Интервью',         href: '/hr/interviews',        icon: 'MessageSquare' },
       { label: 'Настройки найма',  href: '/hr/hiring-settings',   icon: 'Settings' },
       // Адаптация
       { label: 'Ввод информации',         href: '/hr/onboarding',              icon: 'GraduationCap' },
@@ -207,7 +208,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
   },
   dialer: {
     id: 'dialer',
-    name: 'Бот-звонарь',
+    name: 'AI-агент',
     description: 'AI-агент для исходящих звонков по скриптам',
     icon: 'PhoneOutgoing',
     basePath: '/dialer',

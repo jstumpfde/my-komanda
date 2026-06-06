@@ -1,21 +1,27 @@
 import { NextRequest } from "next/server"
-import { eq, or, isNull } from "drizzle-orm"
+import {eq, or, and, isNull, isNotNull} from "drizzle-orm"
 import { db } from "@/lib/db"
 import { demoTemplates } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 
 // GET /api/demo-templates — system + tenant templates
-export async function GET() {
+// ?trashed=true → только в корзине (deleted_at IS NOT NULL); иначе активные.
+export async function GET(req: NextRequest) {
   try {
     const user = await requireCompany()
+    const trashed = req.nextUrl.searchParams.get("trashed") === "true"
 
     const rows = await db
       .select()
       .from(demoTemplates)
       .where(
-        or(
-          eq(demoTemplates.isSystem, true),
-          eq(demoTemplates.tenantId, user.companyId),
+        and(
+          or(
+            eq(demoTemplates.isSystem, true),
+            eq(demoTemplates.tenantId, user.companyId),
+          ),
+          // Этап 3: системные не удаляются → в корзине только tenant-шаблоны.
+          trashed ? isNotNull(demoTemplates.deletedAt) : isNull(demoTemplates.deletedAt),
         ),
       )
       .orderBy(demoTemplates.createdAt)

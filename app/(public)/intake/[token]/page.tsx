@@ -7,8 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2, Upload, X, CheckCircle2, Lock, FileText, Building2 } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { Loader2, Upload, X, CheckCircle2, Lock, FileText, Building2, ChevronDown, ChevronRight, Target } from "lucide-react"
 import { toast } from "sonner"
 
 interface IntakeFile {
@@ -39,6 +38,13 @@ export default function IntakePage({ params }: { params: Promise<{ token: string
   const [salaryFrom, setSalaryFrom] = useState("")
   const [salaryTo, setSalaryTo] = useState("")
   const [externalUrl, setExternalUrl] = useState("")
+  // Блок критериев отбора — помогает AI точнее оценивать кандидатов.
+  const [showCriteria, setShowCriteria] = useState(false)
+  const [mustHave, setMustHave] = useState("")
+  const [dealBreakers, setDealBreakers] = useState("")
+  const [goodExample, setGoodExample] = useState("")
+  const [badExample, setBadExample] = useState("")
+  const [topPriority, setTopPriority] = useState("")
   const [contactName, setContactName] = useState("")
   const [contactPhone, setContactPhone] = useState("")
   const [contactEmail, setContactEmail] = useState("")
@@ -119,6 +125,11 @@ export default function IntakePage({ params }: { params: Promise<{ token: string
             salaryFrom: salaryFrom.trim(),
             salaryTo: salaryTo.trim(),
             externalUrl: externalUrl.trim(),
+            mustHave: mustHave.trim(),
+            dealBreakers: dealBreakers.trim(),
+            goodExample: goodExample.trim(),
+            badExample: badExample.trim(),
+            topPriority: topPriority.trim(),
             contactName: contactName.trim(),
             contactPhone: contactPhone.trim(),
             contactEmail: contactEmail.trim(),
@@ -313,6 +324,51 @@ export default function IntakePage({ params }: { params: Promise<{ token: string
                 Прикрепить файл
               </Button>
               <p className="text-[11px] text-muted-foreground">PDF, DOCX, XLSX, JPG, PNG — до 20 МБ</p>
+            </div>
+
+            {/* Критерии отбора — раскрывающийся блок. Помогает AI точнее
+                оценивать откликнувшихся кандидатов на соответствие. */}
+            <div className="border-t pt-5">
+              <button
+                type="button"
+                onClick={() => setShowCriteria(v => !v)}
+                className="flex items-center gap-2 text-sm font-semibold w-full"
+              >
+                {showCriteria ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                <Target className="w-4 h-4 text-primary" />
+                Критерии отбора
+                <span className="text-xs font-normal text-muted-foreground ml-1">— чем точнее, тем лучше подберём (необязательно)</span>
+              </button>
+
+              {showCriteria && (
+                <div className="space-y-4 mt-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium">Что обязательно — без чего точно нет</Label>
+                    <Textarea value={mustHave} onChange={e => setMustHave(e.target.value)}
+                      placeholder="Например: опыт активных продаж от 2 лет, грамотная речь, работа с CRM" rows={2} className="resize-none" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium">Что недопустимо — стоп-факторы</Label>
+                    <Textarea value={dealBreakers} onChange={e => setDealBreakers(e.target.value)}
+                      placeholder="Например: частая смена работы, нет опыта в B2B, не готов к командировкам" rows={2} className="resize-none" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium">Пример идеального кандидата</Label>
+                    <Textarea value={goodExample} onChange={e => setGoodExample(e.target.value)}
+                      placeholder="Опишите человека, которого точно взяли бы" rows={2} className="resize-none" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium">Пример того, кто точно НЕ подойдёт</Label>
+                    <Textarea value={badExample} onChange={e => setBadExample(e.target.value)}
+                      placeholder="Опишите, кого точно не стали бы рассматривать" rows={2} className="resize-none" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium">Самое важное при выборе</Label>
+                    <Input value={topPriority} onChange={e => setTopPriority(e.target.value)}
+                      placeholder="Что важнее всего: опыт / навыки / личные качества?" className="h-10" />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Contact */}

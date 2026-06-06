@@ -6,12 +6,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { ClipboardList, Plus, Copy, CheckCircle2, ExternalLink } from "lucide-react"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import type { SourceItem } from "./sources-manager"
 
 // ─── Types ─────────────────────────────────────────────
@@ -114,53 +114,49 @@ export function FormsManager({ open, onOpenChange, enabledSources }: FormsManage
         </DialogHeader>
 
         {/* Таблица форм */}
-        <Card>
-          <CardContent className="p-0">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-muted/50 border-b">
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Тип</th>
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Источник</th>
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Размещение</th>
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Ссылка</th>
-                  <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Заявок</th>
-                  <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Конв.</th>
-                  <th className="px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {forms.map((f) => (
-                  <tr key={f.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                    <td className="px-4 py-2.5 text-[13px] font-medium">{f.name}</td>
-                    <td className="px-3 py-2.5">
-                      <Badge variant="outline" className={cn("text-[10px] border-transparent", f.type === "internal" ? "bg-purple-500/10 text-purple-700" : "bg-blue-500/10 text-blue-700")}>
-                        {f.type === "internal" ? "Внутренняя" : "Внешняя"}
-                      </Badge>
-                    </td>
-                    <td className="px-3 py-2.5 text-xs text-muted-foreground">{f.source}</td>
-                    <td className="px-3 py-2.5 text-xs text-muted-foreground">{f.placement}</td>
-                    <td className="px-3 py-2.5 text-[11px] text-muted-foreground max-w-[140px] truncate">{f.url}</td>
-                    <td className="px-3 py-2.5 text-xs text-center font-medium">{f.applications}</td>
-                    <td className="px-3 py-2.5 text-xs text-center font-semibold text-emerald-600">{f.conversion}</td>
-                    <td className="px-3 py-2.5">
-                      <div className="flex items-center gap-0.5">
-                        <Button variant="ghost" size="icon" className="h-6 w-6" title="Копировать ссылку" onClick={() => handleCopy(f.id, `https://${f.url}`)}>
-                          {copiedId === f.id ? <CheckCircle2 className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+        <TableCard>
+          <DataTable>
+            <DataHead>
+              <DataHeadCell>Название</DataHeadCell>
+              <DataHeadCell>Тип</DataHeadCell>
+              <DataHeadCell>Источник</DataHeadCell>
+              <DataHeadCell>Размещение</DataHeadCell>
+              <DataHeadCell>Ссылка</DataHeadCell>
+              <DataHeadCell align="center">Заявок</DataHeadCell>
+              <DataHeadCell align="center">Конв.</DataHeadCell>
+              <DataHeadCell></DataHeadCell>
+            </DataHead>
+            <tbody>
+              {forms.map((f) => (
+                <DataRow key={f.id}>
+                  <DataCell className="font-medium">{f.name}</DataCell>
+                  <DataCell>
+                    <Badge variant="outline" className={cn("text-[10px] border-transparent", f.type === "internal" ? "bg-purple-500/10 text-purple-700" : "bg-blue-500/10 text-blue-700")}>
+                      {f.type === "internal" ? "Внутренняя" : "Внешняя"}
+                    </Badge>
+                  </DataCell>
+                  <DataCell className="text-muted-foreground">{f.source}</DataCell>
+                  <DataCell className="text-muted-foreground">{f.placement}</DataCell>
+                  <DataCell className="text-[11px] text-muted-foreground max-w-[140px] truncate">{f.url}</DataCell>
+                  <DataCell align="center" className="font-medium">{f.applications}</DataCell>
+                  <DataCell align="center" className="font-semibold text-emerald-600">{f.conversion}</DataCell>
+                  <DataCell>
+                    <div className="flex items-center gap-0.5">
+                      <Button variant="ghost" size="icon" className="h-6 w-6" title="Копировать ссылку" onClick={() => handleCopy(f.id, `https://${f.url}`)}>
+                        {copiedId === f.id ? <CheckCircle2 className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                      </Button>
+                      {f.type === "internal" && (
+                        <Button variant="ghost" size="icon" className="h-6 w-6" title="Открыть форму" onClick={() => toast.info("Форма откроется в платформе")}>
+                          <ExternalLink className="w-3 h-3" />
                         </Button>
-                        {f.type === "internal" && (
-                          <Button variant="ghost" size="icon" className="h-6 w-6" title="Открыть форму" onClick={() => toast.info("Форма откроется в платформе")}>
-                            <ExternalLink className="w-3 h-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </CardContent>
-        </Card>
+                      )}
+                    </div>
+                  </DataCell>
+                </DataRow>
+              ))}
+            </tbody>
+          </DataTable>
+        </TableCard>
 
         {/* Embed-код для внешних форм */}
         {forms.filter((f) => f.embedCode).length > 0 && (

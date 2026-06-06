@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { invoices } from "@/lib/db/schema"
+import { invoices, companies } from "@/lib/db/schema"
+import { sendInvoiceDocument } from "@/lib/billing/send-documents"
 import { eq, and } from "drizzle-orm"
-import { apiError, requireAuth, requireCompany } from "@/lib/api-helpers"
+import { apiError, requireAuth, requireCompany, requireDirector } from "@/lib/api-helpers"
 
 export async function GET(
   _req: NextRequest,
@@ -38,7 +39,8 @@ export async function PATCH(
   }
 
   // Only platform admins/managers can update invoice status to 'paid'
-  const isAdmin = user.role === "platform_admin" || user.role === "admin" || user.role === "platform_manager"
+  const role = user.role as string
+  const isAdmin = role === "platform_admin" || role === "admin" || role === "platform_manager"
 
   const { id } = await params
   const body = await req.json().catch(() => ({}))
@@ -59,6 +61,20 @@ export async function PATCH(
     .returning()
 
   if (!updated) return apiError("Счёт не найден", 404)
+
+  // Оплата счёта = активная подписка с известным концом периода.
+  if (status === "paid" && updated.periodEnd) {
+    await db.update(companies)
+      .set({ currentPeriodEnd: new Date(updated.periodEnd), subscriptionStatus: "active", updatedAt: new Date() })
+      .where(eq(companies.id, updated.companyId))
+  }
+
+  // Авто-отправка закрывающего акта (если включена автоматизация документов).
+  if (status === "paid") {
+    const [co] = await db.select({ auto: companies.autoInvoiceEnabled }).from(companies).where(eq(companies.id, updated.companyId)).limit(1)
+    if (co?.auto) { try { await sendInvoiceDocument(updated.id, "act") } catch { /* не блокируем ответ */ } }
+  }
+
   return NextResponse.json(updated)
 }
 
@@ -68,7 +84,7 @@ export async function DELETE(
 ) {
   let user: Awaited<ReturnType<typeof requireCompany>>
   try {
-    user = await requireCompany()
+    user = await requireDirector()
   } catch (e) {
     return e as NextResponse
   }

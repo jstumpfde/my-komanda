@@ -12,6 +12,7 @@ import { NextResponse } from "next/server"
 import { and, eq, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { demoTemplates } from "@/lib/db/schema"
+import { denyIfNotDevAccess } from "@/lib/dev-guard"
 
 // ─── Helpers для структуры блоков ───────────────────────────────────────────
 
@@ -426,6 +427,8 @@ const TEMPLATE_MARKETOLOG_V8 = {
 // ─── Handler ────────────────────────────────────────────────────────────────
 
 export async function POST() {
+  const denied = await denyIfNotDevAccess()
+  if (denied) return denied
   try {
     // Проверяем, есть ли уже такой системный шаблон
     const existing = await db

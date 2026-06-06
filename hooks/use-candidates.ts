@@ -48,6 +48,13 @@ export interface ApiCandidate {
   // AI-скор резюме (выставляется в lib/hh/process-queue.ts при приёме отклика).
   // Отдельно от aiScore — тот считается после демо и учитывает ответы.
   resumeScore?: number | null
+  // Рубричный движок (shadow). Считается параллельно, для ранжирования/сравнения.
+  rubricScore?: number | null
+  // Группа 25: A/B сравнение v1 vs v2 (см. CandidateScoreV2 в schema.ts).
+  aiScoreV1?: number | null
+  aiScoreV2?: number | null
+  aiScoreV2Details?: import("@/lib/db/schema").CandidateScoreV2 | null
+  aiScoredAt?: string | null
   isFavorite: boolean | null
   createdAt: string | null
   updatedAt: string | null
@@ -61,6 +68,13 @@ export interface ApiCandidate {
   demoTotalBlocks?: number
   demoCompletedBlocks?: number
   progressPercent?: number | null
+  // Колонка «Тест»: балл последнего test_submission (AI-оценка / автопроверка)
+  // и статус-лесенка: submitted (сдан) / in_progress (пишет) / opened (перешёл) /
+  // sent (отправлен) / failed (отправка упала) / null.
+  testScore?: number | null
+  testStatus?: "submitted" | "in_progress" | "opened" | "sent" | "failed" | null
+  // «Активен сейчас» — активность (демо/тест) за последние 30 минут.
+  isActive?: boolean
 }
 
 // ─── useCandidates ────────────────────────────────────────────────────────────
@@ -87,7 +101,13 @@ export interface CandidatesFilters {
   salaryMax?: number
   sources?: string[]                  // ['hh','manual','referral','demo','avito','telegram','site']
   cities?: string[]
+  /** @deprecated alias для scoreMinAnketa */
   scoreMin?: number
+  scoreMinResume?: number             // фильтр по candidates.resumeScore
+  scoreMinAnketa?: number             // фильтр по candidates.aiScore (после анкеты)
+  hideRejected?: boolean              // сервер: stage != 'rejected'
+  hideNoSalary?: boolean              // сервер: исключить кандидатов без указанной ЗП
+  activeNow?: boolean                 // сервер: активность за последние 30 мин (демо/тест)
 }
 
 export interface CandidatesSortParams {
@@ -175,6 +195,15 @@ export function useCandidates(
         if (typeof filters.scoreMin === "number" && filters.scoreMin > 0) {
           params.set("scoreMin", String(filters.scoreMin))
         }
+        if (typeof filters.scoreMinResume === "number" && filters.scoreMinResume > 0) {
+          params.set("scoreMinResume", String(filters.scoreMinResume))
+        }
+        if (typeof filters.scoreMinAnketa === "number" && filters.scoreMinAnketa > 0) {
+          params.set("scoreMinAnketa", String(filters.scoreMinAnketa))
+        }
+        if (filters.hideRejected) params.set("excludeRejected", "true")
+        if (filters.hideNoSalary) params.set("hideNoSalary", "true")
+        if (filters.activeNow) params.set("activeNow", "true")
         if (filters.search && filters.search.trim()) {
           params.set("search", filters.search.trim())
         }
@@ -263,12 +292,12 @@ const PAGINATED_PAGE_SIZES = [20, 50, 100] as const
 type PageSize = (typeof PAGINATED_PAGE_SIZES)[number]
 
 export type PaginatedSortKey =
-  | "createdAt" | "name" | "aiScore" | "resumeScore" | "salary" | "stage" | "progress"
-  | "city" | "source" | "favorite"
+  | "createdAt" | "name" | "aiScore" | "resumeScore" | "testScore" | "salary" | "stage" | "progress"
+  | "city" | "source" | "favorite" | "hrQueue"
 
 const PAGINATED_SORT_KEYS: readonly PaginatedSortKey[] = [
-  "createdAt", "name", "aiScore", "resumeScore", "salary", "stage", "progress",
-  "city", "source", "favorite",
+  "createdAt", "name", "aiScore", "resumeScore", "testScore", "salary", "stage", "progress",
+  "city", "source", "favorite", "hrQueue",
 ]
 
 interface PaginatedResponse {
@@ -393,6 +422,11 @@ export function usePaginatedCandidates({
         if (filters.sources?.length) params.set("sources", filters.sources.join(","))
         if (filters.cities?.length)  params.set("cities", filters.cities.join(","))
         if (typeof filters.scoreMin === "number" && filters.scoreMin > 0) params.set("scoreMin", String(filters.scoreMin))
+        if (typeof filters.scoreMinResume === "number" && filters.scoreMinResume > 0) params.set("scoreMinResume", String(filters.scoreMinResume))
+        if (typeof filters.scoreMinAnketa === "number" && filters.scoreMinAnketa > 0) params.set("scoreMinAnketa", String(filters.scoreMinAnketa))
+        if (filters.hideRejected) params.set("excludeRejected", "true")
+        if (filters.hideNoSalary) params.set("hideNoSalary", "true")
+        if (filters.activeNow) params.set("activeNow", "true")
         if (filters.search && filters.search.trim()) params.set("search", filters.search.trim())
         // demoProgress в paginated режиме теперь применяется на сервере через
         // SQL (см. route.ts: pre-fetch demoTotalBlocks → SQL WHERE с COUNT
@@ -456,12 +490,29 @@ export function usePaginatedCandidates({
     setSortByState(key)
     setOrderState(nextDir)
     setPageState(1)
+    // Всегда пишем sortBy в URL, даже если key="createdAt" (мапится на
+    // колонку «Дата отклика»). Раньше тут был спец-кейс sortBy:null для
+    // createdAt → effectiveListSort читал URL и при отсутствии sortBy
+    // возвращал null → стрелка не появлялась на «Дате».
+    // sort:null — чистим legacy-параметр ?sort в том же router.replace,
+    // чтобы не было второго конкурирующего writeUrl, затирающего sortBy.
     writeUrl({
-      sortBy: key === "createdAt" ? null : key,
+      sortBy: key,
       order:  nextDir === "desc" ? null : nextDir,
       page:   null,
+      sort:   null,
     })
   }, [writeUrl, sortBy, order])
+
+  // Сброс сортировки в дефолт (createdAt desc) + чистка URL (?sortBy/?order).
+  // Используется 3-м кликом по заголовку колонки в ListView для индикации
+  // «нет активной сортировки» (стрелка скрыта, данные грузятся в дефолте).
+  const clearSort = useCallback(() => {
+    setSortByState("createdAt")
+    setOrderState("desc")
+    setPageState(1)
+    writeUrl({ sortBy: null, order: null, page: null, sort: null })
+  }, [writeUrl])
 
   // ── Mutations (повторяют useCandidates — но обновляют локальный state) ────
   const updateStage = useCallback(async (candidateId: string, stage: string): Promise<boolean> => {
@@ -509,6 +560,7 @@ export function usePaginatedCandidates({
     setPage,
     setPageSize,
     setSort,
+    clearSort,
     refetch,
     updateStage,
     toggleFavorite,

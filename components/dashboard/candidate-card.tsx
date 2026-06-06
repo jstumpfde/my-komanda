@@ -32,6 +32,8 @@ export interface Candidate {
   aiVerdict?: string
   // AI-скор резюме (выставляется при приёме hh-отклика, до демо).
   resumeScore?: number | null
+  // Рубричный балл (новый shadow-движок).
+  rubricScore?: number | null
   interviewDate?: Date
   interviewTime?: string
   utmSource?: string
@@ -61,6 +63,12 @@ export interface Candidate {
   demoTotalBlocks?: number
   demoCompletedBlocks?: number
   progressPercent?: number | null
+  // Колонка «Тест»: балл последнего теста и статус-лесенка
+  // (submitted/in_progress/opened/sent).
+  testScore?: number | null
+  testStatus?: "submitted" | "in_progress" | "opened" | "sent" | null
+  // «Активен сейчас» — проходит демо/тест в последние 30 минут.
+  isActive?: boolean
 }
 
 interface CandidateCardProps {
@@ -170,6 +178,7 @@ export function CandidateCard({ candidate, settings, columnId, isLastColumn, onO
             completedBlocks={completed}
             totalBlocks={total}
             hasVideoVizitka={candidate.demoProgressJson?.hasVideoVizitka}
+            stage={candidate.stage}
           />
         )
       })()}

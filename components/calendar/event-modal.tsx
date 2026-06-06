@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { format } from "date-fns"
 import {
   Sheet,
   SheetContent,
@@ -43,11 +42,23 @@ interface EventModalProps {
 export interface EventFormData {
   title: string
   type: string
+  scope: string
   startAt: string
   endAt: string
   description: string
   roomId: string
+  // Поля интервью (отправляются только для type='interview').
+  vacancyId?: string | null
+  interviewer?: string
+  interviewType?: string
+  interviewFormat?: string
+  // #14: адрес (Офис) или ссылка на видео-звонок (Онлайн)
+  location?: string
+  meetingUrl?: string
 }
+
+const INTERVIEW_TYPES = ["Техническое", "HR", "Финальное"]
+const INTERVIEW_FORMATS = ["Онлайн", "Офис"]
 
 const EVENT_TYPES = [
   { value: "meeting", label: "Встреча" },
@@ -78,45 +89,91 @@ export function EventModal({
   const [endAt, setEndAt] = useState("")
   const [description, setDescription] = useState("")
   const [roomId, setRoomId] = useState("")
+  const [scope, setScope] = useState("company")
   const [conflict, setConflict] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  // Поля интервью
+  const [vacancyId, setVacancyId] = useState("")
+  const [interviewer, setInterviewer] = useState("")
+  const [interviewType, setInterviewType] = useState("HR")
+  const [interviewFormat, setInterviewFormat] = useState("Онлайн")
+  const [location, setLocation] = useState("")
+  const [meetingUrl, setMeetingUrl] = useState("")
+  const [vacancies, setVacancies] = useState<{ id: string; title: string }[]>([])
+
+  // Список вакансий для селектора (подгружаем при открытии).
+  useEffect(() => {
+    if (!open) return
+    fetch("/api/modules/hr/vacancies?limit=200")
+      .then(r => r.ok ? r.json() : null)
+      .then(j => { const v = j?.vacancies ?? j?.data ?? []; setVacancies(v.map((x: { id: string; title: string }) => ({ id: x.id, title: x.title }))) })
+      .catch(() => {})
+  }, [open])
 
   useEffect(() => {
     if (event) {
       setTitle(event.title)
       setType(event.type)
+      setScope(event.scope ?? "company")
       setStartAt(toLocalDatetime(event.startAt))
       setEndAt(toLocalDatetime(event.endAt))
       setDescription("")
       setRoomId(event.roomId ?? "")
+      setVacancyId(event.vacancyId ?? "")
+      setInterviewer(event.interviewer ?? "")
+      setInterviewType(event.interviewType ?? "HR")
+      setInterviewFormat(event.interviewFormat ?? "Онлайн")
+      setLocation(event.location ?? "")
+      setMeetingUrl(event.meetingUrl ?? "")
     } else if (defaultDate) {
       const start = defaultDate
       const end = new Date(start.getTime() + 60 * 60 * 1000)
       setTitle("")
       setType("meeting")
+      setScope("company")
       setStartAt(toLocalDatetime(start))
       setEndAt(toLocalDatetime(end))
       setDescription("")
       setRoomId("")
+      setVacancyId("")
+      setInterviewer("")
+      setInterviewType("HR")
+      setInterviewFormat("Онлайн")
+      setLocation("")
+      setMeetingUrl("")
     }
     setConflict(null)
   }, [event, defaultDate, open])
 
-  const checkAvailability = async () => {
-    if (!roomId || !startAt || !endAt) return
-    const params = new URLSearchParams({
-      roomId,
-      start: new Date(startAt).toISOString(),
-      end: new Date(endAt).toISOString(),
-    })
+  // #60: авто-проверка пересечений при изменении времени/переговорной (дебаунс).
+  useEffect(() => {
+    if (!open) return
+    const t = setTimeout(() => { void checkConflicts() }, 400)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, startAt, endAt, roomId])
+
+  // #60: авто-проверка конфликтов времени. Покрывает и занятость переговорной,
+  // и общее пересечение по времени (двойное бронирование слота). Не блокирует
+  // сохранение — только мягкое предупреждение.
+  const checkConflicts = async () => {
+    if (!startAt || !endAt) { setConflict(null); return }
+    const s = new Date(startAt), e = new Date(endAt)
+    if (isNaN(s.getTime()) || isNaN(e.getTime()) || e <= s) { setConflict(null); return }
+    const params = new URLSearchParams({ start: s.toISOString(), end: e.toISOString() })
+    if (roomId) params.set("roomId", roomId)
+    if (event?.id) params.set("excludeId", event.id)
     try {
-      const res = await fetch(`/api/modules/hr/rooms/availability?${params}`)
-      const data = await res.json()
-      if (!data.available) {
-        const conflictTitles = data.conflicts
-          .map((c: CalendarEvent) => c.title)
-          .join(", ")
-        setConflict(`Переговорная занята: ${conflictTitles}`)
+      const res = await fetch(`/api/modules/hr/calendar/conflicts?${params}`)
+      if (!res.ok) return
+      const json = await res.json()
+      const data = json.data ?? json
+      const room: { title: string }[] = data.roomConflicts ?? []
+      const time: { title: string }[] = data.timeConflicts ?? []
+      if (room.length) {
+        setConflict(`Переговорная занята: ${room.map(c => c.title).join(", ")}`)
+      } else if (time.length) {
+        setConflict(`В это время уже запланировано: ${time.map(c => c.title).join(", ")}`)
       } else {
         setConflict(null)
       }
@@ -130,7 +187,16 @@ export function EventModal({
     if (!title.trim() || !startAt || !endAt) return
     setLoading(true)
     try {
-      await onSave({ title, type, startAt, endAt, description, roomId })
+      const isInterview = type === "interview"
+      await onSave({
+        title, type, scope, startAt, endAt, description, roomId,
+        vacancyId:       isInterview ? (vacancyId || null) : null,
+        interviewer:     isInterview ? interviewer : "",
+        interviewType:   isInterview ? interviewType : "",
+        interviewFormat: isInterview ? interviewFormat : "",
+        location:        isInterview && interviewFormat === "Офис" ? location : "",
+        meetingUrl:      isInterview && interviewFormat === "Онлайн" ? meetingUrl : "",
+      })
       onClose()
     } finally {
       setLoading(false)
@@ -167,21 +233,94 @@ export function EventModal({
             />
           </div>
 
-          <div className="space-y-1">
-            <Label htmlFor="type">Тип</Label>
-            <Select value={type} onValueChange={setType}>
-              <SelectTrigger id="type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {EVENT_TYPES.map((t) => (
-                  <SelectItem key={t.value} value={t.value}>
-                    {t.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="type">Тип</Label>
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger id="type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {EVENT_TYPES.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="scope">Категория</Label>
+              <Select value={scope} onValueChange={setScope}>
+                <SelectTrigger id="scope">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="company">Компания</SelectItem>
+                  <SelectItem value="hr">HR-отдел</SelectItem>
+                  <SelectItem value="personal">Личное</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+
+          {/* Поля интервью — только для type='interview'. candidate = название события. */}
+          {type === "interview" && (
+            <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
+              <p className="text-xs text-muted-foreground">
+                Имя кандидата укажите в названии события. Эти поля наполняют раздел «Интервью».
+              </p>
+              <div className="space-y-1">
+                <Label htmlFor="iv-vacancy">Вакансия</Label>
+                <Select value={vacancyId || "none"} onValueChange={(v) => setVacancyId(v === "none" ? "" : v)}>
+                  <SelectTrigger id="iv-vacancy"><SelectValue placeholder="Не указана" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Не указана</SelectItem>
+                    {vacancies.map((v) => (
+                      <SelectItem key={v.id} value={v.id}>{v.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="iv-interviewer">Интервьюер</Label>
+                <Input id="iv-interviewer" value={interviewer} onChange={(e) => setInterviewer(e.target.value)} placeholder="Кто проводит" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="iv-type">Тип интервью</Label>
+                  <Select value={interviewType} onValueChange={setInterviewType}>
+                    <SelectTrigger id="iv-type"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {INTERVIEW_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="iv-format">Формат</Label>
+                  <Select value={interviewFormat} onValueChange={setInterviewFormat}>
+                    <SelectTrigger id="iv-format"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {INTERVIEW_FORMATS.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {interviewFormat === "Офис" && (
+                <div className="space-y-1">
+                  <Label htmlFor="iv-location">Адрес офиса</Label>
+                  <Input id="iv-location" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="ул. Ленина, 1, оф. 305" />
+                </div>
+              )}
+              {interviewFormat === "Онлайн" && (
+                <div className="space-y-1">
+                  <Label htmlFor="iv-meeting-url">Ссылка на видео-звонок</Label>
+                  <Input id="iv-meeting-url" value={meetingUrl} onChange={(e) => setMeetingUrl(e.target.value)} placeholder="https://meet.google.com/..." />
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
@@ -209,9 +348,9 @@ export function EventModal({
           <div className="space-y-1">
             <Label htmlFor="room">Переговорная</Label>
             <Select
-              value={roomId}
+              value={roomId || "none"}
               onValueChange={(v) => {
-                setRoomId(v)
+                setRoomId(v === "none" ? "" : v)
                 setConflict(null)
               }}
             >
@@ -219,7 +358,7 @@ export function EventModal({
                 <SelectValue placeholder="Без переговорной" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Без переговорной</SelectItem>
+                <SelectItem value="none">Без переговорной</SelectItem>
                 {rooms.map((r) => (
                   <SelectItem key={r.id} value={r.id}>
                     {r.name}
@@ -229,21 +368,10 @@ export function EventModal({
                 ))}
               </SelectContent>
             </Select>
-            {roomId && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="text-xs mt-1"
-                onClick={checkAvailability}
-              >
-                Проверить доступность
-              </Button>
-            )}
             {conflict && (
-              <div className="flex items-center gap-1 text-xs text-destructive mt-1">
-                <AlertCircle className="h-3 w-3" />
-                {conflict}
+              <div className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500 mt-1.5">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-px" />
+                <span>{conflict}. Сохранить всё равно можно.</span>
               </div>
             )}
           </div>

@@ -90,7 +90,8 @@ const CHANNELS = [
   { key: "push" as const,     label: "Push",     icon: Smartphone,    color: "text-purple-600" },
 ]
 
-const DEFAULT_PREF: PrefValue = { email: true, telegram: false, push: false }
+// Дефолт ВЫКЛ — уведомления включаются пользователем осознанно.
+const DEFAULT_PREF: PrefValue = { email: false, telegram: false, push: false }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 

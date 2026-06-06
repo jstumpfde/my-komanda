@@ -10,14 +10,21 @@ const transporter = nodemailer.createTransport({
   },
 })
 
+interface MailAttachment {
+  filename: string
+  content: string | Buffer
+  contentType?: string
+}
+
 interface SendMailOptions {
   to: string
   subject: string
   text: string
   html?: string
+  attachments?: MailAttachment[]
 }
 
-export async function sendMail({ to, subject, text, html }: SendMailOptions) {
+export async function sendMail({ to, subject, text, html, attachments }: SendMailOptions) {
   if (process.env.INTEGRATIONS_DISABLED === "true") {
     console.log("[INTEGRATIONS_DISABLED] sendMail skipped:", to)
     return { messageId: "disabled", accepted: [], rejected: [] }
@@ -31,6 +38,7 @@ export async function sendMail({ to, subject, text, html }: SendMailOptions) {
     subject,
     text,
     html: html || text.replace(/\n/g, "<br>"),
+    ...(attachments?.length ? { attachments } : {}),
   })
 
   return info

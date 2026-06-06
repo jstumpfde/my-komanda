@@ -7,6 +7,7 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import {
   ClipboardCheck, Loader2, Pencil, CheckCircle2, ChevronRight,
 } from "lucide-react"
@@ -100,7 +101,7 @@ export default function KnowledgeReviewPage() {
               <div>
                 <div className="flex items-center gap-2">
                   <ClipboardCheck className="size-5 text-amber-500" />
-                  <h1 className="text-xl font-semibold">На проверке</h1>
+                  <h1 className="text-lg font-semibold">На проверке</h1>
                   {items.length > 0 && (
                     <Badge variant="secondary" className="bg-amber-100 text-amber-700">
                       {items.length}
@@ -127,42 +128,40 @@ export default function KnowledgeReviewPage() {
                 </p>
               </div>
             ) : (
-              <div className="rounded-xl border border-border overflow-hidden bg-card">
-                <table className="w-full">
-                  <thead className="bg-muted/40">
-                    <tr>
-                      <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-4 py-3">Название</th>
-                      <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-4 py-3 w-32">Статус</th>
-                      <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-4 py-3 w-36">Обновлено</th>
-                      <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-4 py-3 w-36">Valid until</th>
-                      <th className="text-right text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-4 py-3 w-56">Действия</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
+              <TableCard>
+                <DataTable>
+                  <DataHead>
+                    <DataHeadCell>Название</DataHeadCell>
+                    <DataHeadCell width="128px">Статус</DataHeadCell>
+                    <DataHeadCell width="144px">Обновлено</DataHeadCell>
+                    <DataHeadCell width="144px">Valid until</DataHeadCell>
+                    <DataHeadCell align="right" width="224px">Действия</DataHeadCell>
+                  </DataHead>
+                  <tbody>
                     {items.map((a) => {
                       const meta = STATUS_META[a.status] ?? STATUS_META.review
                       return (
-                        <tr key={a.id} className="hover:bg-muted/30 transition-colors">
-                          <td className="px-4 py-3">
+                        <DataRow key={a.id}>
+                          <DataCell>
                             <div className="text-sm font-medium">{a.title}</div>
                             {a.reviewCycle && a.reviewCycle !== "none" && (
                               <div className="text-[10px] text-muted-foreground mt-0.5">
                                 Цикл ревью: {a.reviewCycle}
                               </div>
                             )}
-                          </td>
-                          <td className="px-4 py-3">
+                          </DataCell>
+                          <DataCell>
                             <Badge variant="secondary" className={cn("text-[10px]", meta.className)}>
                               {meta.label}
                             </Badge>
-                          </td>
-                          <td className="px-4 py-3 text-xs text-muted-foreground">
+                          </DataCell>
+                          <DataCell className="text-xs text-muted-foreground">
                             {formatDate(a.updatedAt)}
-                          </td>
-                          <td className="px-4 py-3 text-xs text-muted-foreground">
+                          </DataCell>
+                          <DataCell className="text-xs text-muted-foreground">
                             {formatDate(a.validUntil)}
-                          </td>
-                          <td className="px-4 py-3 text-right">
+                          </DataCell>
+                          <DataCell align="right">
                             <div className="flex gap-2 justify-end">
                               <Link href={`/knowledge-v2/editor?id=${a.id}&type=article`}>
                                 <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs">
@@ -184,13 +183,13 @@ export default function KnowledgeReviewPage() {
                                 Подтвердить актуальность
                               </Button>
                             </div>
-                          </td>
-                        </tr>
+                          </DataCell>
+                        </DataRow>
                       )
                     })}
                   </tbody>
-                </table>
-              </div>
+                </DataTable>
+              </TableCard>
             )}
           </div>
         </div>

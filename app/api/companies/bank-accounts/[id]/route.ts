@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 import { and, eq, ne } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { companyBankAccounts } from "@/lib/db/schema"
-import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { requireDirector, apiError, apiSuccess } from "@/lib/api-helpers"
 
 async function findOwnedAccount(id: string, companyId: string) {
   const [row] = await db
@@ -15,7 +15,7 @@ async function findOwnedAccount(id: string, companyId: string) {
 
 export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const user = await requireCompany()
+    const user = await requireDirector()
     const { id } = await context.params
 
     const existing = await findOwnedAccount(id, user.companyId)
@@ -61,7 +61,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
 
 export async function DELETE(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const user = await requireCompany()
+    const user = await requireDirector()
     const { id } = await context.params
 
     const existing = await findOwnedAccount(id, user.companyId)

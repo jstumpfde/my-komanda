@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Card, CardContent } from "@/components/ui/card"
 import { toast } from "sonner"
 import { Plus, Copy, Trash2, Link } from "lucide-react"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 
 // ─── Mock data ─────────────────────────────────────────
 interface TrackingLink {
@@ -80,39 +80,35 @@ export function TrackingLinks({ sourceName, sourceId }: TrackingLinksProps) {
   return (
     <div className="space-y-2">
       {links.length > 0 && (
-        <Card>
-          <CardContent className="p-0">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-muted/50 border-b">
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Ссылка</th>
-                  <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Переходов</th>
-                  <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Заявок</th>
-                  <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Конв.</th>
-                  <th className="px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {links.map((link) => (
-                  <tr key={link.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                    <td className="px-3 py-2 text-xs font-medium">{link.name}</td>
-                    <td className="px-2 py-2 text-[11px] text-muted-foreground truncate max-w-[180px]">{link.url}</td>
-                    <td className="px-2 py-2 text-xs text-center">{link.clicks}</td>
-                    <td className="px-2 py-2 text-xs text-center font-medium">{link.applications}</td>
-                    <td className="px-2 py-2 text-xs text-center text-emerald-600 font-semibold">{link.conversion}</td>
-                    <td className="px-2 py-2">
-                      <div className="flex items-center gap-0.5">
-                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleCopy(link.url)}><Copy className="w-3 h-3" /></Button>
-                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleDelete(link.id)}><Trash2 className="w-3 h-3" /></Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </CardContent>
-        </Card>
+        <TableCard>
+          <DataTable>
+            <DataHead>
+              <DataHeadCell>Название</DataHeadCell>
+              <DataHeadCell>Ссылка</DataHeadCell>
+              <DataHeadCell align="center">Переходов</DataHeadCell>
+              <DataHeadCell align="center">Заявок</DataHeadCell>
+              <DataHeadCell align="center">Конв.</DataHeadCell>
+              <DataHeadCell></DataHeadCell>
+            </DataHead>
+            <tbody>
+              {links.map((link) => (
+                <DataRow key={link.id}>
+                  <DataCell className="font-medium">{link.name}</DataCell>
+                  <DataCell className="text-[11px] text-muted-foreground truncate max-w-[180px]">{link.url}</DataCell>
+                  <DataCell align="center">{link.clicks}</DataCell>
+                  <DataCell align="center" className="font-medium">{link.applications}</DataCell>
+                  <DataCell align="center" className="text-emerald-600 font-semibold">{link.conversion}</DataCell>
+                  <DataCell>
+                    <div className="flex items-center gap-0.5">
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleCopy(link.url)}><Copy className="w-3 h-3" /></Button>
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleDelete(link.id)}><Trash2 className="w-3 h-3" /></Button>
+                    </div>
+                  </DataCell>
+                </DataRow>
+              ))}
+            </tbody>
+          </DataTable>
+        </TableCard>
       )}
 
       {links.length === 0 && !createMode && (
@@ -130,7 +126,7 @@ export function TrackingLinks({ sourceName, sourceId }: TrackingLinksProps) {
             <Select value={newTarget} onValueChange={setNewTarget}>
               <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="pool">Общая форма Talent Pool</SelectItem>
+                <SelectItem value="pool">Общая форма резерва</SelectItem>
                 <SelectItem value="sales">Менеджер по продажам</SelectItem>
                 <SelectItem value="devops">DevOps инженер</SelectItem>
                 <SelectItem value="hr">HR-менеджер</SelectItem>

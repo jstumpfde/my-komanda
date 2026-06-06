@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -111,47 +112,44 @@ export default function LogisticsQuotesPage() {
             </div>
 
             {/* Table */}
-            <div className="rounded-xl border border-border shadow-sm bg-card">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/50">
-                      {["#", "Запрос", "Клиент", "Маршрут", "Тип", "Вариантов", "Лучшая цена", "Наша цена", "Статус", ""].map((h) => (
-                        <th key={h} className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {QUOTES.map((q) => {
-                      const st = STATUS_MAP[q.status]
-                      const isExpanded = expandedId === q.id
-                      return (
-                        <>
-                          <tr key={q.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                            <td className="px-4 py-3 text-sm font-mono text-muted-foreground">{q.id}</td>
-                            <td className="px-4 py-3 text-sm text-muted-foreground">{q.reqId}</td>
-                            <td className="px-4 py-3 text-sm font-medium">{q.client}</td>
-                            <td className="px-4 py-3 text-sm">{q.route}</td>
-                            <td className="px-4 py-3 text-sm">{q.type}</td>
-                            <td className="px-4 py-3 text-sm text-center font-bold">{q.variants}</td>
-                            <td className="px-4 py-3 text-sm font-medium">₽{q.bestPrice}</td>
-                            <td className="px-4 py-3 text-sm font-bold">₽{q.ourPrice}</td>
-                            <td className="px-4 py-3">
-                              <Badge variant="secondary" className={`text-[10px] border-0 font-medium ${st?.cls}`}>{st?.label}</Badge>
-                            </td>
-                            <td className="px-4 py-3">
-                              <Button
-                                variant="ghost" size="sm" className="h-7 gap-1 text-xs"
-                                onClick={() => setExpandedId(isExpanded ? null : q.id)}
-                              >
-                                {isExpanded ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                                {isExpanded ? "Скрыть" : "Посмотреть"}
-                              </Button>
-                            </td>
-                          </tr>
-                          {isExpanded && (
-                            <tr key={`${q.id}-detail`}>
-                              <td colSpan={10} className="p-0">
+            <TableCard className="border border-border shadow-sm">
+              <DataTable>
+                <DataHead>
+                  {["#", "Запрос", "Клиент", "Маршрут", "Тип", "Вариантов", "Лучшая цена", "Наша цена", "Статус", ""].map((h) => (
+                    <DataHeadCell key={h}>{h}</DataHeadCell>
+                  ))}
+                </DataHead>
+                <tbody>
+                  {QUOTES.map((q) => {
+                    const st = STATUS_MAP[q.status]
+                    const isExpanded = expandedId === q.id
+                    return (
+                      <>
+                        <DataRow key={q.id}>
+                          <DataCell className="font-mono text-muted-foreground">{q.id}</DataCell>
+                          <DataCell className="text-muted-foreground">{q.reqId}</DataCell>
+                          <DataCell className="font-medium">{q.client}</DataCell>
+                          <DataCell>{q.route}</DataCell>
+                          <DataCell>{q.type}</DataCell>
+                          <DataCell align="center" className="font-bold">{q.variants}</DataCell>
+                          <DataCell className="font-medium">₽{q.bestPrice}</DataCell>
+                          <DataCell className="font-bold">₽{q.ourPrice}</DataCell>
+                          <DataCell>
+                            <Badge variant="secondary" className={`text-[10px] border-0 font-medium ${st?.cls}`}>{st?.label}</Badge>
+                          </DataCell>
+                          <DataCell>
+                            <Button
+                              variant="ghost" size="sm" className="h-7 gap-1 text-xs"
+                              onClick={() => setExpandedId(isExpanded ? null : q.id)}
+                            >
+                              {isExpanded ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                              {isExpanded ? "Скрыть" : "Посмотреть"}
+                            </Button>
+                          </DataCell>
+                        </DataRow>
+                        {isExpanded && (
+                          <tr key={`${q.id}-detail`}>
+                            <td colSpan={10} className="p-0">
                                 <div className="px-6 py-5 bg-muted/20 border-b border-border">
                                   {/* AI block */}
                                   <div className="rounded-xl border bg-gradient-to-br from-[#EEEDFE] via-[#E6F1FB] to-[#F3E8FF] dark:from-[#1a1830] dark:via-[#172030] dark:to-[#1f1530] p-4 mb-4">
@@ -214,15 +212,14 @@ export default function LogisticsQuotesPage() {
                                   </div>
                                 </div>
                               </td>
-                            </tr>
-                          )}
-                        </>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                          </tr>
+                        )}
+                      </>
+                    )
+                  })}
+                </tbody>
+              </DataTable>
+            </TableCard>
           </div>
         </main>
       </SidebarInset>

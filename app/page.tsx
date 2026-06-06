@@ -6,10 +6,10 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { KanbanBoard, type ViewMode } from "@/components/dashboard/kanban-board"
 import { CardSettings, type CardDisplaySettings } from "@/components/dashboard/card-settings"
-import { CandidateFilters, type FilterState } from "@/components/dashboard/candidate-filters"
+import { CandidateFilters, DEFAULT_FUNNEL_STATUSES, type FilterState } from "@/components/dashboard/candidate-filters"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
-import { Plus, Filter } from "lucide-react"
+import {Plus} from "lucide-react"
 import { toast } from "sonner"
 import { defaultColumnColors, getNextColumnId, PROGRESS_BY_COLUMN, type CandidateAction } from "@/lib/column-config"
 import type { Candidate } from "@/components/dashboard/candidate-card"
@@ -83,13 +83,16 @@ function AuthenticatedDashboard() {
     salaryMin: 0,
     salaryMax: 250000,
     scoreMin: 0,
+    scoreMinResume: 0,
+    scoreMinAnketa: 0,
     sources: [],
     workFormats: [],
     relocation: "any",
     businessTrips: "any",
     experienceMin: 0,
     experienceMax: 20,
-    funnelStatuses: [],
+    funnelStatuses: DEFAULT_FUNNEL_STATUSES.slice(),
+    hideRejected: false,
     demoProgress: [],
     dateRange: "",
     dateFrom: "",
@@ -223,7 +226,7 @@ function AuthenticatedDashboard() {
           return col
         })
       )
-      toast.success(`${candidate.name} → ${nextColumn?.title}`, {
+      toast.success(`${candidate.name} → ${nextColumnId}`, {
         description: `Кандидат перемещён на следующий этап`,
       })
     }

@@ -20,6 +20,7 @@ import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Progress } from "@/components/ui/progress"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -758,109 +759,105 @@ export default function AdminClientPage() {
                         <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
                       </div>
                     ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full">
-                          <thead>
-                            <tr className="bg-muted/50 border-b">
-                              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Пользователь</th>
-                              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Роль</th>
-                              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
-                              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Действия</th>
+                      <DataTable>
+                        <DataHead>
+                          <DataHeadCell>Пользователь</DataHeadCell>
+                          <DataHeadCell>Роль</DataHeadCell>
+                          <DataHeadCell align="center">Статус</DataHeadCell>
+                          <DataHeadCell align="right">Действия</DataHeadCell>
+                        </DataHead>
+                        <tbody>
+                          {users.length === 0 && (
+                            <tr>
+                              <td colSpan={4} className="text-center py-8 text-sm text-muted-foreground">
+                                Нет пользователей
+                              </td>
                             </tr>
-                          </thead>
-                          <tbody>
-                            {users.length === 0 && (
-                              <tr>
-                                <td colSpan={4} className="text-center py-8 text-sm text-muted-foreground">
-                                  Нет пользователей
-                                </td>
-                              </tr>
-                            )}
-                            {users.map(user => (
-                              <tr key={user.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                                <td className="px-4 py-3">
-                                  <div>
-                                    <p className="text-sm font-medium text-foreground">{user.name}</p>
-                                    <p className="text-xs text-muted-foreground">{user.email}</p>
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3">
-                                  <Select
-                                    value={user.role}
-                                    onValueChange={role => handlePatchUser(user.id, { role })}
-                                  >
-                                    <SelectTrigger className="h-7 text-xs w-[150px]">
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {CLIENT_ROLES.map(r => (
-                                        <SelectItem key={r} value={r}>{ROLE_LABELS[r] ?? r}</SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </td>
-                                <td className="text-center px-4 py-3">
-                                  <Badge
-                                    variant="outline"
-                                    className={cn("text-xs", user.isActive !== false
-                                      ? "bg-emerald-500/10 text-emerald-700 border-emerald-200"
-                                      : "bg-muted text-muted-foreground border-border"
+                          )}
+                          {users.map(user => (
+                            <DataRow key={user.id}>
+                              <DataCell>
+                                <div>
+                                  <p className="font-medium text-foreground">{user.name}</p>
+                                  <p className="text-xs text-muted-foreground">{user.email}</p>
+                                </div>
+                              </DataCell>
+                              <DataCell>
+                                <Select
+                                  value={user.role}
+                                  onValueChange={role => handlePatchUser(user.id, { role })}
+                                >
+                                  <SelectTrigger className="h-7 text-xs w-[150px]">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {CLIENT_ROLES.map(r => (
+                                      <SelectItem key={r} value={r}>{ROLE_LABELS[r] ?? r}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </DataCell>
+                              <DataCell align="center">
+                                <Badge
+                                  variant="outline"
+                                  className={cn("text-xs", user.isActive !== false
+                                    ? "bg-emerald-500/10 text-emerald-700 border-emerald-200"
+                                    : "bg-muted text-muted-foreground border-border"
+                                  )}
+                                >
+                                  {user.isActive !== false ? "Активен" : "Заблокирован"}
+                                </Badge>
+                              </DataCell>
+                              <DataCell>
+                                <div className="flex items-center justify-end gap-1">
+                                  <Button
+                                    size="icon" variant="ghost"
+                                    className={cn("h-7 w-7", user.isActive !== false
+                                      ? "text-muted-foreground hover:text-amber-600"
+                                      : "text-emerald-600 hover:text-emerald-700"
                                     )}
+                                    title={user.isActive !== false ? "Заблокировать" : "Разблокировать"}
+                                    onClick={() => handlePatchUser(user.id, { isActive: user.isActive === false })}
                                   >
-                                    {user.isActive !== false ? "Активен" : "Заблокирован"}
-                                  </Badge>
-                                </td>
-                                <td className="px-4 py-3">
-                                  <div className="flex items-center justify-end gap-1">
-                                    <Button
-                                      size="icon" variant="ghost"
-                                      className={cn("h-7 w-7", user.isActive !== false
-                                        ? "text-muted-foreground hover:text-amber-600"
-                                        : "text-emerald-600 hover:text-emerald-700"
-                                      )}
-                                      title={user.isActive !== false ? "Заблокировать" : "Разблокировать"}
-                                      onClick={() => handlePatchUser(user.id, { isActive: user.isActive === false })}
-                                    >
-                                      {user.isActive !== false
-                                        ? <UserX className="w-3.5 h-3.5" />
-                                        : <UserCheck className="w-3.5 h-3.5" />}
-                                    </Button>
+                                    {user.isActive !== false
+                                      ? <UserX className="w-3.5 h-3.5" />
+                                      : <UserCheck className="w-3.5 h-3.5" />}
+                                  </Button>
 
-                                    <AlertDialog>
-                                      <AlertDialogTrigger asChild>
-                                        <Button
-                                          size="icon" variant="ghost"
-                                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                                          title="Удалить пользователя"
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button
+                                        size="icon" variant="ghost"
+                                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                        title="Удалить пользователя"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Удалить пользователя?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          Пользователь «{user.name}» будет удалён. Это действие необратимо.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Отмена</AlertDialogCancel>
+                                        <AlertDialogAction
+                                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                          onClick={() => handleDeleteUser(user.id)}
                                         >
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                        </Button>
-                                      </AlertDialogTrigger>
-                                      <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                          <AlertDialogTitle>Удалить пользователя?</AlertDialogTitle>
-                                          <AlertDialogDescription>
-                                            Пользователь «{user.name}» будет удалён. Это действие необратимо.
-                                          </AlertDialogDescription>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                          <AlertDialogCancel>Отмена</AlertDialogCancel>
-                                          <AlertDialogAction
-                                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                            onClick={() => handleDeleteUser(user.id)}
-                                          >
-                                            Удалить
-                                          </AlertDialogAction>
-                                        </AlertDialogFooter>
-                                      </AlertDialogContent>
-                                    </AlertDialog>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                                          Удалить
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </div>
+                              </DataCell>
+                            </DataRow>
+                          ))}
+                        </tbody>
+                      </DataTable>
                     )}
                   </CardContent>
                 </Card>

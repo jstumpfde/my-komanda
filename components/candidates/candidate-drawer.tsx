@@ -14,6 +14,17 @@ import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { RubricShadowSection } from "@/components/candidates/rubric-shadow-section"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import {
   Phone,
   Mail,
@@ -34,6 +45,8 @@ import {
   X,
   FileQuestion,
   Play,
+  RotateCcw,
+  Pencil,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -45,7 +58,9 @@ import { toast } from "sonner"
 import type { ApiCandidate } from "@/hooks/use-candidates"
 import type { Lesson, Block } from "@/lib/course-types"
 import { AnswersTab } from "./answers-tab"
+import { TestTab } from "./test-tab"
 import { HhResumeInfo } from "./hh-resume-info"
+import { AiMatchCardV2 } from "./ai-match-card-v2"
 
 // ─── Note type ────────────────────────────────────────────────────────────────
 
@@ -526,6 +541,31 @@ export function CandidateDrawer({
   const [notes, setNotes] = useState<CandidateNote[]>([])
   const [loadingCandidate, setLoadingCandidate] = useState(false)
   const [changingStage, setChangingStage] = useState<string | null>(null)
+  const [restoring, setRestoring] = useState(false)
+  const [confirmRestoreOpen, setConfirmRestoreOpen] = useState(false)
+  const [restoreTargetStage, setRestoreTargetStage] = useState<string | null>(null)
+  const [confirmInterviewOpen, setConfirmInterviewOpen] = useState(false)
+  const [confirmRejectOpen, setConfirmRejectOpen] = useState(false)
+  // Инлайн-редактирование имени (например, для анонимных «Новый кандидат»).
+  const [editingName, setEditingName] = useState(false)
+  const [nameDraft, setNameDraft] = useState("")
+  const [savingName, setSavingName] = useState(false)
+  const startEditName = () => { setNameDraft(candidate?.name ?? ""); setEditingName(true) }
+  const saveName = async () => {
+    if (!candidate) return
+    const next = nameDraft.trim()
+    if (!next || next === candidate.name) { setEditingName(false); return }
+    setSavingName(true)
+    try {
+      const res = await fetch(`/api/modules/hr/candidates/${candidate.id}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: next }),
+      })
+      if (!res.ok) throw new Error()
+      setCandidate((prev) => prev ? { ...prev, name: next } : prev)
+      setEditingName(false)
+      toast.success("Имя сохранено")
+    } catch { toast.error("Не удалось сохранить имя") } finally { setSavingName(false) }
+  }
   const [noteText, setNoteText] = useState("")
   const [savingNote, setSavingNote] = useState(false)
   const [scoringAi, setScoringAi] = useState(false)
@@ -710,6 +750,53 @@ export function CandidateDrawer({
     }
   }
 
+  // Восстановление кандидата из стадии "rejected". prevStage определяет
+  // сервер (по stage_history), но для confirm-диалога рассчитываем тут же
+  // на клиенте — чтобы сразу показать HR'у куда именно вернётся кандидат.
+  const computeRestoreTargetStage = (): string => {
+    if (!candidate) return "primary_contact"
+    const history = (Array.isArray(candidate.stageHistory) ? candidate.stageHistory : []) as StageHistoryEntry[]
+    for (let i = history.length - 1; i >= 0; i--) {
+      const entry = history[i]
+      if (entry?.to === "rejected" && typeof entry.from === "string" && entry.from.length > 0) {
+        return entry.from
+      }
+    }
+    return "primary_contact"
+  }
+
+  const openRestoreConfirm = () => {
+    if (!candidate || candidate.stage !== "rejected" || restoring) return
+    setRestoreTargetStage(computeRestoreTargetStage())
+    setConfirmRestoreOpen(true)
+  }
+
+  const handleRestore = async () => {
+    if (!candidate || restoring) return
+    setRestoring(true)
+    try {
+      const res = await fetch(`/api/modules/hr/candidates/${candidate.id}/restore`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
+      const data = await res.json() as { stage?: string; error?: string }
+      if (!res.ok) {
+        toast.error(data.error || "Не удалось вернуть кандидата")
+        return
+      }
+      const newStage = data.stage ?? "primary_contact"
+      setCandidate((prev) => prev ? { ...prev, stage: newStage } : prev)
+      onStageChange?.(candidate.id, newStage)
+      toast.success(`Кандидат возвращён в воронку: ${getStageLabel(newStage, vacancyPipeline)}`)
+      setConfirmRestoreOpen(false)
+    } catch {
+      toast.error("Ошибка сети")
+    } finally {
+      setRestoring(false)
+    }
+  }
+
   const handleAddNote = async () => {
     if (!candidate || !noteText.trim() || savingNote) return
     setSavingNote(true)
@@ -744,9 +831,25 @@ export function CandidateDrawer({
         const data = await res.json() as { error?: string }
         throw new Error(data.error || "Ошибка")
       }
-      const data = await res.json() as { score: number; summary: string; details: { question: string; score: number; comment: string }[] }
-      setCandidate(prev => prev ? { ...prev, aiScore: data.score, aiSummary: data.summary, aiDetails: data.details } : prev)
-      toast.success(`AI-скоринг: ${data.score}/100`)
+      const data = await res.json() as {
+        score:     number | null
+        summary?:  string | null
+        details?:  { question: string; score: number; comment: string }[] | null
+        v1?:       number | null
+        v2?:       number | null
+        v2Details?: import("@/lib/db/schema").CandidateScoreV2 | null
+      }
+      setCandidate(prev => prev ? {
+        ...prev,
+        aiScore:          data.score ?? prev.aiScore,
+        aiSummary:        typeof data.summary === "string" ? data.summary : prev.aiSummary,
+        aiDetails:        Array.isArray(data.details) ? data.details : prev.aiDetails,
+        aiScoreV1:        data.v1 ?? prev.aiScoreV1 ?? null,
+        aiScoreV2:        data.v2 ?? prev.aiScoreV2 ?? null,
+        aiScoreV2Details: data.v2Details ?? prev.aiScoreV2Details ?? null,
+      } : prev)
+      const shown = data.v2 ?? data.score ?? "?"
+      toast.success(`AI-скоринг: ${shown}/100`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Ошибка AI-скоринга")
     } finally {
@@ -850,7 +953,26 @@ export function CandidateDrawer({
               <AvatarInitials name={candidate.name} size="md" />
               <div className="flex-1 min-w-0">
                 <div className="text-base font-semibold leading-tight mb-1 flex items-center gap-2">
-                  <span className="truncate">{candidate.name}</span>
+                  {editingName ? (
+                    <input
+                      autoFocus
+                      value={nameDraft}
+                      onChange={(e) => setNameDraft(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") void saveName(); if (e.key === "Escape") setEditingName(false) }}
+                      onBlur={() => void saveName()}
+                      disabled={savingName}
+                      placeholder="Имя кандидата"
+                      className="flex-1 min-w-0 text-base font-semibold border-b border-primary/40 bg-transparent outline-none px-0.5"
+                    />
+                  ) : (
+                    <>
+                      <span className="truncate">{candidate.name}</span>
+                      <button type="button" onClick={startEditName} title="Переименовать"
+                        className="shrink-0 text-muted-foreground/40 hover:text-foreground transition-colors p-0.5">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  )}
                   <button
                     type="button"
                     onClick={handleFavoriteToggle}
@@ -890,11 +1012,13 @@ export function CandidateDrawer({
           </ScrollArea>
         ) : candidate && derived ? (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-            <TabsList className="grid grid-cols-6 mx-3 mt-3 shrink-0 h-auto">
+            <TabsList className="grid grid-cols-4 mx-3 mt-3 shrink-0 h-auto">
               <TabsTrigger value="contacts" className="text-[10px] px-1 py-1.5">Контакты</TabsTrigger>
               <TabsTrigger value="answers" className="text-[10px] px-1 py-1.5">Ответы</TabsTrigger>
+              <TabsTrigger value="test" className="text-[10px] px-1 py-1.5">Тест</TabsTrigger>
               <TabsTrigger value="chat" className="text-[10px] px-1 py-1.5">Чат hh</TabsTrigger>
               <TabsTrigger value="ai" className="text-[10px] px-1 py-1.5">AI-оценка</TabsTrigger>
+              <TabsTrigger value="rubric" className="text-[10px] px-1 py-1.5">Рубрика</TabsTrigger>
               <TabsTrigger value="channels" className="text-[10px] px-1 py-1.5">Каналы</TabsTrigger>
               <TabsTrigger value="history" className="text-[10px] px-1 py-1.5">История</TabsTrigger>
             </TabsList>
@@ -993,8 +1117,20 @@ export function CandidateDrawer({
                   </div>
                 )}
                 {isRejected && (
-                  <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive font-medium text-center">
-                    Кандидат получил отказ
+                  <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 space-y-2">
+                    <p className="text-sm text-destructive font-medium text-center">
+                      Кандидат получил отказ
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full gap-2"
+                      disabled={restoring}
+                      onClick={openRestoreConfirm}
+                    >
+                      {restoring ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                      Вернуть в воронку
+                    </Button>
                   </div>
                 )}
 
@@ -1055,7 +1191,12 @@ export function CandidateDrawer({
                 {derived.surveyContacts ? (
                   <SurveyContactsBlock contacts={derived.surveyContacts} />
                 ) : null}
-                <AnswersTab answers={candidate.anketaAnswers} demoLessons={candidate.demoLessons} />
+                <AnswersTab answers={candidate.anketaAnswers} demoLessons={candidate.demoLessons} candidateId={candidate.id} />
+              </TabsContent>
+
+              {/* ── Тест ─────────────────────────────────────────── */}
+              <TabsContent value="test" className="px-6 py-4 pb-40 mt-0 space-y-4">
+                <TestTab candidateId={candidate.id} />
               </TabsContent>
 
               {/* ── Чат (только hh) ──────────────────────────────── */}
@@ -1169,6 +1310,13 @@ export function CandidateDrawer({
 
               {/* ── AI-оценка ────────────────────────────────────── */}
               <TabsContent value="ai" className="px-6 py-4 pb-28 mt-0 space-y-4">
+                {candidate.aiScoreV2Details && (
+                  <AiMatchCardV2
+                    details={candidate.aiScoreV2Details}
+                    scoreV1={candidate.aiScoreV1 ?? null}
+                    scoreV2={candidate.aiScoreV2 ?? null}
+                  />
+                )}
                 {candidate.aiScore != null ? (
                   <>
                     <div className="flex flex-col items-center gap-2 py-4">
@@ -1245,6 +1393,14 @@ export function CandidateDrawer({
                     </p>
                   </div>
                 )}
+              </TabsContent>
+
+              {/* ── Рубрика (новый shadow-движок, отдельно от старой AI-оценки) ── */}
+              <TabsContent value="rubric" className="px-6 py-4 pb-28 mt-0 space-y-4">
+                <p className="text-xs text-muted-foreground">
+                  Новая оценка соответствия по критериям анкеты. Считается параллельно старой AI-оценке и не влияет на стадию.
+                </p>
+                <RubricShadowSection candidateId={candidate.id} />
               </TabsContent>
 
               {/* ── Другие каналы ────────────────────────────────── */}
@@ -1335,9 +1491,9 @@ export function CandidateDrawer({
             <Button
               size="sm"
               variant="outline"
-              className="flex-1 gap-2 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+              className="h-10 flex-1 gap-2 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
               disabled={!!changingStage}
-              onClick={() => handleStageChange("rejected")}
+              onClick={() => setConfirmRejectOpen(true)}
             >
               {changingStage === "rejected" ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
               Отказать
@@ -1346,9 +1502,9 @@ export function CandidateDrawer({
             {candidate.stage !== "interview" && candidate.stage !== "final_decision" && candidate.stage !== "hired" ? (
               <Button
                 size="sm"
-                className="flex-1 gap-2 bg-purple-600 hover:bg-purple-700 text-white"
+                className="h-10 flex-[1.5] gap-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold shadow-md shadow-purple-600/25"
                 disabled={!!changingStage}
-                onClick={() => handleStageChange("interview")}
+                onClick={() => setConfirmInterviewOpen(true)}
               >
                 {changingStage === "interview" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calendar className="w-4 h-4" />}
                 Пригласить на интервью
@@ -1368,6 +1524,78 @@ export function CandidateDrawer({
           </div>
         )}
       </SheetContent>
+
+      <AlertDialog open={confirmRestoreOpen} onOpenChange={setConfirmRestoreOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Вернуть кандидата в воронку?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {restoreTargetStage
+                ? `Кандидат будет перемещён на стадию: «${getStageLabel(restoreTargetStage, vacancyPipeline)}».`
+                : "Кандидат будет перемещён обратно в воронку."}
+              {" "}Автоматическая обработка (если была остановлена) останется выключенной — включите её отдельно, если нужно.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={restoring}>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={restoring}
+              onClick={(e) => { e.preventDefault(); void handleRestore() }}
+            >
+              {restoring ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : null}
+              Вернуть
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Подтверждение приглашения на интервью */}
+      <AlertDialog open={confirmInterviewOpen} onOpenChange={setConfirmInterviewOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Пригласить на интервью?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {candidate?.name ? <><b>{candidate.name}</b> будет переведён</> : "Кандидат будет переведён"} на стадию «Интервью».
+              {" "}Если в воронке для стадии «Интервью» настроено действие hh.ru «Пригласить» — кандидату автоматически уйдёт приглашение в hh-чат с текстом из настроек вакансии.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={!!changingStage}>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!!changingStage}
+              className="bg-purple-600 hover:bg-purple-700"
+              onClick={(e) => { e.preventDefault(); setConfirmInterviewOpen(false); void handleStageChange("interview") }}
+            >
+              {changingStage === "interview" ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : null}
+              Пригласить
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Подтверждение отказа */}
+      <AlertDialog open={confirmRejectOpen} onOpenChange={setConfirmRejectOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Отказать кандидату?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {candidate?.name ? <><b>{candidate.name}</b> будет переведён</> : "Кандидат будет переведён"} на стадию «Отказ», автоматическая обработка остановится.
+              {" "}Если в воронке для стадии «Отказ» настроено действие hh.ru «Отказать» — кандидату уйдёт отказ в hh с текстом из настроек вакансии.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={!!changingStage}>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!!changingStage}
+              className="bg-destructive hover:bg-destructive/90"
+              onClick={(e) => { e.preventDefault(); setConfirmRejectOpen(false); void handleStageChange("rejected") }}
+            >
+              {changingStage === "rejected" ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : null}
+              Отказать
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sheet>
   )
 }

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { Card } from "@/components/ui/card"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -164,8 +164,8 @@ export default function DepartmentsPage() {
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-                  <Building2 className="h-6 w-6 text-primary" />
+                <h1 className="text-lg font-semibold flex items-center gap-2">
+                  <Building2 className="h-5 w-5 text-violet-600" />
                   Отделы
                 </h1>
                 <p className="text-sm text-muted-foreground mt-1">
@@ -178,18 +178,16 @@ export default function DepartmentsPage() {
               </Button>
             </div>
 
-            {/* Table */}
-            <Card className="rounded-xl border border-border shadow-sm bg-card overflow-hidden">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border bg-muted/30">
-                    <th className="text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-5 py-3 text-left">Название</th>
-                    <th className="text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-5 py-3 text-left">Описание</th>
-                    <th className="text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-5 py-3 text-left">Руководитель</th>
-                    <th className="text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-5 py-3 text-left">Родительский отдел</th>
-                    <th className="text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-5 py-3 text-right">Действия</th>
-                  </tr>
-                </thead>
+            {/* Table — единый вид через data-table primitives (S2) */}
+            <TableCard>
+              <DataTable>
+                <DataHead>
+                  <DataHeadCell>Название</DataHeadCell>
+                  <DataHeadCell>Описание</DataHeadCell>
+                  <DataHeadCell>Руководитель</DataHeadCell>
+                  <DataHeadCell>Родительский отдел</DataHeadCell>
+                  <DataHeadCell align="right">Действия</DataHeadCell>
+                </DataHead>
                 <tbody>
                   {loading ? (
                     <tr><td colSpan={5} className="text-center py-12 text-muted-foreground">Загрузка...</td></tr>
@@ -197,29 +195,29 @@ export default function DepartmentsPage() {
                     <tr><td colSpan={5} className="text-center py-12 text-muted-foreground">Нет отделов</td></tr>
                   ) : (
                     tree.map((dept) => (
-                      <tr key={dept.id} className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors">
-                        <td className="px-5 py-3">
+                      <DataRow key={dept.id}>
+                        <DataCell>
                           <div className="flex items-center" style={{ marginLeft: dept.depth * 24 }}>
                             {dept.depth > 0 && (
                               <ChevronRight className="h-3 w-3 text-muted-foreground mr-1.5 shrink-0" />
                             )}
                             <Building2 className="h-4 w-4 text-primary mr-2 shrink-0" />
-                            <span className="font-medium text-sm">{dept.name}</span>
+                            <span className="font-medium">{dept.name}</span>
                           </div>
-                        </td>
-                        <td className="px-5 py-3 text-sm text-muted-foreground">{dept.description ?? "—"}</td>
-                        <td className="px-5 py-3">
+                        </DataCell>
+                        <DataCell className="text-muted-foreground">{dept.description ?? "—"}</DataCell>
+                        <DataCell>
                           {dept.headUserName ? (
                             <Badge variant="secondary" className="gap-1">
                               <Users className="h-3 w-3" />
                               {dept.headUserName}
                             </Badge>
                           ) : (
-                            <span className="text-sm text-muted-foreground">—</span>
+                            <span className="text-muted-foreground">—</span>
                           )}
-                        </td>
-                        <td className="px-5 py-3 text-sm text-muted-foreground">{dept.parentName ?? "—"}</td>
-                        <td className="px-5 py-3 text-right">
+                        </DataCell>
+                        <DataCell className="text-muted-foreground">{dept.parentName ?? "—"}</DataCell>
+                        <DataCell align="right">
                           <div className="flex items-center justify-end gap-1">
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(dept)}>
                               <Pencil className="h-4 w-4" />
@@ -228,13 +226,13 @@ export default function DepartmentsPage() {
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
-                        </td>
-                      </tr>
+                        </DataCell>
+                      </DataRow>
                     ))
                   )}
                 </tbody>
-              </table>
-            </Card>
+              </DataTable>
+            </TableCard>
 
             {/* Create / Edit Dialog */}
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

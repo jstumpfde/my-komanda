@@ -55,10 +55,7 @@ function generateVacancyText(draft: VacancyDraft): string {
 
   return `# ${title}
 
-## О компании
-${draft.companyDescription || "Мы — динамично развивающаяся компания, лидер в своём сегменте рынка."}
-
-## Обязанности
+${draft.companyDescription ? `## О компании\n${draft.companyDescription}\n\n` : ""}## Обязанности
 ${draft.dailyTasks || "- Выполнение ключевых задач по направлению\n- Взаимодействие с командой и клиентами"}
 
 ## Требования

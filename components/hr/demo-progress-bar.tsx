@@ -61,6 +61,21 @@ export function calcDemoFraction(dp: DemoProgressData | null | undefined): DemoF
 
 export type DemoProgressVariant = "list" | "kanban"
 
+// P0-31: стадии, прошедшие точку «решение по демо». Только в них прогресс-бар
+// рендерится зелёным при 100%. Остальные стадии (включая demo_opened,
+// primary_contact, demo_in_progress и т.д.) → синий даже при 16/16,
+// чтобы зелёный сигнал означал «кандидат прошёл воронку дальше демо»,
+// а не просто «досмотрел видео».
+const GREEN_GATING_STAGES = new Set([
+  "decision",
+  "anketa_filled",
+  "ai_screening",
+  "test_task_sent",
+  "interview",
+  "offer",
+  "hired",
+])
+
 interface DemoProgressBarProps {
   /** Процент 0..100 при наличии данных, либо null — кандидат не приступал. */
   progressPercent: number | null
@@ -70,6 +85,12 @@ interface DemoProgressBarProps {
   totalBlocks?: number
   /** Если true — рядом с подписью процента показывается иконка видео-визитки. */
   hasVideoVizitka?: boolean
+  /**
+   * Стадия воронки кандидата (`candidate.stage`). Если задана — зелёный цвет
+   * при 100% включается только когда stage ∈ GREEN_GATING_STAGES.
+   * Если не передана — fallback на старое поведение (только cur/tot).
+   */
+  stage?: string | null
   /**
    * "list"   — узкая шкала ~80px справа подпись "{N}%" / "Не начато" / "Завершено".
    *             Цвета: пусто — серая, 1-99% — синяя, 100% — зелёная.
@@ -85,13 +106,20 @@ export function DemoProgressBar({
   completedBlocks,
   totalBlocks,
   hasVideoVizitka,
+  stage,
   variant = "list",
   className,
 }: DemoProgressBarProps) {
   const pct = progressPercent
   const hasData = pct !== null
+  // P0-31: при 100% — зелёный только если stage прошёл точку «decision».
+  // Если stage не передан (legacy-вызовы) — оставляем зелёный (backward-compat).
+  const stagePassedDecision = stage === undefined || stage === null
+    ? true
+    : GREEN_GATING_STAGES.has(stage)
 
   if (variant === "kanban") {
+    const at100 = pct === 100
     const barColor = !hasData
       ? "bg-muted-foreground/20"
       : pct === 0
@@ -100,7 +128,9 @@ export function DemoProgressBar({
           ? "bg-orange-500"
           : pct < 100
             ? "bg-emerald-500"
-            : "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"
+            : (at100 && !stagePassedDecision
+                ? "bg-blue-500"
+                : "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]")
     const label = !hasData
       ? "Не начато"
       : `${completedBlocks ?? 0}/${totalBlocks ?? 0} · ${pct}%`
@@ -129,11 +159,15 @@ export function DemoProgressBar({
   const hasFraction = typeof completedBlocks === "number" && typeof totalBlocks === "number" && totalBlocks > 0
   const cur = completedBlocks ?? 0
   const tot = totalBlocks ?? 0
-  const isComplete = hasFraction && cur >= tot
+  // P0-31: «complete» теперь требует и cur>=tot, и stage>=decision (если stage передан).
+  const completedFraction = hasFraction && cur >= tot
+  const isComplete = completedFraction && stagePassedDecision
+  // Кандидат досмотрел демо, но воронка ещё не двинулась — рендерим синим.
+  const isCompletedButNotPassed = completedFraction && !stagePassedDecision
   const isStarted = hasFraction && cur > 0 && cur < tot
   const fillColor = isComplete
     ? "bg-emerald-500"
-    : isStarted
+    : (isStarted || isCompletedButNotPassed)
       ? "bg-blue-500"
       : "bg-transparent"
   // "Не начато" — когда нет данных вообще ИЛИ кандидат ещё не сделал ни одного шага.
@@ -162,22 +196,39 @@ export function DemoProgressBar({
   const fillWidth = noProgress ? "0%" : `${fillPct}%`
 
   return (
-    <div className={cn("flex flex-col items-center gap-1 w-full max-w-[140px] mx-auto", className)}>
+    <div className={cn("flex flex-col items-center gap-1 w-full max-w-[105px] mx-auto", className)}>
       <span className={cn("text-sm tabular-nums whitespace-nowrap font-medium inline-flex items-center", labelClass)}>
         {label}
         {hasVideoVizitka && (
           <Video className="inline w-3 h-3 ml-1 text-muted-foreground" aria-label="Есть видео-визитка" />
         )}
       </span>
-      <div
-        className="w-full h-1.5 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800/50"
-        aria-label={`Прогресс демо: ${label}`}
-      >
+      {hasFraction && tot > 0 ? (
+        // Сегменты-«шаги»: tot делений, первые cur — залиты цветом стадии,
+        // остальные серые. Наглядно показывает «N из M страниц пройдено».
+        <div className="flex w-full gap-[1px]" aria-label={`Прогресс демо: ${label}`}>
+          {Array.from({ length: tot }).map((_, i) => (
+            <div
+              key={i}
+              className={cn(
+                "aspect-square flex-1 rounded-[2px] transition-colors",
+                i < cur ? fillColor : "bg-gray-200 dark:bg-gray-700/50",
+              )}
+            />
+          ))}
+        </div>
+      ) : (
+        // Fallback для legacy-записей без известного числа шагов — сплошная шкала.
         <div
-          className={cn("h-full rounded-full transition-all", fillColor)}
-          style={{ width: fillWidth }}
-        />
-      </div>
+          className="w-full h-1.5 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800/50"
+          aria-label={`Прогресс демо: ${label}`}
+        >
+          <div
+            className={cn("h-full rounded-full transition-all", fillColor)}
+            style={{ width: fillWidth }}
+          />
+        </div>
+      )}
     </div>
   )
 }

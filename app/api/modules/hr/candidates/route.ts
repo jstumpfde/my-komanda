@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
-import { eq, ne, and, inArray, asc, desc, or, isNull, sql, type SQL } from "drizzle-orm"
+import { eq, ne, and, inArray, asc, desc, or, isNull, isNotNull, sql, type SQL } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, vacancies, demos, hhResponses } from "@/lib/db/schema"
+import { candidates, vacancies, demos, hhResponses, testSubmissions, followUpMessages } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { generateCandidateToken } from "@/lib/candidate-tokens"
 import { generateCandidateShortId } from "@/lib/short-id"
@@ -11,6 +11,8 @@ type SortKey =
   | "favorite"
   | "aiScore"
   | "resumeScore"
+  | "rubricScore"
+  | "testScore"
   | "salary"
   | "responseDate"
   | "status"
@@ -20,10 +22,11 @@ type SortKey =
   | "stage"
   | "city"
   | "source"
+  | "hrQueue"
 
 const ALLOWED_SORT_KEYS: ReadonlySet<SortKey> = new Set<SortKey>([
-  "favorite", "aiScore", "resumeScore", "salary", "responseDate", "status", "progress",
-  "createdAt", "name", "stage", "city", "source",
+  "favorite", "aiScore", "resumeScore", "rubricScore", "testScore", "salary", "responseDate", "status", "progress",
+  "createdAt", "name", "stage", "city", "source", "hrQueue",
 ])
 
 const ALLOWED_PAGE_SIZES: ReadonlySet<number> = new Set<number>([20, 50, 100])
@@ -70,6 +73,21 @@ const STAGE_ORDER_SQL = sql`CASE ${candidates.stage}
   ELSE 99
 END`
 
+// P0-8: «Очередь HR» — приоритет показа anketa_filled первыми.
+// Самые «дорогие» кандидаты — те, кто прошёл демо и оставил анкету,
+// но ещё без решения HR. Остальные — по убыванию степени готовности.
+const HR_QUEUE_ORDER_SQL = sql`CASE ${candidates.stage}
+  WHEN 'anketa_filled'    THEN 1
+  WHEN 'decision'         THEN 2
+  WHEN 'interview'        THEN 2
+  WHEN 'demo_opened'      THEN 3
+  WHEN 'primary_contact'  THEN 4
+  WHEN 'new'              THEN 5
+  WHEN 'rejected'         THEN 99
+  WHEN 'hired'            THEN 99
+  ELSE 50
+END`
+
 // Абсолютное число пройденных блоков демо (status='completed', исключая
 // служебный __complete__-маркер). totalBlocks одинаков для всех кандидатов
 // одной вакансии, поэтому порядок по этой метрике совпадает с порядком по
@@ -79,6 +97,20 @@ const DEMO_PROGRESS_COUNT_SQL = sql`(
   SELECT count(*) FROM jsonb_array_elements(${candidates.demoProgressJson}->'blocks') b
   WHERE b->>'status' = 'completed'
     AND b->>'blockId' <> '__complete__'
+)`
+
+// Балл последнего теста кандидата для сортировки по колонке «Тест».
+// COALESCE(ai_score, objective.score) — как в testScoreOf (см. ниже).
+const TEST_SCORE_SQL = sql`(
+  SELECT COALESCE(
+    ts.ai_score,
+    CASE WHEN (ts.answers_json->'objective'->>'maxPoints')::int > 0
+         THEN (ts.answers_json->'objective'->>'score')::int END
+  )
+  FROM test_submissions ts
+  WHERE ts.candidate_id = ${candidates.id}
+  ORDER BY ts.submitted_at DESC
+  LIMIT 1
 )`
 
 function buildOrderBy(key: SortKey | null, dir: "asc" | "desc"): SQL[] {
@@ -105,6 +137,21 @@ function buildOrderBy(key: SortKey | null, dir: "asc" | "desc"): SQL[] {
       desc(candidates.createdAt),
       tiebreak,
     ]
+    case "rubricScore": return [
+      dir === "asc"
+        ? sql`${candidates.rubricScore} ASC NULLS LAST`
+        : sql`${candidates.rubricScore} DESC NULLS LAST`,
+      desc(candidates.createdAt),
+      tiebreak,
+    ]
+    case "testScore": return [
+      // Балл теста из подзапроса; NULL (теста нет) — всегда в конец.
+      dir === "asc"
+        ? sql`${TEST_SCORE_SQL} ASC NULLS LAST`
+        : sql`${TEST_SCORE_SQL} DESC NULLS LAST`,
+      desc(candidates.createdAt),
+      tiebreak,
+    ]
     case "salary":       return [wrap(sql`COALESCE(${candidates.salaryMax}, ${candidates.salaryMin}, 0)`), desc(candidates.createdAt), tiebreak]
     case "name":         return [wrap(candidates.name), desc(candidates.createdAt), tiebreak]
     case "progress":     return [
@@ -118,6 +165,15 @@ function buildOrderBy(key: SortKey | null, dir: "asc" | "desc"): SQL[] {
     case "createdAt":    return [wrap(candidates.createdAt), tiebreak]
     case "status":
     case "stage":        return [wrap(STAGE_ORDER_SQL), desc(candidates.createdAt), tiebreak]
+    case "hrQueue":      return [
+      // ASC: anketa_filled=1 первыми → новые внутри стадии первыми.
+      // P0-8: дефолт при первом открытии вакансии.
+      dir === "asc"
+        ? sql`${HR_QUEUE_ORDER_SQL} ASC`
+        : sql`${HR_QUEUE_ORDER_SQL} DESC`,
+      desc(candidates.createdAt),
+      tiebreak,
+    ]
     case "city": return [
       // NULL/пустые в конец независимо от направления — иначе они доминируют
       // и активная сортировка теряет смысл (как в client-side sort, line ~177).
@@ -150,7 +206,24 @@ interface LessonShape {
   blocks?: { id?: string }[]
 }
 
-const ACTIVE_THRESHOLD_MS = 30 * 60 * 1000
+const ACTIVE_THRESHOLD_MS = 15 * 60 * 1000  // «активен сейчас» — активность за 15 мин
+
+// Стадии, в которых тест уже отправлен кандидату (см. lib/stages.ts).
+// Используется для колонки «Тест»: если submission ещё нет, но кандидат
+// на тест-стадии — показываем «отп.» (отправлен).
+const TEST_SENT_STAGES = new Set<string>([
+  "test_task_sent", "test_task_done", "test_passed", "test_failed",
+])
+
+// Достаёт отображаемый балл теста из submission: приоритет — AI-оценка
+// (aiScore, 0–100), фолбэк — объективная автопроверка (objective.score),
+// если в тесте были закрытые вопросы (maxPoints > 0). Иначе null.
+function testScoreOf(aiScore: number | null, answersJson: unknown): number | null {
+  if (typeof aiScore === "number") return aiScore
+  const obj = (answersJson as { objective?: { score?: number; maxPoints?: number } } | null)?.objective
+  if (obj && typeof obj.score === "number" && (obj.maxPoints ?? 0) > 0) return obj.score
+  return null
+}
 
 // GET /api/modules/hr/candidates?vacancy_id=...&stage=new,demo,...
 export async function GET(req: NextRequest) {
@@ -163,6 +236,10 @@ export async function GET(req: NextRequest) {
     // и получал total по всей компании через innerJoin(vacancies).
     const vacancyId = url.searchParams.get("vacancyId") ?? url.searchParams.get("vacancy_id")
     const stageParam = url.searchParams.get("stage")
+    // «Корзина»: ?trashed=true показывает удалённых (deleted_at IS NOT NULL),
+    // обычный режим — только активных (deleted_at IS NULL).
+    const trashedView = url.searchParams.get("trashed") === "true"
+    const deletedFilter = trashedView ? isNotNull(candidates.deletedAt) : isNull(candidates.deletedAt)
 
     // If no vacancy_id — return candidates for this company with vacancy title.
     // Опциональная пагинация по ?page=N&pageSize=M (default 50, max 100):
@@ -180,6 +257,7 @@ export async function GET(req: NextRequest) {
       const whereExpr = and(
         eq(vacancies.companyId, user.companyId),
         or(isNull(candidates.source), ne(candidates.source, "preview")),
+        deletedFilter,
       )
 
       let total = 0
@@ -207,6 +285,7 @@ export async function GET(req: NextRequest) {
           score: candidates.score,
           aiScore: candidates.aiScore,
           resumeScore: candidates.resumeScore,
+          rubricScore: candidates.rubricScore,
           vacancyId: candidates.vacancyId,
           vacancyTitle: vacancies.title,
           createdAt: candidates.createdAt,
@@ -244,7 +323,7 @@ export async function GET(req: NextRequest) {
             updatedAt: demos.updatedAt,
           })
           .from(demos)
-          .where(inArray(demos.vacancyId, vacancyIds))
+          .where(and(inArray(demos.vacancyId, vacancyIds), eq(demos.kind, "demo")))
           .orderBy(desc(demos.updatedAt))
 
         const latestByVacancy = new Map<string, unknown>()
@@ -504,6 +583,10 @@ export async function GET(req: NextRequest) {
         OR COALESCE(${candidates.salaryMin}, ${candidates.salaryMax}, 999999999) <= ${v}
       )`)
     }
+    // «Скрыть без зарплаты» — исключаем кандидатов, у которых ЗП не указана.
+    if (url.searchParams.get("hideNoSalary") === "true") {
+      filterConds.push(sql`NOT (${candidates.salaryMin} IS NULL AND ${candidates.salaryMax} IS NULL)`)
+    }
 
     // Источник кандидата (multi-select).
     const sourcesParam = url.searchParams.get("sources")
@@ -523,7 +606,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // AI-скор от X.
+    // AI-скор от X (legacy единый слайдер — фильтрует по aiScore).
     const scoreMinParam = url.searchParams.get("scoreMin")
     if (scoreMinParam && Number.isFinite(Number(scoreMinParam))) {
       const v = Math.max(0, Math.floor(Number(scoreMinParam)))
@@ -531,6 +614,39 @@ export async function GET(req: NextRequest) {
       if (v > 0) {
         filterConds.push(sql`(${candidates.aiScore} IS NOT NULL AND ${candidates.aiScore} >= ${v})`)
       }
+    }
+
+    // Минимальный AI-скор по резюме (отдельный слайдер на странице вакансии).
+    const scoreMinResumeParam = url.searchParams.get("scoreMinResume")
+    if (scoreMinResumeParam && Number.isFinite(Number(scoreMinResumeParam))) {
+      const v = Math.max(0, Math.floor(Number(scoreMinResumeParam)))
+      if (v > 0) {
+        filterConds.push(sql`(${candidates.resumeScore} IS NOT NULL AND ${candidates.resumeScore} >= ${v})`)
+      }
+    }
+
+    // Минимальный AI-скор по анкете (после прохождения демо).
+    const scoreMinAnketaParam = url.searchParams.get("scoreMinAnketa")
+    if (scoreMinAnketaParam && Number.isFinite(Number(scoreMinAnketaParam))) {
+      const v = Math.max(0, Math.floor(Number(scoreMinAnketaParam)))
+      if (v > 0) {
+        filterConds.push(sql`(${candidates.aiScore} IS NOT NULL AND ${candidates.aiScore} >= ${v})`)
+      }
+    }
+
+    // Скрыть отказы (тумблер «Скрыть/Показать отказы»). Отдельно от
+    // stage-whitelist: исключает ровно rejected, не трогая legacy-стадии
+    // (demo/interviewed/offer/...), которых нет в наборе slug'ов фильтра.
+    const excludeRejectedParam = url.searchParams.get("excludeRejected")
+    if (excludeRejectedParam === "true") {
+      filterConds.push(sql`(${candidates.stage} IS DISTINCT FROM 'rejected')`)
+    }
+
+    // «Активны сейчас» — кандидаты с активностью (демо/тест) за последние 15 мин.
+    // last_activity_at дёргают demo/answer и test/answer|open (now()::timestamp —
+    // сравниваем в той же зоне, что и defaultNow()).
+    if (url.searchParams.get("activeNow") === "true") {
+      filterConds.push(sql`(${candidates.lastActivityAt} IS NOT NULL AND ${candidates.lastActivityAt} > (now()::timestamp - interval '15 minutes'))`)
     }
 
     // Поиск по имени/email/телефону (ILIKE). %/_/\ экранируем, чтобы юзер
@@ -563,7 +679,7 @@ export async function GET(req: NextRequest) {
       const earlyDemoRows = await db
         .select({ lessonsJson: demos.lessonsJson })
         .from(demos)
-        .where(eq(demos.vacancyId, vacancyId))
+        .where(and(eq(demos.vacancyId, vacancyId), eq(demos.kind, "demo")))
         .orderBy(desc(demos.updatedAt))
         .limit(1)
       if (earlyDemoRows.length > 0) {
@@ -595,6 +711,7 @@ export async function GET(req: NextRequest) {
     const baseConds: SQL[] = [
       eq(candidates.vacancyId, vacancyId) as SQL,
       notPreview as SQL,
+      deletedFilter as SQL,
     ]
     if (stages.length > 0) baseConds.push(inArray(candidates.stage, stages) as SQL)
     const where = and(...baseConds, ...filterConds)
@@ -634,6 +751,60 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Состояние теста для колонки «Тест»: последняя запись test_submission на
+    // кандидата. score — число (AI/автопроверка) либо null; answersCount —
+    // сколько вопросов реально отвечено (черновик = автосохранение по ходу);
+    // submitted — нажал ли «Отправить» (submitted_at задан).
+    const testByCandidateId = new Map<string, { score: number | null; answersCount: number; submitted: boolean }>()
+    if (candidateIds.length > 0) {
+      const subRows = await db
+        .select({
+          candidateId: testSubmissions.candidateId,
+          aiScore: testSubmissions.aiScore,
+          answersJson: testSubmissions.answersJson,
+          submittedAt: testSubmissions.submittedAt,
+        })
+        .from(testSubmissions)
+        .where(inArray(testSubmissions.candidateId, candidateIds))
+        .orderBy(desc(testSubmissions.submittedAt))
+      for (const s of subRows) {
+        if (!s.candidateId || testByCandidateId.has(s.candidateId)) continue
+        const answers = (s.answersJson as { answers?: { value?: string }[] } | null)?.answers
+        const answersCount = Array.isArray(answers)
+          ? answers.filter((a) => (a?.value ?? "").trim().length > 0).length
+          : 0
+        testByCandidateId.set(s.candidateId, {
+          score: testScoreOf(s.aiScore, s.answersJson),
+          answersCount,
+          submitted: s.submittedAt != null,
+        })
+      }
+    }
+
+    // Кому тест отправлен/поставлен в очередь — для статуса «отп.» в колонке.
+    // Сигнал надёжнее, чем только стадия: рассылка идёт через follow_up_messages
+    // (branch='test_invite'), а стадия test_task_sent ставится не во всех путях.
+    // Различаем «живые» (sent|pending → «отп.») и «упавшие» (failed): если у
+    // кандидата только провалившиеся попытки (нет hh-чата / hh-403 / нет токена),
+    // стадия осталась test_task_sent, но тест НЕ ушёл — показываем «ошибка», а не
+    // ложное «отп.».
+    const testLiveInvitedIds = new Set<string>()
+    const testFailedInvitedIds = new Set<string>()
+    if (candidateIds.length > 0) {
+      const invRows = await db
+        .select({ candidateId: followUpMessages.candidateId, status: followUpMessages.status })
+        .from(followUpMessages)
+        .where(and(
+          inArray(followUpMessages.candidateId, candidateIds),
+          eq(followUpMessages.branch, "test_invite"),
+        ))
+      for (const r of invRows) {
+        if (!r.candidateId) continue
+        if (r.status === "sent" || r.status === "pending") testLiveInvitedIds.add(r.candidateId)
+        else if (r.status === "failed") testFailedInvitedIds.add(r.candidateId)
+      }
+    }
+
     // Подгружаем структуру курса для расчёта прогресса по СТРАНИЦАМ
     // (см. ту же логику в ветке без vacancyId выше).
     let demoTotalBlocks = 0
@@ -641,7 +812,7 @@ export async function GET(req: NextRequest) {
     const demoRowsV2 = await db
       .select({ lessonsJson: demos.lessonsJson, updatedAt: demos.updatedAt })
       .from(demos)
-      .where(eq(demos.vacancyId, vacancyId))
+      .where(and(eq(demos.vacancyId, vacancyId), eq(demos.kind, "demo")))
       .orderBy(desc(demos.updatedAt))
       .limit(1)
     if (demoRowsV2.length > 0) {
@@ -685,6 +856,33 @@ export async function GET(req: NextRequest) {
       // Нужно для клиентского фильтра по возрасту, который читает c.birthDate.
       const effectiveBirthDate = r.birthDate ?? extractBirthDateFromAnketa(r.anketaAnswers)
 
+      // Колонка «Тест» — лесенка состояний (балл показывается всегда, когда есть):
+      //   submitted   — нажал «Отправить» → «сдан» (если балла ещё нет)
+      //   in_progress — заполняет (черновик с ответами) → «пишет»
+      //   opened      — открыл тест, ещё не отвечал → «пер.»
+      //   sent        — тест отправлен/в очереди → «отп.»
+      //   failed      — отправка упала (нет hh-чата / hh-403 / нет токена) → «ошибка»
+      //   null        — теста не было
+      const test = testByCandidateId.get(r.id)
+      let testStatus: "submitted" | "in_progress" | "opened" | "sent" | "failed" | null
+      if (test) {
+        testStatus = test.submitted ? "submitted" : test.answersCount > 0 ? "in_progress" : "opened"
+      } else if (testLiveInvitedIds.has(r.id)) {
+        testStatus = "sent"
+      } else if (testFailedInvitedIds.has(r.id)) {
+        // Только провалившиеся попытки — ничего не ушло, стадия осталась
+        // test_task_sent ложно. Показываем «ошибка», чтобы HR это видел.
+        testStatus = "failed"
+      } else if (TEST_SENT_STAGES.has(r.stage ?? "")) {
+        testStatus = "sent"
+      } else {
+        testStatus = null
+      }
+
+      // «Активен сейчас» — активность (демо/тест) за последние 30 минут.
+      const isActive = r.lastActivityAt != null
+        && (Date.now() - new Date(r.lastActivityAt).getTime()) <= ACTIVE_THRESHOLD_MS
+
       return {
         ...r,
         birthDate: effectiveBirthDate,
@@ -692,6 +890,9 @@ export async function GET(req: NextRequest) {
         demoTotalBlocks,
         demoCompletedBlocks,
         progressPercent,
+        testScore: test?.score ?? null,
+        testStatus,
+        isActive,
       }
     })
 

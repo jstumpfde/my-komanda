@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { toast } from "sonner"
 import { Handshake, ArrowLeft, Users, Wallet, Plus, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
@@ -234,26 +235,24 @@ export default function IntegratorDetailPage({ params }: { params: Promise<{ id:
                   {clients.length === 0 ? (
                     <p className="text-center py-10 text-sm text-muted-foreground">Нет привязанных клиентов</p>
                   ) : (
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b bg-muted/50">
-                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Компания</th>
-                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">ID компании</th>
-                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Дата привязки</th>
-                        </tr>
-                      </thead>
+                    <DataTable>
+                      <DataHead>
+                        <DataHeadCell>Компания</DataHeadCell>
+                        <DataHeadCell>ID компании</DataHeadCell>
+                        <DataHeadCell>Дата привязки</DataHeadCell>
+                      </DataHead>
                       <tbody>
                         {clients.map(c => (
-                          <tr key={c.id} className="border-b last:border-0">
-                            <td className="px-4 py-3 text-sm font-medium">{c.companyName || "—"}</td>
-                            <td className="px-4 py-3 text-xs text-muted-foreground font-mono">{c.clientCompanyId}</td>
-                            <td className="px-4 py-3 text-xs text-muted-foreground">
+                          <DataRow key={c.id}>
+                            <DataCell className="font-medium">{c.companyName || "—"}</DataCell>
+                            <DataCell className="text-xs text-muted-foreground font-mono">{c.clientCompanyId}</DataCell>
+                            <DataCell className="text-xs text-muted-foreground">
                               {c.referredAt ? new Date(c.referredAt).toLocaleDateString("ru-RU") : "—"}
-                            </td>
-                          </tr>
+                            </DataCell>
+                          </DataRow>
                         ))}
                       </tbody>
-                    </table>
+                    </DataTable>
                   )}
                 </CardContent>
               </Card>
@@ -277,39 +276,37 @@ export default function IntegratorDetailPage({ params }: { params: Promise<{ id:
                     {payouts.length === 0 ? (
                       <p className="text-center py-10 text-sm text-muted-foreground">Нет выплат</p>
                     ) : (
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b bg-muted/50">
-                            <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Период</th>
-                            <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">MRR</th>
-                            <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">%</th>
-                            <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Выплата</th>
-                            <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
-                          </tr>
-                        </thead>
+                      <DataTable>
+                        <DataHead>
+                          <DataHeadCell>Период</DataHeadCell>
+                          <DataHeadCell align="right">MRR</DataHeadCell>
+                          <DataHeadCell align="right">%</DataHeadCell>
+                          <DataHeadCell align="right">Выплата</DataHeadCell>
+                          <DataHeadCell align="center">Статус</DataHeadCell>
+                        </DataHead>
                         <tbody>
                           {payouts.map(p => {
                             const st = PAYOUT_STATUS[p.status ?? "pending"] ?? PAYOUT_STATUS.pending
                             return (
-                              <tr key={p.id} className="border-b last:border-0">
-                                <td className="px-4 py-3 text-xs text-muted-foreground">
+                              <DataRow key={p.id}>
+                                <DataCell className="text-xs text-muted-foreground">
                                   {new Date(p.periodStart).toLocaleDateString("ru-RU")} — {new Date(p.periodEnd).toLocaleDateString("ru-RU")}
-                                </td>
-                                <td className="px-4 py-3 text-sm text-right">
+                                </DataCell>
+                                <DataCell align="right">
                                   {((p.totalMrrKopecks ?? 0) / 100).toLocaleString("ru-RU")} ₽
-                                </td>
-                                <td className="px-4 py-3 text-sm text-right text-muted-foreground">{p.commissionPercent}%</td>
-                                <td className="px-4 py-3 text-sm font-semibold text-right text-emerald-600">
+                                </DataCell>
+                                <DataCell align="right" className="text-muted-foreground">{p.commissionPercent}%</DataCell>
+                                <DataCell align="right" className="font-semibold text-emerald-600">
                                   {((p.payoutKopecks ?? 0) / 100).toLocaleString("ru-RU")} ₽
-                                </td>
-                                <td className="px-4 py-3 text-center">
+                                </DataCell>
+                                <DataCell align="center">
                                   <Badge className={cn("text-xs", st.color)}>{st.label}</Badge>
-                                </td>
-                              </tr>
+                                </DataCell>
+                              </DataRow>
                             )
                           })}
                         </tbody>
-                      </table>
+                      </DataTable>
                     )}
                   </CardContent>
                 </Card>

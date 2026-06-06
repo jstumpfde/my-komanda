@@ -4,13 +4,13 @@ import { useState, useEffect } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { toast } from "sonner"
 import { Layers, Plus, Pencil, Loader2, Check, X } from "lucide-react"
 
@@ -128,48 +128,44 @@ export default function IntegratorLevelsPage() {
                 <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
               </div>
             ) : (
-              <Card>
-                <CardContent className="p-0">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Мин. клиентов</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Мин. MRR</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Комиссия</th>
-                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Активен</th>
-                        <th className="px-4 py-3" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {levels.map(level => (
-                        <tr key={level.id} className="border-b last:border-0 hover:bg-muted/20">
-                          <td className="px-4 py-3">
-                            <Badge variant="outline" className="text-xs font-medium">{level.name}</Badge>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-right text-muted-foreground">{level.minClients ?? 0}</td>
-                          <td className="px-4 py-3 text-sm text-right text-muted-foreground">
-                            {((level.minMrrKopecks ?? 0) / 100).toLocaleString("ru-RU")} ₽
-                          </td>
-                          <td className="px-4 py-3 text-sm font-semibold text-right text-emerald-600">{level.commissionPercent}%</td>
-                          <td className="px-4 py-3 text-center">
-                            {level.isActive ? (
-                              <Check className="w-4 h-4 text-emerald-600 mx-auto" />
-                            ) : (
-                              <X className="w-4 h-4 text-muted-foreground/40 mx-auto" />
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(level)}>
-                              <Pencil className="w-3.5 h-3.5" />
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </CardContent>
-              </Card>
+              <TableCard>
+                <DataTable>
+                  <DataHead>
+                    <DataHeadCell>Название</DataHeadCell>
+                    <DataHeadCell align="right">Мин. клиентов</DataHeadCell>
+                    <DataHeadCell align="right">Мин. MRR</DataHeadCell>
+                    <DataHeadCell align="right">Комиссия</DataHeadCell>
+                    <DataHeadCell align="center">Активен</DataHeadCell>
+                    <DataHeadCell align="right" />
+                  </DataHead>
+                  <tbody>
+                    {levels.map(level => (
+                      <DataRow key={level.id}>
+                        <DataCell>
+                          <Badge variant="outline" className="text-xs font-medium">{level.name}</Badge>
+                        </DataCell>
+                        <DataCell align="right" className="text-muted-foreground">{level.minClients ?? 0}</DataCell>
+                        <DataCell align="right" className="text-muted-foreground">
+                          {((level.minMrrKopecks ?? 0) / 100).toLocaleString("ru-RU")} ₽
+                        </DataCell>
+                        <DataCell align="right" className="font-semibold text-emerald-600">{level.commissionPercent}%</DataCell>
+                        <DataCell align="center">
+                          {level.isActive ? (
+                            <Check className="w-4 h-4 text-emerald-600 mx-auto" />
+                          ) : (
+                            <X className="w-4 h-4 text-muted-foreground/40 mx-auto" />
+                          )}
+                        </DataCell>
+                        <DataCell align="right">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(level)}>
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Button>
+                        </DataCell>
+                      </DataRow>
+                    ))}
+                  </tbody>
+                </DataTable>
+              </TableCard>
             )}
           </div>
         </main>

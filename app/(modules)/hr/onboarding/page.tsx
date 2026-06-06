@@ -44,7 +44,7 @@ export default function OnboardingPage() {
         <main className="p-6 max-w-3xl mx-auto">
       <div className="flex items-center gap-3 mb-2">
         <Rocket className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-semibold">Онбординг</h1>
+        <h1 className="text-lg font-semibold">Онбординг</h1>
       </div>
       <p className="text-muted-foreground mb-8">
         Настройте процесс добавления новых сотрудников в программу адаптации

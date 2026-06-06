@@ -14,6 +14,7 @@ import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
 } from "recharts"
 import { MARKETING_CHANNELS, LEADS_BY_DAY, CAMPAIGNS, AI_RECOMMENDATIONS, CHANNEL_MAP } from "@/lib/marketing/demo-data"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 
 // ─── CountUp ──────────────────────────────────────────────────────────────────
 
@@ -241,46 +242,42 @@ export default function MarketingDashboardPage() {
               <div className="p-5 pb-0">
                 <h3 className="text-base font-semibold">Кампании</h3>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-5 py-3">Название</th>
-                      <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-3 py-3">Канал</th>
-                      <th className="text-center text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-3 py-3">Статус</th>
-                      <th className="text-right text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-3 py-3">Бюджет</th>
-                      <th className="text-right text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-3 py-3">Потрачено</th>
-                      <th className="text-right text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-3 py-3">Лиды</th>
-                      <th className="text-right text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-5 py-3">Период</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {CAMPAIGNS.map((c) => {
-                      const ch = CHANNEL_MAP[c.channel]
-                      const st = CAMPAIGN_STATUSES[c.status]
-                      return (
-                        <tr key={c.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                          <td className="px-5 py-3 text-sm font-medium">{c.name}</td>
-                          <td className="px-3 py-3">
-                            <Badge variant="secondary" className="text-[10px] font-medium border-0" style={{ backgroundColor: `${ch?.color}15`, color: ch?.color }}>
-                              {ch?.name || c.channel}
-                            </Badge>
-                          </td>
-                          <td className="px-3 py-3 text-center">
-                            <Badge variant="secondary" className={`text-[10px] font-medium border-0 ${st?.cls}`}>{st?.label}</Badge>
-                          </td>
-                          <td className="px-3 py-3 text-sm text-right text-muted-foreground">{new Intl.NumberFormat("ru-RU").format(c.budget)} ₽</td>
-                          <td className="px-3 py-3 text-sm text-right font-medium">{new Intl.NumberFormat("ru-RU").format(c.spent)} ₽</td>
-                          <td className="px-3 py-3 text-sm text-right font-bold">{c.leads}</td>
-                          <td className="px-5 py-3 text-xs text-right text-muted-foreground whitespace-nowrap">
-                            {new Date(c.startDate).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })} — {new Date(c.endDate).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable>
+                <DataHead>
+                  <DataHeadCell>Название</DataHeadCell>
+                  <DataHeadCell>Канал</DataHeadCell>
+                  <DataHeadCell align="center">Статус</DataHeadCell>
+                  <DataHeadCell align="right">Бюджет</DataHeadCell>
+                  <DataHeadCell align="right">Потрачено</DataHeadCell>
+                  <DataHeadCell align="right">Лиды</DataHeadCell>
+                  <DataHeadCell align="right">Период</DataHeadCell>
+                </DataHead>
+                <tbody>
+                  {CAMPAIGNS.map((c) => {
+                    const ch = CHANNEL_MAP[c.channel]
+                    const st = CAMPAIGN_STATUSES[c.status]
+                    return (
+                      <DataRow key={c.id}>
+                        <DataCell className="font-medium">{c.name}</DataCell>
+                        <DataCell>
+                          <Badge variant="secondary" className="text-[10px] font-medium border-0" style={{ backgroundColor: `${ch?.color}15`, color: ch?.color }}>
+                            {ch?.name || c.channel}
+                          </Badge>
+                        </DataCell>
+                        <DataCell align="center">
+                          <Badge variant="secondary" className={`text-[10px] font-medium border-0 ${st?.cls}`}>{st?.label}</Badge>
+                        </DataCell>
+                        <DataCell align="right" className="text-muted-foreground">{new Intl.NumberFormat("ru-RU").format(c.budget)} ₽</DataCell>
+                        <DataCell align="right" className="font-medium">{new Intl.NumberFormat("ru-RU").format(c.spent)} ₽</DataCell>
+                        <DataCell align="right" className="font-bold">{c.leads}</DataCell>
+                        <DataCell align="right" className="text-xs text-muted-foreground whitespace-nowrap">
+                          {new Date(c.startDate).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })} — {new Date(c.endDate).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}
+                        </DataCell>
+                      </DataRow>
+                    )
+                  })}
+                </tbody>
+              </DataTable>
             </div>
 
             {/* ═══ Nensi Recommends ═══ */}

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { requireCompany } from "@/lib/api-helpers"
+import { denyIfNotDevAccess } from "@/lib/dev-guard"
 import { db } from "@/lib/db"
 import { skills } from "@/lib/db/schema"
 import { isNull, count } from "drizzle-orm"
@@ -18,6 +19,8 @@ const SYSTEM_SKILLS = [
 ]
 
 export async function GET() {
+  const denied = await denyIfNotDevAccess()
+  if (denied) return denied
   try { await requireCompany() } catch { return NextResponse.json({ error: "Unauthorized" }, { status: 401 }) }
 
   const [existing] = await db.select({ val: count() }).from(skills).where(isNull(skills.tenantId))

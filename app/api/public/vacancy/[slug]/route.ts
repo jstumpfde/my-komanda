@@ -4,6 +4,11 @@ import { db } from "@/lib/db"
 import { vacancies, companies } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+}
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ slug: string }> },
@@ -27,12 +32,20 @@ export async function GET(
         brandBgColor: companies.brandBgColor,
         brandTextColor: companies.brandTextColor,
         descriptionJson: vacancies.descriptionJson,
+        // Группа 38: расширенный брендинг + флаг override.
+        brandingJson:             companies.brandingJson,
+        brandingOverrideEnabled:  vacancies.brandingOverrideEnabled,
+        // O1: список компаний-брендов для резолва выбранной на вакансии.
+        hiringDefaultsJson:       companies.hiringDefaultsJson,
+        // Слоган и сайт компании для публичной страницы вакансии.
+        _companyWebsite:   companies.website,
+        _companySlogan:    companies.brandSlogan,
       })
       .from(vacancies)
       .innerJoin(companies, eq(vacancies.companyId, companies.id))
       .where(
         and(
-          or(eq(vacancies.slug, slug), eq(vacancies.id, slug)),
+          isUuid(slug) ? eq(vacancies.id, slug) : eq(vacancies.slug, slug),
           or(eq(vacancies.status, "active"), eq(vacancies.status, "published")),
           isNull(vacancies.deletedAt),
         ),
@@ -43,7 +56,50 @@ export async function GET(
       return apiError("Вакансия не найдена", 404)
     }
 
-    return apiSuccess(result[0])
+    // O1 мультикомпанийность: если на вакансии выбран бренд (№2+), кандидат
+    // видит название/логотип/слоган/сайт бренд-компании вместо основной.
+    // brandCompanyId="" / отсутствует → основная компания, ничего не меняем.
+    type BrandCompany = { id: string; name: string; logo?: string; slogan?: string; website?: string }
+    const { hiringDefaultsJson, _companyWebsite, _companySlogan, ...row } = result[0] as Record<string, unknown> & {
+      hiringDefaultsJson?: { brandCompanies?: BrandCompany[] } | null
+      _companyWebsite?: string | null
+      _companySlogan?: string | null
+    }
+
+    // Начальные значения — из основной компании.
+    let resolvedLogo    = row.companyLogo as string | null ?? null
+    let resolvedSlogan  = _companySlogan ?? null
+    let resolvedWebsite = _companyWebsite ?? null
+
+    const anketa = (row.descriptionJson as { anketa?: { brandCompanyId?: string } } | null)?.anketa
+    const brandId = anketa?.brandCompanyId
+    if (brandId) {
+      const brand = hiringDefaultsJson?.brandCompanies?.find(c => c.id === brandId)
+      if (brand) {
+        if (brand.name?.trim())  row.companyName = brand.name
+        if (brand.logo?.trim())  resolvedLogo    = brand.logo
+        if (brand.slogan?.trim()) resolvedSlogan  = brand.slogan
+        if (brand.website?.trim()) resolvedWebsite = brand.website
+      }
+    }
+
+    // Учитываем vacancy-level override: если включён и в descriptionJson.branding
+    // заданы logo/slogan/website — они приоритетнее всего.
+    const overrideOn = row.brandingOverrideEnabled === true
+    if (overrideOn) {
+      const vb = ((row.descriptionJson as Record<string, unknown> | null)?.branding ?? {}) as {
+        logo?: string; slogan?: string; website?: string
+      }
+      if (vb.logo?.trim())    resolvedLogo    = vb.logo
+      if (vb.slogan?.trim())  resolvedSlogan  = vb.slogan
+      if (vb.website?.trim()) resolvedWebsite = vb.website
+    }
+
+    row.companyLogo    = resolvedLogo
+    row.companySlogan  = resolvedSlogan
+    row.companyWebsite = resolvedWebsite
+
+    return apiSuccess(row)
   } catch (err) {
     if (err instanceof Response) return err
     console.error("GET /api/public/vacancy/[slug]", err)

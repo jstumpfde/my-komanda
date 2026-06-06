@@ -1,10 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {Card, CardContent} from "@/components/ui/card"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -114,7 +115,7 @@ const INITIAL_CAMPAIGNS: Campaign[] = [
 
 // ─── Component ──────────────────────────────────────────
 export default function TalentPoolPage() {
-  const [candidates, setCandidates] = useState(INITIAL_CANDIDATES)
+  const [candidates, setCandidates] = useState<TalentCandidate[]>([])
   const [campaigns, setCampaigns] = useState(INITIAL_CAMPAIGNS)
   const [addOpen, setAddOpen] = useState(false)
   const [campaignOpen, setCampaignOpen] = useState(false)
@@ -122,6 +123,57 @@ export default function TalentPoolPage() {
   const [statusFilter, setStatusFilter] = useState("all")
   const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set())
   const [sources] = useState<SourceItem[]>(INITIAL_SOURCES)
+
+  // R2 + Доводка: «База» резерва — кандидаты из откликов (стадия talent_pool)
+  // И ручные/CSV записи (talent_pool_entries), смёрджены в одну таблицу.
+  // У записей должность/компания/источник реальные; у вакансийных пока «—».
+  const ZERO_BREAKDOWN = { experience: 0, skills: 0, culture: 0, motivation: 0, availability: 0 }
+  const loadAll = useCallback(async () => {
+    try {
+      const [cRes, eRes] = await Promise.all([
+        fetch("/api/modules/hr/talent-pool/candidates"),
+        fetch("/api/modules/hr/talent-pool/entries"),
+      ])
+      const cData = cRes.ok ? await cRes.json() : null
+      const eData = eRes.ok ? await eRes.json() : null
+      const fromCandidates: TalentCandidate[] = (Array.isArray(cData?.candidates) ? cData.candidates : []).map((r: {
+        id: string; name: string; source: string | null;
+        aiScore: number | null; resumeScore: number | null; score: number | null;
+        email: string | null; phone: string | null; telegram: string | null;
+        updatedAt: string | null; vacancyTitle: string | null
+      }): TalentCandidate => {
+        const sc = r.aiScore ?? r.resumeScore ?? r.score ?? 0
+        return {
+          id: r.id, name: r.name,
+          position: "—", company: r.vacancyTitle || "—",
+          source: r.source || "—",
+          status: scoreToStatus(sc),
+          lastContact: r.updatedAt ? new Date(r.updatedAt) : new Date(),
+          email: r.email || "", phone: r.phone || "",
+          telegram: r.telegram ? "@" + r.telegram : "",
+          comment: "", score: sc,
+          scoreBreakdown: ZERO_BREAKDOWN,
+        }
+      })
+      const fromEntries: TalentCandidate[] = (Array.isArray(eData?.entries) ? eData.entries : []).map((e: {
+        id: string; name: string; position: string; company: string; source: string
+        email: string; phone: string; telegram: string; comment: string
+        score: number; status: string; createdAt: string | null
+      }): TalentCandidate => ({
+        id: e.id, name: e.name,
+        position: e.position || "—", company: e.company || "—",
+        source: e.source || "—",
+        status: (e.status as TalentStatus) || "cold",
+        lastContact: e.createdAt ? new Date(e.createdAt) : new Date(),
+        email: e.email || "", phone: e.phone || "", telegram: e.telegram || "",
+        comment: e.comment || "", score: e.score || 0,
+        scoreBreakdown: ZERO_BREAKDOWN,
+      }))
+      setCandidates([...fromEntries, ...fromCandidates])
+    } catch { /* пусто */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => { loadAll() }, [loadAll])
   const [expandedFilterSources, setExpandedFilterSources] = useState<Set<string>>(new Set())
   const [thanked, setThanked] = useState<Set<string>>(new Set())
   const [colSort, setColSort] = useState<{ column: string; dir: "asc" | "desc" }>({ column: "name", dir: "asc" })
@@ -142,12 +194,53 @@ export default function TalentPoolPage() {
   // Campaign form
   const [campForm, setCampForm] = useState({ name: "", type: "invite", steps: [{ id: "ns1", day: 0, text: "", channel: "tg" as const }] as CampaignStep[] })
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!form.name.trim()) return
-    setCandidates((p) => [...p, { ...form, id: `t-${Date.now()}`, status: "cold" as TalentStatus, lastContact: new Date(), referralName: undefined, score: 0, scoreBreakdown: { experience: 0, skills: 0, culture: 0, motivation: 0, availability: 0 } }])
+    const res = await fetch("/api/modules/hr/talent-pool/entries", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(form),
+    })
+    if (!res.ok) { toast.error("Не удалось добавить"); return }
     setForm({ name: "", position: "", company: "", source: "", email: "", phone: "", telegram: "", comment: "" })
     setAddOpen(false)
-    toast.success("Кандидат добавлен в Talent Pool")
+    toast.success("Кандидат добавлен в резерв")
+    await loadAll()
+  }
+
+  // CSV-импорт: первая строка — заголовки (имя/должность/компания/источник/
+  // email/телефон/telegram/комментарий), дальше строки. Поддерживаем рус. и
+  // англ. заголовки. Парсим просто (разделитель , или ;).
+  const handleCsvFile = async (file: File) => {
+    const text = await file.text()
+    const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0)
+    if (lines.length < 2) { toast.error("CSV пустой или без данных"); return }
+    const sep = lines[0].includes(";") ? ";" : ","
+    const headers = lines[0].split(sep).map(h => h.trim().toLowerCase())
+    const idx = (names: string[]) => headers.findIndex(h => names.some(n => h.includes(n)))
+    const ci = {
+      name: idx(["имя", "фио", "name"]), position: idx(["должн", "position", "title"]),
+      company: idx(["компан", "company"]), source: idx(["источ", "source"]),
+      email: idx(["email", "почт", "mail"]), phone: idx(["телеф", "phone", "тел"]),
+      telegram: idx(["telegram", "телег", "tg"]), comment: idx(["коммент", "comment", "примеч"]),
+    }
+    const rows = lines.slice(1).map(line => {
+      const cols = line.split(sep).map(c => c.trim())
+      const get = (i: number) => (i >= 0 && i < cols.length ? cols[i] : "")
+      return {
+        name: get(ci.name) || cols[0] || "", position: get(ci.position), company: get(ci.company),
+        source: get(ci.source) || "CSV", email: get(ci.email), phone: get(ci.phone),
+        telegram: get(ci.telegram), comment: get(ci.comment),
+      }
+    }).filter(r => r.name.length > 0)
+    if (rows.length === 0) { toast.error("Не найдено строк с именем"); return }
+    const res = await fetch("/api/modules/hr/talent-pool/entries", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows }),
+    })
+    if (!res.ok) { toast.error("Не удалось импортировать"); return }
+    const data = await res.json() as { count?: number }
+    toast.success(`Импортировано: ${data.count ?? rows.length}`)
+    await loadAll()
   }
 
   const handleCreateCampaign = () => {
@@ -214,7 +307,7 @@ export default function TalentPoolPage() {
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="flex items-center justify-between mb-5">
               <div>
-                <h1 className="text-2xl font-semibold">Talent Pool</h1>
+                <h1 className="text-lg font-semibold">Резерв</h1>
                 <p className="text-sm text-muted-foreground">База пассивных кандидатов и кампании прогрева</p>
               </div>
             </div>
@@ -293,49 +386,52 @@ export default function TalentPoolPage() {
                     </PopoverContent>
                   </Popover>
                   <div className="flex-1" />
-                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5"><Upload className="w-3.5 h-3.5" />Загрузить CSV</Button>
+                  <Button asChild variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+                    <label className="cursor-pointer">
+                      <Upload className="w-3.5 h-3.5" />Загрузить CSV
+                      <input type="file" accept=".csv,text/csv" className="hidden"
+                        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCsvFile(f); e.target.value = "" }} />
+                    </label>
+                  </Button>
                   <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => setAddOpen(true)}><Plus className="w-3.5 h-3.5" />Добавить</Button>
                   <Button size="sm" className="h-8 text-xs gap-1.5 bg-purple-600 hover:bg-purple-700 border border-purple-700" onClick={() => setCampaignOpen(true)}><Rocket className="w-3.5 h-3.5" />Запустить кампанию</Button>
                 </div>
 
-                <Card>
-                  <CardContent className="p-0">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="bg-muted/50 border-b border-border">
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
-                          <button onClick={() => toggleColSort("name")} className={cn("inline-flex items-center gap-1 select-none transition-colors", colSort.column === "name" ? "text-foreground" : "text-muted-foreground hover:text-foreground")}>
-                            Имя <ArrowUpDown className={cn("size-3", colSort.column !== "name" && "opacity-40")} />
-                          </button>
-                        </th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Должность</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Компания</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Источник</th>
-                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
-                          <button onClick={() => toggleColSort("score")} className={cn("inline-flex items-center gap-1 select-none transition-colors", colSort.column === "score" ? "text-foreground" : "text-muted-foreground hover:text-foreground")}>
-                            Скоринг <ArrowUpDown className={cn("size-3", colSort.column !== "score" && "opacity-40")} />
-                          </button>
-                        </th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
-                          <button onClick={() => toggleColSort("contact")} className={cn("inline-flex items-center gap-1 select-none transition-colors", colSort.column === "contact" ? "text-foreground" : "text-muted-foreground hover:text-foreground")}>
-                            Контакт <ArrowUpDown className={cn("size-3", colSort.column !== "contact" && "opacity-40")} />
-                          </button>
-                        </th>
-                        <th className="px-4 py-3"></th>
-                      </tr>
-                      </thead>
-                      <tbody>
+                <TableCard>
+                  <DataTable>
+                    <DataHead>
+                      <DataHeadCell>
+                        <button onClick={() => toggleColSort("name")} className={cn("inline-flex items-center gap-1 select-none transition-colors", colSort.column === "name" ? "text-foreground" : "hover:text-foreground")}>
+                          Имя <ArrowUpDown className={cn("size-3", colSort.column !== "name" && "opacity-40")} />
+                        </button>
+                      </DataHeadCell>
+                      <DataHeadCell>Должность</DataHeadCell>
+                      <DataHeadCell>Компания</DataHeadCell>
+                      <DataHeadCell>Источник</DataHeadCell>
+                      <DataHeadCell align="center">
+                        <button onClick={() => toggleColSort("score")} className={cn("inline-flex items-center gap-1 select-none transition-colors", colSort.column === "score" ? "text-foreground" : "hover:text-foreground")}>
+                          Скоринг <ArrowUpDown className={cn("size-3", colSort.column !== "score" && "opacity-40")} />
+                        </button>
+                      </DataHeadCell>
+                      <DataHeadCell>Статус</DataHeadCell>
+                      <DataHeadCell>
+                        <button onClick={() => toggleColSort("contact")} className={cn("inline-flex items-center gap-1 select-none transition-colors", colSort.column === "contact" ? "text-foreground" : "hover:text-foreground")}>
+                          Контакт <ArrowUpDown className={cn("size-3", colSort.column !== "contact" && "opacity-40")} />
+                        </button>
+                      </DataHeadCell>
+                      <DataHeadCell align="right" />
+                    </DataHead>
+                    <tbody>
                         {filtered.map((c) => {
                           const st = STATUS_CFG[c.status]
                           return (
-                            <tr key={c.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                              <td className="px-4 py-2.5 text-[13px] font-medium text-foreground/85">{c.name}</td>
-                              <td className="px-3 py-2.5 text-[13px] text-muted-foreground">{c.position}</td>
-                              <td className="px-3 py-2.5 text-[13px] text-muted-foreground">{c.company}</td>
-                              <td className="px-3 py-2.5">
+                            <DataRow key={c.id}>
+                              <DataCell className="font-medium text-foreground/85">{c.name}</DataCell>
+                              <DataCell className="text-muted-foreground">{c.position}</DataCell>
+                              <DataCell className="text-muted-foreground">{c.company}</DataCell>
+                              <DataCell>
                                 <div className="flex items-center gap-1.5">
-                                  <span className="text-[13px]">{c.source}</span>
+                                  <span>{c.source}</span>
                                   {c.referralName && (
                                     <>
                                       <span className="text-[11px] text-muted-foreground">· {c.referralName}</span>
@@ -343,28 +439,27 @@ export default function TalentPoolPage() {
                                     </>
                                   )}
                                 </div>
-                              </td>
-                              <td className="px-3 py-2.5">
+                              </DataCell>
+                              <DataCell align="center">
                                 <div className="flex justify-center">
                                   <ScoringBadge score={c.score} breakdown={c.scoreBreakdown} size="sm" />
                                 </div>
-                              </td>
-                              <td className="px-3 py-2.5"><Badge variant="outline" className={cn("text-[10px]", st.cls)}>{st.emoji} {st.label}</Badge></td>
-                              <td className="px-3 py-2.5 text-xs text-muted-foreground">{formatDate(c.lastContact)}</td>
-                              <td className="px-3 py-2.5">
+                              </DataCell>
+                              <DataCell><Badge variant="outline" className={cn("text-[10px]", st.cls)}>{st.emoji} {st.label}</Badge></DataCell>
+                              <DataCell className="text-xs text-muted-foreground">{formatDate(c.lastContact)}</DataCell>
+                              <DataCell>
                                 <div className="flex items-center gap-1">
                                   <Button variant="ghost" size="icon" className="h-7 w-7" title="Написать" onClick={() => toast.info("Открыть чат")}><Send className="w-3 h-3" /></Button>
                                   <Button variant="ghost" size="icon" className="h-7 w-7" title="Удалить" onClick={() => setCandidates((p) => p.filter((x) => x.id !== c.id))}><Trash2 className="w-3 h-3" /></Button>
                                 </div>
-                              </td>
-                            </tr>
+                              </DataCell>
+                            </DataRow>
                           )
                         })}
                         {filtered.length === 0 && <tr><td colSpan={8} className="text-center py-8 text-sm text-muted-foreground">Нет кандидатов</td></tr>}
                       </tbody>
-                    </table>
-                  </CardContent>
-                </Card>
+                  </DataTable>
+                </TableCard>
               </TabsContent>
 
               {/* ═══ TAB: Кампании ═══ */}
@@ -394,7 +489,7 @@ export default function TalentPoolPage() {
       {/* Add candidate dialog */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Добавить в Talent Pool</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Добавить в резерв</DialogTitle></DialogHeader>
           <div className="grid gap-3 py-2">
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-1"><Label className="text-xs">Имя *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Иван Петров" /></div>

@@ -15,15 +15,15 @@ import { KanbanBoard, type ViewMode } from "@/components/dashboard/kanban-board"
 import type { ListSortKey, ListSortState } from "@/components/dashboard/list-view"
 import { type CardDisplaySettings } from "@/components/dashboard/card-settings"
 import { ViewSettings } from "@/components/dashboard/view-settings"
-import { CandidateFilters, type FilterState } from "@/components/dashboard/candidate-filters"
+import { CandidateFilters, DEFAULT_FUNNEL_STATUSES, type FilterState } from "@/components/dashboard/candidate-filters"
 import { applyCandidateFilters } from "@/lib/candidate-filter"
 import { SortMenu } from "@/components/dashboard/sort-menu"
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import type { CandidateSortMode } from "@/lib/candidate-sort"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
+import { CandidateTrashSheet } from "@/components/candidates/candidate-trash-sheet"
+import { RubricRankPanel } from "@/components/candidates/rubric-rank-panel"
 import { BulkActionsBar, type BulkAction } from "@/components/dashboard/bulk-actions-bar"
-import { CandidatesProgressList } from "@/components/candidates/candidates-progress-list"
-import { AddCandidateDialog } from "@/components/dashboard/add-candidate-dialog"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Textarea } from "@/components/ui/textarea"
@@ -32,32 +32,53 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { CourseTab, type CourseTabHandle } from "@/components/vacancies/course-tab"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
+import { ContentBlocksTab } from "@/components/vacancies/content-blocks-tab"
 import { AnketaTab, type AnketaTabHandle } from "@/components/vacancies/anketa-tab"
-import type { NotionEditorHandle } from "@/components/vacancies/notion-editor"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import { Plus, Clock, Pause, Play, Archive, RotateCcw, Trash2, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Zap, Globe, AlertTriangle, TrendingUp, Calendar, MapPin, DollarSign, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, XCircle, Users, Phone, Upload, RefreshCw, Activity, FileText } from "lucide-react"
+import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, RefreshCw, Bot, Workflow, FilePlus, UserSearch, Trash2} from "lucide-react"
+import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
+import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-factors-settings"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { defaultColumnColors, COLUMN_ORDER, type CandidateAction, getNextColumnId, PROGRESS_BY_COLUMN } from "@/lib/column-config"
 import type { Candidate } from "@/components/dashboard/candidate-card"
-import { HhVacancyBanner } from "@/components/vacancies/hh-vacancy-banner"
 import { VacancyStatusBadge } from "@/components/vacancies/vacancy-status-badge"
 import { HhAutoProcess } from "@/components/hh/hh-auto-process"
 import { AutomationSettings, type AutomationSectionId } from "@/components/vacancies/automation-settings"
 import { VacancyScheduleSettings } from "@/components/vacancies/vacancy-schedule-settings"
 import { PublishTab } from "@/components/vacancies/publish-tab"
+import { OutboundSourcingTab } from "@/components/vacancies/outbound-sourcing-tab"
+import { VacancyActionsMenuItems } from "@/components/vacancies/vacancy-actions-menu"
+import { ExportCandidatesDialog } from "@/components/vacancies/export-candidates-dialog"
+import { PermanentDeleteDialog } from "@/components/vacancies/permanent-delete-dialog"
+import {
+  getVacancyState,
+  VACANCY_STATUS_ON_PAUSE, VACANCY_STATUS_ON_RESUME,
+  VACANCY_STATUS_ON_CLOSE, VACANCY_STATUS_ON_RESTORE,
+} from "@/lib/vacancies/lifecycle"
 import { MiniFormBuilder } from "@/components/vacancies/mini-form-builder"
 import { UtmLinksSection } from "@/components/vacancies/utm-links-section"
 import { PostDemoSettings } from "@/components/vacancies/post-demo-settings"
 import { VacancyAiProcessSettings } from "@/components/vacancies/vacancy-ai-process-settings"
+import { VacancyRequirementsSettings } from "@/components/vacancies/vacancy-requirements-settings"
 import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
-import { BestPublicationTimeBlock } from "./components/BestPublicationTimeBlock"
+import { VacancyTestFollowupSettings } from "@/components/vacancies/vacancy-test-followup-settings"
+import { VacancyPrequalificationSettings } from "@/components/vacancies/vacancy-prequalification-settings"
+import { VacancyStopWordsSettings } from "@/components/vacancies/vacancy-stop-words-settings"
+import { FinalScreensSettings, type FinalScreensConfig } from "@/components/vacancies/final-screens-settings"
+import { RecoveryMessageSettings } from "@/components/vacancies/recovery-message-settings"
+import { FirstMessagesChainEditor } from "@/components/vacancies/first-messages-chain-editor"
+import { FunnelBuilder } from "@/components/vacancies/funnel-builder"
+import { FunnelTab } from "@/components/vacancies/funnel-tab"
+import { parsePipeline, type CompanyStageHhActions, type CompanyStagePalette } from "@/lib/stages"
+import { BrandingOverrideSwitch } from "@/components/vacancies/branding-override-switch"
+import { VacancySettingsProvider, VacancyTabPendingDot, VacancyStickySaveBar, useVacancySectionRegister, useSafeSubTabSwitch, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
 import {
   ResponsiveContainer,
   BarChart,
@@ -81,7 +102,7 @@ interface ColumnData {
   candidates: Candidate[]
 }
 
-type VacancyStatus = "draft" | "active" | "published" | "paused" | "closed_success" | "closed_cancelled"
+type VacancyStatus = "draft" | "active" | "published" | "paused" | "closed_success" | "closed_cancelled" | "archived"
 
 // Источник правды — COLUMN_ORDER из lib/column-config.ts. Object.entries
 // над defaultColumnColors не гарантирует порядок и включает rejected
@@ -165,6 +186,10 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     aiSummary: c.aiSummary ?? undefined,
     aiVerdict: c.aiScore != null ? (c.aiScore >= 70 ? "подходит" : c.aiScore >= 40 ? "возможно" : "не подходит") : undefined,
     resumeScore: c.resumeScore ?? null,
+    rubricScore: c.rubricScore ?? null,
+    testScore: c.testScore ?? null,
+    testStatus: c.testStatus ?? null,
+    isActive: (c as { isActive?: boolean }).isActive ?? false,
     demoProgressJson: c.demoProgressJson as Candidate["demoProgressJson"],
     demoTotalBlocks: (c as { demoTotalBlocks?: number }).demoTotalBlocks,
     demoCompletedBlocks: (c as { demoCompletedBlocks?: number }).demoCompletedBlocks,
@@ -185,6 +210,13 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
   }
 }
 
+// Пункт меню «Действия». Включённый — обычный DropdownMenuItem. Выключенный —
+// серый div с тултипом (у Radix disabled-item отключены pointer-events, и
+// hover-тултип на нём не срабатывает, поэтому рендерим div-обёртку).
+// Пункты меню действий вынесены в общий компонент
+// components/vacancies/vacancy-actions-menu.tsx (ActionMenuItem /
+// VacancyActionsMenuItems) — переиспользуется и в строке списка вакансий.
+
 export default function VacancyPage() {
   const params = useParams()
   const router = useRouter()
@@ -192,6 +224,40 @@ export default function VacancyPage() {
 
   // ── Real API data ──────────────────────────────────────────
   const { vacancy: apiVacancy, loading: vacancyLoading, error: vacancyError, refetch: refetchVacancy } = useVacancy(id)
+
+  // Company-дефолты hh-маппинга воронки — чтобы редактор стадий показывал их
+  // (а не платформенные) для вакансий без своей воронки.
+  const [companyHhActions, setCompanyHhActions] = useState<CompanyStageHhActions | undefined>(undefined)
+  const [companyPalette, setCompanyPalette] = useState<CompanyStagePalette | undefined>(undefined)
+  useEffect(() => {
+    fetch("/api/modules/hr/company/hiring-defaults").then(r => r.ok ? r.json() : null).then(j => {
+      const hd = j?.hiringDefaults
+      const sha = hd?.stageHhActions
+      if (sha && typeof sha === "object") setCompanyHhActions(sha as CompanyStageHhActions)
+      if (hd && (hd.stageLabels || hd.stageColors)) {
+        setCompanyPalette({ labels: hd.stageLabels, colors: hd.stageColors })
+      }
+      // Загружаем список бренд-компаний для брендинг-секции
+      if (hd && Array.isArray(hd.brandCompanies)) {
+        setBrandCompaniesData(hd.brandCompanies.filter((c: { id: string; name: string }) => c?.name?.trim()))
+      }
+    }).catch(() => {})
+  }, [])
+
+  // Загружаем основные данные компании (brandName, logoUrl, website, subdomain)
+  useEffect(() => {
+    fetch("/api/companies").then(r => r.ok ? r.json() : null).then(j => {
+      const c = j?.data ?? j
+      if (!c) return
+      setMainCompanyData({
+        brandName: c.brandName || c.name || "",
+        logoUrl: c.logoUrl || "",
+        brandSlogan: c.brandSlogan || "",
+        website: c.website || "",
+        subdomain: c.subdomain || "",
+      })
+    }).catch(() => {})
+  }, [])
 
   // ── Quick-fill: paste text (AI) / from library (template) / upload file ──
   const [textDialogOpen, setTextDialogOpen] = useState(false)
@@ -244,6 +310,16 @@ export default function VacancyPage() {
         experienceIdeal: parsed.experienceIdeal ?? existingAnketa.experienceIdeal ?? "",
         conditions: parsed.conditions ?? existingAnketa.conditions ?? [],
         screeningQuestions: parsed.screeningQuestions ?? existingAnketa.screeningQuestions ?? [],
+        // AI-профиль кандидата — заполняем из AI, не затирая ручное непустым→[].
+        aiIdealProfile: (parsed.aiIdealProfile as string) || existingAnketa.aiIdealProfile || "",
+        aiRequiredHardSkills: Array.isArray(parsed.aiRequiredHardSkills) && parsed.aiRequiredHardSkills.length
+          ? parsed.aiRequiredHardSkills : (existingAnketa.aiRequiredHardSkills ?? []),
+        aiStopFactors: Array.isArray(parsed.aiStopFactors) && parsed.aiStopFactors.length
+          ? parsed.aiStopFactors : (existingAnketa.aiStopFactors ?? []),
+        aiWeights: {
+          ...((existingAnketa.aiWeights as Record<string, unknown>) || {}),
+          ...((parsed.aiWeights as Record<string, unknown>) || {}),
+        },
         hhDescription: parsed.hhDescription ?? existingAnketa.hhDescription ?? "",
       }
       const body: Record<string, unknown> = {
@@ -262,7 +338,7 @@ export default function VacancyPage() {
         throw new Error(errBody.error || "Не удалось сохранить анкету")
       }
       await refetchVacancy()
-      toast.success("Анкета заполнена")
+      toast.success("Вакансия заполнена")
       setTextDialogOpen(false)
       setPasteText("")
     } catch (err) {
@@ -364,7 +440,7 @@ export default function VacancyPage() {
       })
       if (!patchRes.ok) throw new Error("Не удалось применить шаблон")
       await refetchVacancy()
-      toast.success(`Анкета заполнена из «${src.title}»`)
+      toast.success(`Заполнено из «${src.title}»`)
       setLibraryDialogOpen(false)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Ошибка")
@@ -374,8 +450,12 @@ export default function VacancyPage() {
   }
   const searchParams = useSearchParams()
 
-  // Сортировка списка кандидатов — состояние в URL, чтобы переживало refresh
-  const VALID_SORT_KEYS: ListSortKey[] = ["favorite", "name", "aiScore", "progress", "salary", "responseDate", "status", "city", "source"]
+  // Сортировка списка кандидатов — состояние в URL, чтобы переживало refresh.
+  // resumeScore был пропущен — единственный ListSortKey, отсутствовавший в
+  // списке. Из-за этого legacy-парсер listSort отбраковывал сортировку по
+  // «AI-резм» как невалидную, и стрелка на этой колонке не появлялась (тогда
+  // как на остальных — появлялась). Добавлен для паритета со всеми колонками.
+  const VALID_SORT_KEYS: ListSortKey[] = ["favorite", "name", "aiScore", "resumeScore", "testScore", "progress", "salary", "responseDate", "status", "city", "source"]
   const sortParam = searchParams?.get("sort") ?? null
   const orderParam = searchParams?.get("order") ?? null
   const listSort: ListSortState | null = sortParam && (VALID_SORT_KEYS as string[]).includes(sortParam)
@@ -395,7 +475,8 @@ export default function VacancyPage() {
     router.replace(`${window.location.pathname}${qs ? "?" + qs : ""}`, { scroll: false })
   }, [router])
 
-  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: [], demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
+  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: DEFAULT_FUNNEL_STATUSES.slice(), hideRejected: false, hideNoSalary: false, activeNow: false, demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
+  const [trashOpen, setTrashOpen] = useState(false) // Корзина кандидатов (Sheet)
 
   // Маппинг русских лейблов фильтра прогресса демо → API-идентификаторы.
   // UI: candidate-filters.tsx:70 ["Не начал", "В процессе", "Завершил (≥85%)",
@@ -432,12 +513,24 @@ export default function VacancyPage() {
     sources: filters.sources,
     cities: filters.cities,
     scoreMin: filters.scoreMin,
+    scoreMinResume: filters.scoreMinResume,
+    scoreMinAnketa: filters.scoreMinAnketa,
+    hideRejected: filters.hideRejected,
+    hideNoSalary: filters.hideNoSalary,
+    activeNow: filters.activeNow,
   }), [filters]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // viewMode поднят сюда (выше хуков), чтобы useCandidates умел пропускать
   // запрос в режиме list-paginated и не дублировал usePaginatedCandidates.
   // Сеттер-обёртка setViewMode (с persist в user-prefs) объявлена ниже.
   const [viewMode, setViewModeLocal] = useState<ViewMode>("list")
+  // D12: «Скоро»-заглушки (источники Авито/SuperJob/Яндекс, CRM-интеграции)
+  // скрываем от клиентов — показываем только платформенному админу.
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
+  useEffect(() => {
+    fetch("/api/auth/me").then(r => r.ok ? r.json() : null)
+      .then(d => setIsPlatformAdmin(!!(d?.data ?? d)?.isPlatformAdmin)).catch(() => {})
+  }, [])
   const tabFromUrl = searchParams?.get("tab") ?? "candidates"
   // Режим серверной пагинации: только tab=candidates + viewMode=list.
   // В этом режиме useCandidates отключается (vacancyId=null), источником
@@ -445,28 +538,16 @@ export default function VacancyPage() {
   // (kanban/funnel/tiles) useCandidates снова работает и наполняет columns.
   const useListPaginated = tabFromUrl === "candidates" && viewMode === "list"
 
-  // Маппинг русских лейблов фильтра воронки → реальные значения
-  // candidates.stage в БД. Без этого маппинга stage=Демо%20пройдено,Оффер,...
-  // ехал в API и никогда не матчил inArray(candidates.stage, ...).
-  // Лейблы из FUNNEL_STATUSES в candidate-filters.tsx (7 шт), enum в БД из
-  // STAGE_ORDER_SQL (route.ts:50). 1:1 маппинг; некоторые DB-значения
-  // (interviewed/offer) могут не встречаться в текущих данных — фильтр всё
-  // равно валиден и просто вернёт 0 строк.
-  const FUNNEL_LABEL_TO_DB_STAGES: Record<string, string[]> = {
-    "Всего откликов":     ["new"],
-    "Демо пройдено":      ["decision"],
-    "Интервью назначено": ["interview"],
-    "Интервью пройдено":  ["interviewed"],
-    "Оффер":              ["offer"],
-    "Нанят":              ["hired"],
-    "Отказ":              ["rejected"],
-  }
+  // filters.funnelStatuses содержит slug'и стадий из PLATFORM_STAGES
+  // (candidate-filters.tsx рендерит ALL_STAGE_SLUGS). Это уже совпадает с
+  // candidates.stage в БД → передаём напрямую как stage-фильтр.
+  // Раньше тут была мапа Russian-label → slug'и, но ключи (рус. метки) НЕ
+  // пересекались с реальным содержимым funnelStatuses (slug'и), поэтому
+  // flatMap всегда возвращал [] — фильтр статусов молча не применялся.
   const stageFilterFromFunnel: string[] | undefined = useMemo(() => {
-    const labels = filters.funnelStatuses ?? []
-    if (labels.length === 0) return undefined
-    const stages = labels.flatMap(l => FUNNEL_LABEL_TO_DB_STAGES[l] ?? [])
-    return stages.length > 0 ? stages : undefined
-  }, [filters.funnelStatuses]) // eslint-disable-line react-hooks/exhaustive-deps
+    const slugs = filters.funnelStatuses ?? []
+    return slugs.length > 0 ? slugs : undefined
+  }, [filters.funnelStatuses])
 
   const { candidates: apiCandidates, updateStage, refetch: refetchCandidates, toggleFavorite } = useCandidates(
     useListPaginated ? null : id,
@@ -483,9 +564,14 @@ export default function VacancyPage() {
   })
 
   const handleToggleFavorite = useCallback(async (candidateId: string, isFavorite: boolean) => {
-    const ok = await toggleFavorite(candidateId, isFavorite)
+    // В режиме list-paginated видимые кандидаты приходят из paginated.candidates
+    // (useCandidates отключён, vacancyId=null). Оптимистичный апдейт должен
+    // менять локальный state именно того хука, который рендерится; иначе UI
+    // не обновляется до полного refetch.
+    const fn = useListPaginated ? paginated.toggleFavorite : toggleFavorite
+    const ok = await fn(candidateId, isFavorite)
     if (!ok) toast.error("Не удалось обновить избранное")
-  }, [toggleFavorite])
+  }, [useListPaginated, paginated.toggleFavorite, toggleFavorite])
 
   const [status, setStatus] = useState<VacancyStatus>("draft")
   const [columns, setColumns] = useState<ColumnData[]>(emptyColumns())
@@ -544,18 +630,17 @@ export default function VacancyPage() {
       // URL-таб «застрял» (anketa/settings/analytics) от прошлого визита,
       // но вакансия уже опубликована — принудительно открываем «Кандидаты»
       // и чистим ?tab, чтобы при следующем визите дефолт не залипал.
-      const STICKY_TABS = new Set(["anketa", "settings", "analytics"])
-      if (!tabAutoSyncedRef.current && isActive && urlTab && STICKY_TABS.has(urlTab)) {
+      // Q1 (deep-link): явный ?tab= в URL — намеренный диплинк/закладка,
+      // его уважаем даже для активной вакансии (activeTab уже инициализирован
+      // в urlTab при mount — переопределять не нужно). Дефолт «Кандидаты»
+      // (active) / «Настройки» (черновик) — только когда ?tab отсутствует.
+      // Ref-guard оставляет это на ПЕРВЫЙ mount, чтобы refetch apiVacancy
+      // (напр. после сохранения брендинга) не выкидывал юзера с его таба.
+      if (!tabAutoSyncedRef.current) {
         tabAutoSyncedRef.current = true
-        setActiveTab("candidates")
-        const sp = new URLSearchParams(window.location.search)
-        sp.delete("tab")
-        const qs = sp.toString()
-        router.replace(`${window.location.pathname}${qs ? "?" + qs : ""}`, { scroll: false })
-      } else if (!urlTab) {
-        // URL без ?tab= — подгоняем дефолт под статус. Active/published →
-        // «Кандидаты»; draft и прочее → «Настройки».
-        setActiveTab(isActive ? "candidates" : "settings")
+        if (!urlTab) {
+          setActiveTab(isActive ? "candidates" : "settings")
+        }
       }
     }
     // Load custom columns from description_json (skip hidden ones)
@@ -582,6 +667,12 @@ export default function VacancyPage() {
       if (branding.domainLevel) setBrandDomainLevel(branding.domainLevel as "free" | "subdomain" | "custom")
       if (branding.companySlug) setBrandCompanySlug(branding.companySlug)
       if (branding.customDomain) setBrandCustomDomain(branding.customDomain)
+      if (branding.website) setBrandWebsite(branding.website)
+    }
+    // Читаем brandCompanyId из anketa (источник правды — AnketaTab)
+    const anketa = desc?.anketa as Record<string, unknown> | undefined
+    if (typeof anketa?.brandCompanyId === "string") {
+      setVacancyBrandCompanyId(anketa.brandCompanyId)
     }
   }, [apiVacancy])
 
@@ -603,7 +694,9 @@ export default function VacancyPage() {
   // ─── При первой загрузке user-prefs — гидратируем UI ─────────────────────
   useEffect(() => {
     if (!userPrefsLoaded) return
-    setViewModeLocal(userPrefs.viewMode as ViewMode)
+    // Не-админам доступен только «Список» (см. ViewSettings). Сохранённый
+    // kanban/funnel не гидратируем, иначе застрянут без переключателя режимов.
+    setViewModeLocal((role === "platform_admin" ? userPrefs.viewMode : "list") as ViewMode)
     if (userPrefs.columns && Object.keys(userPrefs.columns).length > 0) {
       setCardSettingsLocal((prev) => ({ ...prev, ...userPrefs.columns } as typeof prev))
     }
@@ -621,10 +714,14 @@ export default function VacancyPage() {
 // filters перемещён выше — см. строку перед useCandidates
   const [drawerCandidateId, setDrawerCandidateId] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const [addDialogOpen, setAddDialogOpen] = useState(false)
   // Bulk-selection state (только список — выделение между кандидатами)
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Set<string>>(new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
+  // Окно «Отправить тест»: показывает/редактирует текст приглашения перед отправкой.
+  const [testInviteOpen, setTestInviteOpen] = useState(false)
+  const [testInviteText, setTestInviteText] = useState("")
+  const [testInviteIds, setTestInviteIds] = useState<string[]>([])
+  const [testInviteSending, setTestInviteSending] = useState(false)
   const [internalName, setInternalName] = useState("")
   const [isEditingName, setIsEditingName] = useState(false)
   const [savingName, setSavingName] = useState(false)
@@ -685,19 +782,32 @@ export default function VacancyPage() {
   const [brandDomainLevel, setBrandDomainLevel] = useState<"free" | "subdomain" | "custom">("free")
   const [brandCompanySlug, setBrandCompanySlug] = useState("")
   const [brandCustomDomain, setBrandCustomDomain] = useState("")
+  const [brandWebsite, setBrandWebsite] = useState("")
   const [editingSlug, setEditingSlug] = useState(false)
   const [brandSaving, setBrandSaving] = useState(false)
+  // Данные основной компании (для дефолтов брендинга)
+  const [mainCompanyData, setMainCompanyData] = useState<{
+    brandName: string; logoUrl: string; brandSlogan: string; website: string; subdomain: string
+  }>({ brandName: "", logoUrl: "", brandSlogan: "", website: "", subdomain: "" })
+  const [brandCompaniesData, setBrandCompaniesData] = useState<Array<{
+    id: string; name: string; slogan?: string; logo?: string; website?: string
+  }>>([])
+  // brandCompanyId вакансии (берём из descriptionJson.anketa — источник правды в AnketaTab)
+  const [vacancyBrandCompanyId, setVacancyBrandCompanyId] = useState("")
   // Дефолтный таб по статусу:
   //   active/published → «Кандидаты» (главная работа с вакансией)
   //   draft и прочее   → «Настройки» (вакансия ещё не настроена)
   const defaultTab = (status === "active" || status === "published") ? "candidates" : "settings"
   const rawUrlTab = searchParams?.get("tab") ?? null
   // Старая ссылка `?tab=automation` → новая `?tab=settings&section=ai`
-  const urlTab = rawUrlTab === "automation" ? "settings" : rawUrlTab
+  // Старые `?tab=course` / `?tab=test` → объединённый таб `content` (+ под-таб).
+  const urlTab = rawUrlTab === "automation" ? "settings"
+    : (rawUrlTab === "course" || rawUrlTab === "test") ? "content"
+    : rawUrlTab
   const rawUrlSection = rawUrlTab === "automation" ? "ai" : (searchParams?.get("section") ?? null)
   // Миграция старых section-значений на новые 6 табов.
   // general → page (стартовая вкладка с брендингом), automation → ai.
-  const SETTINGS_SECTION_IDS = ["page", "sources", "messages", "funnel", "ai", "integrations"] as const
+  const SETTINGS_SECTION_IDS = ["page", "sources", "messages", "funnel", "funnel-builder", "followup", "aichatbot", "ai", "integrations"] as const
   type SettingsSectionId = typeof SETTINGS_SECTION_IDS[number]
   const initialSettingsSection: SettingsSectionId =
     rawUrlSection === "general" ? "page" :
@@ -721,6 +831,37 @@ export default function VacancyPage() {
   }, [activeTab])
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>(initialSettingsSection)
   const [anPeriod, setAnPeriod] = useState("all")
+  // Аналитика: серверная агрегация по ВСЕЙ вакансии (источник истины — БД,
+  // а не выгруженный на клиент массив columns). Период anPeriod дёргает
+  // endpoint заново; маппинг today→7d (серверный фильтр работает по дням).
+  const [analytics, setAnalytics] = useState<{
+    total: number
+    inProgress: number
+    rejected: number
+    hired: number
+    avgScore: number
+    vacancyCreatedAt: string | null
+    stageCounts: Record<string, number>
+    funnelStages: { stage: string; count: number; color: string }[]
+    sourceData: { source: string; count: number; avgScore: number; pct: number }[]
+    scoreRanges: { range: string; count: number; color: string }[]
+  } | null>(null)
+  const [analyticsLoading, setAnalyticsLoading] = useState(false)
+
+  useEffect(() => {
+    if (activeTab !== "analytics") return
+    const periodMap: Record<string, string> = { all: "all", today: "7d", "7d": "7d", "30d": "30d", "90d": "90d" }
+    const period = periodMap[anPeriod] ?? "all"
+    let cancelled = false
+    setAnalyticsLoading(true)
+    fetch(`/api/modules/hr/vacancies/${id}/analytics?period=${period}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (!cancelled) setAnalytics(data) })
+      .catch(() => { if (!cancelled) setAnalytics(null) })
+      .finally(() => { if (!cancelled) setAnalyticsLoading(false) })
+    return () => { cancelled = true }
+  }, [activeTab, id, anPeriod])
+
   const [anSources, setAnSources] = useState<string[]>([])
   const [anCities, setAnCities] = useState<string[]>([])
   const [anFormats, setAnFormats] = useState<string[]>([])
@@ -728,6 +869,8 @@ export default function VacancyPage() {
   const [anSalaryMax, setAnSalaryMax] = useState(300000)
   const [anScoreMin, setAnScoreMin] = useState(0)
   const [anStages, setAnStages] = useState<string[]>([])
+  // Export dialog state (выбор охвата + полей)
+  const [exportDialogOpen, setExportDialogOpen] = useState(false)
   // Reject dialog state
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
   const [rejectCandidateId, setRejectCandidateId] = useState<string | null>(null)
@@ -753,10 +896,8 @@ export default function VacancyPage() {
   const [offerLoading, setOfferLoading] = useState(false)
   const [offerEditing, setOfferEditing] = useState(false)
 
-  // Course editor toolbar state
-  const courseEditorRef = useRef<NotionEditorHandle>(null)
-  const courseTabRef = useRef<CourseTabHandle>(null)
-  const [courseEditorSaveStatus, setCourseEditorSaveStatus] = useState<"saved" | "saving">("saved")
+  // Таб «Контент» = динамические блоки (ContentBlocksTab со встроенным
+  // редактором/тулбаром). Прежние course/test refs и состояние под-таба удалены.
 
   // Anketa external save handle: AnketaTab вызывает registerHandle({save})
   // при mount, мы держим ссылку и зелёная кнопка «Сохранить» в шапке таба
@@ -783,17 +924,60 @@ export default function VacancyPage() {
   // Сводные счётчики для шапки. Отдельный endpoint, не зависящий от фильтров,
   // чтобы «всего кандидатов» всегда показывало COUNT по vacancy_id, а не
   // длину apiCandidates (которая ужимается фильтрами / задержкой загрузки).
-  const [headerStats, setHeaderStats] = useState<{ total: number; pending: number; demoOpened: number; rejected: number } | null>(null)
+  // #13/#14: единый endpoint /stats — те же цифры в шапке, аналитике
+  // и дашборде. Сохранили старые поля total/pending/freshCount/demoOpened/
+  // rejected плюс hhTotal/hhNew/inProgress/anketaFilled/hired. freshCount
+  // берётся из старого /candidate-stats — он использует user_vacancy_views
+  // (отдельная логика «свежести с прошлого захода»), которой нет в общей
+  // функции.
+  const [headerStats, setHeaderStats] = useState<{
+    total: number; pending: number; freshCount: number;
+    demoOpened: number; rejected: number;
+    hhTotal: number; hhNew: number; inProgress: number;
+    anketaFilled: number; hired: number;
+  } | null>(null)
   const loadHeaderStats = useCallback(async () => {
     if (!id) return
     try {
-      const res = await fetch(`/api/modules/hr/vacancies/${id}/candidate-stats`)
-      if (!res.ok) return
-      const data = await res.json() as { total: number; pending: number; demoOpened: number; rejected: number }
-      setHeaderStats(data)
+      const [statsRes, candRes] = await Promise.all([
+        fetch(`/api/modules/hr/vacancies/${id}/stats`),
+        fetch(`/api/modules/hr/vacancies/${id}/candidate-stats`),
+      ])
+      if (!statsRes.ok) return
+      const stats = await statsRes.json() as {
+        total: number; hhTotal: number; hhNew: number;
+        inProgress: number; rejected: number; hired: number;
+        demoOpened: number; anketaFilled: number;
+      }
+      const cand = candRes.ok
+        ? await candRes.json() as { pending: number; freshCount: number }
+        : { pending: 0, freshCount: 0 }
+      setHeaderStats({
+        total:        stats.total,
+        pending:      cand.pending,
+        freshCount:   cand.freshCount,
+        demoOpened:   stats.demoOpened,
+        rejected:     stats.rejected,
+        hhTotal:      stats.hhTotal,
+        hhNew:        stats.hhNew,
+        inProgress:   stats.inProgress,
+        anketaFilled: stats.anketaFilled,
+        hired:        stats.hired,
+      })
     } catch { /* silent */ }
   }, [id])
-  useEffect(() => { loadHeaderStats() }, [loadHeaderStats])
+  useEffect(() => {
+    if (!id) return
+    // P0-9: сначала забираем freshCount (он считается ОТ предыдущего last_seen),
+    // и только потом UPSERT'им last_seen=NOW(). Иначе бейдж всегда был бы 0.
+    let cancelled = false
+    ;(async () => {
+      await loadHeaderStats()
+      if (cancelled) return
+      fetch(`/api/modules/hr/vacancies/${id}/mark-seen`, { method: "POST" }).catch(() => {})
+    })()
+    return () => { cancelled = true }
+  }, [id, loadHeaderStats])
 
   const loadHhSyncMeta = useCallback(async () => {
     const hhVacId = apiVacancy?.hhVacancyId
@@ -805,7 +989,8 @@ export default function VacancyPage() {
     } catch { /* silent */ }
   }, [apiVacancy?.hhVacancyId])
 
-  // Счётчик «ждут разбора» приходит из лёгкого /candidate-stats (headerStats.pending).
+  // headerStats.pending (hh-отклики со статусом 'response') используется
+  // на кнопке «Разобрать», freshCount — на бейдже «+N новых» в шапке.
   // Раньше тут был loadHhPending, который тянул /api/integrations/hh/responses
   // (~13.8 МБ — все hh-отклики компании) только ради этой цифры. Убран.
 
@@ -823,9 +1008,22 @@ export default function VacancyPage() {
         fetch("/api/integrations/hh/vacancies"),
         fetch("/api/integrations/hh/responses"),
       ])
+
+      // P0-54: cron делает 2 шага (импорт + processQueue), но ручной handleHhSync
+      // раньше делал только импорт. В результате свежие hh_responses оставались
+      // в status='response' до следующего cron-прогона, и первое сообщение
+      // не уходило сразу после нажатия «Синхронизировать». Дёргаем разбор
+      // fire-and-forget — endpoint async, отдаёт {jobId, status:queued}
+      // мгновенно; реальная обработка идёт в фоне.
+      void fetch("/api/integrations/hh/process-queue", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ vacancyId: id, limit: 50, delaySeconds: 2 }),
+      }).catch(() => { /* silent — основной toast о синке всё равно покажем */ })
+
       await Promise.all([loadHhSyncMeta(), loadHeaderStats()])
       refetchCandidates(); refetchVacancy()
-      toast.success("Синхронизировано с hh.ru")
+      toast.success("Синхронизировано с hh.ru. Разбор запущен в фоне.")
     } catch { toast.error("Ошибка синхронизации") }
     finally { setHhSyncing(false) }
   }
@@ -1017,7 +1215,10 @@ export default function VacancyPage() {
 
   const { role } = useAuth()
   const canAdd = isPlatformRole(role)
+  // Удалять кандидатов могут только администратор / менеджер-админ / директор.
+  const canDeleteCandidates = (["platform_admin", "platform_manager", "director"] as string[]).includes(role)
   const [duplicating, setDuplicating] = useState(false)
+  const [permDeleteOpen, setPermDeleteOpen] = useState(false)
 
   const handleDuplicate = async () => {
     setDuplicating(true)
@@ -1034,29 +1235,80 @@ export default function VacancyPage() {
     }
   }
 
+  // ── Действия жизненного цикла (см. lib/vacancies/lifecycle.ts) ──
+  const handlePauseVacancy   = () => { updateVacancyStatus(VACANCY_STATUS_ON_PAUSE);   toast.warning("Вакансия приостановлена") }
+  const handleResumeVacancy  = () => { updateVacancyStatus(VACANCY_STATUS_ON_RESUME);  toast.success("Вакансия возобновлена") }
+  const handleCloseVacancy   = () => { updateVacancyStatus(VACANCY_STATUS_ON_CLOSE);   toast("Вакансия закрыта и отправлена в архив") }
+
+  // Восстановить: из архива → status active; из корзины → очистка deleted_at (PATCH).
+  const handleRestoreVacancy = async () => {
+    if (apiVacancy?.deletedAt) {
+      try {
+        const res = await fetch(`/api/modules/hr/vacancies/${id}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: "{}",
+        })
+        if (!res.ok) throw new Error()
+        toast.success("Вакансия восстановлена из корзины")
+        refetchVacancy()
+      } catch { toast.error("Не удалось восстановить вакансию") }
+    } else {
+      updateVacancyStatus(VACANCY_STATUS_ON_RESTORE)
+      toast.success("Вакансия восстановлена из архива")
+    }
+  }
+
+  // В корзину: soft-delete (deleted_at = now). Вакансия уходит из активных/архива.
+  const handleMoveToTrash = async () => {
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${id}`, { method: "DELETE" })
+      if (!res.ok) throw new Error()
+      toast.success("Вакансия перемещена в корзину")
+      router.push("/hr/vacancies")
+    } catch { toast.error("Не удалось переместить в корзину") }
+  }
+
+  // Экспорт кандидатов в Excel — серверный endpoint отдаёт .xlsx с
+  // Content-Disposition; якорь скачивает файл с именем от сервера.
+  // Открываем диалог выбора охвата (все/выделенные/по статусам) и полей.
+  const handleExportExcel = () => setExportDialogOpen(true)
+
   const totalCandidates = columns.reduce((acc, col) => acc + col.candidates.length, 0)
 
-  const saveBranding = async (updates?: { companyName?: string; color?: string; slogan?: string; logo?: string }) => {
+  const saveBranding = async (updates?: { companyName?: string; color?: string; slogan?: string; logo?: string; website?: string }) => {
     setBrandSaving(true)
-    const existing = (apiVacancy?.descriptionJson as Record<string, unknown>) || {}
     const branding = {
       companyName: updates?.companyName ?? brandCompanyName,
       color: updates?.color ?? brandColor,
       slogan: updates?.slogan ?? brandSlogan,
       logo: updates?.logo ?? brandLogo,
+      website: updates?.website ?? brandWebsite,
       domainLevel: brandDomainLevel,
       companySlug: brandCompanySlug,
       customDomain: brandCustomDomain,
     }
     try {
-      await fetch(`/api/modules/hr/vacancies/${id}`, {
+      // P0-50 hotfix: PATCH делает server-side merge по корню descriptionJson
+      // (см. /api/modules/hr/vacancies/[id]/route.ts:148). Передаём только
+      // branding, остальные ключи descriptionJson сервер сохранит сам.
+      const res = await fetch(`/api/modules/hr/vacancies/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description_json: { ...existing, branding } }),
+        body: JSON.stringify({ description_json: { branding } }),
       })
+      if (!res.ok) {
+        const body = await res.json().catch(() => null) as { error?: string } | null
+        const msg = body?.error || "Не удалось сохранить брендинг"
+        toast.error(msg)
+        throw new Error(msg)
+      }
+      // refetchVacancy перечитает descriptionJson — initial-load эффект
+      // (page.tsx:577) ещё раз выставит state из БД, гарантируя что после
+      // Cmd+R пользователь увидит то же самое.
+      refetchVacancy()
       toast.success("Брендинг сохранён")
-    } catch { /* silent */ }
-    setBrandSaving(false)
+    } finally {
+      setBrandSaving(false)
+    }
   }
 
   const handleAddCustomColumn = async (name: string, color: string, afterColumnId?: string) => {
@@ -1118,6 +1370,40 @@ export default function VacancyPage() {
   }
 
   const handleAction = async (candidateId: string, columnId: string, action: CandidateAction) => {
+    // В режиме пагинированного списка (Вид: Список) видимые строки приходят из
+    // `paginated.*`, а НЕ из kanban-state `columns` (там колонки по стадиям, без
+    // синтетической "all"). Старый код искал кандидата в `columns` по columnId
+    // "all", не находил и молча выходил — кнопки ✓/✗/→ в строке не работали.
+    // Здесь отдельная ветка: меняем стадию через paginated.updateStage (она же
+    // оптимистично обновляет видимый список) и рефетчим, чтобы переехали фильтры.
+    if (useListPaginated) {
+      const cand = paginatedColumns?.[0]?.candidates.find((c) => c.id === candidateId)
+      if (!cand) return
+      if (action === "reject") {
+        setRejectCandidateId(candidateId)
+        setRejectColumnId("all")
+        setRejectReason("")
+        setRejectDialogOpen(true)
+        return
+      }
+      const apply = async (target: string, msg: string) => {
+        const ok = await paginated.updateStage(candidateId, target)
+        if (ok) { toast.success(msg); paginated.refetch() }
+        else toast.error("Не удалось обновить статус")
+      }
+      switch (action) {
+        case "reserve":     return apply("talent_pool", `${cand.name} — в резерв`)
+        case "think":       return apply("pending", "🤔 Подумаем над кандидатом")
+        case "preboarding": return apply("preboarding", `${cand.name} — пребординг`)
+        case "hire":        return apply("hired", `🎉 ${cand.name} — нанят!`)
+        case "advance": {
+          const nextId = getNextColumnId(cand.stage ?? "new")
+          return apply(nextId ?? "hired", nextId ? `${cand.name} → следующий этап` : `🎉 ${cand.name} — нанят!`)
+        }
+        default: return
+      }
+    }
+
     const sourceCol = columns.find((c) => c.id === columnId)
     const candidate = sourceCol?.candidates.find((c) => c.id === candidateId)
     if (!candidate || !sourceCol) return
@@ -1176,16 +1462,49 @@ export default function VacancyPage() {
     }
   }
 
-  const handleAddCandidate = (candidate: Candidate) => {
-    setColumns((p) => p.map((c) => c.id !== "new" ? c : { ...c, candidates: [...c.candidates, candidate], count: c.candidates.length + 1 }))
-    toast.success(`${candidate.name} добавлен`)
-  }
-
   // ─── Bulk actions (плавающая панель) ────────────────────────────────────
   const handleBulkAction = useCallback(
     async (action: BulkAction, payload?: { stage?: string }) => {
       if (selectedCandidateIds.size === 0 || bulkBusy) return
       const ids = Array.from(selectedCandidateIds)
+      // «Отправить тест» → открываем окно с текстом приглашения (предзаполнено
+      // шаблоном вакансии). Отправка — по кнопке окна (confirmSendTest).
+      // Выделение пока не сбрасываем.
+      // «Сравнить» → открываем страницу сравнения ответов по выделенным.
+      if (action === "compare") {
+        if (ids.length < 2) {
+          toast.error("Выделите минимум двух кандидатов для сравнения")
+          return
+        }
+        // Короткая ссылка: сохраняем набор на сервере → /compare?set=<token>.
+        // При сбое — фолбэк на длинную ?ids=, чтобы сравнение всё равно открылось.
+        try {
+          const r = await fetch(`/api/modules/hr/vacancies/${id}/compare/set`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ids }),
+          })
+          const j = await r.json().catch(() => null)
+          const token = j?.data?.token ?? j?.token
+          if (r.ok && token) {
+            window.location.href = `/hr/vacancies/${id}/compare?set=${encodeURIComponent(token)}`
+            return
+          }
+        } catch { /* фолбэк ниже */ }
+        window.location.href = `/hr/vacancies/${id}/compare?ids=${ids.join(",")}`
+        return
+      }
+      if (action === "send_test") {
+        let msg = ""
+        try {
+          const r = await fetch(`/api/modules/hr/vacancies/${id}/send-test`)
+          const j = await r.json().catch(() => null)
+          msg = (j?.message ?? "") as string
+        } catch { /* откроем с пустым — дефолт подставит бэкенд */ }
+        setTestInviteText(msg)
+        setTestInviteIds(ids)
+        setTestInviteOpen(true)
+        return
+      }
       setBulkBusy(true)
       try {
         const res = await fetch("/api/modules/hr/candidates/bulk", {
@@ -1216,17 +1535,68 @@ export default function VacancyPage() {
           case "toggle_favorite":
             toast.success(data.isFavorite ? `В избранном: ${n}` : `Снято с избранного: ${n}`)
             break
+          case "restore":
+            toast.success(`Возвращено в воронку: ${n}`)
+            break
+          case "trash":
+            toast.success(`Удалено в корзину: ${n}`)
+            break
+          case "untrash":
+            toast.success(`Восстановлено из корзины: ${n}`)
+            break
+          case "hard_delete":
+            toast.success(`Удалено навсегда: ${n}`)
+            break
         }
         setSelectedCandidateIds(new Set())
-        await refetchCandidates()
+        // В режиме списка видимые строки из paginated.* — рефетчим его,
+        // иначе таблица не обновится после массового действия.
+        await (useListPaginated ? paginated.refetch() : refetchCandidates())
       } catch {
         toast.error("Ошибка сети")
       } finally {
         setBulkBusy(false)
       }
     },
-    [selectedCandidateIds, bulkBusy, refetchCandidates],
+    [selectedCandidateIds, bulkBusy, refetchCandidates, useListPaginated, paginated, id],
   )
+
+  // Подтверждение из окна «Отправить тест»: шлёт выбранным + сохраняет текст
+  // как шаблон вакансии (если отредактирован).
+  const confirmSendTest = useCallback(async () => {
+    if (testInviteSending || testInviteIds.length === 0) return
+    setTestInviteSending(true)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${id}/send-test`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidateIds: testInviteIds, message: testInviteText }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string }
+        toast.error(err.error || "Не удалось поставить тест в очередь")
+        return
+      }
+      const d = (await res.json()) as { scheduled?: number; alreadyQueued?: number; noHhLink?: number }
+      const queued = d.scheduled ?? 0, dup = d.alreadyQueued ?? 0, noHh = d.noHhLink ?? 0
+      if (queued === 0 && noHh > 0) {
+        toast.error(`Не отправлено: ${noHh} без hh-чата (нет отклика для отправки).`)
+      } else {
+        toast.success(
+          `Тест в очереди: ${queued}` + (dup > 0 ? ` (уже стояло: ${dup})` : "") +
+          (noHh > 0 ? ` · ${noHh} без hh-чата пропущено` : "") +
+          ". Отправка по очереди, с паузой между сообщениями.",
+        )
+      }
+      setTestInviteOpen(false)
+      setSelectedCandidateIds(new Set())
+      await (useListPaginated ? paginated.refetch() : refetchCandidates())
+    } catch {
+      toast.error("Ошибка сети")
+    } finally {
+      setTestInviteSending(false)
+    }
+  }, [id, testInviteIds, testInviteText, testInviteSending, useListPaginated, paginated, refetchCandidates])
 
   const filteredColumns = applyCandidateFilters(columns, filters)
 
@@ -1256,6 +1626,7 @@ export default function VacancyPage() {
     name: "name",
     aiScore: "aiScore",
     resumeScore: "resumeScore",
+    testScore: "testScore",
     salary: "salary",
     responseDate: "createdAt",
     status: "stage",
@@ -1263,20 +1634,31 @@ export default function VacancyPage() {
     city: "city",
     source: "source",
     favorite: "favorite",
+    // P0-8: «Очередь HR» — приоритет anketa_filled первыми.
+    // ListView не имеет колонки hrQueue, key используется только как
+    // невидимый дефолт первого открытия (см. инжект user-prefs ниже).
+    hrQueue: "hrQueue",
   }
 
   const handleListSortChange = useCallback((next: ListSortState | null) => {
     // Persist выбора в user-prefs — на следующем визите без ?sort/?sortBy
     // в URL значение поднимется обратно (см. инжект-эффект ниже).
     persistListSort(next ? { key: next.key, dir: next.dir } : null)
-    if (useListPaginated && next) {
+    if (useListPaginated) {
+      // ВАЖНО: НЕ вызываем setListSort здесь. paginated.clearSort/setSort
+      // сами пишут URL (?sortBy/?order) и заодно чистят legacy ?sort. Вызов
+      // setListSort делал второй router.replace, который читал ещё не
+      // обновлённый window.location.search и затирал только что записанный
+      // ?sortBy → стрелка не появлялась, хотя данные сортировались.
+      if (next === null) {
+        // 3-й клик — сброс сортировки. Сервер вернёт дефолт (createdAt desc),
+        // ListView не подсветит заголовок (effectiveListSort вернёт null).
+        paginated.clearSort()
+        return
+      }
       const serverKey = SERVER_SORT_MAP[next.key]
       if (serverKey) {
-        // Серверная сортировка — пишет в ?sortBy=&order= (usePaginatedCandidates),
-        // ИЛИ сбрасывается в дефолт (?sortBy не задан) при desc по createdAt.
         paginated.setSort(serverKey, next.dir)
-        // Legacy ?sort/?order больше не нужны в этом режиме — чистим.
-        setListSort(null)
         return
       }
     }
@@ -1291,17 +1673,18 @@ export default function VacancyPage() {
   // (юзер кликал ещё раз — отсюда «залипание»).
   const effectiveListSort = useMemo<ListSortState | null>(() => {
     if (!useListPaginated) return listSort
-    // Источник правды — локальный state usePaginatedCandidates, а не URL.
-    // URL — просто зеркало; при дефолте (?sortBy не задан) state всё равно
-    // содержит реально применённую сортировку (progress desc после инжекта
-    // user-prefs). Если читать из URL — ListView получает sort=null, не
-    // подсвечивает активный заголовок и инициирует "set default" вместо
-    // "toggle dir" при клике, что превращает клик в no-op.
+    // 3-state цикл (ASC → DESC → null) требует уметь показывать состояние
+    // «нет активной сортировки» — без подсветки заголовка. Источник правды —
+    // URL: если ?sortBy не задан, юзер явно сбросил сортировку. paginated
+    // продолжит фетчить с дефолтом (createdAt desc), но визуально стрелка
+    // не появится.
+    const urlSortBy = searchParams?.get("sortBy")
+    if (!urlSortBy) return null
     const entry = (Object.entries(SERVER_SORT_MAP) as [ListSortKey, PaginatedSortKey][])
       .find(([, v]) => v === paginated.sortBy)
     const listKey: ListSortKey = entry?.[0] ?? (paginated.sortBy as ListSortKey)
     return { key: listKey, dir: paginated.order }
-  }, [useListPaginated, listSort, paginated.sortBy, paginated.order]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [useListPaginated, listSort, paginated.sortBy, paginated.order, searchParams]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Инжект сохранённой сортировки из user-prefs (per-user persistence) ───
   // Однократный guard: при первом успешном входе в режим list-paginated с
@@ -1318,9 +1701,11 @@ export default function VacancyPage() {
     const hasUrlSort = !!(searchParams?.get("sort") || searchParams?.get("sortBy"))
     if (hasUrlSort) return
     const stored = userPrefs.listSort
+    // P0-8: дефолт первого открытия — hrQueue asc (anketa_filled первыми).
+    // Сохранённый выбор HR (stored) уважаем — это сделанный им явный выбор.
     const toApply: ListSortState = stored
       ? { key: stored.key as ListSortKey, dir: stored.dir }
-      : { key: "progress", dir: "desc" }
+      : { key: "hrQueue" as ListSortKey, dir: "asc" }
     handleListSortChange(toApply)
   }, [userPrefsLoaded, useListPaginated, userPrefs.listSort, searchParams, handleListSortChange])
 
@@ -1433,7 +1818,7 @@ export default function VacancyPage() {
   const inviteFromPool = async (candidateId: string) => {
     await updateStage(candidateId, "new")
     setTalentMatches(prev => prev.filter(c => c.id !== candidateId))
-    toast.success("Кандидат приглашён из Talent Pool")
+    toast.success("Кандидат приглашён из резерва")
     refetchCandidates()
   }
 
@@ -1519,8 +1904,9 @@ export default function VacancyPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          candidates: top.map(c => ({ name: c.name, skills: c.skills, experience: c.experience, aiScore: c.aiScore })),
+          candidates: top.map(c => ({ id: c.id, name: c.name, skills: c.skills, experience: c.experience, aiScore: c.aiScore })),
           vacancyRequirements: String(anketa.requirements || ""),
+          vacancyId: id,
         }),
       })
       if (!res.ok) throw new Error()
@@ -1601,11 +1987,11 @@ export default function VacancyPage() {
       return m[c] || c
     })
     .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "company"
-  const publicPageUrl = brandDomainLevel === "custom" && brandCustomDomain
-    ? `https://${brandCustomDomain}/v/${vacancySlugOrId}`
-    : brandDomainLevel === "subdomain"
-    ? `https://${companySlugDisplay}.company24.pro/v/${vacancySlugOrId}`
-    : `https://company24.pro/c/${companySlugDisplay}/${vacancySlugOrId}`
+  // Публичный URL вакансии: домен берётся из настроек компании (companies.subdomain).
+  // Выбор домена на вакансии убран — он настраивается в профиле компании.
+  const publicPageUrl = mainCompanyData.subdomain
+    ? `https://${mainCompanyData.subdomain}.company24.pro/vacancy/${vacancySlugOrId}`
+    : `https://company24.pro/vacancy/${vacancySlugOrId}`
 
   // ── Loading / 404 guard ────────────────────────────────────
   const isLoadingVacancy = vacancyLoading || (!apiVacancy && !vacancyError)
@@ -1617,7 +2003,7 @@ export default function VacancyPage() {
         <SidebarInset>
           <DashboardHeader />
           <main className="flex-1 overflow-auto bg-background">
-            <div className="py-6 space-y-4 animate-pulse" style={{ paddingLeft: 56, paddingRight: 56 }}>
+            <div className="py-6 px-4 sm:px-14 space-y-4 animate-pulse">
               <div className="h-8 w-64 bg-muted rounded" />
               <div className="h-4 w-40 bg-muted rounded" />
               <div className="flex gap-4 mt-6">
@@ -1639,7 +2025,7 @@ export default function VacancyPage() {
         <SidebarInset>
           <DashboardHeader />
           <main className="flex-1 overflow-auto bg-background">
-            <div className="py-6 flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center" style={{ paddingLeft: 56, paddingRight: 56 }}>
+            <div className="py-6 px-4 sm:px-14 flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center">
               <AlertTriangle className="w-12 h-12 text-muted-foreground/40" />
               <h2 className="text-xl font-semibold text-foreground">Вакансия не найдена</h2>
               <p className="text-sm text-muted-foreground">Вакансия не существует или у вас нет доступа к ней</p>
@@ -1660,10 +2046,10 @@ export default function VacancyPage() {
           {/* ═══ Fixed header: появляется только при скролле (под DashboardHeader) ═══ */}
           <div
             className={cn(
-              "fixed top-14 right-0 z-40 bg-background border-b shadow-sm py-2 transition-all duration-200",
+              "fixed top-14 right-0 z-40 bg-background border-b shadow-sm py-2 transition-all duration-200 px-4 sm:px-14",
               showStickyHeader ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2 pointer-events-none"
             )}
-            style={{ left: "var(--sidebar-effective-width, var(--sidebar-width, 16rem))", paddingLeft: 56, paddingRight: 56, transition: "left 200ms ease-linear" }}
+            style={{ left: "var(--sidebar-effective-width, var(--sidebar-width, 16rem))", transition: "left 200ms ease-linear" }}
           >
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -1692,7 +2078,7 @@ export default function VacancyPage() {
             </div>
           </div>
 
-          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+          <div className="py-6 px-4 sm:px-14">
             {/* ═══ Breadcrumb ═══════════════════════════════ */}
             <Button variant="ghost" size="sm" className="gap-1 text-sm text-muted-foreground -ml-2 mb-2" onClick={() => router.push("/hr/vacancies")}>
               <ChevronLeft className="w-3.5 h-3.5" />
@@ -1725,52 +2111,48 @@ export default function VacancyPage() {
                   )}
                   <VacancyStatusBadge status={status} />
                   {status === "active" && apiVacancy?.createdAt && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="size-3.5" />{Math.floor((Date.now() - new Date(apiVacancy.createdAt).getTime()) / 86400000)} дн.</span>}
-                  <UITooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            const res = await fetch(`/api/modules/hr/vacancies/${id}/preview-candidate`, { method: "POST" })
-                            const json = await res.json()
-                            if (!json?.token) { toast.error("Не удалось открыть превью"); return }
-                            window.open(`${window.location.origin}/demo/${json.token}?as=hr`, "_blank", "noopener,noreferrer")
-                          } catch {
-                            toast.error("Не удалось открыть превью")
-                          }
-                        }}
-                        aria-label="Открыть как директор"
-                        className="inline-flex items-center justify-center w-6 h-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                      >
-                        <Eye className="size-3.5" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>Открыть как директор (ответы не сохраняются)</TooltipContent>
-                  </UITooltip>
                 </div>
                 <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
                   {activeTab === "candidates" && <>
-                    {/* Цифры берём из headerStats (отдельный COUNT по vacancy_id).
-                        Пока запрос /candidate-stats не вернулся — показываем «—». */}
-                    <UITooltip>
-                      <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.total ?? "—"}</span> всего кандидатов</span>
-                      </TooltipTrigger>
-                      <TooltipContent>Все кандидаты на вакансии — все источники, все этапы</TooltipContent>
-                    </UITooltip>
-                    <span>·</span>
-                    <UITooltip>
-                      <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className={cn("font-medium", (headerStats?.pending ?? 0) > 0 ? "text-amber-700" : "text-foreground")}>{headerStats?.pending ?? "—"}</span> ждут разбора</span>
-                      </TooltipTrigger>
-                      <TooltipContent>Отклики с hh.ru, которые ещё не обработаны (нажмите «Разобрать»)</TooltipContent>
-                    </UITooltip>
-                    <span>·</span>
+                    {/* #13: две логические группы метрик. Слева — hh.ru
+                        (синхрон с hh-кабинетом), вертикальная черта,
+                        справа — наши данные после разбора. Если вакансия
+                        не привязана к hh — hh-блок скрыт. */}
+                    {headerStats?.hhTotal !== undefined && headerStats.hhTotal + headerStats.hhNew > 0 && (
+                      <>
+                        <UITooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help">
+                              <span className="font-medium text-foreground">{headerStats.hhTotal}</span> откликов всего
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>Всего откликов с hh.ru, синхронизировано с hh-кабинетом</TooltipContent>
+                        </UITooltip>
+                        <span>·</span>
+                        <UITooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help">
+                              <span className="font-medium text-foreground">{headerStats.hhNew}</span> новых
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>Новые отклики, ещё не разобраны (status = response)</TooltipContent>
+                        </UITooltip>
+                        <span className="mx-1 inline-block h-3 w-px bg-border" aria-hidden="true" />
+                      </>
+                    )}
+                    {/* Блок наших данных после разбора */}
                     <UITooltip>
                       <TooltipTrigger asChild>
                         <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.demoOpened ?? "—"}</span> открыли демо</span>
                       </TooltipTrigger>
-                      <TooltipContent>Сколько кандидатов хотя бы зашли на демо-анкету</TooltipContent>
+                      <TooltipContent>Кандидаты, добравшиеся до стадии «demo_opened» и далее</TooltipContent>
+                    </UITooltip>
+                    <span>·</span>
+                    <UITooltip>
+                      <TooltipTrigger asChild>
+                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.anketaFilled ?? "—"}</span> анкет заполнено</span>
+                      </TooltipTrigger>
+                      <TooltipContent>Кандидаты, сдавшие финальную анкету (anketa_filled и далее)</TooltipContent>
                     </UITooltip>
                     <span>·</span>
                     <UITooltip>
@@ -1779,6 +2161,20 @@ export default function VacancyPage() {
                       </TooltipTrigger>
                       <TooltipContent>Кандидаты со статусом «Отказ» в воронке</TooltipContent>
                     </UITooltip>
+                    {/* P0-9: бейдж дельты «свежих» — оставлен (отдельная семантика
+                        «с прошлого захода»), но переехал в конец, чтобы не мешать
+                        основным метрикам. */}
+                    {(headerStats?.freshCount ?? 0) > 0 && <>
+                      <span>·</span>
+                      <UITooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 cursor-help">
+                            +{headerStats?.freshCount} новых анкет
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>Новые заполненные анкеты с прошлого захода в вакансию</TooltipContent>
+                      </UITooltip>
+                    </>}
                     {useListPaginated && paginated.total > 0 && (
                       <>
                         <span>·</span>
@@ -1829,76 +2225,32 @@ export default function VacancyPage() {
                       Действия<ChevronDown className="size-3 ml-0.5 opacity-50" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {(status === "draft" || status === "paused") && (
-                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { updateVacancyStatus("active"); toast.success("Вакансия запущена") }}>
-                        <Play className="size-3.5" />Запустить
-                      </DropdownMenuItem>
-                    )}
-                    {(status === "draft" || status === "paused") && <DropdownMenuSeparator />}
-                    {apiCandidates.length > 0 && (
-                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => {
-                        const stageLabels: Record<string, string> = { new: "Новые", primary_contact: "Первичный контакт", demo: "Демо", demo_opened: "Демо открыто", decision: "Демо пройдено", anketa_filled: "Анкета", ai_screening: "AI-скрининг", interview: "Интервью", final_decision: "Финал", hired: "Наняты", rejected: "Отказ" }
-                        const stageCounts: Record<string, number> = {}
-                        for (const c of apiCandidates) { const s = c.stage || "new"; stageCounts[s] = (stageCounts[s] || 0) + 1 }
-                        const topCandidates = apiCandidates.filter(c => c.aiScore != null).sort((a, b) => (b.aiScore ?? 0) - (a.aiScore ?? 0)).slice(0, 10)
-                        const html = `<html><head><title>Отчёт: ${vacancyTitle}</title><style>body{font-family:system-ui;max-width:800px;margin:40px auto;padding:0 20px;color:#1a1a1a}h1{font-size:22px}h2{font-size:16px;margin-top:24px}table{width:100%;border-collapse:collapse;margin:12px 0}td,th{border:1px solid #ddd;padding:8px;text-size:13px;text-align:left}th{background:#f5f5f5}.bar{height:16px;background:#6366f1;border-radius:4px}@media print{body{margin:20px}}</style></head><body>
-<h1>${vacancyTitle}</h1><p>Статус: ${status} | Город: ${apiVacancy?.city || "—"} | ЗП: ${apiVacancy?.salaryMin ? apiVacancy.salaryMin.toLocaleString("ru") : "—"} — ${apiVacancy?.salaryMax ? apiVacancy.salaryMax.toLocaleString("ru") : "—"} ₽</p>
-<h2>Воронка (${apiCandidates.length} кандидатов)</h2><table><tr><th>Этап</th><th>Кол-во</th></tr>${Object.entries(stageCounts).map(([s, n]) => `<tr><td>${stageLabels[s] || s}</td><td>${n}</td></tr>`).join("")}</table>
-${topCandidates.length > 0 ? `<h2>Топ кандидаты</h2><table><tr><th>Имя</th><th>AI-скор</th><th>Этап</th><th>Источник</th></tr>${topCandidates.map(c => `<tr><td>${c.name}</td><td>${c.aiScore}</td><td>${stageLabels[c.stage || "new"] || c.stage}</td><td>${c.source || "—"}</td></tr>`).join("")}</table>` : ""}
-${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
-<p style="color:#999;font-size:11px;margin-top:40px">Сгенерировано Company24.pro</p></body></html>`
-                        const w = window.open("", "_blank")
-                        if (w) { w.document.write(html); w.document.close(); w.print() }
-                      }}>
-                        <Download className="size-3.5" />Отчёт PDF
-                      </DropdownMenuItem>
-                    )}
-                    {apiCandidates.length > 0 && (
-                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={async () => {
-                        const XLSX = (await import("xlsx")).default
-                        const data = apiCandidates.map(c => ({
-                          "Имя": c.name,
-                          "Email": c.email || "",
-                          "Телефон": c.phone || "",
-                          "Город": c.city || "",
-                          "Источник": c.source || "",
-                          "Этап": c.stage || "",
-                          "AI-скор": c.aiScore ?? "",
-                          "Вердикт": c.aiScore != null ? (c.aiScore >= 70 ? "подходит" : c.aiScore >= 40 ? "возможно" : "не подходит") : "",
-                          "Дата": c.createdAt ? new Date(c.createdAt).toLocaleDateString("ru-RU") : "",
-                        }))
-                        const ws = XLSX.utils.json_to_sheet(data)
-                        const wb = XLSX.utils.book_new()
-                        XLSX.utils.book_append_sheet(wb, ws, "Кандидаты")
-                        XLSX.writeFile(wb, `кандидаты-${vacancyTitle}.xlsx`)
-                        toast.success("Экспорт готов")
-                      }}>
-                        <Download className="size-3.5" />Экспорт Excel
-                      </DropdownMenuItem>
-                    )}
-                    {apiCandidates.length > 0 && <DropdownMenuSeparator />}
-                    <DropdownMenuItem className="gap-2 cursor-pointer" disabled={duplicating} onClick={handleDuplicate}>
-                      {duplicating ? <Loader2 className="size-3.5 animate-spin" /> : <Copy className="size-3.5" />}Дублировать
-                    </DropdownMenuItem>
-                    {(status === "draft" || status === "paused") && (
-                      <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { updateVacancyStatus("closed_cancelled"); toast("В архив") }}>
-                        <Archive className="size-3.5" />В архив
-                      </DropdownMenuItem>
-                    )}
-                    {(status === "active" || status === "paused") && <DropdownMenuSeparator />}
-                    {status === "active" && (
-                      <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onClick={() => { updateVacancyStatus("paused"); toast.warning("Вакансия приостановлена") }}>
-                        <Pause className="size-3.5" />Остановить
-                      </DropdownMenuItem>
-                    )}
-                    {(status === "active" || status === "paused") && (
-                      <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onClick={() => { updateVacancyStatus("closed_cancelled"); toast.warning("Вакансия отменена") }}>
-                        <X className="size-3.5" />Закрыть вакансию
-                      </DropdownMenuItem>
-                    )}
+                  <DropdownMenuContent align="end" className="w-56">
+                    {/* Унифицированное меню действий — общий компонент
+                        VacancyActionsMenuItems (тот же в строке списка). */}
+                    <VacancyActionsMenuItems
+                      lifecycle={getVacancyState({ status, deletedAt: apiVacancy?.deletedAt })}
+                      duplicating={duplicating}
+                      handlers={{
+                        onDuplicate:       handleDuplicate,
+                        onExport:          handleExportExcel,
+                        onPause:           handlePauseVacancy,
+                        onResume:          handleResumeVacancy,
+                        onArchive:         handleCloseVacancy,
+                        onRestore:         handleRestoreVacancy,
+                        onTrash:           handleMoveToTrash,
+                        onPermanentDelete: () => setPermDeleteOpen(true),
+                      }}
+                    />
                   </DropdownMenuContent>
                 </DropdownMenu>
+                <PermanentDeleteDialog
+                  open={permDeleteOpen}
+                  onOpenChange={setPermDeleteOpen}
+                  vacancyId={id}
+                  vacancyTitle={apiVacancy?.title ?? ""}
+                  onDeleted={() => router.push("/hr/vacancies")}
+                />
               </div>
             </div>
 
@@ -1957,7 +2309,8 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
 
             {/* ═══ ТАБЫ + ВИД в одной строке ══════════════════ */}
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <div className="flex items-center justify-between gap-3 mb-3 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+              <div className="mb-3 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                <div className="flex items-center justify-between gap-3 min-w-max">
                 <TabsList className="shrink-0">
                   {/* Запущенные вакансии (active|published) — фокус на работе
                       с кандидатами: Кандидаты → Аналитика → Анкета → Демо.
@@ -1965,11 +2318,13 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   {((status === "active" || status === "published") ? [
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
                     { value: "analytics", icon: BarChart3, label: "Аналитика" },
-                    { value: "anketa", icon: ClipboardList, label: "Анкета" },
-                    { value: "course", icon: BookOpen, label: "Демонстрация" },
+                    { value: "anketa", icon: ClipboardList, label: "Вакансия" },
+                    { value: "content", icon: BookOpen, label: "Контент" },
+                    { value: "outbound", icon: UserSearch, label: "Исходящий подбор" },
                   ] : [
-                    { value: "anketa", icon: ClipboardList, label: "Анкета" },
-                    { value: "course", icon: BookOpen, label: "Демонстрация" },
+                    { value: "anketa", icon: ClipboardList, label: "Вакансия" },
+                    { value: "content", icon: BookOpen, label: "Контент" },
+                    { value: "outbound", icon: UserSearch, label: "Исходящий подбор" },
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
                     { value: "analytics", icon: BarChart3, label: "Аналитика" },
                   ]).map(tab => (
@@ -1985,15 +2340,18 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     {activeTab === "candidates" && hhConnected === true && apiVacancy?.hhVacancyId && hhSyncMeta && (
                       <HhAutoProcess
                         vacancyId={id}
-                        defaultMinScore={
-                          ((apiVacancy?.aiProcessSettings as { minScore?: number } | null)?.minScore) ?? 70
-                        }
                         onProcessed={() => { refetchCandidates(); handleHhSync() }}
                       />
                     )}
-                    <CandidateFilters filters={filters} onFiltersChange={setFilters} candidates={columns.flatMap((c) => c.candidates)} />
+                    <CandidateFilters
+                      filters={filters}
+                      onFiltersChange={setFilters}
+                      // Источник фасетов (города/источники в фильтре). В режиме
+                      // списка kanban-`columns` пуст — берём видимые из paginated,
+                      // иначе секция «Города» не показывается.
+                      candidates={useListPaginated ? (paginatedColumns?.[0]?.candidates ?? []) : columns.flatMap((c) => c.candidates)}
+                    />
                     {false && <SortMenu sortMode={sortMode} onSortChange={setSortMode} />}
-                    {false && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs">
@@ -2010,14 +2368,18 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                           <BarChart3 className="w-3.5 h-3.5 mr-2" />
                           Сравнить топ
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setTrashOpen(true)}>
+                          <Trash2 className="w-3.5 h-3.5 mr-2" />
+                          Корзина
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
-                    )}
                     <ViewSettings
                       settings={cardSettings}
                       onSettingsChange={setCardSettings}
                       viewMode={viewMode}
                       onViewModeChange={setViewMode}
+                      testTableHref={`/hr/vacancies/${id}/test-table`}
                     />
                   </div>
                 )}
@@ -2036,6 +2398,16 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                         ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                         : <Check className="w-3.5 h-3.5" />}
                       Сохранить
+                    </Button>
+                    {/* Предпросмотр описания вакансии на весь экран (тот же
+                        контент, что в нижней кнопке «Предпросмотр вакансии», но
+                        полноэкранно). Открывает диалог внутри AnketaTab. */}
+                    <Button
+                      variant="outline" size="sm" className="gap-1.5 text-xs h-8"
+                      onClick={() => anketaHandle?.openPreview()}
+                      disabled={!anketaHandle}
+                    >
+                      <Eye className="w-3.5 h-3.5" />Предпросмотр
                     </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -2062,59 +2434,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     </DropdownMenu>
                   </div>
                 )}
-                {activeTab === "course" && (
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <div className="relative">
-                      <div className="flex items-center">
-                        <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 rounded-r-none border-r-0" onClick={() => courseEditorRef.current?.save()}>
-                          {courseEditorSaveStatus === "saving" ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <Check className="w-3.5 h-3.5" />
-                          )}
-                          Сохранить
-                        </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm" className="h-8 px-2 rounded-l-none">
-                              <ChevronDown className="w-3 h-3 opacity-50" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start">
-                            <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => courseEditorRef.current?.openSaveTemplate()}>
-                              <Save className="w-3.5 h-3.5" />В библиотеку
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => courseEditorRef.current?.downloadTxt()}>
-                              <Download className="w-3.5 h-3.5" />Скачать
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                      <span className={cn("absolute left-1/2 -translate-x-1/2 top-full mt-0.5 text-[10px] leading-none whitespace-nowrap transition-colors", courseEditorSaveStatus === "saving" ? "text-amber-500" : "text-muted-foreground/40")}>
-                        {courseEditorSaveStatus === "saving" ? "Сохранение..." : "✓ Сохранено"}
-                      </span>
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8">
-                          <Sparkles className="w-3.5 h-3.5" />Создать из...
-                          <ChevronDown className="w-3 h-3 ml-0.5 opacity-50" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start">
-                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => courseTabRef.current?.openAiGenerate()}>
-                          <Sparkles className="w-3.5 h-3.5" />Сгенерировать с AI
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => courseEditorRef.current?.openLibrary()}>
-                          <BookOpen className="w-3.5 h-3.5" />Из библиотеки
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => courseTabRef.current?.openFileUpload()}>
-                          <Upload className="w-3.5 h-3.5" />Загрузить файл
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                )}
                 {activeTab === "analytics" && (
                   <AnalyticsFilterButton
                     anPeriod={anPeriod} setAnPeriod={setAnPeriod}
@@ -2129,12 +2448,15 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     candidates={columns.flatMap((c) => c.candidates)}
                   />
                 )}
+                </div>
               </div>
 
               <TabsContent value="anketa">
                 <AnketaTab
                   vacancyId={id}
                   descriptionJson={apiVacancy?.descriptionJson}
+                  aiQualityDetails={(apiVacancy as { aiQualityDetails?: unknown } | undefined)?.aiQualityDetails}
+                  aiQualityAnalyzedAt={(apiVacancy as { aiQualityAnalyzedAt?: string | null } | undefined)?.aiQualityAnalyzedAt ?? null}
                   onTitleChange={(t) => { if (t) setInternalName(t) }}
                   onNavigateTab={(tab) => { setActiveTab(tab); window.scrollTo({ top: 0, behavior: "smooth" }) }}
                   onScoreChange={setAdvisorScore}
@@ -2144,11 +2466,17 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
               </TabsContent>
 
               <TabsContent value="candidates">
+                {/* Рубричное ранжирование (shadow) */}
+                <RubricRankPanel
+                  vacancyId={id}
+                  onOpenCandidate={(cid) => { setDrawerCandidateId(cid); setDrawerOpen(true) }}
+                />
+
                 {/* Talent Pool radar */}
                 {talentMatches.length > 0 && !talentRadarHidden && (
                   <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm font-medium flex items-center gap-1.5"><Users className="w-4 h-4 text-primary" />В Talent Pool найдено {talentMatches.length} подходящих кандидатов</p>
+                      <p className="text-sm font-medium flex items-center gap-1.5"><Users className="w-4 h-4 text-primary" />В резерве найдено {talentMatches.length} подходящих кандидатов</p>
                       <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setTalentRadarHidden(true)}><X className="w-3 h-3" /></Button>
                     </div>
                     <div className="space-y-1.5">
@@ -2188,6 +2516,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   selectedIds={selectedCandidateIds}
                   onSelectionChange={setSelectedCandidateIds}
                   listStartIndex={useListPaginated ? (paginated.page - 1) * paginated.pageSize : undefined}
+                  listServerSorted={useListPaginated}
                 />
                 {useListPaginated && (
                   <div className="mt-3">
@@ -2203,13 +2532,37 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 )}
               </TabsContent>
 
-              <TabsContent value="course">
-                <CourseTab
+              {/* Таб «Контент»: динамический список блоков (имя+тип+редактор).
+                  Фаза 1 — легаси demo/test показываются как первые блоки,
+                  рантайм их по-прежнему читает по kind. */}
+              <TabsContent value="content">
+                <ContentBlocksTab vacancyId={id} vacancyTitle={vacancyTitle} />
+              </TabsContent>
+
+              <TabsContent value="outbound">
+                <OutboundSourcingTab
                   vacancyId={id}
-                  vacancyTitle={vacancyTitle}
-                  editorRef={courseEditorRef}
-                  tabRef={courseTabRef}
-                  onSaveStatusChange={setCourseEditorSaveStatus}
+                  vacancyTitle={apiVacancy?.title ?? null}
+                  vacancyCity={apiVacancy?.city ?? null}
+                  vacancySalaryMin={apiVacancy?.salaryMin ?? null}
+                  vacancySalaryMax={apiVacancy?.salaryMax ?? null}
+                  vacancyRequiredExperience={(apiVacancy as { requiredExperience?: string | null } | undefined)?.requiredExperience ?? null}
+                  anketaWorkFormats={(() => {
+                    const a = (apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.anketa as Record<string, unknown> | undefined
+                    return Array.isArray(a?.workFormats) ? (a!.workFormats as string[]) : null
+                  })()}
+                  anketaEmployment={(() => {
+                    const a = (apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.anketa as Record<string, unknown> | undefined
+                    return Array.isArray(a?.employment) ? (a!.employment as string[]) : null
+                  })()}
+                  anketaLanguages={(() => {
+                    const a = (apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.anketa as Record<string, unknown> | undefined
+                    return Array.isArray(a?.aiLanguages) ? (a!.aiLanguages as { lang: string; level: string }[]) : null
+                  })()}
+                  anketaEducation={(() => {
+                    const a = (apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.anketa as Record<string, unknown> | undefined
+                    return typeof a?.educationLevel === "string" ? (a!.educationLevel as string) : null
+                  })()}
                 />
               </TabsContent>
 
@@ -2217,34 +2570,26 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                 {(() => {
                   const ttStyle = { backgroundColor: "var(--popover)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px" }
 
-                  // ─── Apply analytics filters ───
-                  const now = Date.now()
-                  const periodMs: Record<string, number> = { today: 86400000, "7d": 7 * 86400000, "30d": 30 * 86400000, all: Infinity }
-                  const maxAge = periodMs[anPeriod] || Infinity
+                  // ─── Источник истины — серверная агрегация по ВСЕЙ вакансии ───
+                  // (endpoint /analytics, фетчится при открытии таба и смене
+                  // периода). Раньше всё считалось из columns — на вакансиях с
+                  // серверной пагинацией выборка неполная → цифры занижались и
+                  // расходились с шапкой. Период единый для всех блоков.
+                  const anTotal = analytics?.total ?? 0
+                  // Воронка/источники/распределение — напрямую из server payload.
+                  const funnelStages = analytics?.funnelStages ?? []
+                  const funnelData = funnelStages
+                  const srcColors: Record<string, string> = { "hh.ru": "#D6001C", "hh": "#D6001C", "Avito": "#00AAFF", "avito": "#00AAFF", "SuperJob": "#0066CC", "superjob": "#0066CC", "Telegram": "#26A5E4", "telegram": "#26A5E4", "WhatsApp": "#25D366", "whatsapp": "#25D366", "Сайт": "#F59E0B", "site": "#F59E0B", "Реферал": "#8B5CF6", "referral": "#8B5CF6", "LinkedIn": "#0A66C2" }
+                  const sourceData = (analytics?.sourceData ?? []).map((s) => ({
+                    ...s, color: srcColors[s.source] || "#94a3b8",
+                  }))
+                  const scoreRanges = analytics?.scoreRanges ?? []
+                  const avgScore = analytics?.avgScore ?? 0
+                  const daysActive = analytics?.vacancyCreatedAt
+                    ? Math.floor((Date.now() - new Date(analytics.vacancyCreatedAt).getTime()) / 86400000)
+                    : (apiVacancy?.createdAt ? Math.floor((Date.now() - new Date(apiVacancy.createdAt).getTime()) / 86400000) : 0)
 
-                  const allCands = columns.flatMap((c) => c.candidates).filter((c) => {
-                    if (maxAge < Infinity && (now - c.addedAt.getTime()) > maxAge) return false
-                    if (anSources.length > 0 && !anSources.includes(c.source)) return false
-                    if (anCities.length > 0 && !anCities.includes(c.city)) return false
-                    if (anFormats.length > 0) { const f = (c as any).workFormat || "office"; if (!anFormats.includes(f)) return false }
-                    if (c.salaryMin < anSalaryMin || c.salaryMax > anSalaryMax) return false
-                    if (c.score < anScoreMin) return false
-                    if (anStages.length > 0) {
-                      const col = columns.find((col) => col.candidates.some((x) => x.id === c.id))
-                      if (col && !anStages.includes(col.id)) return false
-                    }
-                    return true
-                  })
-
-                  // Dynamic filter options
-                  const allRaw = columns.flatMap((c) => c.candidates)
-                  const cityOptions = Array.from(new Set(allRaw.map((c) => c.city))).sort()
-                  const sourceOptions = Array.from(new Set(allRaw.map((c) => c.source))).sort()
-                  const hasAnFilters = anPeriod !== "all" || anSources.length > 0 || anCities.length > 0 || anFormats.length > 0 || anSalaryMin > 0 || anSalaryMax < 300000 || anScoreMin > 0 || anStages.length > 0
-                  const resetAnFilters = () => { setAnPeriod("all"); setAnSources([]); setAnCities([]); setAnFormats([]); setAnSalaryMin(0); setAnSalaryMax(300000); setAnScoreMin(0); setAnStages([]) }
                   // Минимальный «значимый» объём, при котором конверсия имеет смысл.
-                  // На малой выборке (< 5 прошли предыдущий этап) проценты — шум,
-                  // и тревога «Здесь теряем больше всего» вводит в заблуждение.
                   const ALARM_MIN_PREV = 5
                   const ALARM_MAX_PCT = 30
                   const transitions = funnelStages.slice(1).map((s, i) => {
@@ -2256,12 +2601,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                       to: s.stage,
                       pct,
                       hasData,
-                      // Тревогу показываем только если: (1) есть данные на старте
-                      // перехода, (2) через этап реально прошёл репрезентативный
-                      // объём, (3) конверсия низкая, (4) на целевой этап реально
-                      // кто-то дошёл (s.count >= 1) — без этого пустой этап с 0
-                      // кандидатами всегда подсвечивается как «бутылочное горло»,
-                      // хотя на самом деле просто никто туда пока не классифицирован.
                       eligibleForAlarm: hasData && prev >= ALARM_MIN_PREV && pct <= ALARM_MAX_PCT && s.count >= 1,
                     }
                   })
@@ -2269,31 +2608,32 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                   const minPct = eligibleAlarms.length > 0
                     ? Math.min(...eligibleAlarms.map((t) => t.pct))
                     : -1
-                  const overallConv = totalCandidates > 0 ? ((funnelStages[funnelStages.length - 1].count / totalCandidates) * 100).toFixed(1) : "0"
-
-                  // Sources
-                  const srcMap = new Map<string, { count: number; scoreSum: number }>()
-                  allCands.forEach((c) => {
-                    const e = srcMap.get(c.source) || { count: 0, scoreSum: 0 }
-                    e.count++; e.scoreSum += c.score
-                    srcMap.set(c.source, e)
-                  })
-                  const srcColors: Record<string, string> = { "hh.ru": "#D6001C", "hh": "#D6001C", "Avito": "#00AAFF", "avito": "#00AAFF", "SuperJob": "#0066CC", "superjob": "#0066CC", "Telegram": "#26A5E4", "telegram": "#26A5E4", "WhatsApp": "#25D366", "whatsapp": "#25D366", "Сайт": "#F59E0B", "site": "#F59E0B", "Реферал": "#8B5CF6", "referral": "#8B5CF6", "LinkedIn": "#0A66C2" }
-                  const sourceData = Array.from(srcMap.entries()).map(([source, d]) => ({
-                    source, count: d.count, avgScore: d.count > 0 ? Math.round(d.scoreSum / d.count) : 0,
-                    pct: totalCandidates > 0 ? Math.round((d.count / totalCandidates) * 100) : 0,
-                    color: srcColors[source] || "#94a3b8",
-                  })).sort((a, b) => b.count - a.count)
-
-                  // Score distribution
-                  const scoreRanges = [
-                    { range: "0-40 (низкий)", count: allCands.filter((c) => c.score <= 40).length, color: "#ef4444" },
-                    { range: "41-70 (средний)", count: allCands.filter((c) => c.score > 40 && c.score <= 70).length, color: "#f59e0b" },
-                    { range: "71-100 (высокий)", count: allCands.filter((c) => c.score > 70).length, color: "#22c55e" },
-                  ]
+                  const overallConv = anTotal > 0 && funnelStages.length > 0
+                    ? ((funnelStages[funnelStages.length - 1].count / anTotal) * 100).toFixed(1)
+                    : "0"
 
                   return (
-                    <div className="space-y-4 max-w-[1200px] mx-auto">
+                    <div className="space-y-4">
+                      {/* Период — единый серверный фильтр для ВСЕХ блоков ниже */}
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs text-muted-foreground">
+                          {analyticsLoading
+                            ? "Загрузка аналитики…"
+                            : `Данные по всей вакансии${anPeriod === "all" ? "" : " за выбранный период"}`}
+                        </p>
+                        <Select value={anPeriod} onValueChange={setAnPeriod}>
+                          <SelectTrigger className="w-full sm:w-[200px] h-8 text-xs">
+                            <SelectValue placeholder="Период" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Всё время</SelectItem>
+                            <SelectItem value="7d">Последние 7 дней</SelectItem>
+                            <SelectItem value="30d">Последние 30 дней</SelectItem>
+                            <SelectItem value="90d">Последние 90 дней</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
                       {/* Funnel chart + 3 metric cards */}
                       <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4">
                         <Card>
@@ -2330,10 +2670,10 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
 
                         {/* 4 metric cards — 2x2 grid */}
                         <div className="grid grid-cols-2 gap-3">
-                          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Всего кандидатов</p><p className="text-2xl font-bold text-blue-600 mt-1">{totalCandidates}</p></CardContent></Card>
+                          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Всего кандидатов</p><p className="text-2xl font-bold text-blue-600 mt-1">{anTotal}</p></CardContent></Card>
                           <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Конверсия воронки</p><p className="text-2xl font-bold text-emerald-600 mt-1">{overallConv}%</p></CardContent></Card>
-                          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Ср. AI-скор</p><p className="text-2xl font-bold text-purple-600 mt-1">{allCands.length > 0 ? Math.round(allCands.reduce((a, c) => a + c.score, 0) / allCands.length) : 0}</p></CardContent></Card>
-                          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Дней активна</p><p className="text-2xl font-bold text-amber-600 mt-1">{apiVacancy?.createdAt ? Math.floor((Date.now() - new Date(apiVacancy.createdAt).getTime()) / 86400000) : 0}</p></CardContent></Card>
+                          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Ср. AI-скор</p><p className="text-2xl font-bold text-purple-600 mt-1">{avgScore}</p></CardContent></Card>
+                          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Дней активна</p><p className="text-2xl font-bold text-amber-600 mt-1">{daysActive}</p></CardContent></Card>
                         </div>
                       </div>
 
@@ -2344,20 +2684,50 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                         </CardHeader>
                         <CardContent className="space-y-1.5">
                           {transitions.map((t) => {
-                            // Подсветка «теряем больше всего» — только для самой низкой
-                            // конверсии среди eligibleForAlarm-этапов. Если данных мало
-                            // или процент в пределах нормы — не подсвечиваем.
-                            const isWorst = t.eligibleForAlarm && t.pct === minPct && eligibleAlarms.length > 1
+                            // #54: смягчённая шкала цвета. Раньше любая
+                            // конверсия <30% подсвечивалась как «бутылочное
+                            // горло» красным — для свежей вакансии 4% это
+                            // нормально, не надо пугать.
+                            //  < 1%   — оранжевый (есть проблема)
+                            //  1–5%   — нейтральный серый (норма для свежих)
+                            //  5–20%  — зелёный (хорошо)
+                            //  > 20%  — emerald (отлично)
+                            // Подсветка «теряем больше всего» теперь только
+                            // для самой низкой и только если она в зоне <1%.
+                            const tone =
+                              !t.hasData       ? "empty"   :
+                              t.pct < 1        ? "warn"    :
+                              t.pct <= 5       ? "neutral" :
+                              t.pct <= 20      ? "good"    :
+                                                 "great"
+                            const isWorst = tone === "warn" && t.eligibleForAlarm && t.pct === minPct && eligibleAlarms.length > 1
+                            const barClass = {
+                              empty:   "bg-muted",
+                              warn:    "bg-orange-500",
+                              neutral: "bg-slate-400",
+                              good:    "bg-emerald-500",
+                              great:   "bg-emerald-600",
+                            }[tone]
+                            const textClass = {
+                              empty:   "text-muted-foreground",
+                              warn:    "text-orange-700 dark:text-orange-400",
+                              neutral: "text-foreground",
+                              good:    "text-emerald-700 dark:text-emerald-400",
+                              great:   "text-emerald-700 dark:text-emerald-400",
+                            }[tone]
+                            const rowClass = isWorst
+                              ? "bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800"
+                              : "bg-muted/30"
                             return (
-                              <div key={t.from + t.to} className={cn("flex items-center gap-3 px-3 py-2 rounded-lg text-sm", isWorst ? "bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800" : "bg-muted/30")}>
+                              <div key={t.from + t.to} className={cn("flex items-center gap-3 px-3 py-2 rounded-lg text-sm", rowClass)}>
                                 <span className="text-muted-foreground w-[200px] shrink-0 text-xs">{t.from} → {t.to}</span>
                                 <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                                  <div className={cn("h-full rounded-full", isWorst ? "bg-red-500" : "bg-primary")} style={{ width: `${t.hasData ? t.pct : 0}%` }} />
+                                  <div className={cn("h-full rounded-full", barClass)} style={{ width: `${t.hasData ? t.pct : 0}%` }} />
                                 </div>
-                                <span className={cn("text-xs font-semibold w-12 text-right", isWorst ? "text-red-600" : t.hasData ? "text-foreground" : "text-muted-foreground")}>
+                                <span className={cn("text-xs font-semibold w-12 text-right", textClass)}>
                                   {t.hasData ? `${t.pct}%` : "—"}
                                 </span>
-                                {isWorst && <div className="flex items-center gap-1 text-red-600 shrink-0"><AlertTriangle className="w-3.5 h-3.5" /><span className="text-xs font-medium">Здесь теряем больше всего</span></div>}
+                                {isWorst && <div className="flex items-center gap-1 text-orange-600 dark:text-orange-400 shrink-0"><AlertTriangle className="w-3.5 h-3.5" /><span className="text-xs font-medium">Здесь теряем больше всего</span></div>}
                               </div>
                             )
                           })}
@@ -2394,27 +2764,27 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                                 </PieChart>
                               </ResponsiveContainer>
                             </div>
-                            <div className="flex-1 overflow-x-auto">
-                              <table className="w-full">
-                                <thead><tr className="bg-muted/50 border-b">
-                                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Источник</th>
-                                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Кол-во</th>
-                                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">%</th>
-                                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Ср. AI-скор</th>
-                                </tr></thead>
+                            <div className="flex-1">
+                              <DataTable>
+                                <DataHead>
+                                  <DataHeadCell>Источник</DataHeadCell>
+                                  <DataHeadCell align="right">Кол-во</DataHeadCell>
+                                  <DataHeadCell align="right">%</DataHeadCell>
+                                  <DataHeadCell align="right">Ср. AI-скор</DataHeadCell>
+                                </DataHead>
                                 <tbody>
                                   {sourceData.map((s) => (
-                                    <tr key={s.source} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                                      <td className="px-3 py-2"><div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color }} /><span className="text-sm font-medium">{s.source}</span></div></td>
-                                      <td className="text-right px-3 py-2 text-sm font-medium">{s.count}</td>
-                                      <td className="text-right px-3 py-2 text-sm text-muted-foreground">{s.pct}%</td>
-                                      <td className="text-right px-3 py-2">
+                                    <DataRow key={s.source}>
+                                      <DataCell><div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color }} /><span className="font-medium">{s.source}</span></div></DataCell>
+                                      <DataCell align="right" className="font-medium">{s.count}</DataCell>
+                                      <DataCell align="right" className="text-muted-foreground">{s.pct}%</DataCell>
+                                      <DataCell align="right">
                                         <Badge variant="outline" className={cn("text-xs", s.avgScore >= 75 ? "bg-emerald-500/10 text-emerald-700 border-emerald-200" : s.avgScore >= 60 ? "bg-amber-500/10 text-amber-700 border-amber-200" : "bg-red-500/10 text-red-700 border-red-200")}>{s.avgScore}</Badge>
-                                      </td>
-                                    </tr>
+                                      </DataCell>
+                                    </DataRow>
                                   ))}
                                 </tbody>
-                              </table>
+                              </DataTable>
                             </div>
                           </div>
                         </CardContent>
@@ -2453,41 +2823,38 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
               </TabsContent>
 
               <TabsContent value="settings">
+                <VacancySettingsProvider>
                 {/* Сабнав: 6 табов настроек вакансии */}
-                <div className="flex items-center gap-1 mb-4 border-b overflow-x-auto">
+                <div className="mb-4 border-b overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                  <div className="flex items-center gap-1 min-w-max">
+                  {/* #18: Воронка перед Сообщениями — HR сначала проектирует
+                      стадии и AI-фильтр, потом уже настраивает тексты. */}
                   {([
-                    { value: "page"        as const, label: "Страница и брендинг", icon: Globe },
-                    { value: "sources"     as const, label: "Источники",           icon: Link2 },
-                    { value: "messages"    as const, label: "Сообщения",           icon: MessageCircle },
-                    { value: "funnel"      as const, label: "Демо и воронка",      icon: Kanban },
-                    { value: "ai"          as const, label: "AI сценарии",         icon: Zap },
-                    { value: "integrations" as const, label: "Интеграции",          icon: Settings },
-                  ]).map((s) => {
-                    const Icon = s.icon
-                    const active = settingsSection === s.value
-                    return (
-                      <button
-                        key={s.value}
-                        type="button"
-                        onClick={() => {
-                          setSettingsSection(s.value)
-                          const sp = new URLSearchParams(window.location.search)
-                          sp.set("tab", "settings")
-                          sp.set("section", s.value)
-                          router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
-                        }}
-                        className={cn(
-                          "inline-flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0",
-                          active
-                            ? "border-primary text-foreground font-medium"
-                            : "border-transparent text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        <Icon className="w-3.5 h-3.5" />
-                        {s.label}
-                      </button>
-                    )
-                  })}
+                    { value: "page"           as const, label: "Брендинг",   icon: Globe },
+                    { value: "funnel-builder" as const, label: "Воронка",     icon: Workflow },
+                    { value: "sources"        as const, label: "Источники",   icon: Link2 },
+                    { value: "ai"             as const, label: "Расписание",  icon: Zap },
+                    { value: "integrations"   as const, label: "Интеграции",  icon: Settings },
+                    // Скрыты (контент доступен по прямой ?section=, настройки — внутри блоков «Воронки»):
+                    // funnel (старые стадии), messages, followup, aichatbot — покрыты блоками Конструктора.
+                  ] satisfies { value: VacancyTabKey; label: string; icon: typeof Globe }[]).map((s) => (
+                    <SettingsSubNavButton
+                      key={s.value}
+                      tab={s.value}
+                      label={s.label}
+                      Icon={s.icon}
+                      active={settingsSection === s.value}
+                      currentTab={settingsSection as VacancyTabKey}
+                      onSwitch={() => {
+                        setSettingsSection(s.value)
+                        const sp = new URLSearchParams(window.location.search)
+                        sp.set("tab", "settings")
+                        sp.set("section", s.value)
+                        router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+                      }}
+                    />
+                  ))}
+                  </div>
                 </div>
 
                 {/* ───────── ТАБ «Страница и брендинг» ───────── */}
@@ -2498,6 +2865,35 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     <p className="text-sm text-muted-foreground">Настройка страницы вакансии для кандидатов</p>
                   </div>
 
+                    {/* P0-50: регистрируем секцию «Брендинг» в sticky-bar.
+                        logo НЕ включаем в watchedValues — он сохраняется авто-
+                        магически при upload/remove, sticky-бар на него не реагирует. */}
+                    <BrandingStickyRegister
+                      vacancyId={id}
+                      loaded={apiVacancy !== undefined && apiVacancy !== null}
+                      branding={{
+                        companyName: brandCompanyName,
+                        color: brandColor,
+                        slogan: brandSlogan,
+                        website: brandWebsite,
+                        logo: "",
+                        domainLevel: brandDomainLevel,
+                        companySlug: brandCompanySlug,
+                        customDomain: brandCustomDomain,
+                      }}
+                      save={() => saveBranding()}
+                    />
+
+                    {/* Группа 38: переключатель «использовать брендинг компании». */}
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Источник брендинга</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <BrandingOverrideSwitch vacancyId={id} />
+                      </CardContent>
+                    </Card>
+
                     {/* Брендинг страницы */}
                     <Card>
                       <CardHeader className="pb-3">
@@ -2507,190 +2903,178 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-4">
-                        <div className="space-y-1.5">
-                          <Label className="text-xs">Название компании</Label>
-                          <Input
-                            value={brandCompanyName}
-                            onChange={(e) => setBrandCompanyName(e.target.value)}
-                            placeholder="Название вашей компании"
-                            className="h-9 text-sm"
-                          />
-                        </div>
-                        <div className="flex gap-4">
-                          <div className="space-y-1.5 flex-1">
-                            <Label className="text-xs">Цвет бренда</Label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="color"
-                                value={brandColor}
-                                onChange={(e) => { setBrandColor(e.target.value) }}
-                                className="w-9 h-9 rounded-md border cursor-pointer p-0.5"
-                              />
-                              <Input
-                                value={brandColor}
-                                onChange={(e) => setBrandColor(e.target.value)}
-                                className="h-9 text-sm font-mono w-28"
-                                maxLength={7}
-                              />
-                              <div className="h-9 flex-1 rounded-md" style={{ backgroundColor: brandColor }} />
+                        {/* Индикатор выбранной компании-бренда */}
+                        {(() => {
+                          const selectedBrand = !vacancyBrandCompanyId || vacancyBrandCompanyId === "__main__"
+                            ? { name: mainCompanyData.brandName, logo: mainCompanyData.logoUrl, slogan: mainCompanyData.brandSlogan, website: mainCompanyData.website }
+                            : brandCompaniesData.find(c => c.id === vacancyBrandCompanyId) ?? null
+                          const brandName = selectedBrand?.name || ""
+                          return (
+                            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/40 border text-xs text-muted-foreground">
+                              <span className="font-medium text-foreground">Компания:</span>
+                              <span>{brandName || "Основная компания"}</span>
+                              <span className="ml-auto text-[10px]">Выбирается во вкладке «Вакансия»</span>
                             </div>
-                          </div>
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-xs">Логотип</Label>
-                          <div className="flex items-center gap-3">
-                            {brandLogo ? (
-                              <div className="relative">
-                                <img src={brandLogo} alt="Логотип" className="max-h-[60px] object-contain rounded-md border" />
-                                <button
-                                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600"
-                                  onClick={() => { setBrandLogo(""); saveBranding({ logo: "" }) }}
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
+                          )
+                        })()}
+                        {/* Название компании — плейсхолдер из выбранного бренда */}
+                        {(() => {
+                          const selectedBrand = !vacancyBrandCompanyId || vacancyBrandCompanyId === "__main__"
+                            ? { name: mainCompanyData.brandName, logo: mainCompanyData.logoUrl, slogan: mainCompanyData.brandSlogan, website: mainCompanyData.website }
+                            : brandCompaniesData.find(c => c.id === vacancyBrandCompanyId) ?? null
+                          const defaultName = selectedBrand?.name || ""
+                          const defaultSlogan = selectedBrand?.slogan || ""
+                          const defaultWebsite = selectedBrand?.website || ""
+                          return (
+                            <>
+                              <div className="space-y-1.5">
+                                <Label className="text-xs">Название компании</Label>
+                                <Input
+                                  value={brandCompanyName}
+                                  onChange={(e) => setBrandCompanyName(e.target.value)}
+                                  placeholder={defaultName || "Название компании"}
+                                  className="h-9 text-sm"
+                                />
+                                {defaultName && !brandCompanyName && (
+                                  <p className="text-[10px] text-muted-foreground">Из профиля компании: {defaultName}</p>
+                                )}
                               </div>
-                            ) : (
-                              <div className="h-14 w-24 rounded-lg border-2 border-dashed border-border flex items-center justify-center bg-muted/50">
-                                <span className="text-[10px] text-muted-foreground">Логотип</span>
-                              </div>
-                            )}
-                            <div className="flex flex-col gap-1">
-                              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => {
-                                const input = document.createElement("input")
-                                input.type = "file"
-                                input.accept = "image/png,image/svg+xml,image/jpeg,image/webp"
-                                input.onchange = (e) => {
-                                  const file = (e.target as HTMLInputElement).files?.[0]
-                                  if (!file) return
-                                  if (file.size > 2 * 1024 * 1024) { toast.error("Файл слишком большой (макс. 2 МБ)"); return }
-                                  const reader = new FileReader()
-                                  reader.onload = () => {
-                                    const base64 = reader.result as string
-                                    setBrandLogo(base64)
-                                    saveBranding({ logo: base64 })
-                                  }
-                                  reader.readAsDataURL(file)
-                                }
-                                input.click()
-                              }}>
-                                Загрузить
-                              </Button>
-                              <span className="text-[10px] text-muted-foreground">PNG, SVG, JPG до 2 МБ</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-xs">Слоган / подзаголовок</Label>
-                          <Input
-                            value={brandSlogan}
-                            onChange={(e) => setBrandSlogan(e.target.value)}
-                            placeholder="Мы строим будущее вместе"
-                            className="h-9 text-sm"
-                          />
-                        </div>
-                        {/* Домен для публичных страниц */}
-                        <div className="space-y-3">
-                          <Label className="text-xs font-medium">Домен для публичных страниц</Label>
-
-                          {/* Free */}
-                          <label className={cn("flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors", brandDomainLevel === "free" ? "border-primary bg-primary/5" : "hover:bg-muted/50")}>
-                            <input type="radio" name="domainLevel" checked={brandDomainLevel === "free"} onChange={() => setBrandDomainLevel("free")} className="mt-0.5" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium">Бесплатный</p>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                Ваши ссылки: <span className="font-mono text-foreground">company24.pro/c/{companySlugDisplay}/...</span>
-                              </p>
-                              {brandDomainLevel === "free" && (
-                                <div className="flex items-center gap-2 mt-2">
-                                  <span className="text-xs text-muted-foreground">Slug:</span>
-                                  {editingSlug ? (
-                                    <Input
-                                      value={brandCompanySlug}
-                                      onChange={(e) => setBrandCompanySlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
-                                      onBlur={() => setEditingSlug(false)}
-                                      onKeyDown={(e) => e.key === "Enter" && setEditingSlug(false)}
-                                      className="h-7 text-xs font-mono w-32"
-                                      autoFocus
-                                    />
-                                  ) : (
-                                    <>
-                                      <span className="text-xs font-mono text-foreground">{companySlugDisplay}</span>
-                                      <button className="text-xs text-primary hover:underline" onClick={() => { setBrandCompanySlug(companySlugDisplay); setEditingSlug(true) }}>Изменить</button>
-                                    </>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          </label>
-
-                          {/* Subdomain */}
-                          <label className={cn("flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors", brandDomainLevel === "subdomain" ? "border-primary bg-primary/5" : "hover:bg-muted/50")}>
-                            <input type="radio" name="domainLevel" checked={brandDomainLevel === "subdomain"} onChange={() => setBrandDomainLevel("subdomain")} className="mt-0.5" />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <p className="text-sm font-medium">Поддомен Company24</p>
-                                <span className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded-full px-2 py-0.5">Тариф Бизнес</span>
-                              </div>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                Ваши ссылки: <span className="font-mono text-foreground">{companySlugDisplay}.company24.pro/v/...</span>
-                              </p>
-                              {brandDomainLevel === "subdomain" && (
-                                <div className="mt-2 space-y-1.5">
+                              <div className="flex gap-4">
+                                <div className="space-y-1.5 flex-1">
+                                  <Label className="text-xs">Цвет бренда</Label>
                                   <div className="flex items-center gap-2">
-                                    <span className="text-xs text-muted-foreground">Ваш сайт:</span>
-                                    <Input
-                                      value={brandCustomDomain}
-                                      onChange={(e) => {
-                                        setBrandCustomDomain(e.target.value)
-                                        const domain = e.target.value.replace(/^(https?:\/\/)?(www\.)?/, "").split("/")[0].split(".")[0]
-                                        if (domain) setBrandCompanySlug(domain.toLowerCase().replace(/[^a-z0-9-]/g, ""))
-                                      }}
-                                      placeholder="orlink.ru"
-                                      className="h-7 text-xs font-mono w-40"
+                                    <input
+                                      type="color"
+                                      value={brandColor}
+                                      onChange={(e) => { setBrandColor(e.target.value) }}
+                                      className="w-9 h-9 rounded-md border cursor-pointer p-0.5"
                                     />
+                                    <Input
+                                      value={brandColor}
+                                      onChange={(e) => setBrandColor(e.target.value)}
+                                      className="h-9 text-sm font-mono w-28"
+                                      maxLength={7}
+                                    />
+                                    <div className="h-9 flex-1 rounded-md" style={{ backgroundColor: brandColor }} />
                                   </div>
-                                  <p className="text-[11px] text-muted-foreground">
-                                    Ваш поддомен: <span className="font-mono text-foreground">{companySlugDisplay}.company24.pro</span>
-                                  </p>
                                 </div>
-                              )}
-                            </div>
-                          </label>
-
-                          {/* Custom domain */}
-                          <label className={cn("flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors", brandDomainLevel === "custom" ? "border-primary bg-primary/5" : "hover:bg-muted/50")}>
-                            <input type="radio" name="domainLevel" checked={brandDomainLevel === "custom"} onChange={() => setBrandDomainLevel("custom")} className="mt-0.5" />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <p className="text-sm font-medium">Свой домен</p>
-                                <span className="text-[10px] bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 rounded-full px-2 py-0.5">Тариф Масштаб</span>
                               </div>
-                              {brandDomainLevel === "custom" && (
-                                <div className="mt-2 space-y-2">
-                                  <Input
-                                    value={brandCustomDomain}
-                                    onChange={(e) => setBrandCustomDomain(e.target.value)}
-                                    placeholder="careers.orlink.ru"
-                                    className="h-8 text-xs font-mono"
+                              {/* #56: современный UX — клик прямо на картинку
+                                  открывает file dialog, hover показывает overlay
+                                  с кнопками «Заменить»/«Удалить». Если пусто —
+                                  плейсхолдер тоже кликабельный (label.htmlFor). */}
+                              <div className="space-y-1.5">
+                                <Label className="text-xs">Логотип</Label>
+                                <div className="flex items-center gap-3">
+                                  <input
+                                    id="brand-logo-input"
+                                    type="file"
+                                    accept="image/png,image/svg+xml,image/jpeg,image/webp"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0]
+                                      if (!file) return
+                                      if (file.size > 2 * 1024 * 1024) {
+                                        toast.error("Файл слишком большой (макс. 2 МБ)")
+                                        e.target.value = ""
+                                        return
+                                      }
+                                      const reader = new FileReader()
+                                      reader.onload = () => {
+                                        const base64 = reader.result as string
+                                        setBrandLogo(base64)
+                                        saveBranding({ logo: base64 })
+                                      }
+                                      reader.readAsDataURL(file)
+                                      e.target.value = ""
+                                    }}
                                   />
-                                  {brandCustomDomain && (
-                                    <>
-                                      <p className="text-[11px] text-muted-foreground">
-                                        Добавьте CNAME запись: <span className="font-mono text-foreground">{brandCustomDomain}</span> → <span className="font-mono text-foreground">company24.pro</span>
-                                      </p>
-                                      <div className="flex items-center gap-2">
-                                        <Badge variant="outline" className="text-[10px] h-5 text-muted-foreground">Не проверен</Badge>
-                                        <Button variant="outline" size="sm" className="h-6 text-[10px] px-2" onClick={() => toast.info("Проверка DNS (скоро)")}>Проверить DNS</Button>
+                                  {brandLogo ? (
+                                    <div className="relative group">
+                                      <img
+                                        src={brandLogo}
+                                        alt="Логотип"
+                                        className="max-h-[60px] min-h-[60px] object-contain rounded-md border bg-background px-2"
+                                      />
+                                      <div className="absolute inset-0 rounded-md bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                        <label
+                                          htmlFor="brand-logo-input"
+                                          className="px-2 py-1 rounded bg-white/90 text-foreground text-[11px] font-medium cursor-pointer hover:bg-white"
+                                        >
+                                          Заменить
+                                        </label>
+                                        <button
+                                          type="button"
+                                          className="px-2 py-1 rounded bg-red-500 text-white text-[11px] font-medium hover:bg-red-600"
+                                          onClick={() => { setBrandLogo(""); saveBranding({ logo: "" }) }}
+                                        >
+                                          Удалить
+                                        </button>
                                       </div>
-                                    </>
+                                    </div>
+                                  ) : selectedBrand?.logo ? (
+                                    <div className="flex flex-col gap-1">
+                                      <img
+                                        src={selectedBrand.logo}
+                                        alt="Логотип компании"
+                                        className="max-h-[60px] min-h-[60px] object-contain rounded-md border bg-background px-2 opacity-60"
+                                      />
+                                      <p className="text-[10px] text-muted-foreground text-center">Из профиля</p>
+                                    </div>
+                                  ) : (
+                                    <label
+                                      htmlFor="brand-logo-input"
+                                      className="h-14 w-24 rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center bg-muted/50 cursor-pointer hover:bg-muted hover:border-primary/40 transition-colors"
+                                    >
+                                      <Upload className="w-4 h-4 text-muted-foreground mb-0.5" />
+                                      <span className="text-[10px] text-muted-foreground">Загрузить</span>
+                                    </label>
                                   )}
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-[10px] text-muted-foreground">PNG, SVG, JPG до 2 МБ</span>
+                                    {!brandLogo && (
+                                      <label
+                                        htmlFor="brand-logo-input"
+                                        className="text-[10px] text-primary cursor-pointer hover:underline"
+                                      >
+                                        {selectedBrand?.logo ? "Загрузить своё" : "Загрузить"}
+                                      </label>
+                                    )}
+                                  </div>
                                 </div>
-                              )}
-                            </div>
-                          </label>
-
-                          {/* Ваша ссылка */}
-                          <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-muted/50 border text-xs font-mono text-muted-foreground mt-1">
+                              </div>
+                              <div className="space-y-1.5">
+                                <Label className="text-xs">Слоган / подзаголовок</Label>
+                                <Input
+                                  value={brandSlogan}
+                                  onChange={(e) => setBrandSlogan(e.target.value)}
+                                  placeholder={defaultSlogan || "Мы строим будущее вместе"}
+                                  className="h-9 text-sm"
+                                />
+                                {defaultSlogan && !brandSlogan && (
+                                  <p className="text-[10px] text-muted-foreground">Из профиля компании: {defaultSlogan}</p>
+                                )}
+                              </div>
+                              <div className="space-y-1.5">
+                                <Label className="text-xs">Сайт компании</Label>
+                                <Input
+                                  value={brandWebsite}
+                                  onChange={(e) => setBrandWebsite(e.target.value)}
+                                  placeholder={defaultWebsite || "https://example.ru"}
+                                  className="h-9 text-sm"
+                                  type="url"
+                                />
+                                {defaultWebsite && !brandWebsite && (
+                                  <p className="text-[10px] text-muted-foreground">Из профиля компании: {defaultWebsite}</p>
+                                )}
+                              </div>
+                            </>
+                          )
+                        })()}
+                        {/* Ссылка на публичную страницу */}
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-medium">Публичная страница вакансии</Label>
+                          <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-muted/50 border text-xs font-mono text-muted-foreground">
                             <Globe className="w-3.5 h-3.5 shrink-0 text-primary" />
                             <span className="truncate flex-1">{publicPageUrl}</span>
                             <button className="shrink-0 text-muted-foreground hover:text-primary" onClick={() => { navigator.clipboard.writeText(publicPageUrl); toast.success("Ссылка скопирована") }}>
@@ -2701,6 +3085,9 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                               Открыть
                             </Button>
                           </div>
+                          {mainCompanyData.subdomain && (
+                            <p className="text-[10px] text-muted-foreground">Домен настроен в профиле компании: <span className="font-mono">{mainCompanyData.subdomain}.company24.pro</span></p>
+                          )}
                         </div>
                         {/* Mini preview */}
                         <div className="rounded-lg border p-4 bg-muted/30">
@@ -2723,27 +3110,8 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                             <div className="h-7 px-4 rounded-md text-xs border flex items-center" style={{ color: brandColor, borderColor: brandColor }}>Подробнее</div>
                           </div>
                         </div>
-                        <div className="flex justify-end mt-4">
-                          <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={() => saveBranding()} disabled={brandSaving}>
-                            {brandSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                            Сохранить
-                          </Button>
-                        </div>
                       </CardContent>
                     </Card>
-
-                  {/* Поля мини-формы */}
-                  <MiniFormBuilder vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
-
-                  {/* HTML-страница */}
-                  <PublishTab
-                    vacancyTitle={internalName || vacancyTitle}
-                    vacancySlug={id}
-                    vacancyCity={apiVacancy?.city ?? "Москва"}
-                    salaryFrom={80000}
-                    salaryTo={150000}
-                    brandOverride={{ companyName: brandCompanyName, color: brandColor, logo: brandLogo, slogan: brandSlogan }}
-                  />
                 </div>
                 )}
 
@@ -2820,6 +3188,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                             <Button size="sm" className="h-8 text-xs shrink-0" onClick={() => setHhImportDialogOpen(true)}>Привязать</Button>
                           </div>
                         )}
+                      {isPlatformAdmin && (<>
                         <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#00AAFF" }}>A</div>
                           <div className="flex-1 min-w-0"><p className="text-sm font-medium flex items-center gap-2">Авито Работа <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span></p><p className="text-[11px] text-muted-foreground">Импорт откликов с Авито</p></div>
@@ -2841,53 +3210,78 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                         <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
                         <Button size="sm" className="h-8 text-xs shrink-0" disabled>Подключить</Button>
                       </div>
+                      </>)}
                     </div>
                   </div>
 
                   {/* Источники и UTM-ссылки */}
                   <UtmLinksSection vacancyId={id} vacancySlug={id} />
+
+                  {/* Поля мини-формы (перенесено из «Брендинг» по P0-38) */}
+                  <MiniFormBuilder vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
+
+                  {/* HTML-страница (перенесено из «Брендинг» по P0-38) */}
+                  <PublishTab
+                    vacancyTitle={internalName || vacancyTitle}
+                    vacancySlug={id}
+                    vacancyCity={apiVacancy?.city ?? "Москва"}
+                    salaryFrom={apiVacancy?.salaryMin}
+                    salaryTo={apiVacancy?.salaryMax}
+                    brandOverride={{ companyName: brandCompanyName, color: brandColor, logo: brandLogo, slogan: brandSlogan }}
+                    formFields={Array.isArray((apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.miniFormFields)
+                      ? (apiVacancy!.descriptionJson as Record<string, unknown>).miniFormFields as Array<{ id: string; label: string; type: string; required: boolean; placeholder?: string; options?: string[] }>
+                      : undefined}
+                  />
                 </div>
                 )}
 
                 {/* ───────── ТАБ «Сообщения» ───────── */}
                 {settingsSection === "messages" && (
                 <div className="space-y-6 max-w-3xl">
-                  <AutomationSettings
+                  {(apiVacancy as { funnelBuilderEnabled?: boolean } | undefined)?.funnelBuilderEnabled && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <div className="text-xs text-amber-900 dark:text-amber-200">
+                        Конструктор воронки активен. Изменения здесь синхронизируются с конструктором.
+                      </div>
+                    </div>
+                  )}
+                  {/* #62: предупреждение для случая когда включён AI-агент.
+                      Обработка пока не подключена (см. ai-chatbot tab), но
+                      когда заработает — все блоки ниже будут заглушены
+                      AI-агентом. Сейчас они продолжают работать. */}
+                  {(apiVacancy as { aiChatbotEnabled?: boolean } | undefined)?.aiChatbotEnabled && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <div className="text-xs text-amber-900 dark:text-amber-200">
+                        <strong>AI чат-бот включён для этой вакансии.</strong> Когда
+                        обработка заработает (на следующей неделе), блоки ниже
+                        будут отключены — за общение с кандидатом отвечает агент.
+                        Сейчас они продолжают работать как обычно.
+                      </div>
+                    </div>
+                  )}
+                  {/* #21: серия первых сообщений. Рендерится первой — это
+                      замена старого блока «Первое сообщение» (он останется
+                      в AutomationSettings как fallback для backward compat,
+                      его текстовый шаблон используется как chain[0] если
+                      chain пустой). Цепочка пишет также в
+                      ai_process_settings.inviteMessage, поэтому
+                      процесс отправки msg1 продолжает работать. */}
+                  <FirstMessagesChainEditor
                     vacancyId={id}
-                    descriptionJson={apiVacancy?.descriptionJson}
-                    vacancyTitle={apiVacancy?.title}
-                    salaryFrom={apiVacancy?.salaryMin}
-                    salaryTo={apiVacancy?.salaryMax}
-                    aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
-                    sections={["firstMessage", "callIntent", "templates"] satisfies AutomationSectionId[]}
-                  />
-                  <VacancyFollowupSettings vacancyId={id} />
-                </div>
-                )}
-
-                {/* ───────── ТАБ «Демо и воронка» ───────── */}
-                {settingsSection === "funnel" && (
-                <div className="space-y-6 max-w-3xl">
-                  <AutomationSettings
-                    vacancyId={id}
-                    descriptionJson={apiVacancy?.descriptionJson}
-                    vacancyTitle={apiVacancy?.title}
-                    salaryFrom={apiVacancy?.salaryMin}
-                    salaryTo={apiVacancy?.salaryMax}
-                    aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
-                    sections={["pipeline", "enrichment"] satisfies AutomationSectionId[]}
-                  />
-                  <PostDemoSettings vacancyId={id} />
-                </div>
-                )}
-
-                {/* ───────── ТАБ «AI сценарии» ───────── */}
-                {settingsSection === "ai" && (
-                <div className="space-y-6 max-w-3xl">
-                  <VacancyAiProcessSettings
-                    vacancyId={id}
-                    initial={apiVacancy?.aiProcessSettings ?? null}
-                    initialAiScoringEnabled={apiVacancy?.aiScoringEnabled ?? true}
+                    initial={(apiVacancy as { firstMessagesChain?: Array<{ enabled: boolean; delaySeconds: number; text: string }> } | undefined)?.firstMessagesChain ?? []}
+                    fallbackFirstMessage={(apiVacancy?.aiProcessSettings as { inviteMessage?: string } | null | undefined)?.inviteMessage ?? ""}
+                    fallbackFirstDelaySeconds={(() => {
+                      const dj = apiVacancy?.descriptionJson as { automation?: { delaySeconds?: number; delayMinutes?: number } } | null | undefined
+                      const a = dj?.automation
+                      if (typeof a?.delaySeconds === "number") return a.delaySeconds
+                      if (typeof a?.delayMinutes === "number") return a.delayMinutes * 60
+                      return 180
+                    })()}
+                    initialOffHoursEnabled={(apiVacancy as { firstMessageOffHoursEnabled?: boolean } | undefined)?.firstMessageOffHoursEnabled ?? false}
+                    initialOffHoursDelaySeconds={(apiVacancy as { firstMessageOffHoursDelaySeconds?: number } | undefined)?.firstMessageOffHoursDelaySeconds ?? 15}
+                    initialOffHoursText={(apiVacancy as { firstMessageOffHoursText?: string | null } | undefined)?.firstMessageOffHoursText ?? ""}
                     onSaved={() => refetchVacancy()}
                   />
                   <AutomationSettings
@@ -2897,8 +3291,139 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     salaryFrom={apiVacancy?.salaryMin}
                     salaryTo={apiVacancy?.salaryMax}
                     aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
-                    sections={["autoActions", "scenarioHire", "dialer"] satisfies AutomationSectionId[]}
+                    // #60: чтобы блок «Минимальная задержка» мог скрыться,
+                    // когда серия первых сообщений активна.
+                    firstMessagesChain={(apiVacancy as { firstMessagesChain?: Array<{ enabled: boolean; delaySeconds: number; text: string }> } | undefined)?.firstMessagesChain ?? []}
+                    sections={["firstMessage", "callIntent", "templates"] satisfies AutomationSectionId[]}
+                    tabKey="messages"
                   />
+                  {/* #46: «Аварийное повторное сообщение» — opt-in под спойлером. */}
+                  <RecoveryMessageSettings
+                    vacancyId={id}
+                    initialEnabled={(apiVacancy as { recoveryMessageEnabled?: boolean } | undefined)?.recoveryMessageEnabled ?? false}
+                    initialText={(apiVacancy as { recoveryMessageText?: string } | undefined)?.recoveryMessageText ?? ""}
+                    onSaved={() => refetchVacancy()}
+                  />
+                </div>
+                )}
+
+                {/* ───────── ТАБ «Демо и воронка» ───────── */}
+                {settingsSection === "funnel" && (
+                <div className="space-y-6 max-w-3xl">
+                  {(apiVacancy as { funnelBuilderEnabled?: boolean } | undefined)?.funnelBuilderEnabled && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <div className="text-xs text-amber-900 dark:text-amber-200">
+                        Конструктор воронки активен. Изменения здесь синхронизируются с конструктором.
+                      </div>
+                    </div>
+                  )}
+                  {/* Редактор стадий воронки (стадии/цвета/названия + действие в hh.ru
+                      на каждую стадию). Дефолты hh — из company-маппинга. */}
+                  <FunnelTab
+                    key={`funnel-${companyHhActions ? "co" : "pf"}-${companyPalette ? "pa" : "np"}`}
+                    vacancyId={id}
+                    initialPipeline={parsePipeline((apiVacancy?.descriptionJson as { pipeline?: unknown } | undefined)?.pipeline, companyHhActions, companyPalette)}
+                    companyPalette={companyPalette}
+                    onSaved={() => refetchVacancy()}
+                  />
+                  <VacancyPrequalificationSettings
+                    vacancyId={id}
+                    initial={apiVacancy?.aiProcessSettings ?? null}
+                    onSaved={() => refetchVacancy()}
+                  />
+                  {/* #61: per-vacancy стоп-факторы. Логика применения в
+                      process-queue пока не подключена — это отдельная
+                      задача. Сейчас компонент только хранит конфиг. */}
+                  <VacancyStopFactorsSettings
+                    vacancyId={id}
+                    initial={(apiVacancy as { stopFactorsJson?: import("@/lib/db/schema").VacancyStopFactors } | undefined)?.stopFactorsJson ?? null}
+                    onSaved={() => refetchVacancy()}
+                  />
+                  {/* P0-22: editable стоп-слова, единый источник для дожима и hh-чата. */}
+                  <VacancyStopWordsSettings
+                    vacancyId={id}
+                    initial={(apiVacancy as { stopWordsJson?: string[] } | undefined)?.stopWordsJson ?? null}
+                    onSaved={() => refetchVacancy()}
+                  />
+                  {/* #16/#25: тексты двух финальных экранов демо. */}
+                  <FinalScreensSettings
+                    vacancyId={id}
+                    initial={((apiVacancy?.descriptionJson as { finalScreens?: FinalScreensConfig } | null | undefined)?.finalScreens) ?? null}
+                  />
+                  <PostDemoSettings vacancyId={id} />
+                </div>
+                )}
+
+                {/* ───────── ТАБ «Конструктор воронки [Beta]» ───────── */}
+                {settingsSection === "funnel-builder" && (
+                <div className="space-y-6 max-w-3xl">
+                  <FunnelBuilder vacancyId={id} />
+                </div>
+                )}
+
+                {/* ───────── ТАБ «Дожим» ───────── */}
+                {settingsSection === "followup" && (
+                <div className="space-y-6 max-w-3xl">
+                  {(apiVacancy as { funnelBuilderEnabled?: boolean } | undefined)?.funnelBuilderEnabled && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <div className="text-xs text-amber-900 dark:text-amber-200">
+                        Конструктор воронки активен. Изменения здесь синхронизируются с конструктором.
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <h3 className="text-lg font-semibold text-foreground mb-1">Настройки дожима</h3>
+                    <p className="text-sm text-muted-foreground">AI-фильтр откликов и цепочка касаний кандидатов, которые не открыли или не дошли до конца демо.</p>
+                  </div>
+                  {/* #62: предупреждение когда AI-агент включён. */}
+                  {(apiVacancy as { aiChatbotEnabled?: boolean } | undefined)?.aiChatbotEnabled && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <div className="text-xs text-amber-900 dark:text-amber-200">
+                        <strong>AI чат-бот включён.</strong> Когда обработка заработает,
+                        цепочка дожима будет отключена для этой вакансии — общение
+                        ведёт агент. Сейчас цепочка продолжает работать.
+                      </div>
+                    </div>
+                  )}
+                  {/* Группа 25: структурированные требования + двухпроходный
+                      AI-скоринг v2. При must_have ≥ 1 — параллельно с v1 для A/B. */}
+                  <VacancyRequirementsSettings
+                    vacancyId={id}
+                    initial={(apiVacancy as { requirementsJson?: import("@/lib/db/schema").VacancyRequirements } | undefined)?.requirementsJson ?? null}
+                    onSaved={() => refetchVacancy()}
+                  />
+                  <VacancyAiProcessSettings
+                    vacancyId={id}
+                    initial={apiVacancy?.aiProcessSettings ?? null}
+                    initialAiScoringEnabled={apiVacancy?.aiScoringEnabled ?? true}
+                    onSaved={() => refetchVacancy()}
+                  />
+                  <VacancyFollowupSettings vacancyId={id} />
+                  <VacancyTestFollowupSettings vacancyId={id} />
+                </div>
+                )}
+
+                {/* ───────── ТАБ «AI чат-бот» ───────── */}
+                {settingsSection === "aichatbot" && (
+                <div className="space-y-6 max-w-3xl">
+                  {(apiVacancy as { funnelBuilderEnabled?: boolean } | undefined)?.funnelBuilderEnabled && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <div className="text-xs text-amber-900 dark:text-amber-200">
+                        Конструктор воронки активен. Изменения здесь синхронизируются с конструктором.
+                      </div>
+                    </div>
+                  )}
+                  <AiChatbotSettings vacancyId={id} onSaved={() => refetchVacancy()} />
+                </div>
+                )}
+
+                {/* ───────── ТАБ «Расписание» (бывший «AI сценарии») ───────── */}
+                {settingsSection === "ai" && (
+                <div className="space-y-6 max-w-3xl">
                   <VacancyScheduleSettings vacancyId={id} />
                 </div>
                 )}
@@ -2910,6 +3435,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                     <h3 className="text-lg font-semibold text-foreground mb-1">CRM-интеграции</h3>
                     <p className="text-sm text-muted-foreground mb-3">Синхронизация воронки с CRM</p>
                     <div className="space-y-3">
+                      {isPlatformAdmin ? (<>
                       <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[9px] font-bold" style={{ backgroundColor: "#2FC6F6" }}>Б24</div>
                         <div className="flex-1 min-w-0"><p className="text-sm font-medium flex items-center gap-2">Битрикс24 <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span></p><p className="text-[11px] text-muted-foreground">Синхронизация воронки и кандидатов</p></div>
@@ -2928,20 +3454,39 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
                         <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
                         <Button size="sm" className="h-8 text-xs shrink-0" disabled>Настроить</Button>
                       </div>
+                      </>) : (
+                      <p className="text-sm text-muted-foreground">CRM-интеграции скоро будут доступны.</p>
+                      )}
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-3">Любые webhook/API-настройки появятся здесь после подключения CRM.</p>
                   </div>
+
+                  {/* AI-агент (перенесён из «AI сценарии» по ТЗ-1 Часть 1.2; #24: переименован с «Бот-звонарь») */}
+                  <AutomationSettings
+                    vacancyId={id}
+                    descriptionJson={apiVacancy?.descriptionJson}
+                    vacancyTitle={apiVacancy?.title}
+                    salaryFrom={apiVacancy?.salaryMin}
+                    salaryTo={apiVacancy?.salaryMax}
+                    aiProcessSettings={apiVacancy?.aiProcessSettings as { inviteMessage?: string; reInviteMessage?: string } | null | undefined}
+                    sections={["dialer"] satisfies AutomationSectionId[]}
+                    tabKey="integrations"
+                  />
                 </div>
                 )}
+
+                {/* Единая sticky-кнопка сохранения + beforeunload-защита */}
+                <VacancyStickySaveBar />
+                </VacancySettingsProvider>
               </TabsContent>
             </Tabs>
 
             {/* ═══ Bottom tab navigation ══════════════════ */}
             {(() => {
               const tabOrder = status === "active"
-                ? ["candidates", "analytics", "course", "anketa", "settings"]
-                : ["anketa", "analytics", "candidates", "course", "settings"]
-              const tabLabels: Record<string, string> = { anketa: "Анкета", course: "Демонстрация", candidates: "Кандидаты", analytics: "Аналитика", settings: "Настройки" }
+                ? ["candidates", "analytics", "content", "anketa", "settings"]
+                : ["anketa", "analytics", "candidates", "content", "settings"]
+              const tabLabels: Record<string, string> = { anketa: "Вакансия", content: "Контент", candidates: "Кандидаты", analytics: "Аналитика", settings: "Настройки" }
               const idx = tabOrder.indexOf(activeTab)
               const prevTab = idx > 0 ? tabOrder[idx - 1] : null
               const nextTab = idx < tabOrder.length - 1 ? tabOrder[idx + 1] : null
@@ -2974,8 +3519,6 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
           </div>
         </main>
       </SidebarInset>
-
-      <AddCandidateDialog open={addDialogOpen} onOpenChange={setAddDialogOpen} onAdd={handleAddCandidate} />
 
       {/* ── Paste text dialog ── */}
       <Dialog open={textDialogOpen} onOpenChange={(o) => { if (!pasteBusy) { setTextDialogOpen(o); if (!o) setPasteText("") } }}>
@@ -3081,6 +3624,13 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
       </Dialog>
 
       {/* Reject confirmation dialog */}
+      <ExportCandidatesDialog
+        open={exportDialogOpen}
+        onOpenChange={setExportDialogOpen}
+        vacancyId={id}
+        selectedIds={Array.from(selectedCandidateIds)}
+      />
+
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -3101,14 +3651,26 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
               variant="destructive"
               onClick={async () => {
                 if (rejectCandidateId && rejectColumnId) {
-                  const candidate = columns.find(c => c.id === rejectColumnId)?.candidates.find(c => c.id === rejectCandidateId)
-                  setColumns(p => p.map(c => c.id !== rejectColumnId ? c : { ...c, candidates: c.candidates.filter(x => x.id !== rejectCandidateId), count: c.candidates.filter(x => x.id !== rejectCandidateId).length }))
-                  toast.error(`${candidate?.name ?? "Кандидат"} — отказ`)
-                  await updateStage(rejectCandidateId, "rejected")
-                  // Suggest talent pool for candidates with decent AI score
-                  if (candidate?.aiScore != null && candidate.aiScore >= 50) {
-                    setTalentPoolCandidate(candidate)
-                    setTalentPoolDialogOpen(true)
+                  if (useListPaginated) {
+                    // Пагинированный список: кандидат в paginated.*, не в columns.
+                    const candidate = paginatedColumns?.[0]?.candidates.find(c => c.id === rejectCandidateId)
+                    toast.success(`${candidate?.name ?? "Кандидат"} отклонён`)
+                    const ok = await paginated.updateStage(rejectCandidateId, "rejected")
+                    if (ok) paginated.refetch(); else toast.error("Не удалось отказать")
+                    if (candidate?.aiScore != null && candidate.aiScore >= 50) {
+                      setTalentPoolCandidate(candidate)
+                      setTalentPoolDialogOpen(true)
+                    }
+                  } else {
+                    const candidate = columns.find(c => c.id === rejectColumnId)?.candidates.find(c => c.id === rejectCandidateId)
+                    setColumns(p => p.map(c => c.id !== rejectColumnId ? c : { ...c, candidates: c.candidates.filter(x => x.id !== rejectCandidateId), count: c.candidates.filter(x => x.id !== rejectCandidateId).length }))
+                    toast.success(`${candidate?.name ?? "Кандидат"} отклонён`)
+                    await updateStage(rejectCandidateId, "rejected")
+                    // Suggest talent pool for candidates with decent AI score
+                    if (candidate?.aiScore != null && candidate.aiScore >= 50) {
+                      setTalentPoolCandidate(candidate)
+                      setTalentPoolDialogOpen(true)
+                    }
                   }
                 }
                 setRejectDialogOpen(false)
@@ -3124,9 +3686,9 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
       <AlertDialog open={talentPoolDialogOpen} onOpenChange={setTalentPoolDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Добавить в Talent Pool?</AlertDialogTitle>
+            <AlertDialogTitle>Добавить в резерв?</AlertDialogTitle>
             <AlertDialogDescription>
-              Кандидат {talentPoolCandidate?.name} набрал {talentPoolCandidate?.aiScore} баллов AI-скрининга. Хотите сохранить его в Talent Pool для будущих вакансий?
+              Кандидат {talentPoolCandidate?.name} набрал {talentPoolCandidate?.aiScore} баллов AI-скрининга. Хотите сохранить его в резерв для будущих вакансий?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -3134,7 +3696,7 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
             <AlertDialogAction onClick={async () => {
               if (talentPoolCandidate) {
                 await updateStage(talentPoolCandidate.id, "talent_pool")
-                toast.success(`${talentPoolCandidate.name} добавлен в Talent Pool`)
+                toast.success(`${talentPoolCandidate.name} добавлен в резерв`)
               }
               setTalentPoolDialogOpen(false)
             }}>
@@ -3338,13 +3900,72 @@ ${healthScore !== null ? `<h2>Готовность: ${healthScore}%</h2>` : ""}
         }}
       />
 
-      {/* Bulk actions floating bar — visible only when кандидаты выделены */}
+      {/* Корзина кандидатов вакансии — восстановление / удаление навсегда. */}
+      <CandidateTrashSheet
+        vacancyId={id}
+        open={trashOpen}
+        onOpenChange={setTrashOpen}
+        onChanged={() => { (useListPaginated ? paginated.refetch() : refetchCandidates()) }}
+      />
+
+      {/* Bulk actions floating bar — visible only when кандидаты выделены.
+          allRejected включает режим bulk-restore: если ВСЕ выделенные
+          сейчас в 'rejected', вместо «Отказать/Пригласить/...» показываем
+          только «Вернуть в воронку». Считаем по уже подгруженным карточкам
+          (paginated.candidates + filtered.columns) — оба варианта режима
+          списка кладут кандидата в один из этих источников. */}
       <BulkActionsBar
         count={selectedCandidateIds.size}
         stages={columns.map((c) => ({ id: c.id, title: c.title }))}
+        allRejected={(() => {
+          if (selectedCandidateIds.size === 0) return false
+          const stageById = new Map<string, string>()
+          for (const c of paginated.candidates) stageById.set(c.id, c.stage ?? "")
+          for (const col of columns) for (const cand of col.candidates) {
+            if (!stageById.has(cand.id)) stageById.set(cand.id, col.id)
+          }
+          for (const id of selectedCandidateIds) {
+            if (stageById.get(id) !== "rejected") return false
+          }
+          return true
+        })()}
+        canDelete={canDeleteCandidates}
         onClear={() => setSelectedCandidateIds(new Set())}
         onAction={handleBulkAction}
       />
+
+      {/* Окно «Отправить тест»: текст приглашения (предзаполнен), можно
+          отредактировать — правка сохраняется как шаблон вакансии. */}
+      <Dialog open={testInviteOpen} onOpenChange={(o) => { if (!testInviteSending) setTestInviteOpen(o) }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Отправить тест · {testInviteIds.length} кандидат(ов)</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Это сообщение уйдёт кандидату в hh-чат со ссылкой на тест. Плейсхолдеры:
+              {" "}<code>{"{{name}}"}</code>, <code>{"{{vacancy}}"}</code>, <code>{"{{test_link}}"}</code>.
+            </p>
+            <Textarea
+              value={testInviteText}
+              onChange={(e) => setTestInviteText(e.target.value)}
+              rows={6}
+              placeholder="Текст приглашения к тесту…"
+              className="text-sm"
+            />
+            <p className="text-[11px] text-muted-foreground/70">
+              Отправка по очереди, с паузой между сообщениями. Кандидаты без hh-чата будут пропущены.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTestInviteOpen(false)} disabled={testInviteSending}>Отмена</Button>
+            <Button onClick={confirmSendTest} disabled={testInviteSending || !testInviteText.trim()}>
+              {testInviteSending ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <ClipboardList className="w-4 h-4 mr-1.5" />}
+              Отправить тест
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </SidebarProvider>
   )
@@ -3412,5 +4033,70 @@ function AnalyticsFilterButton(props: {
         </div>
       </PopoverContent>
     </Popover>
+  )
+}
+
+// P0-50 final: маленький register-компонент. Рендерится ВНУТРИ <VacancySettingsProvider>
+// в карточке «Брендинг», вызывает useVacancySectionRegister с актуальными
+// значениями + save-функцией главной страницы. Возвращает null — UI у него нет.
+//
+// Вынесен наружу, потому что useVacancySectionRegister должен видеть Provider
+// через useVacancySettings(). Главный компонент VacancyDetailPage этот provider
+// НЕ оборачивает целиком — только таб настроек. Поэтому регистрируем брендинг
+// здесь, через дочерний компонент, мониящийся при открытии таба «Брендинг».
+function BrandingStickyRegister({
+  vacancyId, loaded, branding, save,
+}: {
+  vacancyId: string
+  loaded: boolean
+  branding: {
+    companyName: string; color: string; slogan: string; website: string; logo: string
+    domainLevel: "free" | "subdomain" | "custom"
+    companySlug: string; customDomain: string
+  }
+  save: () => Promise<void>
+}) {
+  useVacancySectionRegister({
+    sectionKey: `branding:${vacancyId}`,
+    tabKey: "page",
+    loaded,
+    watchedValues: branding,
+    save,
+  })
+  return null
+}
+
+// #11: кнопка саб-таба настроек, перехватывающая клик через
+// useSafeSubTabSwitch. Если в текущем подтабе есть несохранённые
+// изменения — confirm-диалог даёт три исхода: сохранить и перейти,
+// перейти без сохранения, остаться. Компонент рендерится внутри
+// <VacancySettingsProvider>, поэтому hook сработает.
+function SettingsSubNavButton({
+  tab, label, Icon, active, currentTab, onSwitch,
+}: {
+  tab: VacancyTabKey
+  label: string
+  Icon: typeof Globe
+  active: boolean
+  currentTab: VacancyTabKey
+  onSwitch: () => void
+}) {
+  const safeSwitch = useSafeSubTabSwitch(currentTab)
+  return (
+    <button
+      type="button"
+      data-vacancy-tab
+      onClick={() => safeSwitch(tab, onSwitch)}
+      className={cn(
+        "inline-flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0",
+        active
+          ? "border-primary text-foreground font-medium"
+          : "border-transparent text-muted-foreground hover:text-foreground"
+      )}
+    >
+      <Icon className="w-3.5 h-3.5" />
+      {label}
+      <VacancyTabPendingDot tab={tab} />
+    </button>
   )
 }

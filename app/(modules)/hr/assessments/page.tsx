@@ -7,7 +7,6 @@ import {
 } from "recharts"
 import { ClipboardCheck, Clock, CheckCircle2, TrendingUp, Plus, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -104,7 +103,7 @@ export default function AssessmentsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Оценка персонала</h1>
+          <div className="flex items-center gap-2"><ClipboardCheck className="h-5 w-5 text-violet-600" /><h1 className="text-lg font-semibold">Оценка персонала</h1></div>
           <p className="text-sm text-muted-foreground mt-0.5">Skills assessment & gap analysis</p>
         </div>
         <Button size="sm" onClick={() => setDialogOpen(true)}>

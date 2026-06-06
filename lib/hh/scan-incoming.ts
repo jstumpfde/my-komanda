@@ -23,12 +23,32 @@
 
 import { and, asc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { hhResponses, candidates, followUpMessages, hhCandidates } from "@/lib/db/schema"
+import { hhResponses, candidates, followUpMessages, hhCandidates, vacancies } from "@/lib/db/schema"
 import { getValidToken } from "@/lib/hh-helpers"
-import { matchStopWord } from "@/lib/followup/stop-words"
 import { classifyCandidateResponse } from "@/lib/ai/classify-candidate-response"
+import { processChatbotMessage } from "@/lib/ai/chatbot-processor"
+import { isBlockEnabled } from "@/lib/funnel-builder/runtime"
 import { saveCandidatePhoto } from "@/lib/hh/save-candidate-photo"
 import { extractHhResumeFields } from "@/lib/hh/extract-resume-fields"
+import { matchCallIntentKeyword, renderInsistTemplate } from "@/lib/messaging/call-intent"
+import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
+import { processPrequalificationAnswer } from "@/lib/prequalification/process-answer"
+
+// Дефолтные эскалационные шаблоны для callIntent (insist-demo).
+// Используются только если у вакансии не задан кастомный массив в
+// descriptionJson.automation.callIntent.insistDemoMessages.
+const DEFAULT_INSIST_DEMO_MESSAGES: [string, string, string] = [
+  "{{name}}, понял что хотите созвониться. Чтобы не тратить ваше и моё время, предлагаю сначала пройти короткую демонстрацию должности — там ответы на 90% типовых вопросов: {{demo_link}}",
+  "{{name}}, так как мы сейчас в работе, всё-таки предлагаю сначала ознакомиться с демонстрацией должности и ответить на вопросы. Ваши ответы попадут к нам, и после этого назначим время для звонка: {{demo_link}}",
+  "{{name}}, наша система сбора устроена так, что созваниваемся с кандидатом только после прохождения демонстрации должности и ответов на вопросы. Спасибо за понимание! Демонстрация: {{demo_link}}",
+]
+
+interface VacancyCallIntent {
+  enabled?:            boolean
+  mode?:               "slot-and-demo" | "slot-only" | "insist-demo"
+  keywords?:           string[]
+  insistDemoMessages?: string[]
+}
 
 const FAREWELL_MESSAGE = "Спасибо за отклик. Желаем удачи!"
 
@@ -157,6 +177,12 @@ async function applyRejection(args: {
     .where(eq(candidates.id, candidateId))
     .limit(1)
   const fromStage = prev?.stage ?? "unknown"
+
+  // Guard от повторного отказа: если кандидат уже rejected — ничего не делаем и
+  // НЕ шлём второе прощальное сообщение (иначе в чате несколько отказов подряд).
+  if (fromStage === "rejected") {
+    return false
+  }
 
   await db.update(candidates).set({
     stage: "rejected",
@@ -376,6 +402,32 @@ export async function scanIncomingMessages(opts: {
       })
     }
 
+    // Грузим callIntent из вакансии (через candidate.vacancyId) — один раз
+    // на ответ. Также shortId / title для рендера эскалационных шаблонов.
+    const [candVac] = await db
+      .select({
+        candName:       candidates.name,
+        candShortId:    candidates.shortId,
+        candToken:      candidates.token,
+        callIntentCount: candidates.callIntentCount,
+        prequalStatus:   candidates.prequalificationStatus,
+        vacancyId:      candidates.vacancyId,
+        vacancyTitle:   vacancies.title,
+        descriptionJson: vacancies.descriptionJson,
+        companyId:      vacancies.companyId,
+        aiChatbotEnabled:  vacancies.aiChatbotEnabled,
+        aiChatbotSettings: vacancies.aiChatbotSettings,
+        aiChatbotPrompt:   vacancies.aiChatbotPrompt,
+        funnelRuntimeEnabled: vacancies.funnelRuntimeEnabled,
+        funnelConfigJson:     vacancies.funnelConfigJson,
+      })
+      .from(candidates)
+      .innerJoin(vacancies, eq(vacancies.id, candidates.vacancyId))
+      .where(eq(candidates.id, candidateId))
+      .limit(1)
+    const automation = (candVac?.descriptionJson as { automation?: Record<string, unknown> } | null)?.automation
+    const callIntent = (automation?.["callIntent"] as VacancyCallIntent | undefined) ?? {}
+
     // Обрабатываем сообщения по порядку. Если уже сделали rejection —
     // дальнейшие AI-вызовы пропускаем.
     let rejected = false
@@ -387,19 +439,135 @@ export async function scanIncomingMessages(opts: {
 
       const preview = text.slice(0, 120).replace(/\s+/g, " ")
 
-      // Шаг 1: regex.
-      if (matchStopWord(text)) {
-        const sent = await applyRejection({
+      // #15 phase 5/6: AI чат-бот. Если у вакансии включён бот И есть промпт —
+      // отдаём сообщение ему. processChatbotMessage сам решает: ответить, эскалировать,
+      // отклонить или пропустить. handled=true означает «AI взял на себя» —
+      // дальше в legacy-классификацию не идём для этого сообщения.
+      if (isBlockEnabled(candVac, "ai_chatbot", candVac?.aiChatbotEnabled === true) && (candVac?.aiChatbotPrompt ?? "").trim().length > 0) {
+        try {
+          const cb = await processChatbotMessage({
+            candidateId,
+            vacancyId:    candVac.vacancyId,
+            incomingText: text,
+            vacancy: {
+              id:                candVac.vacancyId,
+              title:             candVac.vacancyTitle ?? "",
+              companyId:         candVac.companyId,
+              aiChatbotEnabled:  candVac.aiChatbotEnabled,
+              aiChatbotSettings: candVac.aiChatbotSettings,
+              aiChatbotPrompt:   candVac.aiChatbotPrompt,
+            },
+          })
+          if (cb.handled) {
+            if (cb.action === "sent" && cb.reply) {
+              // Группа 33: уважаем тайминги из processor — преCмесс +
+              // задержки. Cap-им суммарную задержку 5 минут, чтобы один
+              // кандидат не блокировал scan-incoming.
+              if (cb.preMessage && cb.preMessageDelayMs) {
+                await sendFarewell(accessToken, resp.hhResponseId, cb.preMessage)
+                await new Promise(r => setTimeout(r, Math.min(cb.preMessageDelayMs!, 60_000)))
+              }
+              if (cb.replyDelayMs && cb.replyDelayMs > 0) {
+                await new Promise(r => setTimeout(r, Math.min(cb.replyDelayMs, 60_000)))
+              }
+              const ok = await sendFarewell(accessToken, resp.hhResponseId, cb.reply)
+              console.info(`[scan-incoming] ${candidateId} ai_chatbot_sent ok=${ok} cat=${cb.category} conf=${cb.confidence?.toFixed(2)} text="${preview}"`)
+            } else if (cb.action === "escalated") {
+              console.info(`[scan-incoming] ${candidateId} ai_chatbot_escalated reason=${cb.escalationReason} cat=${cb.category ?? "-"} text="${preview}"`)
+            } else if (cb.action === "rejected") {
+              // Группа 30: processor может вернуть reply при отказе
+              // (injection / severe_abuse / repeated_abuse / unstable) —
+              // отправляем кандидату это сообщение перед закрытием цепочки.
+              if (cb.reply) {
+                if (cb.replyDelayMs && cb.replyDelayMs > 0) {
+                  await new Promise(r => setTimeout(r, Math.min(cb.replyDelayMs, 60_000)))
+                }
+                const ok = await sendFarewell(accessToken, resp.hhResponseId, cb.reply)
+                console.info(`[scan-incoming] ${candidateId} ai_chatbot_rejected_with_reply ok=${ok} reason=${cb.escalationReason} text="${preview}"`)
+              } else {
+                console.info(`[scan-incoming] ${candidateId} ai_chatbot_rejected reason=${cb.escalationReason} text="${preview}"`)
+              }
+              if (cb.escalationReason === "stop_word") {
+                rejected = true
+                result.rejectedRegex++
+              } else if (cb.escalationReason?.startsWith("security_")) {
+                // Помечаем что цепочку дальше не продолжаем для этого
+                // кандидата в текущей итерации scan-incoming.
+                rejected = true
+              }
+            } else {
+              console.info(`[scan-incoming] ${candidateId} ai_chatbot_skipped reason=${cb.escalationReason} text="${preview}"`)
+            }
+            continue
+          }
+        } catch (err) {
+          console.warn(`[scan-incoming] ${candidateId} ai_chatbot_error fallback_to_legacy:`, err instanceof Error ? err.message : err)
+          // fallthrough в legacy-классификацию
+        }
+      }
+
+      // Шаг 1: regex stop_word → жёсткий отказ. Делаем до callIntent,
+      // потому что отказ важнее («не хочу созваниваться» = отказ).
+// P0-14 disabled:       if (matchStopWord(text)) {
+// P0-14 disabled:         const sent = await applyRejection({
+// P0-14 disabled:           candidateId,
+// P0-14 disabled:           reason: "stop_word_regex",
+// P0-14 disabled:           hhResponseId: resp.hhResponseId,
+// P0-14 disabled:           accessToken,
+// P0-14 disabled:           sendFarewellFlag: true,
+// P0-14 disabled:         })
+// P0-14 disabled:         result.rejectedRegex++
+// P0-14 disabled:         rejected = true
+// P0-14 disabled:         console.info(`[scan-incoming] ${candidateId} regex_stop_word farewell=${sent} text="${preview}"`)
+// P0-14 disabled:         break
+// P0-14 disabled:       }
+
+      // Шаг 1.4: Предквалификация (Сессия 9). Если у кандидата идёт опрос —
+      // парсим ответ через AI Haiku и обновляем qualification_answers.
+      // ВАЖНО: эта ветка ДО callIntent, потому что вопросы предкв тоже
+      // могут содержать слова из keywords. Если кандидат на стадии опроса,
+      // его ответ — это ответ на наши вопросы, а не запрос звонка.
+      if (candVac?.prequalStatus === "pending") {
+        const pq = await processPrequalificationAnswer({
           candidateId,
-          reason: "stop_word_regex",
-          hhResponseId: resp.hhResponseId,
-          accessToken,
-          sendFarewellFlag: true,
+          answerText: text,
         })
-        result.rejectedRegex++
-        rejected = true
-        console.info(`[scan-incoming] ${candidateId} regex_stop_word farewell=${sent} text="${preview}"`)
-        break
+        console.info(`[scan-incoming] ${candidateId} prequalification_answer processed=${pq.processed} finalized=${pq.finalized ?? false} verdict=${pq.verdict ?? "-"} text="${preview}"`)
+        // Какой бы ни был исход — этот msg уже потрачен на предкв,
+        // не пускаем в callIntent / AI rejection.
+        continue
+      }
+
+      // Шаг 1.5: callIntent — keyword matching на «хочу созвон».
+      // Активируется только если у вакансии включён master-тумблер и
+      // выбран режим insist-demo (два других — бэклог).
+      if (callIntent.enabled && callIntent.mode === "insist-demo") {
+        const km = matchCallIntentKeyword(text, callIntent.keywords ?? [])
+        if (km.matched) {
+          const count = candVac?.callIntentCount ?? 0
+          if (count < 3) {
+            // Подставляем плейсхолдеры и шлём шаблон №(count+1).
+            const customs = Array.isArray(callIntent.insistDemoMessages) ? callIntent.insistDemoMessages : []
+            const tpl     = customs[count] ?? DEFAULT_INSIST_DEMO_MESSAGES[count]
+            const { firstName } = await getCandidateFirstName(candidateId)
+            const tokenForUrl = candVac?.candShortId ?? candVac?.candToken ?? candidateId
+            const demoLink = `https://company24.pro/demo/${tokenForUrl}`
+            const message = renderInsistTemplate(tpl, {
+              name:     firstName,
+              vacancy:  candVac?.vacancyTitle ?? "",
+              demoLink,
+            })
+            const sentOk = await sendFarewell(accessToken, resp.hhResponseId, message)
+            await db.update(candidates)
+              .set({ callIntentCount: count + 1, updatedAt: new Date() })
+              .where(eq(candidates.id, candidateId))
+            console.info(`[scan-incoming] ${candidateId} call_intent_keyword="${km.word}" count=${count + 1} sent=${sentOk} text="${preview}"`)
+          } else {
+            console.info(`[scan-incoming] ${candidateId} call_intent_keyword="${km.word}" count=${count} (>= 3, silent) text="${preview}"`)
+          }
+          // Не пропускаем msg через AI — это не отказ, мы уже отреагировали.
+          continue
+        }
       }
 
       // Шаг 2: AI.
@@ -413,7 +581,12 @@ export async function scanIncomingMessages(opts: {
         continue
       }
 
-      if (cls.intent === "rejection") {
+      // ТЗ-3 Ч.3: автоотказ применяется ТОЛЬКО при высокой уверенности AI
+      // (≥0.9). Иначе кандидат остаётся в текущей стадии — HR разберёт сам.
+      // Защищает от ложных срабатываний классификатора (51%-уверенный отказ).
+      const REJECTION_CONFIDENCE_THRESHOLD = 0.9
+
+      if (cls.intent === "rejection" && cls.confidence >= REJECTION_CONFIDENCE_THRESHOLD) {
         const sent = await applyRejection({
           candidateId,
           reason: "ai_rejection",
@@ -423,7 +596,10 @@ export async function scanIncomingMessages(opts: {
         })
         result.rejectedAi++
         rejected = true
-        console.info(`[scan-incoming] ${candidateId} ai_rejection conf=${cls.confidence} farewell=${sent} text="${preview}"`)
+        console.info(`[scan-incoming] ${candidateId} ai_rejection_applied conf=${cls.confidence} farewell=${sent} text="${preview}"`)
+      } else if (cls.intent === "rejection") {
+        // confidence < 0.9 — НЕ отказываем, только лог для HR.
+        console.info(`[scan-incoming] ${candidateId} ai_rejection_low_conf_SKIPPED conf=${cls.confidence} text="${preview}"`)
       } else if (cls.intent === "wants_personal_contact") {
         await applyWantsContact(candidateId)
         result.wantsContact++

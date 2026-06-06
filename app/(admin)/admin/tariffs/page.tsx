@@ -4,17 +4,17 @@ import { useState } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { DEFAULT_TARIFFS, formatPrice, type Tariff, type TariffFeatures } from "@/lib/tariff-types"
+import {DEFAULT_TARIFFS, type Tariff, type TariffFeatures} from "@/lib/tariff-types"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import {
   Plus, Pencil, Trash2, Check, X, Shield, Save, UserPlus, Archive,
@@ -148,106 +148,100 @@ export default function AdminTariffsPage() {
             </div>
 
             {/* Таблица тарифов */}
-            <Card>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Цена</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Trial дней</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Вакансий</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Кандидатов</th>
-                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Брендинг</th>
-                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Активен</th>
-                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Действия</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {tariffs.map(tariff => {
-                        const isArchived = !tariff.active
-                        const trialVal = editingTrialDays[tariff.id] ?? String(tariff.trialDays ?? 14)
-                        const isEditingTrial = tariff.id in editingTrialDays
-                        return (
-                        <tr key={tariff.id} className={cn("border-b last:border-0 hover:bg-muted/20 transition-colors", isArchived && "opacity-60")}>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium text-foreground">{tariff.name}</span>
-                              {tariff.badge && (
-                                <Badge className={cn("text-[10px]", tariff.badgeColor || "bg-primary text-primary-foreground")}>
-                                  {tariff.badge}
-                                </Badge>
-                              )}
-                              {isArchived && (
-                                <Badge variant="outline" className="text-[10px] border-amber-400 text-amber-700 bg-amber-50">
-                                  Архив
-                                </Badge>
-                              )}
-                            </div>
-                          </td>
-                          <td className="text-right px-4 py-3 text-sm text-foreground font-medium">
-                            {tariff.price === 0 ? "0 (бесплатно)" : `${tariff.price.toLocaleString("ru-RU")} ₽`}
-                          </td>
-                          <td className="text-right px-4 py-3 text-sm text-muted-foreground">
-                            <div className="flex items-center justify-end gap-1">
-                              <input
-                                type="number"
-                                className="w-14 h-7 text-right text-sm border rounded px-1.5 bg-background"
-                                value={trialVal}
-                                onChange={e => setEditingTrialDays(prev => ({ ...prev, [tariff.id]: e.target.value }))}
-                                onBlur={() => { if (isEditingTrial) handleSaveTrialDays(tariff.id) }}
-                                onKeyDown={e => { if (e.key === "Enter") handleSaveTrialDays(tariff.id) }}
-                              />
-                            </div>
-                          </td>
-                          <td className="text-right px-4 py-3 text-sm text-foreground">{tariff.maxVacancies === 999 ? "∞" : tariff.maxVacancies}</td>
-                          <td className="text-right px-4 py-3 text-sm text-foreground">{tariff.maxCandidates.toLocaleString("ru-RU")}</td>
-                          <td className="text-center px-4 py-3">
-                            {tariff.features.branding ? (
-                              <Check className="w-4 h-4 text-emerald-600 mx-auto" />
-                            ) : (
-                              <X className="w-4 h-4 text-muted-foreground/40 mx-auto" />
-                            )}
-                          </td>
-                          <td className="text-center px-4 py-3">
-                            {tariff.active ? (
-                              <Check className="w-4 h-4 text-emerald-600 mx-auto" />
-                            ) : (
-                              <X className="w-4 h-4 text-red-500 mx-auto" />
-                            )}
-                          </td>
-                          <td className="text-center px-4 py-3">
-                            <div className="flex items-center justify-center gap-0.5">
-                              <Button variant="ghost" size="icon" className="h-8 w-8" title="Редактировать" onClick={() => openEdit(tariff)}>
-                                <Pencil className="w-3.5 h-3.5" />
-                              </Button>
-                              {tariff.id !== "trial" && (
-                                <Button variant="ghost" size="icon" className="h-8 w-8" title="Докупить кандидатов" onClick={() => { setBuyTariffId(tariff.id); setBuyPackage(10); setBuyCandidatesOpen(true) }}>
-                                  <UserPlus className="w-3.5 h-3.5" />
-                                </Button>
-                              )}
-                              {!isArchived && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
-                                  title="Архивировать тариф"
-                                  onClick={() => setArchiveConfirmId(tariff.id)}
-                                >
-                                  <Archive className="w-3.5 h-3.5" />
-                                </Button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
+            <TableCard>
+              <DataTable>
+                <DataHead>
+                  <DataHeadCell>Название</DataHeadCell>
+                  <DataHeadCell align="right">Цена</DataHeadCell>
+                  <DataHeadCell align="right">Trial дней</DataHeadCell>
+                  <DataHeadCell align="right">Вакансий</DataHeadCell>
+                  <DataHeadCell align="right">Кандидатов</DataHeadCell>
+                  <DataHeadCell align="center">Брендинг</DataHeadCell>
+                  <DataHeadCell align="center">Активен</DataHeadCell>
+                  <DataHeadCell align="center">Действия</DataHeadCell>
+                </DataHead>
+                <tbody>
+                  {tariffs.map(tariff => {
+                    const isArchived = !tariff.active
+                    const trialVal = editingTrialDays[tariff.id] ?? String(tariff.trialDays ?? 14)
+                    const isEditingTrial = tariff.id in editingTrialDays
+                    return (
+                    <DataRow key={tariff.id} className={cn(isArchived && "opacity-60")}>
+                      <DataCell>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-foreground">{tariff.name}</span>
+                          {tariff.badge && (
+                            <Badge className={cn("text-[10px]", tariff.badgeColor || "bg-primary text-primary-foreground")}>
+                              {tariff.badge}
+                            </Badge>
+                          )}
+                          {isArchived && (
+                            <Badge variant="outline" className="text-[10px] border-amber-400 text-amber-700 bg-amber-50">
+                              Архив
+                            </Badge>
+                          )}
+                        </div>
+                      </DataCell>
+                      <DataCell align="right" className="text-foreground font-medium">
+                        {tariff.price === 0 ? "0 (бесплатно)" : `${tariff.price.toLocaleString("ru-RU")} ₽`}
+                      </DataCell>
+                      <DataCell align="right" className="text-muted-foreground">
+                        <div className="flex items-center justify-end gap-1">
+                          <input
+                            type="number"
+                            className="w-14 h-7 text-right text-sm border rounded px-1.5 bg-background"
+                            value={trialVal}
+                            onChange={e => setEditingTrialDays(prev => ({ ...prev, [tariff.id]: e.target.value }))}
+                            onBlur={() => { if (isEditingTrial) handleSaveTrialDays(tariff.id) }}
+                            onKeyDown={e => { if (e.key === "Enter") handleSaveTrialDays(tariff.id) }}
+                          />
+                        </div>
+                      </DataCell>
+                      <DataCell align="right" className="text-foreground">{tariff.maxVacancies === 999 ? "∞" : tariff.maxVacancies}</DataCell>
+                      <DataCell align="right" className="text-foreground">{tariff.maxCandidates.toLocaleString("ru-RU")}</DataCell>
+                      <DataCell align="center">
+                        {tariff.features.branding ? (
+                          <Check className="w-4 h-4 text-emerald-600 mx-auto" />
+                        ) : (
+                          <X className="w-4 h-4 text-muted-foreground/40 mx-auto" />
+                        )}
+                      </DataCell>
+                      <DataCell align="center">
+                        {tariff.active ? (
+                          <Check className="w-4 h-4 text-emerald-600 mx-auto" />
+                        ) : (
+                          <X className="w-4 h-4 text-red-500 mx-auto" />
+                        )}
+                      </DataCell>
+                      <DataCell align="center">
+                        <div className="flex items-center justify-center gap-0.5">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" title="Редактировать" onClick={() => openEdit(tariff)}>
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Button>
+                          {tariff.id !== "trial" && (
+                            <Button variant="ghost" size="icon" className="h-8 w-8" title="Докупить кандидатов" onClick={() => { setBuyTariffId(tariff.id); setBuyPackage(10); setBuyCandidatesOpen(true) }}>
+                              <UserPlus className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                          {!isArchived && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                              title="Архивировать тариф"
+                              onClick={() => setArchiveConfirmId(tariff.id)}
+                            >
+                              <Archive className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </DataCell>
+                    </DataRow>
+                    )
+                  })}
+                </tbody>
+              </DataTable>
+            </TableCard>
           </div>
         </main>
       </SidebarInset>

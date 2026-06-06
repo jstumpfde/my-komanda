@@ -8,6 +8,9 @@ import {
   date,
   jsonb,
   unique,
+  primaryKey,
+  index,
+  real,
 } from "drizzle-orm/pg-core"
 
 // ─── Modules ──────────────────────────────────────────────────────────────────
@@ -73,6 +76,129 @@ export const paymentRequisites = pgTable("payment_requisites", {
   updatedAt: timestamp("updated_at").defaultNow(),
 })
 
+// Группа 38: расширенный per-company брендинг. Базовые поля
+// (logo/primary/bg/text) — отдельные колонки на companies; здесь дополнительные.
+export interface CompanyBrandingExtra {
+  accentColor?: string
+  fontFamily?:  string  // "inter" | "manrope" | "ibm-plex" | "roboto"
+}
+
+// ── CompanyHiringDefaults (drizzle/0156) ──
+// Дефолты компании для всех вакансий (HR → Настройки найма).
+// Хранится в companies.hiring_defaults_json. VacancyStopFactors определён ниже
+// в этом же модуле (типы хойстятся, порядок объявления не важен).
+export interface CompanyHiringDefaults {
+  schedule?: {
+    slotDuration?:     string
+    bufferTime?:       string
+    interviewFrom?:    string
+    interviewTo?:      string
+    interviewDays?:    string[]
+    maxPerDay?:        string
+    remind24h?:        boolean
+    remind2h?:         boolean
+    timezone?:         string
+    interviewMethods?: string[]
+    officeAddress?:    string
+    // Конфиг длительности и буфера на каждый способ интервью (additive, drizzle/0177+).
+    // Если отсутствует — используются legacy-поля slotDuration/bufferTime/interviewMethods.
+    interviewMethodConfigs?: Array<{
+      method:  'phone' | 'zoom' | 'telemost' | 'meet' | 'office'
+      enabled: boolean
+      duration: number  // минуты
+      buffer:   number  // минуты между встречами
+    }>
+  }
+  stopFactorsDefaults?:      VacancyStopFactors
+  // Мастер-тумблер: применять stopFactorsDefaults живьём ко ВСЕМ вакансиям
+  // компании во время обработки hh-очереди (company-level стоп-факторы).
+  // Дефолт: false — предохранитель от массовых неожиданных отказов.
+  stopFactorsApplyToAll?:    boolean
+  automation?: {
+    autoDemo?:   boolean
+    autoInvite?: boolean
+    minScore?:   number
+    autoReject?: boolean
+  }
+  funnelScenario?: string
+  dataRetention?:  string
+  webhooks?: { url?: string; events?: Record<string, boolean> }
+  bitrix?:   { url?: string; trigger?: string }
+  // Резерв → Рефералы: правила реферальной программы (drizzle/0167).
+  referralRules?: {
+    bonusPerHire?:       number
+    trialMonths?:        number
+    maxActiveReferrals?: number
+    standardScreening?:  boolean
+  }
+  // O2: авто-сбор обратной связи (опросы адаптации 30/60/90). Дефолт компании;
+  // отправка — модулем «Адаптация» после найма.
+  feedbackSurveys?: {
+    enabled?: boolean
+    d30?: boolean; d60?: boolean; d90?: boolean
+    q30?: string;  q60?: string;  q90?: string
+  }
+  // O1: мультикомпанийность — список компаний-брендов, под которые ведётся найм
+  // (аутсорсинг/рекрутинг). Основная компания берётся из профиля; здесь —
+  // дополнительные. При создании вакансии HR выбирает компанию (vacancy-side — отдельно).
+  showCompanySelector?: boolean
+  brandCompanies?: Array<{ id: string; name: string; slogan?: string; description?: string; logo?: string; website?: string }>
+  // O1: какая компания выбрана по умолчанию при создании вакансии.
+  // "" = основная (№1, из профиля), иначе id из brandCompanies.
+  defaultBrandCompanyId?: string
+  // Маппинг воронки → hh.ru на уровне компании: какое действие hh.ru шлётся
+  // при входе кандидата в стадию. Ключ — slug стадии, значение —
+  // "invitation"|"discard"|null. Дефолт для вакансий, где воронка не кастомизирована.
+  stageHhActions?: Record<string, "invitation" | "discard" | "assessment" | null>
+  // Палитра стадий на уровне компании: переименование и перекраска.
+  // Применяется как soft-дефолт — per-vacancy customLabel/customColor перекрывает.
+  stageLabels?: Record<string, string>
+  stageColors?: Record<string, string>
+  // Настройки доступа ролей (HR → Настройки → Роли и доступ). Хранятся
+  // на уровне компании (общие, не per-user), чтобы шарились между всеми.
+  rolePermissions?: {
+    // По умолчанию корзина вакансий видна только директору/главному HR.
+    // true → HR-менеджеры тоже видят таб «Корзина» и могут восстанавливать/удалять.
+    hrManagerTrashAccess?: boolean
+  }
+}
+
+// ── CompanyLegalContact (drizzle/0177) ──
+// Контактные данные для юр.документов (/settings/legal). Независимы от
+// основных реквизитов — телефон/email могут отличаться от companies.*.
+// При отсутствии поля используется fallback на companies.* в генераторе.
+export interface CompanyLegalContact {
+  companyName?:  string
+  inn?:          string  // ИНН — нужен для генерации политики конфиденциальности
+  email?:        string
+  phone?:        string
+  legalAddress?: string
+  responsible?:  string  // Ответственный за обработку персональных данных
+}
+
+// ── CompanyWorkSchedule (drizzle/0176) ──
+// Standalone-расписание компании (/settings/schedule). Отдельное от can-send-now
+// (vacancies.schedule_*), календаря и hiring-settings — см. memory
+// schedule-three-systems-keep-separate. Просто хранит своё значение.
+export interface CompanyWorkSchedule {
+  schedule?: { enabled: boolean; from: string; to: string }[] // 7 строк, Пн..Вс
+  timezone?: string
+  country?:  string
+  lunch?:    { enabled: boolean; from: string; to: string }
+  customHolidays?: { id: string; date: string; name: string }[]
+  absences?: {
+    id: string; employee: string; type: string
+    dateFrom: string; dateTo: string; status: string; comment: string
+  }[]
+}
+
+// Индивидуальный рабочий график сотрудника (users.custom_schedule).
+// Настраивается самим сотрудником в Профиле.
+export interface UserCustomSchedule {
+  enabled: boolean
+  days: Record<string, { active: boolean; start: string; end: string }>
+}
+
 export const companies = pgTable("companies", {
   id:                 uuid("id").primaryKey().defaultRandom(),
   name:               text("name").notNull(),
@@ -108,6 +234,8 @@ export const companies = pgTable("companies", {
   brandPrimaryColor:  text("brand_primary_color").default("#3b82f6"),
   brandBgColor:       text("brand_bg_color").default("#f0f4ff"),
   brandTextColor:     text("brand_text_color").default("#1e293b"),
+  // Группа 38: расширенные поля брендинга поверх базовых колонок.
+  brandingJson:       jsonb("branding_json").$type<CompanyBrandingExtra>().notNull().default({}),
   customTheme:        jsonb("custom_theme"),       // { primary, background, foreground, sidebar, accent }
   demoProfile:        jsonb("demo_profile").default({}),  // Профиль для демонстраций должности
   brandName:          text("brand_name"),
@@ -119,16 +247,72 @@ export const companies = pgTable("companies", {
   // billing / subscription
   planId:             uuid("plan_id").references(() => plans.id),
   billingEmail:       text("billing_email"),
+  // Документооборот (миграция 0149): счета/акты шлются на billingEmail.
+  // paperInvoicesRequired — клиенту нужны бумажные оригиналы; адрес — куда слать.
+  // autoInvoiceEnabled — авто-создание счёта за 7 дней (по умолчанию выкл).
+  // edo* — задел под подключение ЭДО (Диадок/СБИС/…) в будущем.
+  paperInvoicesRequired: boolean("paper_invoices_required").default(false),
+  // Адрес для оригиналов — отдельные ячейки (миграция 0153). paperInvoiceAddress
+  // = улица/дом/офис; индекс/город/получатель — отдельно.
+  paperInvoiceAddress:   text("paper_invoice_address"),
+  paperInvoiceIndex:     text("paper_invoice_index"),
+  paperInvoiceCity:      text("paper_invoice_city"),
+  paperInvoiceRecipient: text("paper_invoice_recipient"),
+  autoInvoiceEnabled:    boolean("auto_invoice_enabled").default(false),
+  edoEnabled:            boolean("edo_enabled").default(false),
+  edoProvider:           text("edo_provider"),
+  edoOperatorId:         text("edo_operator_id"),
   trialEndsAt:        timestamp("trial_ends_at"),
   subscriptionStatus: text("subscription_status").default("trial"), // 'trial'|'active'|'paused'|'cancelled'|'expired'
   currentPlanId:      uuid("current_plan_id").references(() => plans.id),
-  // Telegram bot (multitenant knowledge base assistant)
+  // Дата конца оплаченного периода (миграция 0150). Выставляется при оплате
+  // счёта (= invoice.periodEnd). По ней считается отсчёт для платных тарифов и
+  // авто-счёт на продление за 7 дней (cron /api/cron/auto-invoices).
+  currentPeriodEnd:   timestamp("current_period_end"),
+  // Telegram bot (multitenant knowledge base assistant) +
+  // Группа 34: тот же токен переиспользуется как HR-уведомления, если
+  // указан telegramChatId компании. См. lib/telegram/send-to-company.ts.
   telegramBotToken:    text("telegram_bot_token"),
   telegramBotUsername: text("telegram_bot_username"),
   telegramWebhookSet:  boolean("telegram_webhook_set").default(false),
+  // Группа 34: per-company чат для HR-уведомлений (новые отклики,
+  // AI-эскалации). Главный канал Юрия — отдельный, не здесь.
+  telegramChatId:      text("telegram_chat_id"),
+  // drizzle/0158 — для будущего Telegram-канала чат-бота (токен бота-кандидата)
+  candidateBotToken:   text("candidate_bot_token"),
   // Privacy policy (per-company, ФЗ-152) — null = используется дефолтный шаблон
   privacyPolicyHtml:        text("privacy_policy_html"),
   privacyPolicyUpdatedAt:   timestamp("privacy_policy_updated_at"),
+  // Безопасность AI-чат-бота: глобальный kill switch на всю компанию.
+  aiChatbotKilled:          boolean("ai_chatbot_killed").notNull().default(false),
+  // Группа 36: режим строгости pre-filter к severe_abuse.
+  //   'strict'  — автоотказ + сообщение (текущее поведение)
+  //   'lenient' — предупреждение, диалог продолжается
+  aiAbuseMode:              text("ai_abuse_mode").notNull().default("strict"),
+  // Безопасность отправки: минимальная задержка между отправками follow-up
+  // сообщений в hh-чат (в секундах, per-company). Меньшие значения повышают
+  // риск бана аккаунта hh.ru за подозрительную активность. Дефолт 31 сек,
+  // допустимый диапазон в UI/API 21..600. Cron умножает на 1000 → ms.
+  followUpSendDelaySeconds: integer("follow_up_send_delay_seconds").notNull().default(31),
+  // Корзина вакансий: срок хранения в днях до авто-удаления (drizzle/0141).
+  // «В корзине» = vacancies.deleted_at IS NOT NULL. Cron /api/cron/trash-cleanup
+  // удаляет вакансии навсегда, когда deleted_at старше trash_retention_days.
+  // Допустимые значения 1/3/7/14/30/60/90, дефолт 30.
+  trashRetentionDays:       integer("trash_retention_days").notNull().default(30),
+  // Дефолты найма (расписание/webhooks/битрикс/хранение/стоп-факторы/автоматизация) (drizzle/0156)
+  hiringDefaultsJson:       jsonb("hiring_defaults_json").$type<CompanyHiringDefaults>().notNull().default({}),
+  // Standalone-расписание компании (/settings/schedule) — отдельное хранилище
+  // общего рабочего времени. НЕ связано с can-send-now (vacancies.schedule_*),
+  // календарём, hiring-settings. Миграция 0176. См. schedule-three-systems-keep-separate.
+  workScheduleJson:         jsonb("work_schedule_json").$type<CompanyWorkSchedule>().notNull().default({}),
+  // Контактные данные для юр.документов (/settings/legal). Отдельны от
+  // companies.* — телефон/email могут отличаться от основных реквизитов.
+  // Подставляются в генератор политики (раздел «куда обращаться»). Миграция 0177.
+  legalContactJson:         jsonb("legal_contact_json").$type<CompanyLegalContact>().notNull().default({}),
+  // Корзина компаний (миграция 0148): NULL — активна; не-NULL — в корзине,
+  // cron trash-cleanup удалит навсегда через trash_retention_days. Признак
+  // корзины — deleted_at (как у вакансий), отдельного статуса не вводим.
+  deletedAt:          timestamp("deleted_at"),
   createdAt:          timestamp("created_at").defaultNow(),
   updatedAt:          timestamp("updated_at").defaultNow(),
 })
@@ -156,9 +340,12 @@ export const users = pgTable("users", {
   avatarUrl: text("avatar_url"),
   position: text("position"),                  // реальная должность (не роль в системе)
   permissions: jsonb("permissions").default("{}"), // { manage_company, manage_team, manage_billing, ... }
-  customSchedule: jsonb("custom_schedule"),          // { enabled, days: { mon: { active, start, end }, ... } }
+  customSchedule: jsonb("custom_schedule").$type<UserCustomSchedule>(),  // график сотрудника (Профиль)
   telegramChatId: text("telegram_chat_id"),
   isActive: boolean("is_active").default(true),
+  // Корзина пользователей (миграция 0152): soft-delete для очистки списка
+  // (демо-наблюдатели, осиротевшие). NULL = активный.
+  deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow(),
 })
 
@@ -175,6 +362,17 @@ export const userPreferences = pgTable("user_preferences", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 })
+
+// P0-9: пер-юзерный last_seen на вакансию для расчёта дельты «свежих»
+// кандидатов (бейдж «+N новых» в шапке + список на дашборде).
+export const userVacancyViews = pgTable("user_vacancy_views", {
+  userId:     uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  vacancyId:  uuid("vacancy_id").notNull().references(() => vacancies.id, { onDelete: "cascade" }),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  pk:           primaryKey({ columns: [t.userId, t.vacancyId] }),
+  byVacancyIdx: index("idx_user_vacancy_views_vacancy").on(t.vacancyId),
+}))
 
 // ─── Sales: CRM Компании ─────────────────────────────────────────────────────
 
@@ -276,18 +474,70 @@ export const vacancies = pgTable("vacancies", {
   hhUrl: text("hh_url"),
   hhSyncedAt: timestamp("hh_synced_at"),
   aiProcessSettings: jsonb("ai_process_settings").default({}),
-  aiScoringEnabled: boolean("ai_scoring_enabled").notNull().default(true),
+  aiScoringEnabled: boolean("ai_scoring_enabled").notNull().default(false),
+  // P0-22: editable стоп-слова на уровне вакансии.
+  stopWordsJson: jsonb("stop_words_json").$type<string[]>().notNull().default([
+    "нет","неактуально","не подходит","спасибо","неинтересно","не интересно",
+    "не интересует","не актуально","не актуальна","отменяю","отказ",
+    "отказываюсь","не рассматриваю",
+  ]),
+  // P0-28: кеш AI-оценки вакансии (vacancy-advisor).
+  aiQualityScore:        integer("ai_quality_score"),
+  aiQualityDetails:      jsonb("ai_quality_details"),
+  aiQualityAnalyzedAt:   timestamp("ai_quality_analyzed_at", { withTimezone: true }),
+  aiQualityInputHash:    text("ai_quality_input_hash"),
+  // #46: Аварийное повторное сообщение.
+  recoveryMessageEnabled: boolean("recovery_message_enabled").notNull().default(false),
+  recoveryMessageText:    text("recovery_message_text").notNull().default(""),
+  // #21: серия из до 3 первых сообщений с тумблерами и задержками.
+  firstMessagesChain: jsonb("first_messages_chain")
+    .$type<Array<{ enabled: boolean; delaySeconds: number; text: string }>>()
+    .notNull()
+    .default([]),
+  // Альтернативный текст Сообщения 1 для нерабочего времени (drizzle/0140).
+  // Если кандидат откликнулся вне рабочих часов вакансии (canSendNow=false)
+  // и off-hours включён — шлётся этот текст вместо основного, без Сообщений 2/3.
+  firstMessageOffHoursEnabled:      boolean("first_message_off_hours_enabled").notNull().default(false),
+  firstMessageOffHoursDelaySeconds: integer("first_message_off_hours_delay_seconds").notNull().default(15),
+  firstMessageOffHoursText:         text("first_message_off_hours_text"),
+  // #15: AI чат-бот кандидатов.
+  aiChatbotEnabled:  boolean("ai_chatbot_enabled").notNull().default(false),
+  aiChatbotSettings: jsonb("ai_chatbot_settings").notNull().default({}),
+  aiChatbotPrompt:   text("ai_chatbot_prompt").notNull().default(""),
+  // #61: per-vacancy стоп-факторы.
+  stopFactorsJson:   jsonb("stop_factors_json").$type<VacancyStopFactors>().notNull().default({}),
+  // Группа 25: структурированные требования (must_have / nice_to_have /
+  // deal_breakers / ideal_profile / scoring_weights). Используются
+  // двухпроходным AI-скорингом v2 (lib/ai-score-candidate-v2.ts).
+  // Если must_have пустой — работает только v1.
+  requirementsJson:  jsonb("requirements_json").$type<VacancyRequirements>().default({}),
+  // Funnel Builder MVP: экспериментальный конструктор воронки (см. drizzle/0127).
+  // funnelBuilderEnabled выключен по умолчанию; cron'ы и старые компоненты
+  // продолжают читать существующие поля (aiChatbotEnabled и т.д.).
+  funnelBuilderEnabled: boolean("funnel_builder_enabled").notNull().default(false),
+  // Группа 38: false — вакансия наследует брендинг компании (default).
+  // true — используется собственный описанный в description_json.branding.
+  brandingOverrideEnabled: boolean("branding_override_enabled").notNull().default(false),
+  funnelConfigJson:     jsonb("funnel_config_json")
+    .$type<{ blocks: Array<{ type: string; order: number; enabled: boolean }> }>()
+    .notNull()
+    .default({ blocks: [] }),
+  // Phase 3 консолидации: отдельный флаг — читает ли РАНТАЙМ воронку из
+  // funnelConfigJson (а не legacy-полей). По умолчанию false → поведение не
+  // меняется. Включается точечно (полигон), обратимо. См. drizzle/0166 и
+  // lib/funnel-builder/runtime.ts (isBlockEnabled).
+  funnelRuntimeEnabled: boolean("funnel_runtime_enabled").notNull().default(false),
   // Авто-разбор hh-откликов: cron каждые 10 минут разбирает накопленные отклики
   // в рабочее время. Если выключено — клиент жмёт «Разобрать» вручную.
   autoProcessingEnabled:      boolean("auto_processing_enabled").notNull().default(false),
   // Расписание отправки сообщений (часы + дни + праздники).
   // Логика — lib/schedule/can-send-now.ts.
-  scheduleEnabled:            boolean("schedule_enabled").notNull().default(false),
+  scheduleEnabled:            boolean("schedule_enabled").notNull().default(true),
   scheduleStart:              text("schedule_start").notNull().default("09:00"),
-  scheduleEnd:                text("schedule_end").notNull().default("19:55"),
+  scheduleEnd:                text("schedule_end").notNull().default("19:30"),
   scheduleTimezone:           text("schedule_timezone").notNull().default("Europe/Moscow"),
-  // 1=Пн ... 7=Вс. Default — Пн-Пт.
-  scheduleWorkingDays:        jsonb("schedule_working_days").$type<number[]>().notNull().default([1, 2, 3, 4, 5]),
+  // 1=Пн ... 7=Вс. Default — Пн-Сб.
+  scheduleWorkingDays:        jsonb("schedule_working_days").$type<number[]>().notNull().default([1, 2, 3, 4, 5, 6]),
   // Идентификаторы из RU_HOLIDAYS — даты, в которые блокируется отправка.
   scheduleExcludedHolidayIds: jsonb("schedule_excluded_holiday_ids").$type<string[]>().notNull().default([
     "dec_31", "jan_1", "jan_2", "jan_3", "jan_4", "jan_5", "jan_6", "jan_7", "jan_8",
@@ -300,23 +550,329 @@ export const vacancies = pgTable("vacancies", {
   updatedAt: timestamp("updated_at").defaultNow(),
 })
 
-export interface VacancyAiProcessSettings {
-  minScore?: number
-  belowThresholdAction?: "reject" | "keep_new"
-  inviteMessage?: string
-  reInviteMessage?: string
-  rejectMessage?: string
+export interface VacancyPrequalificationQuestion {
+  text:      string
+  required:  boolean   // false = информативный
+  criterion: string    // что считается «правильным ответом» для AI (опц.)
 }
+
+// #61: per-vacancy стоп-факторы. Все поля опциональны — отсутствие ключа
+// = выключен. enabled=false тоже = выключен. См. drizzle/0125.
+export interface VacancyStopFactorCity {
+  enabled:         boolean
+  allowedCities?:  string[]   // если кандидат НЕ из списка → стоп
+  allowRelocation?: boolean   // и НЕ отметил «готов к переезду»
+  rejectionText?:  string
+}
+export interface VacancyStopFactorFormat {
+  enabled:         boolean
+  allowedFormats?: Array<"office" | "hybrid" | "remote">
+  rejectionText?:  string
+}
+export interface VacancyStopFactorAge {
+  enabled:         boolean
+  minAge?:         number
+  maxAge?:         number
+  rejectionText?:  string
+}
+export interface VacancyStopFactorExperience {
+  enabled:         boolean
+  minYears?:       number
+  rejectionText?:  string
+}
+export interface VacancyStopFactorDocuments {
+  enabled:         boolean
+  required?:       string[]   // напр. ["med_book", "driver_license_b"]
+  rejectionText?:  string
+}
+export interface VacancyStopFactorCitizenship {
+  enabled:         boolean
+  allowed?:        string[]   // напр. ["RU", "BY"]
+  rejectionText?:  string
+}
+export interface VacancyStopFactorSalary {
+  enabled:         boolean
+  maxAmount?:      number     // в рублях
+  rejectionText?:  string
+}
+export interface VacancyStopFactors {
+  city?:               VacancyStopFactorCity
+  format?:             VacancyStopFactorFormat
+  age?:                VacancyStopFactorAge
+  experience?:         VacancyStopFactorExperience
+  documents?:          VacancyStopFactorDocuments
+  citizenship?:        VacancyStopFactorCitizenship
+  salaryExpectation?:  VacancyStopFactorSalary
+}
+
+// ─── Группа 25: структурированные требования вакансии ──────────────────────
+// Используются двухпроходным AI-скорингом v2 (lib/ai-score-candidate-v2.ts).
+// must_have ≥ 1 — активирует v2 (запуск параллельно с v1, A/B сравнение).
+
+export interface ScoringWeights {
+  relevant_experience: number   // default 30
+  hard_skills:         number   // default 25
+  tenure_stability:    number   // default 10
+  results_in_numbers:  number   // default 10
+  soft_skills_fit:     number   // default 10
+  company_size_match:  number   // default 5
+  managerial_match:    number   // default 5
+  education:           number   // default 3
+  location_readiness:  number   // default 2
+}
+
+export const DEFAULT_SCORING_WEIGHTS: ScoringWeights = {
+  relevant_experience: 30,
+  hard_skills:         25,
+  tenure_stability:    10,
+  results_in_numbers:  10,
+  soft_skills_fit:     10,
+  company_size_match:  5,
+  managerial_match:    5,
+  education:           3,
+  location_readiness:  2,
+}
+
+export interface VacancyRequirements {
+  must_have?:                    string[]   // 3-5 жёстких
+  nice_to_have?:                 string[]   // до 5 желательных
+  deal_breakers?:                string[]   // до 3
+  ideal_profile?:                string     // 1-2 предложения
+  scoring_weights?:              ScoringWeights
+  ai_suggested_at?:              string
+  hr_edited_after_suggestion?:   boolean
+}
+
+// Результат двухпроходного скоринга v2 — сохраняется в candidates.aiScoreV2Details.
+// Полный JSON см. lib/ai-score-candidate-v2.ts.
+export interface CandidateScoreV2 {
+  score:    number                                          // 0-100, взвешенная сумма
+  decision: "strong_match" | "match" | "maybe" | "weak" | "reject"
+  extracted_facts: {
+    total_years_experience:  number | null
+    relevant_experience:     Array<{ role: string; years: number; industry: string | null }>
+    industry_match:          "exact" | "adjacent" | "different" | "unknown"
+    hard_skills_mentioned:   string[]
+    soft_skills_evidence:    string[]
+    managerial_experience:   { has: boolean; team_size: number | null }
+    avg_tenure_years:        number | null
+    company_sizes_worked:    string[]
+    results_with_numbers:    string[]
+    red_flags:               string[]
+    green_flags:             string[]
+    education_summary:       string | null
+  }
+  criteria_scores: {
+    relevant_experience: number
+    hard_skills:         number
+    tenure_stability:    number
+    results_in_numbers:  number
+    soft_skills_fit:     number
+    company_size_match:  number
+    managerial_match:    number
+    education:           number
+    location_readiness:  number
+  }
+  reasoning: {
+    pros:                    string[]
+    cons:                    string[]
+    questions_for_interview: string[]
+  }
+  matched_must_have:        string[]
+  missed_must_have:         string[]
+  matched_nice_to_have:     string[]
+  triggered_deal_breakers:  string[]
+  scored_at?:               string
+}
+
+export interface VacancyPrequalificationConfig {
+  enabled?:      boolean
+  questions?:    VacancyPrequalificationQuestion[]   // max 3
+  reminderD1?:   string                              // напоминание Д+1
+  reminderD3?:   string                              // напоминание Д+3
+  fallbackDays?: number                              // default 5
+}
+
+export interface VacancyAiProcessSettings {
+  /**
+   * Нижний порог скоринга. Резюме со score < этого — мягкий отказ.
+   * Legacy alias: minScore (читается как fallback при отсутствии нового поля).
+   */
+  minScoreLower?:        number
+  /** Verхний порог. Резюме со score >= этого — сразу invite. */
+  minScoreUpper?:        number
+  /** Что делать со средними резюме (lower..upper). По умолчанию prequalification. */
+  midRangeAction?:       "prequalification" | "direct_demo" | "keep_new"
+  /** Конфиг блока «Предквалификация» из таба «Демо и воронка». */
+  prequalification?:     VacancyPrequalificationConfig
+  /**
+   * ТЗ-3 Ч.2: глобальный режим воронки. Приоритет над midRangeAction.
+   *   - "direct_demo"       — кандидаты сразу получают demo-ссылку (дефолт).
+   *   - "prequal_then_demo" — сначала AI-вопросы предквалификации, при
+   *                          passed/no_answer → demo, при failed → reject.
+   *   - "prequal_only"      — только предквалификация без demo; после
+   *                          ответов кандидат → anketa_filled (для HR).
+   * По умолчанию "direct_demo" — для существующих вакансий ничего не меняется.
+   */
+  prequalificationMode?: "direct_demo" | "prequal_then_demo" | "prequal_only"
+
+  /**
+   * Задержка отказа в минутах (drizzle/0155). Все авто-отказы откладываются на
+   * это время и исполняются cron'ом в рабочее время вакансии. 0 = мгновенно.
+   * Дефолт 300 (5 ч) — отклик утром → отказ ~к обеду. Применяется ко ВСЕМ
+   * причинам (стоп-факторы, провал предкв, «не интересно» в чате, security).
+   */
+  rejectionDelayMinutes?: number
+
+  // ── Legacy (Сессии 1-5), оставлены для совместимости ────────────────
+  /** @deprecated → переименовано в minScoreLower; пишем оба для backward compat. */
+  minScore?:             number
+  /** @deprecated → заменено на midRangeAction. */
+  belowThresholdAction?: "reject" | "keep_new"
+
+  inviteMessage?:    string
+  reInviteMessage?:  string
+  rejectMessage?:    string
+
+  // ── Funnel Builder soft-флаги (зеркалятся из funnel_config_json,
+  //    см. funnel-config/route.ts). undefined/отсутствует = включено
+  //    (обратная совместимость со старыми вакансиями). Только явный false
+  //    выключает соответствующий блок воронки на бэкенде. ──
+  stopFactorsEnabled?:       boolean
+  aiAnketaScoreEnabled?:     boolean
+  stopWordsChatEnabled?:     boolean
+  testTaskAutoReplyEnabled?: boolean
+
+  // D5 (Phase 4): тумблер авто-отказа по AI-скору резюме. По умолчанию ВЫКЛ
+  // (P0-14): кандидаты ниже порога идут в keep_new (ручной разбор), отказ НЕ
+  // отправляется. true — HR осознанно включил реальный авто-отказ; это OUTWARD
+  // (discard_by_employer через hh кандидату). См. process-queue.ts.
+  autoRejectEnabled?:        boolean
+}
+
+// ── Резерв (Talent Pool) → Рефералы (drizzle/0167) ──
+// Реферальные ссылки сотрудников: company24.pro/ref/{slug}. Счётчики кликов/
+// приведённых/нанятых растут по мере перехода и найма. Бонус считается в UI
+// как hired_count * companies.hiringDefaultsJson.referralRules.bonusPerHire.
+export const referralLinks = pgTable("referral_links", {
+  id:            uuid("id").defaultRandom().primaryKey(),
+  companyId:     uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  name:          text("name").notNull(),
+  position:      text("position").notNull().default(""),
+  slug:          text("slug").notNull(),
+  clicks:        integer("clicks").notNull().default(0),
+  referredCount: integer("referred_count").notNull().default(0),
+  hiredCount:    integer("hired_count").notNull().default(0),
+  createdAt:     timestamp("created_at").defaultNow(),
+})
+
+// ── Резерв (Talent Pool) → Кампании прогрева (drizzle/0168) ──
+// Управляемая сущность кампании: канал + статус + счётчики воронки
+// (отправлено/открыто/ответили). Реальная ОТПРАВКА касаний кандидатам —
+// отдельная фича (outward, под флагом); сейчас кампания создаётся/паузится,
+// счётчики стартуют с 0 и растут, когда подключим рассылку.
+export const talentCampaigns = pgTable("talent_campaigns", {
+  id:           uuid("id").defaultRandom().primaryKey(),
+  companyId:    uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  name:         text("name").notNull(),
+  status:       text("status").notNull().default("active"),  // 'active' | 'paused'
+  channel:      text("channel").notNull().default("email"),  // 'email' | 'telegram' | 'both'
+  sentCount:    integer("sent_count").notNull().default(0),
+  openedCount:  integer("opened_count").notNull().default(0),
+  repliedCount: integer("replied_count").notNull().default(0),
+  createdAt:    timestamp("created_at").defaultNow(),
+  updatedAt:    timestamp("updated_at").defaultNow(),
+})
+
+// ── Резерв (Talent Pool) → ручные/CSV записи «Базы» (drizzle/0169) ──
+// Пассивные кандидаты, добавленные вручную или импортом CSV (НЕ из откликов на
+// вакансию). Кандидаты-из-вакансий (стадия talent_pool) живут в candidates и
+// мёрджатся в UI отдельно. Здесь — свои поля должность/компания/источник.
+export const talentPoolEntries = pgTable("talent_pool_entries", {
+  id:          uuid("id").defaultRandom().primaryKey(),
+  companyId:   uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  name:        text("name").notNull(),
+  position:    text("position").notNull().default(""),
+  company:     text("company").notNull().default(""),
+  source:      text("source").notNull().default(""),
+  email:       text("email").notNull().default(""),
+  phone:       text("phone").notNull().default(""),
+  telegram:    text("telegram").notNull().default(""),
+  comment:     text("comment").notNull().default(""),
+  score:       integer("score").notNull().default(0),
+  status:      text("status").notNull().default("cold"),  // cold|warming|hot|ideal
+  createdAt:   timestamp("created_at").defaultNow(),
+})
+
+// ── Резерв (Talent Pool) → Формы (drizzle/0170) ──
+// Определения форм сбора кандидатов (внешние/внутренние). Поля формы — в
+// fields_json. Публичная отправка формы (inbound) — отдельная фича.
+export interface TalentFormField { key: string; label: string; enabled: boolean; required: boolean; locked?: boolean }
+
+// ── Резерв → Формы: tracking-ссылки (drizzle/0171) ──
+// Короткая ссылка /f/{slug} для отслеживания источника. Ведёт на публичную
+// форму (опционально конкретную talent_form). Кандидат заполняет → запись в
+// talent_pool_entries + инкремент counters.
+export const formTrackingLinks = pgTable("form_tracking_links", {
+  id:         uuid("id").defaultRandom().primaryKey(),
+  companyId:  uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  formId:     uuid("form_id").references(() => talentForms.id, { onDelete: "set null" }),
+  source:     text("source").notNull().default(""),
+  name:       text("name").notNull().default(""),
+  slug:       text("slug").notNull(),
+  clicks:     integer("clicks").notNull().default(0),
+  candidates: integer("candidates").notNull().default(0),
+  createdAt:  timestamp("created_at").defaultNow(),
+})
+
+export const talentForms = pgTable("talent_forms", {
+  id:               uuid("id").defaultRandom().primaryKey(),
+  companyId:        uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  name:             text("name").notNull(),
+  type:             text("type").notNull().default("external"),  // 'external' | 'internal'
+  source:           text("source").notNull().default(""),
+  placement:        text("placement").notNull().default(""),
+  slug:             text("slug").notNull().default(""),
+  slogan:           text("slogan").notNull().default(""),
+  fieldsJson:       jsonb("fields_json").$type<TalentFormField[]>().notNull().default([]),
+  active:           boolean("active").notNull().default(true),
+  applicationsCount: integer("applications_count").notNull().default(0),
+  createdAt:        timestamp("created_at").defaultNow(),
+  updatedAt:        timestamp("updated_at").defaultNow(),
+})
 
 export const demos = pgTable("demos", {
   id: uuid("id").primaryKey().defaultRandom(),
   vacancyId: uuid("vacancy_id").references(() => vacancies.id).notNull(),
+  // Этап 2.5: дискриминатор материала вакансии. 'demo' — демонстрация
+  // должности (таб «Демонстрация»), 'test' — тестовое задание (таб «Тест»).
+  // Одна запись на (vacancy_id, kind). Миграция 0142.
+  kind: text("kind").notNull().default("demo"), // 'demo' | 'test' | 'block:<uuid>'
   title: text("title").notNull(),
   status: text("status").default("draft"), // 'draft' | 'published'
   lessonsJson: jsonb("lessons_json").notNull().default("[]"),
   postDemoSettings: jsonb("post_demo_settings").default({}),
+  // Миграция 0179: динамические блоки контента
+  sortOrder: integer("sort_order").notNull().default(0),
+  contentType: text("content_type").notNull().default("presentation"), // 'presentation' | 'test' | 'task'
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+})
+
+// Ответы кандидатов на тестовое задание (публичная /test/[token]). Миграция 0144.
+// ai_score/ai_reasoning заполняются на Этапе 2 (AI-скоринг).
+export const testSubmissions = pgTable("test_submissions", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  candidateId: uuid("candidate_id").references(() => candidates.id, { onDelete: "cascade" }).notNull(),
+  demoId:      uuid("demo_id").references(() => demos.id, { onDelete: "set null" }),
+  answerText:  text("answer_text"),
+  fileUrl:     text("file_url"),
+  // Структурированные ответы кандидата на вопросы task-блоков теста.
+  // Формат: { answers: StructuredAnswer[], objective: ObjectiveResult|null }.
+  answersJson: jsonb("answers_json"),
+  aiScore:     integer("ai_score"),
+  aiReasoning: text("ai_reasoning"),
+  submittedAt: timestamp("submitted_at").defaultNow(),
 })
 
 export interface PostDemoSettings {
@@ -353,7 +909,65 @@ export interface PostDemoSettings {
     birthDate?: { enabled: boolean; required: boolean }
     city?: { enabled: boolean; required: boolean }
   }
+  // ТЗ-3 Ч.1: автоответ после заполнения финальной анкеты с предложением
+  // тестового задания. Отдельный одиночный touch (branch=anketa_auto_reply),
+  // не цепочка дожима. Не путать с anketaConfirmation (короткое «спасибо»).
+  anketaAutoReply?: AnketaAutoReplySettings
+
+  // Этап 2.6: настройки блока воронки «Тестовое задание». Хранятся в
+  // postDemoSettings записи demos с kind='test' (контент теста — в её
+  // lessonsJson). Так блок воронки и таб «Тест» используют одну запись.
+  // (DEPRECATED источник — descriptionJson.testTask; читается как fallback.)
+  testTaskInstructions?: string
+  testDeadlineDays?:     number
+  testAiCheck?:          boolean
+  testResponseFormat?:   "text" | "file" | "both"
+
+  // Этап 2 (AI-скоринг теста). Все поля опциональны — обратная совместимость:
+  //   testCheckMode  undefined → 'assisted' (AI оценивает, стадию решает HR)
+  //   testAiPrompt   undefined → дефолтный промпт оценки (lib/ai-score-test.ts)
+  //   testPassingScore undefined → 70
+  //   testAfterMessage undefined/'' → сообщение после теста не отправляется
+  testCheckMode?:   "auto" | "assisted" | "manual"
+  testAiPrompt?:    string
+  testPassingScore?: number
+  testAfterMessage?: string   // плейсхолдеры {{name}}, {{vacancy}}
+  // Мини-фича рассылки теста (01.06.2026): текст приглашения, которое HR шлёт
+  // выбранным кандидатам (branch=test_invite). Плейсхолдеры {{name}},
+  // {{vacancy}}, {{test_link}} (персональная ссылка /test/{token}).
+  // undefined/'' → дефолтный текст из lib/messaging/test-invite.ts.
+  testInviteMessage?: string
+  // Тест-дожим: напоминания тем, кто получил тест, но не сдал. undefined →
+  // выключено. testReminderDays — смещения от отправки теста (Д+N); undefined →
+  // дефолт [1,3,6]. testReminderMessages — тексты по порядку (плейсхолдеры
+  // {{name}}/{{vacancy}}/{{test_link}}); undefined → дефолтные.
+  testReminderEnabled?:  boolean
+  testReminderDays?:     number[]
+  testReminderMessages?: string[]
+  // Цвет кнопок навигации «Далее/Назад» у кандидата. undefined/null → бренд-цвет компании.
+  navButtonColor?: string
+  // Текст кнопки «Далее» у кандидата. undefined/'' → «Далее».
+  navButtonText?: string
 }
+
+export interface AnketaAutoReplySettings {
+  enabled?:         boolean   // тумблер ВКЛ/ВЫКЛ, default false
+  // #59: новые пресеты в секундах (10с/30с/1м/3м/5м/15м/30м/1ч).
+  delaySeconds?:    10 | 30 | 60 | 180 | 300 | 900 | 1800 | 3600
+  // Legacy в минутах — оставлен для backward-compat при чтении старых
+  // descriptionJson. Новые клиенты пишут delaySeconds; читатели сначала
+  // смотрят delaySeconds, потом делают fallback на delayMinutes * 60.
+  delayMinutes?:    5 | 15 | 30 | 60 | 240 | 1440
+  respectSchedule?: boolean   // учитывать рабочее окно вакансии, default true
+  text?:            string    // текст сообщения с плейсхолдерами
+  testTaskUrl?:     string    // опциональная ссылка, дописывается в конец текста
+}
+
+export const ANKETA_AUTO_REPLY_DELAYS_SECONDS = [10, 30, 60, 180, 300, 900, 1800, 3600] as const
+// Legacy — больше не используется в UI, оставлен для совместимости.
+export const ANKETA_AUTO_REPLY_DELAYS = [5, 15, 30, 60, 240, 1440] as const
+export const DEFAULT_ANKETA_AUTO_REPLY_TEXT =
+  "{{name}}, рассмотрели вашу анкету. Ваша кандидатура нам интересна. Предлагаем тестовое задание."
 
 export type FormFieldKey = "firstName" | "lastName" | "email" | "phone" | "telegram" | "birthDate" | "city"
 
@@ -415,6 +1029,17 @@ export const candidates = pgTable("candidates", {
   aiSummary: text("ai_summary"),
   aiDetails: jsonb("ai_details"), // [{question, score, comment}]
   aiScoredAt: timestamp("ai_scored_at"),
+  // Группа 25: A/B сравнение скоринга v1 (scoreCandidateById) vs v2
+  // (scoreCandidateV2, двухпроходный со структурированными требованиями).
+  // aiScore = v2 если доступен, иначе v1 — основной для UI/фильтров.
+  aiScoreV1:        real("ai_score_v1"),
+  aiScoreV2:        real("ai_score_v2"),
+  aiScoreV2Details: jsonb("ai_score_v2_details").$type<CandidateScoreV2>(),
+  // Рубричный движок соответствия (shadow, миграция 0151). Считается параллельно
+  // существующим скорерам и НЕ влияет на автодействия — для сравнения/обкатки.
+  rubricScore:      integer("rubric_score"),
+  rubricDetails:    jsonb("rubric_details"),     // RubricResult (lib/scoring/types)
+  rubricScoredAt:   timestamp("rubric_scored_at"),
   // AI-скор по данным резюме (hh.ru / анкета) — выставляется в момент приёма
   // отклика, до демо. Шкала 0..100, NULL = не оценивали. Отдельно от aiScore
   // (он считается после прохождения демо и включает ответы на вопросы).
@@ -424,18 +1049,58 @@ export const candidates = pgTable("candidates", {
   // Момент первого открытия страницы /demo/<shortId> владельцем-кандидатом.
   // NULL = ещё не открывал (стейдж = primary_contact).
   demoOpenedAt: timestamp("demo_opened_at"),
+  // Последняя активность кандидата (ответ в демо / автосохранение теста /
+  // открытие теста) — для фильтра «активны сейчас» (isActive ≤ 30 мин).
+  lastActivityAt: timestamp("last_activity_at"),
   autoProcessingStopped: boolean("auto_processing_stopped").notNull().default(false),
   autoProcessingStoppedReason: text("auto_processing_stopped_reason"),
   autoProcessingStoppedAt: timestamp("auto_processing_stopped_at", { withTimezone: true }),
+  // Отложенный отказ (drizzle/0155). Никаких мгновенных авто-отказов: точки
+  // отказа ставят pendingRejectionAt = триггер + задержка вакансии, cron
+  // /api/cron/pending-rejections исполняет в рабочее время. NULL = не запланирован.
+  pendingRejectionAt:     timestamp("pending_rejection_at", { withTimezone: true }),
+  pendingRejectionReason: text("pending_rejection_reason"),
+  pendingRejectionSetAt:  timestamp("pending_rejection_set_at", { withTimezone: true }),
+  // Отрендеренный текст отказа на момент планирования (Заход 3). NULL =
+  // использовать generic rejectMessage вакансии. Нужен для факторных текстов
+  // стоп-факторов, которые иначе потерялись бы при отложенном отказе.
+  pendingRejectionMessage: text("pending_rejection_message"),
   // v5: AI-классификатор ответов в hh-чате может выставить паузу автоматизации
   // (например, при rejection или wants_personal_contact).
   automationPaused: boolean("automation_paused").notNull().default(false),
+  // Сколько раз scan-incoming уже отправил кандидату эскалационный
+  // шаблон callIntent (vacancy.automation.callIntent.insistDemoMessages).
+  // После 3 — больше не реагируем на keywords. См. Сессия 5.
+  callIntentCount:  integer("call_intent_count").notNull().default(0),
+  // Предквалификация (Сессия 6b/9). status: pending|passed|failed|no_answer
+  // или NULL если предкв не запускалась. sent_at — момент отправки вопросов,
+  // completed_at — момент финального решения.
+  prequalificationStatus:        text("prequalification_status"),
+  prequalificationSentAt:        timestamp("prequalification_sent_at", { withTimezone: true }),
+  prequalificationCompletedAt:   timestamp("prequalification_completed_at", { withTimezone: true }),
   // v5: дубль по реферальной ссылке — какой short_id привёл этого кандидата.
   referredByShortId: text("referred_by_short_id"),
   // Альтернативные токены при дедупликации: один человек может зайти по
   // разным реф-ссылкам, мы оставляем одну карточку и копим сюда исходные
   // токены (см. lib/candidates/normalize-contacts.ts + apply route).
   referralUuids: jsonb("referral_uuids").$type<string[]>().notNull().default([]),
+  // Группа 30: счётчик медиум-уровней грубости в AI-чате. На 2-м срабатывании
+  // — автоотказ. Сбрасывается только новой ручной активацией HR-ом (или при
+  // пересоздании кандидата). См. drizzle/0134_ai_chatbot_v2_tracking.sql.
+  abuseWarningsCount:   integer("abuse_warnings_count").notNull().default(0),
+  lastAbuseWarningAt:   timestamp("last_abuse_warning_at", { withTimezone: true }),
+  // Группа 33: счётчик «коротких» сообщений ("Минутку, посмотрю...") за
+  // диалог. Лимит регулируется в aiChatbotSettings.responseTiming.
+  // См. drizzle/0135_chatbot_delays.sql.
+  shortMessagesSentCount: integer("short_messages_sent_count").notNull().default(0),
+  lastShortMessageAt:     timestamp("last_short_message_at", { withTimezone: true }),
+  // drizzle/0158 — для будущего Telegram-канала чат-бота (связка с чатом кандидата)
+  telegramChatId:   text("telegram_chat_id"),
+  telegramUsername: text("telegram_username"),
+  // drizzle/0162 — мягкое удаление («Корзина»). NOT NULL = в корзине, скрыт из
+  // списков/счётчиков; восстановление или удаление навсегда; авто-очистка по
+  // companies.trash_retention_days.
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })
@@ -946,6 +1611,22 @@ export const notifications = pgTable("notifications", {
   createdAt:  timestamp("created_at").defaultNow(),
 })
 
+// ─── Audit Log (ФЗ-152) ───────────────────────────────────────────────────────
+// Журнал операций с персональными данными кандидатов (доступ/экспорт/удаление).
+export const auditLog = pgTable("audit_log", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  tenantId:   uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }),
+  userId:     uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  userEmail:  text("user_email"),
+  action:     text("action").notNull(),     // candidate_export | candidate_delete | candidate_view_contacts
+  entityType: text("entity_type"),           // candidate | vacancy
+  entityId:   text("entity_id"),
+  count:      integer("count"),
+  meta:       jsonb("meta").$type<Record<string, unknown>>().default({}),
+  ip:         text("ip"),
+  createdAt:  timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+})
+
 // ─── Invite Links ─────────────────────────────────────────────────────────────
 
 export const inviteLinks = pgTable("invite_links", {
@@ -1049,6 +1730,20 @@ export const calendarEvents = pgTable("calendar_events", {
   color:       text("color"),
   recurrence:  text("recurrence"),
   status:      text("status").default("confirmed"), // confirmed|tentative|cancelled
+  // C6: метки отправленных напоминаний (24ч/2ч до start_at). NULL = не слали.
+  remind24hSentAt: timestamp("remind_24h_sent_at", { withTimezone: true }),
+  remind2hSentAt:  timestamp("remind_2h_sent_at", { withTimezone: true }),
+  // Интервью-модуль: структура для событий type='interview' (всё nullable).
+  candidateId:      uuid("candidate_id").references(() => candidates.id, { onDelete: "set null" }),
+  vacancyId:        uuid("vacancy_id").references(() => vacancies.id, { onDelete: "set null" }),
+  interviewer:      text("interviewer"),
+  interviewType:    text("interview_type"),    // Техническое | HR | Финальное
+  interviewFormat:  text("interview_format"),   // Онлайн | Офис
+  interviewStatus:  text("interview_status"),    // Подтверждено|Ожидает|Пройдено|Не явился|Отменено
+  // #14: адрес офиса (для Офис) / ссылка на видео-звонок (для Онлайн)
+  location:    text("location"),
+  meetingUrl:  text("meeting_url"),
+  scope:       text("scope").notNull().default("company"), // company|hr|personal
   createdAt:   timestamp("created_at").defaultNow(),
   updatedAt:   timestamp("updated_at").defaultNow(),
 })
@@ -1114,8 +1809,17 @@ export const vacancyUtmLinks = pgTable("vacancy_utm_links", {
   name:            text("name").notNull(),
   slug:            text("slug").unique().notNull(),
   destinationUrl:  text("destination_url"),
+  // Куда ведёт /v/{slug}: 'vacancy' → /vacancy/{slug} (default), 'demo' →
+  // /api/public/source/{linkId}/visit (создаёт кандидата и шлёт на /demo).
+  // Миграция 0145. Существующие строки → 'vacancy' через default.
+  destinationType: text("destination_type").notNull().default("vacancy"),
   clicks:          integer("clicks").default(0),
   candidatesCount: integer("candidates_count").default(0),
+  // Audit: кто создал ссылку (миграция 0146). Nullable — старые
+  // (доaudit) строки остаются NULL. FK не ставим намеренно: при удалении
+  // юзера ссылку сохраняем. Параллельная запись идёт в activity_log
+  // (entity_type='utm_link') для полноценного трейла.
+  createdByUserId: uuid("created_by_user_id"),
   createdAt:       timestamp("created_at").defaultNow(),
 })
 
@@ -1372,8 +2076,27 @@ export const demoTemplates = pgTable("demo_templates", {
   validUntil:    timestamp("valid_until"),
   // RAG: см. knowledgeArticles.embedding
   embedding:     jsonb("embedding"),
+  // Этап 3: корзина. NULL — активный; не-NULL — в корзине, cron trash-cleanup
+  // удалит навсегда через companies.trash_retention_days. Миграция 0143.
+  deletedAt:     timestamp("deleted_at"),
   createdAt:     timestamp("created_at").defaultNow(),
   updatedAt:     timestamp("updated_at").defaultNow(),
+})
+
+// Шаблоны анкет (библиотека). По образцу demoTemplates: per-tenant, soft-delete,
+// системные не удаляются. questions — Question[] (lib/course-types.ts), тот же
+// формат, что vacancy.descriptionJson.anketa.questions → применимо к вакансии.
+// Миграция 0147.
+export const questionnaireTemplates = pgTable("questionnaire_templates", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  tenantId:   uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }),
+  name:       text("name").notNull(),
+  type:       text("type").notNull().default("candidate"), // candidate | client | post_demo
+  questions:  jsonb("questions").notNull().default("[]"),
+  isSystem:   boolean("is_system").default(false),
+  deletedAt:  timestamp("deleted_at"),
+  createdAt:  timestamp("created_at").defaultNow(),
+  updatedAt:  timestamp("updated_at").defaultNow(),
 })
 
 // ─── Training: AI ролевые сценарии ───────────────────────────────────────────
@@ -1482,6 +2205,92 @@ export const hhResponses = pgTable("hh_responses", {
 
 // Legacy alias — old code references hhTokens
 export const hhTokens = hhIntegrations
+
+// ─── Исходящий подбор (hh outbound sourcing), Фаза 1 — миграция 0159 ─────────
+// Поток: критерии → hh GET /resumes → сохранить найденные сниппеты →
+// AI-скоринг по сниппетам → HR отмечает лучших → приглашение через negotiations
+// → кандидат в воронке (source='hh_outbound'). См. ТЗ «Исходящий подбор».
+
+// Сохранённый поисковый запрос / кампания по вакансии.
+// mode='manual'  — разовый поиск (текущее поведение).
+// mode='auto'    — кампания: cron периодически запускает поиск, скорит и
+//                  автоматически приглашает кандидатов с ai_score >= scoreThreshold.
+// softCriteria   — текстовое описание «мягких» пожеланий для AI-скоринга
+//                  (передаётся в screenCandidate как дополнительный контекст).
+// active=true    — кампания активна (cron её подхватывает).
+export const outboundSearches = pgTable("outbound_searches", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  companyId:       uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  vacancyId:       uuid("vacancy_id").notNull().references(() => vacancies.id, { onDelete: "cascade" }),
+  criteria:        jsonb("criteria").notNull().default({}),
+  createdByUserId: uuid("created_by_user_id").references(() => users.id),
+  createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  lastRunAt:       timestamp("last_run_at", { withTimezone: true }),
+  // campaign fields (migration 0181)
+  mode:            text("mode").notNull().default("manual"),
+  scoreThreshold:  integer("score_threshold").notNull().default(70),
+  dailyAutoLimit:  integer("daily_auto_limit").notNull().default(10),
+  softCriteria:    text("soft_criteria"),
+  active:          boolean("active").notNull().default(false),
+  cronRunAt:       timestamp("cron_run_at", { withTimezone: true }),
+})
+
+// Найденное резюме из поиска hh. snippet — сырой сниппет из выдачи GET /resumes
+// (НЕ расходует лимит просмотров). ai_score/ai_reasoning заполняются скорером.
+// status: found | viewed | invited | responded | skipped.
+export const outboundCandidates = pgTable("outbound_candidates", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  searchId:     uuid("search_id").notNull().references(() => outboundSearches.id, { onDelete: "cascade" }),
+  companyId:    uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  vacancyId:    uuid("vacancy_id").notNull().references(() => vacancies.id, { onDelete: "cascade" }),
+  hhResumeId:   text("hh_resume_id").notNull(),
+  title:        text("title"),
+  snippet:      jsonb("snippet"),
+  aiScore:      integer("ai_score"),
+  aiReasoning:  text("ai_reasoning"),
+  status:       text("status").notNull().default("found"),
+  invitedAt:    timestamp("invited_at", { withTimezone: true }),
+  viewedAt:     timestamp("viewed_at", { withTimezone: true }),
+  candidateId:  uuid("candidate_id").references(() => candidates.id, { onDelete: "set null" }),
+  createdAt:    timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:    timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  unique("uq_outbound_candidates_vacancy_resume").on(t.vacancyId, t.hhResumeId),
+])
+
+// Дневной учёт расхода лимита просмотров резюме hh по компании.
+//   viewsFromSearch — просмотры из поисковой выдачи (лимит 50/день на менеджера)
+//   totalViews      — суммарные уникальные просмотры (лимит 500/день)
+export const hhResumeViewQuota = pgTable("hh_resume_view_quota", {
+  companyId:        uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  date:             date("date").notNull(),
+  viewsFromSearch:  integer("views_from_search").notNull().default(0),
+  totalViews:       integer("total_views").notNull().default(0),
+}, (t) => [
+  primaryKey({ columns: [t.companyId, t.date] }),
+])
+
+// Async tracking разбора hh-очереди (Сессия 7).
+// POST /api/integrations/hh/process-queue создаёт строку и сразу возвращает
+// jobId; UI делает polling /status?jobId=...
+export const hhProcessJobs = pgTable("hh_process_jobs", {
+  id:                uuid("id").primaryKey().defaultRandom(),
+  companyId:         uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  vacancyId:         uuid("vacancy_id").references(() => vacancies.id, { onDelete: "set null" }),
+  status:            text("status").notNull().default("queued"), // 'queued'|'running'|'completed'|'failed'|'stopped'
+  limitRequested:    integer("limit_requested"),
+  delaySeconds:      integer("delay_seconds"),
+  processed:         integer("processed").notNull().default(0),
+  invited:           integer("invited").notNull().default(0),
+  rejected:          integer("rejected").notNull().default(0),
+  kept:              integer("kept").notNull().default(0),
+  deferredOffHours:  integer("deferred_off_hours").notNull().default(0),
+  results:           jsonb("results").notNull().default([]),
+  error:             text("error"),
+  createdAt:         timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  startedAt:         timestamp("started_at", { withTimezone: true }),
+  finishedAt:        timestamp("finished_at", { withTimezone: true }),
+})
 
 // ─── Learning Plans ─────────────────────────────────────────────────────────
 
@@ -1766,6 +2575,24 @@ export const passwordResetTokens = pgTable("password_reset_tokens", {
 // демо или не допрошёл его до конца. Настраивается на уровне вакансии:
 // один из 4 пресетов (off/soft/standard/aggressive) и кастомные тексты.
 
+// Ответы кандидата на вопросы предквалификации (Сессия 6).
+// Заполняется backend'ом после получения ответа кандидата в hh-чате
+// и AI-вердикта Haiku. См. lib/prequalification/* (TODO в Сессии 6b).
+export const candidateQualificationAnswers = pgTable("candidate_qualification_answers", {
+  id:            uuid("id").primaryKey().defaultRandom(),
+  candidateId:   uuid("candidate_id").notNull().references(() => candidates.id, { onDelete: "cascade" }),
+  vacancyId:     uuid("vacancy_id").notNull().references(() => vacancies.id, { onDelete: "cascade" }),
+  questionText:  text("question_text").notNull(),
+  answerText:    text("answer_text"),
+  // 'passed' | 'failed' | 'unclear' | NULL (ещё ждём)
+  aiVerdict:     text("ai_verdict"),
+  aiReasoning:   text("ai_reasoning"),
+  // Snapshot значения required на момент создания записи. Если HR потом
+  // поменяет требование в настройках — этот ответ сохранит свою критичность.
+  isCritical:    boolean("is_critical").notNull().default(false),
+  createdAt:     timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
 export const followUpCampaigns = pgTable("follow_up_campaigns", {
   id:                   uuid("id").defaultRandom().primaryKey(),
   vacancyId:            uuid("vacancy_id").notNull().references(() => vacancies.id, { onDelete: "cascade" }),
@@ -1777,6 +2604,11 @@ export const followUpCampaigns = pgTable("follow_up_campaigns", {
   customMessages:       jsonb("custom_messages").$type<string[] | null>(),
   // Кастомные тексты ветки Б (открыл, но не дошёл до конца).
   customMessagesOpened: jsonb("custom_messages_opened").$type<string[] | null>(),
+  // ── Дожим по тесту (две ветки), независим от демо-дожима. ──
+  testEnabled:          boolean("test_enabled").notNull().default(false),
+  testPreset:           text("test_preset").notNull().default("off"),
+  testMessages:         jsonb("test_messages").$type<string[] | null>(),        // ветка «не открыл тест»
+  testMessagesOpened:   jsonb("test_messages_opened").$type<string[] | null>(),  // ветка «открыл, но не заполнил»
   createdAt:            timestamp("created_at").defaultNow().notNull(),
   updatedAt:            timestamp("updated_at").defaultNow().notNull(),
 })
@@ -1794,5 +2626,171 @@ export const followUpMessages = pgTable("follow_up_messages", {
   // Ветка дожима: 'not_opened' (А) | 'opened_not_finished' (Б).
   branch:       text("branch").notNull().default("not_opened"),
   errorMessage: text("error_message"),
-  createdAt:    timestamp("created_at").defaultNow().notNull(),
+  // Д0 цепочки — исходная точка отсчёта расписания касаний. Обычно
+  // совпадает с negotiation.created_at hh-отклика. scheduled_at от
+  // chain_d0 отличается на dayOffset + jitter + сдвиг окном работы.
+  chainD0:        timestamp("chain_d0", { withTimezone: true }),
+  // 'hh_response' | 'manual_review' | 'branch_switch'
+  chainD0Source:  text("chain_d0_source"),
+  createdAt:      timestamp("created_at").defaultNow().notNull(),
+})
+
+// Group 14: журнал «миграций настроек платформы». Runner в
+// lib/platform/settings-migrations.ts перед каждой попыткой apply() ищет
+// запись по id — если она уже есть, миграция считается применённой
+// и пропускается. Это делает массовые правки настроек безопасно
+// повторяемыми (идемпотентными).
+export const platformSettingsMigrations = pgTable("platform_settings_migrations", {
+  id:             text("id").primaryKey(),
+  description:    text("description").notNull(),
+  appliedAt:      timestamp("applied_at", { withTimezone: true }),
+  affectedCount:  integer("affected_count").notNull().default(0),
+  rollbackData:   jsonb("rollback_data"),
+  createdBy:      text("created_by"),
+  notes:          text("notes"),
+}, (t) => [
+  index("idx_psm_applied").on(t.appliedAt),
+])
+
+// Платформенные KV-настройки (drizzle/0154). Первое применение —
+// 'trash_retention_days' (срок авто-удаления единой Корзины /admin/clients).
+export const platformSettings = pgTable("platform_settings", {
+  key:       text("key").primaryKey(),
+  value:     jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+})
+
+// Group 14: журнал «emergency broadcast» действий — kill switch AI-чат-бота
+// у всех компаний, добавление глобального стоп-слова и т.п. Любой POST на
+// /api/platform/emergency/* пишет сюда строку с payload и result.
+export const platformEmergencyActions = pgTable("platform_emergency_actions", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  actionType:   text("action_type").notNull(),
+  payload:      jsonb("payload"),
+  executedAt:   timestamp("executed_at", { withTimezone: true }).notNull().defaultNow(),
+  executedBy:   text("executed_by"),
+  result:       jsonb("result"),
+}, (t) => [
+  index("idx_pea_executed").on(t.executedAt),
+])
+
+// P0-30: журнал запусков критичных cron-эндпоинтов. Пишется каждым cron'ом
+// (recordCronRun из lib/cron/record-run.ts), читается health-check endpoint.
+export const cronRuns = pgTable("cron_runs", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  cronName:     text("cron_name").notNull(),
+  startedAt:    timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt:   timestamp("finished_at", { withTimezone: true }),
+  status:       text("status").notNull().default("running"), // 'running' | 'ok' | 'error' | 'busy'
+  durationMs:   integer("duration_ms"),
+  errorMessage: text("error_message"),
+  metadata:     jsonb("metadata"),
+}, (t) => [
+  index("cron_runs_name_started_idx").on(t.cronName, t.startedAt),
+])
+
+// Group 15: библиотека пер-компанийных шаблонов воронки.
+// config_json хранит массив { type, order, enabled } — тот же формат, что в
+// vacancies.funnel_config_json. При применении копируется в вакансию.
+// is_default = true — стартовый шаблон для новых вакансий компании. Только
+// один шаблон на компанию может быть default (см. uniq_cft_default_per_company
+// в drizzle/0130_company_funnel_templates.sql).
+export const companyFunnelTemplates = pgTable("company_funnel_templates", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  companyId:   uuid("company_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  name:        text("name").notNull(),
+  description: text("description"),
+  configJson:  jsonb("config_json").notNull(),
+  isDefault:   boolean("is_default").notNull().default(false),
+  createdBy:   uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt:   timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:   timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("idx_cft_company").on(t.companyId),
+])
+
+// Group 16: библиотека пер-платформенных шаблонов воронки.
+// Создаёт platform-admin (через /admin/platform → Templates). Видна всем
+// HR компаниям через GET /api/modules/hr/funnel-templates/platform
+// (только is_published=true). source_* — для аудита.
+export const platformFunnelTemplates = pgTable("platform_funnel_templates", {
+  id:               uuid("id").primaryKey().defaultRandom(),
+  name:             text("name").notNull(),
+  description:      text("description"),
+  industry:         text("industry"),
+  configJson:       jsonb("config_json").notNull(),
+  sourceVacancyId:  uuid("source_vacancy_id").references(() => vacancies.id, { onDelete: "set null" }),
+  sourceCompanyId:  uuid("source_company_id").references(() => companies.id, { onDelete: "set null" }),
+  isPublished:      boolean("is_published").notNull().default(false),
+  createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:        timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
+// ─── Группа 28: AI-помощник «Юлия» ─────────────────────────────────────────
+// Внутренний HR-ассистент для создания вакансии через короткий диалог.
+// НЕ путать с Аней — sales-ассистентом на лендинге Company24.
+// Миграция drizzle/0133_yulia_conversations.sql.
+
+export interface YuliaConversationState {
+  // Накапливаемые данные в процессе диалога. Произвольный bag — Юлия пишет
+  // сюда то, что нужно текущему context_type, без жёсткой схемы.
+  [k: string]: unknown
+}
+
+export interface YuliaPendingAction {
+  type:                   string                  // "create_vacancy_draft" | (future)
+  params:                 Record<string, unknown>
+  requires_confirmation?: boolean
+}
+
+export const yuliaConversations = pgTable("yulia_conversations", {
+  id:                 uuid("id").primaryKey().defaultRandom(),
+  userId:             uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  companyId:          uuid("company_id").references(() => companies.id, { onDelete: "cascade" }),
+  contextType:        text("context_type").notNull(),                  // "vacancy_creation"
+  state:              jsonb("state").$type<YuliaConversationState>().notNull().default({}),
+  status:             text("status").notNull().default("active"),      // active | completed | abandoned
+  resultingEntityId:  uuid("resulting_entity_id"),
+  createdAt:          timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:          timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("idx_yulia_conv_user").on(t.userId, t.status),
+  index("idx_yulia_conv_company").on(t.companyId, t.createdAt),
+])
+
+export const yuliaMessages = pgTable("yulia_messages", {
+  id:             uuid("id").primaryKey().defaultRandom(),
+  conversationId: uuid("conversation_id").references(() => yuliaConversations.id, { onDelete: "cascade" }).notNull(),
+  role:           text("role").notNull(),                              // user | assistant
+  content:        text("content").notNull(),
+  pendingAction:  jsonb("pending_action").$type<YuliaPendingAction>(),
+  actionStatus:   text("action_status"),                               // null | pending | confirmed | rejected | executed
+  createdAt:      timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("idx_yulia_msg_conv").on(t.conversationId, t.createdAt),
+])
+
+// drizzle/0163 — публичные ссылки на сравнение кандидатов (без логина).
+export const compareShares = pgTable("compare_shares", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  token:        text("token").notNull().unique(),
+  companyId:    uuid("company_id").notNull(),
+  vacancyId:    uuid("vacancy_id").notNull(),
+  candidateIds: jsonb("candidate_ids").notNull(),
+  createdBy:    uuid("created_by"),
+  createdAt:    timestamp("created_at", { withTimezone: true }).defaultNow(),
+  expiresAt:    timestamp("expires_at", { withTimezone: true }).notNull(),
+  revokedAt:    timestamp("revoked_at", { withTimezone: true }),
+})
+
+// Внутренние наборы сравнения — для коротких HR-ссылок ?set=<token>.
+// Без срока жизни и без публичного доступа (в отличие от compareShares).
+export const compareSets = pgTable("compare_sets", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  token:        text("token").notNull().unique(),
+  companyId:    uuid("company_id").notNull(),
+  vacancyId:    uuid("vacancy_id").notNull(),
+  candidateIds: jsonb("candidate_ids").notNull(),
+  createdBy:    uuid("created_by"),
+  createdAt:    timestamp("created_at", { withTimezone: true }).defaultNow(),
 })

@@ -13,7 +13,7 @@ export const DEFAULT_BRAND: BrandConfig = {
   bgColor: "#f0f4ff",
   textColor: "#1e293b",
   logoUrl: null,
-  companyName: "ООО Ромашка",
+  companyName: "",
   greetingTemplate: "Привет, {name}! 👋",
   plan: "business",
 }

@@ -37,7 +37,7 @@ interface UseDemoResult {
   updateDemo: (updated: Demo) => void
 }
 
-export function useDemo(vacancyId: string | null): UseDemoResult {
+export function useDemo(vacancyId: string | null, kind: "demo" | "test" = "demo"): UseDemoResult {
   const [demo, setDemo] = useState<Demo | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -45,14 +45,17 @@ export function useDemo(vacancyId: string | null): UseDemoResult {
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const latestDemoRef = useRef<Demo | null>(null)
+  // Есть несохранённые изменения. Управляет отправкой beacon при уходе со
+  // страницы — чтобы при быстрой перезагрузке последняя правка не терялась.
+  const dirtyRef = useRef(false)
 
-  // Load demo on mount
+  // Load demo on mount (kind разделяет демо/тест — Этап 2.5)
   useEffect(() => {
     if (!vacancyId) return
     setLoading(true)
     setError(null)
 
-    fetch(`/api/modules/hr/demos?vacancy_id=${encodeURIComponent(vacancyId)}`)
+    fetch(`/api/modules/hr/demos?vacancy_id=${encodeURIComponent(vacancyId)}&kind=${kind}`)
       .then(res => res.ok ? res.json() : Promise.reject(res))
       .then((json: { data?: ApiDemo[] }) => {
         const rows = json.data ?? (json as unknown as ApiDemo[])
@@ -65,7 +68,7 @@ export function useDemo(vacancyId: string | null): UseDemoResult {
       })
       .catch(() => setError("Не удалось загрузить демо"))
       .finally(() => setLoading(false))
-  }, [vacancyId])
+  }, [vacancyId, kind])
 
   const persistUpdate = useCallback(async (updated: Demo) => {
     setSaveStatus("saving")
@@ -80,6 +83,7 @@ export function useDemo(vacancyId: string | null): UseDemoResult {
         }),
       })
       if (!res.ok) throw new Error("save failed")
+      dirtyRef.current = false
       setSaveStatus("saved")
     } catch {
       setSaveStatus("error")
@@ -89,6 +93,7 @@ export function useDemo(vacancyId: string | null): UseDemoResult {
   const updateDemo = useCallback((updated: Demo) => {
     setDemo(updated)
     latestDemoRef.current = updated
+    dirtyRef.current = true
     setSaveStatus("saving")
 
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -96,7 +101,7 @@ export function useDemo(vacancyId: string | null): UseDemoResult {
       if (latestDemoRef.current) {
         persistUpdate(latestDemoRef.current)
       }
-    }, 1500)
+    }, 700)
   }, [persistUpdate])
 
   const createDemo = useCallback(async (title: string, lessons: Lesson[]): Promise<Demo | null> => {
@@ -106,7 +111,7 @@ export function useDemo(vacancyId: string | null): UseDemoResult {
       const res = await fetch("/api/modules/hr/demos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ vacancy_id: vacancyId, title, lessons_json: lessons }),
+        body: JSON.stringify({ vacancy_id: vacancyId, title, lessons_json: lessons, kind }),
       })
       if (!res.ok) throw new Error("create failed")
       const json = await res.json()
@@ -120,7 +125,7 @@ export function useDemo(vacancyId: string | null): UseDemoResult {
       setSaveStatus("error")
       return null
     }
-  }, [vacancyId])
+  }, [vacancyId, kind])
 
   // Flush pending changes: save immediately
   const flush = useCallback(() => {
@@ -134,33 +139,46 @@ export function useDemo(vacancyId: string | null): UseDemoResult {
     }
   }, [persistUpdate])
 
-  // Save on unmount and before page unload
+  // Сохранение при уходе со страницы. Шлём beacon ПОКА ЕСТЬ несохранённые
+  // изменения (dirtyRef), а не «пока тикает debounce» — иначе быстрый F5 после
+  // правки терял её. pagehide/visibilitychange надёжнее beforeunload (срабатывают
+  // при перезагрузке, закрытии вкладки и сворачивании, в т.ч. на мобильных).
   useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (debounceRef.current && latestDemoRef.current) {
-        clearTimeout(debounceRef.current)
-        // Use navigator.sendBeacon for reliable delivery on unload
-        const blob = new Blob(
-          [JSON.stringify({
-            title: latestDemoRef.current.title,
-            status: latestDemoRef.current.status,
-            lessons_json: latestDemoRef.current.lessons,
-          })],
-          { type: "application/json" }
-        )
-        navigator.sendBeacon(`/api/modules/hr/demos/${latestDemoRef.current.id}`, blob)
-      }
+    const beaconSave = () => {
+      if (!dirtyRef.current || !latestDemoRef.current) return
+      if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null }
+      const blob = new Blob(
+        [JSON.stringify({
+          title: latestDemoRef.current.title,
+          status: latestDemoRef.current.status,
+          lessons_json: latestDemoRef.current.lessons,
+        })],
+        { type: "application/json" }
+      )
+      // beacon шлёт POST → роут демо принимает POST как PUT (см. demos/[id]/route).
+      const ok = navigator.sendBeacon(`/api/modules/hr/demos/${latestDemoRef.current.id}`, blob)
+      if (ok) dirtyRef.current = false
     }
-    window.addEventListener("beforeunload", handleBeforeUnload)
+    const onVisibility = () => { if (document.visibilityState === "hidden") beaconSave() }
+    window.addEventListener("pagehide", beaconSave)
+    window.addEventListener("beforeunload", beaconSave)
+    document.addEventListener("visibilitychange", onVisibility)
     return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload)
+      window.removeEventListener("pagehide", beaconSave)
+      window.removeEventListener("beforeunload", beaconSave)
+      document.removeEventListener("visibilitychange", onVisibility)
       if (debounceRef.current) clearTimeout(debounceRef.current)
-      // Flush on unmount too
-      if (latestDemoRef.current) {
+      // Flush on unmount too (смена вкладки внутри SPA).
+      if (dirtyRef.current && latestDemoRef.current) {
         persistUpdate(latestDemoRef.current).catch(() => {})
       }
     }
   }, [persistUpdate])
 
   return { demo, loading, error, saveStatus, createDemo, updateDemo }
+}
+
+/** Этап 2.5: таб «Тест» — те же демо-записи в таблице demos, но kind='test'. */
+export function useTest(vacancyId: string | null): UseDemoResult {
+  return useDemo(vacancyId, "test")
 }

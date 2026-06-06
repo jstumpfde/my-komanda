@@ -4,25 +4,7 @@ import { db } from "@/lib/db"
 import { hhIntegrations, hhResponses, vacancies } from "@/lib/db/schema"
 import { and, eq, isNull } from "drizzle-orm"
 import { getValidToken } from "@/lib/hh-helpers"
-import { getNegotiations, fetchHhResume, type HHNegotiationItem } from "@/lib/hh-api"
-
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
-
-// Пауза между запросами /resumes/{id} — hh лимитирует ~200 запросов/час с токена.
-// 200мс даёт ~5 rps, что заведомо безопасно даже при пиковых батчах.
-const RESUME_FETCH_DELAY_MS = 200
-
-// Defensive resolution: hh API формат может отличаться (items / collection / голый массив).
-// Пустой список — это не ошибка, а просто 0 откликов.
-function resolveItems(r: unknown): HHNegotiationItem[] {
-  return Array.isArray((r as { items?: unknown })?.items)
-    ? ((r as { items: HHNegotiationItem[] }).items)
-    : Array.isArray((r as { collection?: unknown })?.collection)
-      ? ((r as { collection: HHNegotiationItem[] }).collection)
-      : Array.isArray(r)
-        ? (r as HHNegotiationItem[])
-        : []
-}
+import { importHhResponsesForVacancy } from "@/lib/hh/import-responses"
 
 export async function GET() {
   const session = await auth()
@@ -52,7 +34,9 @@ export async function GET() {
       .from(vacancies)
       .where(and(eq(vacancies.companyId, companyId), isNull(vacancies.deletedAt)))
 
-    const allItems: HHNegotiationItem[] = []
+    // Импорт делегирован в общий lib/hh/import-responses (тот же модуль, что и
+    // у cron'а — чтобы пути не расходились). mode "sync": обрабатываем все
+    // отклики и подтягиваем полное резюме на каждый, как и раньше.
     for (const v of localVacs) {
       if (!v.hhVacancyId) {
         console.warn(`[hh/responses] skip vacancy ${v.id} — нет hh_vacancy_id`)
@@ -63,107 +47,15 @@ export async function GET() {
         continue
       }
       try {
-        const MAX_PAGES = 20 // защита от бесконечного цикла; 20 * 50 = 1000 откликов
-        const allVacItems: HHNegotiationItem[] = []
-
-        const firstResp = await getNegotiations(accessToken, { vacancyId: v.hhVacancyId, page: 0 }) as unknown
-        const firstItems = resolveItems(firstResp)
-        allVacItems.push(...firstItems)
-
-        const pages = (firstResp as { pages?: number })?.pages ?? 1
-        const found = (firstResp as { found?: number })?.found
-        const totalPages = Math.min(pages, MAX_PAGES)
-        console.log(
-          "[hh/responses] vacancy", v.hhVacancyId,
-          "pages:", pages,
-          "capped:", totalPages,
-          "found:", found,
-        )
-
-        if (firstItems.length === 0 && pages <= 1) {
-          console.info(`[hh/responses] vacancy ${v.id} (hh ${v.hhVacancyId}): 0 откликов`)
-        }
-
-        for (let page = 1; page < totalPages; page++) {
-          const data = await getNegotiations(accessToken, { vacancyId: v.hhVacancyId, page })
-          const items = resolveItems(data)
-          allVacItems.push(...items)
-        }
-
-        // hh при фильтре по vacancy_id не возвращает поле vacancy на каждом item
-        // (все они и так относятся к запрошенной вакансии). Восстанавливаем привязку
-        // из контекста цикла, иначе ниже отвалится проверка !item.vacancy?.id.
-        const hhVacancyId = v.hhVacancyId
-        const itemsWithVacancy: HHNegotiationItem[] = allVacItems.map((item) =>
-          item.vacancy?.id ? item : { ...item, vacancy: { id: hhVacancyId, name: item.vacancy?.name ?? "" } },
-        )
-        allItems.push(...itemsWithVacancy)
+        await importHhResponsesForVacancy({
+          companyId,
+          accessToken,
+          hhVacancyId: v.hhVacancyId,
+          mode: "sync",
+        })
       } catch (err) {
         console.error(`[hh/responses] vacancy ${v.id} (hh ${v.hhVacancyId}) failed:`, err instanceof Error ? err.message : err)
       }
-    }
-
-    for (let idx = 0; idx < allItems.length; idx++) {
-      const item = allItems[idx]
-      // Защитная проверка: hh иногда отдаёт item без vacancy/id — пропускаем,
-      // иначе падает весь батч на TypeError "Cannot read properties of undefined".
-      if (!item?.vacancy?.id || !item?.id) {
-        console.warn("[hh/responses] skip item — missing vacancy.id or item.id")
-        continue
-      }
-
-      const candidateName = [
-        item.resume?.last_name,
-        item.resume?.first_name,
-        item.resume?.middle_name,
-      ].filter(Boolean).join(" ") || null
-
-      // Полное резюме (/resumes/{id}) — содержит контакты, языки, навыки,
-      // портфолио, релокацию и т.д. Если получили — заменяем preview-резюме
-      // полным; preview-поля (first_name/last_name/title/photo) присутствуют
-      // в обоих форматах, поэтому замена безопасна. Если резюме приватное (403)
-      // или удалено (404) — fetchHhResume вернёт null, оставляем preview как было.
-      const resumePreview = (item.resume ?? null) as Record<string, unknown> | null
-      const resumeId = item.resume?.id ?? null
-
-      let mergedResume: Record<string, unknown> | null = resumePreview
-      if (resumeId) {
-        const full = await fetchHhResume(accessToken, resumeId)
-        if (full) {
-          // Полные данные приоритетны, но preview-поля сохраняем как fallback
-          // на случай если hh в /resumes пропустит какое-то поле, что было в /negotiations.
-          mergedResume = { ...(resumePreview ?? {}), ...full }
-        }
-        // Пауза между resume-запросами — защита от rate limit hh (200/час).
-        if (idx < allItems.length - 1) await sleep(RESUME_FETCH_DELAY_MS)
-      }
-
-      const itemRaw = item as unknown as Record<string, unknown>
-      const rawData: Record<string, unknown> = mergedResume
-        ? { ...itemRaw, resume: mergedResume }
-        : itemRaw
-
-      const values = {
-        companyId,
-        hhVacancyId: item.vacancy.id,
-        hhResponseId: item.id,
-        candidateName,
-        candidatePhone: item.phone ?? null,
-        candidateEmail: item.email ?? null,
-        resumeTitle: item.resume?.title ?? null,
-        resumeUrl: item.resume?.alternate_url ?? null,
-        status: item.state.id,
-        rawData,
-        syncedAt: new Date(),
-      }
-
-      await db
-        .insert(hhResponses)
-        .values(values)
-        .onConflictDoUpdate({
-          target: [hhResponses.companyId, hhResponses.hhResponseId],
-          set: values,
-        })
     }
 
     await db

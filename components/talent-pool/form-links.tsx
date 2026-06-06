@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -8,10 +8,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
-import { Link, Plus, Copy, CheckCircle2, Code } from "lucide-react"
-import { nanoid } from "nanoid"
+import { Link, Plus, Copy, CheckCircle2, Code, Trash2 } from "lucide-react"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 
-// ─── Mock data ─────────────────────────────────────────
 interface TrackingLink {
   id: string
   source: string
@@ -20,23 +19,29 @@ interface TrackingLink {
   clicks: number
   candidates: number
 }
-
-const MOCK_LINKS: TrackingLink[] = [
-  { id: "fl1", source: "Telegram", name: "DevOps Moscow", shortUrl: "/f/telegram-devops-mnk123", clicks: 145, candidates: 12 },
-  { id: "fl2", source: "VK", name: "Работа в IT", shortUrl: "/f/vk-rabota-it-mnk456", clicks: 234, candidates: 18 },
-  { id: "fl3", source: "Сайт", name: "Карьерная страница", shortUrl: "/f/site-career-mnk789", clicks: 567, candidates: 34 },
-  { id: "fl4", source: "LinkedIn", name: "Backend пост", shortUrl: "/f/linkedin-backend-mnk012", clicks: 312, candidates: 22 },
-  { id: "fl5", source: "QR-код", name: "Стенд HRTech", shortUrl: "/f/qr-hrtech-mnk345", clicks: 78, candidates: 9 },
-]
+interface ApiLink { id: string; source: string; name: string; slug: string; clicks: number; candidates: number }
 
 const SOURCE_OPTIONS = ["Telegram", "VK", "LinkedIn", "Сайт", "QR-код", "hh.ru", "Email", "Другой"]
 
 export function FormLinks() {
-  const [links, setLinks] = useState(MOCK_LINKS)
+  const [links, setLinks] = useState<TrackingLink[]>([])
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [createMode, setCreateMode] = useState(false)
   const [newSource, setNewSource] = useState("")
   const [newName, setNewName] = useState("")
+  const [saving, setSaving] = useState(false)
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/modules/hr/talent-pool/form-links")
+      const data = await res.json() as { links?: ApiLink[] }
+      setLinks((data.links ?? []).map(l => ({
+        id: l.id, source: l.source, name: l.name,
+        shortUrl: `/f/${l.slug}`, clicks: l.clicks, candidates: l.candidates,
+      })))
+    } catch { /* пусто */ }
+  }, [])
+  useEffect(() => { load() }, [load])
 
   const handleCopy = (id: string, url: string) => {
     navigator.clipboard.writeText(`https://company24.pro${url}`)
@@ -45,23 +50,26 @@ export function FormLinks() {
     setTimeout(() => setCopiedId(null), 2000)
   }
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!newName.trim() || !newSource) return
-    const slug = newName.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-zа-яё0-9-]/gi, "")
-    const srcSlug = newSource.toLowerCase().replace(/\s+/g, "-").replace(/[^a-zа-яё0-9-]/gi, "")
-    const newLink: TrackingLink = {
-      id: `fl-${Date.now()}`,
-      source: newSource,
-      name: newName.trim(),
-      shortUrl: `/f/${srcSlug}-${slug}-${nanoid(6)}`,
-      clicks: 0,
-      candidates: 0,
-    }
-    setLinks((prev) => [...prev, newLink])
-    setNewSource("")
-    setNewName("")
-    setCreateMode(false)
-    toast.success("Ссылка создана")
+    setSaving(true)
+    try {
+      const res = await fetch("/api/modules/hr/talent-pool/form-links", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: newSource, name: newName.trim() }),
+      })
+      if (!res.ok) { toast.error("Не удалось создать ссылку"); return }
+      setNewSource(""); setNewName(""); setCreateMode(false)
+      toast.success("Ссылка создана")
+      await load()
+    } finally { setSaving(false) }
+  }
+
+  const handleDelete = async (id: string) => {
+    const res = await fetch(`/api/modules/hr/talent-pool/form-links/${id}`, { method: "DELETE" })
+    if (!res.ok) { toast.error("Не удалось удалить"); return }
+    setLinks(prev => prev.filter(l => l.id !== id))
+    toast.success("Ссылка удалена")
   }
 
   return (
@@ -101,7 +109,7 @@ export function FormLinks() {
               </div>
             )}
             <div className="flex gap-2">
-              <Button size="sm" className="text-xs" onClick={handleCreate} disabled={!newName.trim() || !newSource}>Создать</Button>
+              <Button size="sm" className="text-xs" onClick={handleCreate} disabled={!newName.trim() || !newSource || saving}>{saving ? "…" : "Создать"}</Button>
               <Button size="sm" variant="outline" className="text-xs" onClick={() => { setCreateMode(false); setNewSource(""); setNewName("") }}>Отмена</Button>
             </div>
           </CardContent>
@@ -113,38 +121,42 @@ export function FormLinks() {
       )}
 
       {/* Table */}
-      <Card>
-        <CardContent className="p-0">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-muted/50 border-b">
-                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Источник</th>
-                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
-                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Короткая ссылка</th>
-                <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Клики</th>
-                <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Кандидаты</th>
-                <th className="px-4 py-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {links.map((link) => (
-                <tr key={link.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                  <td className="px-3 py-2 text-xs text-muted-foreground">{link.source}</td>
-                  <td className="px-3 py-2 text-xs font-medium">{link.name}</td>
-                  <td className="px-3 py-2 text-[11px] text-muted-foreground font-mono">{link.shortUrl}</td>
-                  <td className="px-2 py-2 text-xs text-center">{link.clicks}</td>
-                  <td className="px-2 py-2 text-xs text-center font-semibold">{link.candidates}</td>
-                  <td className="px-2 py-2">
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleCopy(link.id, link.shortUrl)}>
+      <TableCard>
+        <DataTable>
+          <DataHead>
+            <DataHeadCell>Источник</DataHeadCell>
+            <DataHeadCell>Название</DataHeadCell>
+            <DataHeadCell>Короткая ссылка</DataHeadCell>
+            <DataHeadCell align="center">Клики</DataHeadCell>
+            <DataHeadCell align="center">Кандидаты</DataHeadCell>
+            <DataHeadCell></DataHeadCell>
+          </DataHead>
+          <tbody>
+            {links.map((link) => (
+              <DataRow key={link.id}>
+                <DataCell className="text-muted-foreground">{link.source}</DataCell>
+                <DataCell className="font-medium">{link.name}</DataCell>
+                <DataCell className="text-[11px] text-muted-foreground font-mono">{link.shortUrl}</DataCell>
+                <DataCell align="center">{link.clicks}</DataCell>
+                <DataCell align="center" className="font-semibold">{link.candidates}</DataCell>
+                <DataCell>
+                  <div className="flex items-center gap-0.5">
+                    <Button variant="ghost" size="icon" className="h-6 w-6" title="Копировать" onClick={() => handleCopy(link.id, link.shortUrl)}>
                       {copiedId === link.id ? <CheckCircle2 className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                     </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
+                    <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" title="Удалить" onClick={() => handleDelete(link.id)}>
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </DataCell>
+              </DataRow>
+            ))}
+            {links.length === 0 && (
+              <tr><td colSpan={6} className="text-center py-8 text-sm text-muted-foreground">Пока нет ссылок. Создайте первую для отслеживания источника.</td></tr>
+            )}
+          </tbody>
+        </DataTable>
+      </TableCard>
 
       {/* HTML section */}
       <Card>

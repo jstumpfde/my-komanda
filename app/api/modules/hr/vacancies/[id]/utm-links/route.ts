@@ -3,6 +3,7 @@ import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancies, vacancyUtmLinks, companies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { logActivity } from "@/lib/activity-log"
 
 function generateShortCode(companyName: string): string {
   const prefix = (companyName || "k")[0].toLowerCase()
@@ -61,13 +62,26 @@ export async function POST(
 
     if (!vacancy) return apiError("Vacancy not found", 404)
 
-    const body = await req.json() as { source: string; name: string; destinationUrl?: string }
+    const body = await req.json() as {
+      source: string
+      name: string
+      destinationUrl?: string
+      destinationType?: string
+    }
 
     if (!body.source || !body.name?.trim()) {
       return apiError("source and name are required", 400)
     }
 
     const destinationUrl = body.destinationUrl?.trim() || null
+
+    // Enum 'vacancy' | 'demo'. Дефолт 'vacancy' — поведение до этой фичи
+    // (см. миграцию 0145 и /v/[code]). Невалидное значение → 400.
+    const rawDest = body.destinationType?.trim() || "vacancy"
+    if (rawDest !== "vacancy" && rawDest !== "demo" && rawDest !== "test") {
+      return apiError("destinationType must be 'vacancy', 'demo' or 'test'", 400)
+    }
+    const destinationType = rawDest as "vacancy" | "demo" | "test"
 
     // Get company name for short code prefix
     const [company] = await db
@@ -96,8 +110,36 @@ export async function POST(
         name: body.name.trim(),
         slug,
         destinationUrl,
+        destinationType,
+        createdByUserId: user.id,
       })
       .returning()
+
+    // Audit: дублируем в activity_log для общего трейла (фильтры по
+    // user/entity). logActivity сам ловит ошибки внутри (lib/activity-log.ts
+    // 20+38), но оборачиваем ещё раз — best-effort, никакая просадка
+    // лога не должна влиять на ответ клиенту (Yuri's spec).
+    try {
+      await logActivity({
+        companyId:   user.companyId,
+        userId:      user.id,
+        action:      "create",
+        entityType:  "utm_link",
+        entityId:    link.id,
+        entityTitle: link.name,
+        module:      "hr",
+        details: {
+          vacancyId:       id,
+          source:          link.source,
+          destinationType: link.destinationType,
+          slug:            link.slug,
+        },
+        request: req,
+      })
+    } catch (logErr) {
+      console.error("[utm-links POST] activity log failed:",
+        logErr instanceof Error ? logErr.message : logErr)
+    }
 
     return apiSuccess(link, 201)
   } catch (err) {

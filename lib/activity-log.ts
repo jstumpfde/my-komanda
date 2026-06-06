@@ -2,7 +2,7 @@ import { db } from "./db"
 import { activityLog } from "./db/schema"
 
 type ActivityAction = "create" | "update" | "delete" | "view" | "export" | "login" | "logout" | "ai_request" | "status_change" | "invite" | "archive"
-type EntityType = "vacancy" | "candidate" | "demo" | "course" | "article" | "company" | "user" | "settings" | "template" | "integration"
+type EntityType = "vacancy" | "candidate" | "demo" | "course" | "article" | "company" | "user" | "settings" | "template" | "integration" | "utm_link"
 
 interface LogActivityParams {
   companyId: string

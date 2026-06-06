@@ -11,7 +11,6 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Label } from "@/components/ui/label"
 import { Loader2, ShieldCheck, Users, Lock, Pencil } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"

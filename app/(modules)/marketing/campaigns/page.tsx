@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Megaphone, Plus } from "lucide-react"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
+import {Plus} from "lucide-react"
 import { CAMPAIGNS, CHANNEL_MAP, MARKETING_CHANNELS } from "@/lib/marketing/demo-data"
 
 const STATUSES: Record<string, { label: string; cls: string }> = {
@@ -75,55 +76,53 @@ export default function CampaignsPage() {
             </div>
 
             {/* Table */}
-            <div className="rounded-xl border border-border shadow-sm bg-card">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-5 py-3">Название</th>
-                    <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-3 py-3">Канал</th>
-                    <th className="text-center text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-3 py-3">Статус</th>
-                    <th className="text-right text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-3 py-3">Бюджет</th>
-                    <th className="text-right text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-3 py-3">Потрачено</th>
-                    <th className="text-right text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-3 py-3">Лиды</th>
-                    <th className="text-right text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-5 py-3">Период</th>
-                  </tr>
-                </thead>
+            <TableCard>
+              <DataTable>
+                <DataHead>
+                  <DataHeadCell>Название</DataHeadCell>
+                  <DataHeadCell>Канал</DataHeadCell>
+                  <DataHeadCell align="center">Статус</DataHeadCell>
+                  <DataHeadCell align="right">Бюджет</DataHeadCell>
+                  <DataHeadCell align="right">Потрачено</DataHeadCell>
+                  <DataHeadCell align="right">Лиды</DataHeadCell>
+                  <DataHeadCell align="right">Период</DataHeadCell>
+                </DataHead>
                 <tbody>
                   {filtered.map((c) => {
                     const ch = CHANNEL_MAP[c.channel]
                     const st = STATUSES[c.status]
                     const pct = Math.round((c.spent / c.budget) * 100)
                     return (
-                      <tr key={c.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                        <td className="px-5 py-3">
+                      <DataRow key={c.id}>
+                        <DataCell>
                           <p className="text-sm font-medium">{c.name}</p>
                           <div className="h-1 bg-muted rounded-full mt-1.5 w-24">
                             <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: ch?.color || "#666" }} />
                           </div>
-                        </td>
-                        <td className="px-3 py-3">
+                        </DataCell>
+                        <DataCell>
                           <Badge variant="secondary" className="text-[10px] font-medium border-0" style={{ backgroundColor: `${ch?.color}15`, color: ch?.color }}>
                             {ch?.name || c.channel}
                           </Badge>
-                        </td>
-                        <td className="px-3 py-3 text-center">
+                        </DataCell>
+                        <DataCell align="center">
                           <Badge variant="secondary" className={`text-[10px] font-medium border-0 ${st?.cls}`}>{st?.label}</Badge>
-                        </td>
-                        <td className="px-3 py-3 text-sm text-right text-muted-foreground">{new Intl.NumberFormat("ru-RU").format(c.budget)} ₽</td>
-                        <td className="px-3 py-3 text-sm text-right font-medium">{new Intl.NumberFormat("ru-RU").format(c.spent)} ₽</td>
-                        <td className="px-3 py-3 text-sm text-right font-bold">{c.leads}</td>
-                        <td className="px-5 py-3 text-xs text-right text-muted-foreground whitespace-nowrap">
+                        </DataCell>
+                        <DataCell align="right" className="text-muted-foreground">{new Intl.NumberFormat("ru-RU").format(c.budget)} ₽</DataCell>
+                        <DataCell align="right" className="font-medium">{new Intl.NumberFormat("ru-RU").format(c.spent)} ₽</DataCell>
+                        <DataCell align="right" className="font-bold">{c.leads}</DataCell>
+                        <DataCell align="right" className="text-xs text-muted-foreground whitespace-nowrap">
                           {new Date(c.startDate).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })} — {new Date(c.endDate).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}
-                        </td>
-                      </tr>
+                        </DataCell>
+                      </DataRow>
                     )
                   })}
                   {filtered.length === 0 && (
                     <tr><td colSpan={7} className="py-12 text-center text-sm text-muted-foreground">Нет кампаний</td></tr>
                   )}
                 </tbody>
-              </table>
-            </div>
+              </DataTable>
+            </TableCard>
           </div>
         </main>
       </SidebarInset>

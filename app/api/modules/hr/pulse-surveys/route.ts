@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { db } from "@/lib/db"
-import { pulseSurveys, pulseQuestions, pulseResponses } from "@/lib/db/schema"
-import { eq, desc, and, isNull, sql } from "drizzle-orm"
+import {pulseSurveys, pulseQuestions} from "@/lib/db/schema"
+import {eq, desc, sql} from "drizzle-orm"
 
 // GET /api/modules/hr/pulse-surveys — список пульс-опросов + системные вопросы
 export async function GET(req: Request) {

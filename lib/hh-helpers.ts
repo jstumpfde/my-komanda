@@ -42,12 +42,46 @@ export async function getValidToken(companyId: string): Promise<{ accessToken: s
 
     return { accessToken: tokens.access_token, integration: updated }
   } catch (err) {
-    console.error("[hh-helpers] Token refresh failed:", err)
-    // Mark integration as inactive on refresh failure
-    await db
-      .update(hhIntegrations)
-      .set({ isActive: false, updatedAt: new Date() })
-      .where(eq(hhIntegrations.id, integration.id))
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error("[hh-helpers] Token refresh failed:", msg)
+    // ВАЖНО (правило владельца: «крон не должен сам деактивировать интеграцию»):
+    // деактивируем ТОЛЬКО если hh явно отверг refresh_token (400 invalid_grant)
+    // — тогда нужна ручная переподключка. Все прочие сбои (5xx, сеть, таймаут,
+    // 429) — ВРЕМЕННЫЕ: возвращаем null, но интеграцию НЕ трогаем, чтобы cron
+    // повторил рефреш на следующем тике. Раньше любой сбой ставил isActive=false
+    // → интеграция «умирала» навсегда (cron её больше не брал), и автоимпорт
+    // компании вставал до ручного переподключения.
+    const isInvalidGrant = /\b400\b/.test(msg) && /invalid_grant/i.test(msg)
+    if (isInvalidGrant) {
+      // ГОНКА РЕФРЕША: hh ротирует refresh_token — после первого использования
+      // старый становится невалидным. Если cron обрабатывает компании
+      // параллельно (Promise.all) и два потока почти одновременно дёрнули
+      // рефреш одним и тем же refresh_token — ПЕРВЫЙ успешно обновит токен
+      // (новый срок в БД), ВТОРОЙ получит invalid_grant на уже отозванном
+      // токене. Это НЕ повод деактивировать: токен в БД уже свежий.
+      // Перечитываем интеграцию: если её токен обновился (срок ушёл в будущее
+      // или accessToken сменился) — это гонка, отдаём свежий токен.
+      const [fresh] = await db
+        .select()
+        .from(hhIntegrations)
+        .where(eq(hhIntegrations.id, integration.id))
+        .limit(1)
+      if (fresh && fresh.isActive) {
+        const freshExpires = new Date(fresh.tokenExpiresAt).getTime()
+        const refreshedByOther =
+          freshExpires - bufferMs > Date.now() || fresh.accessToken !== integration.accessToken
+        if (refreshedByOther) {
+          console.warn(`[hh-helpers] integration ${integration.id}: invalid_grant из-за гонки рефреша, токен уже обновлён другим потоком — НЕ деактивируем`)
+          return { accessToken: fresh.accessToken, integration: fresh }
+        }
+      }
+      // Реально мёртвый refresh_token — нужна ручная переподключка.
+      await db
+        .update(hhIntegrations)
+        .set({ isActive: false, updatedAt: new Date() })
+        .where(eq(hhIntegrations.id, integration.id))
+      console.warn(`[hh-helpers] integration ${integration.id} деактивирована: refresh_token отвергнут hh (нужна переподключка)`)
+    }
     return null
   }
 }

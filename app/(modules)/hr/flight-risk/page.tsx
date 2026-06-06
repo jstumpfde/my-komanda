@@ -6,12 +6,14 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { Input } from "@/components/ui/input"
 import {
   AlertTriangle, TrendingDown, TrendingUp, Minus, Shield, Users,
   Plus, Search, ArrowUpDown, ChevronRight,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/lib/auth"
 
 // ── Типы ────────────────────────────────────────────────────────────────────
 
@@ -75,6 +77,7 @@ const PRIORITY_COLORS: Record<string, string> = {
 // ── Компонент ───────────────────────────────────────────────────────────────
 
 export default function FlightRiskPage() {
+  const { hasAccess } = useAuth()
   const [scores, setScores] = useState<FlightRiskScore[]>([])
   const [actions, setActions] = useState<RetentionAction[]>([])
   const [summary, setSummary] = useState<RiskSummary | null>(null)
@@ -99,6 +102,15 @@ export default function FlightRiskPage() {
   }, [filter])
 
   useEffect(() => { load() }, [load])
+
+  if (!hasAccess(["platform_admin", "admin", "director", "client", "hr_lead"])) {
+    return (
+      <div className="max-w-2xl mx-auto py-16 text-center">
+        <h1 className="text-lg font-semibold mb-2">Доступ ограничен</h1>
+        <p className="text-sm text-muted-foreground">У вас нет доступа к этому разделу.</p>
+      </div>
+    )
+  }
 
   const seedDemo = async () => {
     await fetch("/api/modules/hr/flight-risk", {
@@ -230,49 +242,47 @@ export default function FlightRiskPage() {
                   Нет данных. Нажмите «Загрузить демо» для тестовых данных.
                 </div>
               ) : (
-                <div className="border border-border rounded-xl overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-muted/50 border-b">
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Сотрудник</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Отдел</th>
-                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Балл</th>
-                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Уровень</th>
-                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Тренд</th>
-                      </tr>
-                    </thead>
+                <TableCard>
+                  <DataTable>
+                    <DataHead>
+                      <DataHeadCell>Сотрудник</DataHeadCell>
+                      <DataHeadCell>Отдел</DataHeadCell>
+                      <DataHeadCell align="center">Балл</DataHeadCell>
+                      <DataHeadCell align="center">Уровень</DataHeadCell>
+                      <DataHeadCell align="center">Тренд</DataHeadCell>
+                    </DataHead>
                     <tbody>
                       {filtered.map((s) => {
                         const cfg = RISK_CONFIG[s.riskLevel] ?? RISK_CONFIG.low
                         const trd = TREND_ICON[s.trend] ?? TREND_ICON.stable
                         const TrendIcon = trd.icon
                         return (
-                          <tr key={s.id} className="border-t border-border hover:bg-muted/50 transition-colors">
-                            <td className="px-4 py-3">
+                          <DataRow key={s.id}>
+                            <DataCell>
                               <p className="font-medium">{s.employeeName}</p>
                               <p className="text-xs text-muted-foreground">{s.position}</p>
-                            </td>
-                            <td className="px-4 py-3 text-muted-foreground">{s.department}</td>
-                            <td className="px-4 py-3 text-center">
+                            </DataCell>
+                            <DataCell className="text-muted-foreground">{s.department}</DataCell>
+                            <DataCell align="center">
                               <span className={cn("text-lg font-semibold", cfg.color)}>{s.score}</span>
-                            </td>
-                            <td className="px-4 py-3 text-center">
+                            </DataCell>
+                            <DataCell align="center">
                               <Badge variant="secondary" className={cn(cfg.bg, cfg.color, "text-xs")}>
                                 {cfg.label}
                               </Badge>
-                            </td>
-                            <td className="px-4 py-3 text-center">
+                            </DataCell>
+                            <DataCell align="center">
                               <div className="flex items-center justify-center gap-1">
                                 <TrendIcon className={cn("size-4", trd.color)} />
                                 <span className={cn("text-xs", trd.color)}>{trd.label}</span>
                               </div>
-                            </td>
-                          </tr>
+                            </DataCell>
+                          </DataRow>
                         )
                       })}
                     </tbody>
-                  </table>
-                </div>
+                  </DataTable>
+                </TableCard>
               )}
             </div>
           )}

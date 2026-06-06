@@ -6,6 +6,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { TrendingDown, ArrowDown, Clock } from "lucide-react"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { cn } from "@/lib/utils"
 
 const FUNNEL_STAGES = [
@@ -55,7 +56,7 @@ export default function SalesPipelinePage() {
                 <TrendingDown className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <h1 className="text-2xl font-semibold">Воронка продаж</h1>
+                <h1 className="text-lg font-semibold">Воронка продаж</h1>
                 <p className="text-sm text-muted-foreground">Конверсия по этапам и анализ источников</p>
               </div>
             </div>
@@ -129,37 +130,33 @@ export default function SalesPipelinePage() {
                   <CardTitle className="text-base">Анализ источников</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="bg-muted/50 border-b">
-                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Источник</th>
-                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Лидов</th>
-                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Сделок</th>
-                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Конверсия</th>
-                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Ср. сумма</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {SOURCE_BREAKDOWN.map((row) => (
-                          <tr key={row.source} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                            <td className="px-4 py-3 text-sm font-medium text-foreground">{row.source}</td>
-                            <td className="text-right px-4 py-3 text-sm text-foreground">{row.leads}</td>
-                            <td className="text-right px-4 py-3 text-sm text-foreground">{row.deals}</td>
-                            <td className="text-right px-4 py-3">
-                              <Badge
-                                variant={row.conversion >= 20 ? "default" : "secondary"}
-                                className="text-xs"
-                              >
-                                {row.conversion}%
-                              </Badge>
-                            </td>
-                            <td className="text-right px-4 py-3 text-sm text-foreground">{formatMoney(row.avgAmount)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <DataTable>
+                    <DataHead>
+                      <DataHeadCell>Источник</DataHeadCell>
+                      <DataHeadCell align="right">Лидов</DataHeadCell>
+                      <DataHeadCell align="right">Сделок</DataHeadCell>
+                      <DataHeadCell align="right">Конверсия</DataHeadCell>
+                      <DataHeadCell align="right">Ср. сумма</DataHeadCell>
+                    </DataHead>
+                    <tbody>
+                      {SOURCE_BREAKDOWN.map((row) => (
+                        <DataRow key={row.source}>
+                          <DataCell className="font-medium text-foreground">{row.source}</DataCell>
+                          <DataCell align="right" className="text-foreground">{row.leads}</DataCell>
+                          <DataCell align="right" className="text-foreground">{row.deals}</DataCell>
+                          <DataCell align="right">
+                            <Badge
+                              variant={row.conversion >= 20 ? "default" : "secondary"}
+                              className="text-xs"
+                            >
+                              {row.conversion}%
+                            </Badge>
+                          </DataCell>
+                          <DataCell align="right" className="text-foreground">{formatMoney(row.avgAmount)}</DataCell>
+                        </DataRow>
+                      ))}
+                    </tbody>
+                  </DataTable>
                 </CardContent>
               </Card>
 

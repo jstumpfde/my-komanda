@@ -29,16 +29,19 @@ export async function GET() {
     plan = planRows[0] ?? null
   }
 
-  // Calculate days remaining for trial
+  // Дней до конца: для триала — trialEndsAt, для активного тарифа — currentPeriodEnd.
+  const daysTo = (d: Date | string) => Math.max(0, Math.ceil((new Date(d).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
   let daysRemaining: number | null = null
   if (company.subscriptionStatus === "trial" && company.trialEndsAt) {
-    const ms = new Date(company.trialEndsAt).getTime() - Date.now()
-    daysRemaining = Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)))
+    daysRemaining = daysTo(company.trialEndsAt)
+  } else if (company.subscriptionStatus === "active" && company.currentPeriodEnd) {
+    daysRemaining = daysTo(company.currentPeriodEnd)
   }
 
   return NextResponse.json({
     status:           company.subscriptionStatus ?? "trial",
     trialEndsAt:      company.trialEndsAt,
+    currentPeriodEnd: company.currentPeriodEnd,
     companyCreatedAt: company.createdAt,
     daysRemaining,
     plan: plan ? {

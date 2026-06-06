@@ -5,6 +5,7 @@
 import { NextResponse } from "next/server"
 import { execSync } from "child_process"
 import { requireCompany } from "@/lib/api-helpers"
+import { denyIfNotDevAccess } from "@/lib/dev-guard"
 import { db } from "@/lib/db"
 import {
   adaptationPlans, adaptationAssignments, adaptationSteps, stepCompletions,
@@ -23,6 +24,8 @@ const DEMO_EMP = [
 ]
 
 export async function GET() {
+  const denied = await denyIfNotDevAccess()
+  if (denied) return denied
   let user: { companyId: string; id: string }
   try { user = await requireCompany() as { companyId: string; id: string } }
   catch { return NextResponse.json({ error: "Unauthorized" }, { status: 401 }) }

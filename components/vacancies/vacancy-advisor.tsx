@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react"
+import { formatDistanceToNow } from "date-fns"
+import { ru } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -9,6 +11,7 @@ import {
   CheckCircle2, AlertTriangle, XCircle, Sparkles, ChevronDown, ChevronUp,
   Loader2, RefreshCw, Bot, X, Plus, TrendingUp, Lightbulb,
 } from "lucide-react"
+import { mergeSkills, hasSkill } from "@/lib/skills/normalize"
 import { formatSalary, marketStats } from "@/lib/salary-benchmarks"
 import { scoreVacancyTitle } from "@/lib/vacancy-title-scorer"
 import { analyzeMotivation } from "@/lib/motivation-analyzer"
@@ -54,9 +57,14 @@ interface AdvisorResult {
 }
 
 interface VacancyAdvisorProps {
+  vacancyId?: string
   vacancyData: Record<string, unknown>
   companyDescription?: string
   focusedField?: string
+  /** P0-28: предварительно прогретый кеш-результат — если родитель уже
+   *  загрузил его из БД, можем показать без AI-запроса. */
+  initialResult?: AdvisorResult | null
+  initialAnalyzedAt?: string | null
   onScrollToSection?: (sectionId: string) => void
   onApplySuggestion?: (field: string, value: unknown) => void
   onScoreChange?: (score: { score: number; label: string }) => void
@@ -77,6 +85,43 @@ const SECTION_MAP: Record<string, string> = {
 
 const AI_SCREENING_FIELDS = new Set(["responsibilities", "requirements", "skills", "stopFactors"])
 
+// ── Static section tips (instant, no AI call) ────────────────────────────────
+
+const SECTION_TIPS: Record<string, { icon: string; text: string }> = {
+  title: {
+    icon: "✏️",
+    text: "Хорошее название — конкретное и без шаблонных слов вроде «динамичный» или «перспективный». Укажите специализацию и уровень: «Frontend-разработчик (React, middle)» — лучше чем «Разработчик». Короткие названия набирают на 15–20% больше откликов.",
+  },
+  salary: {
+    icon: "💰",
+    text: "Вакансии с указанной вилкой зарплат получают в 2–3 раза больше откликов. Если указываете «до», оставляйте реалистичный максимум — завышенный потолок снижает конверсию из отклика в оффер. Укажите периодичность выплат и тип занятости.",
+  },
+  responsibilities: {
+    icon: "📋",
+    text: "Пишите обязанности от глагола действия: «Развивать клиентскую базу» лучше, чем «Работа с клиентами». Ограничьтесь 5–8 пунктами — длинный список отпугивает кандидатов. Первые 2–3 пункта — самые важные, их видят раньше остальных.",
+  },
+  requirements: {
+    icon: "🎯",
+    text: "Разделите требования на обязательные и желательные. Не копируйте требования из других вакансий — добавляйте только то, что реально нужно. Длинный список требований при скромной зарплате — главная причина низкого отклика.",
+  },
+  skills: {
+    icon: "⚡",
+    text: "Добавьте 3–5 ключевых hard skill и 1–2 soft skill. Слишком длинный список «стоп-скиллов» сужает воронку. AI-скоринг проверяет навыки из резюме — чем точнее список, тем точнее отбор кандидатов.",
+  },
+  stopFactors: {
+    icon: "🚫",
+    text: "Стоп-факторы — автоматический фильтр на входе. Активируйте только те, что действительно критичны: каждый включённый стоп-фактор сокращает поток на 10–30%. Гражданство и документы — самые распространённые ограничения.",
+  },
+  conditions: {
+    icon: "🏢",
+    text: "Конкретные условия повышают доверие: напишите адрес офиса, формат работы (удалённо/офис/гибрид), график. Бонусы и льготы лучше перечислить списком — они напрямую влияют на анализ мотивации в этой панели.",
+  },
+  company: {
+    icon: "🏷️",
+    text: "Раздел «О компании» влияет на первое впечатление. Укажите сферу, размер команды и что делает компанию особенной. Кандидаты с сильной мотивацией читают этот раздел — он помогает привлечь «правильных» людей.",
+  },
+}
+
 // ── Experience insight data ─────────────────────────────────────────────────
 
 const EXPERIENCE_INSIGHTS: Record<string, { label: string; volumePercent: number; qualityPercent: number; tip: string }> = {
@@ -87,8 +132,10 @@ const EXPERIENCE_INSIGHTS: Record<string, { label: string; volumePercent: number
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, onScrollToSection, onApplySuggestion, onScoreChange }: VacancyAdvisorProps) {
-  const [result, setResult] = useState<AdvisorResult | null>(null)
+export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, focusedField, initialResult, initialAnalyzedAt, onScrollToSection, onApplySuggestion, onScoreChange }: VacancyAdvisorProps) {
+  const [result, setResult] = useState<AdvisorResult | null>(initialResult ?? null)
+  const [analyzedAt, setAnalyzedAt] = useState<string | null>(initialAnalyzedAt ?? null)
+  const [cached, setCached] = useState<boolean>(Boolean(initialResult))
   const [loading, setLoading] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -119,16 +166,18 @@ export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, 
     }
   }, [vacancyData])
 
-  const fetchAnalysis = useCallback(async (signal?: AbortSignal) => {
+  const fetchAnalysis = useCallback(async (signal?: AbortSignal, opts?: { force?: boolean }) => {
     setLoading(true)
     try {
       const res = await fetch("/api/ai/vacancy-advisor", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          vacancyId,
           vacancyData,
           companyDescription: companyDescription || "",
           focusedField: focusedField || "",
+          force: Boolean(opts?.force),
         }),
         signal,
       })
@@ -136,8 +185,11 @@ export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, 
         if (res.status === 429) return // silently skip rate-limited
         throw new Error("API error")
       }
-      const data = await res.json() as AdvisorResult
-      setResult(data)
+      const data = await res.json() as AdvisorResult & { _cached?: boolean; _analyzedAt?: string | null }
+      const { _cached, _analyzedAt, ...rest } = data
+      setResult(rest)
+      setCached(Boolean(_cached))
+      setAnalyzedAt(_analyzedAt ?? new Date().toISOString())
       lastDataHash.current = dataHash
     } catch (err) {
       if ((err as Error).name === "AbortError") return
@@ -145,9 +197,12 @@ export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, 
     } finally {
       setLoading(false)
     }
-  }, [vacancyData, companyDescription, focusedField, dataHash])
+  }, [vacancyId, vacancyData, companyDescription, focusedField, dataHash])
 
-  // Debounced fetch on data change
+  // P0-28: focused-field-driven запросы оставляем (контекстный совет к
+  // конкретному инпуту), но НЕ кэшируются — сервер вернёт fresh fallback.
+  // Дебаунс срабатывает только при изменении dataHash относительно
+  // последнего сохранённого, или если фокус сменился.
   useEffect(() => {
     if (dataHash === lastDataHash.current && !focusedField) return
 
@@ -165,9 +220,18 @@ export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, 
     }
   }, [dataHash, focusedField, fetchAnalysis])
 
-  // Initial fetch
+  // P0-28: безусловный initial fetch удалён. Если есть initialResult из
+  // БД-кеша — показываем сразу без вызова Claude. Если нет кеша —
+  // первый debounced fetch выше (на любое реальное изменение dataHash)
+  // запросит анализ и закеширует. Пока нет ни кеша, ни правок — пользователю
+  // показываем "пусто, нажмите Обновить".
   useEffect(() => {
-    fetchAnalysis()
+    if (!result && !initialResult && !loading && lastDataHash.current === "") {
+      // Помечаем начальный dataHash, чтобы debounced effect не дёрнул AI
+      // сразу же при первом mount'е. Если пользователь сразу что-то поменяет —
+      // dataHash сдвинется, и анализ запустится.
+      lastDataHash.current = dataHash
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -249,17 +313,49 @@ export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, 
     </div>
   )
 
+  const staticTip = focusedField ? SECTION_TIPS[focusedField] ?? null : null
+
   function renderContent() {
     if (!result && loading) {
       return (
-        <div className="flex flex-col items-center gap-3 py-8">
-          <Loader2 className="w-6 h-6 text-primary animate-spin" />
-          <p className="text-xs text-muted-foreground">Анализирую анкету...</p>
+        <div className="space-y-3">
+          {staticTip && (
+            <div key={focusedField} className="rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800 p-3 animate-in fade-in duration-200">
+              <div className="flex items-start gap-2">
+                <span className="text-base leading-none mt-0.5 shrink-0">{staticTip.icon}</span>
+                <p className="text-xs leading-relaxed text-amber-900 dark:text-amber-200">{staticTip.text}</p>
+              </div>
+            </div>
+          )}
+          <div className="flex flex-col items-center gap-3 py-8">
+            <Loader2 className="w-6 h-6 text-primary animate-spin" />
+            <p className="text-xs text-muted-foreground">Анализирую анкету...</p>
+          </div>
         </div>
       )
     }
 
-    if (!result) return null
+    if (!result) {
+      return (
+        <div className="space-y-3">
+          {staticTip && (
+            <div key={focusedField} className="rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800 p-3 animate-in fade-in duration-200">
+              <div className="flex items-start gap-2">
+                <span className="text-base leading-none mt-0.5">{staticTip.icon}</span>
+                <p className="text-xs leading-relaxed text-amber-900 dark:text-amber-200">{staticTip.text}</p>
+              </div>
+            </div>
+          )}
+          <div className="flex flex-col items-center gap-3 py-8 text-center">
+            <Bot className="w-8 h-8 text-muted-foreground" />
+            <p className="text-xs text-muted-foreground px-4">Анализ ещё не запускался. Нажмите кнопку чтобы оценить вакансию.</p>
+            <Button size="sm" variant="outline" onClick={() => fetchAnalysis(undefined, { force: true })} disabled={loading}>
+              <Sparkles className="w-3.5 h-3.5 mr-1.5" />Запустить анализ
+            </Button>
+          </div>
+        </div>
+      )
+    }
 
     return (
       <div className="space-y-3">
@@ -277,8 +373,18 @@ export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, 
           </p>
         </div>
 
-        {/* Context tip */}
-        {result.contextTip && (
+        {/* Static contextual tip (instant, no AI call) */}
+        {staticTip && (
+          <div key={focusedField} className="rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800 p-3 animate-in fade-in duration-200">
+            <div className="flex items-start gap-2">
+              <span className="text-base leading-none mt-0.5 shrink-0">{staticTip.icon}</span>
+              <p className="text-xs leading-relaxed text-amber-900 dark:text-amber-200">{staticTip.text}</p>
+            </div>
+          </div>
+        )}
+
+        {/* AI context tip (from last analysis) */}
+        {result.contextTip && !staticTip && (
           <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 animate-in fade-in duration-300">
             <div className="flex items-start gap-2">
               <Sparkles className="w-4 h-4 text-primary mt-0.5 shrink-0" />
@@ -312,6 +418,9 @@ export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, 
         {/* 6. Рынок Q1 2025→2026 */}
         <MarketContextCard />
 
+        {/* 6b. Лучшее время публикации — по откликам компании */}
+        <BestPublishTimeCard vacancyId={vacancyId} city={(vacancyData.positionCity as string) || (vacancyData.companyCity as string) || ""} />
+
         {/* 7. Анализ мотивации */}
         <MotivationAnalysisCard
           salaryMin={parseInt(String(vacancyData.salaryFrom || "0").replace(/\s/g, "")) || 0}
@@ -327,7 +436,7 @@ export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, 
         />
 
         {/* 8. О компании */}
-        <CompanyDescriptionCard description={companyDescription || ""} />
+        <CompanyDescriptionCard description={companyDescription || (vacancyData.companyDescription as string) || ""} />
 
         {/* Sections: критичные и рекомендации — соответствуют секциям 4-5 (обязанности, требования, навыки, стоп-факторы) */}
         {errors.length > 0 && (
@@ -372,17 +481,23 @@ export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, 
           onFillRequirements={onApplySuggestion ? (text) => onApplySuggestion("requirements", text) : undefined}
         />
 
-        {/* Refresh */}
-        <div className="pt-1">
+        {/* P0-28: дата последнего анализа + force-refresh. */}
+        <div className="pt-1 space-y-1">
+          {analyzedAt && (
+            <p className="text-[10px] text-muted-foreground text-center">
+              {cached ? "Из кеша · " : ""}
+              Проанализировано {formatDistanceToNow(new Date(analyzedAt), { addSuffix: true, locale: ru })}
+            </p>
+          )}
           <Button
             variant="ghost"
             size="sm"
             className="w-full text-xs h-7 text-muted-foreground"
-            onClick={() => fetchAnalysis()}
+            onClick={() => fetchAnalysis(undefined, { force: true })}
             disabled={loading}
           >
             {loading ? <Loader2 className="w-3 h-3 animate-spin mr-1.5" /> : <RefreshCw className="w-3 h-3 mr-1.5" />}
-            Обновить анализ
+            Переанализировать (тратит токены)
           </Button>
         </div>
       </div>
@@ -392,9 +507,11 @@ export function VacancyAdvisor({ vacancyData, companyDescription, focusedField, 
   // ── Desktop panel ──
   return (
     <>
-      {/* Desktop sidebar */}
-      <div className="hidden lg:block flex-[1] min-w-[340px]">
-        <div className="space-y-3 border-l pl-4">
+      {/* Desktop sidebar. self-stretch + h-full: колонка тянется на всю высоту
+          строки (родитель — flex items-start), чтобы левый разделитель border-l
+          шёл во всю высоту анкеты, а не обрывался на футере «Переанализировать». */}
+      <div className="hidden lg:block flex-[1] min-w-[340px] self-stretch">
+        <div className="space-y-3 border-l pl-4 h-full">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Bot className="w-4 h-4 text-primary" />
@@ -504,11 +621,12 @@ function FormatCard({ workFormats }: { workFormats: string[] }) {
 
   return (
     <div className="rounded-lg border p-3 space-y-2">
-      <div className="flex items-center gap-1.5">
-        <Sparkles className="w-3.5 h-3.5 text-primary" />
-        <span className="text-xs font-medium">Формат работы</span>
-      </div>
-      <div className="flex flex-wrap gap-1">
+      {/* QW5: заголовок и бейджи формата — в одну строку */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Sparkles className="w-3.5 h-3.5 text-primary" />
+          <span className="text-xs font-medium">Формат работы</span>
+        </div>
         {workFormats.map(f => (
           <Badge key={f} variant="secondary" className="text-[10px]">{f}</Badge>
         ))}
@@ -615,7 +733,7 @@ function TitleScoringCard({ title, context, suggestions, onApply }: {
       </div>
 
       {suggestions.length > 0 && onApply && (
-        <div className="pt-1 border-t space-y-1">
+        <div className="pt-1 border-t space-y-0.5">
           <span className="text-[10px] font-medium text-muted-foreground">Варианты с высоким откликом:</span>
           {suggestions.map((s, i) => {
             const sScore = scoreVacancyTitle(s, context)
@@ -624,7 +742,7 @@ function TitleScoringCard({ title, context, suggestions, onApply }: {
               <button
                 key={i}
                 onClick={() => onApply(s)}
-                className="w-full text-left px-2 py-1.5 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors group"
+                className="w-full text-left px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors group"
               >
                 <span className="text-xs text-blue-800 dark:text-blue-200 underline decoration-dotted underline-offset-2 group-hover:text-blue-600">{s}</span>
                 <span className={cn("text-[10px] font-bold ml-1.5", sColor)}>&rarr; {sScore.score}/100</span>
@@ -808,11 +926,70 @@ function MarketContextCard() {
   )
 }
 
+// ── Best Publish Time Card ──────────────────────────────────────────────────
+// Лучшее время публикации по откликам компании (GET /best-publish-time).
+// Эндпоинт агрегирует hh_responses по дню недели и часу (МСК). Честно помечаем,
+// что это статистика откликов компании, а не рыночный бенчмарк hh.
+interface PublishTimeData {
+  enough: boolean
+  total: number
+  topDays?: { name: string; pct: number }[]
+  topHours?: { range: string; pct: number }[]
+}
+
+function BestPublishTimeCard({ vacancyId, city }: { vacancyId?: string; city?: string }) {
+  const [data, setData] = useState<PublishTimeData | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!vacancyId) { setLoading(false); return }
+    let alive = true
+    fetch(`/api/modules/hr/vacancies/${vacancyId}/best-publish-time`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: PublishTimeData | null) => { if (alive) setData(d) })
+      .catch(() => {})
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [vacancyId])
+
+  if (loading || !data) return null
+  const cityLabel = city?.trim() ? `, ${city.trim()}` : ""
+
+  return (
+    <div className="rounded-lg border p-3 space-y-2">
+      <p className="text-sm font-semibold">🕐 Лучшее время публикации</p>
+      {!data.enough ? (
+        <p className="text-xs text-muted-foreground">
+          Пока мало данных для рекомендации ({data.total} откликов). Накопится статистика — покажем, в какие дни и часы кандидаты откликаются активнее.
+        </p>
+      ) : (
+        <>
+          <div className="space-y-1">
+            {data.topDays && data.topDays.length > 0 && (
+              <div className="flex items-baseline gap-1.5 text-sm">
+                <span className="text-muted-foreground text-xs">Дни:</span>
+                <span className="font-medium">{data.topDays.map(d => `${d.name} (${d.pct}%)`).join(", ")}</span>
+              </div>
+            )}
+            {data.topHours && data.topHours.length > 0 && (
+              <div className="flex items-baseline gap-1.5 text-sm">
+                <span className="text-muted-foreground text-xs">Часы:</span>
+                <span className="font-medium">{data.topHours.map(h => `${h.range} (${h.pct}%)`).join(", ")}</span>
+              </div>
+            )}
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            По откликам вашей компании (время МСК{cityLabel ? ` · вакансия${cityLabel}` : ""}). Опирается на {data.total} откликов.
+          </p>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── Company Description Card ────────────────────────────────────────────────
 
 function CompanyDescriptionCard({ description }: { description: string }) {
-  const [includeInVacancy, setIncludeInVacancy] = useState(true)
-
   // Пустое описание — подсказка с кнопкой заполнения
   if (!description) {
     return (
@@ -838,35 +1015,25 @@ function CompanyDescriptionCard({ description }: { description: string }) {
     )
   }
 
-  const preview = description.length > 150 ? description.slice(0, 150) + "..." : description
-
+  // Описание заполнено — компактное подтверждение без повтора текста: само
+  // описание редактируется в блоке 4 формы рядом (#29 — убрали дубль контента).
   return (
     <div className="rounded-lg border p-3 space-y-2">
       <div className="flex items-center gap-1.5">
         <span className="text-sm font-semibold">🏢 О компании</span>
       </div>
-      <p className="text-sm text-foreground leading-relaxed">{preview}</p>
       <div className="flex items-center gap-1.5">
         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-        <span className="text-xs text-emerald-700 dark:text-emerald-400">Описание подтянуто из настроек</span>
+        <span className="text-xs text-emerald-700 dark:text-emerald-400">Описание заполнено — редактируется в блоке «О компании» формы</span>
       </div>
       <a
-        href="/settings/company"
+        href="/hr/hiring-settings"
         target="_blank"
         rel="noopener noreferrer"
         className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
       >
-        Редактировать в настройках →
+        Изменить в настройках компании →
       </a>
-      <label className="flex items-center gap-2 pt-1 border-t cursor-pointer">
-        <input
-          type="checkbox"
-          checked={includeInVacancy}
-          onChange={e => setIncludeInVacancy(e.target.checked)}
-          className="rounded"
-        />
-        <span className="text-sm">Включить в описание вакансии</span>
-      </label>
     </div>
   )
 }
@@ -897,8 +1064,8 @@ function SuggestionsPanel({ suggestions, onApply, vacancyData }: {
             <button
               onClick={() => {
                 const current = (vacancyData.requiredSkills as string[]) || []
-                const newSkills = suggestions.skills.filter(s => !current.includes(s))
-                onApply("requiredSkills", [...current, ...newSkills])
+                // mergeSkills дедупит по канону (регистр/пробелы/дефисы) — без дублей.
+                onApply("requiredSkills", mergeSkills(current, suggestions.skills))
               }}
               className="text-[10px] text-primary hover:underline flex items-center gap-0.5"
             >
@@ -907,15 +1074,15 @@ function SuggestionsPanel({ suggestions, onApply, vacancyData }: {
           </div>
           <div className="flex flex-wrap gap-1">
             {suggestions.skills.map(skill => {
-              const alreadyHas = ((vacancyData.requiredSkills as string[]) || []).includes(skill)
-                || ((vacancyData.desiredSkills as string[]) || []).includes(skill)
+              const alreadyHas = hasSkill((vacancyData.requiredSkills as string[]) || [], skill)
+                || hasSkill((vacancyData.desiredSkills as string[]) || [], skill)
               return (
                 <button
                   key={skill}
                   disabled={alreadyHas}
                   onClick={() => {
                     const current = (vacancyData.requiredSkills as string[]) || []
-                    onApply("requiredSkills", [...current, skill])
+                    onApply("requiredSkills", mergeSkills(current, [skill]))
                   }}
                   className={cn(
                     "text-[11px] px-1.5 py-0.5 rounded border transition-colors",
@@ -936,12 +1103,11 @@ function SuggestionsPanel({ suggestions, onApply, vacancyData }: {
       {hasStopFactors && (
         <div className="rounded-lg border p-2.5 space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium">Стоп-факторы</span>
+            <span className="text-xs font-medium">Неприемлемо</span>
             <button
               onClick={() => {
                 const current = (vacancyData.unacceptableSkills as string[]) || []
-                const newFactors = suggestions.stopFactors.filter(s => !current.includes(s))
-                onApply("unacceptableSkills", [...current, ...newFactors])
+                onApply("unacceptableSkills", mergeSkills(current, suggestions.stopFactors))
               }}
               className="text-[10px] text-primary hover:underline flex items-center gap-0.5"
             >
@@ -950,14 +1116,14 @@ function SuggestionsPanel({ suggestions, onApply, vacancyData }: {
           </div>
           <div className="flex flex-wrap gap-1">
             {suggestions.stopFactors.map(factor => {
-              const alreadyHas = ((vacancyData.unacceptableSkills as string[]) || []).includes(factor)
+              const alreadyHas = hasSkill((vacancyData.unacceptableSkills as string[]) || [], factor)
               return (
                 <button
                   key={factor}
                   disabled={alreadyHas}
                   onClick={() => {
                     const current = (vacancyData.unacceptableSkills as string[]) || []
-                    onApply("unacceptableSkills", [...current, factor])
+                    onApply("unacceptableSkills", mergeSkills(current, [factor]))
                   }}
                   className={cn(
                     "text-[11px] px-1.5 py-0.5 rounded border transition-colors",

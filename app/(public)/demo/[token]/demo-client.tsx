@@ -12,6 +12,7 @@ import { CheckCircle2, ChevronRight, Loader2, Video as VideoIcon, Mic, Camera, S
 import type { Block, Lesson, Question } from "@/lib/course-types"
 import { resolveBrand } from "@/lib/brand-colors"
 import { VideoEmbed } from "@/components/blocks/VideoEmbed"
+import { StoriesPlayer } from "@/components/vacancies/stories-player"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -43,6 +44,8 @@ interface PostDemoSettings {
     birthDate?: { enabled: boolean; required: boolean }
     city?: { enabled: boolean; required: boolean }
   }
+  navButtonColor?: string
+  navButtonText?: string
 }
 
 type FormFieldKey = "firstName" | "lastName" | "email" | "phone" | "telegram" | "birthDate" | "city"
@@ -128,7 +131,25 @@ interface DemoData {
   // Ф5: текст-обёртка финальной анкеты, vacancies.description_json.anketaIntro.
   // Пустые поля или null → показываем дефолты.
   anketaIntro?: { title: string; description: string } | null
+  // #16/#25: два редактируемых финальных экрана.
+  finalScreens?: {
+    afterVideo:  { title: string; subtitle: string; button: string }
+    afterAnketa: { title: string; subtitle: string }
+  } | null
   prefill?: { first_name: string | null; last_name: string | null; city: string | null }
+}
+
+// Дефолты должны совпадать с DEFAULT_AFTER_VIDEO/DEFAULT_AFTER_ANKETA из
+// components/vacancies/final-screens-settings.tsx (UI настроек). Если HR
+// оставил поле пустым — используется дефолт.
+const DEMO_DEFAULT_AFTER_VIDEO = {
+  title:    "Спасибо за прохождение!",
+  subtitle: "Заполните короткую анкету и мы свяжемся в чате",
+  button:   "Заполнить анкету",
+}
+const DEMO_DEFAULT_AFTER_ANKETA = {
+  title:    "Спасибо!",
+  subtitle: "Мы изучим вашу анкету и свяжемся в чате",
 }
 
 interface FlatLesson {
@@ -635,6 +656,10 @@ export default function DemoPage() {
   const [formSubmitted, setFormSubmitted] = useState(false)
   const [formSubmitting, setFormSubmitting] = useState(false)
   const [showFarewell, setShowFarewell] = useState(false)
+  // #16: промежуточный экран после видео-уроков ДО анкеты. Default true —
+  // показываем экран, кандидат нажимает кнопку → setAnketaIntroDismissed(true)
+  // и попадает в анкету. Это снимает «шок» от резкого появления формы.
+  const [anketaIntroDismissed, setAnketaIntroDismissed] = useState(false)
   const [formFirst, setFormFirst] = useState("")
   const [formLast, setFormLast] = useState("")
   const [formEmail, setFormEmail] = useState("")
@@ -921,6 +946,7 @@ export default function DemoPage() {
   const brandColor = brand.primary
   const bgColor = brand.bg
   const textColor = brand.text
+  const navBtnColor = data.postDemoSettings?.navButtonColor || brandColor
 
   // ─── Final screen: form + thank you ────────────────────────────────────────
 
@@ -984,8 +1010,18 @@ export default function DemoPage() {
   }
 
   if (finished) {
-    // Если HR выключил пост-демо блок — показываем стандартный экран «спасибо»
-    // вместо кастомного флоу (анкета + динамический финальный экран).
+    // #25: порядок экранов после прохождения уроков:
+    //   1. (если postDemoSettings.enabled === false) → статичный «спасибо»,
+    //      минуя анкету и финальный экран. Выход.
+    //   2. (если showFarewell) → прощальный экран после ручного клика. Выход.
+    //   3. (если formSubmitted) → ФИНАЛЬНЫЙ «Спасибо!» (afterAnketa
+    //      из finalScreens, fallback DEMO_DEFAULT_AFTER_ANKETA).
+    //   4. (если !anketaIntroDismissed) → ПРОМЕЖУТОЧНЫЙ экран после видео
+    //      (afterVideo из finalScreens, кнопка → переход в анкету).
+    //   5. иначе → форма анкеты.
+    // Это даёт последовательность: уроки → промежуточный → анкета →
+    // submit → финальный. Два разных «Спасибо» — оба редактируемые
+    // через FinalScreensSettings в табе «Воронка».
     if (data.postDemoSettings?.enabled === false) {
       return (
         <div className="flex min-h-screen items-center justify-center px-4" style={{ backgroundColor: bgColor }}>
@@ -1029,37 +1065,12 @@ export default function DemoPage() {
       )
     }
 
-    // Thank you after form submit — динамический блок из post-demo settings
+    // Thank you after form submit — динамический блок из post-demo settings.
+    // #17/#25: упростили — без выбора времени интервью, единый текст из
+    // finalScreens.afterAnketa (fallback на DEMO_DEFAULT_AFTER_ANKETA).
     if (formSubmitted) {
-      const settings: PostDemoSettings = data.postDemoSettings ?? {}
-      const mode = settings.mode ?? "auto"
-      const aiScore = data.aiScore
-      const upper = settings.upperThreshold ?? 75
-      const lower = settings.lowerThreshold ?? 50
-
-      let finalBlock: "green" | "yellow" | "red" | "manual"
-      if (mode === "manual") {
-        finalBlock = "manual"
-      } else if (aiScore !== null && aiScore >= upper) {
-        finalBlock = "green"
-      } else if (aiScore !== null && aiScore >= lower) {
-        finalBlock = "yellow"
-      } else {
-        finalBlock = "red"
-      }
-
-      // Приоритет: имя из анкеты (то, что кандидат сам подтвердил),
-      // затем prefill из hh resume, и только в крайнем случае split candidateName,
-      // который для hh-источника часто идёт как «Фамилия Имя» — split[0] даёт фамилию.
-      const firstName =
-        formFirst.trim() ||
-        data.prefill?.first_name ||
-        data.candidateName?.split(" ")[0] ||
-        data.candidateName ||
-        "кандидат"
-      const replaceName = (s: string) => s.replace(/\[Имя\]/g, firstName).replace(/\[имя\]/g, firstName)
-
-      const manualButtonEnabled = settings.manualButtonEnabled !== false
+      const afterAnketaTitle    = data.finalScreens?.afterAnketa?.title?.trim() || DEMO_DEFAULT_AFTER_ANKETA.title
+      const afterAnketaSubtitle = data.finalScreens?.afterAnketa?.subtitle?.trim() || DEMO_DEFAULT_AFTER_ANKETA.subtitle
 
       return (
         <div className="flex min-h-screen items-center justify-center px-4 py-8" style={{ backgroundColor: bgColor }}>
@@ -1072,80 +1083,41 @@ export default function DemoPage() {
                   className="mx-auto h-12 w-auto object-contain mb-2"
                 />
               )}
-              {finalBlock === "manual" && (
-                <>
-                  <h1 className="text-2xl font-bold text-gray-900">
-                    {replaceName(settings.manualTitle ?? "Отлично, [Имя]! Вы прошли демонстрацию 🎉")}
-                  </h1>
-                  <p className="text-gray-600">
-                    {settings.manualText ?? "Мы изучим ваши ответы и свяжемся с вами в ближайшее время"}
-                  </p>
-                  {manualButtonEnabled && (
-                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-                      <button
-                        type="button"
-                        className="w-full h-10 rounded-lg text-white text-sm font-medium"
-                        style={{ backgroundColor: brandColor }}
-                        onClick={() => setShowFarewell(true)}
-                      >
-                        {settings.manualButton ?? "Хорошо, жду!"}
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {finalBlock === "green" && (
-                <>
-                  <h1 className="text-2xl font-bold text-gray-900">
-                    {settings.greenTitle ?? "Отлично! Выберите удобное время для встречи"}
-                  </h1>
-                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-2 text-left">
-                    <p className="text-xs text-gray-500 text-center">Выберите тип встречи:</p>
-                    {settings.meetPhone && (
-                      <button type="button" className="w-full p-3 rounded-lg border border-gray-200 bg-white text-sm text-gray-900 flex items-center gap-2">
-                        📞 Звонок
-                      </button>
-                    )}
-                    {settings.meetOnline && (
-                      <button type="button" className="w-full p-3 rounded-lg border border-gray-200 bg-white text-sm text-gray-900 flex items-center gap-2">
-                        🎥 Онлайн
-                      </button>
-                    )}
-                    {settings.meetOffice && (
-                      <button type="button" className="w-full p-3 rounded-lg border border-gray-200 bg-white text-sm text-gray-900 flex items-center gap-2">
-                        🏢 Офис{settings.officeAddress ? ` (${settings.officeAddress})` : ""}
-                      </button>
-                    )}
-                    {!settings.meetPhone && !settings.meetOnline && !settings.meetOffice && (
-                      <p className="text-sm text-gray-500 text-center">Мы свяжемся с вами для согласования встречи.</p>
-                    )}
-                  </div>
-                </>
-              )}
-
-              {finalBlock === "yellow" && (
-                <>
-                  <h1 className="text-2xl font-bold text-gray-900">
-                    {settings.yellowTitle ?? "Спасибо за прохождение!"}
-                  </h1>
-                  <p className="text-gray-600">
-                    {settings.yellowText ?? "Мы рассмотрим вашу анкету и свяжемся с вами в ближайшее время"}
-                  </p>
-                </>
-              )}
-
-              {finalBlock === "red" && (
-                <>
-                  <h1 className="text-2xl font-bold text-gray-900">
-                    {settings.redTitle ?? "Спасибо за интерес к вакансии"}
-                  </h1>
-                  <p className="text-gray-600">
-                    {settings.redText ?? "К сожалению, ваш профиль не соответствует требованиям данной позиции. Мы сохраним ваши данные и свяжемся, если появится подходящая вакансия."}
-                  </p>
-                </>
-              )}
+              <h1 className="text-2xl font-bold text-gray-900">{afterAnketaTitle}</h1>
+              <p className="text-gray-600 whitespace-pre-line">{afterAnketaSubtitle}</p>
             </div>
+          </div>
+        </div>
+      )
+    }
+
+    // #16: промежуточный экран после видео-визитки, ДО анкеты. Кнопка
+    // переводит в форму. Если кандидат уже нажал её (anketaIntroDismissed
+    // = true) или анкета уже частично заполнена — экран скипается.
+    if (!anketaIntroDismissed) {
+      const introTitle    = data.finalScreens?.afterVideo?.title?.trim() || DEMO_DEFAULT_AFTER_VIDEO.title
+      const introSubtitle = data.finalScreens?.afterVideo?.subtitle?.trim() || DEMO_DEFAULT_AFTER_VIDEO.subtitle
+      const introButton   = data.finalScreens?.afterVideo?.button?.trim() || DEMO_DEFAULT_AFTER_VIDEO.button
+      return (
+        <div className="flex min-h-screen items-center justify-center px-4 py-8" style={{ backgroundColor: bgColor }}>
+          <div className="w-full max-w-md space-y-6 text-center">
+            {data.companyLogo && (
+              <img
+                src={data.companyLogo}
+                alt={data.companyName}
+                className="mx-auto h-12 w-auto object-contain mb-2"
+              />
+            )}
+            <h1 className="text-2xl font-bold text-gray-900">{introTitle}</h1>
+            <p className="text-gray-600 whitespace-pre-line">{introSubtitle}</p>
+            <button
+              type="button"
+              onClick={() => setAnketaIntroDismissed(true)}
+              className="inline-flex items-center justify-center rounded-lg px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors"
+              style={{ backgroundColor: data.brandPrimaryColor || "#3b82f6" }}
+            >
+              {introButton}
+            </button>
           </div>
         </div>
       )
@@ -1390,6 +1362,9 @@ export default function DemoPage() {
                     </span>
                   </a>
                 )}
+                {block.type === "stories" && (
+                  <StoriesPlayer cards={block.storiesCards ?? []} />
+                )}
                 {block.type === "media" && (
                   <MediaBlock
                     block={block}
@@ -1456,7 +1431,7 @@ export default function DemoPage() {
             disabled={hasRequiredUnanswered || saving || isAnyMediaUploading}
             title={isAnyMediaUploading ? "Дождитесь окончания загрузки видео" : undefined}
             className="flex-1 h-12 text-base font-medium"
-            style={{ backgroundColor: brandColor }}
+            style={{ backgroundColor: navBtnColor, borderColor: navBtnColor }}
           >
             {saving || isAnyMediaUploading ? (
               <Loader2 className="h-5 w-5 animate-spin" />
@@ -1464,7 +1439,7 @@ export default function DemoPage() {
               "Завершить"
             ) : (
               <>
-                Далее
+                {data.postDemoSettings?.navButtonText || "Далее"}
                 <ChevronRight className="ml-1 h-5 w-5" />
               </>
             )}
@@ -1874,8 +1849,8 @@ function MediaBlock({
       previewUrlRef.current = null
       setPreviewUrl(null)
       setMode("done")
-    } catch (err: any) {
-      reportErr(err?.message || "Ошибка загрузки. Попробуйте ещё раз.", err)
+    } catch (err) {
+      reportErr(err instanceof Error ? err.message : "Ошибка загрузки. Попробуйте ещё раз.", err)
       setMode("preview")
     }
   }

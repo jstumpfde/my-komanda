@@ -72,7 +72,7 @@ export default function QCCallDetailPage() {
               <Button variant="ghost" size="icon" onClick={() => router.push("/qc")}><ArrowLeft className="w-5 h-5" /></Button>
               <Headphones className="w-5 h-5 text-primary" />
               <div>
-                <h1 className="text-xl font-semibold">{call.managerName} → {call.clientName}</h1>
+                <h1 className="text-lg font-semibold">{call.managerName} → {call.clientName}</h1>
                 <p className="text-sm text-muted-foreground">
                   {new Date(call.date).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })} в {new Date(call.date).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })} · {formatDurationQC(call.duration)} · {call.type === "incoming" ? "Входящий" : "Исходящий"}
                 </p>

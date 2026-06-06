@@ -13,6 +13,7 @@ import { StepMarket } from "@/components/vacancies/step-market"
 import { StepQuestionnaire } from "@/components/vacancies/step-questionnaire"
 import { StepEditor } from "@/components/vacancies/step-editor"
 import { StepPublish } from "@/components/vacancies/step-publish"
+import { YuliaBanner } from "@/components/yulia/yulia-banner"
 
 const STEPS = [
   { id: 1, title: "Базовая информация" },
@@ -41,6 +42,7 @@ export default function NewVacancyPage() {
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
           <div className="max-w-3xl mx-auto p-4 sm:p-6">
+            {step === 1 && <YuliaBanner />}
             {/* Progress stepper */}
             <div className="flex items-center gap-1 mb-8">
               {STEPS.map((s, i) => (

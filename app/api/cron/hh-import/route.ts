@@ -1,5 +1,5 @@
 // POST /api/cron/hh-import
-// Защищён X-Cron-Secret. Каждые ~2 минуты импортирует новые отклики с hh.ru
+// Защищён X-Cron-Secret. Каждую минуту (crontab * * * * *) импортирует отклики с hh.ru
 // по всем активным hh-вакансиям компаний и сразу запускает разбор:
 //   • если рабочее время вакансии (canSendNow) — создаём кандидата,
 //     шлём демо-приглашение, переводим стадию, расписываем follow-up;
@@ -13,17 +13,30 @@
 // повторный INSERT/обновление по тем же откликам.
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { hhVacancies, vacancies, hhTokens, hhResponses } from "@/lib/db/schema"
+import { hhVacancies, vacancies, hhResponses } from "@/lib/db/schema"
 import { and, eq, inArray, count, sql } from "drizzle-orm"
-import { HHClient } from "@/lib/hh/client"
+import { getValidToken } from "@/lib/hh-helpers"
+import { importHhResponsesForVacancy } from "@/lib/hh/import-responses"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { processHhQueue } from "@/lib/hh/process-queue"
+import { runCleanup as runHhCleanup } from "@/app/api/cron/hh-cleanup-stuck/route"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 
 // Лимит откликов в обработку за один вызов cron'а — на компанию.
-// 50 — компромисс: hh API per-employer rate-limit ≈ 60 rps, в коде
-// последовательная обработка с delaySeconds=2 на отклик (т.е. ~50×2=100 сек).
-// Поднимать выше — рискуем тайм-аутом серверлесс-функции.
-const PROCESS_LIMIT_PER_RUN = 50
+// 20 (раньше 50) — сознательно держим прогон коротким. Разбор идёт
+// последовательно с PROCESS_DELAY_SECONDS на отклик, и весь прогон держит
+// единый advisory-lock. При 50×2с=~100с lock висел ~1.5 мин, и минутный cron
+// ВСЕ это время возвращал busy → свежие отклики НЕ импортировались. Эффект:
+// кандидат появлялся через 10–20 мин после отклика на hh (диагностика
+// 01.06.2026: у Макарова resp_created == cand_created, т.е. тормозил импорт,
+// а не разбор — разбор мгновенный). 20×1с=~20с → lock освобождается в ~4×
+// чаще → импорт почти каждую минуту. Бэклог дренится меньше за прогон, но
+// прогонов кратно больше — суммарная пропускная не падает.
+const PROCESS_LIMIT_PER_RUN = 20
+
+// Задержка между откликами при разборе (раньше 2с). 1с по-прежнему щадит hh
+// per-employer rate-limit (~60 rps), но вдвое сокращает удержание lock'а.
+const PROCESS_DELAY_SECONDS = 1
 
 // Стабильный ключ pg_advisory_lock. int4 (Postgres принимает int4/int8) —
 // сознательно держим в безопасном диапазоне, чтобы не конфликтовать с
@@ -42,23 +55,50 @@ export async function POST(req: NextRequest) {
   ) as unknown as Array<{ acquired: boolean }>
   const acquired = lockRows?.[0]?.acquired === true
   if (!acquired) {
+    // НЕ пишем busy-тики в cron_runs: cron минутный, ~60% тиков заняты —
+    // это ~1400 строк/сутки шума. Логируем только прогоны, реально взявшие
+    // lock (ниже), чтобы видеть честную частоту и длительность работы.
     return NextResponse.json(
       { ok: false, busy: true, error: "hh-import already running, try later" },
       { status: 409 },
     )
   }
 
+  // Записываем запуск только после захвата lock'а — это реальный рабочий
+  // прогон. По cron_runs.duration_ms видно, сколько lock держится (главный
+  // фактор задержки импорта свежих откликов), и реальную частоту прогонов.
+  const run = await startCronRun("hh-import")
+
   let imported  = 0
   let processed = 0
   let deferredOffHours = 0
   let skipped   = 0
+  let orphanedCleanup = 0
   const errors: string[] = []
 
   try {
+    // P0-53: до основного прохода чистим "застрявшие" hh_responses —
+    // status='response' с linked candidate в стадии rejected/hired или
+    // autoProcessingStopped=true. Это позволяет основному processHhQueue
+    // ниже не упираться в ORDER BY createdAt ASC LIMIT 50 на старых
+    // stopped-откликах и доходить до свежих.
+    try {
+      const cleanupRes = await runHhCleanup()
+      orphanedCleanup = cleanupRes.orphaned
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error("[hh-import] cleanup failed:", msg)
+      errors.push(`cleanup: ${msg}`)
+    }
+
     // Все активные hh-вакансии всех компаний с включённым авто-разбором.
     const activeRows = await db
       .select({
         hhVacancyId:           hhVacancies.hhVacancyId,
+        // vacancies.hh_vacancy_id — тот же hh-идентификатор, что использует
+        // кнопка «Синхронизировать» (доказанно рабочий путь). Берём его как
+        // приоритетный источник, hhVacancies.hhVacancyId — fallback.
+        vacancyHhId:           vacancies.hhVacancyId,
         vacancyId:             hhVacancies.localVacancyId,
         companyId:             vacancies.companyId,
         autoProcessingEnabled: vacancies.autoProcessingEnabled,
@@ -83,30 +123,55 @@ export async function POST(req: NextRequest) {
     }
 
     // Параллельная обработка компаний — каждая компания идёт своим потоком.
-    // Внутри компании (importApplications + processHhQueue) сохраняется
+    // Внутри компании (импорт в hh_responses + processHhQueue) сохраняется
     // последовательность, чтобы не словить 429 от hh.ru на одном employer.
     await Promise.all(Array.from(byCompany.entries()).map(async ([companyId, rows]) => {
-      // Без токена hh — пропускаем компанию.
-      const tokenRows = await db
-        .select()
-        .from(hhTokens)
-        .where(eq(hhTokens.companyId, companyId))
-        .limit(1)
-      if (!tokenRows[0]) {
+      // Без валидного токена hh — пропускаем компанию. getValidToken — тот же
+      // путь, что и у кнопки: сам рефрешит протухший access_token.
+      const tokenResult = await getValidToken(companyId)
+      if (!tokenResult) {
         skipped++
         return
       }
+      const accessToken = tokenResult.accessToken
 
       // Шаг 1 — импорт новых откликов в hh_responses (status='response').
-      const client = new HHClient(companyId)
+      // ПЕРЕВЕДЕНО на тот же путь, что и кнопка «Синхронизировать»
+      // (importHhResponsesForVacancy → negotiations → upsert hh_responses).
+      // Раньше тут был HHClient.importApplications, который писал НАПРЯМУЮ в
+      // candidates (минуя hh_responses), поэтому processHhQueue ниже не видел
+      // новых откликов. mode "new" — тянем полное резюме только для новых
+      // откликов, чтобы не выжигать hh /resumes rate-limit на каждом тике.
       for (const row of rows) {
         // INNER JOIN гарантирует non-null, но schema разрешает null —
         // на всякий случай защищаемся.
         if (!row.vacancyId) continue
         const localVacancyId = row.vacancyId
+        const hhVacancyId = row.vacancyHhId ?? row.hhVacancyId
+        // hh API ждёт числовой vacancy_id; некорректный — пропускаем (как кнопка).
+        if (!hhVacancyId || !/^\d+$/.test(hhVacancyId)) {
+          console.warn(`[hh-import] vacancy ${localVacancyId} — пропуск, hh_vacancy_id не числовой: "${hhVacancyId}"`)
+          continue
+        }
         try {
-          const r = await client.importApplications(localVacancyId)
+          const r = await importHhResponsesForVacancy({
+            companyId,
+            accessToken,
+            hhVacancyId,
+            mode: "new",
+          })
           imported += r.imported
+          // Отмечаем реальное время cron-синхронизации этой вакансии. Поле
+          // «Синк» в UI раньше показывало max(последний отклик, updatedAt) —
+          // обманчиво (выглядело «не синкалось» при работающем cron'е). Теперь
+          // пишем фактическую метку успешного импорта в hh_vacancies.syncedAt.
+          await db.update(hhVacancies)
+            .set({ syncedAt: new Date() })
+            .where(and(
+              eq(hhVacancies.companyId, companyId),
+              eq(hhVacancies.hhVacancyId, hhVacancyId),
+            ))
+            .catch(() => {})
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err)
           console.error(`[hh-import] vacancy ${localVacancyId} failed:`, msg)
@@ -126,7 +191,7 @@ export async function POST(req: NextRequest) {
           const result = await processHhQueue({
             companyId,
             limit:               Math.min(pending, PROCESS_LIMIT_PER_RUN),
-            delaySeconds:        2,    // быстрее чем ручной (там 30), но щадяще
+            delaySeconds:        PROCESS_DELAY_SECONDS,
             respectWorkingHours: true,
           })
           processed        += result.invited
@@ -144,10 +209,12 @@ export async function POST(req: NextRequest) {
     // Lock освобождаем даже на throw — иначе следующий cron получит 409 навсегда
     // (или до restart процесса, что хуже).
     await db.execute(sql`SELECT pg_advisory_unlock(${HH_IMPORT_LOCK_KEY})`).catch(() => {})
+    await finishCronRun(run.id, "error", { imported, processed, deferredOffHours, skipped, orphanedCleanup }, msg).catch(() => {})
     return NextResponse.json({ ok: false, error: msg }, { status: 500 })
   }
 
   await db.execute(sql`SELECT pg_advisory_unlock(${HH_IMPORT_LOCK_KEY})`).catch(() => {})
+  await finishCronRun(run.id, "ok", { imported, processed, deferredOffHours, skipped, orphanedCleanup, errors: errors.length }).catch(() => {})
 
   return NextResponse.json({
     ok: true,
@@ -155,6 +222,7 @@ export async function POST(req: NextRequest) {
     processed,
     deferredOffHours,
     skipped,
+    orphanedCleanup,
     errors,
   })
 }

@@ -101,7 +101,7 @@ export default function EditVacancyPage() {
               <ArrowLeft className="size-4" />Назад к вакансии
             </Link>
 
-            <h1 className="text-xl font-semibold text-foreground mb-6">Редактирование вакансии</h1>
+            <h1 className="text-lg font-semibold text-foreground mb-6">Редактирование вакансии</h1>
 
             {loading ? (
               <div className="space-y-4 max-w-xl">

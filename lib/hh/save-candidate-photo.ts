@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "fs/promises"
 import path from "path"
+import { uploadsDir } from "@/lib/uploads-path"
 
 // Качаем фото кандидата с hh и сохраняем локально в
 // public/uploads/candidates/{id}/photo.jpg. Возвращаем относительный URL,
@@ -36,7 +37,7 @@ export async function saveCandidatePhoto(
       console.warn("[saveCandidatePhoto] empty body", { candidateId, url: sourceUrl })
       return null
     }
-    const dir = path.join(process.cwd(), "public", "uploads", "candidates", candidateId)
+    const dir = uploadsDir("candidates", candidateId)
     await mkdir(dir, { recursive: true })
     await writeFile(path.join(dir, "photo.jpg"), buf)
     return `/uploads/candidates/${candidateId}/photo.jpg`

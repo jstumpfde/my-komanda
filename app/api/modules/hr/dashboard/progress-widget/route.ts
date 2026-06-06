@@ -2,6 +2,7 @@ import { eq, and, isNull, desc, inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancies, candidates } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { ACTIVE_VACANCY_STATUSES } from "@/lib/vacancies/filters"
 import {
   getDemoProgressPercent,
   getDemoProgressGroup,
@@ -16,10 +17,15 @@ export interface ProgressWidgetItem {
   progressBuckets: DemoProgressGroupCounts
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const user = await requireCompany()
     const companyId = user.companyId
+
+    // #49: ?vacancyId= — показывать прогресс одной вакансии
+    const url = new URL(req.url)
+    const vacancyIdParam = url.searchParams.get("vacancyId")
+    const singleVacancy = vacancyIdParam && vacancyIdParam !== "all" ? vacancyIdParam : null
 
     const topVacancies = await db
       .select({
@@ -29,11 +35,12 @@ export async function GET() {
       .from(vacancies)
       .where(and(
         eq(vacancies.companyId, companyId),
-        eq(vacancies.status, "published"),
+        inArray(vacancies.status, ACTIVE_VACANCY_STATUSES),
         isNull(vacancies.deletedAt),
+        singleVacancy ? eq(vacancies.id, singleVacancy) : undefined,
       ))
       .orderBy(desc(vacancies.createdAt))
-      .limit(5)
+      .limit(singleVacancy ? 1 : 5)
 
     if (topVacancies.length === 0) {
       return apiSuccess<ProgressWidgetItem[]>([])

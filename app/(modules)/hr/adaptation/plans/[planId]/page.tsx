@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Switch } from "@/components/ui/switch"
-import { Loader2, Plus, ChevronLeft, GripVertical, Pencil, Trash2, BookOpen, CheckSquare, Video, ClipboardList, Users, Play } from "lucide-react"
+import {Loader2, Plus, ChevronLeft, GripVertical, Pencil, Trash2, BookOpen, CheckSquare, Video, ClipboardList, Users} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 
@@ -233,7 +233,7 @@ export default function AdaptationPlanPage() {
               </Button>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h1 className="text-xl font-semibold truncate">{plan.title}</h1>
+                  <h1 className="text-lg font-semibold truncate">{plan.title}</h1>
                   <Badge variant="outline" className="text-[10px]">{planTypeLabel[plan.planType] ?? plan.planType}</Badge>
                   <Badge variant="outline" className="text-[10px]">{plan.durationDays} дней</Badge>
                   {plan.isTemplate && <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700">Шаблон</Badge>}

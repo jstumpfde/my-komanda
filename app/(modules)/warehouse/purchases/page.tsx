@@ -4,7 +4,7 @@ import { useState } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { Card, CardContent } from "@/components/ui/card"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -104,7 +104,7 @@ export default function LogisticsPurchasesPage() {
                   <ClipboardList className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-semibold">Закупки</h1>
+                  <h1 className="text-lg font-semibold">Закупки</h1>
                   <p className="text-sm text-muted-foreground">{purchases.length} заказов поставщикам</p>
                 </div>
               </div>
@@ -122,45 +122,41 @@ export default function LogisticsPurchasesPage() {
                 const list = t.value === "all" ? purchases : purchases.filter(p => p.status === t.value)
                 return (
                   <TabsContent key={t.value} value={t.value}>
-                    <Card>
-                      <CardContent className="p-0">
-                        <table className="w-full">
-                          <thead>
-                            <tr className="border-b bg-muted/50">
-                              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Номер</th>
-                              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Поставщик</th>
-                              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Дата</th>
-                              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Ожидается</th>
-                              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Позиций</th>
-                              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Сумма</th>
-                              <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {list.map(p => {
-                              const st = STATUS_MAP[p.status]
-                              const total = purchaseTotal(p)
-                              return (
-                                <tr key={p.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                                  <td className="px-4 py-3 text-xs font-mono font-semibold">{p.number}</td>
-                                  <td className="px-3 py-3 text-sm font-medium">{p.supplier}</td>
-                                  <td className="px-3 py-3 text-sm text-muted-foreground">{p.date}</td>
-                                  <td className="px-3 py-3 text-sm text-muted-foreground">{p.expectedDate}</td>
-                                  <td className="text-right px-3 py-3 text-sm">{p.items.length}</td>
-                                  <td className="text-right px-3 py-3 text-sm font-semibold">{total.toLocaleString("ru-RU")} ₽</td>
-                                  <td className="text-center px-3 py-3">
-                                    <Badge variant={st.variant} className="text-xs">{st.label}</Badge>
-                                  </td>
-                                </tr>
-                              )
-                            })}
-                            {list.length === 0 && (
-                              <tr><td colSpan={7} className="text-center py-10 text-sm text-muted-foreground">Нет закупок</td></tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </CardContent>
-                    </Card>
+                    <TableCard>
+                      <DataTable>
+                        <DataHead>
+                          <DataHeadCell>Номер</DataHeadCell>
+                          <DataHeadCell>Поставщик</DataHeadCell>
+                          <DataHeadCell>Дата</DataHeadCell>
+                          <DataHeadCell>Ожидается</DataHeadCell>
+                          <DataHeadCell align="right">Позиций</DataHeadCell>
+                          <DataHeadCell align="right">Сумма</DataHeadCell>
+                          <DataHeadCell align="center">Статус</DataHeadCell>
+                        </DataHead>
+                        <tbody>
+                          {list.map(p => {
+                            const st = STATUS_MAP[p.status]
+                            const total = purchaseTotal(p)
+                            return (
+                              <DataRow key={p.id}>
+                                <DataCell className="text-xs font-mono font-semibold">{p.number}</DataCell>
+                                <DataCell className="font-medium">{p.supplier}</DataCell>
+                                <DataCell className="text-muted-foreground">{p.date}</DataCell>
+                                <DataCell className="text-muted-foreground">{p.expectedDate}</DataCell>
+                                <DataCell align="right">{p.items.length}</DataCell>
+                                <DataCell align="right" className="font-semibold">{total.toLocaleString("ru-RU")} ₽</DataCell>
+                                <DataCell align="center">
+                                  <Badge variant={st.variant} className="text-xs">{st.label}</Badge>
+                                </DataCell>
+                              </DataRow>
+                            )
+                          })}
+                          {list.length === 0 && (
+                            <tr><td colSpan={7} className="text-center py-10 text-sm text-muted-foreground">Нет закупок</td></tr>
+                          )}
+                        </tbody>
+                      </DataTable>
+                    </TableCard>
                   </TabsContent>
                 )
               })}

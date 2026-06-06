@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { eq, and, inArray, notInArray } from "drizzle-orm"
+import {eq, and, notInArray} from "drizzle-orm"
 import { db } from "@/lib/db"
 import { companies, plans, planModules, tenantModules } from "@/lib/db/schema"
 import { requirePlatformAdmin, apiError, apiSuccess } from "@/lib/api-helpers"

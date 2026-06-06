@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { pulseResponses, pulseSurveys, notifications, companies } from "@/lib/db/schema"
-import { eq, and, avg, sql, desc, lt } from "drizzle-orm"
+import {pulseResponses, pulseSurveys, notifications} from "@/lib/db/schema"
+import {eq, and, avg, sql} from "drizzle-orm"
 import { checkCronAuth } from "@/lib/cron/auth"
 
 // POST /api/cron/pulse-alerts — scan recent pulse responses for low scores

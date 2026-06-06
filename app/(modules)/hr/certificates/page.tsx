@@ -4,7 +4,6 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { Award, BookOpen, Calendar, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
@@ -45,7 +44,7 @@ export default function CertificatesPage() {
         <DashboardHeader />
         <main className="p-6 space-y-6">
       <div>
-        <h1 className="text-xl font-semibold">Сертификаты</h1>
+        <div className="flex items-center gap-2"><Award className="h-5 w-5 text-violet-600" /><h1 className="text-lg font-semibold">Сертификаты</h1></div>
         <p className="text-sm text-muted-foreground mt-0.5">Выданные сертификаты об окончании курсов</p>
       </div>
 

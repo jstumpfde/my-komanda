@@ -4,7 +4,7 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
-import { Settings, Search, Users, Send, BarChart3, LineChart, Lock } from "lucide-react"
+import {Search, Users, Send, BarChart3, LineChart, Lock} from "lucide-react"
 
 const INTEGRATIONS = [
   { name: "Яндекс.Директ API", desc: "Автоимпорт кампаний, расходов и статистики", icon: Search, color: "#FF0000" },

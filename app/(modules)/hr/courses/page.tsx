@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { BookOpen, Plus, Clock, Users, Award, Filter, ChevronRight, Layers, Sparkles } from "lucide-react"
+import {BookOpen, Plus, Clock, ChevronRight, Layers, Sparkles} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
@@ -105,7 +105,7 @@ export default function CoursesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Курсы обучения</h1>
+          <div className="flex items-center gap-2"><BookOpen className="h-5 w-5 text-violet-600" /><h1 className="text-lg font-semibold">Курсы обучения</h1></div>
           <p className="text-sm text-muted-foreground mt-0.5">{courses.length} курсов в базе</p>
         </div>
         <div className="flex items-center gap-2">

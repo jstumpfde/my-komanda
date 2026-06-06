@@ -53,6 +53,12 @@ export async function PATCH(
       stopOnReply?: boolean
       stopOnVacancyClosed?: boolean
       customMessages?: string[] | null
+      customMessagesOpened?: string[] | null
+      // Дожим по тесту
+      testEnabled?: boolean
+      testPreset?: string
+      testMessages?: string[] | null
+      testMessagesOpened?: string[] | null
     }
 
     const updates: Record<string, unknown> = { updatedAt: new Date() }
@@ -66,6 +72,26 @@ export async function PATCH(
       updates.customMessages = body.customMessages.map(m => String(m).slice(0, 2000)).slice(0, 20)
     } else if (body.customMessages === null) {
       updates.customMessages = null
+    }
+    // Ветка Б — кастомные тексты для тех, кто открыл демо, но не дошёл до конца.
+    // Колонка follow_up_campaigns.custom_messages_opened, читается в switch-branch.ts.
+    if (Array.isArray(body.customMessagesOpened)) {
+      updates.customMessagesOpened = body.customMessagesOpened.map(m => String(m).slice(0, 2000)).slice(0, 20)
+    } else if (body.customMessagesOpened === null) {
+      updates.customMessagesOpened = null
+    }
+    // ── Дожим по тесту ──
+    if (typeof body.testEnabled === "boolean") updates.testEnabled = body.testEnabled
+    if (typeof body.testPreset === "string" && isFollowUpPreset(body.testPreset)) updates.testPreset = body.testPreset
+    if (Array.isArray(body.testMessages)) {
+      updates.testMessages = body.testMessages.map(m => String(m).slice(0, 2000)).slice(0, 20)
+    } else if (body.testMessages === null) {
+      updates.testMessages = null
+    }
+    if (Array.isArray(body.testMessagesOpened)) {
+      updates.testMessagesOpened = body.testMessagesOpened.map(m => String(m).slice(0, 2000)).slice(0, 20)
+    } else if (body.testMessagesOpened === null) {
+      updates.testMessagesOpened = null
     }
 
     const [existing] = await db
@@ -87,6 +113,11 @@ export async function PATCH(
       stopOnReply: typeof updates.stopOnReply === "boolean" ? updates.stopOnReply : true,
       stopOnVacancyClosed: typeof updates.stopOnVacancyClosed === "boolean" ? updates.stopOnVacancyClosed : true,
       customMessages: Array.isArray(updates.customMessages) ? (updates.customMessages as string[]) : null,
+      customMessagesOpened: Array.isArray(updates.customMessagesOpened) ? (updates.customMessagesOpened as string[]) : null,
+      testEnabled: typeof updates.testEnabled === "boolean" ? updates.testEnabled : false,
+      testPreset: typeof updates.testPreset === "string" ? updates.testPreset : "off",
+      testMessages: Array.isArray(updates.testMessages) ? (updates.testMessages as string[]) : null,
+      testMessagesOpened: Array.isArray(updates.testMessagesOpened) ? (updates.testMessagesOpened as string[]) : null,
     }
     const [created] = await db.insert(followUpCampaigns).values(insertValues).returning()
     return apiSuccess({ campaign: created })

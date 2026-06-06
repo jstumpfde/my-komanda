@@ -3,7 +3,7 @@ import { db } from "@/lib/db"
 import { calendarEvents, calendarEventParticipants } from "@/lib/db/schema"
 import { requireCompany } from "@/lib/api-helpers"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
-import { eq, and, gte, lte } from "drizzle-orm"
+import { eq, and, gte, lte, or, inArray } from "drizzle-orm"
 
 export async function GET(req: NextRequest) {
   try {
@@ -26,8 +26,21 @@ export async function GET(req: NextRequest) {
     if (type) {
       conditions.push(eq(calendarEvents.type, type))
     }
+    if (filter === "hr") {
+      conditions.push(eq(calendarEvents.scope, "hr"))
+    }
     if (filter === "mine") {
-      conditions.push(eq(calendarEvents.createdBy, user.id!))
+      // «Мой» = события, где я автор ИЛИ участник (а не только созданные мной).
+      const myParticipantEvents = db
+        .select({ eventId: calendarEventParticipants.eventId })
+        .from(calendarEventParticipants)
+        .where(eq(calendarEventParticipants.userId, user.id!))
+      conditions.push(
+        or(
+          eq(calendarEvents.createdBy, user.id!),
+          inArray(calendarEvents.id, myParticipantEvents),
+        )!
+      )
     }
 
     const events = await db
@@ -48,7 +61,9 @@ export async function POST(req: NextRequest) {
     const user = await requireCompany()
     const body = await req.json()
 
-    const { title, description, type, startAt, endAt, allDay, roomId, color, recurrence, participants } = body
+    const { title, description, type, startAt, endAt, allDay, roomId, color, recurrence, participants,
+            candidateId, vacancyId, interviewer, interviewType, interviewFormat, interviewStatus, scope,
+            location, meetingUrl } = body
 
     if (!title || !startAt || !endAt) {
       return apiError("Обязательные поля: title, startAt, endAt")
@@ -69,6 +84,15 @@ export async function POST(req: NextRequest) {
         color,
         recurrence,
         status: "confirmed",
+        candidateId:     candidateId ?? null,
+        vacancyId:       vacancyId ?? null,
+        interviewer:     interviewer ?? null,
+        interviewType:   interviewType ?? null,
+        interviewFormat: interviewFormat ?? null,
+        interviewStatus: interviewStatus ?? null,
+        location:    location ?? null,
+        meetingUrl:  meetingUrl ?? null,
+        scope: (scope === "hr" || scope === "personal") ? scope : "company",
       })
       .returning()
 

@@ -14,6 +14,15 @@ import {
   Globe, Smartphone, Monitor, ChevronRight,
 } from "lucide-react"
 
+export interface MiniFormFieldForHtml {
+  id: string
+  label: string
+  type: string
+  required: boolean
+  placeholder?: string
+  options?: string[]
+}
+
 interface PublishTabProps {
   vacancyTitle: string
   vacancySlug: string
@@ -26,19 +35,50 @@ interface PublishTabProps {
     logo?: string
     slogan?: string
   }
+  formFields?: MiniFormFieldForHtml[]
 }
 
-function generateFullPageHtml(brand: BrandConfig, vacancy: { title: string; slug: string; city?: string; salaryFrom?: number; salaryTo?: number }): string {
-  const primary = brand.primaryColor
-  const bg = brand.bgColor
+interface BrandOverride {
+  companyName?: string
+  color?: string
+  logo?: string
+  slogan?: string
+}
+
+/** Экранирует спецсимволы HTML в пользовательских строках */
+function escHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;")
+}
+
+function generateFullPageHtml(
+  brand: BrandConfig,
+  vacancy: { title: string; slug: string; city?: string; salaryFrom?: number; salaryTo?: number },
+  override?: BrandOverride,
+  formFields?: MiniFormFieldForHtml[],
+): string {
+  const primary = override?.color || brand.primaryColor || "#3b82f6"
+  const bg = override?.color ? override.color + "10" : brand.bgColor
   const text = brand.textColor
-  const company = brand.companyName
-  const logoHtml = brand.logoUrl
-    ? `<img src="${brand.logoUrl}" alt="${company}" style="width:44px;height:44px;border-radius:12px;object-fit:contain" />`
-    : `<div style="width:44px;height:44px;border-radius:12px;background:${primary};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px">${company[0]}</div>`
+  const rawCompany = override?.companyName || brand.companyName || ""
+  const company = rawCompany.trim() || "Ваша компания"
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://company24.pro"
+  // B6: на внешнем сайте (Tilda/Wix) относительный путь /uploads/... ломается
+  // (резолвится к чужому домену) → пустой квадрат. Делаем логотип абсолютным.
+  const logoSrc = override?.logo || brand.logoUrl
+  const logoUrl = logoSrc && logoSrc.startsWith("/") ? origin + logoSrc : logoSrc
+  const initial = company.charAt(0) || "•"
+  const logoHtml = logoUrl
+    ? `<img src="${logoUrl}" alt="${company}" style="width:44px;height:44px;border-radius:12px;object-fit:contain" />`
+    : `<div style="width:44px;height:44px;border-radius:12px;background:${primary};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px">${initial}</div>`
   const salary = vacancy.salaryFrom && vacancy.salaryTo
     ? `${vacancy.salaryFrom.toLocaleString("ru-RU")} – ${vacancy.salaryTo.toLocaleString("ru-RU")} ₽`
     : ""
+  const slogan = override?.slogan?.trim() || ""
 
   return `<!DOCTYPE html>
 <html lang="ru">
@@ -53,14 +93,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .logo{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:32px}
 .logo-text{font-size:20px;font-weight:700;color:${text}}
 h1{font-size:28px;font-weight:800;color:${text};margin-bottom:8px;line-height:1.2}
+.slogan{color:${text}cc;font-size:15px;font-weight:500;margin-bottom:12px}
 .meta{color:${text}99;font-size:14px;margin-bottom:24px}
 .highlights{background:#fff;border-radius:16px;padding:24px;margin-bottom:24px;text-align:left}
 .highlight{display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;font-size:14px;color:${text}}
 .highlight:last-child{margin-bottom:0}
 .check{color:${primary};font-size:18px;flex-shrink:0;margin-top:1px}
 .form-card{background:#fff;border-radius:16px;padding:24px;margin-bottom:24px}
-.form-card input{width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:12px;outline:none;transition:border .2s}
-.form-card input:focus{border-color:${primary}}
+.form-card input,.form-card select{width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:12px;outline:none;transition:border .2s;background:#fff;color:${text};appearance:none;-webkit-appearance:none}
+.form-card input:focus,.form-card select:focus{border-color:${primary}}
 .btn{display:block;width:100%;padding:16px;background:${primary};color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;transition:opacity .2s}
 .btn:hover{opacity:.9}
 .footer{font-size:11px;color:${text}40;margin-top:24px}
@@ -70,7 +111,7 @@ h1{font-size:28px;font-weight:800;color:${text};margin-bottom:8px;line-height:1.
 <div class="container">
 <div class="logo">${logoHtml}<span class="logo-text">${company}</span></div>
 <h1>${vacancy.title}</h1>
-<p class="meta">${vacancy.city || ""}${salary ? " · " + salary : ""}</p>
+${slogan ? `<p class="slogan">${slogan}</p>\n` : ""}<p class="meta">${vacancy.city || ""}${salary ? " · " + salary : ""}</p>
 <div class="highlights">
 <div class="highlight"><span class="check">✓</span>Доход от ${vacancy.salaryFrom ? Math.round(vacancy.salaryFrom * 1.5).toLocaleString("ru-RU") + " ₽" : "конкурентный"} через 3 месяца</div>
 <div class="highlight"><span class="check">✓</span>Обучение и наставник с первого дня</div>
@@ -78,8 +119,20 @@ h1{font-size:28px;font-weight:800;color:${text};margin-bottom:8px;line-height:1.
 <div class="highlight"><span class="check">✓</span>Современный офис${vacancy.city ? " в " + vacancy.city : ""}</div>
 </div>
 <div class="form-card">
-<input type="text" id="hf-name" placeholder="Ваше имя" />
-<input type="tel" id="hf-phone" placeholder="Телефон" />
+<input type="text" id="hf-name" placeholder="Ваше имя" required />
+<input type="tel" id="hf-phone" placeholder="Телефон" required />
+${(formFields ?? []).map(f => {
+  const lbl = escHtml(f.label)
+  const ph = escHtml(f.placeholder || f.label)
+  const fid = escHtml(f.id)
+  const req = f.required ? " required" : ""
+  if (f.type === "select" && f.options && f.options.length > 0) {
+    const opts = f.options.map(o => `<option value="${escHtml(o)}">${escHtml(o)}</option>`).join("")
+    return `<select id="hf-${fid}" data-field="${fid}"${req}><option value="" disabled selected>${lbl}</option>${opts}</select>`
+  }
+  const inputType = f.type === "number" ? "number" : "text"
+  return `<input type="${inputType}" id="hf-${fid}" data-field="${fid}" placeholder="${ph}${f.required ? " *" : ""}"${req} />`
+}).join("\n")}
 <button class="btn" onclick="handleSubmit()">Узнать подробнее →</button>
 </div>
 <p class="footer">Powered by Company24</p>
@@ -88,8 +141,18 @@ h1{font-size:28px;font-weight:800;color:${text};margin-bottom:8px;line-height:1.
 function handleSubmit(){
 var n=document.getElementById('hf-name').value;
 var p=document.getElementById('hf-phone').value;
-if(!n||!p){alert('Заполните все поля');return}
-window.location.href='${typeof window !== "undefined" ? window.location.origin : ""}/vacancy/${vacancy.slug}?name='+encodeURIComponent(n)+'&phone='+encodeURIComponent(p)+'&utm_source=embed';
+if(!n||!p){alert('Заполните имя и телефон');return}
+var extra={};
+document.querySelectorAll('[data-field]').forEach(function(el){
+  var key=el.getAttribute('data-field');
+  var val=el.value;
+  if(el.hasAttribute('required')&&!val){alert('Заполните все обязательные поля');extra=null;return}
+  if(extra!==null)extra[key]=val;
+});
+if(extra===null)return;
+var qs='?name='+encodeURIComponent(n)+'&phone='+encodeURIComponent(p)+'&utm_source=embed';
+if(Object.keys(extra).length>0)qs+='&extra='+encodeURIComponent(JSON.stringify(extra));
+window.location.href='${origin}/vacancy/${vacancy.slug}'+qs;
 }
 </script>
 </body>
@@ -123,13 +186,13 @@ const CMS_INSTRUCTIONS: { id: string; name: string; steps: string[] }[] = [
   ]},
 ]
 
-export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom, salaryTo, brandOverride }: PublishTabProps) {
+export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom, salaryTo, brandOverride, formFields }: PublishTabProps) {
   const [brand, setBrand] = useState<BrandConfig | null>(null)
   const [copied, setCopied] = useState(false)
   const [activeInstruction, setActiveInstruction] = useState<string | null>(null)
 
   useEffect(() => {
-    const base = getBrand()
+    const base = { ...getBrand() }
     if (brandOverride) {
       if (brandOverride.companyName) base.companyName = brandOverride.companyName
       if (brandOverride.color) { base.primaryColor = brandOverride.color; base.bgColor = brandOverride.color + "10" }
@@ -140,7 +203,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
 
   const handleCopyCode = async () => {
     if (!brand) return
-    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo })
+    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields)
     await navigator.clipboard.writeText(html)
     setCopied(true)
     toast.success("HTML-код скопирован в буфер обмена")
@@ -149,7 +212,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
 
   const handlePreview = () => {
     if (!brand) return
-    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo })
+    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields)
     const blob = new Blob([html], { type: "text/html" })
     const url = URL.createObjectURL(blob)
     window.open(url, "_blank")
@@ -158,7 +221,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
 
   const handleDownload = () => {
     if (!brand) return
-    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo })
+    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields)
     const blob = new Blob([html], { type: "text/html" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
@@ -170,8 +233,6 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
   }
 
   if (!brand) return null
-
-  const previewHtml = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo })
 
   return (
     <div className="space-y-6">
@@ -230,10 +291,10 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
                     <img src={brand.logoUrl} alt="" className="w-8 h-8 rounded-lg object-contain" />
                   ) : (
                     <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs" style={{ backgroundColor: brand.primaryColor }}>
-                      {brand.companyName[0]}
+                      {(brand.companyName.trim() || "Ваша компания").charAt(0)}
                     </div>
                   )}
-                  <span className="text-sm font-bold" style={{ color: brand.textColor }}>{brand.companyName}</span>
+                  <span className="text-sm font-bold" style={{ color: brand.textColor }}>{brand.companyName.trim() || "Ваша компания"}</span>
                 </div>
                 <h3 className="text-base font-bold" style={{ color: brand.textColor }}>{vacancyTitle}</h3>
                 <p className="text-xs" style={{ color: brand.textColor + "80" }}>
@@ -243,6 +304,11 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
                 <div className="space-y-1.5 bg-white rounded-lg p-3">
                   <div className="h-7 rounded-md border bg-white" />
                   <div className="h-7 rounded-md border bg-white" />
+                  {(formFields ?? []).map(f => (
+                    <div key={f.id} className="h-7 rounded-md border bg-white relative overflow-hidden">
+                      <span className="absolute inset-0 flex items-center px-2 text-[9px] text-gray-400 truncate">{f.label}{f.required ? " *" : ""}</span>
+                    </div>
+                  ))}
                   <div className="h-8 rounded-md text-white text-xs font-semibold flex items-center justify-center" style={{ backgroundColor: brand.primaryColor }}>
                     Узнать подробнее →
                   </div>

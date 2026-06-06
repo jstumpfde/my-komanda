@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { companies, users } from "@/lib/db/schema"
-import { requireAuth, apiError, apiSuccess } from "@/lib/api-helpers"
+import { requireAuth, requireDirector, apiError, apiSuccess } from "@/lib/api-helpers"
 import { seedDefaultFunnelStages } from "@/lib/funnel/seed-default-stages"
 
 export async function POST(req: NextRequest) {
@@ -80,7 +80,8 @@ export const PATCH = PUT
 
 export async function PUT(req: NextRequest) {
   try {
-    const user = await requireAuth()
+    // Профиль/брендинг компании — общие настройки, только директор.
+    const user = await requireDirector()
 
     const body = await req.json() as {
       name?: string
@@ -120,6 +121,8 @@ export async function PUT(req: NextRequest) {
       postal_address?: string
       custom_theme?: Record<string, unknown>
       subdomain?: string
+      join_code?: string
+      join_enabled?: boolean
     }
 
     const fieldMap: Record<string, unknown> = {}
@@ -132,7 +135,16 @@ export async function PUT(req: NextRequest) {
     if (body.postal_code !== undefined) fieldMap.postalCode = body.postal_code
     if (body.founded_year !== undefined) fieldMap.foundedYear = body.founded_year
     if (body.revenue_range !== undefined) fieldMap.revenueRange = body.revenue_range
-    if (body.website !== undefined) fieldMap.website = body.website
+    if (body.website !== undefined) {
+      const trimmedWebsite = (body.website ?? "").trim()
+      if (trimmedWebsite === "") {
+        fieldMap.website = null
+      } else if (!/^https?:\/\/.+/i.test(trimmedWebsite)) {
+        return apiError("Адрес сайта должен начинаться с http:// или https://", 400)
+      } else {
+        fieldMap.website = trimmedWebsite
+      }
+    }
     if (body.crm_status !== undefined) fieldMap.crmStatus = body.crm_status
     if (body.crm_name !== undefined) fieldMap.crmName = body.crm_name
     if (body.sales_scripts !== undefined) fieldMap.salesScripts = body.sales_scripts
@@ -162,6 +174,13 @@ export async function PUT(req: NextRequest) {
     if (body.postal_address !== undefined) fieldMap.postalAddress = body.postal_address
     if (body.custom_theme !== undefined) fieldMap.customTheme = body.custom_theme
     if (body.subdomain !== undefined) fieldMap.subdomain = body.subdomain
+    // Постоянная ссылка-приглашение: уникальный код компании (например orlink).
+    // Пустая строка → null (сброс). Нормализуем к slug-формату.
+    if (body.join_code !== undefined) {
+      const raw = (body.join_code ?? "").trim().toLowerCase().replace(/[^a-z0-9а-я_-]+/gi, "-").replace(/^-+|-+$/g, "")
+      fieldMap.joinCode = raw === "" ? null : raw
+    }
+    if (body.join_enabled !== undefined) fieldMap.joinEnabled = body.join_enabled === true
 
     // Auto-create company if user has no companyId
     if (!user.companyId) {
@@ -205,6 +224,7 @@ export async function PUT(req: NextRequest) {
     console.error("[companies PUT]", err instanceof Error ? err.message : err, err instanceof Error ? err.stack : "")
     const msg = err instanceof Error ? err.message : String(err)
     if (msg.includes("subdomain") && msg.includes("unique")) return apiError("Этот поддомен уже занят", 409)
+    if (msg.includes("join_code") && msg.includes("unique")) return apiError("Эта ссылка-приглашение уже занята — выберите другую", 409)
     return apiError("Internal server error", 500)
   }
 }

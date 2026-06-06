@@ -1,10 +1,10 @@
 import { NextRequest } from "next/server"
-import { eq, and } from "drizzle-orm"
-import { db } from "@/lib/db"
-import { vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { hardDeleteVacancy } from "@/lib/vacancies/hard-delete"
 
-// Hard delete — permanently removes vacancy from DB (only for trashed items)
+// Hard delete — навсегда удаляет вакансию из БД (только для корзины).
+// Сносит зависимые строки (кандидаты/демо/hh) ДО самой вакансии — иначе
+// FK NO ACTION блокируют удаление. Логика — lib/vacancies/hard-delete.ts.
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -13,18 +13,15 @@ export async function DELETE(
     const user = await requireCompany()
     const { id } = await params
 
-    const [deleted] = await db
-      .delete(vacancies)
-      .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
-      .returning({ id: vacancies.id })
-
-    if (!deleted) {
+    const res = await hardDeleteVacancy(id, user.companyId)
+    if (!res.deleted) {
       return apiError("Vacancy not found", 404)
     }
 
-    return apiSuccess({ deleted: true })
+    return apiSuccess({ deleted: true, candidates: res.candidates })
   } catch (err) {
     if (err instanceof Response) return err
+    console.error("[DELETE /vacancies/[id]/permanent]", err)
     return apiError("Internal server error", 500)
   }
 }

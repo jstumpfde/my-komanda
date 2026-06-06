@@ -1,5 +1,20 @@
 import { auth } from "@/auth"
-import { hasAnyModule, HR_MODULE_SLUGS } from "@/lib/modules/access"
+import { NextResponse } from "next/server"
+import {HR_MODULE_SLUGS} from "@/lib/modules/access"
+
+// Хосты платформы — НЕ поддомены компаний.
+const PLATFORM_HOSTS = new Set(["company24.pro", "www.company24.pro", "new.company24.pro", "localhost"])
+
+// Извлечь поддомен компании из Host ({sub}.company24.pro → "sub"), иначе null.
+function getCompanySubdomain(host: string): string | null {
+  const h = host.split(":")[0].toLowerCase()
+  if (PLATFORM_HOSTS.has(h)) return null
+  if (h.endsWith(".company24.pro")) {
+    const sub = h.slice(0, -".company24.pro".length)
+    if (sub && sub !== "www" && sub !== "new" && !sub.includes(".")) return sub
+  }
+  return null
+}
 
 // Node.js runtime — нужен для DB-запросов в middleware
 export const runtime = "nodejs"
@@ -12,9 +27,11 @@ const PUBLIC_PREFIXES = [
   "/landing",
   "/vacancy/",
   "/candidate/",
+  "/candidate-update/", // публичная страница самообновления данных кандидата (токен-ссылка)
   "/schedule/",
   "/ref/",
   "/v/",
+  "/f/",                // публичная форма Резерва (tracking-ссылка)
   "/join/",
   "/api/auth",          // sign-in/out + forgot-password/reset-password
   "/api/cron/",         // cron-эндпоинты — защищены X-Cron-Secret в самом роуте,
@@ -29,9 +46,12 @@ const PUBLIC_PREFIXES = [
   "/intake/",
   "/vacancy-view/",
   "/demo/",
+  "/test/",             // публичная страница прохождения теста по токен-ссылке
+  "/compare/",          // публичная ссылка на сравнение кандидатов (share-токен)
   "/politicahr2026",
   "/ask/",
   "/uploads/",
+  "/careers",            // публичная карьерная страница компании (поддомен)
 ]
 
 function isPublic(pathname: string): boolean {
@@ -55,6 +75,17 @@ const MODULE_PATH_MAP: { prefix: string; slugs: string[]; moduleParam: string }[
 export default auth(async (req) => {
   const { pathname } = req.nextUrl
   const session = req.auth
+
+  // ── Поддомен компании ({sub}.company24.pro) ───────────────────────────────
+  // Корень поддомена → карьерная страница компании (/careers?sub=...). Остальные
+  // публичные пути (vacancy/demo/…) работают как есть — слаги глобальны.
+  const sub = getCompanySubdomain(req.headers.get("host") || "")
+  if (sub && (pathname === "/" || pathname === "/careers")) {
+    const url = req.nextUrl.clone()
+    url.pathname = "/careers"
+    url.searchParams.set("sub", sub)
+    return NextResponse.rewrite(url)
+  }
 
   // Публичный маршрут — пропускаем
   if (isPublic(pathname)) return

@@ -2,29 +2,35 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
 import {
-  Play, Square, Loader2, Settings2, Shield, Gauge, AlertTriangle, Info,
+  Play, Square, Loader2, Settings2, Shield, Gauge, Info,
 } from "lucide-react"
 
-interface ProcessQueueResponse {
-  processed: number
-  invited?: number
-  rejected?: number
-  kept?: number
-  message?: string
+interface EnqueueResponse {
+  jobId:  string
+  status: "queued"
   error?: string
 }
+
+interface JobStatusResponse {
+  jobId:     string
+  status:    "queued" | "running" | "completed" | "failed" | "stopped"
+  processed: number
+  invited:   number
+  rejected:  number
+  kept:      number
+  error?:    string | null
+}
+
+const POLL_INTERVAL_MS = 2000
 
 interface HhAutoProcessProps {
   vacancyId?: string
   pendingCount?: number
-  defaultMinScore?: number
   onProcessed?: () => void
   /** "inline" — компактная кнопка с поповером (по умолчанию), "card" — большая карточка. */
   variant?: "inline" | "card"
@@ -42,7 +48,6 @@ const LIMIT_FALLBACK_MAX = 8
 export function HhAutoProcess({
   vacancyId,
   pendingCount,
-  defaultMinScore = 70,
   onProcessed,
   variant = "inline",
 }: HhAutoProcessProps) {
@@ -52,9 +57,7 @@ export function HhAutoProcess({
 
   const [limit, setLimit] = useState<number | "all">(5)
   const [speed, setSpeed] = useState<SpeedPreset>("safe")
-  const [useMinScore, setUseMinScore] = useState<boolean>(false)
   const [manualMode, setManualMode] = useState<boolean>(false)
-  const [minScore, setMinScore] = useState<number>(defaultMinScore)
 
   const [autoProcessingEnabled, setAutoProcessingEnabled] = useState<boolean | null>(null)
   const [autoProcessingSaving, setAutoProcessingSaving] = useState(false)
@@ -118,34 +121,40 @@ export function HhAutoProcess({
     setOpen(false)
     const startedAt = Date.now()
     try {
-      // Защита от рассинхронизации типов после ввода через UI:
-      // Number() гарантирует, что limit/delaySeconds/minScore — это всегда
-      // конечные числа (без NaN), даже если state пришёл из URL/localStorage
-      // как строка.
       const payload = {
         vacancyId,
         limit:        Number.isFinite(Number(effectiveLimit)) ? Number(effectiveLimit) : 5,
         delaySeconds: Number.isFinite(Number(delaySeconds))   ? Number(delaySeconds)   : 30,
-        minScore:     useMinScore ? (Number.isFinite(Number(minScore)) ? Number(minScore) : 70) : 0,
       }
+      // 1. Enqueue. Бэкенд возвращает {jobId, status:queued} мгновенно
+      //   (<500мс), реальный разбор идёт в фоне.
       const res = await fetch("/api/integrations/hh/process-queue", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
-      const data = await res.json() as ProcessQueueResponse
-      if (!res.ok) throw new Error(data.error || "Ошибка")
+      const enq = await res.json() as EnqueueResponse
+      if (!res.ok || !enq.jobId) throw new Error(enq.error || "Не удалось поставить задачу в очередь")
+
+      toast("🔄 Разбор запущен в фоне…", { duration: 2000 })
+
+      // 2. Polling — раз в 2 сек до завершения. Не блокирует UI.
+      const finalStatus = await waitForJob(enq.jobId)
 
       const dur = Math.round((Date.now() - startedAt) / 1000)
       const summary = [
-        `Обработано: ${data.processed}`,
-        data.invited != null ? `приглашено: ${data.invited}` : null,
-        data.rejected != null ? `отказ: ${data.rejected}` : null,
-        data.kept ? `в «Новый»: ${data.kept}` : null,
+        `Обработано: ${finalStatus.processed}`,
+        finalStatus.invited > 0 ? `приглашено: ${finalStatus.invited}` : null,
+        finalStatus.rejected > 0 ? `отказ: ${finalStatus.rejected}` : null,
+        finalStatus.kept > 0 ? `в «Новый»: ${finalStatus.kept}` : null,
       ].filter(Boolean).join(", ")
 
-      if (data.processed === 0) {
-        toast.info(data.message || "Нет новых откликов для разбора")
+      if (finalStatus.status === "failed") {
+        toast.error(finalStatus.error || "Разбор завершился с ошибкой")
+      } else if (finalStatus.status === "stopped") {
+        toast(`🛑 Разбор остановлен. ${summary}`)
+      } else if (finalStatus.processed === 0) {
+        toast.info("Нет новых откликов для разбора")
       } else {
         toast.success(`Разбор завершён: ${summary} (${dur}с)`)
       }
@@ -155,6 +164,27 @@ export function HhAutoProcess({
     } finally {
       setRunning(false)
     }
+  }
+
+  // Polling статуса до перехода в terminal-состояние.
+  // Терпит сетевые сбои (просто пытается дальше), сдаётся через ~30 мин.
+  const waitForJob = async (jobId: string): Promise<JobStatusResponse> => {
+    const startedAt = Date.now()
+    const MAX_WAIT_MS = 30 * 60 * 1000 // 30 минут абсолютный таймаут
+    while (Date.now() - startedAt < MAX_WAIT_MS) {
+      await new Promise(r => setTimeout(r, POLL_INTERVAL_MS))
+      try {
+        const r = await fetch(`/api/integrations/hh/process-queue/status?jobId=${jobId}`)
+        if (!r.ok) continue
+        const data = await r.json() as JobStatusResponse
+        if (data.status === "completed" || data.status === "failed" || data.status === "stopped") {
+          return data
+        }
+      } catch {
+        // молча — сеть может ребутнуться, продолжаем polling
+      }
+    }
+    throw new Error("Превышен таймаут ожидания разбора (30 минут)")
   }
 
   const stop = async () => {
@@ -251,31 +281,12 @@ export function HhAutoProcess({
         </div>
       )}
 
-      <div>
-        <div className="flex items-center justify-between mb-1.5">
-          <Label className="text-xs font-medium">Использовать минимальный AI-скор</Label>
-          <Switch checked={useMinScore} onCheckedChange={setUseMinScore} />
-        </div>
-        {useMinScore && (
-          <>
-            <div className="flex items-center justify-between mb-1.5">
-              <Label className="text-xs text-muted-foreground">Порог приглашения</Label>
-              <Badge variant="outline" className="h-5 px-1.5 text-[10px] tabular-nums">{minScore}</Badge>
-            </div>
-            <Slider
-              value={[minScore]}
-              min={0}
-              max={95}
-              step={5}
-              onValueChange={v => setMinScore(v[0] ?? 70)}
-            />
-            <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-              <span>0</span>
-              <span>95</span>
-            </div>
-          </>
-        )}
-      </div>
+      {/* P0-52: Тумблер «Использовать минимальный AI-скор» и слайдер «Порог
+          приглашения» удалены. Источник истины — таб «Воронка» вакансии
+          (vacancy_ai_settings.minScoreLower/Upper). Раньше payload.minScore
+          в любом случае игнорировался бэкендом — но UI запутывал HR'ов и
+          провоцировал баги уровня P0-53 (старый порог 70 + новый 50 →
+          50 кандидатов с auto_processing_stopped=true). */}
 
       {isAll ? (
         <div className="flex items-start gap-2 rounded border border-red-300 bg-red-50 px-2.5 py-2 text-[11px] leading-snug text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
@@ -346,7 +357,7 @@ export function HhAutoProcess({
       <div>
         <h3 className="text-sm font-medium">🤖 Автоматический разбор откликов с hh.ru</h3>
         <p className="text-xs text-muted-foreground mt-1">
-          AI оценит резюме под вакансию: при score ≥ {minScore} → приглашение и карточка в канбане.
+          AI оценит резюме под вакансию. Пороги настраиваются в табе «Воронка» вакансии.
         </p>
       </div>
       {settingsContent}

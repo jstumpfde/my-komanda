@@ -120,16 +120,26 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ hhR
 
     const messages: NormalizedMessage[] = allItems
       .filter((m): m is HhMessageItem & { id: string } => typeof m?.id === "string")
-      .map((m) => ({
-        id: m.id,
-        text: extractText(m),
-        authorType: extractAuthorType(m),
-        createdAt: m.created_at ?? null,
-        viewedByMe: m.viewed_by_me ?? false,
-        viewedByOpponent: m.viewed_by_opponent ?? false,
-      }))
-      // Скрываем системные state-change «сообщения» без текста — они не несут
-      // ничего полезного для HR и захламляют чат.
+      .map((m) => {
+        const authorType = extractAuthorType(m)
+        let text = extractText(m)
+        // Пустой applicant-меседж = сам отклик кандидата (без сопроводительного
+        // письма). Раньше он отфильтровывался, и переписка выглядела
+        // односторонней. Показываем его как маркер «Откликнулся на вакансию».
+        if (!text.trim() && authorType === "applicant") {
+          text = "Откликнулся на вакансию (без сопроводительного письма)"
+        }
+        return {
+          id: m.id,
+          text,
+          authorType,
+          createdAt: m.created_at ?? null,
+          viewedByMe: m.viewed_by_me ?? false,
+          viewedByOpponent: m.viewed_by_opponent ?? false,
+        }
+      })
+      // Скрываем системные state-change «сообщения» без текста (не applicant) —
+      // они не несут ничего полезного для HR и захламляют чат.
       .filter((m) => m.text.trim().length > 0)
       // Хронологический порядок — старые вверху, новые внизу.
       .sort((a, b) => {

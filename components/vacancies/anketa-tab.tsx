@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { cn } from "@/lib/utils"
+import { hasSkill, dedupeSkills } from "@/lib/skills/normalize"
 import { Progress } from "@/components/ui/progress"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -12,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { ChevronDown, ChevronUp, Plus, X, Save, Loader2, Trash2, GripVertical, Eye, Copy, FileDown, Sparkles, RefreshCw, Check, PenLine, Upload, File, FileSpreadsheet, FileImage } from "lucide-react"
+import {ChevronDown, ChevronUp, Plus, X, Save, Loader2, Trash2, Eye, Copy, FileDown, Sparkles, RefreshCw, Check, PenLine, Upload, File, FileSpreadsheet, FileImage} from "lucide-react"
 import { toast } from "sonner"
 import { POSITION_CATEGORIES } from "@/lib/position-classifier"
 // AnketaPublicSection переехал в отдельный таб «Анкета» (Ф5.1) и рендерится
@@ -52,6 +53,11 @@ interface AnketaData {
   showSalary: boolean
   // 4. О компании
   companyDescription: string
+  // O1 мультикомпанийность: под какую компанию-бренд идёт вакансия.
+  // "" = основная компания из кабинета (Брендинг), №1. Иначе — id бренда
+  // из companies.hiringDefaultsJson.brandCompanies (№2+). Кандидат видит
+  // имя/описание выбранного бренда. Основная компания не редактируется здесь.
+  brandCompanyId: string
   // 5. Обязанности и требования
   responsibilities: string
   requirements: string
@@ -61,6 +67,10 @@ interface AnketaData {
   unacceptableSkills: string[]
   experienceMin: string
   experienceIdeal: string
+  // Языки (hh language id) с уровнями (hh уровень a1..c2/l1) — для исходящего подбора
+  aiLanguages: { lang: string; level: string }[]
+  // Уровень образования (hh education_level id), "" = любое
+  educationLevel: string
   stopFactors: StopFactor[]
   desiredParams: DesiredParam[]
   // 6. Условия
@@ -88,6 +98,8 @@ interface AnketaData {
   aiStopFactors: string[]
   aiIdealProfile: string
   aiWeights: Record<string, AiWeightLevel>
+  // Кастомные критерии оценки сверх встроенных (произвольное число под вакансию).
+  aiCustomCriteria: { label: string; weight: AiWeightLevel; hint?: string }[]
 }
 
 interface StopFactor {
@@ -187,24 +199,24 @@ const AI_WEIGHT_OPTIONS: { value: AiWeightLevel; label: string }[] = [
   { value: "irrelevant", label: "Не важно" },
 ]
 
+// Встроенные критерии ОЦЕНКИ профпригодности. Город и формат работы убраны
+// намеренно — это жёсткие ФИЛЬТРЫ (стоп-факторы вакансии), а не баллы
+// (см. lib/scoring/vacancy-spec.ts и TZ-SCORING-FILTERS-SPLIT). Сверх этих осей
+// HR может добавить свои критерии ниже (aiCustomCriteria).
 const AI_WEIGHT_CRITERIA = [
   { id: "industry_experience", label: "Опыт в отрасли" },
-  { id: "management", label: "Опыт управления" },
-  { id: "education", label: "Образование" },
   { id: "specific_skills", label: "Конкретные навыки" },
   { id: "salary_match", label: "Зарплатное соответствие" },
-  { id: "work_format", label: "Формат работы" },
-  { id: "location", label: "Город/локация" },
+  { id: "management", label: "Опыт управления" },
+  { id: "education", label: "Образование" },
 ]
 
 const DEFAULT_AI_WEIGHTS: Record<string, AiWeightLevel> = {
-  industry_experience: "important",
+  industry_experience: "critical",
+  specific_skills: "critical",
+  salary_match: "important",
   management: "nice",
   education: "nice",
-  specific_skills: "important",
-  salary_match: "important",
-  work_format: "nice",
-  location: "nice",
 }
 
 const PAY_FREQUENCY_OPTIONS = [
@@ -281,6 +293,38 @@ const CONDITIONS_OPTIONS = [
   "Менторская программа", "Бюджет на конференции",
 ]
 
+// hh language id → русский лейбл (только точно известные id из hh /languages)
+const LANGUAGE_OPTIONS: { id: string; label: string }[] = [
+  { id: "eng", label: "Английский" },
+  { id: "deu", label: "Немецкий" },
+  { id: "fra", label: "Французский" },
+  { id: "spa", label: "Испанский" },
+  { id: "ita", label: "Итальянский" },
+  { id: "zho", label: "Китайский" },
+]
+// hh уровень владения языком
+const LANGUAGE_LEVEL_OPTIONS: { id: string; label: string }[] = [
+  { id: "a1", label: "A1 — начальный" },
+  { id: "a2", label: "A2 — элементарный" },
+  { id: "b1", label: "B1 — средний" },
+  { id: "b2", label: "B2 — средне-продвинутый" },
+  { id: "c1", label: "C1 — продвинутый" },
+  { id: "c2", label: "C2 — в совершенстве" },
+  { id: "l1", label: "Родной" },
+]
+// hh education_level id → русский лейбл
+const EDUCATION_LEVEL_OPTIONS: { id: string; label: string }[] = [
+  { id: "", label: "Любое" },
+  { id: "secondary", label: "Среднее" },
+  { id: "special_secondary", label: "Среднее специальное" },
+  { id: "unfinished_higher", label: "Неоконченное высшее" },
+  { id: "higher", label: "Высшее" },
+  { id: "bachelor", label: "Бакалавр" },
+  { id: "master", label: "Магистр" },
+  { id: "candidate", label: "Кандидат наук" },
+  { id: "doctor", label: "Доктор наук" },
+]
+
 const ANKETA_QTYPES: { type: QuestionAnswerType; icon: string; label: string; desc: string }[] = [
   { type: "short", icon: "T", label: "Короткий текст", desc: "Одна строка" },
   { type: "long", icon: "≡", label: "Развёрнутый ответ", desc: "Абзац" },
@@ -299,10 +343,11 @@ function emptyAnketa(): AnketaData {
     positionCategory: "", workFormats: [], employment: [], positionCity: "",
     requiredExperience: "", hiringPlan: 1,
     salaryFrom: "", salaryTo: "", bonus: "", payFrequency: [], showSalary: true,
-    companyDescription: "",
+    companyDescription: "", brandCompanyId: "",
     responsibilities: "", requirements: "",
     requiredSkills: [], desiredSkills: [], unacceptableSkills: [],
     experienceMin: "", experienceIdeal: "",
+    aiLanguages: [], educationLevel: "",
     stopFactors: DEFAULT_STOP_FACTORS.map(f => ({ ...f })),
     desiredParams: DEFAULT_DESIRED_PARAMS.map(p => ({ ...p })),
     conditions: [], conditionsCustom: [],
@@ -313,7 +358,7 @@ function emptyAnketa(): AnketaData {
     questions: [],
     screeningQuestions: [], hhDescription: "",
     aiMinExperience: "", aiRequiredHardSkills: [], aiStopFactors: [],
-    aiIdealProfile: "", aiWeights: { ...DEFAULT_AI_WEIGHTS },
+    aiIdealProfile: "", aiWeights: { ...DEFAULT_AI_WEIGHTS }, aiCustomCriteria: [],
   }
 }
 
@@ -330,6 +375,8 @@ function cleanText(s: string): string {
 
 function migrateAnketa(saved: Record<string, unknown>): AnketaData {
   const d = { ...emptyAnketa(), ...saved } as AnketaData
+  // aiCustomCriteria: защита от старого/битого значения (должен быть массив)
+  if (!Array.isArray(d.aiCustomCriteria)) d.aiCustomCriteria = []
   // employment: string -> string[]
   if (typeof d.employment === "string" && d.employment) {
     d.employment = [d.employment as string]
@@ -359,6 +406,10 @@ function migrateAnketa(saved: Record<string, unknown>): AnketaData {
     }
   }
   if (!Array.isArray(d.unacceptableSkills)) d.unacceptableSkills = []
+  // Языки / образование — старые анкеты без этих полей не должны падать
+  if (!Array.isArray(d.aiLanguages)) d.aiLanguages = []
+  else d.aiLanguages = d.aiLanguages.filter(l => l && typeof l.lang === "string").map(l => ({ lang: l.lang, level: typeof l.level === "string" ? l.level : "" }))
+  if (typeof d.educationLevel !== "string") d.educationLevel = ""
 
   // Apply parsed stop factors from file import
   const psf = (saved as Record<string, unknown>).parsedStopFactors as Record<string, string | boolean> | undefined
@@ -430,7 +481,8 @@ function TagInput({ tags, onChange, placeholder, customType }: {
   const [input, setInput] = useState("")
   const add = () => {
     const v = input.trim()
-    if (v && !tags.includes(v)) {
+    // Дедуп по канону (см. lib/skills/normalize) — не плодим «B2B»/«B2B-».
+    if (v && !hasSkill(tags, v)) {
       onChange([...tags, v])
       if (customType) {
         fetch("/api/custom-items", {
@@ -498,7 +550,8 @@ function TagInputWithSuggestions({ tags, onChange, placeholder, suggestions, cus
 
   const addCustom = () => {
     const v = input.trim()
-    if (v && !tags.includes(v)) {
+    // Дедуп по канону: «B2B маркетинг» = «B2B-маркетинг» = «b2b  маркетинг».
+    if (v && !hasSkill(tags, v)) {
       onChange([...tags, v])
       if (customType && !suggestions.includes(v)) {
         fetch("/api/custom-items", {
@@ -553,7 +606,7 @@ function TagInputWithSuggestions({ tags, onChange, placeholder, suggestions, cus
                   <button
                     key={s}
                     type="button"
-                    onMouseDown={e => { e.preventDefault(); onChange([...tags, s]); setInput("") }}
+                    onMouseDown={e => { e.preventDefault(); if (!hasSkill(tags, s)) onChange([...tags, s]); setInput("") }}
                     className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted transition-colors"
                   >
                     + {s}
@@ -576,7 +629,7 @@ function TagInputWithSuggestions({ tags, onChange, placeholder, suggestions, cus
 
 // ─── Question constructor ───────────────────────────────────────────────────
 
-function QuestionEditor({ questions, onChange }: {
+export function QuestionEditor({ questions, onChange }: {
   questions: Question[]; onChange: (q: Question[]) => void
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -964,11 +1017,16 @@ function CategoryField({ value, onChange }: { value: string; onChange: (v: strin
 // своего хедера — без дублирования логики save() внутри AnketaTab).
 export interface AnketaTabHandle {
   save: () => Promise<void>
+  /** Открыть предпросмотр описания вакансии на весь экран (верхняя кнопка тулбара). */
+  openPreview: () => void
 }
 
 interface AnketaTabProps {
   vacancyId: string
   descriptionJson: unknown
+  /** P0-28: pre-warmed AI-кеш из vacancies.ai_quality_*. */
+  aiQualityDetails?: unknown
+  aiQualityAnalyzedAt?: string | null
   onTitleChange?: (title: string) => void
   onNavigateTab?: (tab: string) => void
   onScoreChange?: (score: { score: number; label: string }) => void
@@ -977,28 +1035,53 @@ interface AnketaTabProps {
   registerHandle?: (handle: AnketaTabHandle) => void
 }
 
-export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigateTab, onScoreChange, onSavingChange, registerHandle }: AnketaTabProps) {
+export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQualityAnalyzedAt, onTitleChange, onNavigateTab, onScoreChange, onSavingChange, registerHandle }: AnketaTabProps) {
   const [data, setData] = useState<AnketaData>(() => {
     const saved = (descriptionJson as Record<string, unknown>)?.anketa as Record<string, unknown> | undefined
     return saved ? migrateAnketa(saved) : emptyAnketa()
   })
   const [saving, setSaving] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
+  // Полноэкранный режим предпросмотра (верхняя кнопка тулбара). Нижняя кнопка
+  // «Предпросмотр вакансии» открывает то же, но обычным окошком.
+  const [previewFullscreen, setPreviewFullscreen] = useState(false)
   const [advisorFocusedField, setAdvisorFocusedField] = useState("")
   const [aiLoading, setAiLoading] = useState(false)
   const [aiLoadingStep, setAiLoadingStep] = useState(0)
   const [showCompanySection, setShowCompanySection] = useState(false)
   const [companyDescription, setCompanyDescription] = useState("")
+  // O1 мультикомпанийность: основная компания (№1, из кабинета) + бренды (№2+).
+  type BrandCompany = { id: string; name: string; slogan?: string; description?: string }
+  const [mainCompanyName, setMainCompanyName] = useState("")
+  const [brandCompanies, setBrandCompanies] = useState<BrandCompany[]>([])
+  const [brandSelectorEnabled, setBrandSelectorEnabled] = useState(false)
   useEffect(() => {
     setShowCompanySection(localStorage.getItem("mk_hr_show_company_selector") === "true")
   }, [])
-  // Fetch company description for advisor
+  // Fetch company description + основная компания (имя) для advisor и O1-селектора
   useEffect(() => {
     fetch("/api/companies").then(r => r.ok ? r.json() : null).then(json => {
-      const desc = json?.companyDescription || json?.description
+      // Строго один источник — только описание из «Настроек найма»
+      // (companies.company_description). Без фолбэка на общий description
+      // (авто-текст DaData), чтобы в вакансию не подтягивались левые тексты.
+      const desc = json?.companyDescription
       if (desc) {
         setCompanyDescription(desc)
         setData(prev => prev.companyDescription ? prev : { ...prev, companyDescription: desc })
+      }
+      if (json) setMainCompanyName((json.brandName || json.name || "").toString())
+    }).catch(() => {})
+  }, [])
+  // O1: список компаний-брендов + флаг показа селектора (Настройки найма)
+  useEffect(() => {
+    fetch("/api/modules/hr/company/hiring-defaults").then(r => r.ok ? r.json() : null).then(json => {
+      const hd = json?.hiringDefaults
+      if (!hd) return
+      if (Array.isArray(hd.brandCompanies)) setBrandCompanies(hd.brandCompanies.filter((c: BrandCompany) => c?.name?.trim()))
+      if (typeof hd.showCompanySelector === "boolean") setBrandSelectorEnabled(hd.showCompanySelector)
+      // Дефолтная компания из настроек — предвыбираем для новой вакансии (если HR ещё не выбрал).
+      if (typeof hd.defaultBrandCompanyId === "string" && hd.defaultBrandCompanyId) {
+        setData(prev => prev.brandCompanyId ? prev : { ...prev, brandCompanyId: hd.defaultBrandCompanyId })
       }
     }).catch(() => {})
   }, [])
@@ -1035,15 +1118,31 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
       hiringPlan: result.hiringPlan && result.hiringPlan > 1 ? result.hiringPlan : prev.hiringPlan,
       conditions: result.conditions.length > 0 ? result.conditions : prev.conditions,
       screeningQuestions: result.screeningQuestions.length > 0 ? result.screeningQuestions : prev.screeningQuestions,
+      // AI-профиль кандидата — мержим только непустое, не затирая ручные правки.
+      aiIdealProfile: result.aiIdealProfile || prev.aiIdealProfile,
+      aiRequiredHardSkills: result.aiRequiredHardSkills && result.aiRequiredHardSkills.length > 0 ? result.aiRequiredHardSkills : prev.aiRequiredHardSkills,
+      aiStopFactors: result.aiStopFactors && result.aiStopFactors.length > 0 ? result.aiStopFactors : prev.aiStopFactors,
+      aiWeights: result.aiWeights && Object.keys(result.aiWeights).length > 0
+        ? { ...prev.aiWeights, ...(result.aiWeights as Record<string, AiWeightLevel>) }
+        : prev.aiWeights,
       hhDescription: result.hhDescription || prev.hhDescription,
     }))
     if (result.positionTitle) onTitleChange?.(result.positionTitle)
     toast.success("Анкета заполнена! Проверьте и дополните.")
   }, [onTitleChange])
 
+  // P0-27 fix: re-sync извне затирал локальные правки пользователя при любом
+  // refetch (saveBranding, save вакансии и т.п. → новый descriptionJson →
+  // setData затирает несохранённые поля). dataDirtyRef переехал сюда из
+  // блока autosave, чтобы быть доступным здесь раньше. Теперь догоняемся
+  // только если правок нет (== синхронизировано с сервером). Если есть —
+  // оставляем локальный state, save их допишет, после успеха ref сбросится.
+  const dataDirtyRef = useRef(false)
   useEffect(() => {
     const saved = (descriptionJson as Record<string, unknown>)?.anketa as Record<string, unknown> | undefined
-    if (saved) setData(prev => ({ ...prev, ...migrateAnketa(saved) }))
+    if (!saved) return
+    if (dataDirtyRef.current) return
+    setData(prev => ({ ...prev, ...migrateAnketa(saved) }))
   }, [descriptionJson])
 
   // Auto-trigger AI parsing if sessionStorage has text from create-vacancy-dialog
@@ -1096,23 +1195,33 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
   }, [data])
 
   // ── Save ──
+  // P0-27 fix: PATCH со server-side merge ({...currentJson, ...body.description_json})
+  // вместо PUT-перезаписи. Раньше save брал stale `existing = descriptionJson`
+  // из closure и при race condition с параллельным PUT (например attachments
+  // autosave ниже) — одно из сохранений затирало другое. Теперь шлём ТОЛЬКО
+  // ключ anketa: сервер сам мерджит с актуальным descriptionJson из БД.
+  // После успешного save сбрасываем dirty-флаг, чтобы re-sync эффект мог
+  // догнать локальный state из свежего refetch'а.
   const save = useCallback(async () => {
     setSaving(true)
     try {
-      const existing = (descriptionJson as Record<string, unknown>) ?? {}
       const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
-        method: "PUT",
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description_json: { ...existing, anketa: data } }),
+        body: JSON.stringify({ description_json: { anketa: data } }),
       })
-      if (!res.ok) throw new Error("Ошибка сохранения")
+      if (!res.ok) {
+        const body = await res.json().catch(() => null) as { error?: string } | null
+        throw new Error(body?.error || "Ошибка сохранения")
+      }
+      dataDirtyRef.current = false
       toast.success("Анкета сохранена")
-    } catch {
-      toast.error("Не удалось сохранить анкету")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Не удалось сохранить анкету")
     } finally {
       setSaving(false)
     }
-  }, [data, descriptionJson, vacancyId])
+  }, [data, vacancyId])
 
   // Прокидываем saving в page.tsx, чтобы кнопка «Сохранить» в шапке таба
   // умела показать spinner. На первом рендере (false) — состояние совпадает.
@@ -1122,7 +1231,10 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
   // registerHandle — стабильная ссылка из useCallback в page.tsx; не вызовет
   // лишних re-register'ов.
   useEffect(() => {
-    registerHandle?.({ save })
+    registerHandle?.({
+      save,
+      openPreview: () => { setPreviewFullscreen(true); setPreviewOpen(true) },
+    })
   }, [registerHandle, save])
 
   // ── AI Refill ──
@@ -1321,7 +1433,9 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
     toast.success("Данные из документа добавлены в анкету")
   }, [])
 
-  // Save attachments with autosave
+  // Save attachments with autosave.
+  // P0-27 fix: PATCH со server-merge — раньше параллельный PUT с stale
+  // descriptionJson затирал свежие правки анкеты (или наоборот).
   useEffect(() => {
     const existing = (descriptionJson as Record<string, unknown>) ?? {}
     const currentAttachments = Array.isArray(existing.attachments) ? existing.attachments as Attachment[] : []
@@ -1329,9 +1443,9 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
     const timer = setTimeout(async () => {
       try {
         await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
-          method: "PUT",
+          method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ description_json: { ...existing, attachments } }),
+          body: JSON.stringify({ description_json: { attachments } }),
         })
       } catch {}
     }, 1500)
@@ -1339,13 +1453,42 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
   }, [attachments, descriptionJson, vacancyId])
 
   // ── Autosave ──
+  // dataDirtyRef объявлен выше (рядом с re-sync эффектом). Здесь только таймер.
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const dataDirtyRef = useRef(false)
   const scheduleAutosave = useCallback(() => {
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current)
-    autosaveTimer.current = setTimeout(() => save(), 2000)
+    autosaveTimer.current = setTimeout(() => save(), 800)
   }, [save])
   useEffect(() => () => { if (autosaveTimer.current) clearTimeout(autosaveTimer.current) }, [])
+
+  // Flush несохранённой анкеты при уходе со страницы (F5/закрытие/сворачивание),
+  // пока не сработал автосейв. keepalive-fetch (в отличие от sendBeacon) шлёт
+  // PATCH и переживает выгрузку страницы. Иначе быстрый F5 терял правку.
+  const latestDataRef = useRef(data)
+  useEffect(() => { latestDataRef.current = data }, [data])
+  useEffect(() => {
+    const flush = () => {
+      if (!dataDirtyRef.current) return
+      try {
+        fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ description_json: { anketa: latestDataRef.current } }),
+          keepalive: true,
+        })
+        dataDirtyRef.current = false
+      } catch { /* fire-and-forget */ }
+    }
+    const onVis = () => { if (document.visibilityState === "hidden") flush() }
+    window.addEventListener("pagehide", flush)
+    window.addEventListener("beforeunload", flush)
+    document.addEventListener("visibilitychange", onVis)
+    return () => {
+      window.removeEventListener("pagehide", flush)
+      window.removeEventListener("beforeunload", flush)
+      document.removeEventListener("visibilitychange", onVis)
+    }
+  }, [vacancyId])
   useEffect(() => {
     if (!dataDirtyRef.current) {
       dataDirtyRef.current = true
@@ -1492,13 +1635,18 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
             <Label className="text-xs">Количество вакантных мест</Label>
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground border-muted-foreground/30">hh.ru</Badge>
           </div>
-          <Input
-            type="number"
-            min={1}
-            value={data.hiringPlan}
-            onChange={e => set("hiringPlan", Math.max(1, parseInt(e.target.value) || 1))}
-            className="h-9 bg-[var(--input-bg)] border border-input w-24"
-          />
+          {/* QW6: компактный степпер вместо number-инпута с браузерными стрелками */}
+          <div className="inline-flex items-center h-9 rounded-md border border-input bg-[var(--input-bg)] w-fit overflow-hidden">
+            <button type="button" aria-label="Меньше" className="px-3 h-full text-muted-foreground hover:text-foreground hover:bg-accent" onClick={() => set("hiringPlan", Math.max(1, (data.hiringPlan || 1) - 1))}>−</button>
+            <input
+              type="number"
+              min={1}
+              value={data.hiringPlan}
+              onChange={e => set("hiringPlan", Math.max(1, parseInt(e.target.value) || 1))}
+              className="w-12 text-center bg-transparent outline-none text-sm border-x border-input [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+            <button type="button" aria-label="Больше" className="px-3 h-full text-muted-foreground hover:text-foreground hover:bg-accent" onClick={() => set("hiringPlan", (data.hiringPlan || 1) + 1)}>+</button>
+          </div>
         </div>
       </Section>
 
@@ -1535,6 +1683,43 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
 
       {/* ── 4. О компании ── */}
       <Section title="О компании" number={4} filled={sectionFilled(4)} id="section-4">
+        {/* O1: выбор компании-бренда, под которую идёт вакансия. №1 — основная
+            из кабинета (не редактируется), №2+ — бренды из Настроек найма. */}
+        {brandSelectorEnabled && brandCompanies.length > 0 && (
+          <div className="space-y-1.5 mb-3 pb-3 border-b">
+            <Label className="text-xs">Компания вакансии</Label>
+            <Select
+              value={data.brandCompanyId || "__main__"}
+              onValueChange={(v) => {
+                const id = v === "__main__" ? "" : v
+                set("brandCompanyId", id)
+                // Подставить описание выбранной компании (основная — из кабинета,
+                // бренд — из его описания). Имя бренда кандидат увидит на странице.
+                if (id === "") {
+                  if (companyDescription) set("companyDescription", companyDescription)
+                } else {
+                  const bc = brandCompanies.find(c => c.id === id)
+                  if (bc?.description?.trim()) set("companyDescription", bc.description)
+                }
+              }}
+            >
+              <SelectTrigger className="h-9 bg-[var(--input-bg)] border border-input w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__main__">Основная: {mainCompanyName || "из кабинета"}</SelectItem>
+                {brandCompanies.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Под какую компанию идёт вакансия. Кандидат увидит её название и описание ниже.
+              Основная компания и список брендов настраиваются в{" "}
+              <a href="/hr/hiring-settings" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Настройках найма</a>.
+            </p>
+          </div>
+        )}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between gap-2">
             <Label className="text-xs">Описание компании</Label>
@@ -1566,7 +1751,6 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
         <div className="space-y-1.5">
           <div className="flex items-center gap-2">
             <Label className="text-xs">Обязанности</Label>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">Нужно для AI-скрининга</Badge>
           </div>
           <Textarea
             value={data.responsibilities}
@@ -1580,7 +1764,6 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
         <div className="space-y-1.5">
           <div className="flex items-center gap-2">
             <Label className="text-xs">Требования</Label>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">Нужно для AI-скрининга</Badge>
           </div>
           <Textarea
             value={data.requirements}
@@ -1664,7 +1847,6 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
         <div className="space-y-1.5" onFocus={() => setAdvisorFocusedField("skills")}>
           <div className="flex items-center gap-2">
             <Label className="text-xs">Обязательные навыки</Label>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">Нужно для AI-скрининга</Badge>
           </div>
           <TagInputWithSuggestions tags={data.requiredSkills} onChange={v => set("requiredSkills", v)} placeholder="Добавить навык..." suggestions={REQUIRED_SKILL_SUGGESTIONS} customType="skill" />
         </div>
@@ -1675,16 +1857,105 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
         <div className="space-y-1.5" onFocus={() => setAdvisorFocusedField("stopFactors")}>
           <div className="flex items-center gap-2">
             <Label className="text-xs text-destructive/80">Неприемлемо</Label>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">Нужно для AI-скрининга</Badge>
           </div>
           <TagInputWithSuggestions tags={data.unacceptableSkills} onChange={v => set("unacceptableSkills", v)} placeholder="Что неприемлемо..." suggestions={UNACCEPTABLE_SUGGESTIONS} customType="skill" />
+        </div>
+        <p className="text-[11px] text-muted-foreground leading-snug">
+          Основные настройки AI-оценки — в блоке «AI-профиль кандидата» ниже; эти поля используются как запасной вариант.
+        </p>
+
+        {/* Образование и языки — используются в «Исходящем подборе» (hh-фильтры) */}
+        <div className="space-y-3 pt-2 border-t">
+          <div className="space-y-1.5 max-w-xs">
+            <div className="flex items-center gap-2">
+              <Label className="text-xs">Уровень образования</Label>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground border-muted-foreground/30">hh.ru</Badge>
+            </div>
+            <Select
+              value={data.educationLevel || "any"}
+              onValueChange={v => set("educationLevel", v === "any" ? "" : v)}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Любое" />
+              </SelectTrigger>
+              <SelectContent>
+                {EDUCATION_LEVEL_OPTIONS.map(o => (
+                  <SelectItem key={o.id || "any"} value={o.id || "any"}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <Label className="text-xs">Языки</Label>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground border-muted-foreground/30">hh.ru</Badge>
+            </div>
+            {data.aiLanguages.length > 0 && (
+              <div className="space-y-1.5">
+                {data.aiLanguages.map((l, idx) => (
+                  <div key={idx} className="flex items-center gap-1.5">
+                    <Select
+                      value={l.lang || undefined}
+                      onValueChange={v => {
+                        const next = [...data.aiLanguages]
+                        next[idx] = { ...next[idx], lang: v }
+                        set("aiLanguages", next)
+                      }}
+                    >
+                      <SelectTrigger className="h-9 flex-1">
+                        <SelectValue placeholder="Язык" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {LANGUAGE_OPTIONS.map(o => (
+                          <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={l.level || undefined}
+                      onValueChange={v => {
+                        const next = [...data.aiLanguages]
+                        next[idx] = { ...next[idx], level: v }
+                        set("aiLanguages", next)
+                      }}
+                    >
+                      <SelectTrigger className="h-9 flex-1">
+                        <SelectValue placeholder="Уровень" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {LANGUAGE_LEVEL_OPTIONS.map(o => (
+                          <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <button
+                      type="button"
+                      onClick={() => set("aiLanguages", data.aiLanguages.filter((_, i) => i !== idx))}
+                      className="text-muted-foreground hover:text-destructive shrink-0 p-1"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => set("aiLanguages", [...data.aiLanguages, { lang: "", level: "" }])}
+            >
+              <Plus className="w-3.5 h-3.5 mr-1" /> Добавить язык
+            </Button>
+          </div>
         </div>
 
         {/* Stop factors */}
         <div className="space-y-2 pt-2 border-t">
           <div className="flex items-center gap-2">
             <Label className="text-xs font-semibold">Критерии отбора</Label>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">Нужно для AI-скрининга</Badge>
           </div>
           <div className="space-y-2">
             {data.stopFactors.map((f, idx) => (
@@ -2018,10 +2289,11 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
 
       {/* ── 9. AI-генерация ── */}
       <Section title="AI-генерация" number={9} filled={data.screeningQuestions.length > 0 || !!data.hhDescription}>
-        {/* Screening questions */}
-        {data.screeningQuestions.length > 0 && (
-          <div className="space-y-2">
-            <Label className="text-xs font-medium">Вопросы для скрининга</Label>
+        {/* Screening questions — блок виден всегда, чтобы можно было добавить
+            первый вопрос вручную (а не только после AI-парса). БАГ-6. */}
+        <div className="space-y-2">
+          <Label className="text-xs font-medium">Вопросы для скрининга</Label>
+          {data.screeningQuestions.length > 0 ? (
             <div className="space-y-1.5">
               {data.screeningQuestions.map((q, i) => (
                 <div key={i} className="flex items-start gap-2">
@@ -2046,16 +2318,18 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
                 </div>
               ))}
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs gap-1"
-              onClick={() => set("screeningQuestions", [...data.screeningQuestions, ""])}
-            >
-              <Plus className="w-3 h-3" /> Добавить вопрос
-            </Button>
-          </div>
-        )}
+          ) : (
+            <p className="text-xs text-muted-foreground">Пока нет вопросов — добавьте вручную или сгенерируйте через AI ниже.</p>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1"
+            onClick={() => set("screeningQuestions", [...data.screeningQuestions, ""])}
+          >
+            <Plus className="w-3 h-3" /> Добавить вопрос
+          </Button>
+        </div>
 
         {/* hh.ru description — generate / preview / edit */}
         <div className="space-y-3 mt-4">
@@ -2183,7 +2457,7 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
           {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
           Перезаполнить через AI
         </Button>
-        <Button variant="outline" size="sm" className="gap-1.5 h-9 text-xs" onClick={() => setPreviewOpen(true)}>
+        <Button variant="outline" size="sm" className="gap-1.5 h-9 text-xs" onClick={() => { setPreviewFullscreen(false); setPreviewOpen(true) }}>
           <Eye className="w-3.5 h-3.5" />
           Предпросмотр вакансии
         </Button>
@@ -2200,7 +2474,10 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
 
       {/* Preview modal */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto bg-white dark:bg-gray-950 p-6">
+        <DialogContent className={previewFullscreen
+          ? "max-w-none w-screen h-screen sm:max-w-none rounded-none overflow-y-auto bg-white dark:bg-gray-950 p-6 sm:p-10"
+          : "sm:max-w-2xl max-h-[80vh] overflow-y-auto bg-white dark:bg-gray-950 p-6"}>
+          <div className={previewFullscreen ? "mx-auto w-full max-w-3xl" : "w-full"}>
           <DialogHeader>
             <div className="flex items-center justify-between gap-3">
               <DialogTitle className="text-lg">{data.vacancyTitle || "Без названия"}</DialogTitle>
@@ -2309,14 +2586,18 @@ export function AnketaTab({ vacancyId, descriptionJson, onTitleChange, onNavigat
               </div>
             )}
           </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
     {/* ── AI Advisor Panel ── */}
     <VacancyAdvisor
+      vacancyId={vacancyId}
       vacancyData={data as unknown as Record<string, unknown>}
       companyDescription={companyDescription}
       focusedField={advisorFocusedField}
+      initialResult={aiQualityDetails as never}
+      initialAnalyzedAt={aiQualityAnalyzedAt ?? null}
       onScoreChange={onScoreChange}
       onApplySuggestion={(field, value) => {
         if (field === "vacancyTitle") {
@@ -2345,7 +2626,9 @@ function AiProfileSection({ data, set }: {
   data: AnketaData
   set: <K extends keyof AnketaData>(key: K, value: AnketaData[K]) => void
 }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
+  // Индекс свежедобавленного критерия — на него ставим autoFocus
+  const [focusCriterionIdx, setFocusCriterionIdx] = useState<number | null>(null)
 
   const hasSomeData = data.aiIdealProfile || data.aiRequiredHardSkills.length > 0
     || data.aiStopFactors.length > 0 || data.aiMinExperience
@@ -2393,8 +2676,11 @@ function AiProfileSection({ data, set }: {
                   : ""
 
                 set("aiMinExperience", minExp)
-                set("aiRequiredHardSkills", [...data.requiredSkills])
-                set("aiStopFactors", [...data.unacceptableSkills])
+                // Дедуп при копировании: «B2B маркетинг»/«B2B-маркетинг» не
+                // должны попадать в AI-профиль как два разных навыка (иначе
+                // баллы скоринга размываются).
+                set("aiRequiredHardSkills", dedupeSkills(data.requiredSkills))
+                set("aiStopFactors", dedupeSkills(data.unacceptableSkills))
                 if (profile) set("aiIdealProfile", profile)
                 toast.success("AI-профиль заполнен из данных анкеты")
               }}
@@ -2403,53 +2689,9 @@ function AiProfileSection({ data, set }: {
             </Button>
           )}
 
-          {/* Min experience */}
+          {/* Идеальный кандидат — общее описание в свободной форме */}
           <div className="space-y-1.5">
-            <Label className="text-xs">Минимальный опыт для AI-фильтра (лет)</Label>
-            <Input
-              type="number"
-              min={0}
-              value={data.aiMinExperience}
-              onChange={e => set("aiMinExperience", e.target.value)}
-              placeholder="0"
-              className="h-9 bg-[var(--input-bg)] border border-input w-24"
-            />
-            <p className="text-[10px] text-muted-foreground">AI будет автоматически снижать рейтинг кандидатам с опытом менее указанного</p>
-          </div>
-
-          {/* Required hard skills */}
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              <Label className="text-xs">Обязательные компетенции (hard skills)</Label>
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">AI-скрининг</Badge>
-            </div>
-            <TagInput
-              tags={data.aiRequiredHardSkills}
-              onChange={v => set("aiRequiredHardSkills", v)}
-              placeholder="Добавить навык..."
-              customType="skill"
-            />
-            <p className="text-[10px] text-muted-foreground">Кандидат без этих навыков получит рейтинг ниже 50%</p>
-          </div>
-
-          {/* AI stop factors */}
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              <Label className="text-xs text-destructive/80">Автоматический отказ — стоп-факторы</Label>
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">AI-скрининг</Badge>
-            </div>
-            <TagInput
-              tags={data.aiStopFactors}
-              onChange={v => set("aiStopFactors", v)}
-              placeholder="Нет опыта B2B, Нет опыта управления..."
-              customType="stop_factor"
-            />
-            <p className="text-[10px] text-muted-foreground">Если у кандидата есть хотя бы один стоп-фактор — автоматический отказ (рейтинг 0)</p>
-          </div>
-
-          {/* Ideal profile */}
-          <div className="space-y-1.5">
-            <Label className="text-xs">Описание идеального кандидата</Label>
+            <Label className="text-xs">Идеальный кандидат (в свободной форме)</Label>
             <Textarea
               value={data.aiIdealProfile}
               onChange={e => set("aiIdealProfile", e.target.value)}
@@ -2460,9 +2702,78 @@ function AiProfileSection({ data, set }: {
             <p className="text-[10px] text-muted-foreground">AI будет сравнивать каждое резюме с этим описанием</p>
           </div>
 
-          {/* AI weights */}
-          <div className="space-y-2">
-            <Label className="text-xs font-semibold">Приоритеты оценки</Label>
+          {/* ── Подблок 1: Жёсткие требования (фильтры отсева) ── */}
+          <div className="space-y-3 border-t pt-3">
+            <div>
+              <div className="text-sm font-semibold">🚫 Жёсткие требования (фильтры отсева)</div>
+              <p className="text-[11px] text-muted-foreground">Не соответствует → отказ или низкий рейтинг</p>
+            </div>
+
+            {/* Required hard skills */}
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <Label className="text-xs">Обязательные компетенции (hard skills)</Label>
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">AI-скрининг</Badge>
+              </div>
+              <TagInput
+                tags={data.aiRequiredHardSkills}
+                onChange={v => set("aiRequiredHardSkills", v)}
+                placeholder="Добавить навык..."
+                customType="skill"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Кандидат без этих навыков получит рейтинг ниже 50%. Совпадение
+                считается по доле: чем больше навыков совпало, тем выше балл (не
+                нужно, чтобы совпали все).
+              </p>
+              <p className={cn(
+                "text-[10px]",
+                data.aiRequiredHardSkills.length > 8
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-muted-foreground",
+              )}>
+                {data.aiRequiredHardSkills.length > 8
+                  ? `⚠️ Навыков: ${data.aiRequiredHardSkills.length}. Слишком много обязательных навыков размывает оценку — почти ни одно резюме не закроет весь список, и баллы перестают различать кандидатов. Оставьте 4–6 ключевых, остальное перенесите в «Желательные навыки».`
+                  : "Рекомендуем 4–6 ключевых навыков. Второстепенное — в «Желательные навыки»."}
+              </p>
+            </div>
+
+            {/* AI stop factors */}
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-destructive/80">Автоматический отказ — стоп-факторы</Label>
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">AI-скрининг</Badge>
+              </div>
+              <TagInput
+                tags={data.aiStopFactors}
+                onChange={v => set("aiStopFactors", v)}
+                placeholder="Нет опыта B2B, Нет опыта управления..."
+                customType="stop_factor"
+              />
+              <p className="text-[10px] text-muted-foreground">Если у кандидата есть хотя бы один стоп-фактор — автоматический отказ (рейтинг 0)</p>
+            </div>
+
+            {/* Min experience */}
+            <div className="space-y-1.5">
+              <Label className="text-xs">Минимальный опыт для AI-фильтра (лет)</Label>
+              <Input
+                type="number"
+                min={0}
+                value={data.aiMinExperience}
+                onChange={e => set("aiMinExperience", e.target.value)}
+                placeholder="0"
+                className="h-9 bg-[var(--input-bg)] border border-input w-24"
+              />
+              <p className="text-[10px] text-muted-foreground">AI будет автоматически снижать рейтинг кандидатам с опытом менее указанного</p>
+            </div>
+          </div>
+
+          {/* ── Подблок 2: Критерии оценки (влияют на балл) ── */}
+          <div className="space-y-2 border-t pt-3">
+            <div>
+              <div className="text-sm font-semibold">⚖️ Критерии оценки (влияют на балл)</div>
+              <p className="text-[11px] text-muted-foreground">Влияют на итоговый балл, не отсеивают кандидата</p>
+            </div>
             <div className="space-y-2">
               {AI_WEIGHT_CRITERIA.map(criterion => (
                 <div key={criterion.id} className="flex items-center justify-between gap-3">
@@ -2490,6 +2801,85 @@ function AiProfileSection({ data, set }: {
                 </div>
               ))}
             </div>
+
+            {/* Кастомные критерии: произвольное число под вакансию */}
+            {data.aiCustomCriteria.length > 0 && (
+              <div className="space-y-2 pt-1">
+                {data.aiCustomCriteria.map((cc, idx) => (
+                  <div key={idx} className="space-y-0.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                      <Input
+                        autoFocus={focusCriterionIdx === idx}
+                        value={cc.label}
+                        onChange={e => {
+                          const next = [...data.aiCustomCriteria]
+                          next[idx] = { ...next[idx], label: e.target.value }
+                          set("aiCustomCriteria", next)
+                        }}
+                        placeholder="Например: Опыт в EdTech / Знание 1С"
+                        className="h-7 text-sm"
+                      />
+                      <button
+                        type="button"
+                        title="Удалить критерий"
+                        onClick={() => set("aiCustomCriteria", data.aiCustomCriteria.filter((_, i) => i !== idx))}
+                        className="text-muted-foreground hover:text-destructive shrink-0 px-1"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <div className="flex gap-0.5 shrink-0">
+                      {AI_WEIGHT_OPTIONS.map(opt => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => {
+                            const next = [...data.aiCustomCriteria]
+                            next[idx] = { ...next[idx], weight: opt.value }
+                            set("aiCustomCriteria", next)
+                          }}
+                          className={cn(
+                            "px-2 py-0.5 rounded text-[10px] font-medium border transition-colors",
+                            cc.weight === opt.value
+                              ? opt.value === "critical" ? "bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-300 border-red-300 dark:border-red-800"
+                                : opt.value === "important" ? "bg-amber-100 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-800"
+                                : opt.value === "nice" ? "bg-blue-100 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-800"
+                                : "bg-muted text-muted-foreground border-border"
+                              : "bg-background text-muted-foreground border-border hover:bg-accent"
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {!cc.label.trim() && (
+                    <p className="text-[11px] text-muted-foreground pl-0.5">
+                      Введите название — пустой критерий игнорируется при оценке
+                    </p>
+                  )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                const next = [...data.aiCustomCriteria, { label: "", weight: "important" as AiWeightLevel }]
+                set("aiCustomCriteria", next)
+                setFocusCriterionIdx(next.length - 1)
+              }}
+              className="text-xs text-primary hover:underline"
+            >
+              + Добавить свой критерий
+            </button>
+
+            <p className="text-[11px] text-muted-foreground leading-snug pt-1">
+              Город и формат работы здесь не оцениваются баллом — это жёсткие фильтры
+              (раздел «Стоп-факторы»): неподходящие кандидаты отсеиваются до оценки.
+            </p>
           </div>
         </div>
       )}

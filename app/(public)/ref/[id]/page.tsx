@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -175,43 +176,39 @@ export default function ReferrerPublicPage({ params }: { params: Promise<{ id: s
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-muted/50 border-b">
-                    <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Имя</th>
-                    <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Вакансия</th>
-                    <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
-                    <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Дата</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {referrer.candidates.slice(0, 20).map(c => (
-                    <tr key={c.id} className="border-b last:border-0">
-                      <td className="px-4 py-2.5 text-sm font-medium text-foreground">{c.name}</td>
-                      <td className="px-4 py-2.5 text-sm text-muted-foreground">{c.vacancy}</td>
-                      <td className="text-center px-4 py-2.5">
-                        <Badge variant="outline" className={cn("text-xs",
-                          c.stage === "Нанят" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200" :
-                          c.stage === "Интервью" ? "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200" :
-                          "bg-muted text-muted-foreground border-border"
-                        )}>
-                          {c.stage}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                        {c.addedAt.toLocaleDateString("ru-RU")}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {referrer.candidates.length > 20 && (
-                <div className="text-center py-3 text-xs text-muted-foreground">
-                  Показано 20 из {referrer.candidates.length}
-                </div>
-              )}
-            </div>
+            <DataTable>
+              <DataHead>
+                <DataHeadCell>Имя</DataHeadCell>
+                <DataHeadCell>Вакансия</DataHeadCell>
+                <DataHeadCell align="center">Статус</DataHeadCell>
+                <DataHeadCell>Дата</DataHeadCell>
+              </DataHead>
+              <tbody>
+                {referrer.candidates.slice(0, 20).map(c => (
+                  <DataRow key={c.id}>
+                    <DataCell className="font-medium text-foreground">{c.name}</DataCell>
+                    <DataCell className="text-muted-foreground">{c.vacancy}</DataCell>
+                    <DataCell align="center">
+                      <Badge variant="outline" className={cn("text-xs",
+                        c.stage === "Нанят" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200" :
+                        c.stage === "Интервью" ? "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200" :
+                        "bg-muted text-muted-foreground border-border"
+                      )}>
+                        {c.stage}
+                      </Badge>
+                    </DataCell>
+                    <DataCell className="text-xs text-muted-foreground">
+                      {c.addedAt.toLocaleDateString("ru-RU")}
+                    </DataCell>
+                  </DataRow>
+                ))}
+              </tbody>
+            </DataTable>
+            {referrer.candidates.length > 20 && (
+              <div className="text-center py-3 text-xs text-muted-foreground">
+                Показано 20 из {referrer.candidates.length}
+              </div>
+            )}
           </CardContent>
         </Card>
 

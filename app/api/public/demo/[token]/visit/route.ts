@@ -55,16 +55,29 @@ export async function GET(
       return NextResponse.redirect(new URL(`/demo/${token}?c=${owner.id}`, req.url))
     }
     const [existing] = await db
-      .select({ id: candidates.id, shortId: candidates.shortId })
+      .select({
+        id:        candidates.id,
+        shortId:   candidates.shortId,
+        vacancyId: candidates.vacancyId,
+      })
       .from(candidates)
       .where(eq(candidates.id, cookieUuid))
       .limit(1)
-    if (existing && existing.shortId) {
-      // Существующий кандидат заходит на чужую ссылку — фиксируем его
-      // собственное открытие демо (не owner'а).
+    // Tenant guard симметричен page.tsx #9 fix (app/(public)/demo/[token]/page.tsx:69):
+    // редиректить на демо existing-кандидата можно только если он принадлежит
+    // той же вакансии что и owner текущей ссылки. Раньше эта проверка стояла
+    // только в page.tsx, и при fallthrough в /visit cookie от чужой вакансии
+    // снова уводил на чужое демо — защита page.tsx эффективно отменялась.
+    // Инцидент #16 (28.05) для зеркального source/visit, разбор показал, что
+    // дефект существует и здесь — закрываем заодно.
+    if (existing && existing.shortId && existing.vacancyId === owner.vacancyId) {
+      // Существующий кандидат заходит на чужую ссылку владельца (но тех же
+      // тенантов) — фиксируем его собственное открытие демо (не owner'а).
       await markDemoOpened(existing.id)
       return NextResponse.redirect(new URL(`/demo/${existing.shortId}?c=${existing.id}`, req.url))
     }
+    // Cookie указывает на (а) несуществующего кандидата, (б) кандидата
+    // другой вакансии — fallthrough, создаём нового под owner.vacancyId.
   }
 
   // Если owner существует и cookie ещё не установлено — признать

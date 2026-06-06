@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { eq, desc, and, sql } from "drizzle-orm"
+import {eq, desc, and} from "drizzle-orm"
 import { db } from "@/lib/db"
 import { aiAuditLog } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"

@@ -13,6 +13,8 @@ export async function GET() {
     .from(notificationPreferences)
     .where(eq(notificationPreferences.userId, session.user.id))
 
+  // Дефолт ВЫКЛ: если записи для события/мастера нет — фронт показывает «выкл».
+  // Уведомления включаются пользователем осознанно (PUT запишет реальную строку).
   return NextResponse.json({ prefs })
 }
 

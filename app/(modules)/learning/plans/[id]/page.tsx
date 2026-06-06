@@ -6,6 +6,7 @@ import { ArrowLeft, Loader2, BookOpen, FileText, Users, Calendar, CheckCircle2, 
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { cn } from "@/lib/utils"
 
 interface PlanMaterialRef {
@@ -134,7 +135,7 @@ export default function LearningPlanDetailPage({
                   <ArrowLeft className="w-4 h-4" />
                   Все планы
                 </Link>
-                <h1 className="text-xl font-semibold">{plan.title}</h1>
+                <h1 className="text-lg font-semibold">{plan.title}</h1>
                 {plan.description && (
                   <p className="text-sm text-muted-foreground mt-1">{plan.description}</p>
                 )}
@@ -204,45 +205,43 @@ export default function LearningPlanDetailPage({
                     <p className="text-sm text-muted-foreground">Пока никому не назначено</p>
                   </div>
                 ) : (
-                  <div className="rounded-xl border border-border overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead className="bg-muted/40 border-b border-border">
-                        <tr className="text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                          <th className="px-4 py-3">Сотрудник</th>
-                          <th className="px-4 py-3">Статус</th>
-                          <th className="px-4 py-3">Дедлайн</th>
-                          <th className="px-4 py-3">Назначено</th>
-                          <th className="px-4 py-3 text-right">Сертификат</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border">
+                  <TableCard>
+                    <DataTable>
+                      <DataHead>
+                        <DataHeadCell>Сотрудник</DataHeadCell>
+                        <DataHeadCell>Статус</DataHeadCell>
+                        <DataHeadCell>Дедлайн</DataHeadCell>
+                        <DataHeadCell>Назначено</DataHeadCell>
+                        <DataHeadCell align="right">Сертификат</DataHeadCell>
+                      </DataHead>
+                      <tbody>
                         {assignments.map((a) => {
                           const meta = STATUS_META[a.status] ?? STATUS_META.assigned
                           const Icon = meta.icon
                           return (
-                            <tr key={a.id} className="hover:bg-muted/30 transition-colors">
-                              <td className="px-4 py-3">
+                            <DataRow key={a.id}>
+                              <DataCell>
                                 <div className="font-medium">{a.userName ?? "—"}</div>
                                 <div className="text-xs text-muted-foreground">{a.userEmail}</div>
-                              </td>
-                              <td className="px-4 py-3">
+                              </DataCell>
+                              <DataCell>
                                 <span className={cn("inline-flex items-center gap-1.5 text-xs", meta.className)}>
                                   <Icon className="w-3.5 h-3.5" />
                                   {meta.label}
                                 </span>
-                              </td>
-                              <td className="px-4 py-3 text-xs text-muted-foreground">
+                              </DataCell>
+                              <DataCell className="text-xs text-muted-foreground">
                                 {a.deadline ? (
                                   <span className="inline-flex items-center gap-1">
                                     <Calendar className="w-3 h-3" />
                                     {new Date(a.deadline).toLocaleDateString("ru-RU")}
                                   </span>
                                 ) : "—"}
-                              </td>
-                              <td className="px-4 py-3 text-xs text-muted-foreground">
+                              </DataCell>
+                              <DataCell className="text-xs text-muted-foreground">
                                 {new Date(a.assignedAt).toLocaleDateString("ru-RU")}
-                              </td>
-                              <td className="px-4 py-3 text-right">
+                              </DataCell>
+                              <DataCell align="right">
                                 {a.status === "completed" && a.certificateUrl ? (
                                   <Link
                                     href={a.certificateUrl}
@@ -255,13 +254,13 @@ export default function LearningPlanDetailPage({
                                 ) : (
                                   <span className="text-xs text-muted-foreground">—</span>
                                 )}
-                              </td>
-                            </tr>
+                              </DataCell>
+                            </DataRow>
                           )
                         })}
                       </tbody>
-                    </table>
-                  </div>
+                    </DataTable>
+                  </TableCard>
                 )}
               </div>
             </div>

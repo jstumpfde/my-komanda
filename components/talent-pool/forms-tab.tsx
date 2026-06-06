@@ -1,80 +1,77 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { Plus, FileText, ChevronDown, ChevronRight, LayoutGrid, List } from "lucide-react"
+import { toast } from "sonner"
+import { Plus, FileText, ChevronDown, ChevronRight, LayoutGrid, List, Trash2 } from "lucide-react"
 import { FormConstructor, type FormEntry, type FormFieldItem } from "./form-constructor"
 import { FormLinks } from "./form-links"
 import type { SourceItem } from "./sources-manager"
 
-// ─── Mock forms ────────────────────────────────────────
-const INITIAL_FORMS: FormEntry[] = [
-  {
-    id: "f1", name: "Общая анкета", type: "external", source: "Сайт компании", placement: "Карьерная страница",
-    slug: "obshaya-anketa", slogan: "Присоединяйтесь к нашей команде", applications: 34, active: true,
-    fields: [
-      { key: "firstName", label: "Имя", enabled: true, required: true, locked: true },
-      { key: "lastName", label: "Фамилия", enabled: true, required: true, locked: true },
-      { key: "email", label: "Email", enabled: true, required: true, locked: true },
-      { key: "phone", label: "Телефон", enabled: true, required: false },
-      { key: "position", label: "Должность", enabled: true, required: false },
-      { key: "resume", label: "Резюме (файл)", enabled: true, required: false },
-    ],
-  },
-  {
-    id: "f2", name: "DevOps набор", type: "external", source: "Telegram", placement: "Канал DevOps Moscow",
-    slug: "devops-nabor", slogan: "Ищем DevOps-инженеров", applications: 12, active: true,
-    fields: [
-      { key: "firstName", label: "Имя", enabled: true, required: true, locked: true },
-      { key: "lastName", label: "Фамилия", enabled: true, required: true, locked: true },
-      { key: "email", label: "Email", enabled: true, required: true, locked: true },
-      { key: "phone", label: "Телефон", enabled: true, required: false },
-    ],
-  },
-  {
-    id: "f3", name: "Реферал от команды", type: "internal", source: "Реферал", placement: "Внутри платформы",
-    slug: "referal-ot-komandy", slogan: "", applications: 5, active: true,
-    fields: [
-      { key: "employee", label: "Поиск сотрудника", enabled: true, required: true, locked: true },
-      { key: "position", label: "Должность", enabled: true, required: false },
-      { key: "comment", label: "Комментарий", enabled: true, required: false },
-      { key: "referrer", label: "Кто рекомендовал", enabled: true, required: true, locked: true },
-    ],
-  },
-  {
-    id: "f4", name: "Анкета с конференции", type: "external", source: "QR-код", placement: "Стенд HRTech 2026",
-    slug: "anketa-konferenciya", slogan: "", applications: 9, active: false,
-    fields: [
-      { key: "firstName", label: "Имя", enabled: true, required: true, locked: true },
-      { key: "email", label: "Email", enabled: true, required: true, locked: true },
-      { key: "phone", label: "Телефон", enabled: true, required: false },
-      { key: "company", label: "Компания", enabled: true, required: false },
-    ],
-  },
-]
+// Серверная строка формы → FormEntry для UI.
+interface ServerForm {
+  id: string; name: string; type: "internal" | "external"; source: string
+  placement: string; slug: string; slogan: string
+  fieldsJson: FormFieldItem[]; active: boolean; applicationsCount: number
+}
+function toEntry(r: ServerForm): FormEntry {
+  return {
+    id: r.id, name: r.name, type: r.type, source: r.source, placement: r.placement,
+    slug: r.slug, slogan: r.slogan, fields: Array.isArray(r.fieldsJson) ? r.fieldsJson : [],
+    applications: r.applicationsCount ?? 0, active: r.active,
+  }
+}
 
 interface FormsTabProps {
   enabledSources: SourceItem[]
 }
 
 export function FormsTab({ enabledSources }: FormsTabProps) {
-  const [forms, setForms] = useState(INITIAL_FORMS)
-  const [selectedFormId, setSelectedFormId] = useState<string | null>("f1")
+  const [forms, setForms] = useState<FormEntry[]>([])
+  const [selectedFormId, setSelectedFormId] = useState<string | null>(null)
   const [formsCollapsed, setFormsCollapsed] = useState(false)
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
 
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/modules/hr/talent-pool/forms")
+      const data = await res.json() as { forms?: ServerForm[] }
+      const mapped = (data.forms ?? []).map(toEntry)
+      setForms(mapped)
+      setSelectedFormId(prev => prev ?? mapped[0]?.id ?? null)
+    } catch { /* пусто */ }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
   const selectedForm = forms.find((f) => f.id === selectedFormId) || null
 
-  const handleSave = (form: FormEntry) => {
-    setForms((prev) => {
-      const exists = prev.find((f) => f.id === form.id)
-      if (exists) return prev.map((f) => f.id === form.id ? form : f)
-      return [...prev, form]
+  // existsOnServer: форма уже сохранена (id есть в загруженном списке) → PUT, иначе POST.
+  const handleSave = async (form: FormEntry) => {
+    const existsOnServer = forms.some((f) => f.id === form.id)
+    const url = existsOnServer
+      ? `/api/modules/hr/talent-pool/forms/${form.id}`
+      : "/api/modules/hr/talent-pool/forms"
+    const res = await fetch(url, {
+      method: existsOnServer ? "PUT" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(form),
     })
-    setSelectedFormId(form.id)
+    if (!res.ok) { toast.error("Не удалось сохранить форму"); return }
+    const data = await res.json() as { form?: ServerForm }
+    if (data.form) setSelectedFormId(data.form.id)
+    await load()
+  }
+
+  const handleDelete = async (id: string) => {
+    const res = await fetch(`/api/modules/hr/talent-pool/forms/${id}`, { method: "DELETE" })
+    if (!res.ok) { toast.error("Не удалось удалить"); return }
+    setForms(prev => prev.filter(f => f.id !== id))
+    if (selectedFormId === id) setSelectedFormId(null)
+    toast.success("Форма удалена")
   }
 
   const handleCreateNew = () => {
@@ -97,6 +94,12 @@ export function FormsTab({ enabledSources }: FormsTabProps) {
           <span className="text-xs font-normal text-muted-foreground ml-1">{forms.length}</span>
         </button>
         <div className="flex items-center gap-1">
+          {selectedForm && (
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive"
+              title="Удалить форму" onClick={() => handleDelete(selectedForm.id)}>
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"

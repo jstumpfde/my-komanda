@@ -5,7 +5,6 @@ import type { Candidate } from "./candidate-card"
 import { CandidateAvatar } from "./candidate-avatar"
 import type { CardDisplaySettings } from "./card-settings"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
@@ -15,7 +14,7 @@ import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ArrowUp, Ar
 import { DemoProgressBar, calcDemoPercent, calcDemoFraction } from "@/components/hr/demo-progress-bar"
 import { getStageLabel, getStageColorClasses } from "@/lib/stages"
 
-export type ListSortKey = "favorite" | "name" | "aiScore" | "resumeScore" | "progress" | "salary" | "responseDate" | "status" | "city" | "source"
+export type ListSortKey = "favorite" | "name" | "aiScore" | "resumeScore" | "rubricScore" | "testScore" | "progress" | "salary" | "responseDate" | "status" | "city" | "source"
 export type ListSortDir = "asc" | "desc"
 export interface ListSortState {
   key: ListSortKey
@@ -45,13 +44,23 @@ interface ListViewProps {
   onSelectionChange?: (next: Set<string>) => void
   /** @deprecated Колонка № удалена. Поле сохранено для совместимости интерфейса с callers. */
   startIndex?: number
+  /** В paginated-режиме сервер уже отсортировал — повторно сортировать не нужно.
+   *  Иначе локальный сорт по `sort.key=favorite` перетасовывает строки сразу
+   *  после optimistic-апдейта isFavorite, и кандидат «пропадает» из текущей
+   *  позиции (на самом деле — едет в favorites-группу). */
+  serverSorted?: boolean
 }
 
+// 3-state цикл сортировки: DEFAULT_DIR → reverse → null.
+// Для числовых/дат-колонок DEFAULT_DIR=desc (юзер ждёт «большое сверху»),
+// для текстовых — asc (алфавитный порядок естественен сверху→вниз).
 const DEFAULT_DIR: Record<ListSortKey, ListSortDir> = {
   favorite:     "desc",
   name:         "asc",
   aiScore:      "desc",
   resumeScore:  "desc",
+  rubricScore:  "desc",
+  testScore:    "desc",
   progress:     "desc",
   salary:       "desc",
   responseDate: "desc",
@@ -134,13 +143,17 @@ export function ListView({
   columns, settings, onOpenProfile, onAction, onToggleFavorite,
   sortMode = "date_desc", sort = null, onSortChange,
   selectedIds, onSelectionChange,
+  serverSorted = false,
 }: ListViewProps) {
   const lastSelectedIdRef = useRef<string | null>(null)
   const selectionEnabled = !!selectedIds && !!onSelectionChange
   const showProgress     = settings.showProgress !== false
   const showResponseDate = settings.showResponseDate !== false
   const showCity         = settings.showCity
-  const showScore        = settings.showScore
+  const showScore        = settings.showScore          // AI-оцен. (оценка анкеты)
+  const showResumeScore  = settings.showResumeScore !== false  // AI-резм. (undefined = вкл)
+  const showRubricScore  = settings.showRubricScore !== false  // Рубрика (по умолчанию вкл, как AI-резм)
+  const showTestScore    = settings.showTestScore !== false    // Тест (балл/статус; по умолчанию вкл)
   const showSalary       = settings.showSalary || settings.showSalaryFull
   const showSource       = settings.showSource
   const showActions      = settings.showActions
@@ -150,6 +163,10 @@ export function ListView({
   ), [columns])
 
   const allCandidates = useMemo(() => {
+    // В paginated-режиме сервер уже отсортировал → не пересортировываем.
+    // Иначе локальная сортировка по favorite перетасует список сразу после
+    // optimistic-апдейта isFavorite, и кандидат «уезжает» из своей позиции.
+    if (serverSorted) return rawCandidates
     if (!sort) return applySortMode(rawCandidates, sortMode) as typeof rawCandidates
     const arr = [...rawCandidates]
     const mul = sort.dir === "asc" ? 1 : -1
@@ -171,6 +188,12 @@ export function ListView({
         }
         case "resumeScore": {
           return mul * ((a.resumeScore ?? -1) - (b.resumeScore ?? -1))
+        }
+        case "rubricScore": {
+          return mul * ((a.rubricScore ?? -1) - (b.rubricScore ?? -1))
+        }
+        case "testScore": {
+          return mul * ((a.testScore ?? -1) - (b.testScore ?? -1))
         }
         case "progress": {
           return mul * ((progressPercentOf(a) ?? -1) - (progressPercentOf(b) ?? -1))
@@ -210,20 +233,22 @@ export function ListView({
       return 0
     })
     return arr
-  }, [rawCandidates, sort, sortMode])
+  }, [rawCandidates, sort, sortMode, serverSorted])
 
   const handleSort = (key: ListSortKey) => {
     if (!onSortChange) return
+    // 3-state цикл: DEFAULT_DIR → reverse → null (сброс).
+    // Раньше первый клик всегда давал ASC — для AI-score/salary/date это
+    // выглядело как «сортировка не работает» (юзер кликнул по «AI-оцен.»
+    // и ждал лучших сверху, а получил худших).
+    const def = DEFAULT_DIR[key]
+    const rev: ListSortDir = def === "asc" ? "desc" : "asc"
     if (!sort || sort.key !== key) {
-      onSortChange({ key, dir: DEFAULT_DIR[key] })
-    } else if (sort.dir === DEFAULT_DIR[key]) {
-      onSortChange({ key, dir: sort.dir === "asc" ? "desc" : "asc" })
+      onSortChange({ key, dir: def })
+    } else if (sort.dir === def) {
+      onSortChange({ key, dir: rev })
     } else {
-      // 3-й клик — сброс на глобальный дефолт (progress desc), а не null.
-      // Раньше возвращали null, но в pagination-режиме это приводило к
-      // визуальному "залипанию" последней сортировки (paginated state не
-      // сбрасывался). Явный reset к дефолту делает цикл предсказуемым.
-      onSortChange({ key: "progress", dir: "desc" })
+      onSortChange(null)
     }
   }
 
@@ -248,19 +273,24 @@ export function ListView({
   // Балансировка после расширения воронки (drizzle/0083): новые badge'и
   // длиннее («Первичный контакт» ~17 симв, «Анкета заполнена» ~16 симв),
   // поэтому Статус получает больше места (min 140 / 1.8fr), а Кандидат —
-  // меньше избыточного простора (с 6fr → 3fr, max-w на имя 240px).
+  // меньше избыточного простора. Кандидат: min 255px + 2.2fr — полное ФИО
+  // («Савватеев Дмитрий Викторович» ~28 симв + запас) помещается, длиннее —
+  // обрезается «…» (truncate на <p>); fr снижен с 3.45 → 2.2, чтобы колонка
+  // не забирала лишнее свободное место и пробел справа не был огромным.
   const cols: string[] = []
   // ☐ — 28px, justify-end. ★ — 32px (w-8), justify-center, чтобы звёздочка
   // визуально была по центру ячейки с равным воздухом слева/справа.
   // -ml-3 на ★ и Кандидате схлопывает gap-4 до 4px edge-to-edge.
   if (selectionEnabled) cols.push("24px")               // ☐ — фикс (компактнее)
   cols.push("28px")                                     // ★ — фикс (w-7, ужато)
-  cols.push("minmax(207px, 3.45fr)")                    // Кандидат — расширен ~15% за счёт Демо/AI
-  if (showProgress) cols.push("minmax(95px, 1.2fr)")    // Демо
-  cols.push("60px")                                     // AI-резм. — AI-скор резюме (фикс, w-8 badge + место под header)
-  if (showScore) cols.push("minmax(60px, 0.85fr)")      // AI
+  cols.push("minmax(280px, 2.4fr)")                     // Кандидат — +~10% (вмещает полное ФИО, длиннее → «…»)
+  if (showProgress) cols.push("minmax(80px, 1fr)")      // Демо — сегменты-«шаги», сужено ~15%
+  if (showResumeScore) cols.push("60px")                // AI-резм. — AI-скор резюме (фикс, w-8 badge + место под header)
+  if (showScore) cols.push("minmax(60px, 0.85fr)")      // AI-оцен.
+  if (showRubricScore) cols.push("64px")                // Рубрика — новый shadow-движок
+  if (showTestScore) cols.push("60px")                  // Тест — балл/«отп.»/«сдан» (фикс, как AI-резм)
   if (showSalary) cols.push("minmax(95px, 1.1fr)")      // Зарплата — ужата (длинных чисел редко > 7 симв)
-  if (showCity) cols.push("minmax(120px, 2fr)")         // Город
+  if (showCity) cols.push("minmax(102px, 1.7fr)")       // Город — −~15%
   if (showResponseDate) cols.push("minmax(70px, 0.7fr)") // Дата — "DD.MM.YY" укладывается в 70px
   cols.push("minmax(130px, 1.3fr)")                     // Статус — ужат с 140/1.8fr до 130/1.3fr
   if (showSource) cols.push("48px")                     // Источник — фикс (значки "hh"/"av" короткие)
@@ -358,8 +388,10 @@ export function ListView({
           )}
         </div>
         {showProgress && <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} align="center" />}
-        <SortHeader label="AI-резм." sortKey="resumeScore" sort={sort} onToggle={handleSort} align="center" />
+        {showResumeScore && <SortHeader label="AI-резм." sortKey="resumeScore" sort={sort} onToggle={handleSort} align="center" />}
         {showScore && <SortHeader label="AI-оцен." sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />}
+        {showRubricScore && <SortHeader label="Рубрика" sortKey="rubricScore" sort={sort} onToggle={handleSort} align="center" />}
+        {showTestScore && <SortHeader label="Тест" sortKey="testScore" sort={sort} onToggle={handleSort} align="center" />}
         {showSalary && <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} align="center" />}
         {showCity && <SortHeader label="Город" sortKey="city" sort={sort} onToggle={handleSort} align="left" />}
         {showResponseDate && <SortHeader label="Дата" sortKey="responseDate" sort={sort} onToggle={handleSort} align="center" />}
@@ -433,10 +465,13 @@ export function ListView({
                 />
                 <div className="min-w-0 flex-1">
                   <p
-                    className="text-[15px] font-medium text-foreground truncate"
-                    title={candidate.name}
+                    className="text-[15px] font-medium text-foreground flex items-center gap-1.5 min-w-0"
+                    title={candidate.isActive ? `${candidate.name} · активен сейчас` : candidate.name}
                   >
-                    {candidate.name}
+                    {candidate.isActive && (
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" aria-label="Активен сейчас" />
+                    )}
+                    <span className="truncate">{candidate.name}</span>
                   </p>
                   {settings.showExperience && (
                     <p
@@ -460,26 +495,29 @@ export function ListView({
                     completedBlocks={demoFraction.hasData ? demoFraction.current : undefined}
                     totalBlocks={demoFraction.hasData ? demoFraction.total : undefined}
                     hasVideoVizitka={candidate.demoProgressJson?.hasVideoVizitka}
+                    stage={candidate.stage}
                   />
                 </div>
               )}
 
               {/* AI score резюме — выставлен в process-queue.ts при приёме отклика. */}
-              <div className="flex items-center justify-center" title="AI-скор резюме (до демо)">
-                {candidate.resumeScore != null ? (
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
-                      getScoreColor(candidate.resumeScore),
-                    )}
-                  >
-                    {candidate.resumeScore}
-                  </Badge>
-                ) : (
-                  <span className="text-muted-foreground/40 text-xs">—</span>
-                )}
-              </div>
+              {showResumeScore && (
+                <div className="flex items-center justify-center" title="AI-скор резюме (до демо)">
+                  {candidate.resumeScore != null ? (
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
+                        getScoreColor(candidate.resumeScore),
+                      )}
+                    >
+                      {candidate.resumeScore}
+                    </Badge>
+                  ) : (
+                    <span className="text-muted-foreground/40 text-xs">—</span>
+                  )}
+                </div>
+              )}
 
               {/* AI score */}
               {showScore && (
@@ -493,6 +531,56 @@ export function ListView({
                   >
                     {aiActuallyRan ? candidate.aiScore : "—"}
                   </Badge>
+                </div>
+              )}
+
+              {/* Рубрика — новый shadow-движок соответствия */}
+              {showRubricScore && (
+                <div className="flex items-center justify-center" title="Соответствие по рубрике (тест)">
+                  {candidate.rubricScore != null ? (
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
+                        getScoreColor(candidate.rubricScore),
+                      )}
+                    >
+                      {candidate.rubricScore}
+                    </Badge>
+                  ) : (
+                    <span className="text-muted-foreground/40 text-xs">—</span>
+                  )}
+                </div>
+              )}
+
+              {/* Тест — лесенка: балл (бейдж) → «сдан» (отправил, балла ещё нет) →
+                  «пишет» (заполняет, черновик) → «пер.» (открыл) → «отп.»
+                  (отправлен) → «—» (не было). */}
+              {showTestScore && (
+                <div className="flex items-center justify-center" title="Результат теста">
+                  {candidate.testScore != null ? (
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
+                        getScoreColor(candidate.testScore),
+                      )}
+                    >
+                      {candidate.testScore}
+                    </Badge>
+                  ) : candidate.testStatus === "submitted" ? (
+                    <span className="text-success text-[11px] font-medium">сдан</span>
+                  ) : candidate.testStatus === "in_progress" ? (
+                    <span className="text-blue-600 dark:text-blue-500 text-[11px] font-medium">заб</span>
+                  ) : candidate.testStatus === "opened" ? (
+                    <span className="text-muted-foreground text-[11px]">пер.</span>
+                  ) : candidate.testStatus === "sent" ? (
+                    <span className="text-muted-foreground text-[11px]">отп.</span>
+                  ) : candidate.testStatus === "failed" ? (
+                    <span className="text-destructive text-[11px] font-medium" title="Отправка теста не прошла (нет hh-чата / hh отклонил)">ошибка</span>
+                  ) : (
+                    <span className="text-muted-foreground/40 text-xs">—</span>
+                  )}
                 </div>
               )}
 

@@ -14,7 +14,7 @@ import {
 import {
   Activity, Users, Eye, Clock, Globe, ChevronLeft, ChevronRight, Loader2,
 } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -176,8 +176,8 @@ export default function VisitLogPage() {
 
             {/* Header */}
             <div className="flex items-center gap-2">
-              <Activity className="size-5 text-blue-500" />
-              <h1 className="text-xl font-semibold">Журнал посещений</h1>
+              <Activity className="size-5 text-violet-600" />
+              <h1 className="text-lg font-semibold">Журнал посещений</h1>
             </div>
 
             {/* Loading */}
@@ -262,7 +262,7 @@ export default function VisitLogPage() {
                 </div>
 
                 {/* ── Visit history ── */}
-                <div className="border rounded-xl bg-card overflow-hidden">
+                <TableCard>
                   <div className="px-5 py-3 border-b bg-muted/20 flex items-center justify-between">
                     <h2 className="text-sm font-semibold">История посещений</h2>
                     <div className="flex items-center gap-2">
@@ -283,44 +283,40 @@ export default function VisitLogPage() {
                       />
                     </div>
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-muted/50 border-b">
-                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Время</th>
-                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Пользователь</th>
-                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Роль</th>
-                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Страница</th>
-                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">IP</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {paginatedVisits.map((v) => (
-                          <tr key={v.id} className="hover:bg-muted/50 transition-colors">
-                            <td className="px-4 py-2 text-xs text-muted-foreground whitespace-nowrap">{formatTime(v.createdAt)}</td>
-                            <td className="px-4 py-2">
-                              <div className="flex items-center gap-2">
-                                {v.userId && (
-                                  <Avatar className="size-5">
-                                    <AvatarFallback style={{ backgroundColor: getColor(v.userId) }} className="text-white text-[8px]">
-                                      {getInitials(v.userName)}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                )}
-                                <span className="text-xs">{v.userName || v.userEmail || "Аноним"}</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-2 text-xs text-muted-foreground">{v.userRole ? (ROLE_LABELS[v.userRole] ?? v.userRole) : "—"}</td>
-                            <td className="px-4 py-2 text-xs">{prettyPage(v.page)}</td>
-                            <td className="px-4 py-2 text-xs text-muted-foreground font-mono">{v.ip || "—"}</td>
-                          </tr>
-                        ))}
-                        {paginatedVisits.length === 0 && (
-                          <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">Нет записей</td></tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                  <DataTable>
+                    <DataHead>
+                      <DataHeadCell>Время</DataHeadCell>
+                      <DataHeadCell>Пользователь</DataHeadCell>
+                      <DataHeadCell>Роль</DataHeadCell>
+                      <DataHeadCell>Страница</DataHeadCell>
+                      <DataHeadCell>IP</DataHeadCell>
+                    </DataHead>
+                    <tbody>
+                      {paginatedVisits.map((v) => (
+                        <DataRow key={v.id}>
+                          <DataCell className="text-xs text-muted-foreground whitespace-nowrap">{formatTime(v.createdAt)}</DataCell>
+                          <DataCell>
+                            <div className="flex items-center gap-2">
+                              {v.userId && (
+                                <Avatar className="size-5">
+                                  <AvatarFallback style={{ backgroundColor: getColor(v.userId) }} className="text-white text-[8px]">
+                                    {getInitials(v.userName)}
+                                  </AvatarFallback>
+                                </Avatar>
+                              )}
+                              <span className="text-xs">{v.userName || v.userEmail || "Аноним"}</span>
+                            </div>
+                          </DataCell>
+                          <DataCell className="text-xs text-muted-foreground">{v.userRole ? (ROLE_LABELS[v.userRole] ?? v.userRole) : "—"}</DataCell>
+                          <DataCell className="text-xs">{prettyPage(v.page)}</DataCell>
+                          <DataCell className="text-xs text-muted-foreground font-mono">{v.ip || "—"}</DataCell>
+                        </DataRow>
+                      ))}
+                      {paginatedVisits.length === 0 && (
+                        <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">Нет записей</td></tr>
+                      )}
+                    </tbody>
+                  </DataTable>
                   {totalPages > 1 && (
                     <div className="px-5 py-3 border-t flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">
@@ -336,34 +332,32 @@ export default function VisitLogPage() {
                       </div>
                     </div>
                   )}
-                </div>
+                </TableCard>
 
                 {/* ── Top pages ── */}
                 {stats && stats.topPages.length > 0 && (
-                  <div className="border rounded-xl bg-card overflow-hidden">
+                  <TableCard>
                     <div className="px-5 py-3 border-b bg-muted/20">
                       <h2 className="text-sm font-semibold">Популярные страницы</h2>
                     </div>
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-muted/50 border-b">
-                          <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Страница</th>
-                          <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Визитов</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
+                    <DataTable>
+                      <DataHead>
+                        <DataHeadCell>Страница</DataHeadCell>
+                        <DataHeadCell align="right">Визитов</DataHeadCell>
+                      </DataHead>
+                      <tbody>
                         {stats.topPages.map((p, i) => (
-                          <tr key={i} className="hover:bg-muted/50 transition-colors">
-                            <td className="px-4 py-2 text-xs">
+                          <DataRow key={i}>
+                            <DataCell className="text-xs">
                               <span className="font-medium">{prettyPage(p.page)}</span>
                               <span className="text-muted-foreground ml-2">{p.page}</span>
-                            </td>
-                            <td className="px-4 py-2 text-xs text-right font-medium">{p.views}</td>
-                          </tr>
+                            </DataCell>
+                            <DataCell align="right" className="text-xs font-medium">{p.views}</DataCell>
+                          </DataRow>
                         ))}
                       </tbody>
-                    </table>
-                  </div>
+                    </DataTable>
+                  </TableCard>
                 )}
               </>
             )}

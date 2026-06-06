@@ -15,7 +15,7 @@ export default function TemplatesPage() {
         <div className="flex-1 overflow-auto bg-background min-w-0">
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="mb-6">
-              <h1 className="text-xl font-semibold text-foreground mb-1">Шаблоны сообщений</h1>
+              <div className="flex items-center gap-2"><FileText className="h-5 w-5 text-violet-600" /><h1 className="text-lg font-semibold">Шаблоны сообщений</h1></div>
               <p className="text-sm text-muted-foreground">Шаблоны писем и сообщений для кандидатов</p>
             </div>
             <Card>

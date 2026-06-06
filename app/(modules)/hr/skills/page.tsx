@@ -89,7 +89,7 @@ export default function SkillsPage() {
         <main className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Справочник навыков</h1>
+          <div className="flex items-center gap-2"><Zap className="h-5 w-5 text-violet-600" /><h1 className="text-lg font-semibold">Справочник навыков</h1></div>
           <p className="text-sm text-muted-foreground mt-0.5">{skills.length} навыков</p>
         </div>
         <div className="flex gap-2">

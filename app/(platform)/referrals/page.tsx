@@ -13,6 +13,7 @@ import { Separator } from "@/components/ui/separator"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
@@ -122,68 +123,64 @@ export default function ReferralsPage() {
                 <CardTitle className="text-base">Рефереры</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Имя</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Тип</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Кандидатов</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Нанято</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Заработано</th>
-                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
-                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Ссылка</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {referrers.map(ref => {
-                        const hired = ref.candidates.filter(c => c.stage === "Нанят").length
-                        return (
-                          <tr key={ref.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                            <td className="px-4 py-3">
-                              <div>
-                                <p className="text-sm font-medium text-foreground">{ref.name}</p>
-                                <p className="text-xs text-muted-foreground">{ref.contact}</p>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <Badge variant="outline" className={cn("text-xs", REFERRER_TYPE_COLORS[ref.type])}>
-                                {REFERRER_TYPE_LABELS[ref.type]}
-                              </Badge>
-                            </td>
-                            <td className="text-right px-4 py-3 text-sm font-medium text-foreground">{ref.candidates.length}</td>
-                            <td className="text-right px-4 py-3 text-sm font-medium text-foreground">{hired}</td>
-                            <td className="text-right px-4 py-3 text-sm font-medium text-foreground">
-                              {ref.totalEarned.toLocaleString("ru-RU")} ₽
-                            </td>
-                            <td className="text-center px-4 py-3">
-                              <Badge variant="outline" className={cn("text-xs",
-                                ref.status === "active" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" : "bg-muted text-muted-foreground border-border"
-                              )}>
-                                {STATUS_LABELS[ref.status]}
-                              </Badge>
-                            </td>
-                            <td className="text-center px-4 py-3">
-                              <div className="flex items-center justify-center gap-1">
-                                <Button
-                                  variant="ghost" size="icon" className="h-7 w-7"
-                                  onClick={() => handleCopyLink(ref.link)}
-                                >
-                                  {copiedLink === ref.link ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                                </Button>
-                                <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
-                                  <a href={ref.link} target="_blank">
-                                    <ExternalLink className="w-3.5 h-3.5" />
-                                  </a>
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                <DataTable>
+                  <DataHead>
+                    <DataHeadCell>Имя</DataHeadCell>
+                    <DataHeadCell>Тип</DataHeadCell>
+                    <DataHeadCell align="right">Кандидатов</DataHeadCell>
+                    <DataHeadCell align="right">Нанято</DataHeadCell>
+                    <DataHeadCell align="right">Заработано</DataHeadCell>
+                    <DataHeadCell align="center">Статус</DataHeadCell>
+                    <DataHeadCell align="center">Ссылка</DataHeadCell>
+                  </DataHead>
+                  <tbody>
+                    {referrers.map(ref => {
+                      const hired = ref.candidates.filter(c => c.stage === "Нанят").length
+                      return (
+                        <DataRow key={ref.id}>
+                          <DataCell>
+                            <div>
+                              <p className="text-sm font-medium text-foreground">{ref.name}</p>
+                              <p className="text-xs text-muted-foreground">{ref.contact}</p>
+                            </div>
+                          </DataCell>
+                          <DataCell>
+                            <Badge variant="outline" className={cn("text-xs", REFERRER_TYPE_COLORS[ref.type])}>
+                              {REFERRER_TYPE_LABELS[ref.type]}
+                            </Badge>
+                          </DataCell>
+                          <DataCell align="right" className="font-medium text-foreground">{ref.candidates.length}</DataCell>
+                          <DataCell align="right" className="font-medium text-foreground">{hired}</DataCell>
+                          <DataCell align="right" className="font-medium text-foreground">
+                            {ref.totalEarned.toLocaleString("ru-RU")} ₽
+                          </DataCell>
+                          <DataCell align="center">
+                            <Badge variant="outline" className={cn("text-xs",
+                              ref.status === "active" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" : "bg-muted text-muted-foreground border-border"
+                            )}>
+                              {STATUS_LABELS[ref.status]}
+                            </Badge>
+                          </DataCell>
+                          <DataCell align="center">
+                            <div className="flex items-center justify-center gap-1">
+                              <Button
+                                variant="ghost" size="icon" className="h-7 w-7"
+                                onClick={() => handleCopyLink(ref.link)}
+                              >
+                                {copiedLink === ref.link ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                                <a href={ref.link} target="_blank">
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                </a>
+                              </Button>
+                            </div>
+                          </DataCell>
+                        </DataRow>
+                      )
+                    })}
+                  </tbody>
+                </DataTable>
               </CardContent>
             </Card>
 

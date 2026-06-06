@@ -6,9 +6,9 @@ import { plans, planModules, modules, companies } from "@/lib/db/schema"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { LayoutGrid, Pencil } from "lucide-react"
 import Link from "next/link"
 
@@ -72,84 +72,78 @@ export default async function AdminPlansPage() {
               </div>
             </div>
 
-            <Card>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="bg-muted/50 border-b">
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Slug</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Цена</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Модули</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Клиентов</th>
-                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
-                        <th className="px-4 py-3" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {planList.map(plan => (
-                        <tr key={plan.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                          <td className="px-4 py-3">
-                            <p className="font-medium text-sm text-foreground">{plan.name}</p>
-                          </td>
-                          <td className="px-4 py-3">
-                            <code className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                              {plan.slug}
-                            </code>
-                          </td>
-                          <td className="text-right px-4 py-3">
-                            <p className="text-sm font-semibold text-foreground">{formatPrice(plan.price)}</p>
-                            <p className="text-xs text-muted-foreground">/{plan.interval === "month" ? "мес" : "год"}</p>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex flex-wrap gap-1">
-                              {plan.modules.length === 0
-                                ? <span className="text-xs text-muted-foreground">—</span>
-                                : plan.modules.map(m => (
-                                  <Badge key={m.id} variant="secondary" className="text-xs">
-                                    {m.name}
-                                  </Badge>
-                                ))
-                              }
-                            </div>
-                          </td>
-                          <td className="text-right px-4 py-3">
-                            <span className="text-sm font-medium text-foreground">{plan.clientCount}</span>
-                          </td>
-                          <td className="text-center px-4 py-3">
-                            <Badge
-                              variant="outline"
-                              className={plan.isPublic
-                                ? "text-xs bg-emerald-500/10 text-emerald-700 border-emerald-200 dark:text-emerald-400 dark:border-emerald-800"
-                                : "text-xs text-muted-foreground"
-                              }
-                            >
-                              {plan.isPublic ? "Публичный" : "Скрытый"}
-                            </Badge>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <Button asChild size="sm" variant="ghost" className="h-8">
-                              <Link href={`/admin/plans/${plan.id}`}>
-                                <Pencil className="w-3.5 h-3.5 mr-1.5" />
-                                Редактировать
-                              </Link>
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
-                      {planList.length === 0 && (
-                        <tr>
-                          <td colSpan={7} className="text-center py-10 text-sm text-muted-foreground">
-                            Тарифы не найдены
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
+            <TableCard>
+              <DataTable>
+                <DataHead>
+                  <DataHeadCell>Название</DataHeadCell>
+                  <DataHeadCell>Slug</DataHeadCell>
+                  <DataHeadCell align="right">Цена</DataHeadCell>
+                  <DataHeadCell>Модули</DataHeadCell>
+                  <DataHeadCell align="right">Клиентов</DataHeadCell>
+                  <DataHeadCell align="center">Статус</DataHeadCell>
+                  <DataHeadCell align="right" />
+                </DataHead>
+                <tbody>
+                  {planList.map(plan => (
+                    <DataRow key={plan.id}>
+                      <DataCell>
+                        <p className="font-medium text-foreground">{plan.name}</p>
+                      </DataCell>
+                      <DataCell>
+                        <code className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                          {plan.slug}
+                        </code>
+                      </DataCell>
+                      <DataCell align="right">
+                        <p className="font-semibold text-foreground">{formatPrice(plan.price)}</p>
+                        <p className="text-xs text-muted-foreground">/{plan.interval === "month" ? "мес" : "год"}</p>
+                      </DataCell>
+                      <DataCell>
+                        <div className="flex flex-wrap gap-1">
+                          {plan.modules.length === 0
+                            ? <span className="text-xs text-muted-foreground">—</span>
+                            : plan.modules.map(m => (
+                              <Badge key={m.id} variant="secondary" className="text-xs">
+                                {m.name}
+                              </Badge>
+                            ))
+                          }
+                        </div>
+                      </DataCell>
+                      <DataCell align="right">
+                        <span className="font-medium text-foreground">{plan.clientCount}</span>
+                      </DataCell>
+                      <DataCell align="center">
+                        <Badge
+                          variant="outline"
+                          className={plan.isPublic
+                            ? "text-xs bg-emerald-500/10 text-emerald-700 border-emerald-200 dark:text-emerald-400 dark:border-emerald-800"
+                            : "text-xs text-muted-foreground"
+                          }
+                        >
+                          {plan.isPublic ? "Публичный" : "Скрытый"}
+                        </Badge>
+                      </DataCell>
+                      <DataCell align="right">
+                        <Button asChild size="sm" variant="ghost" className="h-8">
+                          <Link href={`/admin/plans/${plan.id}`}>
+                            <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                            Редактировать
+                          </Link>
+                        </Button>
+                      </DataCell>
+                    </DataRow>
+                  ))}
+                  {planList.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="text-center py-10 text-sm text-muted-foreground">
+                        Тарифы не найдены
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </DataTable>
+            </TableCard>
           </div>
         </main>
       </SidebarInset>

@@ -26,3 +26,37 @@ node_modules
 
 # User uploads (videos, photos, files from candidates)
 public/uploads/
+
+# Backup files from hotfixes (e.g. *.bak, *.bak-postdemo-mode, *.bak-stopword)
+*.bak
+*.bak-*
+
+# Playwright runtime artifacts (local CLI/MCP browsers, screenshots from runs)
+.playwright-cli/
+.playwright-mcp/
+
+# Ad-hoc screenshots/markdown from debugging sessions in repo root
+/*.png
+/recon-followup-*.md
+
+# Временные скрины архитектуры под разбор (не коммитим, итог — в SYSTEM-MAP.md)
+/docs/architecture/screens/
+
+# Logs and temp directories
+*.log
+tmp/
+temp/
+
+# Playwright (Группа 29)
+playwright-report/
+test-results/
+.playwright/
+
+# Локальные справочники/ТЗ (не коммитим)
+/BUGS-CHECKLIST.md
+/TZ-pack-A.md
+/NIGHT-QUEUE.md
+
+# рабочие скриншоты/пробы (мусор)
+*.jpeg
+sheet-probe.json

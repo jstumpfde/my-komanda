@@ -7,19 +7,22 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
-import { Search, Settings, X, ChevronsUpDown, Check } from "lucide-react"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Search, Settings, X, ChevronsUpDown, Check, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Candidate } from "./candidate-card"
 import {
   PLATFORM_STAGES,
-  getEnabledStages,
-  getStageLabel,
+  ALL_STAGE_SLUGS,
+  type StageSlug,
   type VacancyPipelineV2,
 } from "@/lib/stages"
 
@@ -28,7 +31,15 @@ export interface FilterState {
   cities: string[]
   salaryMin: number
   salaryMax: number
+  /** @deprecated — оставлено для обратной совместимости с местами, где
+   *  используется один общий слайдер. На странице вакансии — scoreMinAnketa. */
   scoreMin: number
+  /** Минимальный AI-скор по резюме (поле candidates.resumeScore).
+   *  0 = «не задан», фильтр не применяется. */
+  scoreMinResume: number
+  /** Минимальный AI-скор по анкете (поле candidates.aiScore).
+   *  0 = «не задан», фильтр не применяется. */
+  scoreMinAnketa: number
   sources: string[]
   workFormats: string[]
   relocation: "any" | "yes" | "no"
@@ -36,6 +47,13 @@ export interface FilterState {
   experienceMin: number
   experienceMax: number
   funnelStatuses: string[]
+  /** Скрыть кандидатов в стадии rejected. Отдельно от funnelStatuses —
+   *  применяется сервером как stage != 'rejected', не ломая legacy-стадии. */
+  hideRejected: boolean
+  /** Скрыть кандидатов без указанной зарплаты (server: salary NOT NULL). */
+  hideNoSalary: boolean
+  /** Показать только активных сейчас (активность демо/тест за 30 мин). */
+  activeNow: boolean
   demoProgress: string[]
   dateRange: string
   dateFrom: string
@@ -49,22 +67,15 @@ export interface FilterState {
   industries: string[]
 }
 
-const DEFAULT_FILTERS: FilterState = {
-  searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, sources: [], workFormats: [],
-  relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: [], demoProgress: [],
-  dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [],
-  skills: [], industries: [],
-}
-
 interface CandidateFiltersProps {
   filters: FilterState
   onFiltersChange: (filters: FilterState) => void
   candidates?: Candidate[]
   /**
-   * Ф6: pipeline текущей вакансии. Если передан — чек-лист «Статус в воронке»
-   * рендерится из включённых стадий pipeline (с кастомными лейблами).
-   * Если null/undefined — fallback на захардкоженный FUNNEL_STATUSES для
-   * страниц, где нет привязки к одной вакансии.
+   * Ф6: pipeline текущей вакансии. ТЗ-3 Ч.4: больше НЕ влияет на выбор
+   * стадий — фильтр всегда показывает все 14 системных стадий из
+   * PLATFORM_STAGES. Проп оставлен для совместимости (custom-лейблы могут
+   * пригодиться позже).
    */
   vacancyPipeline?: VacancyPipelineV2 | null
 }
@@ -75,10 +86,25 @@ const WORK_FORMATS = [
   { id: "remote", label: "Удалёнка" },
 ]
 
-const FUNNEL_STATUSES = [
-  "Всего откликов", "Демо пройдено", "Интервью назначено",
-  "Интервью пройдено", "Оффер", "Нанят", "Отказ",
-]
+// Семантика: пустой массив = «нет фильтра по статусу, показываем всех».
+// 13 заранее проставленных чекбоксов сбивали с толку — выглядело как
+// активный фильтр, хотя видимо ничего не отсекалось. Теперь по первому
+// открытию HR видит чистый список без галочек и сам выбирает статусы.
+export const DEFAULT_FUNNEL_STATUSES: StageSlug[] = []
+
+const DEFAULT_FILTERS: FilterState = {
+  searchText: "", cities: [], salaryMin: 0, salaryMax: 250000,
+  scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0,
+  sources: [], workFormats: [],
+  relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20,
+  funnelStatuses: DEFAULT_FUNNEL_STATUSES.slice(),
+  hideRejected: false,
+  hideNoSalary: false,
+  activeNow: false,
+  demoProgress: [],
+  dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [],
+  skills: [], industries: [],
+}
 
 const DEMO_PROGRESS = [
   "Не начал", "В процессе", "Завершил (≥85%)", "Завершил (<85%)",
@@ -208,12 +234,15 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
     (filters.cities?.length ?? 0) > 0 ? 1 : 0,
     (filters.sources?.length ?? 0) > 0 ? 1 : 0,
     (filters.workFormats?.length ?? 0) > 0 ? 1 : 0,
-    (filters.scoreMin ?? 0) > 0 ? 1 : 0,
+    (filters.scoreMinResume ?? 0) > 0 ? 1 : 0,
+    (filters.scoreMinAnketa ?? 0) > 0 ? 1 : 0,
     (filters.salaryMin ?? 0) > 0 || (filters.salaryMax ?? 250000) < 250000 ? 1 : 0,
+    filters.hideNoSalary ? 1 : 0,
     (filters.relocation ?? "any") !== "any" ? 1 : 0,
     (filters.businessTrips ?? "any") !== "any" ? 1 : 0,
     (filters.experienceMin ?? 0) > 0 || (filters.experienceMax ?? 20) < 20 ? 1 : 0,
     (filters.funnelStatuses?.length ?? 0) > 0 ? 1 : 0,
+    filters.hideRejected ? 1 : 0,
     (filters.demoProgress?.length ?? 0) > 0 ? 1 : 0,
     filters.dateRange || filters.dateFrom || filters.dateTo ? 1 : 0,
     (filters.ageMin ?? 18) > 18 || (filters.ageMax ?? 65) < 65 ? 1 : 0,
@@ -243,8 +272,11 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
           <Settings className="size-3.5 ml-0.5 text-current opacity-60" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80 p-0" align="start">
-        <div className="max-h-[75vh] overflow-y-auto p-4 space-y-4">
+      <PopoverContent
+        className="w-80 p-0 flex flex-col max-h-[min(85vh,var(--radix-popover-content-available-height))]"
+        align="start"
+      >
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
           <div className="flex items-center justify-between mb-1">
             <h3 className="font-semibold text-sm">Поиск кандидатов</h3>
             {hasActiveFilters && (
@@ -325,164 +357,223 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
             </div>
           )}
 
-          {/* Salary Range */}
-          {false && (
+          {/* Salary Range — единый ползунок с двумя бегунками (как «Возраст»).
+              На полном диапазоне (0–250k) показываем «не задана» — фильтр не
+              активен. Верхний бегунок на максимуме означает «и выше» (250k+). */}
           <div className="space-y-2">
             <label className="text-xs font-medium text-muted-foreground">
-              Зарплата: {filters.salaryMin.toLocaleString("ru-RU")} – {filters.salaryMax.toLocaleString("ru-RU")} ₽
-            </label>
-            <div className="space-y-2">
-              <Slider value={[filters.salaryMin]} onValueChange={([v]) => onFiltersChange({ ...filters, salaryMin: v })} min={0} max={250000} step={10000} />
-              <Slider value={[filters.salaryMax]} onValueChange={([v]) => onFiltersChange({ ...filters, salaryMax: v })} min={0} max={250000} step={10000} />
-            </div>
-          </div>
-          )}
-
-          {/* Score. На дефолте (0) — пишем «не задано», чтобы пользователь не
-              думал, что у него стоит фильтр «AI ≥ 0» (он ничего не отсекает,
-              но визуально выглядит как активный). */}
-          <div className="space-y-2">
-            <label className="text-xs font-medium text-muted-foreground">
-              Минимальный AI-скор: {filters.scoreMin > 0 ? filters.scoreMin : <span className="italic">не задан</span>}
-            </label>
-            <Slider value={[filters.scoreMin]} onValueChange={([v]) => onFiltersChange({ ...filters, scoreMin: v })} min={0} max={100} step={5} />
-          </div>
-
-          <Separator />
-
-          {/* 1. Work Format — 3 checkboxes */}
-          {false && (
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Формат работы</label>
-            <div className="space-y-1">
-              {WORK_FORMATS.map((f) => (
-                <div key={f.id} className="flex items-center gap-2">
-                  <Checkbox
-                    id={`fmt-${f.id}`}
-                    checked={filters.workFormats.includes(f.id)}
-                    onCheckedChange={() => onFiltersChange({ ...filters, workFormats: toggleArray(filters.workFormats, f.id) })}
-                  />
-                  <label htmlFor={`fmt-${f.id}`} className="text-sm cursor-pointer">{f.label}</label>
-                </div>
-              ))}
-            </div>
-          </div>
-          )}
-
-          {/* 2. Relocation */}
-          {false && (
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Готовность к переезду</label>
-            <div className="space-y-1">
-              {([["any", "Не важно"], ["yes", "Да"], ["no", "Нет"]] as const).map(([val, label]) => (
-                <div key={val} className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    id={`reloc-${val}`}
-                    name="relocation"
-                    checked={filters.relocation === val}
-                    onChange={() => onFiltersChange({ ...filters, relocation: val })}
-                    className="accent-primary w-3.5 h-3.5"
-                  />
-                  <label htmlFor={`reloc-${val}`} className="text-sm cursor-pointer">{label}</label>
-                </div>
-              ))}
-            </div>
-          </div>
-          )}
-
-          {/* 2b. Business Trips */}
-          {false && (
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Готовность к командировкам</label>
-            <div className="space-y-1">
-              {([["any", "Не важно"], ["yes", "Готов"], ["no", "Не готов"]] as const).map(([val, label]) => (
-                <div key={val} className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    id={`trips-${val}`}
-                    name="businessTrips"
-                    checked={filters.businessTrips === val}
-                    onChange={() => onFiltersChange({ ...filters, businessTrips: val })}
-                    className="accent-primary w-3.5 h-3.5"
-                  />
-                  <label htmlFor={`trips-${val}`} className="text-sm cursor-pointer">{label}</label>
-                </div>
-              ))}
-            </div>
-          </div>
-          )}
-
-          {/* 3. Experience */}
-          {false && (
-          <div className="space-y-2">
-            <label className="text-xs font-medium text-muted-foreground">
-              Опыт работы: {filters.experienceMin} – {filters.experienceMax} лет
+              {filters.salaryMin === 0 && filters.salaryMax >= 250000
+                ? <>Зарплата: <span className="italic">не задана</span></>
+                : <>Зарплата: {filters.salaryMin.toLocaleString("ru-RU")} – {filters.salaryMax.toLocaleString("ru-RU")}{filters.salaryMax >= 250000 ? "+" : ""} ₽</>}
             </label>
             <Slider
-              value={[filters.experienceMin, filters.experienceMax]}
-              onValueChange={([min, max]) => onFiltersChange({ ...filters, experienceMin: min, experienceMax: max })}
-              min={0} max={20} step={1}
+              value={[filters.salaryMin, filters.salaryMax]}
+              onValueChange={([min, max]) => onFiltersChange({ ...filters, salaryMin: min, salaryMax: max })}
+              min={0} max={250000} step={10000}
+            />
+            {/* По умолчанию кандидаты без указанной ЗП проходят любой фильтр по
+                зарплате (их оффер неизвестен). Этот чекбокс их прячет. */}
+            <label className="flex items-center gap-2 cursor-pointer text-sm pt-0.5">
+              <Checkbox
+                checked={filters.hideNoSalary}
+                onCheckedChange={(v) => onFiltersChange({ ...filters, hideNoSalary: v === true })}
+              />
+              <span>Скрыть без указанной зарплаты</span>
+            </label>
+          </div>
+
+          <Separator className="my-1" />
+
+          {/* Score — два независимых слайдера. resumeScore — оценка резюме
+              (выставляется в process-queue.ts при приёме отклика); aiScore —
+              оценка после прохождения демо/анкеты. На дефолте (0) показываем
+              «не задан», чтобы было видно — фильтр не активен. */}
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground">
+              Минимальный AI-скор по резюме: {filters.scoreMinResume > 0
+                ? filters.scoreMinResume
+                : <span className="italic">не задан</span>}
+            </label>
+            <Slider
+              value={[filters.scoreMinResume]}
+              onValueChange={([v]) => onFiltersChange({ ...filters, scoreMinResume: v })}
+              min={0} max={100} step={5}
             />
           </div>
-          )}
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground">
+              Минимальный AI-скор по анкете: {filters.scoreMinAnketa > 0
+                ? filters.scoreMinAnketa
+                : <span className="italic">не задан</span>}
+            </label>
+            <Slider
+              value={[filters.scoreMinAnketa]}
+              onValueChange={([v]) => onFiltersChange({ ...filters, scoreMinAnketa: v })}
+              min={0} max={100} step={5}
+            />
+          </div>
 
-          <Separator />
+          <Separator className="my-1" />
 
-          {/* 4. Funnel Status — динамический если есть pipeline, иначе legacy */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Статус в воронке</label>
-            <div className="space-y-1">
-              {vacancyPipeline ? (
-                getEnabledStages(vacancyPipeline).map((slug) => {
-                  const label = getStageLabel(slug, vacancyPipeline)
-                  return (
-                    <div key={slug} className="flex items-center gap-2">
+          {/* Доп. фильтры — свёрнуты по умолчанию, чтобы панель не растягивалась */}
+          <Collapsible>
+            <CollapsibleTrigger className="flex w-full items-center justify-between text-sm font-medium [&[data-state=open]>svg]:rotate-180">
+              <span className="flex items-center gap-2">
+                Дополнительно
+                {((filters.workFormats?.length ?? 0) > 0 || (filters.relocation ?? "any") !== "any" || (filters.businessTrips ?? "any") !== "any" || (filters.experienceMin ?? 0) > 0 || (filters.experienceMax ?? 20) < 20) && (
+                  <span className="text-[10px] rounded-full bg-primary/15 text-primary px-1.5 py-0.5">активны</span>
+                )}
+              </span>
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-3 pt-3">
+              {/* Формат работы */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Формат работы</label>
+                <div className="space-y-1">
+                  {WORK_FORMATS.map((f) => (
+                    <div key={f.id} className="flex items-center gap-2">
                       <Checkbox
-                        id={`funnel-${slug}`}
-                        checked={filters.funnelStatuses.includes(slug)}
-                        onCheckedChange={() => onFiltersChange({ ...filters, funnelStatuses: toggleArray(filters.funnelStatuses, slug) })}
+                        id={`fmt-${f.id}`}
+                        checked={filters.workFormats.includes(f.id)}
+                        onCheckedChange={() => onFiltersChange({ ...filters, workFormats: toggleArray(filters.workFormats, f.id) })}
                       />
-                      <label htmlFor={`funnel-${slug}`} className="text-sm cursor-pointer flex items-center gap-2">
-                        <span>{label}</span>
-                        {PLATFORM_STAGES[slug].isTerminal && (
-                          <span className="text-[10px] text-muted-foreground">терминальная</span>
-                        )}
-                      </label>
+                      <label htmlFor={`fmt-${f.id}`} className="text-sm cursor-pointer">{f.label}</label>
                     </div>
-                  )
-                })
-              ) : (
-                FUNNEL_STATUSES.map((s) => (
-                  <div key={s} className="flex items-center gap-2">
-                    <Checkbox
-                      id={`funnel-${s}`}
-                      checked={filters.funnelStatuses.includes(s)}
-                      onCheckedChange={() => onFiltersChange({ ...filters, funnelStatuses: toggleArray(filters.funnelStatuses, s) })}
-                    />
-                    <label htmlFor={`funnel-${s}`} className="text-sm cursor-pointer">{s}</label>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* 5. Demo Progress */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Прогресс демо</label>
-            <div className="space-y-1">
-              {DEMO_PROGRESS.map((s) => (
-                <div key={s} className="flex items-center gap-2">
-                  <Checkbox
-                    id={`demo-${s}`}
-                    checked={filters.demoProgress.includes(s)}
-                    onCheckedChange={() => onFiltersChange({ ...filters, demoProgress: toggleArray(filters.demoProgress, s) })}
-                  />
-                  <label htmlFor={`demo-${s}`} className="text-sm cursor-pointer">{s}</label>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
+              {/* Готовность к переезду */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Готовность к переезду</label>
+                <div className="space-y-1">
+                  {([["any", "Не важно"], ["yes", "Да"], ["no", "Нет"]] as const).map(([val, label]) => (
+                    <div key={val} className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        id={`reloc-${val}`}
+                        name="relocation"
+                        checked={filters.relocation === val}
+                        onChange={() => onFiltersChange({ ...filters, relocation: val })}
+                        className="accent-primary w-3.5 h-3.5"
+                      />
+                      <label htmlFor={`reloc-${val}`} className="text-sm cursor-pointer">{label}</label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* Готовность к командировкам */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Готовность к командировкам</label>
+                <div className="space-y-1">
+                  {([["any", "Не важно"], ["yes", "Готов"], ["no", "Не готов"]] as const).map(([val, label]) => (
+                    <div key={val} className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        id={`trips-${val}`}
+                        name="businessTrips"
+                        checked={filters.businessTrips === val}
+                        onChange={() => onFiltersChange({ ...filters, businessTrips: val })}
+                        className="accent-primary w-3.5 h-3.5"
+                      />
+                      <label htmlFor={`trips-${val}`} className="text-sm cursor-pointer">{label}</label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* Опыт работы */}
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">
+                  {filters.experienceMin === 0 && filters.experienceMax >= 20
+                    ? <>Опыт работы: <span className="italic">не задан</span></>
+                    : <>Опыт работы: {filters.experienceMin} – {filters.experienceMax}{filters.experienceMax >= 20 ? "+" : ""} лет</>}
+                </label>
+                <Slider
+                  value={[filters.experienceMin, filters.experienceMax]}
+                  onValueChange={([min, max]) => onFiltersChange({ ...filters, experienceMin: min, experienceMax: max })}
+                  min={0} max={20} step={1}
+                />
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+
+          {/* Статус, отказы и прогресс демо — свёрнуты (список статусов длинный) */}
+          <Collapsible>
+            <CollapsibleTrigger className="flex w-full items-center justify-between text-sm font-medium [&[data-state=open]>svg]:rotate-180">
+              <span className="flex items-center gap-2">
+                Статус и этап
+                {((filters.funnelStatuses?.length ?? 0) > 0 || filters.hideRejected || (filters.demoProgress?.length ?? 0) > 0) && (
+                  <span className="text-[10px] rounded-full bg-primary/15 text-primary px-1.5 py-0.5">активны</span>
+                )}
+              </span>
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-3 pt-3">
+              {/* Статус в воронке. rejected исключён — им управляет тумблер ниже. */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Статус в воронке</label>
+                <div className="space-y-1">
+                  {ALL_STAGE_SLUGS.filter((slug) => slug !== "rejected").map((slug) => {
+                    const stage = PLATFORM_STAGES[slug]
+                    return (
+                      <div key={slug} className="flex items-center gap-2">
+                        <Checkbox
+                          id={`funnel-${slug}`}
+                          checked={filters.funnelStatuses.includes(slug)}
+                          onCheckedChange={() => onFiltersChange({ ...filters, funnelStatuses: toggleArray(filters.funnelStatuses, slug) })}
+                        />
+                        <label htmlFor={`funnel-${slug}`} className="text-sm cursor-pointer flex items-center gap-2">
+                          <span>{stage.defaultLabel}</span>
+                          {stage.isTerminal && <span className="text-[10px] text-muted-foreground">терминальная</span>}
+                        </label>
+                      </div>
+                    )
+                  })}
+                </div>
+                {/* Скрыть/Показать отказы — отдельный hideRejected (сервер: stage != 'rejected'),
+                    т.к. в данных есть legacy-стадии вне ALL_STAGE_SLUGS. */}
+                <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-border/40">
+                  <Label htmlFor="show-rejections" className="text-sm cursor-pointer">
+                    {filters.hideRejected ? "Показать отказы" : "Скрыть отказы"}
+                  </Label>
+                  <Switch
+                    id="show-rejections"
+                    checked={!filters.hideRejected}
+                    onCheckedChange={(show) => onFiltersChange({ ...filters, hideRejected: !show })}
+                  />
+                </div>
+                {/* Активны сейчас — кандидаты, кто прямо сейчас проходит демо
+                    или тест (активность за последние 30 минут). */}
+                <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-border/40">
+                  <Label htmlFor="active-now" className="text-sm cursor-pointer flex items-center gap-1.5">
+                    <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
+                    Активны сейчас
+                  </Label>
+                  <Switch
+                    id="active-now"
+                    checked={filters.activeNow}
+                    onCheckedChange={(on) => onFiltersChange({ ...filters, activeNow: on })}
+                  />
+                </div>
+              </div>
+              {/* Прогресс демо */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Прогресс демо</label>
+                <div className="space-y-1">
+                  {DEMO_PROGRESS.map((s) => (
+                    <div key={s} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`demo-${s}`}
+                        checked={filters.demoProgress.includes(s)}
+                        onCheckedChange={() => onFiltersChange({ ...filters, demoProgress: toggleArray(filters.demoProgress, s) })}
+                      />
+                      <label htmlFor={`demo-${s}`} className="text-sm cursor-pointer">{s}</label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
 
           <Separator />
 
@@ -543,8 +634,6 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
               min={18} max={65} step={1}
             />
           </div>
-
-          <Separator />
 
           {/* 8. Education */}
           {false && (
@@ -648,8 +737,6 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
           </div>
           )}
 
-          <Separator />
-
           {/* 10. Skills — combobox */}
           {false && (
           <div className="space-y-1.5">
@@ -750,12 +837,12 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
           </div>
           )}
 
-          {/* Кнопка раньше называлась «Применить», но фильтры применяются
-              немедленно при каждом изменении (onFiltersChange → useCandidates
-              → refetch). Никакого batch-apply здесь нет, поэтому клик просто
-              закрывал поповер — и пользователь думал, что кнопка не работает.
-              Переименовали в «Готово», и подсказка для ясности. */}
-          <p className="text-[11px] text-muted-foreground text-center -mb-1">
+        </div>
+        {/* Футер закреплён вне скролла — «Готово» всегда доступно, даже когда
+            список фильтров длиннее экрана. Кнопка просто закрывает поповер:
+            фильтры применяются мгновенно при каждом изменении. */}
+        <div className="border-t bg-popover px-4 py-3 shrink-0">
+          <p className="text-[11px] text-muted-foreground text-center mb-2">
             Фильтры применяются мгновенно
           </p>
           <Button variant="default" className="w-full h-8 text-sm" onClick={() => setIsOpen(false)}>

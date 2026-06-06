@@ -5,8 +5,9 @@ import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { users } from "@/lib/db/schema"
 import { requireAuth, apiError, apiSuccess } from "@/lib/api-helpers"
+import { uploadsDir, publicDir } from "@/lib/uploads-path"
 
-const UPLOAD_DIR = path.join(process.cwd(), "public/uploads/avatars")
+const UPLOAD_DIR = uploadsDir("avatars")
 const MAX_SIZE = 2 * 1024 * 1024 // 2 MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"]
 
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
     // Delete old avatar file if exists
     const [existing] = await db.select({ avatarUrl: users.avatarUrl }).from(users).where(eq(users.id, targetUserId!)).limit(1)
     if (existing?.avatarUrl) {
-      const oldPath = path.join(process.cwd(), "public", existing.avatarUrl)
+      const oldPath = publicDir(existing.avatarUrl)
       await unlink(oldPath).catch(() => {})
     }
 
@@ -53,7 +54,7 @@ export async function DELETE(req: NextRequest) {
 
     const [existing] = await db.select({ avatarUrl: users.avatarUrl }).from(users).where(eq(users.id, targetUserId!)).limit(1)
     if (existing?.avatarUrl) {
-      const filePath = path.join(process.cwd(), "public", existing.avatarUrl)
+      const filePath = publicDir(existing.avatarUrl)
       await unlink(filePath).catch(() => {})
     }
 

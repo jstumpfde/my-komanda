@@ -10,9 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Separator } from "@/components/ui/separator"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -136,7 +134,7 @@ export default function DealDetailPage() {
                   <ArrowLeft className="w-5 h-5" />
                 </Button>
                 <Handshake className="w-5 h-5 text-primary" />
-                <h1 className="text-xl font-semibold">Сделка</h1>
+                <h1 className="text-lg font-semibold">Сделка</h1>
               </div>
               <div className="flex items-center gap-2">
                 <AlertDialog>

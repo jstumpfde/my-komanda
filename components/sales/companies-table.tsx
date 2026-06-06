@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 
 export interface SalesCompany {
   id: string
@@ -70,80 +71,76 @@ export function CompaniesTable({ companies, onEdit, onArchive, onRestore, sortCo
   }
 
   return (
-    <div className="border rounded-xl overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-muted/50 border-b">
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 min-w-[200px]">
-                <button type="button" onClick={() => onSort?.("name")} className="inline-flex items-center gap-1 hover:text-foreground transition-colors">
-                  Название <ArrowUpDown className={cn("w-4 h-4", sortColumn === "name" ? "text-foreground" : "opacity-60")} />
-                </button>
-              </th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">ИНН</th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Отрасль</th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Город</th>
-              <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
-                <button type="button" onClick={() => onSort?.("status")} className="inline-flex items-center gap-1 hover:text-foreground transition-colors">
-                  Статус <ArrowUpDown className={cn("w-4 h-4", sortColumn === "status" ? "text-foreground" : "opacity-60")} />
-                </button>
-              </th>
-              <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 pr-4">Действия</th>
-            </tr>
-          </thead>
-          <tbody>
-            {companies.map((company) => (
-              <tr key={company.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                <td className="px-4 py-3 min-w-[200px]">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                      <Building2 className="w-4 h-4 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{company.name}</p>
-                      <p className="text-xs text-muted-foreground">{TYPE_LABELS[company.type] || company.type}</p>
-                    </div>
+    <TableCard>
+      <DataTable>
+        <DataHead>
+          <DataHeadCell className="min-w-[200px]">
+            <button type="button" onClick={() => onSort?.("name")} className="inline-flex items-center gap-1 hover:text-foreground transition-colors">
+              Название <ArrowUpDown className={cn("w-4 h-4", sortColumn === "name" ? "text-foreground" : "opacity-60")} />
+            </button>
+          </DataHeadCell>
+          <DataHeadCell>ИНН</DataHeadCell>
+          <DataHeadCell>Отрасль</DataHeadCell>
+          <DataHeadCell>Город</DataHeadCell>
+          <DataHeadCell>
+            <button type="button" onClick={() => onSort?.("status")} className="inline-flex items-center gap-1 hover:text-foreground transition-colors">
+              Статус <ArrowUpDown className={cn("w-4 h-4", sortColumn === "status" ? "text-foreground" : "opacity-60")} />
+            </button>
+          </DataHeadCell>
+          <DataHeadCell align="right">Действия</DataHeadCell>
+        </DataHead>
+        <tbody>
+          {companies.map((company) => (
+            <DataRow key={company.id}>
+              <DataCell className="min-w-[200px]">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <Building2 className="w-4 h-4 text-primary" />
                   </div>
-                </td>
-                <td className="px-4 py-3 text-sm text-muted-foreground font-mono">{company.inn || "—"}</td>
-                <td className="px-4 py-3 text-sm text-muted-foreground">{company.industry || "—"}</td>
-                <td className="px-4 py-3 text-sm text-muted-foreground">{company.city || "—"}</td>
-                <td className="px-4 py-3">
-                  <Badge className={cn("text-xs border-0", STATUS_COLORS[company.status] || STATUS_COLORS.active)}>
-                    {STATUS_LABELS[company.status] || company.status}
-                  </Badge>
-                </td>
-                <td className="px-4 py-3 text-right pr-4">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => onEdit?.(company)}>
-                        <Pencil className="w-4 h-4 mr-2" />
-                        Редактировать
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{company.name}</p>
+                    <p className="text-xs text-muted-foreground">{TYPE_LABELS[company.type] || company.type}</p>
+                  </div>
+                </div>
+              </DataCell>
+              <DataCell className="text-muted-foreground font-mono">{company.inn || "—"}</DataCell>
+              <DataCell className="text-muted-foreground">{company.industry || "—"}</DataCell>
+              <DataCell className="text-muted-foreground">{company.city || "—"}</DataCell>
+              <DataCell>
+                <Badge className={cn("text-xs border-0", STATUS_COLORS[company.status] || STATUS_COLORS.active)}>
+                  {STATUS_LABELS[company.status] || company.status}
+                </Badge>
+              </DataCell>
+              <DataCell align="right">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <MoreHorizontal className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => onEdit?.(company)}>
+                      <Pencil className="w-4 h-4 mr-2" />
+                      Редактировать
+                    </DropdownMenuItem>
+                    {company.status === "active" ? (
+                      <DropdownMenuItem onClick={() => onArchive?.(company)}>
+                        <Archive className="w-4 h-4 mr-2" />
+                        В архив
                       </DropdownMenuItem>
-                      {company.status === "active" ? (
-                        <DropdownMenuItem onClick={() => onArchive?.(company)}>
-                          <Archive className="w-4 h-4 mr-2" />
-                          В архив
-                        </DropdownMenuItem>
-                      ) : (
-                        <DropdownMenuItem onClick={() => onRestore?.(company)}>
-                          <RotateCcw className="w-4 h-4 mr-2" />
-                          Восстановить
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+                    ) : (
+                      <DropdownMenuItem onClick={() => onRestore?.(company)}>
+                        <RotateCcw className="w-4 h-4 mr-2" />
+                        Восстановить
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </DataCell>
+            </DataRow>
+          ))}
+        </tbody>
+      </DataTable>
+    </TableCard>
   )
 }

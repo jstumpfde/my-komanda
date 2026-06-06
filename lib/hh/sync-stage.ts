@@ -10,42 +10,15 @@
 // последовательно с задержкой (anti-429) — см. bulk/route.ts.
 
 import { db } from "@/lib/db"
-import { candidates, hhCandidates, hhResponses, vacancies } from "@/lib/db/schema"
+import { candidates, hhCandidates, hhResponses, vacancies, companies } from "@/lib/db/schema"
 import type { VacancyAiProcessSettings } from "@/lib/db/schema"
 import { and, eq } from "drizzle-orm"
+import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
 import { getValidToken } from "@/lib/hh-helpers"
 import { changeNegotiationState } from "@/lib/hh-api"
 import { getStageHhAction, parsePipeline, type StageSlug } from "@/lib/stages"
-
-const DEFAULT_REJECT_MESSAGE =
-  `Здравствуйте, {{name}}!\n\n` +
-  `Спасибо за отклик на вакансию «{{vacancy}}». ` +
-  `К сожалению, мы решили остановиться на других кандидатах. ` +
-  `Желаем удачи в поиске работы!`
-
-const DEFAULT_INVITE_MESSAGE =
-  `Здравствуйте, {{name}}!\n\n` +
-  `Спасибо за отклик на вакансию «{{vacancy}}». ` +
-  `Мы хотим познакомиться поближе и приглашаем пройти короткое демо-задание (10–15 минут):\n\n` +
-  `{{demo_link}}\n\n` +
-  `После прохождения мы свяжемся с вами для следующих шагов.`
-
-function renderTemplate(tpl: string, vars: Record<string, string>): string {
-  return tpl
-    .replaceAll("{{name}}",      vars.name      ?? "")
-    .replaceAll("{{vacancy}}",   vars.vacancy   ?? "")
-    .replaceAll("{{demo_link}}", vars.demo_link ?? "")
-    // Совместимость со стилем сообщений из process-queue
-    // ([Имя], {имя}, [должность], …) — если HR использует их.
-    .replaceAll("[Имя]",         vars.name      ?? "")
-    .replaceAll("[имя]",         vars.name      ?? "")
-    .replaceAll("{Имя}",         vars.name      ?? "")
-    .replaceAll("{имя}",         vars.name      ?? "")
-    .replaceAll("[должность]",   vars.vacancy   ?? "")
-    .replaceAll("{должность}",   vars.vacancy   ?? "")
-    .replaceAll("[ссылка]",      vars.demo_link ?? "")
-    .replaceAll("{ссылка}",      vars.demo_link ?? "")
-}
+import { DEFAULT_REJECT_MESSAGE, DEFAULT_INVITE_MESSAGE } from "@/lib/hh/default-messages"
+import { renderTemplate } from "@/lib/template-renderer"
 
 interface CandidateContext {
   id:        string
@@ -130,7 +103,7 @@ async function loadContext(candidateId: string): Promise<{
  * кандидат не привязан к hh-отклику или нет валидного токена —
  * это нормальные ситуации, не ошибки.
  */
-export async function trySyncRejectToHh(candidateId: string): Promise<boolean> {
+export async function trySyncRejectToHh(candidateId: string, customMessage?: string | null): Promise<boolean> {
   try {
     const ctx = await loadContext(candidateId)
     if (!ctx) return false
@@ -138,11 +111,19 @@ export async function trySyncRejectToHh(candidateId: string): Promise<boolean> {
     const token = await getValidToken(ctx.vac.companyId)
     if (!token) return false
 
-    const tpl = ctx.vac.aiProcessSettings.rejectMessage?.trim() || DEFAULT_REJECT_MESSAGE
-    const message = renderTemplate(tpl, {
-      name:    ctx.cand.name,
-      vacancy: ctx.vac.title,
-    })
+    // customMessage (Заход 3) — уже отрендеренный текст. Если задан, шлём его
+    // вместо generic rejectMessage вакансии (факторные тексты стоп-факторов).
+    let message: string
+    if (typeof customMessage === "string" && customMessage.trim().length > 0) {
+      message = customMessage
+    } else {
+      const { firstName } = await getCandidateFirstName(ctx.cand.id)
+      const tpl = ctx.vac.aiProcessSettings.rejectMessage?.trim() || DEFAULT_REJECT_MESSAGE
+      message = renderTemplate(tpl, {
+        name:    firstName,
+        vacancy: ctx.vac.title,
+      })
+    }
 
     await changeNegotiationState(token.accessToken, ctx.hh.hhResponseId, "discard", message)
     console.info(`[hh:sync-stage] reject → ${ctx.hh.hhResponseId} (cand ${ctx.cand.id})`)
@@ -170,9 +151,10 @@ export async function trySyncInviteToHh(candidateId: string): Promise<boolean> {
     const demoToken = ctx.cand.shortId ?? ctx.cand.id
     const demoLink  = `https://company24.pro/demo/${demoToken}`
 
+    const { firstName } = await getCandidateFirstName(ctx.cand.id)
     const tpl = ctx.vac.aiProcessSettings.inviteMessage?.trim() || DEFAULT_INVITE_MESSAGE
     let message = renderTemplate(tpl, {
-      name:      ctx.cand.name,
+      name:      firstName,
       vacancy:   ctx.vac.title,
       demo_link: demoLink,
     })
@@ -186,6 +168,28 @@ export async function trySyncInviteToHh(candidateId: string): Promise<boolean> {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.warn(`[hh:sync-stage] invite failed for cand ${candidateId}: ${msg}`)
+    return false
+  }
+}
+
+/**
+ * Переводит отклик кандидата на hh в стадию «Тестовое задание» (коллекция
+ * hh `assessment`). Без сообщения в чат — текст с тест-ссылкой уходит
+ * отдельным сообщением (test-invite). Вызывается при отправке теста.
+ * Вернёт false, если кандидат не привязан к hh-отклику или нет токена.
+ */
+export async function trySyncTestStageToHh(candidateId: string): Promise<boolean> {
+  try {
+    const ctx = await loadContext(candidateId)
+    if (!ctx) return false
+    const token = await getValidToken(ctx.vac.companyId)
+    if (!token) return false
+    await changeNegotiationState(token.accessToken, ctx.hh.hhResponseId, "assessment")
+    console.info(`[hh:sync-stage] assessment (тест) → ${ctx.hh.hhResponseId} (cand ${ctx.cand.id})`)
+    return true
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.warn(`[hh:sync-stage] assessment failed for cand ${candidateId}: ${msg}`)
     return false
   }
 }
@@ -211,8 +215,17 @@ export async function trySyncStageToHh(candidateId: string, newStage: string): P
     const ctx = await loadContext(candidateId)
     if (!ctx) return false
 
+    // Company-level дефолты hh-маппинга (для вакансий без кастомной воронки).
+    const [companyRow] = await db
+      .select({ hiringDefaults: companies.hiringDefaultsJson })
+      .from(companies)
+      .where(eq(companies.id, ctx.vac.companyId))
+      .limit(1)
+    const companyHhActions = (companyRow?.hiringDefaults as { stageHhActions?: Record<string, "invitation" | "discard" | "assessment" | null> } | null)?.stageHhActions
+
     const pipeline = parsePipeline(
       (ctx.vac.descriptionJson as Record<string, unknown> | null)?.pipeline,
+      companyHhActions,
     )
     const action = getStageHhAction(newStage as StageSlug, pipeline)
     if (!action) return false
@@ -220,14 +233,22 @@ export async function trySyncStageToHh(candidateId: string, newStage: string): P
     const token = await getValidToken(ctx.vac.companyId)
     if (!token) return false
 
+    const { firstName } = await getCandidateFirstName(ctx.cand.id)
+
     if (action === "discard") {
       const tpl = ctx.vac.aiProcessSettings.rejectMessage?.trim() || DEFAULT_REJECT_MESSAGE
       const message = renderTemplate(tpl, {
-        name:    ctx.cand.name,
+        name:    firstName,
         vacancy: ctx.vac.title,
       })
       await changeNegotiationState(token.accessToken, ctx.hh.hhResponseId, "discard", message)
       console.info(`[hh:sync-stage] discard (${newStage}) → ${ctx.hh.hhResponseId} (cand ${ctx.cand.id})`)
+      return true
+    }
+
+    if (action === "assessment") {
+      await changeNegotiationState(token.accessToken, ctx.hh.hhResponseId, "assessment")
+      console.info(`[hh:sync-stage] assessment (${newStage}) → ${ctx.hh.hhResponseId} (cand ${ctx.cand.id})`)
       return true
     }
 
@@ -236,7 +257,7 @@ export async function trySyncStageToHh(candidateId: string, newStage: string): P
     const demoLink  = `https://company24.pro/demo/${demoToken}`
     const tpl = ctx.vac.aiProcessSettings.inviteMessage?.trim() || DEFAULT_INVITE_MESSAGE
     let message = renderTemplate(tpl, {
-      name:      ctx.cand.name,
+      name:      firstName,
       vacancy:   ctx.vac.title,
       demo_link: demoLink,
     })

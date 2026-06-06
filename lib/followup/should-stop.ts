@@ -1,10 +1,12 @@
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, followUpCampaigns } from "@/lib/db/schema"
-import { STOP_WORDS, matchStopWord } from "@/lib/followup/stop-words"
+import { STOP_WORDS, matchStopWord, matchStopWordList } from "@/lib/followup/stop-words"
+import { isBlockEnabled } from "@/lib/funnel-builder/runtime"
 
 export type StopReason =
   | "vacancy_closed"
+  | "vacancy_paused"
   | "demo_completed"
   | "candidate_refused"
   | "campaign_disabled"
@@ -45,12 +47,20 @@ export async function shouldStopFollowUp(
     return { stop: true, reason: "auto_processing_stopped" }
   }
 
+  // Статус вакансии. paused («Приостановлена») останавливает дожим ВСЕГДА —
+  // это явная команда HR притормозить всю работу по вакансии (в т.ч. дожимы
+  // уже откликнувшихся). Закрытие/архив/корзина — стоп при stopOnVacancyClosed.
+  // ВАЖНО: архив на hh.ru сюда НЕ относится — он не меняет локальный status,
+  // и дожим уже откликнувшихся продолжается (объявление истекло ≠ найм закрыт).
+  const [vacancy] = await db
+    .select({ status: vacancies.status, deletedAt: vacancies.deletedAt })
+    .from(vacancies)
+    .where(eq(vacancies.id, candidate.vacancyId))
+    .limit(1)
+  if (vacancy?.status === "paused") {
+    return { stop: true, reason: "vacancy_paused" }
+  }
   if (campaign.stopOnVacancyClosed) {
-    const [vacancy] = await db
-      .select({ status: vacancies.status, deletedAt: vacancies.deletedAt })
-      .from(vacancies)
-      .where(eq(vacancies.id, candidate.vacancyId))
-      .limit(1)
     if (!vacancy || vacancy.status === "closed" || vacancy.status === "archived" || vacancy.deletedAt) {
       return { stop: true, reason: "vacancy_closed" }
     }
@@ -63,6 +73,10 @@ export async function shouldStopFollowUp(
   // decision, anketa_filled, ai_screening, interview, final_decision, scheduled, interviewed, hired.
   const ADVANCED_STAGES = new Set([
     "decision", "anketa_filled", "ai_screening",
+    // Тест-стадии: кандидату отправлен/пройден тест — он продвинулся дальше
+    // демо, дожим больше не нужен (иначе кандидат с тестом получает дожим —
+    // баг C1, закрыт 01.06.2026 вместе с мини-фичей рассылки теста).
+    "test_task_sent", "test_task_done", "test_passed", "test_failed",
     "interview", "final_decision",
     "scheduled", "interviewed", "hired",
   ])
@@ -87,18 +101,50 @@ export async function shouldStopFollowUp(
   // элементам и извлекаем все доступные текстовые значения; matchStopWord
   // защищает от substring false-positive'ов (инцидент 04.05.2026).
   if (campaign.stopOnReply) {
+    // P0-22: тянем editable список из vacancies.stop_words_json. Если он
+    // пустой/невалидный — fallback на исторический matchStopWord (word-boundary),
+    // чтобы не потерять защиту при пустой колонке.
+    let vacancyStopWords: string[] | null = null
+    try {
+      const [vac] = await db
+        .select({
+          stopWordsJson:        vacancies.stopWordsJson,
+          aiProcessSettings:    vacancies.aiProcessSettings,
+          funnelRuntimeEnabled: vacancies.funnelRuntimeEnabled,
+          funnelConfigJson:     vacancies.funnelConfigJson,
+        })
+        .from(vacancies)
+        .where(eq(vacancies.id, candidate.vacancyId))
+        .limit(1)
+      // Funnel-флаг stop_words_chat: только явный false отключает КАСТОМНЫЙ
+      // список стоп-слов вакансии (undefined/отсутствует = включено).
+      // Жёстко закодированный baseline matchStopWord НЕ отключаем — это
+      // защита от нежелательного дожима (инцидент 04.05.2026).
+      // Phase 3: при funnelRuntimeEnabled источник — блок stop_words_chat.
+      const funnelFlag = (vac?.aiProcessSettings as { stopWordsChatEnabled?: boolean } | null)?.stopWordsChatEnabled
+      const stopWordsOn = isBlockEnabled(vac, "stop_words_chat", funnelFlag !== false)
+      if (stopWordsOn && Array.isArray(vac?.stopWordsJson) && vac.stopWordsJson.length > 0) {
+        vacancyStopWords = vac.stopWordsJson.filter((s): s is string => typeof s === "string")
+      }
+    } catch { /* silent — fallback ниже */ }
+
+    const matchAny = (text: string): boolean =>
+      vacancyStopWords
+        ? matchStopWordList(text, vacancyStopWords) !== null
+        : matchStopWord(text)
+
     const answers = candidate.anketaAnswers
     if (Array.isArray(answers)) {
       for (const item of answers) {
         if (!item || typeof item !== "object") continue
         const rawAnswer = (item as { answer?: unknown }).answer
         if (typeof rawAnswer === "string") {
-          if (matchStopWord(rawAnswer)) {
+          if (matchAny(rawAnswer)) {
             return { stop: true, reason: "candidate_refused" }
           }
         } else if (Array.isArray(rawAnswer)) {
           for (const v of rawAnswer) {
-            if (typeof v === "string" && matchStopWord(v)) {
+            if (typeof v === "string" && matchAny(v)) {
               return { stop: true, reason: "candidate_refused" }
             }
           }

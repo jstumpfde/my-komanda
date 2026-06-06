@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react"
 import { toast } from "sonner"
 import { useSidebar } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
-import { Sun, Moon, Coffee, PanelLeftClose, PanelLeft, Bell, Building2, CreditCard, Users, Plug, Clock, User, LogOut, Palette, ScrollText, ChevronDown, Loader2 } from "lucide-react"
+import { Sun, Moon, Coffee, PanelLeftClose, PanelLeft, Bell, Building2, CreditCard, Users, Plug, Clock, User, LogOut, Palette, ScrollText, Shield, ChevronDown, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -20,16 +20,24 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 // Компания → Профиль → Команда → Расписание → Уведомления → Интеграции →
 // Тариф и оплата → Брендинг. Админский «Юр. документы» прячется через
 // roles и идёт последним.
-const navItems: { href: string; label: string; icon: typeof Building2; roles?: UserRole[] }[] = [
-  { href: "/settings/company",       label: "Компания",    icon: Building2 },
-  { href: "/settings/profile",       label: "Профиль",     icon: User },
-  { href: "/settings/team",          label: "Команда",     icon: Users },
-  { href: "/settings/schedule",      label: "Расписание",  icon: Clock },
-  { href: "/settings/notifications", label: "Уведомления", icon: Bell },
-  { href: "/settings/integrations",  label: "Интеграции",  icon: Plug },
-  { href: "/settings/billing",       label: "Тариф и оплата", icon: CreditCard },
-  { href: "/settings/branding",      label: "Брендинг",    icon: Palette },
-  { href: "/settings/legal",         label: "Юр. документы", icon: ScrollText, roles: ["platform_admin"] },
+// IA-рефактор (D8): пункты сгруппированы в 4 раздела. Роуты не меняются.
+const GROUP_ORDER = ["Профиль и компания", "Интеграции", "Служебные"] as const
+type NavGroup = (typeof GROUP_ORDER)[number]
+// Компанийские настройки (Компания/Команда/Брендинг/Интеграции/Расписание/
+// Тариф/Юр.документы/Роли) редактирует только директор — отдаём их роли
+// ["platform_admin","director"]. Личные (Профиль, Уведомления) — всем.
+const COMPANY_ROLES: UserRole[] = ["platform_admin", "director"]
+const navItems: { href: string; label: string; icon: typeof Building2; roles?: UserRole[]; group: NavGroup }[] = [
+  { href: "/settings/company",       label: "Компания",       icon: Building2,  roles: COMPANY_ROLES, group: "Профиль и компания" },
+  { href: "/settings/profile",       label: "Профиль",        icon: User,       group: "Профиль и компания" },
+  { href: "/settings/team",          label: "Команда",        icon: Users,      roles: COMPANY_ROLES, group: "Профиль и компания" },
+  { href: "/settings/branding",      label: "Брендинг",       icon: Palette,    roles: COMPANY_ROLES, group: "Профиль и компания" },
+  { href: "/settings/integrations",  label: "Интеграции",     icon: Plug,       roles: COMPANY_ROLES, group: "Интеграции" },
+  { href: "/settings/schedule",      label: "Расписание",     icon: Clock,      roles: COMPANY_ROLES, group: "Профиль и компания" },
+  { href: "/settings/notifications", label: "Уведомления",    icon: Bell,       group: "Служебные" },
+  { href: "/settings/billing",       label: "Тариф и оплата", icon: CreditCard, roles: COMPANY_ROLES, group: "Служебные" },
+  { href: "/settings/legal",         label: "Юр. документы",  icon: ScrollText, roles: COMPANY_ROLES, group: "Служебные" },
+  { href: "/settings/roles",         label: "Роли и доступ",  icon: Shield,     roles: COMPANY_ROLES, group: "Служебные" },
 ]
 
 const NOTIFICATIONS = [
@@ -176,10 +184,7 @@ export function SettingsHeader() {
                   </div>
                 </div>
                 <DropdownMenuItem className="text-sm cursor-pointer" asChild>
-                  <Link href="/settings/company"><Building2 className="w-4 h-4 mr-2" />Компания</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem className="text-sm cursor-pointer" asChild>
-                  <Link href="/settings/profile"><User className="w-4 h-4 mr-2" />Профиль</Link>
+                  <Link href="/settings/company"><Building2 className="w-4 h-4 mr-2" />Настройки компании</Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 {mounted && (
@@ -214,24 +219,35 @@ export function SettingsHeader() {
         </div>
       </div>
 
-      {/* Row 2: Settings tabs */}
+      {/* Row 2: Settings tabs — IA D8: 4 раздела с метками групп */}
       <div className="border-b border-border overflow-x-auto">
-        <nav className="flex items-center gap-0.5" style={{ paddingLeft: 56, paddingRight: 56 }}>
-          {visibleNav.map(({ href, label, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-3 text-sm font-medium whitespace-nowrap transition-colors border-b-2",
-                pathname === href
-                  ? "text-primary border-primary"
-                  : "text-muted-foreground hover:text-foreground border-transparent"
-              )}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              {label}
-            </Link>
-          ))}
+        <nav className="flex items-end gap-x-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+          {GROUP_ORDER.map((g) => {
+            const items = visibleNav.filter((i) => i.group === g)
+            if (items.length === 0) return null
+            return (
+              <div key={g} className="flex flex-col">
+                <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/50 pl-3 pt-2">{g}</span>
+                <div className="flex items-center gap-0.5">
+                  {items.map(({ href, label, icon: Icon }) => (
+                    <Link
+                      key={href}
+                      href={href}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2",
+                        pathname === href
+                          ? "text-primary border-primary"
+                          : "text-muted-foreground hover:text-foreground border-transparent"
+                      )}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      {label}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
         </nav>
       </div>
     </header>

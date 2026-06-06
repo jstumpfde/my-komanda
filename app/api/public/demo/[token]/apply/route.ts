@@ -5,6 +5,10 @@ import { db } from "@/lib/db"
 import { candidates, demos, hhCandidates } from "@/lib/db/schema"
 import { generateCandidateShortId, isShortId } from "@/lib/short-id"
 import { normalizePhone, normalizeEmail } from "@/lib/candidates/normalize-contacts"
+// #19: scheduleAnketaConfirmation больше не вызываем — функция оставлена
+// для совместимости с уже запланированными follow_up_messages, но новые
+// записи теперь идут только через scheduleAnketaAutoReply (таб «Воронка»).
+import { scheduleAnketaAutoReply } from "@/lib/messaging/anketa-auto-reply"
 
 type AnketaPayload = {
   telegram?: string
@@ -133,6 +137,17 @@ export async function POST(
 
       await db.update(candidates).set(updates).where(eq(candidates.id, existing.id))
 
+      // #19: scheduleAnketaConfirmation удалён — старый блок «Подтверждение
+      // после анкеты» в табе «Сообщения» больше нет. Единственный канал
+      // авто-сообщения после анкеты — scheduleAnketaAutoReply (ниже),
+      // настраивается в табе «Воронка» через PostDemoSettings.
+      // ТЗ-3 Ч.1: автоответ с тестовым заданием — отдельный одиночный
+      // touch (branch=anketa_auto_reply). Конфиг в post_demo_settings.
+      void scheduleAnketaAutoReply({
+        candidateId: existing.id,
+        vacancyId:   existing.vacancyId,
+      })
+
       return NextResponse.json({ success: true, id: existing.id })
     }
 
@@ -141,6 +156,7 @@ export async function POST(
     const [demo] = await db
       .select({ vacancyId: demos.vacancyId })
       .from(demos)
+      .where(eq(demos.kind, "demo"))
       .limit(1)
 
     if (!demo?.vacancyId) {
@@ -203,6 +219,16 @@ export async function POST(
       }
 
       await db.update(candidates).set(updates).where(eq(candidates.id, dup.id))
+
+      // ТЗ-3 Ч.1: автоответ и в dedup-ветке тоже (раньше пропускался).
+      // Совпадает с symmetric-fix к scheduleAnketaConfirmation выше.
+      if (!FINAL_STAGES.has(currentStage) && ANKETA_ELIGIBLE.has(currentStage)) {
+        void scheduleAnketaAutoReply({
+          candidateId: dup.id,
+          vacancyId:   demo.vacancyId,
+        })
+      }
+
       return NextResponse.json({ success: true, id: dup.id, deduplicated: true })
     }
 

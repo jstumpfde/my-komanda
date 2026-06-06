@@ -12,11 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth"
 import {
-  Briefcase, Users, UserCheck, Clock, TrendingUp, Plus, ChevronRight,
-  Sparkles, Activity, Calendar, BarChart3,
+  Briefcase, Users, UserCheck, TrendingUp, Plus, ChevronRight,
+  Sparkles, Activity, Calendar,
 } from "lucide-react"
 import { CandidatesProgressMiniTable } from "@/components/candidates/candidates-progress-mini-table"
-import { Greeting } from "./_components/greeting"
+import { AwaitingReviewBanner } from "./_components/awaiting-review-banner"
 
 // ─── Colors ─────────────────────────────────────────────────────────────────
 
@@ -74,6 +74,7 @@ interface VacancyRow {
   createdAt: string
   candidateCount: number
   decisionCount: number
+  inProgressCount?: number
 }
 
 interface DashboardStats {
@@ -94,10 +95,19 @@ interface DashboardStats {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
+// #31: time-aware приветствие в Москве, единый источник правды.
+// 4 варианта: ночь (0-4) / утро (5-11) / день (12-17) / вечер (18-23).
 function getGreeting(): string {
-  const h = new Date().getHours()
-  if (h < 12) return "Доброе утро"
-  if (h < 18) return "Добрый день"
+  const parts = new Intl.DateTimeFormat("ru-RU", {
+    timeZone: "Europe/Moscow",
+    hour: "numeric",
+    hour12: false,
+  }).formatToParts(new Date())
+  const hourStr = parts.find(p => p.type === "hour")?.value ?? "0"
+  const h = (parseInt(hourStr, 10) || 0) % 24
+  if (h <= 4) return "Доброй ночи"
+  if (h <= 11) return "Доброе утро"
+  if (h <= 17) return "Добрый день"
   return "Добрый вечер"
 }
 
@@ -129,22 +139,6 @@ function ComingSoon({ children }: { children: ReactNode }) {
   )
 }
 
-// ─── KPI Pill ───────────────────────────────────────────────────────────────
-
-function KpiPill({ icon: Icon, label, value }: { icon: ElementType; label: string; value: number | null }) {
-  return (
-    <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 inline-flex items-center gap-3 w-fit">
-      <div className="w-10 h-10 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center shrink-0">
-        <Icon className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-      </div>
-      <div className="flex flex-col">
-        <span className="text-xs text-muted-foreground leading-none">{label}</span>
-        <span className="text-2xl font-bold leading-tight mt-1">{value === null ? "…" : value}</span>
-      </div>
-    </div>
-  )
-}
-
 // ─── Color metric card ──────────────────────────────────────────────────────
 
 function Metric({
@@ -166,15 +160,63 @@ function Metric({
 
 // ─── Page ───────────────────────────────────────────────────────────────────
 
+// #47: ключ для localStorage. Сохраняем { name, savedAt } чтобы при первом
+// рендере страницы (до прихода session) сразу показать имя из прошлого захода.
+const HR_USER_CACHE_KEY = "hr_user_cache"
+
+interface HrUserCache {
+  name: string
+  savedAt: number
+}
+
+function readHrUserCache(): HrUserCache | null {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = localStorage.getItem(HR_USER_CACHE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<HrUserCache>
+    if (typeof parsed.name === "string" && parsed.name.length > 0) {
+      return { name: parsed.name, savedAt: parsed.savedAt ?? 0 }
+    }
+  } catch {}
+  return null
+}
+
 function DashboardContent() {
   const router = useRouter()
   const { user } = useAuth()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loaded, setLoaded] = useState(false)
+  // #30: фильтр по вакансии. "all" = показывать всё (default).
+  const [selectedVacancyId, setSelectedVacancyId] = useState<string>("all")
+  // #47: имя из localStorage для мгновенного первого рендера. Заменяется на
+  // user.name как только сессия подтянулась.
+  const [cachedName, setCachedName] = useState<string>("")
+
+  useEffect(() => {
+    const c = readHrUserCache()
+    if (c) setCachedName(c.name)
+  }, [])
+
+  // #47: когда сессия загрузилась — сохранить актуальное имя в localStorage,
+  // чтобы при следующем заходе оно было сразу.
+  useEffect(() => {
+    if (!user.name) return
+    if (typeof window === "undefined") return
+    try {
+      const current = readHrUserCache()
+      if (current?.name !== user.name) {
+        localStorage.setItem(HR_USER_CACHE_KEY, JSON.stringify({ name: user.name, savedAt: Date.now() }))
+      }
+    } catch {}
+  }, [user.name])
 
   useEffect(() => {
     let cancelled = false
-    fetch("/api/modules/hr/dashboard/stats")
+    // #49: при изменении фильтра — перезагружаем счётчики с ?vacancyId=
+    const qs = selectedVacancyId !== "all" ? `?vacancyId=${encodeURIComponent(selectedVacancyId)}` : ""
+    setLoaded(false)
+    fetch(`/api/modules/hr/dashboard/stats${qs}`)
       .then(r => (r.ok ? r.json() : null))
       .then((d: DashboardStats | null) => {
         if (cancelled) return
@@ -183,11 +225,21 @@ function DashboardContent() {
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoaded(true) })
     return () => { cancelled = true }
-  }, [])
+  }, [selectedVacancyId])
+
+  // #47: эффективное имя — реальное user.name из сессии, иначе из кеша.
+  const effectiveName = user.name || cachedName
 
   const kpi = stats?.kpi
   const vacancies = stats?.vacancies ?? []
-  const funnelTotals = stats?.funnel?.totals ?? {}
+  // #30: если выбрана конкретная вакансия — используем её срез из byVacancy,
+  // иначе общий totals.
+  const funnelTotals = (() => {
+    if (selectedVacancyId !== "all" && stats?.funnel?.byVacancy?.[selectedVacancyId]) {
+      return stats.funnel.byVacancy[selectedVacancyId]
+    }
+    return stats?.funnel?.totals ?? {}
+  })()
 
   const funnel = FUNNEL_STAGES.map(s => ({
     label: s.label,
@@ -199,7 +251,9 @@ function DashboardContent() {
 
   // Header subtitle
   const headerSubtitle = (() => {
-    if (!loaded) return "Загрузка данных…"
+    // #29: не показываем «Загрузка» — оставляем подзаголовок пустым до
+    // прихода данных, чтобы первый рендер был спокойным.
+    if (!loaded) return ""
     if (!kpi) return "Не удалось загрузить данные"
     const today = kpi.candidatesToday ?? 0
     const inWork = kpi.candidatesInWork ?? 0
@@ -222,86 +276,76 @@ function DashboardContent() {
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-6 space-y-5" style={{ paddingLeft: 56, paddingRight: 56 }}>
 
-            {/* ═══ Header ═══ */}
+            {/* ═══ Header ═══
+                #29: имя из SSR-сессии. Если пустое (первый mount) — показываем
+                просто «{приветствие}!» без имени, чтобы не пугать «Загрузка».
+                #31: убран дублирующий <Greeting /> ниже (он рендерил то же
+                самое второй раз).
+                #32: убран фильтр «Этот месяц» — Юрий говорит непонятно что
+                он фильтрует. Фильтр «Все вакансии» теперь стоит в правом
+                верхнем углу один, как просили. */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h1 className="text-xl font-semibold">{getGreeting()}, {user.name.split(" ")[0]}!</h1>
+                <h1 className="text-lg font-semibold">
+                  {effectiveName
+                    ? `${getGreeting()}, ${effectiveName.split(" ")[0]}!`
+                    : `${getGreeting()}!`}
+                </h1>
                 <p className="text-sm text-muted-foreground" suppressHydrationWarning>{getDateString()}</p>
-                <p className="text-sm text-muted-foreground mt-0.5">{headerSubtitle}</p>
+                {headerSubtitle && (
+                  <p className="text-sm text-muted-foreground mt-0.5">{headerSubtitle}</p>
+                )}
               </div>
               <div className="flex items-center gap-2">
-                <Select disabled value="all">
-                  <SelectTrigger className="h-8 w-[180px] text-xs" title="Скоро">
+                {/* #30: активирован фильтр вакансий. По умолчанию "all" —
+                    показываем все. При выборе одной — фильтруем клиентскую
+                    voronku/active-vacancies по vacancyId. */}
+                <Select value={selectedVacancyId} onValueChange={setSelectedVacancyId}>
+                  <SelectTrigger className="h-8 w-full sm:w-[200px] text-xs">
                     <SelectValue placeholder="Все вакансии" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Все вакансии</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select disabled value="month">
-                  <SelectTrigger className="h-8 w-[140px] text-xs" title="Скоро">
-                    <SelectValue placeholder="Период" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="month">Этот месяц</SelectItem>
+                    {vacancies.map(v => (
+                      <SelectItem key={v.id} value={v.id} className="text-xs">
+                        {v.title}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
-            {/* ═══ Greeting ═══ */}
-            <Greeting />
+            {/* ═══ Очередь HR (P0-8) ═══ */}
+            <AwaitingReviewBanner />
 
-            {/* ═══ KPI pills ═══ */}
-            <div className="flex flex-wrap gap-3">
-              <KpiPill icon={Briefcase} label="Активные вакансии" value={kpi?.activeVacancies ?? null} />
-              <KpiPill icon={Users} label="Кандидатов сегодня" value={kpi?.candidatesToday ?? null} />
-              <KpiPill icon={Users} label="Кандидатов в работе" value={kpi?.candidatesInWork ?? null} />
-            </div>
-
-            {/* ═══ AI Assistant — Скоро ═══ */}
-            <ComingSoon>
-              <div className="rounded-lg border bg-gradient-to-br from-[#EEEDFE] to-[#E6F1FB] dark:from-[#1a1830] dark:to-[#172030] p-5">
-                <div className="flex items-center gap-2 mb-3">
-                  <Sparkles className="w-4 h-4" style={{ color: C.purple }} />
-                  <h2 className="text-sm font-semibold">AI-ассистент</h2>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-                  {[1, 2, 3, 4].map(i => (
-                    <div key={i} className="bg-white dark:bg-gray-900 rounded-md p-3 h-20" />
-                  ))}
-                </div>
-              </div>
-            </ComingSoon>
-
-            {/* ═══ 5 Metrics ═══ */}
+            {/* ═══ KPI pills — #50/#51 ═══
+                Раньше было 2 ряда (KpiPill + Metric цветной), путано.
+                Юрий: один ряд понятных метрик, реагируют на фильтр вакансии.
+                «Кандидатов сегодня» → «Откликов сегодня» (это hh-отклики
+                за день). «Кандидатов в работе» → «Прошли демо» (count
+                stage IN demo_opened+, см. /api/.../stats #49). Убраны
+                «Ср. время закрытия» (Скоро-плейсхолдер) и «Всего
+                кандидатов» (бесполезно при наличии «Прошли демо»). */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-              <Metric icon={Briefcase} label="Активных вакансий" value={kpi?.activeVacancies ?? "—"} bg="bg-emerald-400" />
-              <Metric icon={Users} label="Всего кандидатов" value={kpi?.totalCandidates ?? "—"} bg="bg-blue-400" />
-              <Metric icon={UserCheck} label="Нанято за месяц" value={kpi?.hiredThisMonth ?? "—"} bg="bg-violet-600" />
-              <Metric icon={Clock} label="Ср. время закрытия" value="—" trend="Скоро" bg="bg-orange-400" />
-              <Metric icon={TrendingUp} label="Конверсия воронки" value={kpi ? `${kpi.conversionRate}%` : "—"} bg="bg-indigo-400" />
+              <Metric icon={Briefcase} label="Активных вакансий" value={kpi?.activeVacancies ?? "—"} bg="bg-emerald-500" />
+              <Metric icon={Users} label="Откликов сегодня" value={kpi?.candidatesToday ?? "—"} bg="bg-blue-500" />
+              <Metric icon={UserCheck} label="Прошли демо" value={kpi?.candidatesInWork ?? "—"} bg="bg-violet-500" />
+              <Metric icon={Activity} label="Нанято за месяц" value={kpi?.hiredThisMonth ?? "—"} bg="bg-orange-500" />
+              <Metric icon={TrendingUp} label="Конверсия воронки" value={kpi ? `${kpi.conversionRate}%` : "—"} bg="bg-indigo-500" />
             </div>
 
-            {/* ═══ Live progress widget ═══ */}
-            <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <Activity className="w-4 h-4" style={{ color: C.green }} />
-                  Прогресс кандидатов сейчас
-                </h3>
-                <Link
-                  href="/hr/candidates"
-                  className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-                >
-                  Все <ChevronRight className="w-3 h-3" />
-                </Link>
-              </div>
-              <CandidatesProgressMiniTable limit={5} />
-            </div>
+            {/* ═══ AI-ассистент — #33: активирован SQL-инсайтами ═══ */}
+            <AiInsights selectedVacancyId={selectedVacancyId} />
 
-            {/* ═══ Funnel + Active Vacancies ═══ */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* ═══ Live progress widget — #52: раскрывающийся ═══ */}
+            <ProgressWidget selectedVacancyId={selectedVacancyId} />
+
+            {/* ═══ Funnel + Active Vacancies ═══
+                #49: блок «Активные вакансии» справа не показываем, когда
+                выбрана конкретная — иначе там единственная карточка-дубль.
+                Воронка остаётся (она уже фильтруется). */}
+            <div className={cn("grid grid-cols-1 gap-5", selectedVacancyId === "all" && "lg:grid-cols-2")}>
               {/* Funnel */}
               <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
                 <h3 className="text-lg font-semibold mb-4">Воронка найма</h3>
@@ -338,7 +382,8 @@ function DashboardContent() {
                 )}
               </div>
 
-              {/* Active Vacancies */}
+              {/* Active Vacancies — #49: скрываем когда выбрана одна вакансия */}
+              {selectedVacancyId === "all" && (
               <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold">Активные вакансии</h3>
@@ -371,10 +416,14 @@ function DashboardContent() {
                           </p>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
-                          <Badge variant="secondary" className="text-[10px] h-5">{v.candidateCount} откл.</Badge>
-                          {v.decisionCount > 0 && (
-                            <Badge className="text-[10px] h-5 bg-emerald-100 text-emerald-700 border-0">
-                              {v.decisionCount} фин.
+                          {/* #34: «откл./фин.» переименовано в более понятное
+                              «откликов · в работе». В работе = stage IN
+                              (primary_contact..offer_sent) — кандидат активно
+                              в воронке. */}
+                          <Badge variant="secondary" className="text-[10px] h-5">{v.candidateCount} откликов</Badge>
+                          {(v.inProgressCount ?? 0) > 0 && (
+                            <Badge className="text-[10px] h-5 bg-blue-100 text-blue-700 border-0">
+                              {v.inProgressCount} в работе
                             </Badge>
                           )}
                         </div>
@@ -383,17 +432,28 @@ function DashboardContent() {
                   </div>
                 )}
               </div>
+              )}
             </div>
 
-            {/* ═══ Efficiency + Events ═══ */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-              {/* Efficiency — реальное */}
+            {/* ═══ Efficiency + Events ═══
+                #49: «Прогресс вакансий» скрываем при выборе одной — это
+                кросс-вакансионный обзор, теряет смысл с фильтром. */}
+            <div className={cn("grid grid-cols-1 gap-5", selectedVacancyId === "all" && "lg:grid-cols-2")}>
+              {/* #35: блок «Эффективность по вакансиям» переименован в
+                  «Прогресс вакансий». Раньше показывалось «done/total» с
+                  %% (например 6/432 = 1.4% для свежей вакансии — выглядело
+                  как провал, хотя в первые недели это норма). Теперь —
+                  «inProgress / total» без процентов: «X в работе из Y
+                  откликов». Бар показывает долю «в работе» от total —
+                  это нейтральная метрика, без оценки.
+                  #49: скрываем при фильтре по конкретной вакансии. */}
+              {selectedVacancyId === "all" && (
               <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
                 <div className="flex items-center justify-between mb-1">
-                  <h3 className="text-lg font-semibold">Эффективность по вакансиям</h3>
+                  <h3 className="text-lg font-semibold">Прогресс вакансий</h3>
                 </div>
                 <p className="text-xs text-muted-foreground mb-4">
-                  Сколько откликов дошло до этапа «Решение» / всего откликов
+                  Сколько кандидатов в работе по каждой вакансии
                 </p>
                 {!loaded ? (
                   <div className="h-40" />
@@ -405,10 +465,10 @@ function DashboardContent() {
                   <div className="space-y-4">
                     {vacancies.slice(0, 5).map(v => {
                       const total = v.candidateCount || 0
-                      const done = v.decisionCount || 0
-                      const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0
-                      const barColor = pct >= 50 ? C.green : pct >= 20 ? C.blue : C.orange
-                      const tooltip = `Дошло до решения: ${done} из ${total} откликов${total > 0 ? ` (${pct}%)` : ""}`
+                      const inWork = v.inProgressCount ?? 0
+                      const barPct = total > 0 ? Math.min(100, Math.round((inWork / total) * 100)) : 0
+                      const barColor = inWork === 0 ? C.orange : inWork >= 5 ? C.green : C.blue
+                      const tooltip = `${inWork} в работе из ${total} откликов`
                       return (
                         <div key={v.id}>
                           <div className="flex items-center justify-between mb-1.5 gap-2">
@@ -417,13 +477,15 @@ function DashboardContent() {
                               className="text-[11px] text-muted-foreground tabular-nums whitespace-nowrap shrink-0"
                               title={tooltip}
                             >
-                              {done}/{total} <span className="text-muted-foreground/70">решений</span>
+                              <span className="font-medium text-foreground">{inWork}</span>
+                              <span className="text-muted-foreground/70"> в работе </span>
+                              / {total} <span className="text-muted-foreground/70">откликов</span>
                             </span>
                           </div>
                           <div className="h-2.5 bg-muted/30 rounded-full overflow-hidden" title={tooltip}>
                             <div
                               className="h-full rounded-full transition-all"
-                              style={{ width: `${pct}%`, backgroundColor: barColor }}
+                              style={{ width: `${barPct}%`, backgroundColor: barColor }}
                             />
                           </div>
                         </div>
@@ -432,6 +494,7 @@ function DashboardContent() {
                   </div>
                 )}
               </div>
+              )}
 
               {/* Events — Скоро */}
               <ComingSoon>
@@ -449,50 +512,11 @@ function DashboardContent() {
               </ComingSoon>
             </div>
 
-            {/* ═══ Goals + Sources — Скоро ═══ */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-              <ComingSoon>
-                <div className="border rounded-xl shadow-sm p-6">
-                  <h3 className="text-lg font-semibold mb-4">Цели месяца</h3>
-                  <div className="space-y-4">
-                    {[1, 2, 3, 4].map(i => (
-                      <div key={i}>
-                        <div className="h-3 bg-muted/30 rounded w-1/2 mb-2" />
-                        <div className="h-2.5 bg-muted/30 rounded-full" />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </ComingSoon>
-
-              <ComingSoon>
-                <div className="border rounded-xl shadow-sm p-6">
-                  <h3 className="text-lg font-semibold mb-4">Источники откликов</h3>
-                  <div className="flex items-center gap-6">
-                    <div className="w-[140px] h-[140px] shrink-0 rounded-full bg-muted/30" />
-                    <div className="space-y-2 flex-1">
-                      {[1, 2, 3, 4].map(i => (
-                        <div key={i} className="flex items-center gap-2">
-                          <div className="w-2.5 h-2.5 rounded-full bg-muted/50" />
-                          <div className="h-3 bg-muted/30 rounded flex-1" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </ComingSoon>
-            </div>
-
-            {/* ═══ Dynamics — Скоро ═══ */}
-            <ComingSoon>
-              <div className="border rounded-xl shadow-sm p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold">Динамика за период</h3>
-                  <BarChart3 className="w-4 h-4 text-muted-foreground" />
-                </div>
-                <div className="h-[250px] bg-muted/20 rounded-md" />
-              </div>
-            </ComingSoon>
+            {/* #36: блоки «Цели месяца», «Источники откликов», «Динамика
+                за период» были placeholder'ами «Скоро» — удалены, чтобы
+                HR не видел неработающий шум на дашборде. Когда виджеты
+                будут готовы — вернутся через систему «Добавить виджет»
+                (отдельная будущая задача). */}
 
           </div>
         </main>
@@ -503,4 +527,105 @@ function DashboardContent() {
 
 export default function HRDashboardPage() {
   return <DashboardContent />
+}
+
+// ─── Прогресс кандидатов сейчас — #52 ─────────────────────────────────────
+// По умолчанию 5 строк. Кнопка «Показать все» раскрывает до 20.
+// Фильтр vacancyId передаётся из шапки (#49).
+function ProgressWidget({ selectedVacancyId }: { selectedVacancyId: string }) {
+  const [expanded, setExpanded] = useState(false)
+  return (
+    <div className="border rounded-xl shadow-sm hover:shadow-md transition-shadow p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold flex items-center gap-2">
+          <Activity className="w-4 h-4" style={{ color: C.green }} />
+          Прогресс кандидатов сейчас
+        </h3>
+        <Link
+          href="/hr/candidates"
+          className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+        >
+          Все <ChevronRight className="w-3 h-3" />
+        </Link>
+      </div>
+      <CandidatesProgressMiniTable
+        limit={5}
+        vacancyId={selectedVacancyId}
+        expanded={expanded}
+        maxExpanded={20}
+      />
+      <div className="mt-3 flex justify-center">
+        <button
+          type="button"
+          onClick={() => setExpanded(v => !v)}
+          className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors px-3 py-1 rounded-md hover:bg-muted/40"
+        >
+          {expanded ? "Свернуть" : "Показать все"}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// #33: AI-ассистент — 4 карточки с SQL-инсайтами из БД (без LLM-вызовов).
+// Endpoint /api/modules/hr/dashboard/ai-insights. selectedVacancyId сейчас
+// игнорируется на сервере (для будущего расширения).
+interface AiInsight {
+  key:         string
+  title:       string
+  value:       string
+  description: string
+  link:        string | null
+}
+
+function AiInsights({ selectedVacancyId }: { selectedVacancyId: string }) {
+  const [insights, setInsights] = useState<AiInsight[] | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    // #49: фильтр инсайтов по выбранной вакансии
+    const qs = selectedVacancyId !== "all" ? `?vacancyId=${encodeURIComponent(selectedVacancyId)}` : ""
+    setInsights(null)
+    fetch(`/api/modules/hr/dashboard/ai-insights${qs}`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { insights?: AiInsight[] } | null) => {
+        if (cancelled) return
+        if (d?.insights && Array.isArray(d.insights)) setInsights(d.insights)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [selectedVacancyId])
+
+  return (
+    <div className="rounded-lg border bg-gradient-to-br from-[#EEEDFE] to-[#E6F1FB] dark:from-[#1a1830] dark:to-[#172030] p-5">
+      <div className="flex items-center gap-2 mb-3">
+        <Sparkles className="w-4 h-4" style={{ color: C.purple }} />
+        <h2 className="text-sm font-semibold">AI-ассистент</h2>
+        <span className="text-[10px] text-muted-foreground">инсайты из ваших данных</span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+        {!insights ? (
+          [1, 2, 3, 4].map(i => (
+            <div key={i} className="bg-white dark:bg-gray-900 rounded-md p-3 h-20 animate-pulse" />
+          ))
+        ) : (
+          insights.map(ins => {
+            const card = (
+              <div className="bg-white dark:bg-gray-900 rounded-md p-3 h-full flex flex-col">
+                <p className="text-[11px] text-muted-foreground">{ins.title}</p>
+                <p className="text-xl font-bold mt-0.5">{ins.value}</p>
+                <p className="text-[11px] text-muted-foreground mt-auto line-clamp-2">{ins.description}</p>
+              </div>
+            )
+            return ins.link ? (
+              <Link key={ins.key} href={ins.link} className="hover:scale-[1.02] transition-transform">
+                {card}
+              </Link>
+            ) : (
+              <div key={ins.key}>{card}</div>
+            )
+          })
+        )}
+      </div>
+    </div>
+  )
 }

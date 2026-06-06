@@ -10,9 +10,13 @@ async function getOwnedDemo(demoId: string, companyId: string) {
     .select({
       id: demos.id,
       vacancyId: demos.vacancyId,
+      kind: demos.kind,
       title: demos.title,
       status: demos.status,
       lessonsJson: demos.lessonsJson,
+      postDemoSettings: demos.postDemoSettings,
+      sortOrder: demos.sortOrder,
+      contentType: demos.contentType,
       createdAt: demos.createdAt,
       updatedAt: demos.updatedAt,
     })
@@ -60,6 +64,9 @@ export async function PUT(
       title?: unknown
       status?: unknown
       lessons_json?: unknown
+      post_demo_settings?: unknown
+      content_type?: unknown
+      sort_order?: unknown
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -74,6 +81,22 @@ export async function PUT(
     if (Array.isArray(body.lessons_json)) {
       updates.lessonsJson = body.lessons_json
     }
+    // Этап 2.6: настройки блока «Тестовое задание» (и пр.) — мерджим с
+    // существующими, чтобы частичный PUT не затирал чужие ключи postDemoSettings.
+    if (body.post_demo_settings && typeof body.post_demo_settings === "object" && !Array.isArray(body.post_demo_settings)) {
+      const prev = (existing.postDemoSettings && typeof existing.postDemoSettings === "object")
+        ? existing.postDemoSettings as Record<string, unknown>
+        : {}
+      updates.postDemoSettings = { ...prev, ...(body.post_demo_settings as Record<string, unknown>) }
+    }
+    // Миграция 0179: content_type и sort_order для динамических блоков контента
+    const CONTENT_TYPES = ["presentation", "test", "task"]
+    if (typeof body.content_type === "string" && CONTENT_TYPES.includes(body.content_type)) {
+      updates.contentType = body.content_type
+    }
+    if (typeof body.sort_order === "number" && Number.isInteger(body.sort_order) && body.sort_order >= 0) {
+      updates.sortOrder = body.sort_order
+    }
 
     const [updated] = await db
       .update(demos)
@@ -87,6 +110,18 @@ export async function PUT(
     console.error("[demos/[id] PUT] error:", err)
     return apiError("Внутренняя ошибка сервера", 500)
   }
+}
+
+// POST = тот же апдейт, что PUT. navigator.sendBeacon (flush черновика демо/
+// теста при уходе со страницы, hooks/use-demo.ts) умеет слать ТОЛЬКО POST —
+// без этого последняя правка (баллы по вариантам, ИИ-проверка и т.п.) терялась
+// при быстрой перезагрузке. Объявляем РЕАЛЬНОЙ функцией (а не `export const
+// POST = PUT`) — иначе Turbopack может не зарегистрировать метод-хендлер.
+export async function POST(
+  req: NextRequest,
+  ctx: { params: Promise<{ id: string }> },
+) {
+  return PUT(req, ctx)
 }
 
 // DELETE /api/demos/[id]

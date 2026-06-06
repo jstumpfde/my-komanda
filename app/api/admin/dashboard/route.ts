@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 import { db } from "@/lib/db"
 import { companies, users, plans } from "@/lib/db/schema"
 import { eq, count, sql, and, lt, gte, inArray } from "drizzle-orm"
-import { requirePlatformAdmin, apiError, apiSuccess } from "@/lib/api-helpers"
+import {requirePlatformAdmin, apiSuccess} from "@/lib/api-helpers"
 
 // GET /api/admin/dashboard — метрики для дашборда администратора
 export async function GET(_req: NextRequest) {

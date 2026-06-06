@@ -3,9 +3,8 @@
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { Plus, ExternalLink, Pencil, BarChart2 } from "lucide-react"
 
 const landings = [
@@ -78,57 +77,51 @@ export default function LandingsPage() {
         </Button>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted/50">
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">URL</th>
-                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Конверсия</th>
-                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Посещений</th>
-                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Лидов</th>
-                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
-                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Действия</th>
-                </tr>
-              </thead>
-              <tbody>
-                {landings.map((row) => (
-                  <tr key={row.id} className="border-b last:border-0 hover:bg-muted/30">
-                    <td className="py-3 px-4 font-medium">{row.name}</td>
-                    <td className="py-3 px-4 text-muted-foreground font-mono text-xs">{row.url}</td>
-                    <td className="py-3 px-4 text-right font-semibold text-green-600">{row.conversion}</td>
-                    <td className="py-3 px-4 text-right text-muted-foreground">{row.visits}</td>
-                    <td className="py-3 px-4 text-right font-medium">{row.leads}</td>
-                    <td className="py-3 px-4">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[row.status]}`}>
-                        {row.status}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
-                          <ExternalLink className="h-3.5 w-3.5 mr-1" />
-                          Открыть
-                        </Button>
-                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
-                          <Pencil className="h-3.5 w-3.5 mr-1" />
-                          Редактировать
-                        </Button>
-                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
-                          <BarChart2 className="h-3.5 w-3.5 mr-1" />
-                          Статистика
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+      <TableCard>
+        <DataTable>
+          <DataHead>
+            <DataHeadCell>Название</DataHeadCell>
+            <DataHeadCell>URL</DataHeadCell>
+            <DataHeadCell align="right">Конверсия</DataHeadCell>
+            <DataHeadCell align="right">Посещений</DataHeadCell>
+            <DataHeadCell align="right">Лидов</DataHeadCell>
+            <DataHeadCell>Статус</DataHeadCell>
+            <DataHeadCell align="right">Действия</DataHeadCell>
+          </DataHead>
+          <tbody>
+            {landings.map((row) => (
+              <DataRow key={row.id}>
+                <DataCell className="font-medium">{row.name}</DataCell>
+                <DataCell className="text-muted-foreground font-mono text-xs">{row.url}</DataCell>
+                <DataCell align="right" className="font-semibold text-green-600">{row.conversion}</DataCell>
+                <DataCell align="right" className="text-muted-foreground">{row.visits}</DataCell>
+                <DataCell align="right" className="font-medium">{row.leads}</DataCell>
+                <DataCell>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[row.status]}`}>
+                    {row.status}
+                  </span>
+                </DataCell>
+                <DataCell>
+                  <div className="flex items-center justify-end gap-1">
+                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
+                      <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                      Открыть
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
+                      <Pencil className="h-3.5 w-3.5 mr-1" />
+                      Редактировать
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
+                      <BarChart2 className="h-3.5 w-3.5 mr-1" />
+                      Статистика
+                    </Button>
+                  </div>
+                </DataCell>
+              </DataRow>
+            ))}
+          </tbody>
+        </DataTable>
+      </TableCard>
           </div>
         </main>
       </SidebarInset>

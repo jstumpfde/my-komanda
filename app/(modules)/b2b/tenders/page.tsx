@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Plus } from "lucide-react"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { TENDERS, TENDER_STATUS_MAP, formatValueShort } from "@/lib/b2b/demo-data"
 
 export default function B2BTendersPage() {
@@ -32,15 +33,13 @@ export default function B2BTendersPage() {
               </TooltipProvider>
             </div>
 
-            <div className="rounded-xl border border-border shadow-sm bg-card">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border">
-                    {["Название", "Клиент", "Дедлайн", "Сумма", "Статус", "Конкурентов"].map((h) => (
-                      <th key={h} className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-5 py-3">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
+            <TableCard className="shadow-sm">
+              <DataTable>
+                <DataHead>
+                  {["Название", "Клиент", "Дедлайн", "Сумма", "Статус", "Конкурентов"].map((h) => (
+                    <DataHeadCell key={h}>{h}</DataHeadCell>
+                  ))}
+                </DataHead>
                 <tbody>
                   {TENDERS.map((t) => {
                     const st = TENDER_STATUS_MAP[t.status]
@@ -48,28 +47,28 @@ export default function B2BTendersPage() {
                     const daysLeft = Math.max(0, Math.round((deadline.getTime() - Date.now()) / 86400000))
                     const isUrgent = daysLeft < 7
                     return (
-                      <tr key={t.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                        <td className="px-5 py-4 text-sm font-medium">{t.title}</td>
-                        <td className="px-5 py-4 text-sm">{t.client}</td>
-                        <td className="px-5 py-4">
+                      <DataRow key={t.id}>
+                        <DataCell className="font-medium">{t.title}</DataCell>
+                        <DataCell>{t.client}</DataCell>
+                        <DataCell>
                           <div className="text-sm">{deadline.toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })}</div>
                           <div className={`text-xs font-medium ${isUrgent ? "text-red-500" : "text-muted-foreground"}`}>
                             {daysLeft === 0 ? "Сегодня!" : `${daysLeft} дн осталось`}
                           </div>
-                        </td>
-                        <td className="px-5 py-4 text-sm font-bold">{formatValueShort(t.value)}</td>
-                        <td className="px-5 py-4">
+                        </DataCell>
+                        <DataCell className="font-bold">{formatValueShort(t.value)}</DataCell>
+                        <DataCell>
                           <Badge variant="secondary" className="text-[10px] border-0 font-medium" style={{ backgroundColor: `${st?.color}15`, color: st?.color }}>
                             {st?.label}
                           </Badge>
-                        </td>
-                        <td className="px-5 py-4 text-sm text-center">{t.competitors}</td>
-                      </tr>
+                        </DataCell>
+                        <DataCell align="center">{t.competitors}</DataCell>
+                      </DataRow>
                     )
                   })}
                 </tbody>
-              </table>
-            </div>
+              </DataTable>
+            </TableCard>
           </div>
         </main>
       </SidebarInset>

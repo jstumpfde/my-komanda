@@ -66,6 +66,7 @@ export async function PUT(
       employment_type?: string[]
       hiring_plan?: number
       employee_type?: string
+      branding_override_enabled?: boolean
     }
 
     const updates: Record<string, unknown> = {
@@ -93,6 +94,10 @@ export async function PUT(
     if (body.employment_type !== undefined) updates.employmentType = body.employment_type
     if (body.hiring_plan !== undefined) updates.hiringPlan = body.hiring_plan
     if (body.employee_type !== undefined) updates.employeeType = body.employee_type
+    // Группа 38: переключатель override брендинга.
+    if (body.branding_override_enabled !== undefined) {
+      updates.brandingOverrideEnabled = body.branding_override_enabled === true
+    }
 
     const [updated] = await db
       .update(vacancies)
@@ -120,6 +125,17 @@ export interface VacancyAutomationSettings {
   autoInvite?: boolean
   autoReject?: boolean
   notifyManager?: boolean
+  /**
+   * Блок «Если кандидат хочет созвониться». Авто-сохраняется по добавлению/
+   * удалению ключевого слова и переключению тумблера (см. automation-settings.tsx),
+   * поэтому PATCH должен принимать его частично и мёржить в automation.
+   */
+  callIntent?: {
+    enabled?: boolean
+    mode?: string
+    keywords?: string[]
+    insistDemoMessages?: string[]
+  }
   /** @deprecated используйте messageTemplates.soft_reject */
   rejectTemplate?: string
   /** @deprecated используйте messageTemplates.demo_invite */
@@ -140,15 +156,62 @@ export async function PATCH(
     const { id } = await params
 
     // Аккуратно достаём тело — для restore-вызовов оно может отсутствовать
-    let body: { automation?: VacancyAutomationSettings } = {}
+    let body: {
+      automation?:      VacancyAutomationSettings
+      description_json?: Record<string, unknown>
+    } = {}
     try {
       const text = await req.text()
       if (text && text.trim().length > 0) {
-        body = JSON.parse(text) as { automation?: VacancyAutomationSettings }
+        body = JSON.parse(text) as typeof body
       }
     } catch {
       // Тело не JSON — считаем как пустое (восстановление)
       body = {}
+    }
+
+    // P0-50 hotfix: ветка 0 — обновление description_json. Saver'ы брендинга
+    // (а также любые другие саб-секции, складывающие свои данные в
+    // descriptionJson через PATCH) попадали раньше в "восстановление из
+    // корзины" и тело игнорировалось — toast "Сохранено" показывался, но
+    // в БД ничего не писалось. Здесь делаем merge на уровне корня объекта:
+    // переданные ключи перезаписывают существующие, остальные сохраняются.
+    if (body.description_json && typeof body.description_json === "object") {
+      const [existing] = await db
+        .select({ id: vacancies.id, descriptionJson: vacancies.descriptionJson })
+        .from(vacancies)
+        .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
+        .limit(1)
+
+      if (!existing) return apiError("Vacancy not found", 404)
+
+      const currentJson = (existing.descriptionJson && typeof existing.descriptionJson === "object" && existing.descriptionJson !== null)
+        ? existing.descriptionJson as Record<string, unknown>
+        : {}
+
+      const nextJson = { ...currentJson, ...body.description_json }
+
+      const [updated] = await db
+        .update(vacancies)
+        .set({ descriptionJson: nextJson, updatedAt: new Date() })
+        .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
+        .returning()
+
+      if (!updated) return apiError("Vacancy not found", 404)
+
+      logActivity({
+        companyId: user.companyId,
+        userId: user.id!,
+        action: "update",
+        entityType: "vacancy",
+        entityId: id,
+        entityTitle: updated.title,
+        module: "hr",
+        details: { changedFields: Object.keys(body.description_json) },
+        request: req,
+      })
+
+      return apiSuccess(updated)
     }
 
     // Ветка 1: обновление настроек автоматизации
@@ -177,6 +240,30 @@ export async function PATCH(
       if (typeof incoming.autoInvite === "boolean") sanitized.autoInvite = incoming.autoInvite
       if (typeof incoming.autoReject === "boolean") sanitized.autoReject = incoming.autoReject
       if (typeof incoming.notifyManager === "boolean") sanitized.notifyManager = incoming.notifyManager
+      // callIntent — частичный merge: сохраняем поверх существующего, чтобы
+      // авто-сохранение ключевых слов/тумблера не теряло уже записанные поля.
+      if (incoming.callIntent && typeof incoming.callIntent === "object") {
+        const currentCI = (sanitized.callIntent && typeof sanitized.callIntent === "object")
+          ? sanitized.callIntent as Record<string, unknown>
+          : {}
+        const ci = incoming.callIntent
+        const nextCI: Record<string, unknown> = { ...currentCI }
+        if (typeof ci.enabled === "boolean") nextCI.enabled = ci.enabled
+        if (typeof ci.mode === "string") nextCI.mode = ci.mode
+        if (Array.isArray(ci.keywords)) {
+          nextCI.keywords = ci.keywords
+            .filter((k): k is string => typeof k === "string")
+            .map(k => k.trim())
+            .filter(Boolean)
+            .slice(0, 50)
+        }
+        if (Array.isArray(ci.insistDemoMessages)) {
+          nextCI.insistDemoMessages = ci.insistDemoMessages
+            .filter((m): m is string => typeof m === "string")
+            .slice(0, 3)
+        }
+        sanitized.callIntent = nextCI
+      }
       // rejectTemplate / inviteTemplate больше не сохраняются — UI убрал поля,
       // данные живут в messageTemplates.soft_reject / messageTemplates.demo_invite.
       // Если кто-то всё-таки пришлёт старые ключи — игнорируем (не перезатираем merge).

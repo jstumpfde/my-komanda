@@ -9,7 +9,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Building2, Users, Plus, Search } from "lucide-react"
 import { CompanyFormModal, type CompanyFormData } from "@/components/sales/company-form-modal"
 import { ContactFormModal, type ContactFormData } from "@/components/sales/contact-form-modal"
-import { cn } from "@/lib/utils"
 
 interface CompanyOption {
   id: string

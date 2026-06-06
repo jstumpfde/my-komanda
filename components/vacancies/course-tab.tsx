@@ -4,6 +4,10 @@ import React, { useState, useCallback, forwardRef, useImperativeHandle, useRef, 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
+  AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
+} from "@/components/ui/alert-dialog"
 import { Loader2, Check, AlertCircle, Sparkles, Clock } from "lucide-react"
 import { type Demo, type Lesson, createBlock } from "@/lib/course-types"
 import { DEMO_TEMPLATES, type DemoTemplateId } from "@/lib/hr/demo-templates"
@@ -93,25 +97,48 @@ function splitTextIntoLessons(text: string, fileName: string): Lesson[] {
   return result
 }
 
+// Есть ли в демо осмысленный контент (для confirm перед «Создать с нуля»).
+// Свежая авто-созданная запись = 1 урок с пустыми блоками → считаем пустой.
+function demoHasContent(d: Demo | null): boolean {
+  if (!d) return false
+  if (d.lessons.length > 1) return true
+  return d.lessons.some(l =>
+    (l.blocks ?? []).some(b =>
+      (b.content?.trim()?.length ?? 0) > 0 ||
+      (b.taskTitle?.trim()?.length ?? 0) > 0 ||
+      (Array.isArray(b.questions) && b.questions.length > 0)
+    )
+  )
+}
+
 export interface CourseTabHandle {
   openAiGenerate: () => void
   openFileUpload: () => void
+  /** Этап 2.5: сбросить содержимое к одному пустому уроку («Создать с нуля»). */
+  resetBlank: () => void
 }
 
 interface CourseTabProps {
   vacancyId: string
   vacancyTitle?: string
+  /** Этап 2.5: 'demo' (таб «Демонстрация», дефолт) | 'test' (таб «Тест»). */
+  kind?: "demo" | "test"
   editorRef?: React.Ref<NotionEditorHandle>
   tabRef?: React.Ref<CourseTabHandle>
   onSaveStatusChange?: (status: "saved" | "saving") => void
 }
 
 export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
-  function CourseTab({ vacancyId, vacancyTitle, editorRef, tabRef, onSaveStatusChange }, _ref) {
-    const { demo, loading, error, saveStatus, createDemo, updateDemo } = useDemo(vacancyId)
+  function CourseTab({ vacancyId, vacancyTitle, kind = "demo", editorRef, tabRef, onSaveStatusChange }, _ref) {
+    const { demo, loading, error, saveStatus, createDemo, updateDemo } = useDemo(vacancyId, kind)
+    // Заголовок по умолчанию для новой записи отражает тип материала.
+    const defaultTitle = kind === "test"
+      ? (vacancyTitle ? `${vacancyTitle} — тест` : "Тестовое задание")
+      : (vacancyTitle || "Демонстрация должности")
     const [generating, setGenerating] = useState(false)
     const [genProgress, setGenProgress] = useState<{ current: number; total: number } | null>(null)
     const [aiDialogOpen, setAiDialogOpen] = useState(false)
+    const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
     const [selectedTemplate, setSelectedTemplate] = useState<DemoTemplateId>("medium")
     const [selectedTone, setSelectedTone] = useState<"energetic" | "friendly" | "business" | "direct">("friendly")
     const autoCreatingRef = useRef(false)
@@ -137,9 +164,9 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
         title: "Новый урок",
         blocks: [createBlock("text")],
       }
-      createDemo(vacancyTitle || "Демонстрация должности", [lesson])
+      createDemo(defaultTitle, [lesson])
         .catch(() => toast.error("Не удалось создать демонстрацию"))
-    }, [loading, demo, error, vacancyTitle, createDemo])
+    }, [loading, demo, error, defaultTitle, createDemo])
 
     // ═══ ГЕНЕРАЦИЯ БЛОК-ЗА-БЛОКОМ ═══
     const handleGenerateDemo = useCallback(async () => {
@@ -285,10 +312,28 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
       }
     }, [demo, updateDemo, createDemo, vacancyTitle])
 
+    // Собственно сброс к одному пустому уроку.
+    const doResetBlank = useCallback(() => {
+      const blank: Lesson = {
+        id: `les-${Date.now()}`,
+        emoji: "📄",
+        title: "Новый урок",
+        blocks: [createBlock("text")],
+      }
+      if (demo) updateDemo({ ...demo, lessons: [blank] })
+      else createDemo(defaultTitle, [blank]).catch(() => toast.error("Не удалось создать"))
+    }, [demo, updateDemo, createDemo, defaultTitle])
+
     useImperativeHandle(tabRef, () => ({
       openAiGenerate: () => setAiDialogOpen(true),
       openFileUpload: () => fileInputRef.current?.click(),
-    }), [])
+      // «Создать с нуля». Если есть контент — спрашиваем подтверждение,
+      // иначе (пустая запись) сбрасываем сразу без лишнего диалога.
+      resetBlank: () => {
+        if (demoHasContent(demo)) setResetConfirmOpen(true)
+        else doResetBlank()
+      },
+    }), [demo, doResetBlank])
 
     // Loading state
     if (loading || (!demo && !error)) {
@@ -466,6 +511,24 @@ export const CourseTab = forwardRef<NotionEditorHandle, CourseTabProps>(
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Confirm «Создать с нуля» — затирание текущего контента */}
+        <AlertDialog open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Создать с нуля?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Текущий контент будет удалён. Продолжить?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Отмена</AlertDialogCancel>
+              <AlertDialogAction onClick={() => doResetBlank()}>
+                Удалить и начать с нуля
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </>
     )
   }

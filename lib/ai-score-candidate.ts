@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { candidates, vacancies, demos } from "@/lib/db/schema"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import type { Lesson, Block } from "@/lib/course-types"
+import { buildScoreCandidatePrompt } from "@/lib/ai/prompts/score-candidate"
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -141,7 +142,7 @@ export async function scoreCandidateById(args: {
   const [demoRow] = await db
     .select({ lessonsJson: demos.lessonsJson })
     .from(demos)
-    .where(eq(demos.vacancyId, vacancyId))
+    .where(and(eq(demos.vacancyId, vacancyId), eq(demos.kind, "demo")))
     .orderBy(desc(demos.updatedAt))
     .limit(1)
   const blockMap = buildBlockMap(demoRow?.lessonsJson)
@@ -161,7 +162,7 @@ export async function scoreCandidateById(args: {
     ?.filter(p => p.enabled)
     ?.map(p => `${p.label} (вес: ${p.weight}/5)`) || []
 
-  const questions = (anketa?.questions as string[]) || []
+  const fallbackQuestions = (anketa?.questions as string[]) || []
 
   const answers = normalizeAnswers(candidate.anketaAnswers, blockMap)
 
@@ -170,40 +171,20 @@ export async function scoreCandidateById(args: {
   if (candidate.skills?.length) candidateInfo.push(`Навыки: ${candidate.skills.join(", ")}`)
   if (candidate.city) candidateInfo.push(`Город: ${candidate.city}`)
 
-  const prompt = `Ты — AI-рекрутер. Оцени кандидата по шкале 0-100.
-
-ВАКАНСИЯ: ${vacancy.title}
-${requirements.length > 0 ? `\nТРЕБОВАНИЯ:\n${requirements.join("\n")}` : ""}
-${desiredParams.length > 0 ? `\nЖЕЛАЕМЫЕ ПАРАМЕТРЫ:\n${desiredParams.join("\n")}` : ""}
-
-ДАННЫЕ КАНДИДАТА:
-Имя: ${candidate.name}
-${candidateInfo.join("\n")}
-
-${answers.length > 0
-  ? `ОТВЕТЫ НА КВАЛИФИКАЦИОННЫЕ ВОПРОСЫ:\n${answers.map((a, i) => `${i + 1}. Вопрос: ${a.question}\n   Ответ: ${a.answer}`).join("\n\n")}`
-  : questions.length > 0
-    ? `КВАЛИФИКАЦИОННЫЕ ВОПРОСЫ (ответы ещё не получены):\n${questions.map((q, i) => `${i + 1}. ${q}`).join("\n")}`
-    : ""}
-
-КРИТЕРИИ ОЦЕНКИ:
-1. Соответствие требованиям вакансии
-2. Полнота ответов
-3. Конкретность (цифры, факты, примеры)
-4. Релевантность опыта
-
-Верни ТОЛЬКО валидный JSON (без markdown):
-{
-  "score": <число 0-100>,
-  "summary": "<резюме оценки, 4-5 предложений>",
-  "details": [
-    {"question": "<вопрос или критерий>", "score": <0-100>, "comment": "<комментарий>"}
-  ]
-}`
+  const prompt = buildScoreCandidatePrompt({
+    vacancyTitle: vacancy.title,
+    requirements,
+    desiredParams,
+    candidateName: candidate.name,
+    candidateInfo,
+    answers,
+    fallbackQuestions,
+  })
 
   const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: "claude-sonnet-4-6",
     max_tokens: 1024,
+    temperature: 0,
     messages: [{ role: "user", content: prompt }],
   })
 

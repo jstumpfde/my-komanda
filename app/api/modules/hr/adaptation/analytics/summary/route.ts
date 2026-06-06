@@ -1,4 +1,4 @@
-import { eq, and, count, avg, sql } from "drizzle-orm"
+import {eq} from "drizzle-orm"
 import { db } from "@/lib/db"
 import { adaptationAssignments, adaptationPlans } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"

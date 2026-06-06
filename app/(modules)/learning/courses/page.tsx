@@ -128,7 +128,7 @@ export default function AiCoursesListPage() {
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
                 <Sparkles className="size-5 text-violet-500" />
-                <h1 className="text-xl font-semibold">AI-курсы</h1>
+                <h1 className="text-lg font-semibold">AI-курсы</h1>
               </div>
               <div className="flex items-center gap-2">
                 <WorkshopLauncher

@@ -6,21 +6,20 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Separator } from "@/components/ui/separator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { PlaceholderBadges } from "@/components/ui/placeholder-badges"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
-  MessageSquare, Zap, Phone, Brain, Send, Pencil, Check,
-  FileText, ClipboardList, Sparkles, Loader2,
+  MessageSquare, Zap, Phone, Brain, Send, Check,
+  ClipboardList, Loader2, Plus, X,
 } from "lucide-react"
+import { useVacancySectionRegister, type VacancyTabKey } from "./vacancy-settings-context"
 
 // ─── Типы ────────────────────────────────────────────────────
 
-type MessageTone = "official" | "casual" | "custom"
 type ResponseReaction = "slot-and-demo" | "slot-only" | "insist-demo"
 
 // ScenarioType / StepType / SCENARIO_PRESETS («Последовательность взаимодействия») и
@@ -29,15 +28,35 @@ type ResponseReaction = "slot-and-demo" | "slot-only" | "insist-demo"
 
 // ─── Данные по-умолчанию ─────────────────────────────────────
 
-const DEFAULT_FIRST_MESSAGE = `[Имя], привет! Видели ваш отклик на [должность] — выглядит интересно 👋
+const DEFAULT_FIRST_MESSAGE = `{{name}}, привет! Видели ваш отклик на {{vacancy}} — выглядит интересно 👋
 Чтобы не тратить ваше время на формальное интервью, сделали короткий обзор должности на 15 мин — там реальные цифры дохода и как устроена работа.
 Если после просмотра захотите пообщаться — сразу договоримся на звонок 🙂
-[ссылка]`
+{{demo_link}}`
 
-const OFFICIAL_TEMPLATE = `Здравствуйте, [Имя].
-Благодарим за отклик на вакансию [должность]. Мы подготовили информационную презентацию о компании и должности (около 15 минут).
-Предлагаем вам ознакомиться с материалами по ссылке ниже. После просмотра вы сможете записаться на собеседование.
-[ссылка]`
+const DEFAULT_CALL_INTENT_KEYWORDS = ["созвон", "позвоните", "номер", "телефон", "голос"]
+const DEFAULT_INSIST_DEMO_MESSAGES: [string, string, string] = [
+  "{{name}}, понял что хотите созвониться. Чтобы не тратить ваше и моё время, предлагаю сначала пройти короткую демонстрацию должности — там ответы на 90% типовых вопросов: {{demo_link}}",
+  "{{name}}, так как мы сейчас в работе, всё-таки предлагаю сначала ознакомиться с демонстрацией должности и ответить на вопросы. Ваши ответы попадут к нам, и после этого назначим время для звонка: {{demo_link}}",
+  "{{name}}, наша система сбора устроена так, что созваниваемся с кандидатом только после прохождения демонстрации должности и ответов на вопросы. Спасибо за понимание! Демонстрация: {{demo_link}}",
+]
+
+// FAQ — справочник готовых ответов для ручного копирования в hh-чат.
+// Заменил старые messageTemplates (Сессия 7).
+interface FaqItem { topic: string; text: string }
+const DEFAULT_FAQ: FaqItem[] = [
+  { topic: "Зарплата",       text: "Здравствуйте, {{name}}! Зарплата на позиции {{vacancy}} составляет {{salary_from}} — {{salary_to}} ₽. Подробнее об условиях — в презентации должности: {{demo_link}}" },
+  { topic: "Формат работы",  text: "Здравствуйте, {{name}}! По «{{vacancy}}» формат работы — офис. Подробнее в демонстрации: {{demo_link}}" },
+  { topic: "График",         text: "Здравствуйте, {{name}}! График — Пн–Пт, 09:00–18:00. Подробнее о режиме работы в презентации: {{demo_link}}" },
+  { topic: "Локация",        text: "Здравствуйте, {{name}}! Офис находится в Москве. Точный адрес и условия — в демонстрации должности: {{demo_link}}" },
+  { topic: "Оформление",     text: "Здравствуйте, {{name}}! Оформление по ТК РФ с первого дня. Подробнее о социальном пакете — в презентации: {{demo_link}}" },
+  { topic: "Опыт",           text: "Здравствуйте, {{name}}! Требования к опыту по «{{vacancy}}» подробно описаны в демонстрации: {{demo_link}}. После просмотра сможем оценить вашу кандидатуру точнее." },
+]
+const MAX_FAQ_ITEMS = 15
+
+// anketaConfirmation — автоматическое сообщение-подтверждение в hh
+// через N минут после отправки финальной анкеты (Сессия 7 п.8).
+const DEFAULT_ANKETA_CONFIRMATION_TEXT =
+  "{{name}}, спасибо! Мы получили ваши данные и ответы. В ближайшие дни рассмотрим кандидатуру и свяжемся. Хорошего дня!"
 
 // ─── Компонент ──────────────────────────────────────────────
 
@@ -60,14 +79,45 @@ interface AutomationSettingsProps {
   vacancyId: string
   descriptionJson?: unknown
   aiProcessSettings?: { inviteMessage?: string; reInviteMessage?: string } | null
+  /**
+   * #60: текущая серия первых сообщений из vacancies.first_messages_chain.
+   * Если chain[0].enabled=true и текст не пустой — старый блок «Минимальная
+   * задержка перед первым сообщением» (legacy automation.delaySeconds)
+   * скрывается, потому что cron берёт задержку из chain[0].delaySeconds.
+   */
+  firstMessagesChain?: Array<{ enabled: boolean; delaySeconds: number; text: string }>
+  vacancyTitle?: string
+  salaryFrom?: number | null
+  salaryTo?: number | null
   /** Если задано — рендерятся только эти карточки. Иначе все. */
   sections?: AutomationSectionId[]
-  /** Показать глобальную кнопку «Сохранить настройки» внизу. По умолчанию true. */
+  /**
+   * Показать глобальную кнопку «Сохранить настройки» внизу.
+   * P0-50: при подключении к sticky-bar (tabKey задан) кнопка автоматически скрывается.
+   */
   showGlobalSave?: boolean
+  /**
+   * P0-50: какой таб настроек вакансии сейчас рендерит этот инстанс. Если
+   * задан — компонент регистрирует свои секции в VacancySettingsProvider,
+   * сохраняется через единую sticky-кнопку, локальные «Сохранить» скрываются.
+   * Если не задан — старое поведение (локальные кнопки).
+   */
+  tabKey?: VacancyTabKey
 }
 
-export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettings, sections, showGlobalSave = true }: AutomationSettingsProps) {
+export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettings, firstMessagesChain, sections, showGlobalSave = true, tabKey }: AutomationSettingsProps) {
   const showSection = (id: AutomationSectionId): boolean => !sections || sections.includes(id)
+  // P0-50: при подключённом sticky-bar глобальную кнопку прячем.
+  const showLocalGlobalSave = showGlobalSave && !tabKey
+  // #60: серия активна, если есть хотя бы шаг 0, он включён, и текст не
+  // пустой. Тогда старый блок «Минимальная задержка» дублирует chain[0]
+  // и должен скрываться, чтобы HR не путался.
+  const chainActive = Boolean(
+    firstMessagesChain
+      && firstMessagesChain.length > 0
+      && firstMessagesChain[0]?.enabled
+      && (firstMessagesChain[0]?.text ?? "").trim().length > 0
+  )
 
   // Parse automation settings from descriptionJson
   const initialAutomation = (() => {
@@ -78,9 +128,17 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
     return {}
   })()
 
-  // 1. Первое сообщение
-  const [tone, setTone] = useState<MessageTone>((initialAutomation.tone as MessageTone) || "casual")
-  const [firstMessageDelay, setFirstMessageDelay] = useState(String(initialAutomation.delayMinutes ?? "3"))
+  // 1. Первое сообщение.
+  // #20: delaySeconds — новое поле в секундах. Раньше было delayMinutes
+  // (целое число минут, минимум 2 мин), теперь поддерживаем 15/30 сек
+  // для "живого" общения. Читаем сначала delaySeconds, если нет —
+  // fallback на delayMinutes * 60.
+  const initialDelaySeconds = (() => {
+    if (typeof initialAutomation.delaySeconds === "number") return initialAutomation.delaySeconds
+    if (typeof initialAutomation.delayMinutes === "number") return initialAutomation.delayMinutes * 60
+    return 180
+  })()
+  const [firstMessageDelay, setFirstMessageDelay] = useState(String(initialDelaySeconds))
   // Шаблон сообщения хранится в vacancies.ai_process_settings.inviteMessage —
   // его читает hh process-queue при отправке приглашения на демо.
   const initialInviteMessage = aiProcessSettings?.inviteMessage || DEFAULT_FIRST_MESSAGE
@@ -88,14 +146,6 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
   const [savedInviteMessage, setSavedInviteMessage] = useState(initialInviteMessage)
   const [savingInvite, setSavingInvite] = useState(false)
   const inviteDirty = firstMessageText !== savedInviteMessage
-
-  // Текст для повторной отправки (после исправления битой ссылки).
-  // Используется в hh process-queue, если по отклику уже было исходящее сообщение от работодателя.
-  const initialReInviteMessage = aiProcessSettings?.reInviteMessage || ""
-  const [reInviteText, setReInviteText] = useState(initialReInviteMessage)
-  const [savedReInviteMessage, setSavedReInviteMessage] = useState(initialReInviteMessage)
-  const [savingReInvite, setSavingReInvite] = useState(false)
-  const reInviteDirty = reInviteText !== savedReInviteMessage
 
   useEffect(() => {
     const next = aiProcessSettings?.inviteMessage
@@ -105,14 +155,6 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
     }
   }, [aiProcessSettings, savedInviteMessage])
 
-  useEffect(() => {
-    const next = aiProcessSettings?.reInviteMessage
-    if (typeof next === "string" && next !== savedReInviteMessage) {
-      setSavedReInviteMessage(next)
-      setReInviteText(next)
-    }
-  }, [aiProcessSettings, savedReInviteMessage])
-
   const saveInviteMessage = useCallback(async () => {
     setSavingInvite(true)
     try {
@@ -121,43 +163,153 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ inviteMessage: firstMessageText }),
       })
-      if (!res.ok) throw new Error("Ошибка сохранения")
+      if (!res.ok) {
+        // P0-43 fix: парсим тело ответа, чтобы показать конкретный текст
+        // (валидация demo_link и пр.). Бросаем дальше — это сигнал для
+        // sticky-bar register'а НЕ сбрасывать baseline и НЕ вызывать
+        // следующий saveSettings (а то «Сохранено» затрёт ошибку).
+        const body = await res.json().catch(() => null) as { error?: string } | null
+        const msg = body?.error || "Не удалось сохранить"
+        toast.error(msg)
+        throw new Error(msg)
+      }
       setSavedInviteMessage(firstMessageText)
       toast.success("Сохранено")
-    } catch {
-      toast.error("Не удалось сохранить")
     } finally {
       setSavingInvite(false)
     }
   }, [vacancyId, firstMessageText])
-
-  const saveReInviteMessage = useCallback(async () => {
-    setSavingReInvite(true)
-    try {
-      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/ai-settings`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reInviteMessage: reInviteText }),
-      })
-      if (!res.ok) throw new Error("Ошибка сохранения")
-      setSavedReInviteMessage(reInviteText)
-      toast.success("Сохранено")
-    } catch {
-      toast.error("Не удалось сохранить")
-    } finally {
-      setSavingReInvite(false)
-    }
-  }, [vacancyId, reInviteText])
 
   // 1b. Рабочие часы — переехали в отдельный компонент VacancyScheduleSettings.
   // Здесь старые поля больше не редактируются, но описание_json мы при сохранении
   // не трогаем (старое значение остаётся в automation.workingHours для архива
   // и обратной совместимости, но cron'ы уже его не читают).
 
-  // 2. Обработка ответа
-  const [responseReaction, setResponseReaction] = useState<ResponseReaction>(
-    (initialAutomation.responseReaction as ResponseReaction) || "slot-and-demo"
+  // 2. Обработка ответа — блок «Если кандидат хочет созвониться».
+  //
+  // Storage: descriptionJson.automation.callIntent = {
+  //   enabled, mode, keywords, insistDemoMessages: [s1, s2, s3]
+  // }
+  //
+  // Дефолт mode="insist-demo" (Сессия 5). enabled=false по умолчанию.
+  // Два других mode (slot-and-demo, slot-only) — UI present, но действий
+  // в backend нет (бэклог). Активны только при mode=insist-demo +
+  // enabled=true: scan-incoming подхватывает keywords и шлёт эскалацию.
+  const initialCallIntent =
+    (initialAutomation.callIntent as {
+      enabled?: boolean
+      mode?: ResponseReaction
+      keywords?: string[]
+      insistDemoMessages?: string[]
+    }) || {}
+  const [callIntentEnabled, setCallIntentEnabled]   = useState<boolean>(initialCallIntent.enabled ?? false)
+  const [callIntentMode,    setCallIntentMode]      = useState<ResponseReaction>(initialCallIntent.mode ?? "insist-demo")
+  const [callIntentKeywords, setCallIntentKeywords] = useState<string[]>(
+    Array.isArray(initialCallIntent.keywords) && initialCallIntent.keywords.length > 0
+      ? initialCallIntent.keywords
+      : DEFAULT_CALL_INTENT_KEYWORDS,
   )
+  const [keywordInput, setKeywordInput] = useState("")
+  const [insistMessages, setInsistMessages] = useState<[string, string, string]>(() => {
+    const src = initialCallIntent.insistDemoMessages
+    if (Array.isArray(src)) {
+      return [
+        src[0] ?? DEFAULT_INSIST_DEMO_MESSAGES[0],
+        src[1] ?? DEFAULT_INSIST_DEMO_MESSAGES[1],
+        src[2] ?? DEFAULT_INSIST_DEMO_MESSAGES[2],
+      ]
+    }
+    return [...DEFAULT_INSIST_DEMO_MESSAGES]
+  })
+
+  // Legacy responseReaction — оставлен в state ради обратной совместимости
+  // descriptionJson.automation.responseReaction, в UI больше не используется
+  // (заменён на callIntent.mode выше).
+  const responseReaction = (initialAutomation.responseReaction as ResponseReaction) || "slot-and-demo"
+
+  // Авто-сохранение блока callIntent: добавил/удалил слово или переключил
+  // тумблер → сразу пишем в БД через PATCH (сервер мёржит automation.callIntent),
+  // чтобы ключевые слова не терялись, если HR не нажал общий «Сохранить».
+  // Передаём явные новые значения, чтобы не зависеть от асинхронного setState.
+  const [callIntentSaving, setCallIntentSaving] = useState(false)
+  const persistCallIntent = useCallback(async (next: {
+    enabled: boolean; mode: ResponseReaction; keywords: string[]; insistDemoMessages: string[]
+  }) => {
+    setCallIntentSaving(true)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ automation: { callIntent: next } }),
+      })
+      if (!res.ok) throw new Error("save failed")
+    } catch {
+      toast.error("Не удалось сохранить ключевые слова")
+    } finally {
+      setCallIntentSaving(false)
+    }
+  }, [vacancyId])
+
+  const addKeyword = () => {
+    const k = keywordInput.trim().toLowerCase()
+    if (!k) return
+    if (callIntentKeywords.includes(k)) {
+      toast.error("Это слово уже есть")
+      return
+    }
+    const next = [...callIntentKeywords, k]
+    setCallIntentKeywords(next)
+    setKeywordInput("")
+    void persistCallIntent({ enabled: callIntentEnabled, mode: callIntentMode, keywords: next, insistDemoMessages: insistMessages })
+  }
+  const removeKeyword = (idx: number) => {
+    const next = callIntentKeywords.filter((_, i) => i !== idx)
+    setCallIntentKeywords(next)
+    void persistCallIntent({ enabled: callIntentEnabled, mode: callIntentMode, keywords: next, insistDemoMessages: insistMessages })
+  }
+  const toggleCallIntent = (v: boolean) => {
+    setCallIntentEnabled(v)
+    void persistCallIntent({ enabled: v, mode: callIntentMode, keywords: callIntentKeywords, insistDemoMessages: insistMessages })
+  }
+  const changeCallIntentMode = (m: ResponseReaction) => {
+    setCallIntentMode(m)
+    void persistCallIntent({ enabled: callIntentEnabled, mode: m, keywords: callIntentKeywords, insistDemoMessages: insistMessages })
+  }
+  // Первичная загрузка callIntent, если descriptionJson пришёл ПОСЛЕ mount
+  // (родитель сначала отдаёт undefined, затем подтягивает вакансию). Без
+  // этого useState-инициализаторы зафиксировали бы дефолты, и сохранённые
+  // ключевые слова «исчезали» после перезагрузки. Срабатывает один раз.
+  const callIntentInitedRef = useRef(descriptionJson !== undefined)
+  useEffect(() => {
+    if (callIntentInitedRef.current) return
+    if (descriptionJson === undefined || descriptionJson === null) return
+    callIntentInitedRef.current = true
+    const dj = descriptionJson as Record<string, unknown>
+    const auto = (dj.automation as Record<string, unknown>) || {}
+    const ci = (auto.callIntent as {
+      enabled?: boolean; mode?: ResponseReaction; keywords?: string[]; insistDemoMessages?: string[]
+    }) || {}
+    setCallIntentEnabled(ci.enabled ?? false)
+    setCallIntentMode(ci.mode ?? "insist-demo")
+    setCallIntentKeywords(
+      Array.isArray(ci.keywords) && ci.keywords.length > 0 ? ci.keywords : DEFAULT_CALL_INTENT_KEYWORDS,
+    )
+    if (Array.isArray(ci.insistDemoMessages)) {
+      setInsistMessages([
+        ci.insistDemoMessages[0] ?? DEFAULT_INSIST_DEMO_MESSAGES[0],
+        ci.insistDemoMessages[1] ?? DEFAULT_INSIST_DEMO_MESSAGES[1],
+        ci.insistDemoMessages[2] ?? DEFAULT_INSIST_DEMO_MESSAGES[2],
+      ])
+    }
+  }, [descriptionJson])
+
+  const updateInsistMessage = (idx: 0 | 1 | 2, text: string) => {
+    const next: [string, string, string] = [...insistMessages] as [string, string, string]
+    next[idx] = text
+    setInsistMessages(next)
+  }
+  // #57: refs на 3 текстарии insistMessages для PlaceholderBadges.
+  const insistRefs = useRef<Array<HTMLTextAreaElement | null>>([null, null, null])
 
   // 3. Цепочка дожима — переехала в отдельный компонент VacancyFollowupSettings
   // (API: /api/modules/hr/vacancies/[id]/followup-settings, таблица
@@ -232,42 +384,47 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
   const [completenessChannel, setCompletenessChannel] = useState(initialCompleteness.channel || "email")
   const [completenessDelay, setCompletenessDelay] = useState(initialCompleteness.delay || "1hour")
 
-  // 8. Бот-звонарь
+  // 8. AI-агент (#24: переименован с «Бот-звонарь»)
   const initialDialer = (initialAutomation.dialer as { enabled?: boolean; scriptId?: string; trigger?: string }) || {}
   const [dialerEnabled, setDialerEnabled] = useState(initialDialer.enabled ?? false)
   const [dialerScriptId, setDialerScriptId] = useState(initialDialer.scriptId || "")
   const [dialerTrigger, setDialerTrigger] = useState(initialDialer.trigger || "after_screening")
 
-  // 7. Шаблоны сообщений (inherit from global)
-  const hardcodedDefaults: Record<string, string> = {
-    salary: "Здравствуйте, {имя}! Зарплата на позиции {должность} составляет {зп_от} — {зп_до} ₽. Подробнее об условиях — в презентации должности: {ссылка_на_демонстрацию}",
-    demo_invite: "Здравствуйте, {имя}! Благодарим за интерес к позиции {должность}. Пожалуйста, ознакомьтесь с презентацией должности: {ссылка_на_демонстрацию}. После просмотра мы свяжемся с вами.",
-    soft_reject: "Здравствуйте, {имя}! Благодарим за интерес к позиции {должность}. К сожалению, на данный момент мы остановились на других кандидатах. Желаем успехов!",
-    info_request: "Здравствуйте, {имя}! Нам интересна ваша кандидатура на позицию {должность}. Не могли бы вы дополнительно рассказать о вашем опыте?",
-    interview_invite: "Здравствуйте, {имя}! Мы хотели бы пригласить вас на собеседование на позицию {должность}. Удобное время: {дата_время}. Формат: онлайн.",
-  }
-  const globalTemplates = (() => {
-    try {
-      const saved = typeof window !== "undefined" ? localStorage.getItem("mk_hr_message_templates") : null
-      return saved ? { ...hardcodedDefaults, ...JSON.parse(saved) } : hardcodedDefaults
-    } catch { return hardcodedDefaults }
+  // 7. FAQ — справочник готовых ответов для ручного копирования (Сессия 7).
+  // Storage: descriptionJson.faq (массив { topic, text }).
+  // Дефолтный набор 6 тем заполняется миграцией 0110 для существующих
+  // вакансий; для новых — fallback на DEFAULT_FAQ при пустом массиве.
+  const initialFaq = (() => {
+    if (descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null) {
+      const dj = descriptionJson as Record<string, unknown>
+      const raw = dj.faq
+      if (Array.isArray(raw) && raw.length > 0) {
+        return raw.map(r => ({
+          topic: typeof (r as { topic?: unknown })?.topic === "string" ? (r as { topic: string }).topic : "",
+          text:  typeof (r as { text?: unknown })?.text  === "string" ? (r as { text:  string }).text  : "",
+        }))
+      }
+    }
+    return DEFAULT_FAQ
   })()
-  const templateLabels: Record<string, string> = {
-    salary: "Вопрос о зарплате",
-    demo_invite: "Приглашение на демонстрацию",
-    soft_reject: "Мягкий отказ",
-    info_request: "Запрос доп. информации",
-    interview_invite: "Приглашение на собеседование",
-  }
-  const [messageTemplates, setMessageTemplates] = useState<Record<string, string>>(() => {
-    const saved = (initialAutomation.messageTemplates as Record<string, string>) || {}
-    return { ...globalTemplates, ...saved }
-  })
+  const [faq, setFaq] = useState<FaqItem[]>(initialFaq)
+  // B7-fix: FAQ resync. Если descriptionJson приходит ПОСЛЕ mount (родитель
+  // грузит вакансию асинхронно), useState(initialFaq) зафиксировал DEFAULT_FAQ
+  // и не обновлялся → после reload пользователь видел дефолт вместо своего
+  // сохранённого FAQ. Тот же приём, что для callIntent ниже.
+  const faqInitedRef = useRef(descriptionJson !== undefined)
+  useEffect(() => {
+    if (faqInitedRef.current || descriptionJson === undefined) return
+    faqInitedRef.current = true
+    setFaq(initialFaq)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [descriptionJson])
 
-  // Тоны временно в разработке — не меняют текст рассылки.
-  void OFFICIAL_TEMPLATE
-  void tone
-  void setTone
+  // anketaConfirmation — устаревший блок (#19). UI удалён 22.05.2026, поле
+  // descriptionJson.automation.anketaConfirmation остаётся в БД для совместимости
+  // с уже запланированными follow_up_messages, но новые записи не пишем.
+  // Источник истины для авто-сообщения после анкеты — anketaAutoReply в
+  // demos.post_demo_settings (рендерится в табе «Воронка»).
 
   // Save all automation settings to API
   const saveSettings = useCallback(async () => {
@@ -280,14 +437,32 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
       // workingHours переехали в schedule_* колонки и редактируются через
       // /api/modules/hr/vacancies/[id]/schedule-settings; здесь не сохраняем.
       const previousWorkingHours = (currentJson.automation as Record<string, unknown> | undefined)?.workingHours
+      // #20: пишем оба поля для backward compatibility.
+      //   delaySeconds — новое (15..3600);
+      //   delayMinutes — старое (в минутах, дробное при <60s). cron/process-queue
+      //   при чтении будет предпочитать delaySeconds, если оба заполнены.
+      const delaySecondsNum = Number(firstMessageDelay)
       const automationData = {
-        delayMinutes: Number(firstMessageDelay),
+        delaySeconds: Number.isFinite(delaySecondsNum) ? delaySecondsNum : 180,
+        delayMinutes: Number.isFinite(delaySecondsNum) ? Math.max(1, Math.round(delaySecondsNum / 60)) : 3,
         ...(previousWorkingHours ? { workingHours: previousWorkingHours } : {}),
         responseReaction,
         autoInvite,
         autoReject,
         notifyManager,
-        messageTemplates,
+        callIntent: {
+          enabled:            callIntentEnabled,
+          mode:               callIntentMode,
+          keywords:           callIntentKeywords,
+          insistDemoMessages: insistMessages,
+        },
+        // #19: anketaConfirmation не пишем — UI блок удалён. Если в БД уже
+        // лежит старая запись — она будет затёрта ниже через PUT всего
+        // descriptionJson; чтобы не терять её для уже запланированных
+        // follow_up_messages, сохраним существующее значение из БД как есть.
+        ...((currentJson.automation as Record<string, unknown> | undefined)?.anketaConfirmation
+          ? { anketaConfirmation: (currentJson.automation as Record<string, unknown>).anketaConfirmation }
+          : {}),
         dialer: { enabled: dialerEnabled, scriptId: dialerScriptId, trigger: dialerTrigger },
         completenessCheck: { enabled: completenessEnabled, threshold: Number(completenessThreshold), channel: completenessChannel, delay: completenessDelay },
       }
@@ -302,6 +477,9 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
           description_json: {
             ...currentJson,
             automation: automationData,
+            // FAQ хранится на корне descriptionJson, а не внутри automation
+            // (по плану Сессии 7 п.10).
+            faq: faq.filter(f => f.topic.trim() || f.text.trim()).slice(0, MAX_FAQ_ITEMS),
           },
         }),
       })
@@ -313,7 +491,62 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
     } finally {
       setSaving(false)
     }
-  }, [vacancyId, descriptionJson, firstMessageDelay, responseReaction, autoInvite, autoReject, notifyManager, messageTemplates, dialerEnabled, dialerScriptId, dialerTrigger, completenessEnabled, completenessThreshold, completenessChannel, completenessDelay])
+  }, [vacancyId, descriptionJson, firstMessageDelay, responseReaction, autoInvite, autoReject, notifyManager, faq, callIntentEnabled, callIntentMode, callIntentKeywords, insistMessages, dialerEnabled, dialerScriptId, dialerTrigger, completenessEnabled, completenessThreshold, completenessChannel, completenessDelay])
+
+  // ─── P0-50: регистрация секций в sticky-bar ───────────────────────
+  // Грузимся-готовы, когда descriptionJson распарсен (родитель передаёт
+  // его сразу при mount; undefined → ещё не подтянули).
+  const loadedReady = tabKey !== undefined && descriptionJson !== undefined
+  // tabKey ?? "messages" — useVacancySectionRegister всегда требует ключ;
+  // если tabKey не задан, loadedReady=false → секция фактически не
+  // регистрируется (loaded остаётся false).
+  const effectiveTab: VacancyTabKey = tabKey ?? "messages"
+
+  // 1. «Первое сообщение» — invite шаблон + задержка.
+  //    invite шлётся в ai-settings, остальное — в descriptionJson через saveSettings.
+  //    #19: anketaConfirmation удалён — отслеживать его в watchedValues
+  //    больше не нужно (поле остаётся в БД as-is).
+  useVacancySectionRegister({
+    sectionKey: `automation-${vacancyId}-${effectiveTab}-invite`,
+    tabKey: effectiveTab,
+    loaded: loadedReady && (sections?.includes("firstMessage") ?? true),
+    watchedValues: {
+      firstMessageText, firstMessageDelay,
+    },
+    save: async () => {
+      // P0-43 fix: invite сначала. Если валидация упала (400) — throw
+      // прокидывается в sticky-bar, секция остаётся dirty, saveSettings
+      // НЕ вызывается (иначе success-toast «Настройки сохранены» затрёт
+      // ошибку и пользователь решит, что всё ОК).
+      await saveInviteMessage()
+      await saveSettings()
+    },
+  })
+
+  // 2. callIntent + templates (FAQ) — обе секции таба «Сообщения» через saveSettings.
+  useVacancySectionRegister({
+    sectionKey: `automation-${vacancyId}-${effectiveTab}-callintent`,
+    tabKey: effectiveTab,
+    loaded: loadedReady && (
+      (sections?.includes("callIntent") ?? true) || (sections?.includes("templates") ?? true)
+    ),
+    // callIntentEnabled/Mode/Keywords авто-сохраняются по клику (см.
+    // persistCallIntent), поэтому в sticky-bar их НЕ отслеживаем — иначе он
+    // показывал бы «есть несохранённые изменения» после авто-сохранения.
+    watchedValues: {
+      insistMessages, faq,
+    },
+    save: saveSettings,
+  })
+
+  // 4. dialer (бот-звонарь) — таб «Интеграции».
+  useVacancySectionRegister({
+    sectionKey: `automation-${vacancyId}-${effectiveTab}-bot`,
+    tabKey: effectiveTab,
+    loaded: loadedReady && (sections?.includes("dialer") ?? true),
+    watchedValues: { dialerEnabled, dialerScriptId, dialerTrigger },
+    save: saveSettings,
+  })
 
   return (
     <div className="space-y-6">
@@ -327,171 +560,211 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
-          {/* Тон — пока не подключён к рассылке */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Label className="text-sm font-medium">Тон сообщения</Label>
-              <Badge variant="outline" className="text-[10px] h-4 px-1.5">Скоро</Badge>
+          {/* Минимальная задержка перед первым сообщением.
+              Реальная задержка может быть больше: всё зависит от очереди cron'а
+              разбора hh-откликов (см. lib/hh/process-queue.ts).
+              #60: когда серия первых сообщений включена — этот блок дублирует
+              chain[0].delaySeconds. Показываем плашку-подсказку, сам Select
+              скрываем, чтобы HR не редактировал «мёртвое» поле. */}
+          {chainActive ? (
+            <div className="rounded-lg border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
+              Минимальная задержка перед первым сообщением управляется в блоке
+              «Серия первых сообщений» выше — задержка берётся из Сообщения 1.
+              Этот старый параметр больше не используется.
             </div>
-            <div className="flex flex-wrap gap-2 opacity-60 pointer-events-none select-none" aria-disabled="true">
-              {([
-                { value: "official" as const, label: "Официальный", icon: FileText },
-                { value: "casual" as const, label: "Живой", icon: Sparkles },
-                { value: "custom" as const, label: "Свой текст", icon: Pencil },
-              ]).map(opt => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  disabled
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground"
-                >
-                  <opt.icon className="w-4 h-4" />
-                  {opt.label}
-                </button>
-              ))}
+          ) : (
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-0.5 flex-1">
+                <Label className="text-sm font-medium">Минимальная задержка перед первым сообщением</Label>
+                <p className="text-xs text-muted-foreground">
+                  Чтобы первое сообщение не выглядело как автоматика. Реальная задержка может быть больше из-за обработки очереди.
+                </p>
+              </div>
+              <Select value={firstMessageDelay} onValueChange={setFirstMessageDelay}>
+                <SelectTrigger className="w-[140px] h-9 shrink-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="15">15 секунд</SelectItem>
+                  <SelectItem value="30">30 секунд</SelectItem>
+                  <SelectItem value="60">1 минута</SelectItem>
+                  <SelectItem value="180">3 минуты</SelectItem>
+                  <SelectItem value="900">15 минут</SelectItem>
+                  <SelectItem value="1800">30 минут</SelectItem>
+                  <SelectItem value="3600">1 час</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <p className="text-[11px] text-muted-foreground">Функция в разработке. Сейчас рассылается текст ниже.</p>
-          </div>
-
-          {/* Задержка */}
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label className="text-sm font-medium">Задержка после отклика</Label>
-              <p className="text-xs text-muted-foreground">Время ожидания перед отправкой первого сообщения</p>
-            </div>
-            <Select value={firstMessageDelay} onValueChange={setFirstMessageDelay}>
-              <SelectTrigger className="w-[130px] h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="0">Сразу</SelectItem>
-                <SelectItem value="1">1 минута</SelectItem>
-                <SelectItem value="3">3 минуты</SelectItem>
-                <SelectItem value="5">5 минут</SelectItem>
-                <SelectItem value="10">10 минут</SelectItem>
-                <SelectItem value="15">15 минут</SelectItem>
-                <SelectItem value="30">30 минут</SelectItem>
-                <SelectItem value="60">60 минут</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          )}
 
           {/* Рабочие часы и нерабочие дни редактируются в отдельной секции
               «Расписание» под цепочкой дожима — см. VacancyScheduleSettings. */}
 
-          {/* Шаблон */}
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Шаблон сообщения</Label>
-            <textarea
-              className="w-full border rounded-lg p-3 text-sm resize-none h-36 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none leading-relaxed"
-              value={firstMessageText}
-              onChange={(e) => setFirstMessageText(e.target.value)}
-              placeholder="Текст первого сообщения..."
-            />
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div className="flex flex-wrap gap-1.5">
-                {["[Имя]", "[должность]", "[компания]", "[ссылка]"].map(v => (
-                  <Badge key={v} variant="outline" className="text-xs cursor-default">{v}</Badge>
-                ))}
-              </div>
-              <Button
-                size="sm"
-                className="h-8 text-xs gap-1.5"
-                onClick={saveInviteMessage}
-                disabled={!inviteDirty || savingInvite}
-              >
-                {savingInvite ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                Сохранить
-              </Button>
-            </div>
-          </div>
+          {/* #21: блок «Шаблон сообщения» переехал в FirstMessagesChainEditor.
+              Один textarea заменён на серию из 3 шагов с тумблерами и
+              задержками. См. components/vacancies/first-messages-chain-editor.tsx.
+              Эта Card теперь содержит только глобальную задержку (используется
+              как fallback для chain[0] если массив пустой).
+          */}
 
-          {/* Шаблон для повторной отправки */}
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Текст для повторной отправки (если ссылка была сломана)</Label>
-            <textarea
-              className="w-full border rounded-lg p-3 text-sm resize-none h-36 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none leading-relaxed"
-              value={reInviteText}
-              onChange={(e) => setReInviteText(e.target.value)}
-              placeholder="Здравствуйте, [Имя]! Извините — в прошлом сообщении была неактуальная ссылка. Вот рабочая: [ссылка]"
-            />
-            <p className="text-[11px] text-muted-foreground">
-              Используется для кандидатов, которым уже отправлялось сообщение ранее (например, после исправления битых ссылок).
-            </p>
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div className="flex flex-wrap gap-1.5">
-                {["[Имя]", "[должность]", "[компания]", "[ссылка]"].map(v => (
-                  <Badge key={v} variant="outline" className="text-xs cursor-default">{v}</Badge>
-                ))}
-              </div>
-              <Button
-                size="sm"
-                className="h-8 text-xs gap-1.5"
-                onClick={saveReInviteMessage}
-                disabled={!reInviteDirty || savingReInvite}
-              >
-                {savingReInvite ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                Сохранить
-              </Button>
-            </div>
-          </div>
+          {/* #19: блок «Подтверждение после анкеты» УДАЛЁН отсюда. Его
+              функция дублирует «Автоответ после заполнения анкеты» в табе
+              «Воронка» (PostDemoSettings → anketaAutoReply). Старое поле
+              automation.anketaConfirmation в descriptionJson сохраняется
+              в БД как есть для уже запланированных follow_up_messages с
+              branch='anketa_confirmation' (cron их корректно достреливает),
+              но новые анкеты планируют только anketaAutoReply. */}
+
+          {/* #46: блок «Текст для повторной отправки» удалён из этой
+              карточки. Переехал в отдельный компонент RecoveryMessageSettings
+              под спойлером в табе «Сообщения» — opt-in, по умолчанию ВЫКЛ,
+              чтобы автоматика не дёргала кандидатов дубликатами. */}
         </CardContent>
       </Card>
       )}
 
-      {/* ═══ 2. Если кандидат отвечает ═════════════════════════ */}
+      {/* ═══ 2. Если кандидат хочет созвониться ═════════════════ */}
       {showSection("callIntent") && (
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Brain className="w-4 h-4" />
-            Если кандидат хочет созвониться
-            <Badge variant="outline" className="text-[10px] h-4 px-1.5">Скоро</Badge>
-          </CardTitle>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Brain className="w-4 h-4" />
+                Если кандидат хочет созвониться
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Парсер ключевых слов в ответе кандидата → отправляет один из трёх эскалационных шаблонов и продолжает дожимать на демо.
+              </p>
+            </div>
+            <Switch checked={callIntentEnabled} onCheckedChange={toggleCallIntent} />
+          </div>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="p-3 rounded-lg bg-muted/50 border border-border">
-            <p className="text-xs text-muted-foreground mb-1">Система определяет намерение по ключевым словам:</p>
+        <CardContent className={cn("space-y-4", !callIntentEnabled && "opacity-60")}>
+          {/* Ключевые слова — редактируемые чипсы. */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Ключевые слова</Label>
+            <p className="text-[11px] text-muted-foreground">
+              Если в ответе кандидата встречается одно из этих слов — система определяет это как «хочет созвониться».
+            </p>
             <div className="flex flex-wrap gap-1.5">
-              {["созвон", "позвоните", "номер", "телефон", "голос"].map(w => (
-                <Badge key={w} variant="secondary" className="text-xs font-mono">{w}</Badge>
+              {callIntentKeywords.map((w, idx) => (
+                <span
+                  key={`${w}-${idx}`}
+                  className="inline-flex items-center gap-1 rounded-full bg-secondary/80 px-2.5 py-1 text-xs font-mono"
+                >
+                  {w}
+                  <button
+                    type="button"
+                    onClick={() => removeKeyword(idx)}
+                    disabled={!callIntentEnabled}
+                    className="hover:text-destructive disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label={`Удалить ${w}`}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
               ))}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                value={keywordInput}
+                onChange={e => setKeywordInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addKeyword() } }}
+                placeholder="Добавить слово…"
+                disabled={!callIntentEnabled}
+                className="h-9 text-sm"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addKeyword}
+                disabled={!callIntentEnabled || !keywordInput.trim() || callIntentSaving}
+                className="gap-1.5"
+              >
+                {callIntentSaving
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <Plus className="w-3.5 h-3.5" />}
+                Добавить
+              </Button>
             </div>
           </div>
 
+          {/* Реакция системы — выбор режима. */}
           <div className="space-y-2">
             <Label className="text-sm font-medium">Реакция системы</Label>
             <div className="space-y-2">
               {([
-                { value: "slot-and-demo" as const, label: "Предложить слот + мягко предложить демо параллельно", desc: "Максимальная конверсия" },
-                { value: "slot-only" as const, label: "Сразу дать слот без демо", desc: "Быстрый процесс" },
-                { value: "insist-demo" as const, label: "Настоять на демо перед звонком", desc: "Фильтрация немотивированных" },
+                { value: "slot-and-demo" as const, label: "Предложить слот + мягко предложить демо параллельно", desc: "Максимальная конверсия", soon: true },
+                { value: "slot-only"     as const, label: "Сразу дать слот без демо",                              desc: "Быстрый процесс",         soon: true },
+                { value: "insist-demo"   as const, label: "Настоять на демо перед звонком",                        desc: "Фильтрация немотивированных", soon: false },
               ]).map(opt => (
                 <button
                   key={opt.value}
-                  disabled
+                  type="button"
+                  disabled={!callIntentEnabled || opt.soon}
                   className={cn(
-                    "w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-all opacity-50 cursor-not-allowed",
-                    responseReaction === opt.value
+                    "w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-all",
+                    callIntentMode === opt.value && !opt.soon
                       ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-                      : "border-border hover:border-primary/30"
+                      : "border-border hover:border-primary/30",
+                    (opt.soon || !callIntentEnabled) && "opacity-60 cursor-not-allowed",
                   )}
-                  onClick={() => setResponseReaction(opt.value)}
+                  onClick={() => !opt.soon && changeCallIntentMode(opt.value)}
                 >
                   <div className={cn(
                     "w-4 h-4 rounded-full border-2 mt-0.5 shrink-0 flex items-center justify-center",
-                    responseReaction === opt.value ? "border-primary" : "border-muted-foreground/40"
+                    callIntentMode === opt.value && !opt.soon ? "border-primary" : "border-muted-foreground/40",
                   )}>
-                    {responseReaction === opt.value && <div className="w-2 h-2 rounded-full bg-primary" />}
+                    {callIntentMode === opt.value && !opt.soon && <div className="w-2 h-2 rounded-full bg-primary" />}
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{opt.label}</p>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground flex items-center gap-2">
+                      {opt.label}
+                      {opt.soon && <Badge variant="outline" className="text-[10px] h-4 px-1.5">Скоро</Badge>}
+                    </p>
                     <p className="text-xs text-muted-foreground">{opt.desc}</p>
                   </div>
                 </button>
               ))}
             </div>
           </div>
+
+          {/* Эскалационные шаблоны — только для insist-demo. */}
+          {callIntentMode === "insist-demo" && (
+            <div className="space-y-3 border-t pt-3">
+              <div className="flex items-center gap-2">
+                <Label className="text-sm font-medium">Эскалационные шаблоны</Label>
+                <Badge variant="secondary" className="text-[10px] h-4 px-1.5">3 текста</Badge>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Каждый раз когда кандидат повторно пишет о звонке — отправляется следующий шаблон. После №3 — больше не реагируем на ключевые слова в рамках этой вакансии.
+              </p>
+              {insistMessages.map((text, idx) => (
+                <div key={idx} className="space-y-1.5">
+                  <Label className="text-xs font-medium">
+                    Шаблон №{idx + 1}{idx === 2 && " — финальный"}
+                  </Label>
+                  <textarea
+                    ref={(el) => { insistRefs.current[idx] = el }}
+                    value={text}
+                    onChange={e => updateInsistMessage(idx as 0 | 1 | 2, e.target.value)}
+                    rows={3}
+                    disabled={!callIntentEnabled}
+                    className="border-input flex w-full rounded-md border bg-[var(--input-bg)] px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:border-ring resize-y"
+                  />
+                  {/* #57: кликабельные плейсхолдеры */}
+                  <PlaceholderBadges
+                    getTextarea={() => insistRefs.current[idx]}
+                    placeholders={["name", "vacancy", "demo_link"]}
+                    value={text}
+                    onValueChange={(v) => updateInsistMessage(idx as 0 | 1 | 2, v)}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
       )}
@@ -507,83 +780,11 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
           Источник истины — таб «Воронка» (Ф3, components/vacancies/funnel-tab.tsx),
           сохраняется через PUT /api/modules/hr/vacancies/[id]/pipeline. */}
 
-      {/* ═══ 6. Автоматические действия ═══════════════════════ */}
-      {showSection("autoActions") && (
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Zap className="w-4 h-4" />
-              Автоматические действия
-            </CardTitle>
-            {automationSaving && (
-              <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Сохранение…
-              </span>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-4">
-            <label className="flex items-start gap-3 cursor-pointer py-1">
-              <Checkbox
-                id="auto-invite"
-                checked={autoInvite}
-                onCheckedChange={(v) => setAutoInvite(v === true)}
-                className="mt-0.5"
-                disabled
-              />
-              <div className="flex-1">
-                <p className="text-sm font-medium flex items-center gap-2">
-                  Авто-приглашение подходящих (AI-скор ≥ 70)
-                  <Badge variant="outline" className="text-[10px] h-4 px-1.5">Скоро</Badge>
-                </p>
-                <p className="text-xs text-muted-foreground">Автоматическое приглашение на следующий этап</p>
-              </div>
-            </label>
-
-            <label className="flex items-start gap-3 cursor-pointer py-1">
-              <Checkbox
-                id="auto-reject"
-                checked={autoReject}
-                onCheckedChange={(v) => setAutoReject(v === true)}
-                className="mt-0.5"
-              />
-              <div className="flex-1">
-                <p className="text-sm font-medium">Авто-отказ неподходящим (AI-скор &lt; 40)</p>
-                <p className="text-xs text-muted-foreground">Автоматический вежливый отказ</p>
-              </div>
-            </label>
-
-            <label className="flex items-start gap-3 cursor-pointer py-1">
-              <Checkbox
-                id="notify-manager"
-                checked={notifyManager}
-                onCheckedChange={(v) => setNotifyManager(v === true)}
-                className="mt-0.5"
-                disabled
-              />
-              <div className="flex-1">
-                <p className="text-sm font-medium flex items-center gap-2">
-                  Уведомлять менеджера о каждом действии
-                  <Badge variant="outline" className="text-[10px] h-4 px-1.5">Скоро</Badge>
-                </p>
-                <p className="text-xs text-muted-foreground">Получать уведомление при каждом авто-действии</p>
-              </div>
-            </label>
-
-            <Separator />
-
-            <p className="text-[11px] text-muted-foreground">
-              Тексты приглашения и отказа теперь редактируются в табе{" "}
-              <span className="font-medium text-foreground">«Сообщения» → «Шаблоны сообщений»</span>{" "}
-              (поля «Приглашение на демонстрацию» и «Мягкий отказ»). Это унифицированное хранилище шаблонов.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-      )}
+      {/* ═══ 6. Автоматические действия ═══ удалено в Сессии 6.
+          Источник истины — блок «AI-фильтр откликов» в табе «Дожим»
+          (components/vacancies/vacancy-ai-process-settings.tsx).
+          AutomationSectionId.autoActions оставлен в типе ради
+          обратной совместимости sections={[...]}, но UI не рендерим. */}
 
       {/* ═══ 9. Дозапрос данных ═══════════════════════════════ */}
       {showSection("enrichment") && (
@@ -645,63 +846,101 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
       </Card>
       )}
 
-      {/* ═══ 7. Шаблоны сообщений ════════════════════════════ */}
+      {/* ═══ 7. Частые вопросы (FAQ) — Сессия 7 ═══════════════ */}
       {showSection("templates") && (
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <MessageSquare className="w-4 h-4" />
-            Шаблоны сообщений
+            Частые вопросы кандидатов
           </CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Готовые ответы на типовые вопросы кандидатов. Для ручного копирования в чат hh.
+          </p>
         </CardHeader>
         <CardContent className="space-y-4">
-          {Object.entries(templateLabels).map(([key, label]) => (
-            <div key={key} className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs font-medium">{label}</Label>
-                <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1 px-2" onClick={async () => {
-                  await navigator.clipboard.writeText(messageTemplates[key] || "")
-                  toast.success("Скопировано")
-                }}>
-                  Копировать
-                </Button>
+          {faq.map((item, idx) => (
+            <div key={idx} className="space-y-1.5 rounded-md border bg-muted/20 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <Input
+                  value={item.topic}
+                  onChange={e => setFaq(prev => prev.map((f, i) => i === idx ? { ...f, topic: e.target.value } : f))}
+                  placeholder="Название темы"
+                  className="h-7 text-xs font-medium flex-1 max-w-[240px]"
+                />
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-[10px] gap-1 px-2"
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(item.text)
+                      toast.success("Скопировано")
+                    }}
+                  >
+                    Копировать
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-[10px] gap-1 px-2 text-destructive hover:text-destructive"
+                    onClick={() => setFaq(prev => prev.filter((_, i) => i !== idx))}
+                    aria-label={`Удалить «${item.topic || "вопрос"}»`}
+                  >
+                    ✕ Удалить
+                  </Button>
+                </div>
               </div>
               <Textarea
-                value={messageTemplates[key] || ""}
-                onChange={e => setMessageTemplates(prev => ({ ...prev, [key]: e.target.value }))}
+                value={item.text}
+                onChange={e => setFaq(prev => prev.map((f, i) => i === idx ? { ...f, text: e.target.value } : f))}
                 rows={2}
-                className="text-xs resize-none bg-[var(--input-bg)] border border-input"
+                className="text-xs resize-y bg-[var(--input-bg)] border border-input"
+                placeholder="Текст ответа…"
               />
             </div>
           ))}
           <div className="flex items-center justify-between">
             <p className="text-[11px] text-muted-foreground">
-              Переменные: {"{имя}"}, {"{должность}"}, {"{зп_от}"}, {"{зп_до}"}, {"{ссылка_на_демонстрацию}"}, {"{дата_время}"}
+              Переменные: {"{{name}}"}, {"{{vacancy}}"}, {"{{salary_from}}"}, {"{{salary_to}}"}, {"{{demo_link}}"}, {"{{interview_at}}"}
             </p>
-            <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => { setMessageTemplates({ ...globalTemplates }); toast.success("Сброшено к шаблонам компании") }}>
-              Сбросить к шаблонам компании
-            </Button>
+            {faq.length < MAX_FAQ_ITEMS && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1.5"
+                onClick={() => setFaq(prev => [...prev, { topic: "", text: "" }])}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Добавить вопрос
+              </Button>
+            )}
           </div>
+          {faq.length === 0 && (
+            <p className="text-[11px] text-muted-foreground italic text-center py-2">
+              Нет тем. Нажмите «Добавить вопрос», чтобы создать первую.
+            </p>
+          )}
         </CardContent>
       </Card>
       )}
 
-      {/* ═══ 8. Бот-звонарь ══════════════════════════════════ */}
+      {/* ═══ 8. AI-агент (звонки кандидатам). #24: переименован с
+             «Бот-звонарь». Сама фича всё ещё «Скоро». ════════════ */}
       {showSection("dialer") && (
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Phone className="w-4 h-4" />
             Звонки кандидатам
-            <Badge variant="outline" className="text-[10px] ml-1">Бот-звонарь</Badge>
             <Badge variant="outline" className="text-[10px] h-4 px-1.5">Скоро</Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium">Подключить бот-звонарь</p>
-              <p className="text-xs text-muted-foreground">Бот автоматически позвонит кандидатам по выбранному сценарию</p>
+              <p className="text-sm font-medium">Подключить AI агента</p>
+              <p className="text-xs text-muted-foreground">Агент автоматически будет звонить кандидатам по выбранному сценарию</p>
             </div>
             <Switch checked={dialerEnabled} onCheckedChange={setDialerEnabled} disabled />
           </div>
@@ -721,9 +960,9 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
               <div className="space-y-1.5">
                 <Label className="text-xs">ID скрипта звонка</Label>
                 <Input value={dialerScriptId} onChange={e => setDialerScriptId(e.target.value)}
-                  placeholder="Выберите скрипт в модуле Бот-звонарь" className="h-9 text-sm bg-[var(--input-bg)] border border-input" />
+                  placeholder="Выберите скрипт в модуле AI-агент" className="h-9 text-sm bg-[var(--input-bg)] border border-input" />
               </div>
-              <a href="/dialer" className="text-xs text-primary hover:underline">Настроить скрипты в модуле Бот-звонарь →</a>
+              <a href="/dialer" className="text-xs text-primary hover:underline">Настроить скрипты в модуле AI-агент →</a>
             </div>
           )}
         </CardContent>
@@ -735,7 +974,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
           components/vacancies/scenario-tab.tsx, lib/scenarios.ts). */}
 
       {/* Кнопка сохранения */}
-      {showGlobalSave && (
+      {showLocalGlobalSave && (
         <div className="flex justify-end mt-3">
           <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={saveSettings} disabled={saving}>
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}

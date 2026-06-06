@@ -1,4 +1,11 @@
-export type BlockType = "text" | "image" | "video" | "audio" | "file" | "info" | "button" | "task" | "media"
+export type BlockType = "text" | "image" | "video" | "audio" | "file" | "info" | "button" | "task" | "media" | "stories"
+
+export interface StoriesCard {
+  id: string
+  mediaType: "image" | "video"
+  url: string
+  caption?: string
+}
 
 export type ImageLayout = "full" | "image-left" | "image-right"
 export type AudioLayout = "full" | "audio-left" | "audio-right"
@@ -26,6 +33,23 @@ export interface Question {
   correctYesNo?: "yes" | "no" // правильный ответ для yesno
   correctSort?: number[]     // правильный порядок для sort (индексы)
   points?: number            // баллы за правильный ответ (0 = не учитывать)
+  // Баллы на каждый вариант (index-aligned с options) для single/multiple.
+  // Если задан — частичный скоринг: балл за вопрос = сумма баллов выбранных
+  // вариантов (для single — балл выбранного), обрезается в [0 … макс].
+  // Отрицательные значения = штраф за лишний/ловушку. Если НЕ задан —
+  // деривится из correctOptions + points (см. lib/score-test-objective).
+  optionPoints?: number[]
+  // Штраф за лишний (неверный) выбор в multiple, когда баллы НЕ заданы вручную
+  // (простой режим с ✓). Влияет на деривацию optionPoints:
+  //   "none" → лишний = 0, "half" → лишний = −½ балла верного, "full" → −полный.
+  // undefined → "half" (мягкий дефолт).
+  overselectPenalty?: "none" | "half" | "full"
+  // «Другое (с полем ввода)»: индексы вариантов, при выборе которых кандидату
+  // показывается текстовое поле для своего ответа. otherPlaceholder — подсказка
+  // в этом поле (напр. «Укажите что»). Хранение по индексам (как correctOptions),
+  // правится на удалении варианта.
+  otherOptions?: number[]
+  otherPlaceholder?: string
   // legacy fields
   textMatchMode?: "exact" | "ai"
   correctText?: string
@@ -68,6 +92,11 @@ export interface Block {
   buttonColor?: string
   buttonIconBefore?: string
   buttonIconAfter?: string
+  buttonAlign?: "left" | "center" | "right"  // расположение кнопки на странице
+  // Куда ведёт кнопка: "next" — следующая страница по очереди (для теста —
+  // отправка ответов + экран после), "url" — внешняя ссылка (показываем поле URL).
+  // undefined трактуем как "url" при заполненном buttonUrl, иначе "next".
+  buttonTarget?: "next" | "url"
   taskTitle: string        // заголовок задания (новое)
   taskDescription: string  // вступительный текст
   questions: Question[]
@@ -78,6 +107,8 @@ export interface Block {
   mediaMaxDuration?: number | null  // секунды, null = без лимита
   mediaRequired?: boolean
   mediaInstruction?: string
+  // stories-блок — карусель карточек (фото + видео)
+  storiesCards?: StoriesCard[]
 }
 
 export interface Lesson {
@@ -127,6 +158,7 @@ export const BLOCK_TYPE_META: { type: BlockType; icon: string; label: string }[]
   { type: "button", icon: "🔘", label: "Кнопка" },
   { type: "task", icon: "✅", label: "Задание" },
   { type: "media", icon: "🎥", label: "Запись медиа" },
+  { type: "stories", icon: "▶", label: "Сторис" },
 ]
 
 export function defaultQuestion(): Question {
@@ -151,6 +183,7 @@ export function createBlock(type: BlockType): Block {
     mediaMaxDuration: type === "media" ? 60 : undefined,
     mediaRequired: type === "media" ? false : undefined,
     mediaInstruction: type === "media" ? "" : undefined,
+    storiesCards: type === "stories" ? [] : undefined,
   }
 }
 

@@ -9,7 +9,7 @@ import {
   Globe, Database, Rocket, BarChart3, BarChart2, FileText, Search, TrendingUp, Megaphone,
   DollarSign, Truck, Gift, Building2, CreditCard, Plug, Clock, Bell, Palette, LayoutGrid,
   Settings, Shield, ChevronRight, ChevronDown, LogOut, Calendar, CalendarDays, Share2, ShieldCheck,
-  ClipboardList, ClipboardCheck, UserCheck2, Trophy, HeartHandshake, BookOpen, Award, Zap,
+  ScrollText, ClipboardList, ClipboardCheck, UserCheck2, Trophy, HeartHandshake, BookOpen, Award, Zap,
   AlertTriangle, UserMinus, Brain, Radar, Bot, Store, TrendingDown, Handshake,
   BookMarked, GraduationCap, Target, PieChart, FilePlus, Lock, Library,
   Sparkles, Plus, Coins, SlidersHorizontal, Sunrise, Activity, Inbox,
@@ -46,7 +46,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   LayoutDashboard, Users, User, Briefcase, UserCheck, Layers, MessageSquare,
   Globe, Database, Rocket, BarChart3, FileText, Search, TrendingUp, Megaphone,
   DollarSign, Truck, Gift, Building2, CreditCard, Plug, Clock, Bell, Palette, LayoutGrid,
-  Settings, Shield, Calendar, CalendarDays, Share2, ShieldCheck, ClipboardList, ClipboardCheck,
+  Settings, Shield, Calendar, CalendarDays, Share2, ShieldCheck, ScrollText, ClipboardList, ClipboardCheck,
   UserCheck2, Trophy, BarChart2, HeartHandshake, BookOpen, Award, Zap, ChevronRight,
   AlertTriangle, UserMinus, Brain, Radar, Bot, Store, TrendingDown, Handshake,
   BookMarked, GraduationCap, Target, PieChart, FilePlus, Library,
@@ -170,15 +170,19 @@ export function DashboardSidebar() {
   const [companyLogo, setCompanyLogo] = useState<string | null>(null)
   const [companyName, setCompanyName] = useState<string | null>(null)
   const [companySlogan, setCompanySlogan] = useState<string | null>(null)
+  // Вид логотипа: подложка-бейдж (padded, по умолчанию) или без неё (plain).
+  // Выбирается в Настройки → Брендинг (customTheme.sidebarLogoMode).
+  const [logoPadded, setLogoPadded] = useState(true)
   useEffect(() => {
     const loadCompany = () => {
       fetch('/api/companies').then(r => r.ok ? r.json() : null)
-        .then((d: { logoUrl?: string; name?: string; brandName?: string; brandSlogan?: string } | null) => {
+        .then((d: { logoUrl?: string; name?: string; brandName?: string; brandSlogan?: string; customTheme?: Record<string, unknown> } | null) => {
           if (d) {
             setCompanyLogo(d.logoUrl ?? null)
             const display = d.brandName?.trim() || d.name?.trim() || null
             setCompanyName(display)
             setCompanySlogan(d.brandSlogan?.trim() || null)
+            setLogoPadded((d.customTheme as Record<string, unknown> | undefined)?.sidebarLogoMode !== "plain")
           }
         }).catch(() => {})
     }
@@ -208,14 +212,31 @@ export function DashboardSidebar() {
   // E-commerce: убран из меню, планируется позже
   const ALL_MODULES_FOR_ROLE = (vis.modules ?? ['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'logistics', 'booking', 'dialer', 'qc', 'b2b']) as ModuleId[]
   const [activeModules, setActiveModules] = useState<ModuleId[]>(ALL_MODULES_FOR_ROLE)
+
+  // STAGING-ONLY: всем КЛИЕНТСКИМ ролям на new.company24.pro открываем ПОЛНЫЙ HR +
+  // Базу знаний (для редактирования/тестов). На проде остаётся клиентский lite-режим.
+  // Гейт по hostname — клиентский, поэтому через состояние после маунта (без
+  // SSR-рассинхрона). Прод НЕ затрагивается. Позже откроем и на проде по команде.
+  const [stagingFullAccess, setStagingFullAccess] = useState(false)
+  useEffect(() => {
+    setStagingFullAccess(
+      !isAdminOrManager && role !== 'employee' &&
+      typeof window !== 'undefined' && window.location.hostname === 'new.company24.pro'
+    )
+  }, [role, isAdminOrManager])
+  const hrLite = !isAdminOrManager && !stagingFullAccess
+
   // Пересчёт модулей при изменении роли (когда useSession догружает данные)
   useEffect(() => {
-    const newModules = (vis.modules ?? ['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'logistics', 'booking', 'dialer', 'qc', 'b2b']) as ModuleId[]
+    const base = (vis.modules ?? ['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'logistics', 'booking', 'dialer', 'qc', 'b2b']) as ModuleId[]
+    const newModules = (stagingFullAccess && !base.includes('knowledge' as ModuleId)
+      ? [...base, 'knowledge' as ModuleId]
+      : base)
     setActiveModules(prev => {
       if (prev.length === newModules.length && prev.every((m, i) => m === newModules[i])) return prev
       return newModules
     })
-  }, [vis.modules])
+  }, [vis.modules, stagingFullAccess])
 
   // ── Sidebar visibility customization ──
   const { visibility: sidebarVis, setVisibility: setSidebarVis, isModuleVisible, isItemVisible, resetToDefault: resetSidebarVis } = useSidebarVisibility()
@@ -297,7 +318,7 @@ export function DashboardSidebar() {
     } catch {}
     // Auto-expand group matching current path
     for (const id of activeModules) {
-      for (const group of getModuleGroups(id, !isAdminOrManager)) {
+      for (const group of getModuleGroups(id, hrLite)) {
         if (group.label && group.items.some(i => !i.divider && (pathname === i.href || pathname.startsWith(i.href + '/')))) {
           next.add(`${id}:${group.label}`)
         }
@@ -316,7 +337,7 @@ export function DashboardSidebar() {
   useEffect(() => {
     if (!mounted) return
     for (const id of activeModules) {
-      for (const group of getModuleGroups(id, !isAdminOrManager)) {
+      for (const group of getModuleGroups(id, hrLite)) {
         if (group.label && group.items.some(i => !i.divider && (pathname === i.href || pathname.startsWith(i.href + '/')))) {
           const key = `${id}:${group.label}`
           setExpandedGroups(prev => {
@@ -409,9 +430,12 @@ export function DashboardSidebar() {
         <div className="flex items-center gap-3">
           {companyLogo ? (
             <div className={cn(
-              "shrink-0 flex items-center justify-center overflow-hidden bg-white/15 rounded-md p-1",
+              // Подложка-бейдж выбирается в Брендинге: padded — белый фон (любой
+              // логотип читается на тёмном сайдбаре), plain — логотип без подложки.
+              "shrink-0 flex items-center justify-center overflow-hidden rounded-md",
+              logoPadded && "bg-white p-0.5",
               "h-10 w-auto max-w-[140px] min-w-10",
-              "group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:max-w-8 group-data-[collapsible=icon]:rounded-[6px]",
+              "group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:max-w-8 group-data-[collapsible=icon]:rounded-[6px] group-data-[collapsible=icon]:p-0.5",
             )}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -488,7 +512,7 @@ export function DashboardSidebar() {
 
           {/* Module switcher icons */}
           {(Object.keys(MODULE_REGISTRY) as ModuleId[])
-            .filter((id) => (id !== 'hr' || vis.hiring) && isModuleVisible(id) && activeModules.includes(id))
+            .filter((id) => (id !== 'hr' || vis.hiring || stagingFullAccess) && isModuleVisible(id) && activeModules.includes(id))
             .map((id) => {
             const mod = MODULE_REGISTRY[id]
             const Icon = getIcon(mod.icon)
@@ -515,7 +539,7 @@ export function DashboardSidebar() {
           {(() => {
             const activeId = activeModules.find(id => pathname.startsWith(MODULE_REGISTRY[id].basePath)) || activeModules[0]
             if (!activeId) return null
-            const groups = getModuleGroups(activeId, !isAdminOrManager)
+            const groups = getModuleGroups(activeId, hrLite)
             return groups.filter(g => g.items.some(i => !i.divider)).map((group) => {
               const firstItem = group.items.find(i => !i.divider)!
               const GroupIcon = getIcon(firstItem.icon)
@@ -580,14 +604,14 @@ export function DashboardSidebar() {
           <div className="my-1.5 mx-3 border-t border-sidebar-border/60" />
 
           {(Object.keys(MODULE_REGISTRY) as ModuleId[])
-            .filter((id) => (id !== 'hr' || vis.hiring) && isModuleVisible(id) && activeModules.includes(id))
+            .filter((id) => (id !== 'hr' || vis.hiring || stagingFullAccess) && isModuleVisible(id) && activeModules.includes(id))
             .map((id) => {
             const isModuleEnabled = activeModules.includes(id)
             const mod = MODULE_REGISTRY[id]
             const ModIcon = getIcon(mod.icon)
             const isExpanded = expandedModules.has(id)
             const isModuleActive = pathname.startsWith(mod.basePath)
-            const groups = isModuleEnabled ? getModuleGroups(id, !isAdminOrManager) : []
+            const groups = isModuleEnabled ? getModuleGroups(id, hrLite) : []
             const hasItems = isModuleEnabled && groups.some(g => g.items.length > 0)
 
             // Single-item module → render as direct link (no accordion)
@@ -735,10 +759,6 @@ export function DashboardSidebar() {
                                 ? <>{group.label.replace(' (v1)', '')}<span className="ml-1 text-[9px] font-normal normal-case opacity-50">(v1)</span></>
                                 : group.label}
                             </span>
-                            <span className={cn(
-                              "text-[10px] font-medium px-1.5 py-0.5 rounded-full",
-                              GROUP_COLORS[group.label]?.bg || (group.legacy ? "bg-slate-500/10 text-sidebar-foreground/30" : "bg-sidebar-accent/50 text-sidebar-foreground/50")
-                            )}>{group.items.filter(i => !i.divider && !i.legacy).length}</span>
                             <ChevronRight className={cn(
                               "size-3 shrink-0 transition-transform duration-150",
                               mounted && isGroupExpanded && "rotate-90"

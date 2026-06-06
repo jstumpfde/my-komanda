@@ -3,6 +3,7 @@ import { and, eq, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { demoTemplates } from "@/lib/db/schema"
 import { requireCompany } from "@/lib/api-helpers"
+import { denyIfNotDevAccess } from "@/lib/dev-guard"
 
 // ─── Block & lesson helpers ──────────────────────────────────────────────────
 
@@ -377,11 +378,117 @@ const TEMPLATE_WORKER = {
   ],
 }
 
-const ALL_TEMPLATES = [TEMPLATE_B2B_SALES, TEMPLATE_IT_DEV, TEMPLATE_WORKER]
+// ─── Template 4: Менеджер продаж — демонстрация-анкета (вопрос-ответ) ────────
+// «Перевёрнутый» формат: не длинный текст про компанию, а 7 коротких вопросов
+// кандидату, между которыми — короткие строки-контекст о компании (как награда).
+// Прохождение = заполнение анкеты: каждый ответ идёт в карточку и в AI-скоринг.
+// Текстовые вопросы (что продавал) — главный сигнал для скоринга.
+// Один вопрос = один экран (урок). Контекст-строка идёт под вопросом.
+
+const TEMPLATE_SALES_QA = {
+  name: "Менеджер продаж — демонстрация должности",
+  niche: "sales_b2b",
+  length: "short",
+  sections: [
+    lesson("l1", "", "Знакомство", [
+      blk("b1", "text", p(
+        "{{компания}}\n\n" +
+        "Кто мы: компания на стадии активного роста, продукт уже работает у клиентов.\n" +
+        "Кто ведёт: {{руководитель}} — основатель, продажи и маркетинг ведёт сам.\n\n" +
+        "Вместо собеседования — 7 коротких вопросов. Это займёт 3 минуты. По ответам сразу поймём, подходим ли друг другу. Листать вперёд можно, отвечая на вопросы."
+      )),
+    ]),
+    lesson("l2", "", "Вопрос 1. Доход", [
+      blk("b2", "task", "", {
+        taskTitle: "Какой доход в месяц вам нужен, чтобы было комфортно?",
+        taskDescription: "Укажите сумму в рублях.",
+        questions: [{ id: "q1", text: "Желаемый доход в месяц, ₽", answerType: "short", options: [], required: true }],
+      }),
+      blk("b2c", "info", p("У нас оклад от {{зарплата_от}} ₽ + % без потолка. Сколько закрываете — столько зарабатываете."), { infoStyle: "success" }),
+    ]),
+    lesson("l3", "", "Вопрос 2. Тип продаж", [
+      blk("b3", "task", "", {
+        taskTitle: "Что вы продавали по типу сделок?",
+        taskDescription: "Отметьте всё, что про вас.",
+        questions: [{
+          id: "q1", text: "Отметьте всё, что подходит", answerType: "multiple",
+          options: ["Короткие быстрые сделки", "Длинный цикл, несколько касаний", "Большие чеки", "Средние чеки", "Малые чеки"],
+          required: true,
+        }],
+      }),
+      blk("b3c", "info", p("У нас вы продаёте AI-платформу для бизнеса. Сделки средние и крупные, цикл от нескольких касаний."), { infoStyle: "info" }),
+    ]),
+    lesson("l4", "", "Вопрос 3. Стиль работы", [
+      blk("b4", "task", "", {
+        taskTitle: "Что вам ближе в работе с клиентом?",
+        taskDescription: "",
+        questions: [{
+          id: "q1", text: "Выберите один вариант", answerType: "single",
+          options: ["Привлекать новых клиентов с нуля", "Вести и развивать существующих", "И то и другое примерно поровну"],
+          required: true,
+        }],
+      }),
+      blk("b4c", "info", p("Нам нужен хантер, который умеет привлекать с нуля и доводить до сделки."), { infoStyle: "info" }),
+    ]),
+    lesson("l5", "", "Вопрос 4. Масштаб работы", [
+      blk("b5", "task", "", {
+        taskTitle: "Вы работали в одиночку или в составе отдела продаж?",
+        taskDescription: "",
+        questions: [{
+          id: "q1", text: "Выберите один вариант", answerType: "single",
+          options: ["В одиночку / самозанятый", "В небольшом отделе (до 5)", "В большом отделе продаж"],
+          required: true,
+        }],
+      }),
+    ]),
+    lesson("l6", "", "Вопрос 5. Что продавали", [
+      blk("b6", "task", "", {
+        taskTitle: "Расскажите своими словами: что именно вы продавали и кому?",
+        taskDescription: "Чем конкретнее — тем лучше. Это главный вопрос: по нему видно реальный опыт.",
+        questions: [{ id: "q1", text: "Ваш ответ", answerType: "long", options: [], required: true }],
+      }),
+      blk("b6c", "info", p("У нас работа в темпе стартапа: плотно, быстрая обратная связь, напрямую с {{руководитель}}."), { infoStyle: "info" }),
+    ]),
+    lesson("l7", "", "Вопрос 6. Заказчики", [
+      blk("b7", "task", "", {
+        taskTitle: "С какими заказчиками вы работали?",
+        taskDescription: "Отметьте всё, что подходит.",
+        questions: [{
+          id: "q1", text: "Отметьте всё, что подходит", answerType: "multiple",
+          options: ["B2B — бизнесу", "B2C — частным лицам", "B2G — госзаказ"],
+          required: true,
+        }],
+      }),
+      blk("b7c", "info", p("Мы работаем с B2B — компаниями и предпринимателями."), { infoStyle: "info" }),
+    ]),
+    lesson("l8", "", "Вопрос 7. Способы связи", [
+      blk("b8", "task", "", {
+        taskTitle: "С какими способами связи вы работаете в продажах?",
+        taskDescription: "Отметьте всё, что подходит.",
+        questions: [{
+          id: "q1", text: "Отметьте всё, что подходит", answerType: "multiple",
+          options: ["Входящие обращения и заявки", "Звонки по тёплой базе", "Холодные звонки", "Переписка в мессенджерах", "Email и письма", "Личные встречи / видеовстречи"],
+          required: true,
+        }],
+      }),
+      blk("b8c", "info", p("У нас тёплая база + холодные звонки, переписка в мессенджерах."), { infoStyle: "info" }),
+    ]),
+    lesson("l9", "", "Готово", [
+      blk("b9", "text", p(
+        "Спасибо! AI оценит ваши ответы по нескольким параметрам.\n\n" +
+        "Если подходим друг другу — {{руководитель}} напишет лично в течение 24 часов. В любом случае мы ответим."
+      )),
+    ]),
+  ],
+}
+
+const ALL_TEMPLATES = [TEMPLATE_B2B_SALES, TEMPLATE_IT_DEV, TEMPLATE_WORKER, TEMPLATE_SALES_QA]
 
 // ─── Handler ────────────────────────────────────────────────────────────────
 
 export async function POST() {
+  const denied = await denyIfNotDevAccess()
+  if (denied) return denied
   try {
     await requireCompany()
   } catch (err) {
@@ -389,7 +496,7 @@ export async function POST() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const results: Array<{ name: string; action: "inserted" | "exists" }> = []
+  const results: Array<{ name: string; action: "inserted" | "updated" }> = []
 
   for (const tmpl of ALL_TEMPLATES) {
     const existing = await db
@@ -403,7 +510,13 @@ export async function POST() {
       .limit(1)
 
     if (existing.length > 0) {
-      results.push({ name: tmpl.name, action: "exists" })
+      // Системный шаблон управляется кодом — синхронизируем содержимое при
+      // повторном сиде (правки в TEMPLATE_* подхватываются). Пользовательские
+      // копии (isSystem=false) сюда не попадают и не затрагиваются.
+      await db.update(demoTemplates)
+        .set({ niche: tmpl.niche, length: tmpl.length, sections: tmpl.sections, updatedAt: new Date() })
+        .where(eq(demoTemplates.id, existing[0].id))
+      results.push({ name: tmpl.name, action: "updated" })
       continue
     }
 

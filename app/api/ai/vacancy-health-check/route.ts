@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     const [demo] = await db
       .select({ id: demos.id })
       .from(demos)
-      .where(eq(demos.vacancyId, body.vacancyId))
+      .where(and(eq(demos.vacancyId, body.vacancyId), eq(demos.kind, "demo")))
       .limit(1)
 
     const issues: HealthIssue[] = []

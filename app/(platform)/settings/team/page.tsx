@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import {
   Users, Plus, Settings, Trash2, Save, UserPlus,
   Mail, AlertTriangle, Check,
@@ -21,7 +22,7 @@ import {
   Loader2, ExternalLink, Camera, KeyRound, Ban, ChevronDown,
 } from "lucide-react"
 import { getVacancyCategories } from "@/lib/vacancy-storage"
-import { useLocalStorage } from "@/hooks/use-local-storage"
+import { useAuth } from "@/lib/auth"
 
 // ─── Типы ────────────────────────────────────────────────────
 
@@ -108,19 +109,35 @@ const PERMISSIONS_CONFIG = [
   { key: "view_analytics", label: "Аналитика" },
 ] as const
 
-// ─── Тестовые данные ────────────────────────────────────────
-
-const INITIAL_MEMBERS: TeamMember[] = [
-  { id: "m1", name: "Анна Иванова",   email: "anna@romashka.ru",    role: "hr_lead",         status: "active",  avatar: "АИ", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "all" },
-  { id: "m2", name: "Дмитрий Козлов", email: "dmitry@romashka.ru",  role: "hr_manager",      status: "active",  avatar: "ДК", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "own" },
-  { id: "m3", name: "Михаил Романов", email: "mikhail@romashka.ru", role: "department_head", status: "active",  avatar: "МР", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "categories" },
-  { id: "m4", name: "Ольга Тихонова", email: "olga@romashka.ru",    role: "observer",        status: "invited", avatar: "ОТ", avatarUrl: undefined, vacancyIds: [], categories: [], candidateVisibility: "all" },
-]
-
 // ─── Компонент ──────────────────────────────────────────────
 
 export default function TeamPage() {
-  const [members, setMembers] = useLocalStorage<TeamMember[]>("team-members", INITIAL_MEMBERS)
+  const { hasAccess } = useAuth()
+  const [members, setMembers] = useState<TeamMember[]>([])
+
+  // Реальные участники компании из БД (GET /api/team), а не демо-данные.
+  useEffect(() => {
+    let alive = true
+    fetch("/api/team")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: { id: string; name: string; email: string; role: string; avatarUrl?: string | null; isActive?: boolean; permissions?: Record<string, boolean> | null }[]) => {
+        if (!alive || !Array.isArray(rows)) return
+        const VALID: TeamRole[] = ["director", "hr_lead", "hr_manager", "department_head", "observer", "employee"]
+        setMembers(rows.map((u) => ({
+          id: u.id,
+          name: u.name || u.email,
+          email: u.email,
+          role: (VALID.includes(u.role as TeamRole) ? u.role : "employee") as TeamRole,
+          status: (u.isActive === false ? "disabled" : "active") as MemberStatus,
+          permissions: (u.permissions as Record<string, boolean>) ?? undefined,
+          avatar: (u.name || u.email).split(/\s+/).map((s) => s[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(),
+          avatarUrl: u.avatarUrl || undefined,
+          vacancyIds: [], categories: [], candidateVisibility: "all",
+        })))
+      })
+      .catch(() => { /* оставляем пустой список */ })
+    return () => { alive = false }
+  }, [])
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
@@ -199,8 +216,47 @@ export default function TeamPage() {
   const [editPermissions, setEditPermissions] = useState<Record<string, boolean>>({})
 
   // Join link state
-  const [joinCode] = useState("demo-abc123")
+  // Постоянная ссылка-приглашение = уникальный join_code компании (например
+  // orlink). Грузим реальный из /api/companies, редактируем и сохраняем.
+  const [joinCode, setJoinCode] = useState("")
+  const [joinCodeSaved, setJoinCodeSaved] = useState("")
   const [joinEnabled, setJoinEnabled] = useState(true)
+  const [joinSaving, setJoinSaving] = useState(false)
+  const [joinOrigin, setJoinOrigin] = useState("company24.pro")
+
+  useEffect(() => {
+    if (typeof window !== "undefined") setJoinOrigin(window.location.host)
+    fetch("/api/companies")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((c: { joinCode?: string | null; joinEnabled?: boolean } | null) => {
+        if (!c) return
+        const code = c.joinCode || ""
+        setJoinCode(code); setJoinCodeSaved(code)
+        setJoinEnabled(c.joinEnabled !== false)
+      })
+      .catch(() => {})
+  }, [])
+
+  const saveJoin = async (patch: { join_code?: string; join_enabled?: boolean }) => {
+    setJoinSaving(true)
+    try {
+      const res = await fetch("/api/companies", {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch),
+      })
+      const data = await res.json().catch(() => null) as { joinCode?: string | null; joinEnabled?: boolean; error?: string } | null
+      if (!res.ok) throw new Error(data?.error || "Не удалось сохранить")
+      if (patch.join_code !== undefined) {
+        const code = data?.joinCode || ""
+        setJoinCode(code); setJoinCodeSaved(code)
+      }
+      if (patch.join_enabled !== undefined) setJoinEnabled(data?.joinEnabled !== false)
+      toast.success("Сохранено")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Ошибка")
+      // откатываем тумблер при ошибке
+      if (patch.join_enabled !== undefined) setJoinEnabled((v) => !v)
+    } finally { setJoinSaving(false) }
+  }
 
   // Invite by email form
   const [inviteEmail, setInviteEmail] = useState("")
@@ -217,6 +273,15 @@ export default function TeamPage() {
   const [linkMaxUses, setLinkMaxUses]       = useState<string>("1")
   const [linkExpireDays, setLinkExpireDays] = useState<string>("7")
   const [creating, setCreating]             = useState(false)
+
+  if (!hasAccess(["platform_admin", "admin", "director", "client"])) {
+    return (
+      <div className="max-w-2xl mx-auto py-16 text-center">
+        <h1 className="text-xl font-semibold mb-2">Доступ ограничен</h1>
+        <p className="text-sm text-muted-foreground">Эта страница доступна только директору компании.</p>
+      </div>
+    )
+  }
 
   const openLinkDialog = async () => {
     setLinkDialogOpen(true)
@@ -294,28 +359,62 @@ export default function TeamPage() {
     setConfirmDeleteId(null)
   }
 
-  const handleSaveInline = (memberId: string) => {
+  const handleSaveInline = async (memberId: string) => {
+    const snapshot = members
+    const nextRole = editRole
+    const nextPerms = editPermissions
     setMembers(prev => prev.map(m =>
-      m.id === memberId ? { ...m, role: editRole, permissions: editPermissions } : m
+      m.id === memberId ? { ...m, role: nextRole, permissions: nextPerms } : m
     ))
     setExpandedId(null)
-    toast.success("Настройки сохранены")
+    try {
+      const res = await fetch("/api/team", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: memberId, role: nextRole, permissions: nextPerms }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`)
+      toast.success("Настройки сохранены")
+    } catch (e) {
+      setMembers(snapshot) // откат — на сервере не сохранилось
+      toast.error(e instanceof Error ? e.message : "Не удалось сохранить")
+    }
   }
 
-  const handleDeleteMember = (memberId: string) => {
+  const handleDeleteMember = async (memberId: string) => {
     const member = members.find(m => m.id === memberId)
+    const snapshot = members
     setMembers(prev => prev.filter(m => m.id !== memberId))
     setExpandedId(null)
-    toast.error(`${member?.name ?? "Участник"} удалён из команды`)
+    try {
+      const res = await fetch(`/api/team?id=${encodeURIComponent(memberId)}`, { method: "DELETE" })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`)
+      toast.success(`${member?.name ?? "Участник"} удалён из команды`)
+    } catch (e) {
+      setMembers(snapshot) // откат
+      toast.error(e instanceof Error ? e.message : "Не удалось удалить")
+    }
   }
 
-  const handleBlockMember = (memberId: string) => {
-    setMembers(prev => prev.map(m =>
-      m.id === memberId ? { ...m, status: m.status === "disabled" ? "active" : "disabled" as MemberStatus } : m
-    ))
+  const handleBlockMember = async (memberId: string) => {
     const member = members.find(m => m.id === memberId)
-    const wasDisabled = member?.status === "disabled"
-    toast.success(wasDisabled ? `${member?.name} разблокирован` : `${member?.name} заблокирован`)
+    const snapshot = members
+    const willDisable = member?.status !== "disabled"
+    setMembers(prev => prev.map(m =>
+      m.id === memberId ? { ...m, status: (willDisable ? "disabled" : "active") as MemberStatus } : m
+    ))
+    try {
+      const res = await fetch("/api/team", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: memberId, isActive: !willDisable }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`)
+      toast.success(willDisable ? `${member?.name} заблокирован` : `${member?.name} разблокирован`)
+    } catch (e) {
+      setMembers(snapshot) // откат
+      toast.error(e instanceof Error ? e.message : "Не удалось изменить статус")
+    }
   }
 
   const handleResetPassword = (memberId: string) => {
@@ -359,7 +458,7 @@ export default function TeamPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
         <div>
-          <h1 className="text-xl font-semibold text-foreground mb-1">Команда</h1>
+          <div className="flex items-center gap-2"><Users className="h-5 w-5 text-violet-600" /><h1 className="text-lg font-semibold">Команда</h1></div>
           <p className="text-muted-foreground text-sm">Управление участниками и ролями</p>
         </div>
         <div className="flex gap-2">
@@ -378,51 +477,79 @@ export default function TeamPage() {
         </div>
       </div>
 
-      {/* Ссылка для присоединения */}
+      {/* ═══ Приглашения: часть 1 — публичная ссылка (роль: Сотрудник) ═══ */}
       <Card className="mb-4">
         <CardHeader>
-          <CardTitle className="text-base">Ссылка для присоединения к компании</CardTitle>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Link2 className="w-4 h-4" /> Публичная ссылка <span className="text-xs font-normal text-muted-foreground">(роль: Сотрудник)</span>
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Любой сотрудник может присоединиться по этой ссылке. После регистрации он попадёт в компанию с ролью &laquo;Сотрудник&raquo; — настройте права в карточке.
+            Постоянная ссылка-приглашение компании (без срока и лимита). Любой, кто перейдёт,
+            присоединится с ролью &laquo;Сотрудник&raquo; — права настроите в его карточке.
+            Адрес можно менять; он уникален для всего портала.
           </p>
-          <div className="flex items-center gap-2">
-            <div className="bg-muted px-3 py-2 rounded-lg font-mono text-sm flex-1 truncate">
-              company24.pro/join/{joinCode}
+          <p className="text-xs text-muted-foreground">
+            <b>Когда использовать:</b> массовый набор сотрудников по одной ссылке. Нужна
+            конкретная роль (HR, директор) или срок/лимит — используйте{" "}
+            <button type="button" onClick={openLinkDialog} className="text-primary hover:underline">персональные приглашения</button>.
+          </p>
+          {/* Редактируемый код: префикс + поле + кнопка — единый контрол */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center flex-1 min-w-[260px] rounded-md border border-input bg-background overflow-hidden focus-within:ring-2 focus-within:ring-ring/50 focus-within:border-ring transition-[box-shadow,border-color]">
+              <span className="px-3 py-2 font-mono text-sm text-muted-foreground bg-muted select-none whitespace-nowrap border-r border-input">
+                {joinOrigin}/join/
+              </span>
+              <Input
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value)}
+                placeholder="company"
+                className="h-9 border-0 shadow-none rounded-none bg-transparent font-mono text-sm focus-visible:ring-0 focus-visible:border-0 px-2 flex-1"
+              />
+              {joinCode === joinCodeSaved && (
+                <button
+                  type="button"
+                  className="px-3 h-full flex items-center text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 border-l border-input"
+                  disabled={!joinCodeSaved}
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/join/${joinCodeSaved}`)
+                    toast.success("Ссылка скопирована")
+                  }}
+                  title="Скопировать ссылку"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+              )}
             </div>
-            <Button
-              variant="outline"
-              size="icon"
-              className="shrink-0"
-              onClick={() => {
-                navigator.clipboard.writeText(`company24.pro/join/${joinCode}`)
-                toast.success("Ссылка скопирована")
-              }}
-            >
-              <Copy className="w-4 h-4" />
-            </Button>
+            {joinCode !== joinCodeSaved && (
+              <Button size="sm" disabled={joinSaving || !joinCode.trim()} onClick={() => saveJoin({ join_code: joinCode.trim() })}>
+                Сохранить
+              </Button>
+            )}
           </div>
+          {!joinCodeSaved && (
+            <p className="text-xs text-amber-600">
+              Ссылка ещё не задана — впишите уникальный адрес (например <b>company</b>) и нажмите «Сохранить».
+            </p>
+          )}
           <div className="flex items-center gap-2">
-            <Switch checked={joinEnabled} onCheckedChange={setJoinEnabled} />
+            <Switch checked={joinEnabled} onCheckedChange={(v) => { setJoinEnabled(v); void saveJoin({ join_enabled: v }) }} disabled={joinSaving} />
             <span className="text-sm text-foreground">Ссылка активна</span>
           </div>
         </CardContent>
       </Card>
 
       {/* Таблица участников */}
-      <div className="rounded-xl border border-border shadow-sm bg-card mb-8">
-        <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-muted/50 border-b border-border/50">
-                  <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-5 py-3">Участник</th>
-                  <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-3 py-3 w-[140px]">Роль</th>
-                  <th className="text-left text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-3 py-3">Email</th>
-                  <th className="text-center text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-3 py-3 w-[100px]">Статус</th>
-                  <th className="text-center text-[10px] uppercase font-medium text-muted-foreground tracking-wider px-3 py-3 w-[50px]"></th>
-                </tr>
-              </thead>
+      <TableCard className="mb-8">
+            <DataTable>
+              <DataHead>
+                <DataHeadCell>Участник</DataHeadCell>
+                <DataHeadCell width="140px">Роль</DataHeadCell>
+                <DataHeadCell>Email</DataHeadCell>
+                <DataHeadCell align="center" width="100px">Статус</DataHeadCell>
+                <DataHeadCell align="center" width="50px"></DataHeadCell>
+              </DataHead>
               <tbody>
                 {members.map(member => {
                   const roleCfg = ROLE_CONFIG[member.role]
@@ -450,9 +577,8 @@ export default function TeamPage() {
                   )
                 })}
               </tbody>
-            </table>
-        </div>
-      </div>
+            </DataTable>
+      </TableCard>
 
       {/* ═══ Диалог ссылок-приглашений ══════════════════════════════ */}
       <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
@@ -460,15 +586,20 @@ export default function TeamPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Link2 className="w-5 h-5" />
-              Ссылки-приглашения
+              Персональные приглашения <span className="text-xs font-normal text-muted-foreground">(роль + срок)</span>
             </DialogTitle>
+            <p className="text-xs text-muted-foreground pt-1">
+              Адресные ссылки на любую роль (вплоть до HR/директора) со сроком и лимитом
+              использований. Для массового набора сотрудников проще одна публичная ссылка
+              на странице «Команда».
+            </p>
           </DialogHeader>
 
           {/* Форма создания */}
           <div className="rounded-xl border bg-muted/30 p-4 space-y-4">
             <p className="text-sm font-medium text-foreground">Создать новую ссылку</p>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs">Роль</Label>
                 <Select value={linkRole} onValueChange={v => setLinkRole(v as TeamRole)}>
@@ -829,14 +960,14 @@ function MemberRow({
 
   return (
     <>
-      <tr
+      <DataRow
         className={cn(
-          "border-b border-border/50 hover:bg-muted/50 transition-colors cursor-pointer",
+          "cursor-pointer",
           isExpanded && "bg-muted/30"
         )}
         onClick={onToggle}
       >
-        <td className="px-5 py-3">
+        <DataCell>
           <div className="flex items-center gap-3">
             <Avatar className="w-8 h-8 shrink-0">
               {member.avatarUrl && (
@@ -848,17 +979,17 @@ function MemberRow({
             </Avatar>
             <span className="text-sm font-medium text-foreground truncate">{member.name}</span>
           </div>
-        </td>
-        <td className="px-3 py-3">
+        </DataCell>
+        <DataCell>
           <span className={cn(
             "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border-transparent whitespace-nowrap",
             roleCfg.color
           )}>
             {roleCfg.label}
           </span>
-        </td>
-        <td className="px-3 py-3 text-sm text-muted-foreground truncate">{member.email}</td>
-        <td className="text-center px-3 py-3">
+        </DataCell>
+        <DataCell className="text-muted-foreground truncate">{member.email}</DataCell>
+        <DataCell align="center">
           <span className="inline-flex items-center gap-1.5 text-xs">
             <span className={cn(
               "w-2 h-2 rounded-full shrink-0",
@@ -883,8 +1014,8 @@ function MemberRow({
                   : isActive ? "Активен" : "Не в сети"}
             </span>
           </span>
-        </td>
-        <td className="text-center px-3 py-3">
+        </DataCell>
+        <DataCell align="center">
           <Button
             variant="ghost"
             size="icon"
@@ -893,8 +1024,8 @@ function MemberRow({
           >
             <ChevronDown className={cn("w-4 h-4 transition-transform", isExpanded && "rotate-180")} />
           </Button>
-        </td>
-      </tr>
+        </DataCell>
+      </DataRow>
 
       {/* Expandable content */}
       {isExpanded && (

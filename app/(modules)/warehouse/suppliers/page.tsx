@@ -4,7 +4,7 @@ import { useState } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -94,7 +94,7 @@ export default function LogisticsSuppliersPage() {
                   <Users className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-semibold">Поставщики</h1>
+                  <h1 className="text-lg font-semibold">Поставщики</h1>
                   <p className="text-sm text-muted-foreground">{suppliers.length} поставщиков</p>
                 </div>
               </div>
@@ -119,65 +119,59 @@ export default function LogisticsSuppliersPage() {
             </div>
 
             {/* Cards/Table */}
-            <Card>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Название</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">ИНН</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Контакт</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Телефон</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Email</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Товаров</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Последняя закупка</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Рейтинг</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filtered.map(s => (
-                        <tr key={s.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <div className="w-8 h-8 rounded-lg bg-muted/50 flex items-center justify-center shrink-0">
-                                <Building2 className="w-4 h-4 text-muted-foreground" />
-                              </div>
-                              <div>
-                                <p className="text-sm font-medium">{s.name}</p>
-                                <p className="text-xs text-muted-foreground">{s.paymentTerms}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-3 py-3 text-xs font-mono text-muted-foreground">{s.inn}</td>
-                          <td className="px-3 py-3 text-sm">{s.contact}</td>
-                          <td className="px-3 py-3">
-                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                              <Phone className="w-3.5 h-3.5 shrink-0" />
-                              {s.phone}
-                            </div>
-                          </td>
-                          <td className="px-3 py-3">
-                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                              <Mail className="w-3.5 h-3.5 shrink-0" />
-                              {s.email}
-                            </div>
-                          </td>
-                          <td className="text-right px-3 py-3 text-sm font-semibold">{s.itemCount}</td>
-                          <td className="px-3 py-3 text-sm text-muted-foreground">{s.lastPurchase}</td>
-                          <td className="px-3 py-3">
-                            <StarRating rating={s.rating} />
-                          </td>
-                        </tr>
-                      ))}
-                      {filtered.length === 0 && (
-                        <tr><td colSpan={8} className="text-center py-10 text-sm text-muted-foreground">Нет поставщиков</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
+            <TableCard>
+              <DataTable>
+                <DataHead>
+                  <DataHeadCell>Название</DataHeadCell>
+                  <DataHeadCell>ИНН</DataHeadCell>
+                  <DataHeadCell>Контакт</DataHeadCell>
+                  <DataHeadCell>Телефон</DataHeadCell>
+                  <DataHeadCell>Email</DataHeadCell>
+                  <DataHeadCell align="right">Товаров</DataHeadCell>
+                  <DataHeadCell>Последняя закупка</DataHeadCell>
+                  <DataHeadCell>Рейтинг</DataHeadCell>
+                </DataHead>
+                <tbody>
+                  {filtered.map(s => (
+                    <DataRow key={s.id}>
+                      <DataCell>
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-muted/50 flex items-center justify-center shrink-0">
+                            <Building2 className="w-4 h-4 text-muted-foreground" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium">{s.name}</p>
+                            <p className="text-xs text-muted-foreground">{s.paymentTerms}</p>
+                          </div>
+                        </div>
+                      </DataCell>
+                      <DataCell className="text-xs font-mono text-muted-foreground">{s.inn}</DataCell>
+                      <DataCell>{s.contact}</DataCell>
+                      <DataCell>
+                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                          <Phone className="w-3.5 h-3.5 shrink-0" />
+                          {s.phone}
+                        </div>
+                      </DataCell>
+                      <DataCell>
+                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                          <Mail className="w-3.5 h-3.5 shrink-0" />
+                          {s.email}
+                        </div>
+                      </DataCell>
+                      <DataCell align="right" className="font-semibold">{s.itemCount}</DataCell>
+                      <DataCell className="text-muted-foreground">{s.lastPurchase}</DataCell>
+                      <DataCell>
+                        <StarRating rating={s.rating} />
+                      </DataCell>
+                    </DataRow>
+                  ))}
+                  {filtered.length === 0 && (
+                    <tr><td colSpan={8} className="text-center py-10 text-sm text-muted-foreground">Нет поставщиков</td></tr>
+                  )}
+                </tbody>
+              </DataTable>
+            </TableCard>
           </div>
         </main>
       </SidebarInset>

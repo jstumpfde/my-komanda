@@ -7,6 +7,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { toast } from "sonner"
 import { Mail, Loader2, Check, X, Inbox } from "lucide-react"
 
@@ -117,80 +118,76 @@ export default function AdminRequestsPage() {
                 </CardContent>
               </Card>
             ) : (
-              <Card>
-                <CardContent className="p-0">
-                  <table className="w-full text-sm">
-                    <thead className="border-b border-border bg-muted/30">
-                      <tr className="text-left text-xs text-muted-foreground">
-                        <th className="px-4 py-2 font-medium">Пользователь</th>
-                        <th className="px-4 py-2 font-medium">Компания</th>
-                        <th className="px-4 py-2 font-medium">Текущий → Новый</th>
-                        <th className="px-4 py-2 font-medium">Причина</th>
-                        <th className="px-4 py-2 font-medium">Дата</th>
-                        <th className="px-4 py-2 font-medium text-right">Действия</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map(row => {
-                        const newEmail = row.data?.newEmail ?? "—"
-                        const currentEmail = row.data?.currentEmail ?? row.userEmail ?? "—"
-                        const reason = row.data?.reason ?? ""
-                        return (
-                          <tr key={row.id} className="border-b border-border/50 last:border-0 align-top">
-                            <td className="px-4 py-3">
-                              <div className="font-medium">{row.userName ?? "—"}</div>
-                              {row.userRole && (
-                                <Badge variant="outline" className="text-[10px] mt-1">{row.userRole}</Badge>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-muted-foreground">{row.companyName ?? "—"}</td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                <Mail className="w-3 h-3" /> {currentEmail}
+              <TableCard>
+                <DataTable>
+                  <DataHead>
+                    <DataHeadCell>Пользователь</DataHeadCell>
+                    <DataHeadCell>Компания</DataHeadCell>
+                    <DataHeadCell>Текущий → Новый</DataHeadCell>
+                    <DataHeadCell>Причина</DataHeadCell>
+                    <DataHeadCell>Дата</DataHeadCell>
+                    <DataHeadCell align="right">Действия</DataHeadCell>
+                  </DataHead>
+                  <tbody>
+                    {rows.map(row => {
+                      const newEmail = row.data?.newEmail ?? "—"
+                      const currentEmail = row.data?.currentEmail ?? row.userEmail ?? "—"
+                      const reason = row.data?.reason ?? ""
+                      return (
+                        <DataRow key={row.id} className="align-top">
+                          <DataCell>
+                            <div className="font-medium">{row.userName ?? "—"}</div>
+                            {row.userRole && (
+                              <Badge variant="outline" className="text-[10px] mt-1">{row.userRole}</Badge>
+                            )}
+                          </DataCell>
+                          <DataCell className="text-muted-foreground">{row.companyName ?? "—"}</DataCell>
+                          <DataCell>
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <Mail className="w-3 h-3" /> {currentEmail}
+                            </div>
+                            <div className="flex items-center gap-1.5 text-sm font-medium mt-0.5">
+                              <Mail className="w-3.5 h-3.5 text-primary" /> {newEmail}
+                            </div>
+                          </DataCell>
+                          <DataCell className="text-muted-foreground max-w-xs">
+                            {reason ? <span className="whitespace-pre-wrap break-words">{reason}</span> : "—"}
+                          </DataCell>
+                          <DataCell className="text-muted-foreground whitespace-nowrap">
+                            {formatDate(row.createdAt)}
+                          </DataCell>
+                          <DataCell align="right">
+                            {status === "new" ? (
+                              <div className="inline-flex items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={busyId === row.id}
+                                  onClick={() => act(row.id, "reject")}
+                                >
+                                  <X className="w-3.5 h-3.5 mr-1" /> Отклонить
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  disabled={busyId === row.id}
+                                  onClick={() => act(row.id, "approve")}
+                                >
+                                  {busyId === row.id
+                                    ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                                    : <Check className="w-3.5 h-3.5 mr-1" />}
+                                  Принять
+                                </Button>
                               </div>
-                              <div className="flex items-center gap-1.5 text-sm font-medium mt-0.5">
-                                <Mail className="w-3.5 h-3.5 text-primary" /> {newEmail}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-muted-foreground max-w-xs">
-                              {reason ? <span className="whitespace-pre-wrap break-words">{reason}</span> : "—"}
-                            </td>
-                            <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                              {formatDate(row.createdAt)}
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              {status === "new" ? (
-                                <div className="inline-flex items-center gap-2">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={busyId === row.id}
-                                    onClick={() => act(row.id, "reject")}
-                                  >
-                                    <X className="w-3.5 h-3.5 mr-1" /> Отклонить
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    disabled={busyId === row.id}
-                                    onClick={() => act(row.id, "approve")}
-                                  >
-                                    {busyId === row.id
-                                      ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
-                                      : <Check className="w-3.5 h-3.5 mr-1" />}
-                                    Принять
-                                  </Button>
-                                </div>
-                              ) : (
-                                <span className="text-xs text-muted-foreground italic">{row.status}</span>
-                              )}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </CardContent>
-              </Card>
+                            ) : (
+                              <span className="text-xs text-muted-foreground italic">{row.status}</span>
+                            )}
+                          </DataCell>
+                        </DataRow>
+                      )
+                    })}
+                  </tbody>
+                </DataTable>
+              </TableCard>
             )}
           </div>
         </main>

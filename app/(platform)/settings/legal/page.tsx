@@ -6,12 +6,14 @@ import { Building2, ScrollText } from "lucide-react"
 import { useAuth } from "@/lib/auth"
 import { LegalEditor } from "@/components/legal/legal-editor"
 import { CompanyPrivacyEditor } from "@/components/legal/company-privacy-editor"
+import { CompanyContactBlock } from "@/components/legal/company-contact-block"
 
 export default function LegalSettingsPage() {
   const { hasAccess } = useAuth()
 
   const isPlatformAdmin = hasAccess(["platform_admin"])
-  const canEditCompanyPolicy = hasAccess(["platform_admin", "director", "hr_lead"])
+  // #4: юр.документы — компанийская настройка, редактирует только директор.
+  const canEditCompanyPolicy = hasAccess(["platform_admin", "admin", "director", "client"])
 
   if (!isPlatformAdmin && !canEditCompanyPolicy) {
     return (
@@ -34,6 +36,8 @@ export default function LegalSettingsPage() {
       </div>
 
       <div className="space-y-3">
+        {canEditCompanyPolicy && <CompanyContactBlock />}
+
         {canEditCompanyPolicy && (
           <Card>
             <CardHeader className="pb-2 pt-4 px-5">

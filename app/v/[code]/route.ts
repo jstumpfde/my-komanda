@@ -17,6 +17,7 @@ export async function GET(
         vacancyId: vacancyUtmLinks.vacancyId,
         source: vacancyUtmLinks.source,
         destinationUrl: vacancyUtmLinks.destinationUrl,
+        destinationType: vacancyUtmLinks.destinationType,
       })
       .from(vacancyUtmLinks)
       .where(eq(vacancyUtmLinks.slug, code))
@@ -35,10 +36,17 @@ export async function GET(
     let redirectUrl: URL
 
     if (link.destinationUrl) {
-      // External destination
+      // External destination (приоритетнее, чем destinationType — это явно
+      // указанный HR-ом внешний URL, его трогать не должны).
       redirectUrl = new URL(link.destinationUrl)
+    } else if (link.destinationType === "demo" || link.destinationType === "test") {
+      // Источник ведёт сразу на демо ИЛИ на тест. Bounce создаёт кандидата под
+      // link.vacancyId, ставит cookie и редиректит на /demo/{shortId} или
+      // /test/{shortId} (флаг ?to=test). ?ref — аналитика (utm_ref cookie ниже).
+      redirectUrl = new URL(`/api/public/source/${link.id}/visit`, _req.url)
+      if (link.destinationType === "test") redirectUrl.searchParams.set("to", "test")
     } else {
-      // Default: our vacancy page
+      // Default: страница описания вакансии (destinationType='vacancy').
       const [vacancy] = await db
         .select({ slug: vacancies.slug })
         .from(vacancies)

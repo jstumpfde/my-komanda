@@ -1,12 +1,21 @@
-import { eq, and, count, isNull, gte, inArray, sql } from "drizzle-orm"
+import { eq, and, count, isNull, gte, inArray, sql, type SQL } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancies, candidates } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { ACTIVE_VACANCY_STATUSES } from "@/lib/vacancies/filters"
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const user = await requireCompany()
     const companyId = user.companyId
+
+    // #49: опциональный фильтр по vacancyId — применяем ко всем счётчикам
+    // (кроме списка vacancies и активных вакансий — это сами вакансии).
+    const url = new URL(req.url)
+    const vacancyIdParam = url.searchParams.get("vacancyId")
+    const vacancyFilter: SQL | undefined = vacancyIdParam && vacancyIdParam !== "all"
+      ? eq(candidates.vacancyId, vacancyIdParam)
+      : undefined
 
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
@@ -26,7 +35,7 @@ export async function GET() {
         .from(vacancies)
         .where(and(
           eq(vacancies.companyId, companyId),
-          eq(vacancies.status, "published"),
+          inArray(vacancies.status, ACTIVE_VACANCY_STATUSES),
           isNull(vacancies.deletedAt),
         )),
 
@@ -37,16 +46,23 @@ export async function GET() {
         .where(and(
           eq(vacancies.companyId, companyId),
           isNull(vacancies.deletedAt),
+          vacancyFilter,
         )),
 
-      // 2b. Candidates currently "in work" (not hired and not rejected)
+      // 2b. Candidates currently "in work" — расширил до полного списка
+      // активных стадий, чтобы метрика «Прошли демо» (#51) была честной.
       db.select({ value: count() })
         .from(candidates)
         .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
         .where(and(
           eq(vacancies.companyId, companyId),
           isNull(vacancies.deletedAt),
-          inArray(candidates.stage, ["new", "demo", "scheduled", "interviewed"]),
+          inArray(candidates.stage, [
+            "demo_opened","anketa_filled","ai_screening","test_task_sent",
+            "test_task_done","scheduled","interview","interviewed",
+            "reference_check","decision","offer_sent","final_decision","offer","hired",
+          ]),
+          vacancyFilter,
         )),
 
       // 2c. Candidates created today (Europe/Moscow timezone)
@@ -57,6 +73,7 @@ export async function GET() {
           eq(vacancies.companyId, companyId),
           isNull(vacancies.deletedAt),
           sql`${candidates.createdAt} >= (date_trunc('day', now() AT TIME ZONE 'Europe/Moscow') AT TIME ZONE 'Europe/Moscow')`,
+          vacancyFilter,
         )),
 
       // 3. Hired this month
@@ -67,6 +84,7 @@ export async function GET() {
           eq(vacancies.companyId, companyId),
           eq(candidates.stage, "hired"),
           gte(candidates.updatedAt, thirtyDaysAgo),
+          vacancyFilter,
         )),
 
       // 4. Candidates grouped by stage (for funnel)
@@ -80,10 +98,13 @@ export async function GET() {
         .where(and(
           eq(vacancies.companyId, companyId),
           isNull(vacancies.deletedAt),
+          vacancyFilter,
         ))
         .groupBy(candidates.stage, candidates.vacancyId),
 
-      // 5. Active vacancies with candidate counts
+      // 5. Active vacancies with candidate counts.
+      // #34: добавил inProgressCount — кандидаты «в работе» (НЕ new, НЕ
+      // rejected, НЕ hired). Это даёт честную метрику «кто сейчас в воронке».
       db.select({
         id: vacancies.id,
         title: vacancies.title,
@@ -95,12 +116,17 @@ export async function GET() {
         createdAt: vacancies.createdAt,
         candidateCount: sql<number>`count(${candidates.id})::int`,
         decisionCount: sql<number>`count(case when ${candidates.stage} in ('decision', 'final_decision') then 1 end)::int`,
+        inProgressCount: sql<number>`count(case when ${candidates.stage} in (
+          'primary_contact','demo_opened','anketa_filled','ai_screening',
+          'test_task_sent','test_task_done','scheduled','interview',
+          'reference_check','decision','offer_sent'
+        ) then 1 end)::int`,
       })
         .from(vacancies)
         .leftJoin(candidates, eq(candidates.vacancyId, vacancies.id))
         .where(and(
           eq(vacancies.companyId, companyId),
-          eq(vacancies.status, "published"),
+          inArray(vacancies.status, ACTIVE_VACANCY_STATUSES),
           isNull(vacancies.deletedAt),
         ))
         .groupBy(vacancies.id)

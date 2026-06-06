@@ -1,8 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
@@ -10,12 +9,17 @@ import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Button } from "@/components/ui/button"
+import { PlaceholderBadges } from "@/components/ui/placeholder-badges"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { renderTemplate } from "@/lib/template-renderer"
 import {
-  CheckCircle2, Calendar, Phone, Video, Building2, Save,
+  CheckCircle2, Calendar, Phone, Video, Building2,
   Sparkles, Clock, Play, XCircle, ChevronDown, ClipboardList,
+  Send, Save,
 } from "lucide-react"
+import { useVacancySectionRegister } from "./vacancy-settings-context"
 
 type PostDemoMode = "auto" | "manual"
 
@@ -44,7 +48,26 @@ const FIELD_LABELS: Record<FormFieldKey, string> = {
 
 const FIELD_ORDER: FormFieldKey[] = ["firstName", "lastName", "email", "phone", "telegram", "birthDate", "city"]
 
-export type PostDemoSection = "thresholds" | "formFields" | "preview"
+export type PostDemoSection = "thresholds" | "formFields" | "preview" | "anketaAutoReply"
+
+// #59: новые пресеты задержки автоответа. Раньше было только минутное
+// разрешение (5/15/30/60/240/1440). Юрий: после анкеты HR хочет
+// «живую» реакцию (10–30 секунд), но также бывают сценарии «через 1 час»
+// для офисных вакансий. 4ч/24ч убраны как слишком долгие — кандидат к
+// этому моменту охлаждается.
+type AnketaAutoReplyDelay = 10 | 30 | 60 | 180 | 300 | 900 | 1800 | 3600
+const ANKETA_DELAYS: { value: AnketaAutoReplyDelay; label: string }[] = [
+  { value: 10,   label: "10 секунд" },
+  { value: 30,   label: "30 секунд" },
+  { value: 60,   label: "1 минута" },
+  { value: 180,  label: "3 минуты" },
+  { value: 300,  label: "5 минут" },
+  { value: 900,  label: "15 минут" },
+  { value: 1800, label: "30 минут" },
+  { value: 3600, label: "1 час" },
+]
+const DEFAULT_ANKETA_AUTO_REPLY_TEXT =
+  "{{name}}, рассмотрели вашу анкету. Ваша кандидатура нам интересна. Предлагаем тестовое задание."
 
 interface PostDemoSettingsProps {
   vacancyId: string
@@ -59,8 +82,9 @@ interface PostDemoSettingsProps {
 
 export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps) {
   const showSection = (id: PostDemoSection) => !sections || sections.includes(id)
-  const [enabled, setEnabled] = useState(true)
-  const [mode, setMode] = useState<PostDemoMode>("auto")
+  // ТЗ-1 Часть 5 (P0-17) + Часть 8 (P0-19b): новые вакансии стартуют с enabled=false, mode=manual.
+  const [enabled, setEnabled] = useState(false)
+  const [mode, setMode] = useState<PostDemoMode>("manual")
 
   // Thresholds
   const [upperThreshold, setUpperThreshold] = useState(75)
@@ -85,7 +109,7 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
   const [redOpen, setRedOpen] = useState(false)
 
   // Manual mode
-  const [manualTitle, setManualTitle] = useState("Отлично, [Имя]! Вы прошли демонстрацию 🎉")
+  const [manualTitle, setManualTitle] = useState("Отлично, {{name}}! Вы прошли демонстрацию 🎉")
   const [manualText, setManualText] = useState("Мы изучим ваши ответы и свяжемся с вами в ближайшее время")
   const [manualButton, setManualButton] = useState("Хорошо, жду!")
   const [manualButtonEnabled, setManualButtonEnabled] = useState(true)
@@ -93,12 +117,23 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
   // Final form fields
   const [formFields, setFormFields] = useState<FormFieldsState>(DEFAULT_FORM_FIELDS)
 
+  // ТЗ-3 Ч.1: автоответ после заполнения анкеты
+  const [autoReplyEnabled, setAutoReplyEnabled] = useState(false)
+  // #59: дефолт 180с (3 минуты) — раньше было 60 (трактовалось как 1 час).
+  // Backward-compat — см. load-блок ниже, где old `delayMinutes` конвертится.
+  const [autoReplyDelay, setAutoReplyDelay] = useState<AnketaAutoReplyDelay>(180)
+  const [autoReplyRespectSchedule, setAutoReplyRespectSchedule] = useState(true)
+  const [autoReplyText, setAutoReplyText] = useState(DEFAULT_ANKETA_AUTO_REPLY_TEXT)
+  const [autoReplyTestTaskUrl, setAutoReplyTestTaskUrl] = useState("")
+  const autoReplyTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+
   // Preview
   const [previewScore, setPreviewScore] = useState(80)
   const previewLevel = previewScore >= upperThreshold ? "green" : previewScore >= lowerThreshold ? "yellow" : "red"
 
   // Saving state
   const [saving, setSaving] = useState(false)
+  const [loaded, setLoaded] = useState(false)
 
   // Load saved settings on mount
   useEffect(() => {
@@ -107,7 +142,8 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
     fetch(`/api/modules/hr/vacancies/${vacancyId}/post-demo-settings`)
       .then(r => r.ok ? r.json() : null)
       .then(json => {
-        if (cancelled || !json) return
+        if (cancelled) return
+        if (!json) { setLoaded(true); return }
         const data = json.settings ?? {}
         if (!data || typeof data !== "object") return
         if (typeof data.enabled === "boolean") setEnabled(data.enabled)
@@ -127,6 +163,31 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
         if (typeof data.manualText === "string") setManualText(data.manualText)
         if (typeof data.manualButton === "string") setManualButton(data.manualButton)
         if (typeof data.manualButtonEnabled === "boolean") setManualButtonEnabled(data.manualButtonEnabled)
+        if (data.anketaAutoReply && typeof data.anketaAutoReply === "object") {
+          const ar = data.anketaAutoReply as Record<string, unknown>
+          if (typeof ar.enabled === "boolean") setAutoReplyEnabled(ar.enabled)
+          // #59: новое поле delaySeconds (источник правды). Backward-compat:
+          // если есть только старое delayMinutes — конвертируем в секунды и
+          // мапим на ближайший пресет.
+          let seconds: number | null = null
+          if (typeof ar.delaySeconds === "number") seconds = ar.delaySeconds
+          else if (typeof ar.delayMinutes === "number") seconds = ar.delayMinutes * 60
+          if (seconds !== null) {
+            const exact = ANKETA_DELAYS.find(d => d.value === seconds)
+            if (exact) {
+              setAutoReplyDelay(exact.value)
+            } else {
+              // Не попали в пресет — выбираем ближайший по абс. разнице.
+              const closest = ANKETA_DELAYS.reduce((a, b) =>
+                Math.abs(b.value - seconds!) < Math.abs(a.value - seconds!) ? b : a
+              )
+              setAutoReplyDelay(closest.value)
+            }
+          }
+          if (typeof ar.respectSchedule === "boolean") setAutoReplyRespectSchedule(ar.respectSchedule)
+          if (typeof ar.text === "string") setAutoReplyText(ar.text)
+          if (typeof ar.testTaskUrl === "string") setAutoReplyTestTaskUrl(ar.testTaskUrl)
+        }
         if (data.formFields && typeof data.formFields === "object") {
           const merged: FormFieldsState = { ...DEFAULT_FORM_FIELDS }
           for (const key of FIELD_ORDER) {
@@ -143,6 +204,7 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
         }
       })
       .catch(err => console.error("[post-demo load]", err))
+      .finally(() => { if (!cancelled) setLoaded(true) })
     return () => { cancelled = true }
   }, [vacancyId])
 
@@ -179,6 +241,16 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
         manualButton,
         manualButtonEnabled,
         formFields,
+        anketaAutoReply: {
+          enabled:         autoReplyEnabled,
+          // #59: пишем секунды как источник правды. Старое delayMinutes
+          // оставляем для backward-compat — серверной части и старых клиентов.
+          delaySeconds:    autoReplyDelay,
+          delayMinutes:    Math.max(1, Math.round(autoReplyDelay / 60)),
+          respectSchedule: autoReplyRespectSchedule,
+          text:            autoReplyText,
+          testTaskUrl:     autoReplyTestTaskUrl,
+        },
       }
       const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/post-demo-settings`, {
         method: "PUT",
@@ -195,6 +267,23 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
     }
   }
 
+  // ТЗ-1 Часть 2: регистрируем сохранение в общем контексте sticky-кнопки.
+  // Все секции (thresholds + formFields + preview) шлются одним PUT'ом → одна регистрация.
+  useVacancySectionRegister({
+    sectionKey: `post-demo:${vacancyId}`,
+    tabKey: "funnel",
+    loaded,
+    watchedValues: {
+      enabled, mode, upperThreshold, lowerThreshold,
+      greenTitle, meetPhone, meetOnline, meetOffice, officeAddress,
+      yellowTitle, yellowText, redTitle, redText,
+      manualTitle, manualText, manualButton, manualButtonEnabled,
+      formFields,
+    },
+    save: handleSave,
+  })
+  void saving // saving остаётся для возможной локальной индикации; основная — в sticky bar.
+
   return (
     <div className="space-y-6">
       {showSection("thresholds") && (
@@ -210,6 +299,12 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
               <Switch checked={enabled} onCheckedChange={setEnabled} />
             </div>
           </div>
+          {/* ТЗ-1 Часть 7 (P0-23): подсказка только когда блок выключен. */}
+          {!enabled && (
+            <p className="text-[11px] text-muted-foreground mt-2 bg-muted/40 rounded-md px-3 py-2 border">
+              Блок выключен. Кандидат после демо видит стандартный экран благодарности.
+            </p>
+          )}
         </CardHeader>
         <CardContent className={cn("space-y-5", !enabled && "opacity-50 pointer-events-none")}>
           {/* Mode selection */}
@@ -217,22 +312,31 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
             <Label className="text-sm font-medium">Режим</Label>
             <div className="space-y-2">
               {([
-                { value: "auto" as const, label: "Автоматический", desc: "Кандидат сам записывается на интервью по порогу AI-скоринга" },
-                { value: "manual" as const, label: "Ручной", desc: "HR связывается сам после просмотра результатов" },
+                { value: "auto" as const, label: "Автоматический", desc: "Кандидат сам записывается на интервью по порогу AI-скоринга", disabled: true },
+                { value: "manual" as const, label: "Ручной", desc: "HR связывается сам после просмотра результатов", disabled: false },
               ]).map(opt => (
                 <button
                   key={opt.value}
+                  type="button"
+                  disabled={opt.disabled}
+                  title={opt.disabled ? "Скоро будет доступно" : undefined}
                   className={cn(
                     "w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-all",
-                    mode === opt.value ? "border-primary bg-primary/5 ring-2 ring-primary/20" : "border-border hover:border-primary/30"
+                    mode === opt.value ? "border-primary bg-primary/5 ring-2 ring-primary/20" : "border-border hover:border-primary/30",
+                    opt.disabled && "opacity-50 cursor-not-allowed hover:border-border"
                   )}
-                  onClick={() => setMode(opt.value)}
+                  onClick={() => { if (!opt.disabled) setMode(opt.value) }}
                 >
                   <div className={cn("w-4 h-4 rounded-full border-2 mt-0.5 shrink-0 flex items-center justify-center", mode === opt.value ? "border-primary" : "border-muted-foreground/40")}>
                     {mode === opt.value && <div className="w-2 h-2 rounded-full bg-primary" />}
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{opt.label}</p>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground flex items-center gap-2">
+                      {opt.label}
+                      {opt.disabled && (
+                        <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span>
+                      )}
+                    </p>
                     <p className="text-xs text-muted-foreground">{opt.desc}</p>
                   </div>
                 </button>
@@ -247,10 +351,15 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
             <div className="space-y-5">
               {/* Thresholds */}
               <div className="space-y-4">
-                <Label className="text-sm font-medium flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-amber-500" />
-                  Пороги AI-скоринга
-                </Label>
+                <div>
+                  <Label className="text-sm font-medium flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                    Пороги после демо
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Эти пороги применяются к результатам прохождения демонстрации, не к оценке резюме. Для скоринга резюме см. таб «Дожим» → блок «AI-фильтр откликов».
+                  </p>
+                </div>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">Верхний порог (зелёный)</span>
@@ -380,7 +489,7 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
               <div className="space-y-2">
                 <Label className="text-xs">Заголовок</Label>
                 <Input value={manualTitle} onChange={e => setManualTitle(e.target.value)} className="h-8 text-sm" />
-                <p className="text-[10px] text-muted-foreground">[Имя] подставляется автоматически</p>
+                <p className="text-[10px] text-muted-foreground">{"{{name}}"} подставляется автоматически</p>
               </div>
               <div className="space-y-2">
                 <Label className="text-xs">Текст</Label>
@@ -405,11 +514,7 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
             </div>
           )}
 
-          <div className="flex justify-end mt-4">
-            <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={handleSave} disabled={saving}>
-              <Save className="w-4 h-4" /> {saving ? "Сохранение…" : "Сохранить настройки"}
-            </Button>
-          </div>
+          {/* ТЗ-1 Часть 2: локальная «Сохранить» убрана — есть глобальная sticky-кнопка снизу-справа. */}
         </CardContent>
       </Card>
       )}
@@ -461,27 +566,23 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
               )
             })}
           </div>
-          <div className="flex justify-end mt-4">
-            <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={handleSave} disabled={saving}>
-              <Save className="w-4 h-4" /> {saving ? "Сохранение…" : "Сохранить настройки"}
-            </Button>
-          </div>
+          {/* ТЗ-1 Часть 2: локальная «Сохранить» убрана — глобальная sticky-кнопка. */}
         </CardContent>
       </Card>
       )}
+
+      {/* #17: блок «Автоответ после заполнения анкеты» переехал ВНИЗ —
+          после превью, как завершающее действие воронки. См. ниже за
+          showSection("preview"). */}
 
       {showSection("preview") && (
       /* Live preview */
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Превью финального экрана</CardTitle>
-          {mode === "auto" && (
-            <div className="flex items-center gap-3 mt-2">
-              <Label className="text-xs text-muted-foreground">Тестовый балл:</Label>
-              <Slider value={[previewScore]} onValueChange={([v]) => setPreviewScore(v)} min={0} max={100} step={1} className="w-32" />
-              <span className={cn("text-sm font-bold", previewLevel === "green" ? "text-emerald-600" : previewLevel === "yellow" ? "text-amber-600" : "text-red-600")}>{previewScore}%</span>
-            </div>
-          )}
+          {/* #17: ползунок «Тестовый балл» удалён — это была отладка,
+              в проде не нужно. Превью отрисовывается под текущий
+              previewScore из state (default 80, см. useState выше). */}
         </CardHeader>
         <CardContent>
           <div className="rounded-xl border overflow-hidden" style={{ backgroundColor: "#f8fafc" }}>
@@ -491,10 +592,6 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
                   <>
                     <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
                     <h3 className="text-lg font-bold text-gray-900">{greenTitle}</h3>
-                    <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
-                      <Sparkles className="w-4 h-4 text-amber-500" />
-                      AI-скоринг: <span className="font-bold text-emerald-600">{previewScore}%</span>
-                    </div>
                     <div className="space-y-2 text-left">
                       <p className="text-xs text-gray-500">Выберите тип встречи:</p>
                       <div className="space-y-1.5">
@@ -511,27 +608,19 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
                   <>
                     <Clock className="w-12 h-12 text-amber-500 mx-auto" />
                     <h3 className="text-lg font-bold text-gray-900">{yellowTitle}</h3>
-                    <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
-                      <Sparkles className="w-4 h-4 text-amber-500" />
-                      AI-скоринг: <span className="font-bold text-amber-600">{previewScore}%</span>
-                    </div>
                     <p className="text-sm text-gray-500">{yellowText}</p>
                   </>
                 ) : (
                   <>
                     <XCircle className="w-12 h-12 text-red-400 mx-auto" />
                     <h3 className="text-lg font-bold text-gray-900">{redTitle}</h3>
-                    <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
-                      <Sparkles className="w-4 h-4 text-amber-500" />
-                      AI-скоринг: <span className="font-bold text-red-600">{previewScore}%</span>
-                    </div>
                     <p className="text-sm text-gray-500">{redText}</p>
                   </>
                 )
               ) : (
                 <>
                   <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
-                  <h3 className="text-lg font-bold text-gray-900">{manualTitle.replace("[Имя]", "Иван")}</h3>
+                  <h3 className="text-lg font-bold text-gray-900">{renderTemplate(manualTitle, { name: "Иван" })}</h3>
                   <p className="text-sm text-gray-500">{manualText}</p>
                   {manualButtonEnabled && (
                     <div className="h-9 rounded-lg bg-primary flex items-center justify-center text-white text-sm font-medium">
@@ -542,6 +631,98 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
               )}
               <p className="text-[10px] text-gray-300">Powered by Company24</p>
             </div>
+          </div>
+        </CardContent>
+      </Card>
+      )}
+
+      {showSection("anketaAutoReply") && (
+      /* ТЗ-3 Ч.1: автоответ после заполнения финальной анкеты.
+         #17: блок перенесён вниз (раньше был выше preview) — теперь это
+         завершающее действие воронки, идущее после AI-скоринга и превью. */
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Send className="w-4 h-4" />
+                Автоответ после заполнения анкеты
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Когда кандидат сдаёт финальную анкету, бот сам отправит ему сообщение
+                в hh-чат — например, с тестовым заданием. HR не разбирает руками.
+              </p>
+            </div>
+            <Switch checked={autoReplyEnabled} onCheckedChange={setAutoReplyEnabled} />
+          </div>
+        </CardHeader>
+        <CardContent className={cn("space-y-4", !autoReplyEnabled && "opacity-60 pointer-events-none")}>
+          <div className="space-y-2">
+            <Label className="text-xs">Задержка перед отправкой</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {ANKETA_DELAYS.map(d => (
+                <button
+                  key={d.value}
+                  type="button"
+                  onClick={() => setAutoReplyDelay(d.value)}
+                  className={cn(
+                    "h-7 px-2.5 rounded-md border text-xs transition-colors",
+                    autoReplyDelay === d.value
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border hover:border-primary/30"
+                  )}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 p-3">
+            <div>
+              <Label className="text-xs">Учитывать рабочее время вакансии</Label>
+              <p className="text-[10px] text-muted-foreground">
+                Если кандидат заполнил анкету ночью — отправим утром по расписанию из таба «Расписание».
+              </p>
+            </div>
+            <Switch checked={autoReplyRespectSchedule} onCheckedChange={setAutoReplyRespectSchedule} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Текст сообщения</Label>
+            <textarea
+              ref={autoReplyTextareaRef}
+              className="w-full border rounded-lg p-2 text-sm resize-none h-20 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+              value={autoReplyText}
+              onChange={e => setAutoReplyText(e.target.value.slice(0, 2000))}
+            />
+            {/* #57: кликабельные плейсхолдеры — вставка на позицию курсора. */}
+            <PlaceholderBadges
+              textareaRef={autoReplyTextareaRef}
+              placeholders={["name", "vacancy", "company", "demo_link"]}
+              value={autoReplyText}
+              onValueChange={(v) => setAutoReplyText(v.slice(0, 2000))}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Ссылка на тестовое задание (опционально)</Label>
+            <Input
+              type="url"
+              value={autoReplyTestTaskUrl}
+              onChange={e => setAutoReplyTestTaskUrl(e.target.value)}
+              placeholder="https://docs.google.com/..."
+              className="h-8 text-sm"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Если указана — будет дописана в конец сообщения отдельной строкой.
+            </p>
+          </div>
+
+          <div className="flex justify-end pt-1">
+            <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={handleSave} disabled={saving}>
+              <Save className="w-4 h-4" /> {saving ? "Сохранение…" : "Сохранить настройки"}
+            </Button>
           </div>
         </CardContent>
       </Card>

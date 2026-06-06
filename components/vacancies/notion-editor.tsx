@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback, useId, forwardRef, useImperativeHandle } from "react"
+import {useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle} from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -9,6 +9,9 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
@@ -20,13 +23,15 @@ import {
   GripVertical, Plus, Save, Eye, Sparkles, BookOpen, X, MoreHorizontal, Pencil, ClipboardPaste,
   Copy, Trash2, ArrowUp, ArrowDown,
   Bold, Italic, Underline, Strikethrough, AlignLeft, AlignCenter, AlignRight,
-  Heading1, Heading2, Heading3, List as ListIcon, ListOrdered, Link2, Hash, Smile,
+  Heading1, Heading2, Heading3, List as ListIcon, ListOrdered, Link2, Hash,
   Type, ImageIcon, Video, Music, FileText, Info, MousePointerClick, CheckSquare,
-  ChevronLeft, ChevronRight, Mic, Highlighter, Loader2,
+  ChevronLeft, ChevronRight, Mic, Highlighter, Loader2, Clapperboard,
 } from "lucide-react"
 import { toast } from "sonner"
-import type { Demo, Block, BlockType, Lesson } from "@/lib/course-types"
-import { VARIABLES, BLOCK_TYPE_META, createBlock } from "@/lib/course-types"
+import type { Demo, Block, BlockType, Lesson, StoriesCard } from "@/lib/course-types"
+import {BLOCK_TYPE_META, createBlock} from "@/lib/course-types"
+import { StoriesPlayer } from "@/components/vacancies/stories-player"
+import { resolveOptionPoints } from "@/lib/score-test-objective"
 import { TEMPLATE_VARIABLES } from "@/lib/templates/demo-templates"
 import { LibraryDialog } from "./library-dialog"
 
@@ -53,6 +58,7 @@ export interface NotionEditorHandle {
   openLibrary: () => void
   openSaveTemplate: () => void
   downloadTxt: () => void
+  generateWithAI: () => Promise<void>
 }
 
 function htmlToPlainText(html: string): string {
@@ -81,7 +87,19 @@ interface NotionEditorProps {
   showSidebar?: boolean
   vacancyId?: string
   onOpenLibrary?: () => void
+  navButtonColor?: string
+  navButtonText?: string
+  onNavButtonChange?: (color: string | null, text: string | null) => void
 }
+
+const NAV_BUTTON_PRESET_COLORS = [
+  { hex: "#3b82f6", label: "Синий" },
+  { hex: "#ef4444", label: "Красный" },
+  { hex: "#22c55e", label: "Зелёный" },
+  { hex: "#f97316", label: "Оранжевый" },
+  { hex: "#8b5cf6", label: "Фиолетовый" },
+  { hex: "#000000", label: "Чёрный" },
+]
 
 // ─── Slash command menu ────────────────────────────────────────────────────
 
@@ -95,11 +113,12 @@ const SLASH_ITEMS = [
   { type: "button" as BlockType, icon: <MousePointerClick className="w-4 h-4" />, inlineIcon: <MousePointerClick className="w-[17px] h-[17px]" />, label: "Кнопка", desc: "Кнопка-ссылка" },
   { type: "task" as BlockType, icon: <CheckSquare className="w-4 h-4" />, inlineIcon: <CheckSquare className="w-[17px] h-[17px]" />, label: "Задание", desc: "Вопросы кандидату" },
   { type: "media" as BlockType, icon: <Video className="w-4 h-4" />, inlineIcon: <Video className="w-[17px] h-[17px]" />, label: "Запись медиа", desc: "Запись видео/аудио/фото от кандидата" },
+  { type: "stories" as BlockType, icon: <Clapperboard className="w-4 h-4" />, inlineIcon: <Clapperboard className="w-[17px] h-[17px]" />, label: "Сторис", desc: "Вертикальные/горизонтальные карточки и видео" },
 ]
 
 // ─── Main component ────────────────────────────────────────────────────────
 
-export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(function NotionEditorInner({ demo, onBack, onUpdate, onSaveStatusChange, hideToolbar = false, showSidebar = true, vacancyId, onOpenLibrary }, ref) {
+export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(function NotionEditorInner({ demo, onBack, onUpdate, onSaveStatusChange, hideToolbar = false, showSidebar = true, vacancyId, onOpenLibrary, navButtonColor, navButtonText, onNavButtonChange }, ref) {
   const [activeLessonId, setActiveLessonId] = useState(demo.lessons[0]?.id || "")
   const [previewMode, setPreviewMode] = useState(false)
   const [previewIdx, setPreviewIdx] = useState(0)
@@ -110,6 +129,10 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "idle">("saved")
   const [dragLessonIdx, setDragLessonIdx] = useState<number | null>(null)
   const [dragOverLessonIdx, setDragOverLessonIdx] = useState<number | null>(null)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  // Локальный стейт для текста кнопки «Далее» (синхронизируется с пропом при маунте)
+  const [localNavText, setLocalNavText] = useState(navButtonText || "")
+  const renamingOriginalTitle = useRef<string>("")
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Library + save-template state
@@ -118,6 +141,12 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
   const [saveTemplateName, setSaveTemplateName] = useState("")
   const [saveTemplateCategory, setSaveTemplateCategory] = useState("Общее")
   const [savedTemplates, setSavedTemplates] = useState<{ title: string; category: string; lessons: Lesson[] }[]>([])
+  // #26: новая UX-модель диалога — radio "Новый" / "Заменить" + dropdown +
+  // подтверждение перед заменой. Стейт описывает текущий выбор.
+  const [saveMode, setSaveMode] = useState<"new" | "replace">("new")
+  const [replaceTargetIdx, setReplaceTargetIdx] = useState<number | null>(null)
+  const [replaceComboOpen, setReplaceComboOpen] = useState(false)
+  const [replaceConfirmIdx, setReplaceConfirmIdx] = useState<number | null>(null)
   const [savedModules, setSavedModules] = useState<Lesson[]>([])
 
   useEffect(() => {
@@ -140,6 +169,12 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
   }, [])
 
   const activeLesson = demo.lessons.find((l) => l.id === activeLessonId)
+
+  // Высота панели уроков: минимум ~5 строк (даже если уроков меньше), дальше
+  // растёт по числу уроков. Свёрнутый и развёрнутый виды — одинаковой высоты.
+  const LESSON_ROW_H = 30           // высота строки урока (изм. ~29px + запас)
+  const LESSON_PANEL_CHROME = 84    // шапка (45) + паддинги списка (8) + кнопка «+ Урок» (31)
+  const lessonsPanelHeight = `min(${LESSON_PANEL_CHROME + Math.max(5, demo.lessons.length) * LESSON_ROW_H}px, 100%)`
 
   // Save helper
   const save = useCallback((lessons: Lesson[]) => {
@@ -231,7 +266,8 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
     },
-  }), [saveNow, onOpenLibrary, demo])
+    generateWithAI,
+  }), [saveNow, onOpenLibrary, demo, generateWithAI])
 
   // Lesson ops
   const updateLesson = (lessonId: string, patch: Partial<Lesson>) =>
@@ -240,9 +276,13 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
   const switchLesson = (id: string) => setActiveLessonId(id)
 
   const addLesson = () => {
-    const l: Lesson = { id: `les-${Date.now()}`, emoji: "📝", title: "Новый урок", blocks: [createBlock("text")] }
+    const l: Lesson = { id: `les-${Date.now()}`, emoji: "", title: "", blocks: [createBlock("text")] }
     save([...demo.lessons, l])
     setActiveLessonId(l.id)
+    // Сразу открыть инлайн-ввод названия нового урока (поверх плашки).
+    // Пустой заголовок → виден placeholder; при сохранении пустого подставится «Новый урок».
+    renamingOriginalTitle.current = ""
+    setRenamingLessonId(l.id)
   }
 
   const duplicateLesson = (idx: number) => {
@@ -318,9 +358,9 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
     if (!lesson) { setPreviewMode(false); return null }
     const pct = ((previewIdx + 1) / demo.lessons.length) * 100
     return (
-      <div className="max-w-4xl mx-auto py-6 px-8">
+      <div className="max-w-5xl mx-auto py-6 px-6 sm:px-8">
         <div className="flex items-center justify-end mb-4">
-          <Badge variant="outline" className="text-[10px]">Предпросмотр для кандидата</Badge>
+          <Badge variant="outline" className="text-[10px]">Предпросмотр</Badge>
         </div>
         <div className="flex items-center gap-3 mb-5">
           <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
@@ -344,11 +384,17 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
             <ChevronLeft className="w-4 h-4 mr-1" />Назад
           </Button>
           {previewIdx < demo.lessons.length - 1 ? (
-            <Button onClick={() => setPreviewIdx(previewIdx + 1)}>
+            <Button
+              onClick={() => setPreviewIdx(previewIdx + 1)}
+              style={navButtonColor ? { backgroundColor: navButtonColor, borderColor: navButtonColor } : undefined}
+            >
               Далее<ChevronRight className="w-4 h-4 ml-1" />
             </Button>
           ) : (
-            <Button onClick={() => setPreviewMode(false)}>Завершить ✓</Button>
+            <Button
+              onClick={() => setPreviewMode(false)}
+              style={navButtonColor ? { backgroundColor: navButtonColor, borderColor: navButtonColor } : undefined}
+            >Завершить ✓</Button>
           )}
         </div>
       </div>
@@ -422,94 +468,231 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
       <div className="flex gap-4 flex-1 min-h-0">
 
         {/* LEFT — Lesson list */}
-        {showSidebar && <div className="w-[260px] flex-shrink-0 border border-border rounded-xl bg-card overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-            <h4 className="text-sm font-semibold text-foreground">Уроки</h4>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs px-2">
-                  <Plus className="w-3 h-3" />Урок
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={addLesson}><Plus className="w-3.5 h-3.5 mr-2" />Новый пустой урок</DropdownMenuItem>
-                <DropdownMenuItem disabled={!copiedLesson} onClick={pasteLesson}><ClipboardPaste className="w-3.5 h-3.5 mr-2" />Вставить скопированный</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-1.5 py-1">
-            {demo.lessons.map((lesson, i) => {
-              const isActive = activeLessonId === lesson.id
-              const isRenaming = renamingLessonId === lesson.id
-              return (
-                <DropdownMenu
-                  key={lesson.id}
-                  open={contextMenuLessonId === lesson.id}
-                  onOpenChange={(v) => { if (!v) setContextMenuLessonId(null) }}
-                >
-                  <div
-                    draggable={!isRenaming}
-                    onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; setDragLessonIdx(i) }}
-                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDragOverLessonIdx(i) }}
-                    onDragEnd={() => { setDragLessonIdx(null); setDragOverLessonIdx(null) }}
-                    onDrop={(e) => { e.preventDefault(); dropLesson(i) }}
-                    onClick={() => { if (!isRenaming) switchLesson(lesson.id) }}
-                    onContextMenu={(e) => { e.preventDefault(); setContextMenuLessonId(lesson.id) }}
+        {showSidebar && (
+          sidebarCollapsed ? (
+            /* Свёрнутый вид — узкая полоска: раскрыть сверху, ниже сразу — добавить урок */
+            <div className="flex-shrink-0 self-start border border-border rounded-xl bg-card overflow-hidden flex flex-col items-center py-2 gap-1" style={{ width: 36, height: lessonsPanelHeight }}>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 w-7 p-0"
+                title="Раскрыть список уроков"
+                onClick={() => setSidebarCollapsed(false)}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+              {/* Мини-список уроков: иконка (если есть) или первая буква названия —
+                  чтобы было видно, что внутри список, а не пустая полоса. Клик —
+                  выбрать урок и раскрыть. */}
+              <div className="flex-1 w-full overflow-y-auto flex flex-col items-center gap-1 py-1">
+                {demo.lessons.map((l) => (
+                  <button
+                    key={l.id}
+                    title={l.title || "Без названия"}
+                    onClick={() => { setActiveLessonId(l.id); setSidebarCollapsed(false) }}
                     className={cn(
-                      "flex items-center gap-1.5 pl-1 pr-2 py-1.5 rounded-lg cursor-pointer group transition-all text-sm select-none",
-                      isActive ? "bg-primary text-primary-foreground" : "hover:bg-muted/60 text-foreground",
-                      dragLessonIdx === i && "opacity-30",
-                      dragOverLessonIdx === i && dragLessonIdx !== i && "ring-2 ring-primary/50 bg-primary/5"
+                      "w-7 h-7 rounded-md flex items-center justify-center shrink-0 leading-none transition-colors",
+                      activeLessonId === l.id ? "bg-primary text-primary-foreground" : "hover:bg-muted text-muted-foreground"
                     )}
                   >
-                    <GripVertical className={cn("w-3 h-3 flex-shrink-0 cursor-grab active:cursor-grabbing", isActive ? "text-primary-foreground/40" : "text-muted-foreground/30 group-hover:text-muted-foreground/60")} />
-                    {/* <span className="text-xl flex-shrink-0 leading-none">{lesson.emoji}</span> */}
-                    {isRenaming ? (
-                      <input
-                        autoFocus
-                        className="flex-1 text-xs font-medium bg-transparent border-b border-primary-foreground/40 outline-none min-w-0"
-                        value={lesson.title}
-                        onChange={(e) => updateLesson(lesson.id, { title: e.target.value })}
-                        onBlur={() => setRenamingLessonId(null)}
-                        onKeyDown={(e) => { if (e.key === "Enter") setRenamingLessonId(null) }}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    ) : (
-                      <span className="flex-1 truncate text-[12px] font-medium">{lesson.title}</span>
-                    )}
+                    {l.emoji
+                      ? <span className="text-[15px]">{l.emoji}</span>
+                      : <span className="text-[11px] font-semibold">{(l.title || "").trim().charAt(0).toUpperCase() || "•"}</span>}
+                  </button>
+                ))}
+              </div>
+              {/* Добавить урок — снизу полосы (как «+ Урок» в развёрнутом виде). */}
+              <button
+                type="button"
+                title="Добавить урок"
+                onClick={() => { setSidebarCollapsed(false); addLesson() }}
+                className="group/addc w-full flex items-center justify-center pt-2 pb-1 border-t border-dashed border-border text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="w-[260px] flex-shrink-0 self-start border border-border rounded-xl bg-card overflow-hidden flex flex-col" style={{ height: lessonsPanelHeight }}>
+              <div className="flex items-center gap-1 px-3 py-2 border-b border-border shrink-0">
+                {/* кнопка свернуть */}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 w-6 p-0 -ml-1"
+                  title="Свернуть список уроков"
+                  onClick={() => setSidebarCollapsed(true)}
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </Button>
+                <h4 className="text-sm font-semibold text-foreground">Уроки</h4>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-1.5 py-1 min-h-0">
+                {demo.lessons.map((lesson, i) => {
+                  const isActive = activeLessonId === lesson.id
+                  const isRenaming = renamingLessonId === lesson.id
+                  return (
+                    <DropdownMenu
+                      key={lesson.id}
+                      open={contextMenuLessonId === lesson.id}
+                      onOpenChange={(v) => { if (!v) setContextMenuLessonId(null) }}
+                    >
+                      <div
+                        draggable={!isRenaming}
+                        onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; setDragLessonIdx(i) }}
+                        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDragOverLessonIdx(i) }}
+                        onDragEnd={() => { setDragLessonIdx(null); setDragOverLessonIdx(null) }}
+                        onDrop={(e) => { e.preventDefault(); dropLesson(i) }}
+                        onClick={() => { if (!isRenaming) switchLesson(lesson.id) }}
+                        onContextMenu={(e) => { e.preventDefault(); setContextMenuLessonId(lesson.id) }}
+                        className={cn(
+                          "flex items-center gap-1.5 pl-1 pr-2 py-1.5 rounded-lg cursor-pointer group transition-all text-sm select-none",
+                          isActive ? "bg-primary text-primary-foreground" : "hover:bg-muted/60 text-foreground",
+                          dragLessonIdx === i && "opacity-30",
+                          dragOverLessonIdx === i && dragLessonIdx !== i && "ring-2 ring-primary/50 bg-primary/5"
+                        )}
+                      >
+                        <GripVertical className={cn("w-3 h-3 flex-shrink-0 cursor-grab active:cursor-grabbing", isActive ? "text-primary-foreground/40" : "text-muted-foreground/30 group-hover:text-muted-foreground/60")} />
+                        {/* <span className="text-xl flex-shrink-0 leading-none">{lesson.emoji}</span> */}
+                        {isRenaming ? (
+                          <input
+                            autoFocus
+                            placeholder="Название урока…"
+                            className="flex-1 text-xs font-medium bg-transparent border-b border-primary-foreground/40 outline-none min-w-0 placeholder:opacity-50"
+                            value={lesson.title}
+                            onChange={(e) => updateLesson(lesson.id, { title: e.target.value })}
+                            onFocus={(e) => e.currentTarget.select()}
+                            onBlur={() => {
+                              // Сохранить: пустое имя → «Новый урок»
+                              if (!lesson.title.trim()) updateLesson(lesson.id, { title: "Новый урок" })
+                              setRenamingLessonId(null)
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault()
+                                if (!lesson.title.trim()) updateLesson(lesson.id, { title: "Новый урок" })
+                                setRenamingLessonId(null)
+                              }
+                              if (e.key === "Escape") {
+                                // Откат к оригинальному названию (для нового урока — «Новый урок»)
+                                updateLesson(lesson.id, { title: renamingOriginalTitle.current || "Новый урок" })
+                                setRenamingLessonId(null)
+                              }
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          /* Правка 3: двойной клик → инлайн-переименование */
+                          <span
+                            className="flex-1 truncate text-[12px] font-medium"
+                            onDoubleClick={(e) => {
+                              e.stopPropagation()
+                              renamingOriginalTitle.current = lesson.title
+                              setRenamingLessonId(lesson.id)
+                            }}
+                          >{lesson.title}</span>
+                        )}
+                      </div>
+                      <DropdownMenuTrigger className="sr-only" />
+                      <DropdownMenuContent align="start" className="w-44">
+                        <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); renamingOriginalTitle.current = lesson.title; setRenamingLessonId(lesson.id) }}>
+                          <Pencil className="w-3.5 h-3.5 mr-2" />Переименовать
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); setCopiedLesson(lesson); toast.success("Скопировано") }}>
+                          <Copy className="w-3.5 h-3.5 mr-2" />Копировать
+                        </DropdownMenuItem>
+                        <DropdownMenuItem disabled={!copiedLesson} onClick={() => { setContextMenuLessonId(null); pasteLesson() }}>
+                          <ClipboardPaste className="w-3.5 h-3.5 mr-2" />Вставить
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); duplicateLesson(i) }}>
+                          <Copy className="w-3.5 h-3.5 mr-2" />Дублировать
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); moveLessonDir(i, -1) }} disabled={i === 0}>
+                          <ArrowUp className="w-3.5 h-3.5 mr-2" />Переместить вверх
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); moveLessonDir(i, 1) }} disabled={i === demo.lessons.length - 1}>
+                          <ArrowDown className="w-3.5 h-3.5 mr-2" />Переместить вниз
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); setDeleteConfirmId(lesson.id) }} className="text-destructive focus:text-destructive">
+                          <Trash2 className="w-3.5 h-3.5 mr-2" />Удалить
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )
+                })}
+
+              </div>
+
+              {/* + Урок — над редактором кнопки, не прокручивается */}
+              <button
+                type="button"
+                title="Добавить урок"
+                onClick={addLesson}
+                className="shrink-0 w-full border-t border-dashed border-border px-2 pt-2 pb-1.5 flex items-center justify-center gap-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span className="text-xs">Урок</span>
+              </button>
+
+              {/* Редактор кнопки «Далее» — фиксированный футер под «+ Урок» */}
+              {onNavButtonChange && (
+                <div className="shrink-0 border-t border-border px-2.5 py-2.5 space-y-2">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider text-center">Кнопка «Далее»</p>
+                  {/* Текст кнопки */}
+                  <Input
+                    value={localNavText}
+                    onChange={(e) => setLocalNavText(e.target.value)}
+                    onBlur={() => onNavButtonChange(navButtonColor ?? null, localNavText || null)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur()
+                    }}
+                    placeholder="Далее"
+                    className="h-7 text-xs px-2 text-center"
+                  />
+                  {/* Цветовая палитра — центрированная */}
+                  <div className="flex items-center justify-center gap-1.5">
+                    <button
+                      title="Цвет бренда (по умолчанию)"
+                      onClick={() => onNavButtonChange(null, localNavText || null)}
+                      className={cn(
+                        "w-4 h-4 rounded-full border-2 transition-all shrink-0",
+                        !navButtonColor ? "border-foreground/50 scale-110" : "border-transparent hover:scale-105"
+                      )}
+                      style={{ background: "linear-gradient(135deg, #6366f1 50%, #8b5cf6 50%)" }}
+                    />
+                    {NAV_BUTTON_PRESET_COLORS.map(({ hex, label }) => {
+                      const active = navButtonColor === hex
+                      return (
+                        <button
+                          key={hex}
+                          title={label}
+                          onClick={() => onNavButtonChange(active ? null : hex, localNavText || null)}
+                          className={cn(
+                            "w-4 h-4 rounded-full border-2 transition-all shrink-0",
+                            active ? "border-foreground/50 scale-110" : "border-transparent hover:scale-105"
+                          )}
+                          style={{ backgroundColor: hex }}
+                        />
+                      )
+                    })}
                   </div>
-                  <DropdownMenuTrigger className="sr-only" />
-                  <DropdownMenuContent align="start" className="w-44">
-                    <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); setRenamingLessonId(lesson.id) }}>
-                      <Pencil className="w-3.5 h-3.5 mr-2" />Переименовать
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); setCopiedLesson(lesson); toast.success("Скопировано") }}>
-                      <Copy className="w-3.5 h-3.5 mr-2" />Копировать
-                    </DropdownMenuItem>
-                    <DropdownMenuItem disabled={!copiedLesson} onClick={() => { setContextMenuLessonId(null); pasteLesson() }}>
-                      <ClipboardPaste className="w-3.5 h-3.5 mr-2" />Вставить
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); duplicateLesson(i) }}>
-                      <Copy className="w-3.5 h-3.5 mr-2" />Дублировать
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); moveLessonDir(i, -1) }} disabled={i === 0}>
-                      <ArrowUp className="w-3.5 h-3.5 mr-2" />Переместить вверх
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); moveLessonDir(i, 1) }} disabled={i === demo.lessons.length - 1}>
-                      <ArrowDown className="w-3.5 h-3.5 mr-2" />Переместить вниз
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); setDeleteConfirmId(lesson.id) }} className="text-destructive focus:text-destructive">
-                      <Trash2 className="w-3.5 h-3.5 mr-2" />Удалить
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )
-            })}
-          </div>
-        </div>}
+                  {/* Мини-превью кнопки */}
+                  <div className="flex justify-center">
+                    <span
+                      className="inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-medium text-white"
+                      style={{ backgroundColor: navButtonColor || "var(--primary)" }}
+                    >
+                      {localNavText || "Далее"}
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        )}
 
         {/* RIGHT — Notion-style block editor */}
         <div className="flex-1 min-w-0 overflow-y-auto">
@@ -545,41 +728,202 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
         savedTemplates={savedTemplates}
       />
 
-      {/* Save as template dialog */}
-      <Dialog open={saveTemplateOpen} onOpenChange={(o) => { setSaveTemplateOpen(o); if (!o) { setSaveTemplateName(""); setSaveTemplateCategory("Общее") } }}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader><DialogTitle>Сохранить в библиотеку</DialogTitle></DialogHeader>
-          <div className="grid gap-3 py-2">
-            <Input value={saveTemplateName} onChange={(e) => setSaveTemplateName(e.target.value)} placeholder="Название шаблона" autoFocus />
-            <Input value={saveTemplateCategory} onChange={(e) => setSaveTemplateCategory(e.target.value)} placeholder="Категория (напр. Продажи)" />
-            {savedTemplates.length > 0 && (
-              <div className="space-y-1 border-t pt-3">
-                <p className="text-xs text-muted-foreground mb-1">Или обновить существующий:</p>
-                <div className="max-h-40 overflow-y-auto space-y-1">
-                  {savedTemplates.map((t, i) => (
-                    <button key={i} type="button"
-                      className="w-full flex items-center justify-between text-left px-2 py-1.5 rounded hover:bg-muted text-sm"
-                      onClick={() => {
-                        const next = savedTemplates.map((x, j) => j === i ? { ...x, lessons: demo.lessons } : x)
-                        persistTemplates(next)
-                        setSaveTemplateOpen(false)
-                        toast.success(`Шаблон «${t.title}» обновлён`)
-                      }}>
-                      <span className="truncate">{t.title}</span>
-                      <span className="text-[10px] text-muted-foreground">{t.lessons.length} ур.</span>
-                    </button>
-                  ))}
-                </div>
+      {/* #26: Save-to-library диалог. Два режима: «Сохранить как новый» /
+          «Заменить существующий». При замене — отдельный confirm. */}
+      <Dialog open={saveTemplateOpen} onOpenChange={(o) => {
+        setSaveTemplateOpen(o)
+        if (o) {
+          // Дефолт названия = title + дата (YYYY-MM-DD). Если поле уже
+          // заполнено — не трогаем.
+          if (!saveTemplateName.trim()) {
+            const today = new Date().toISOString().slice(0, 10)
+            const base = (demo.title || "Демонстрация").trim()
+            setSaveTemplateName(`${base} ${today}`)
+          }
+          setSaveMode("new")
+          setReplaceTargetIdx(null)
+        } else {
+          setSaveTemplateName("")
+          setSaveTemplateCategory("Общее")
+          setSaveMode("new")
+          setReplaceTargetIdx(null)
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Сохранить демо в библиотеку</DialogTitle></DialogHeader>
+          <div className="grid gap-4 py-2">
+            <RadioGroup
+              value={saveMode}
+              onValueChange={(v) => setSaveMode(v === "replace" ? "replace" : "new")}
+              className="gap-3"
+            >
+              {/* Режим 1: новый шаблон */}
+              <div className={cn(
+                "rounded-lg border p-3",
+                saveMode === "new" ? "border-primary bg-primary/5" : "border-border",
+              )}>
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <RadioGroupItem value="new" className="mt-0.5" />
+                  <div className="flex-1 space-y-2">
+                    <span className="text-sm font-medium">Сохранить как новый</span>
+                    {saveMode === "new" && (
+                      <div className="space-y-2 pt-1">
+                        <Input
+                          value={saveTemplateName}
+                          onChange={(e) => setSaveTemplateName(e.target.value)}
+                          placeholder="Название шаблона"
+                          autoFocus
+                        />
+                        <Input
+                          value={saveTemplateCategory}
+                          onChange={(e) => setSaveTemplateCategory(e.target.value)}
+                          placeholder="Категория (напр. Продажи)"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </label>
               </div>
-            )}
-            <Button onClick={() => {
-              if (!saveTemplateName.trim()) { toast.error("Укажите название"); return }
-              const next = [...savedTemplates, { title: saveTemplateName.trim(), category: saveTemplateCategory.trim() || "Общее", lessons: demo.lessons }]
-              persistTemplates(next)
-              setSaveTemplateOpen(false)
-              setSaveTemplateName("")
-              toast.success("Шаблон сохранён в библиотеку")
-            }}>Сохранить как новый</Button>
+
+              {/* Режим 2: заменить существующий */}
+              <div className={cn(
+                "rounded-lg border p-3",
+                saveMode === "replace" ? "border-primary bg-primary/5" : "border-border",
+                savedTemplates.length === 0 && "opacity-50",
+              )}>
+                <label className={cn(
+                  "flex items-start gap-2",
+                  savedTemplates.length === 0 ? "cursor-not-allowed" : "cursor-pointer",
+                )}>
+                  <RadioGroupItem
+                    value="replace"
+                    className="mt-0.5"
+                    disabled={savedTemplates.length === 0}
+                  />
+                  <div className="flex-1 space-y-2">
+                    <span className="text-sm font-medium">
+                      Заменить существующий
+                      {savedTemplates.length === 0 && (
+                        <span className="ml-2 text-[10px] text-muted-foreground font-normal">
+                          (нет сохранённых шаблонов)
+                        </span>
+                      )}
+                    </span>
+                    {saveMode === "replace" && savedTemplates.length > 0 && (
+                      <Popover open={replaceComboOpen} onOpenChange={setReplaceComboOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full justify-between h-9 text-sm font-normal"
+                          >
+                            {replaceTargetIdx !== null
+                              ? savedTemplates[replaceTargetIdx]?.title
+                              : <span className="text-muted-foreground">Выберите шаблон для замены…</span>}
+                            <ChevronRight className="w-3.5 h-3.5 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                          <Command>
+                            {savedTemplates.length > 5 && (
+                              <CommandInput placeholder="Поиск шаблона…" className="h-9 text-sm" />
+                            )}
+                            <CommandList className="max-h-60">
+                              <CommandEmpty className="py-2 text-center text-xs text-muted-foreground">
+                                Не найдено
+                              </CommandEmpty>
+                              <CommandGroup>
+                                {savedTemplates.map((t, i) => (
+                                  <CommandItem
+                                    key={i}
+                                    value={t.title}
+                                    onSelect={() => {
+                                      setReplaceTargetIdx(i)
+                                      setReplaceComboOpen(false)
+                                    }}
+                                    className="text-sm"
+                                  >
+                                    <div className="flex items-center justify-between w-full">
+                                      <span className="truncate">{t.title}</span>
+                                      <span className="text-[10px] text-muted-foreground ml-2 shrink-0">
+                                        {t.lessons.length} ур.
+                                      </span>
+                                    </div>
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                    )}
+                  </div>
+                </label>
+              </div>
+            </RadioGroup>
+
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <Button variant="ghost" size="sm" onClick={() => setSaveTemplateOpen(false)}>
+                Отмена
+              </Button>
+              <Button
+                size="sm"
+                disabled={saveMode === "replace" && replaceTargetIdx === null}
+                onClick={() => {
+                  if (saveMode === "new") {
+                    if (!saveTemplateName.trim()) { toast.error("Укажите название"); return }
+                    const next = [
+                      ...savedTemplates,
+                      { title: saveTemplateName.trim(), category: saveTemplateCategory.trim() || "Общее", lessons: demo.lessons },
+                    ]
+                    persistTemplates(next)
+                    setSaveTemplateOpen(false)
+                    toast.success("Шаблон сохранён в библиотеку")
+                  } else {
+                    // Replace mode — открыть confirm.
+                    if (replaceTargetIdx !== null) setReplaceConfirmIdx(replaceTargetIdx)
+                  }
+                }}
+              >
+                {saveMode === "new" ? "Создать новый" : "Заменить выбранный"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* #26: Confirm-диалог замены. Двойное подтверждение, чтобы HR не
+          затёр чужой шаблон по ошибке. */}
+      <Dialog open={replaceConfirmIdx !== null} onOpenChange={(o) => { if (!o) setReplaceConfirmIdx(null) }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Заменить шаблон?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Вы уверены, что хотите заменить «{replaceConfirmIdx !== null ? savedTemplates[replaceConfirmIdx]?.title : ""}»?
+            Старая версия шаблона будет потеряна.
+          </p>
+          <div className="flex justify-end gap-2 mt-2">
+            <Button variant="outline" size="sm" onClick={() => setReplaceConfirmIdx(null)}>
+              Отмена
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                if (replaceConfirmIdx === null) return
+                const t = savedTemplates[replaceConfirmIdx]
+                const next = savedTemplates.map((x, j) =>
+                  j === replaceConfirmIdx ? { ...x, lessons: demo.lessons } : x
+                )
+                persistTemplates(next)
+                setReplaceConfirmIdx(null)
+                setSaveTemplateOpen(false)
+                toast.success(`Шаблон «${t?.title}» обновлён`)
+              }}
+            >
+              Заменить
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -868,8 +1212,17 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
 
       {/* Lesson title */}
       {!hideLessonTitle && (
-        <div className="flex items-center gap-3 mb-0 group/title">
-          <EmojiBtn current={lesson.emoji} onSelect={(v) => onUpdateLesson({ emoji: v })} />
+        <div className="relative flex items-center mb-0 group/title">
+          {lesson.emoji ? (
+            <span className="mr-3 shrink-0">
+              <EmojiBtn current={lesson.emoji} onSelect={(v) => onUpdateLesson({ emoji: v })} />
+            </span>
+          ) : (
+            // Нет иконки — заголовок выровнен по левому краю; «+» появляется в левом поле при наведении
+            <span className="absolute right-full mr-1 top-1/2 -translate-y-1/2">
+              <EmojiBtn current="" onSelect={(v) => onUpdateLesson({ emoji: v })} />
+            </span>
+          )}
           <input
             className="flex-1 text-3xl font-bold bg-transparent outline-none text-foreground placeholder:text-muted-foreground/30 leading-tight pt-0.5"
             value={lesson.title}
@@ -1833,7 +2186,16 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
           const isExpanded = expandedIdx === qi
           const hasOptions = q.answerType === "single" || q.answerType === "multiple" || q.answerType === "sort"
           const isText = q.answerType === "short" || q.answerType === "long" || q.answerType === "text"
+          // Вопрос с выбором, где есть вариант «Другое…» — он даёт свободный
+          // текст, поэтому тоже показываем поле «ИИ-проверка» (как у текстовых).
+          const hasOtherOption = (q.answerType === "single" || q.answerType === "multiple")
+            && ((q.otherOptions?.length ?? 0) > 0 || (q.options ?? []).some((o) => /^друго/i.test((o ?? "").trim())))
+          const showAiCheck = isText || hasOtherOption
           const points = q.points ?? 0
+          // Per-option режим (single/multiple): баллы заданы на каждый вариант,
+          // общий «Баллы» внизу не используется — скрываем, чтобы не путать.
+          const perOptionMode = (q.answerType === "single" || q.answerType === "multiple")
+            && Array.isArray(q.optionPoints) && q.optionPoints.length === q.options.length
           const typeInfo = qTypeInfo(q.answerType)
           return (
             <div
@@ -1854,7 +2216,7 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                 </div>
                 <span className="text-xs font-bold text-muted-foreground w-5 shrink-0">{qi + 1}.</span>
                 <span className={cn("flex-1 text-sm truncate", q.text ? "text-foreground" : "text-muted-foreground/50 italic")}>
-                  {q.text || "Вопрос"}
+                  {isExpanded ? "" : (q.text || "Вопрос")}
                 </span>
                 {typeInfo && (
                   <span className="text-[11px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0 font-mono">
@@ -1909,7 +2271,7 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                               updateQ(qi, {
                                 answerType: type,
                                 options: (type === "single" || type === "multiple" || type === "sort") && q.options.length === 0 ? ["", ""] : q.options,
-                                aiCriteria: type === "short" || type === "long" ? q.aiCriteria : undefined,
+                                aiCriteria: (type === "short" || type === "long" || type === "single" || type === "multiple") ? q.aiCriteria : undefined,
                               })
                               setTypePicker(null)
                             }}
@@ -1929,56 +2291,88 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                     )}
                   </div>
 
-                  {/* ── Короткий/длинный текст → ИИ-проверка ── */}
-                  {isText && (
-                    <div className="space-y-1.5">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-muted-foreground font-medium">🤖 ИИ-проверка</span>
-                        <span className="text-[10px] text-muted-foreground/50">необязательно</span>
-                      </div>
-                      <textarea
-                        className="w-full text-xs bg-muted/30 border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-primary/50 resize-none min-h-[52px]"
-                        value={q.aiCriteria || ""}
-                        onChange={(e) => updateQ(qi, { aiCriteria: e.target.value })}
-                        placeholder="Критерий для ИИ: например «Кандидат должен упомянуть опыт продаж более 2 лет»"
-                      />
-                      {q.aiCriteria && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">Баллы:</span>
-                          <input type="number" min={0} max={999}
-                            className="w-16 text-xs border border-border rounded px-2 py-0.5 outline-none bg-background focus:border-primary/50 text-center"
-                            value={points}
-                            onChange={(e) => { const v = parseInt(e.target.value); updateQ(qi, { points: isNaN(v) || v < 0 ? 0 : v }) }}
-                          />
-                          <button className="text-[11px] text-primary/60 hover:text-primary underline underline-offset-2"
-                            onClick={() => onUpdate({ questions: distributePoints(block.questions) })}
-                          >÷{block.questions.length}</button>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  {/* ИИ-проверка перенесена НИЖЕ — под список вариантов (см. ниже). */}
 
                   {/* ── Варианты (single / multiple / sort) ── */}
-                  {hasOptions && (
+                  {hasOptions && (() => {
+                    const isSelect = q.answerType === "single" || q.answerType === "multiple"
+                    // Режим «баллы по вариантам» — признак: массив optionPoints нужной длины.
+                    const perOption = isSelect && Array.isArray(q.optionPoints) && q.optionPoints.length === q.options.length
+                    const eff = isSelect ? resolveOptionPoints(q) : []
+                    const qMax = q.answerType === "single"
+                      ? Math.max(0, ...eff, 0)
+                      : q.answerType === "multiple"
+                        ? eff.reduce((s, p) => s + (p > 0 ? p : 0), 0)
+                        : 0
+                    // Записать балл варианта (материализует optionPoints при первом вводе).
+                    const setOptPoint = (oi: number, raw: string) => {
+                      const v = raw.trim() === "" || raw.trim() === "-" ? 0 : parseInt(raw, 10)
+                      const arr = perOption ? [...q.optionPoints!] : resolveOptionPoints(q)
+                      arr[oi] = Number.isFinite(v) ? v : 0
+                      updateQ(qi, { optionPoints: arr })
+                    }
+                    return (
                     <div className="space-y-1.5">
                       {q.options.map((opt, oi) => {
                         const isCorrectSingle = q.answerType === "single" && q.correctOptions?.[0] === oi
                         const isCorrectMulti = q.answerType === "multiple" && (q.correctOptions?.includes(oi) ?? false)
+                        const positive = perOption && (eff[oi] ?? 0) > 0
+                        const negative = perOption && (eff[oi] ?? 0) < 0
                         return (
                           <div key={oi} className="flex items-center gap-1.5">
+                            {/* Перемещение варианта вверх/вниз (с ремапом ✓/✏️ и перестановкой баллов). */}
+                            <div className="flex flex-col shrink-0 -my-0.5">
+                              {([-1, 1] as const).map((dir) => {
+                                const j = oi + dir
+                                const disabled = j < 0 || j >= q.options.length
+                                return (
+                                  <button
+                                    key={dir}
+                                    type="button"
+                                    title={dir < 0 ? "Вверх" : "Вниз"}
+                                    disabled={disabled}
+                                    onClick={() => {
+                                      if (disabled) return
+                                      const no = [...q.options]
+                                      ;[no[oi], no[j]] = [no[j], no[oi]]
+                                      const remap = (a?: number[]) => a?.map((c) => (c === oi ? j : c === j ? oi : c))
+                                      const swapVals = (a?: number[]) => { if (!a) return a; const c = [...a]; [c[oi], c[j]] = [c[j], c[oi]]; return c }
+                                      updateQ(qi, { options: no, correctOptions: remap(q.correctOptions), otherOptions: remap(q.otherOptions), optionPoints: swapVals(q.optionPoints) })
+                                    }}
+                                    className="text-muted-foreground/40 hover:text-foreground disabled:opacity-20 leading-none"
+                                  >
+                                    {dir < 0 ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
+                                  </button>
+                                )
+                              })}
+                            </div>
                             {q.answerType === "sort" && (
                               <span className="text-xs text-muted-foreground w-4 shrink-0 text-center">{oi + 1}.</span>
                             )}
                             <input
                               className={cn(
                                 "flex-1 text-xs border rounded px-2 py-1.5 outline-none focus:border-primary/50",
-                                (isCorrectSingle || isCorrectMulti) ? "bg-green-500/5 border-green-400/50" : "bg-muted/30 border-border"
+                                (isCorrectSingle || isCorrectMulti || positive) ? "bg-green-500/5 border-green-400/50"
+                                  : negative ? "bg-destructive/5 border-destructive/40" : "bg-muted/30 border-border"
                               )}
                               value={opt}
                               onChange={(e) => { const no = [...q.options]; no[oi] = e.target.value; updateQ(qi, { options: no }) }}
                               placeholder={`Вариант ${oi + 1}...`}
                             />
-                            {q.answerType === "single" && (
+                            {/* Per-option режим: поле балла вместо ✓ */}
+                            {perOption && (
+                              <input
+                                type="number"
+                                title="Балл за этот вариант (можно отрицательный — штраф)"
+                                className={cn(
+                                  "shrink-0 w-14 text-xs border rounded px-1.5 py-1 outline-none text-center focus:border-primary/50 bg-background",
+                                  positive ? "border-green-400/50 text-green-700" : negative ? "border-destructive/40 text-destructive" : "border-border"
+                                )}
+                                value={q.optionPoints![oi] ?? 0}
+                                onChange={(e) => setOptPoint(oi, e.target.value)}
+                              />
+                            )}
+                            {!perOption && q.answerType === "single" && (
                               <button
                                 title={isCorrectSingle ? "Правильный ответ" : "Отметить как правильный"}
                                 onClick={() => updateQ(qi, { correctOptions: isCorrectSingle ? [] : [oi] })}
@@ -1988,7 +2382,7 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                                 )}
                               >✓</button>
                             )}
-                            {q.answerType === "multiple" && (
+                            {!perOption && q.answerType === "multiple" && (
                               <button
                                 title={isCorrectMulti ? "Правильный (снять)" : "Отметить как правильный"}
                                 onClick={() => {
@@ -2001,23 +2395,139 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                                 )}
                               >✓</button>
                             )}
+                            {(q.answerType === "single" || q.answerType === "multiple") && (() => {
+                              const isOther = q.otherOptions?.includes(oi) ?? false
+                              return (
+                                <button
+                                  title={isOther ? "Свой ответ (поле ввода) — снять" : "Сделать вариантом «Другое» (поле ввода)"}
+                                  onClick={() => {
+                                    const cur = q.otherOptions || []
+                                    updateQ(qi, { otherOptions: cur.includes(oi) ? cur.filter((x) => x !== oi) : [...cur, oi] })
+                                  }}
+                                  className={cn(
+                                    "shrink-0 px-2 py-1 rounded text-[11px] font-medium border transition-all",
+                                    isOther ? "bg-blue-500 border-blue-500 text-white" : "border-border text-muted-foreground/40 hover:border-blue-400 hover:text-blue-600"
+                                  )}
+                                >✏️</button>
+                              )
+                            })()}
                             <button className="text-muted-foreground/40 hover:text-destructive shrink-0"
                               onClick={() => {
                                 const newOpts = q.options.filter((_, j) => j !== oi)
                                 const newCorrect = q.correctOptions?.filter((c) => c !== oi).map((c) => c > oi ? c - 1 : c)
-                                updateQ(qi, { options: newOpts, correctOptions: newCorrect })
+                                const newOther = q.otherOptions?.filter((c) => c !== oi).map((c) => c > oi ? c - 1 : c)
+                                const newOptPts = q.optionPoints?.filter((_, j) => j !== oi)
+                                updateQ(qi, { options: newOpts, correctOptions: newCorrect, otherOptions: newOther, optionPoints: newOptPts })
                               }}
                             ><X className="w-3 h-3" /></button>
                           </div>
                         )
                       })}
+                      {/* Подсказка для поля «Другое» (когда есть хотя бы один такой вариант) */}
+                      {(q.answerType === "single" || q.answerType === "multiple") && (q.otherOptions?.length ?? 0) > 0 && (
+                        <input
+                          className="w-full text-xs bg-blue-500/5 border border-blue-400/40 rounded px-2 py-1.5 outline-none focus:border-blue-400"
+                          value={q.otherPlaceholder || ""}
+                          onChange={(e) => updateQ(qi, { otherPlaceholder: e.target.value })}
+                          placeholder="Текст-подсказка для своего ответа: напр. «Укажите что»"
+                        />
+                      )}
                       <button className="text-xs text-primary/70 hover:text-primary flex items-center gap-1"
-                        onClick={() => updateQ(qi, { options: [...q.options, ""] })}
+                        onClick={() => updateQ(qi, { options: [...q.options, ""], optionPoints: q.optionPoints ? [...q.optionPoints, 0] : undefined })}
                       >
                         <Plus className="w-3 h-3" />{q.answerType === "sort" ? "Добавить пункт" : "Добавить вариант"}
                       </button>
                       {q.answerType === "sort" && q.options.length > 0 && (
                         <p className="text-[11px] text-muted-foreground/50">Текущий порядок считается правильным</p>
+                      )}
+                      {/* ── Режим баллов: переключатель + максимум ── */}
+                      {isSelect && (
+                        <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                          {!perOption ? (
+                            <button
+                              className="text-[11px] text-primary/70 hover:text-primary underline underline-offset-2"
+                              onClick={() => updateQ(qi, { optionPoints: resolveOptionPoints(q) })}
+                            >Разные баллы по вариантам…</button>
+                          ) : (
+                            <>
+                              <span className="text-[11px] text-muted-foreground">Баллы по вариантам:</span>
+                              <button
+                                className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2"
+                                onClick={() => updateQ(qi, { optionPoints: undefined })}
+                                title="Вернуться к простому режиму: отметка ✓ + равные баллы"
+                              >↺ к простому (✓)</button>
+                            </>
+                          )}
+                          {qMax > 0 && (
+                            <span className="text-[11px] text-amber-600 ml-auto">Максимум: {qMax} б</span>
+                          )}
+                        </div>
+                      )}
+                      {/* ── Штраф за лишний выбор (простой режим multiple) ── */}
+                      {q.answerType === "multiple" && !perOption && (q.correctOptions?.length ?? 0) > 0 && (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[11px] text-muted-foreground">Штраф за лишний:</span>
+                          {([
+                            { v: "none", label: "нет" },
+                            { v: "half", label: "½" },
+                            { v: "full", label: "полный" },
+                          ] as const).map(({ v, label }) => {
+                            const active = (q.overselectPenalty ?? "half") === v
+                            return (
+                              <button
+                                key={v}
+                                onClick={() => updateQ(qi, { overselectPenalty: v })}
+                                className={cn(
+                                  "px-2 py-0.5 rounded text-[11px] font-medium border transition-all",
+                                  active ? "bg-primary/10 border-primary text-primary" : "border-border text-muted-foreground/60 hover:border-primary/40"
+                                )}
+                              >{label}</button>
+                            )
+                          })}
+                          <span className="text-[10px] text-muted-foreground/50">за неверный пункт списывается балл</span>
+                        </div>
+                      )}
+                      {perOption && q.answerType === "multiple" && (
+                        <p className="text-[10px] text-muted-foreground/70">
+                          Балл вопроса = сумма выбранных (обрезается в 0…{qMax}). Отрицательные баллы — штраф за лишний выбор.
+                        </p>
+                      )}
+                    </div>
+                    )
+                  })()}
+
+                  {/* ── ИИ-проверка (под вариантами): текстовые + выбор с «Другое…» ── */}
+                  {showAiCheck && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-muted-foreground font-medium">🤖 ИИ-проверка</span>
+                        <span className="text-[10px] text-muted-foreground/50">необязательно</span>
+                      </div>
+                      {hasOptions && (q.correctOptions?.length ?? 0) > 0 && (
+                        <p className="text-[10px] text-muted-foreground/70">
+                          Подходящие (✓): {(q.correctOptions ?? []).map((i) => q.options[i]).filter(Boolean).join(", ")} — учитываются ИИ. Ниже можно дописать правило.
+                        </p>
+                      )}
+                      <textarea
+                        className="w-full text-xs bg-muted/30 border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-primary/50 resize-none min-h-[52px]"
+                        value={q.aiCriteria || ""}
+                        onChange={(e) => updateQ(qi, { aiCriteria: e.target.value })}
+                        placeholder={hasOptions ? "Правило для ИИ: напр. «подходит всё, что связано с промышленным/военным строительством, кроме малоэтажного»" : "Критерий для ИИ: например «Кандидат должен упомянуть опыт продаж более 2 лет»"}
+                      />
+                      {/* Баллы здесь — только для ТЕКСТОВЫХ вопросов. У выборных
+                          свой блок баллов ниже (!isText), иначе дублировалось. */}
+                      {isText && q.aiCriteria && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">Баллы:</span>
+                          <input type="number" min={0} max={999}
+                            className="w-16 text-xs border border-border rounded px-2 py-0.5 outline-none bg-background focus:border-primary/50 text-center"
+                            value={points}
+                            onChange={(e) => { const v = parseInt(e.target.value); updateQ(qi, { points: isNaN(v) || v < 0 ? 0 : v }) }}
+                          />
+                          <button className="text-[11px] text-primary/60 hover:text-primary underline underline-offset-2"
+                            onClick={() => onUpdate({ questions: distributePoints(block.questions) })}
+                          >÷{block.questions.length}</button>
+                        </div>
                       )}
                     </div>
                   )}
@@ -2040,8 +2550,8 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                     </div>
                   )}
 
-                  {/* ── Баллы (не для текстовых без aiCriteria) ── */}
-                  {!isText && (
+                  {/* ── Баллы (не для текстовых без aiCriteria; не в per-option режиме) ── */}
+                  {!isText && !perOptionMode && (
                     <div className="flex items-center gap-2 pt-0.5 border-t border-border/40">
                       <span className="text-xs text-muted-foreground">Баллы:</span>
                       <input type="number" min={0} max={999}
@@ -2184,6 +2694,163 @@ function MediaEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch:
           className="resize-none text-sm"
         />
       </div>
+    </div>
+  )
+}
+
+// ─── Stories editor block ──────────────────────────────────────────────────
+
+function StoriesEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partial<Block>) => void }) {
+  const cards: StoriesCard[] = block.storiesCards ?? []
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleAddFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ""
+
+    const mediaType: StoriesCard["mediaType"] = file.type.startsWith("video/") ? "video" : "image"
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      const res = await fetch("/api/upload", { method: "POST", body: formData })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Ошибка загрузки" }))
+        toast.error(err.error || "Ошибка загрузки")
+        setUploading(false)
+        return
+      }
+      const data = await res.json()
+      const newCard: StoriesCard = { id: `sc-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, mediaType, url: data.url }
+      onUpdate({ storiesCards: [...cards, newCard] })
+    } catch {
+      // Fallback — blob/dataURL
+      let url: string
+      if (mediaType === "video") {
+        url = URL.createObjectURL(file)
+      } else {
+        url = await new Promise<string>((resolve) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.readAsDataURL(file)
+        })
+      }
+      const newCard: StoriesCard = { id: `sc-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, mediaType, url }
+      onUpdate({ storiesCards: [...cards, newCard] })
+    }
+    setUploading(false)
+  }
+
+  const updateCard = (id: string, patch: Partial<StoriesCard>) => {
+    onUpdate({ storiesCards: cards.map(c => c.id === id ? { ...c, ...patch } : c) })
+  }
+
+  const removeCard = (id: string) => {
+    onUpdate({ storiesCards: cards.filter(c => c.id !== id) })
+  }
+
+  const moveCard = (id: string, dir: -1 | 1) => {
+    const idx = cards.findIndex(c => c.id === id)
+    if (idx === -1) return
+    const newCards = [...cards]
+    const target = idx + dir
+    if (target < 0 || target >= newCards.length) return
+    ;[newCards[idx], newCards[target]] = [newCards[target], newCards[idx]]
+    onUpdate({ storiesCards: newCards })
+  }
+
+  return (
+    <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <Clapperboard className="w-4 h-4" />
+          <span>Сторис</span>
+          {cards.length > 0 && (
+            <span className="text-xs bg-primary/10 text-primary rounded px-1.5 py-0.5">{cards.length} карточек</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {uploading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border hover:border-primary/50 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+          >
+            <Plus className="w-3.5 h-3.5" />Добавить карточку
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,video/*"
+            className="hidden"
+            onChange={handleAddFile}
+          />
+        </div>
+      </div>
+
+      {cards.length === 0 ? (
+        <div className="text-xs text-muted-foreground text-center py-3">
+          Нажмите «Добавить карточку» — поддерживаются фото и видео (вертикальные и горизонтальные)
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {cards.map((card, idx) => (
+            <div key={card.id} className="flex items-center gap-3 p-2 rounded-lg border border-border bg-background">
+              {/* Миниатюра */}
+              <div className="w-12 h-16 rounded-md overflow-hidden bg-muted shrink-0 flex items-center justify-center">
+                {card.mediaType === "image" ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={card.url} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="flex flex-col items-center gap-0.5 text-muted-foreground">
+                    <Video className="w-5 h-5" />
+                    <span className="text-[9px]">видео</span>
+                  </div>
+                )}
+              </div>
+              {/* Подпись */}
+              <div className="flex-1 min-w-0">
+                <input
+                  type="text"
+                  value={card.caption || ""}
+                  onChange={(e) => updateCard(card.id, { caption: e.target.value })}
+                  placeholder="Подпись (необязательно)"
+                  maxLength={120}
+                  className="w-full text-xs border border-border rounded-md px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-primary/50"
+                />
+              </div>
+              {/* Действия */}
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => moveCard(card.id, -1)}
+                  disabled={idx === 0}
+                  className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 hover:bg-muted transition-colors"
+                  title="Выше"
+                >
+                  <ArrowUp className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => moveCard(card.id, 1)}
+                  disabled={idx === cards.length - 1}
+                  className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 hover:bg-muted transition-colors"
+                  title="Ниже"
+                >
+                  <ArrowDown className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => removeCard(card.id)}
+                  className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                  title="Удалить"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -2575,16 +3242,55 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
             <MousePointerClick className="w-4 h-4" /><span>Кнопка</span>
           </div>
 
-          {/* Текст + ссылка */}
-          <div className="grid grid-cols-2 gap-2">
-            <Input placeholder="Текст кнопки" value={block.buttonText} onChange={(e) => onUpdate({ buttonText: e.target.value })} className="text-sm" />
-            <Input placeholder="https://..." value={block.buttonUrl} onChange={(e) => onUpdate({ buttonUrl: e.target.value })} className="text-sm" />
-          </div>
+          {/* Текст + (условно) ссылка. target: next = следующая страница, url = ссылка */}
+          {(() => {
+            const target = block.buttonTarget || (block.buttonUrl ? "url" : "next")
+            return (
+              <>
+                <div className={cn("grid gap-2", target === "url" ? "grid-cols-2" : "grid-cols-1")}>
+                  <Input placeholder="Текст кнопки" value={block.buttonText} onChange={(e) => onUpdate({ buttonText: e.target.value })} className="text-sm" />
+                  {target === "url" && (
+                    <Input placeholder="https://..." value={block.buttonUrl} onChange={(e) => onUpdate({ buttonUrl: e.target.value })} className="text-sm" />
+                  )}
+                </div>
+                {/* Куда ведёт */}
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1.5">Куда ведёт</p>
+                  <div className="flex items-center gap-1.5">
+                    <Button variant={target === "next" ? "default" : "outline"} size="sm" className="text-xs" onClick={() => onUpdate({ buttonTarget: "next" })}>Следующая страница</Button>
+                    <Button variant={target === "url" ? "default" : "outline"} size="sm" className="text-xs" onClick={() => onUpdate({ buttonTarget: "url" })}>Ссылка</Button>
+                  </div>
+                  {target === "next" && (
+                    <p className="text-[10px] text-muted-foreground/60 mt-1">В тесте: отправляет ответы и открывает следующую страницу (по очереди). URL не нужен.</p>
+                  )}
+                </div>
+              </>
+            )
+          })()}
 
           {/* Стиль: основная / контурная */}
           <div className="flex items-center gap-2">
             <Button variant={isPrimary ? "default" : "outline"} size="sm" className="text-xs" onClick={() => onUpdate({ buttonVariant: "primary" })}>Основная</Button>
             <Button variant={!isPrimary ? "default" : "outline"} size="sm" className="text-xs" onClick={() => onUpdate({ buttonVariant: "outline" })}>Контурная</Button>
+          </div>
+
+          {/* Расположение кнопки на странице */}
+          <div>
+            <p className="text-xs text-muted-foreground mb-1.5">Расположение</p>
+            <div className="flex items-center gap-1.5">
+              {([
+                { v: "left",   l: "Слева" },
+                { v: "center", l: "По центру" },
+                { v: "right",  l: "Справа" },
+              ] as const).map(({ v, l }) => (
+                <Button
+                  key={v}
+                  variant={(block.buttonAlign || "left") === v ? "default" : "outline"}
+                  size="sm" className="text-xs"
+                  onClick={() => onUpdate({ buttonAlign: v })}
+                >{l}</Button>
+              ))}
+            </div>
           </div>
 
           {/* Иконка ДО текста */}
@@ -2683,6 +3389,9 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
     case "media":
       return <MediaEditorBlock block={block} onUpdate={onUpdate} />
 
+    case "stories":
+      return <StoriesEditorBlock block={block} onUpdate={onUpdate} />
+
     default:
       return (
         <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 text-sm text-muted-foreground flex items-center gap-2">
@@ -2731,14 +3440,19 @@ const TOOLBAR_BLOCK_ITEMS: { type: BlockType; label: string; light: { bg: string
     svg: (c) => <><rect x="3" y="3" width="18" height="18" rx="4" stroke={c} strokeWidth="1.3"/><path d="M8 12l3 3 5-5" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></>,
   },
   {
-    type: "button", label: "Задание",
+    type: "button", label: "Кнопка",
     light: { bg: "#FAEEDA", icon: "#854F0B" }, dark: { bg: "#1f1a0e", icon: "#FBBF24" },
-    svg: (c) => <path d="M12 2l3 6.5h6.5l-5.2 4 2 6.5L12 15.5 5.7 19l2-6.5L2.5 8.5H9z" stroke={c} strokeWidth="1.3" strokeLinejoin="round" fill="none"/>,
+    svg: (c) => <><rect x="3" y="8" width="18" height="8" rx="4" stroke={c} strokeWidth="1.3" fill="none"/><path d="M7.5 12h6" stroke={c} strokeWidth="1.4" strokeLinecap="round"/></>,
   },
   {
     type: "media", label: "Запись",
     light: { bg: "#FDE7E7", icon: "#B91C1C" }, dark: { bg: "#231515", icon: "#F87171" },
     svg: (c) => <><circle cx="12" cy="12" r="9" stroke={c} strokeWidth="1.3"/><circle cx="12" cy="12" r="4" fill={c}/></>,
+  },
+  {
+    type: "stories", label: "Сторис",
+    light: { bg: "#EEEDFE", icon: "#534AB7" }, dark: { bg: "#1e1e2a", icon: "#AFA9EC" },
+    svg: (c) => <><rect x="3" y="2" width="7" height="20" rx="2" stroke={c} strokeWidth="1.3"/><rect x="13" y="5" width="8" height="14" rx="2" stroke={c} strokeWidth="1.3"/><path d="M8 10l-1.5 2 1.5 2" stroke={c} strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></>,
   },
 ]
 
@@ -3405,10 +4119,15 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
       <button
         ref={btnRef}
         onClick={openPicker}
-        className="text-[1.44rem] leading-none hover:opacity-70 transition-opacity flex-shrink-0 cursor-pointer"
-        title="Сменить эмодзи"
+        className={cn(
+          "leading-none transition-all flex-shrink-0 cursor-pointer flex items-center justify-center",
+          current
+            ? "text-[1.44rem] hover:opacity-70"
+            : "w-8 h-8 rounded-md text-muted-foreground/40 hover:text-foreground hover:bg-muted opacity-0 group-hover/title:opacity-100"
+        )}
+        title={current ? "Сменить иконку" : "Добавить иконку"}
       >
-        {current || "📝"}
+        {current || <Plus className="w-5 h-5" />}
       </button>
 
       {open && pos && typeof document !== "undefined" && (
@@ -3425,6 +4144,16 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
             placeholder="Поиск эмодзи..."
             className="w-full text-xs border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-primary/50 bg-muted/30 placeholder:text-muted-foreground/50"
           />
+
+          {/* Убрать иконку — заголовок останется без иконки */}
+          {current && (
+            <button
+              onClick={() => { onSelect(""); setOpen(false) }}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors px-1 py-1 -mb-0.5"
+            >
+              <X className="w-3.5 h-3.5" />Убрать иконку
+            </button>
+          )}
 
           {/* Быстрый доступ — скрываем при поиске */}
           {!search && (
@@ -3816,6 +4545,8 @@ function SimplePreviewBlock({ block }: { block: Block }) {
         </div>
       )
     }
+    case "stories":
+      return <StoriesPlayer cards={block.storiesCards ?? []} />
     default:
       return null
   }

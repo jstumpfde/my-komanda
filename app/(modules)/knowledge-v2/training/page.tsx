@@ -242,7 +242,7 @@ export default function TrainingListPage() {
               <div>
                 <div className="flex items-center gap-2">
                   <Target className="size-5 text-violet-500" />
-                  <h1 className="text-xl font-semibold">Тренировки с AI</h1>
+                  <h1 className="text-lg font-semibold">Тренировки с AI</h1>
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
                   Ролевые сценарии: AI играет собеседника, оценивает ваш диалог и даёт рекомендации

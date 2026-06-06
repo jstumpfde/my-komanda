@@ -107,7 +107,7 @@ export async function POST(
     const fileName = `${safeBlock}-${Date.now()}.${ext}`
 
     const relativeDir = path.join("uploads", "candidates", candidate.id)
-    const absoluteDir = path.join(process.cwd(), "public", relativeDir)
+    const absoluteDir = publicDir(relativeDir)
     await fs.mkdir(absoluteDir, { recursive: true })
 
     const absolutePath = path.join(absoluteDir, fileName)

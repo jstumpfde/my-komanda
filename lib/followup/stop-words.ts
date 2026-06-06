@@ -17,6 +17,14 @@ export const STOP_WORDS = [
   "нашла работу", "не актуально",
 ]
 
+// P0-22: editable дефолт, который и применяется как DEFAULT для колонки
+// vacancies.stop_words_json. Совпадает с тем, что предложил Юрий в ТЗ.
+export const DEFAULT_STOP_WORDS_V2 = [
+  "нет", "неактуально", "не подходит", "спасибо", "неинтересно",
+  "не интересно", "не интересует", "не актуально", "не актуальна",
+  "отменяю", "отказ", "отказываюсь", "не рассматриваю",
+]
+
 export function matchStopWord(text: string): boolean {
   // Нормализация: вся пунктуация → пробел, схлопываем пробелы.
   const norm = text
@@ -32,4 +40,21 @@ export function matchStopWord(text: string): boolean {
     if (re.test(norm)) return true
   }
   return false
+}
+
+// P0-22: editable список из vacancies.stop_words_json. Юрий явно попросил
+// case-insensitive substring match (а не word-boundary как в matchStopWord
+// выше). Внимание: substring чувствителен к false positives — «интернет»
+// содержит «нет», «внеплановый» содержит «не». Список редактируется HR'ом,
+// и от него ожидается, что он будет вписывать только осмысленные стоп-фразы.
+// Возвращает первое попавшееся слово (для логирования) или null.
+export function matchStopWordList(text: string, list: string[]): string | null {
+  if (!list || list.length === 0) return null
+  const lowered = text.toLowerCase()
+  for (const raw of list) {
+    const w = raw.trim().toLowerCase()
+    if (!w) continue
+    if (lowered.includes(w)) return raw
+  }
+  return null
 }

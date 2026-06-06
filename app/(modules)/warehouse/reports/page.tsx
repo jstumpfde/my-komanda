@@ -5,6 +5,7 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { FileText, Download, Package, ShoppingCart, TrendingUp, ClipboardList, Users } from "lucide-react"
@@ -82,7 +83,7 @@ export default function LogisticsReportsPage() {
                 <FileText className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <h1 className="text-2xl font-semibold">Отчёты</h1>
+                <h1 className="text-lg font-semibold">Отчёты</h1>
                 <p className="text-sm text-muted-foreground">Выгрузка данных по складу и логистике</p>
               </div>
             </div>
@@ -128,39 +129,37 @@ export default function LogisticsReportsPage() {
                 <CardTitle className="text-base">Сформированные отчёты</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Отчёт</th>
-                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Период</th>
-                      <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Дата формирования</th>
-                      <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Формат</th>
-                      <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Скачать</th>
-                    </tr>
-                  </thead>
+                <DataTable>
+                  <DataHead>
+                    <DataHeadCell>Отчёт</DataHeadCell>
+                    <DataHeadCell>Период</DataHeadCell>
+                    <DataHeadCell>Дата формирования</DataHeadCell>
+                    <DataHeadCell align="center">Формат</DataHeadCell>
+                    <DataHeadCell align="center">Скачать</DataHeadCell>
+                  </DataHead>
                   <tbody>
                     {generated.map(r => (
-                      <tr key={r.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                        <td className="px-4 py-3 text-sm font-medium">{r.title}</td>
-                        <td className="px-3 py-3 text-sm text-muted-foreground">{r.period}</td>
-                        <td className="px-3 py-3 text-sm text-muted-foreground">{r.date}</td>
-                        <td className="text-center px-3 py-3">
+                      <DataRow key={r.id}>
+                        <DataCell className="font-medium">{r.title}</DataCell>
+                        <DataCell className="text-muted-foreground">{r.period}</DataCell>
+                        <DataCell className="text-muted-foreground">{r.date}</DataCell>
+                        <DataCell align="center">
                           <span className={`text-xs font-semibold px-2 py-0.5 rounded ${r.format === "Excel" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
                             {r.format}
                           </span>
-                        </td>
-                        <td className="text-center px-3 py-3">
+                        </DataCell>
+                        <DataCell align="center">
                           <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => toast.info(`Скачивание: ${r.title}`)}>
                             <Download className="w-3.5 h-3.5" /> Скачать
                           </Button>
-                        </td>
-                      </tr>
+                        </DataCell>
+                      </DataRow>
                     ))}
                     {generated.length === 0 && (
                       <tr><td colSpan={5} className="text-center py-8 text-sm text-muted-foreground">Нет сформированных отчётов</td></tr>
                     )}
                   </tbody>
-                </table>
+                </DataTable>
               </CardContent>
             </Card>
           </div>

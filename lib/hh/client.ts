@@ -307,6 +307,7 @@ export class HHClient {
               aiIdealProfile:       (anketa.aiIdealProfile as string | undefined) ?? null,
               aiRequiredHardSkills: (anketa.aiRequiredHardSkills as string[] | undefined) ?? null,
               aiStopFactors:        (anketa.aiStopFactors as string[] | undefined) ?? null,
+              screeningQuestions:   (anketa.screeningQuestions as string[] | undefined) ?? null,
             },
           })
           if (result) {

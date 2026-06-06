@@ -16,10 +16,10 @@
 
 import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { followUpCampaigns, followUpMessages, candidates } from "@/lib/db/schema"
+import { followUpCampaigns, followUpMessages, candidates, vacancies } from "@/lib/db/schema"
 import { isFollowUpPreset } from "./presets"
-import { generateTouchSchedule } from "./schedule"
-import { DEFAULT_FOLLOWUP_OPENED_NOT_FINISHED } from "./default-messages"
+import { generateTouchSchedule, mergeMessagesWithDefaults } from "./schedule"
+import { DEFAULT_FOLLOWUP_OPENED_NOT_FINISHED, DEFAULT_TEST_OPENED_NOT_SUBMITTED } from "./default-messages"
 
 export async function switchToBranchOpened(candidateId: string): Promise<{
   switched: boolean
@@ -59,17 +59,126 @@ export async function switchToBranchOpened(candidateId: string): Promise<{
     .returning({ id: followUpMessages.id })
 
   // Шаг 2: запланировать ветку Б.
-  const messagesB = (campaign.customMessagesOpened && campaign.customMessagesOpened.length > 0)
-    ? campaign.customMessagesOpened
-    : DEFAULT_FOLLOWUP_OPENED_NOT_FINISHED
-  const touchesB = generateTouchSchedule(
-    campaign.id,
+  // mergeMessagesWithDefaults гарантирует массив длиной FOLLOWUP_MESSAGE_SLOTS,
+  // чтобы preset.messageIndexes мог адресовать любой слот 0..8.
+  const messagesB = mergeMessagesWithDefaults(campaign.customMessagesOpened, DEFAULT_FOLLOWUP_OPENED_NOT_FINISHED)
+
+  // Для adjustToWorkingWindow нужны расписание-поля вакансии (start/end/
+  // working_days/holidays). Один SELECT — это безболезненно, switch-branch
+  // дёргается раз на кандидата при открытии демо.
+  const [vac] = await db
+    .select({
+      scheduleEnabled:            vacancies.scheduleEnabled,
+      scheduleStart:              vacancies.scheduleStart,
+      scheduleEnd:                vacancies.scheduleEnd,
+      scheduleTimezone:           vacancies.scheduleTimezone,
+      scheduleWorkingDays:        vacancies.scheduleWorkingDays,
+      scheduleExcludedHolidayIds: vacancies.scheduleExcludedHolidayIds,
+      scheduleCustomHolidays:     vacancies.scheduleCustomHolidays,
+      descriptionJson:            vacancies.descriptionJson,
+    })
+    .from(vacancies)
+    .where(eq(vacancies.id, cand.vacancyId))
+    .limit(1)
+
+  // Группа 35: кастомные дни касаний из descriptionJson.followupCustomDays.
+  const djForDays = vac?.descriptionJson as Record<string, unknown> | null
+  const rawDays = Array.isArray(djForDays?.followupCustomDays)
+    ? (djForDays!.followupCustomDays as unknown[])
+    : null
+  const customDays = rawDays
+    ? rawDays.map(d => Number(d)).filter(d => Number.isFinite(d) && d >= 1 && d <= 365)
+    : null
+
+  const touchesB = generateTouchSchedule({
+    campaignId:  campaign.id,
     candidateId,
-    campaign.preset,
-    new Date(),
-    messagesB,
-    "opened_not_finished",
-  )
+    preset:      campaign.preset,
+    // Д0 для ветки Б = момент открытия демо (отсчёт начинается отсюда).
+    d0Date:      new Date(),
+    d0Source:    "branch_switch",
+    messages:    messagesB,
+    branch:      "opened_not_finished",
+    vacancy:     vac ?? {},
+    customDays:  customDays && customDays.length > 0 ? customDays : null,
+  })
+  let scheduled = 0
+  if (touchesB.length > 0) {
+    const inserted = await db.insert(followUpMessages).values(touchesB).returning({ id: followUpMessages.id })
+    scheduled = inserted.length
+  }
+
+  return { switched: true, cancelledA: cancelled.length, scheduledB: scheduled }
+}
+
+// Тест-дожим: переключение ветки при ОТКРЫТИИ теста кандидатом (первый визит
+// на /test/<token>, см. app/api/public/test/[token]/route.ts). Отменяет
+// pending-касания «не открыл тест» (test_not_opened) и ставит ветку «открыл,
+// но не заполнил» (test_opened_not_submitted) от текущего момента.
+// Гейт: campaign.test_enabled и test_preset != off.
+export async function switchToTestBranchOpened(candidateId: string): Promise<{
+  switched: boolean
+  cancelledA: number
+  scheduledB: number
+  reason?: string
+}> {
+  const [cand] = await db
+    .select({ vacancyId: candidates.vacancyId })
+    .from(candidates)
+    .where(eq(candidates.id, candidateId))
+    .limit(1)
+  if (!cand) return { switched: false, cancelledA: 0, scheduledB: 0, reason: "candidate_not_found" }
+
+  const [campaign] = await db
+    .select()
+    .from(followUpCampaigns)
+    .where(eq(followUpCampaigns.vacancyId, cand.vacancyId))
+    .limit(1)
+  if (!campaign || !campaign.testEnabled) {
+    return { switched: false, cancelledA: 0, scheduledB: 0, reason: "test_followup_off" }
+  }
+  if (!isFollowUpPreset(campaign.testPreset) || campaign.testPreset === "off") {
+    return { switched: false, cancelledA: 0, scheduledB: 0, reason: "test_preset_off" }
+  }
+
+  // Шаг 1: отменить ветку «не открыл тест».
+  const cancelled = await db
+    .update(followUpMessages)
+    .set({ status: "cancelled", errorMessage: "test_branch_switched" })
+    .where(and(
+      eq(followUpMessages.candidateId, candidateId),
+      eq(followUpMessages.branch, "test_not_opened"),
+      eq(followUpMessages.status, "pending"),
+    ))
+    .returning({ id: followUpMessages.id })
+
+  // Шаг 2: запланировать ветку «открыл, но не заполнил» от текущего момента.
+  const messagesB = mergeMessagesWithDefaults(campaign.testMessagesOpened, DEFAULT_TEST_OPENED_NOT_SUBMITTED)
+  const [vac] = await db
+    .select({
+      scheduleEnabled:            vacancies.scheduleEnabled,
+      scheduleStart:              vacancies.scheduleStart,
+      scheduleEnd:                vacancies.scheduleEnd,
+      scheduleTimezone:           vacancies.scheduleTimezone,
+      scheduleWorkingDays:        vacancies.scheduleWorkingDays,
+      scheduleExcludedHolidayIds: vacancies.scheduleExcludedHolidayIds,
+      scheduleCustomHolidays:     vacancies.scheduleCustomHolidays,
+    })
+    .from(vacancies)
+    .where(eq(vacancies.id, cand.vacancyId))
+    .limit(1)
+
+  const touchesB = generateTouchSchedule({
+    campaignId:  campaign.id,
+    candidateId,
+    preset:      campaign.testPreset,
+    d0Date:      new Date(),
+    d0Source:    "test_branch_switch",
+    messages:    messagesB,
+    branch:      "test_opened_not_submitted",
+    vacancy:     vac ?? {},
+    customDays:  null,
+  })
   let scheduled = 0
   if (touchesB.length > 0) {
     const inserted = await db.insert(followUpMessages).values(touchesB).returning({ id: followUpMessages.id })

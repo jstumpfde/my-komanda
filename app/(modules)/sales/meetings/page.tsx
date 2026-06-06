@@ -223,7 +223,7 @@ export default function SalesMeetingsPage() {
                   <Calendar className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-semibold">Встречи</h1>
+                  <h1 className="text-lg font-semibold">Встречи</h1>
                   <p className="text-sm text-muted-foreground">Неделя 25–31 марта 2026</p>
                 </div>
               </div>

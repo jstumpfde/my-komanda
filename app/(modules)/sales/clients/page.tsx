@@ -87,7 +87,7 @@ export default function SalesClientsPage() {
                   <Building2 className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-semibold">Компании</h1>
+                  <h1 className="text-lg font-semibold">Компании</h1>
                   <p className="text-sm text-muted-foreground">{companies.length} компаний в базе</p>
                 </div>
               </div>

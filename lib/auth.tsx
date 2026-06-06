@@ -11,7 +11,9 @@ import { signOut as nextAuthSignOut } from "next-auth/react"
 export type UserRole =
   | "platform_admin"
   | "platform_manager"
+  | "admin"          // legacy супер-админ (admin@test.ru) — есть в БД
   | "director"
+  | "client"         // legacy роль владельца компании — есть в БД (наравне с director)
   | "hr_lead"
   | "hr_manager"
   | "department_head"
@@ -19,11 +21,22 @@ export type UserRole =
   | "tester_hr"
   | "employee"
 
-export const PLATFORM_ROLES: UserRole[] = ["platform_admin", "platform_manager"]
-export const CLIENT_ROLES: UserRole[] = ["director", "hr_lead", "hr_manager", "department_head", "observer", "tester_hr"]
+export const PLATFORM_ROLES: UserRole[] = ["platform_admin", "platform_manager", "admin"]
+export const CLIENT_ROLES: UserRole[] = ["director", "client", "hr_lead", "hr_manager", "department_head", "observer", "tester_hr"]
+
+// Владелец компании / уровень директора — полный доступ к компанийским
+// настройкам (Тариф, Команда, Интеграции, Роли, Юр.документы, Брендинг).
+// Включает legacy-роли client/admin, которые реально есть в БД (в т.ч. главный
+// аккаунт jstumpf.de@gmail.com = client). НЕ заменять на ["platform_admin","director"]
+// — иначе владельцы с ролью client/admin теряют доступ.
+export const COMPANY_OWNER_ROLES: UserRole[] = ["platform_admin", "admin", "director", "client"]
 
 export function isPlatformRole(role: UserRole): boolean {
   return PLATFORM_ROLES.includes(role)
+}
+
+export function isCompanyOwner(role: UserRole): boolean {
+  return COMPANY_OWNER_ROLES.includes(role)
 }
 
 export interface User {
@@ -55,7 +68,10 @@ const STORAGE_VIEW_ROLE = "hireflow-view-role"
 
 const FALLBACK_USER: User = {
   id: "",
-  name: "Загрузка...",
+  // #29: было "Загрузка..." — пугало пользователя при первом заходе, что
+  // система не помнит его. Пустая строка позволяет UI решать fallback
+  // (например, в dashboard: `${greeting}!` без имени).
+  name: "",
   email: "",
   role: "platform_admin",
 }
@@ -121,7 +137,9 @@ export function useAuth() {
 export const ROLE_LABELS: Record<UserRole, string> = {
   platform_admin: "Администратор платформы",
   platform_manager: "Менеджер платформы",
+  admin: "Администратор",
   director: "Директор",
+  client: "Владелец компании",
   hr_lead: "Главный HR",
   hr_manager: "HR-менеджер",
   department_head: "Руководитель отдела",
@@ -133,7 +151,9 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 export const ROLE_ICONS: Record<UserRole, string> = {
   platform_admin: "👑",
   platform_manager: "🤝",
+  admin: "👑",
   director: "👔",
+  client: "👔",
   hr_lead: "🛡️",
   hr_manager: "🏢",
   department_head: "👥",
@@ -152,9 +172,13 @@ export function getVisibleSections(role: UserRole) {
   switch (role) {
     case "platform_admin":
       return { main: true, hiring: true, tools: true, settings: true, admin: true, modules: ALL_MODULES_LIST }
+    case "admin": // legacy супер-админ = уровень platform_admin
+      return { main: true, hiring: true, tools: true, settings: true, admin: true, modules: ALL_MODULES_LIST }
     case "platform_manager":
       return { main: true, hiring: true, tools: true, settings: false, admin: false, modules: ALL_MODULES_LIST }
     case "director":
+      return { main: true, hiring: true, tools: true, settings: true, admin: false, modules: CLIENT_MODULES_LIST }
+    case "client": // legacy владелец компании = уровень director
       return { main: true, hiring: true, tools: true, settings: true, admin: false, modules: CLIENT_MODULES_LIST }
     case "hr_lead":
       return { main: true, hiring: true, tools: true, settings: true, admin: false, modules: CLIENT_MODULES_LIST }
@@ -174,10 +198,14 @@ export function getVisibleSections(role: UserRole) {
 // Settings items visible per role
 export function getVisibleSettings(role: UserRole): string[] {
   switch (role) {
-    case "platform_admin": return ["company", "profile", "team", "integrations", "schedule", "notifications", "billing", "legal"]
+    case "platform_admin": return ["company", "profile", "team", "branding", "integrations", "schedule", "notifications", "billing", "legal", "roles"]
+    case "admin": return ["company", "profile", "team", "branding", "integrations", "schedule", "notifications", "billing", "legal", "roles"]
     case "platform_manager": return ["profile", "notifications"]
-    case "director": return ["company", "profile", "team", "integrations", "schedule", "notifications", "billing"]
-    case "hr_lead": return ["company", "profile", "team", "integrations", "schedule", "notifications"]
+    // Компанийские настройки редактирует только директор/владелец (см. requireDirector / COMPANY_OWNER_ROLES).
+    case "director": return ["company", "profile", "team", "branding", "integrations", "schedule", "notifications", "billing", "legal", "roles"]
+    case "client": return ["company", "profile", "team", "branding", "integrations", "schedule", "notifications", "billing", "legal", "roles"]
+    // hr_lead больше не видит компанийские настройки — только личные.
+    case "hr_lead": return ["profile", "notifications"]
     case "hr_manager": return ["profile", "notifications"]
     case "department_head": return ["profile", "notifications"]
     case "observer": return ["profile"]

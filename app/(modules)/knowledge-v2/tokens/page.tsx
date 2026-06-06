@@ -5,6 +5,7 @@ import { Coins, TrendingUp, Gauge, Loader2 } from "lucide-react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
 } from "recharts"
@@ -83,7 +84,7 @@ export default function TokensPage() {
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="max-w-6xl mx-auto space-y-6">
               <div>
-                <h1 className="text-xl font-semibold">Расход AI-токенов</h1>
+                <h1 className="text-lg font-semibold">Расход AI-токенов</h1>
                 <p className="text-sm text-muted-foreground mt-0.5">
                   Агрегированная статистика по всем запросам к AI
                 </p>
@@ -172,45 +173,43 @@ export default function TokensPage() {
                         <p className="text-sm text-muted-foreground">Пока нет запросов</p>
                       </div>
                     ) : (
-                      <div className="rounded-xl border border-border overflow-hidden">
-                        <table className="w-full text-sm">
-                          <thead className="bg-muted/40 border-b border-border">
-                            <tr className="text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                              <th className="px-4 py-3">Дата</th>
-                              <th className="px-4 py-3">Пользователь</th>
-                              <th className="px-4 py-3">Действие</th>
-                              <th className="px-4 py-3 text-right">Токены</th>
-                              <th className="px-4 py-3 text-right">Стоимость</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-border">
+                      <TableCard>
+                        <DataTable>
+                          <DataHead>
+                            <DataHeadCell>Дата</DataHeadCell>
+                            <DataHeadCell>Пользователь</DataHeadCell>
+                            <DataHeadCell>Действие</DataHeadCell>
+                            <DataHeadCell align="right">Токены</DataHeadCell>
+                            <DataHeadCell align="right">Стоимость</DataHeadCell>
+                          </DataHead>
+                          <tbody>
                             {data.recent.map((r) => {
                               const total = (r.inputTokens ?? 0) + (r.outputTokens ?? 0)
                               const cost = Number(r.costUsd ?? "0")
                               return (
-                                <tr key={r.id} className="hover:bg-muted/30">
-                                  <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                                <DataRow key={r.id}>
+                                  <DataCell className="text-xs text-muted-foreground whitespace-nowrap">
                                     {new Date(r.createdAt).toLocaleString("ru-RU", {
                                       day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
                                     })}
-                                  </td>
-                                  <td className="px-4 py-3">
+                                  </DataCell>
+                                  <DataCell>
                                     <div className="text-xs font-medium">{r.userName ?? "—"}</div>
                                     <div className="text-xs text-muted-foreground">{r.userEmail}</div>
-                                  </td>
-                                  <td className="px-4 py-3 text-xs">
+                                  </DataCell>
+                                  <DataCell className="text-xs">
                                     {ACTION_LABELS[r.action] ?? r.action}
-                                  </td>
-                                  <td className="px-4 py-3 text-right text-xs tabular-nums">{formatNumber(total)}</td>
-                                  <td className="px-4 py-3 text-right text-xs tabular-nums text-muted-foreground">
+                                  </DataCell>
+                                  <DataCell align="right" className="text-xs tabular-nums">{formatNumber(total)}</DataCell>
+                                  <DataCell align="right" className="text-xs tabular-nums text-muted-foreground">
                                     {formatUsd(cost)}
-                                  </td>
-                                </tr>
+                                  </DataCell>
+                                </DataRow>
                               )
                             })}
                           </tbody>
-                        </table>
-                      </div>
+                        </DataTable>
+                      </TableCard>
                     )}
                   </div>
                 </>

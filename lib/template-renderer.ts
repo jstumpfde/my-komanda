@@ -1,0 +1,100 @@
+// Универсальный рендерер шаблонов с поддержкой 5 legacy-синтаксисов.
+//
+// Canonical:   {{name}}, {{vacancy}}, {{company}}, {{demo_link}},
+//              {{salary_from}}, {{salary_to}}, {{interview_at}}
+// Legacy (читаем для обратной совместимости, навсегда):
+//   - {{key}} / {key} / [key] / любой регистр / русские алиасы из ALIASES.
+//
+// Гарантии:
+//   1. Один проход — подставленное значение НЕ перепарсивается
+//      (защита от двойной подстановки, если value содержит «{{name}}»).
+//   2. Неизвестная переменная → литерал «{{key}}» в результате + warn.
+//   3. Пустое value → пустая строка.
+//
+// Используется во всех точках отправки кандидатам: hh process-queue,
+// scan-incoming (call-intent), cron follow-up, prequalification reminders,
+// anketa confirmation, automation send-message и т.д.
+
+const ALIASES: Record<string, string> = {
+  // ─── имя ─────────────────
+  "имя":                       "name",
+  "Имя":                       "name",
+  "ИМЯ":                       "name",
+  "имя_кандидата":             "name",
+  "name":                      "name",
+  "Name":                      "name",
+  // ─── должность ────────────
+  "должность":                 "vacancy",
+  "Должность":                 "vacancy",
+  "vacancy":                   "vacancy",
+  "Vacancy":                   "vacancy",
+  "position":                  "vacancy",
+  // ─── компания ─────────────
+  "компания":                  "company",
+  "Компания":                  "company",
+  "company":                   "company",
+  "Company":                   "company",
+  // ─── ссылка на демо ───────
+  "ссылка":                    "demo_link",
+  "Ссылка":                    "demo_link",
+  "ссылка_на_демонстрацию":    "demo_link",
+  "ссылка_на_демо":            "demo_link",
+  "demo_link":                 "demo_link",
+  "link":                      "demo_link",
+  // ─── ссылка на тест ───────
+  "ссылка_на_тест":            "test_link",
+  "тест_ссылка":               "test_link",
+  "test_link":                 "test_link",
+  // ─── ЗП и интервью ────────
+  "зп_от":                     "salary_from",
+  "зп_до":                     "salary_to",
+  "salary_from":               "salary_from",
+  "salary_to":                 "salary_to",
+  "дата_время":                "interview_at",
+  "interview_at":              "interview_at",
+}
+
+// Регулярка единым проходом ловит:
+//   {{...}}  — canonical (двойные фигурные)
+//   {...}    — single brace (одинарные фигурные)
+//   [...]    — square brackets
+// Внутри допустимы кириллица/латиница/цифры/_ — это все формы из ALIASES.
+// Захваты:
+//   1: содержимое {{...}}
+//   2: содержимое {...}
+//   3: содержимое [...]
+const PLACEHOLDER_RE = /\{\{([^{}\[\]]+?)\}\}|\{([^{}\[\]]+?)\}|\[([^\[\]]+?)\]/g
+
+function resolveKey(raw: string): string | null {
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+  // Прямое попадание (canonical name, latin lowercase и др.)
+  if (ALIASES[trimmed]) return ALIASES[trimmed]
+  // Кейс-инсенситивный поиск по русским вариантам
+  // (например, «должность» в любом регистре).
+  const lower = trimmed.toLowerCase()
+  if (ALIASES[lower]) return ALIASES[lower]
+  return null
+}
+
+export function renderTemplate(
+  text: string,
+  vars: Record<string, string>,
+): string {
+  if (!text) return ""
+  return text.replace(PLACEHOLDER_RE, (match, doubleBrace?: string, singleBrace?: string, square?: string) => {
+    const raw = doubleBrace ?? singleBrace ?? square ?? ""
+    const canonical = resolveKey(raw)
+    if (!canonical) {
+      // Не наш плейсхолдер — оставляем как есть (может быть JSON, обычный
+      // текст в фигурных скобках и т.п.). Не warn'им — слишком шумно.
+      return match
+    }
+    const value = vars[canonical]
+    if (value === undefined) {
+      console.warn(`[template-renderer] Unknown variable "${canonical}" (matched "${match}") — left as literal`)
+      return `{{${canonical}}}`
+    }
+    return value ?? ""
+  })
+}

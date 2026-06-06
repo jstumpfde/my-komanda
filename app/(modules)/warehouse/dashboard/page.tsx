@@ -5,6 +5,7 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -81,7 +82,7 @@ export default function LogisticsDashboardPage() {
                   <Package className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-semibold">Дашборд склада</h1>
+                  <h1 className="text-lg font-semibold">Дашборд склада</h1>
                   <p className="text-sm text-muted-foreground">Сводка на 29 марта 2026</p>
                 </div>
               </div>
@@ -133,30 +134,28 @@ export default function LogisticsDashboardPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Артикул</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Наименование</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Остаток</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Мин.</th>
-                      </tr>
-                    </thead>
+                  <DataTable>
+                    <DataHead>
+                      <DataHeadCell>Артикул</DataHeadCell>
+                      <DataHeadCell>Наименование</DataHeadCell>
+                      <DataHeadCell align="right">Остаток</DataHeadCell>
+                      <DataHeadCell align="right">Мин.</DataHeadCell>
+                    </DataHead>
                     <tbody>
                       {LOW_STOCK.map(item => (
-                        <tr key={item.sku} className="border-b last:border-0 hover:bg-muted/20">
-                          <td className="px-4 py-2.5 text-xs font-mono text-muted-foreground">{item.sku}</td>
-                          <td className="px-3 py-2.5 text-sm">{item.name}</td>
-                          <td className="text-right px-4 py-2.5">
+                        <DataRow key={item.sku}>
+                          <DataCell className="text-xs font-mono text-muted-foreground">{item.sku}</DataCell>
+                          <DataCell>{item.name}</DataCell>
+                          <DataCell align="right">
                             <Badge variant={item.status === "critical" ? "destructive" : "secondary"} className="text-xs">
                               {item.qty} {item.unit}
                             </Badge>
-                          </td>
-                          <td className="text-right px-4 py-2.5 text-xs text-muted-foreground">{item.min}</td>
-                        </tr>
+                          </DataCell>
+                          <DataCell align="right" className="text-xs text-muted-foreground">{item.min}</DataCell>
+                        </DataRow>
                       ))}
                     </tbody>
-                  </table>
+                  </DataTable>
                 </CardContent>
               </Card>
 
@@ -169,31 +168,29 @@ export default function LogisticsDashboardPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Номер</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Клиент</th>
-                        <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Сумма</th>
-                        <th className="text-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Статус</th>
-                      </tr>
-                    </thead>
+                  <DataTable>
+                    <DataHead>
+                      <DataHeadCell>Номер</DataHeadCell>
+                      <DataHeadCell>Клиент</DataHeadCell>
+                      <DataHeadCell align="right">Сумма</DataHeadCell>
+                      <DataHeadCell align="center">Статус</DataHeadCell>
+                    </DataHead>
                     <tbody>
                       {RECENT_ORDERS.map(order => {
                         const st = ORDER_STATUS[order.status]
                         return (
-                          <tr key={order.id} className="border-b last:border-0 hover:bg-muted/20">
-                            <td className="px-4 py-2.5 text-xs font-mono">{order.id}</td>
-                            <td className="px-3 py-2.5 text-sm max-w-[140px] truncate">{order.client}</td>
-                            <td className="text-right px-4 py-2.5 text-sm font-medium">{order.total}</td>
-                            <td className="text-center px-4 py-2.5">
+                          <DataRow key={order.id}>
+                            <DataCell className="text-xs font-mono">{order.id}</DataCell>
+                            <DataCell className="max-w-[140px] truncate">{order.client}</DataCell>
+                            <DataCell align="right" className="font-medium">{order.total}</DataCell>
+                            <DataCell align="center">
                               <Badge variant={st.variant} className="text-xs">{st.label}</Badge>
-                            </td>
-                          </tr>
+                            </DataCell>
+                          </DataRow>
                         )
                       })}
                     </tbody>
-                  </table>
+                  </DataTable>
                 </CardContent>
               </Card>
             </div>

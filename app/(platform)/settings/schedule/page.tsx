@@ -13,9 +13,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
-  Globe, Clock, Coffee, CalendarOff, Palmtree, Save, Plus, Trash2, Copy, ChevronDown, Users, Settings, Loader2,
+  Globe, Clock, Coffee, CalendarOff, Palmtree, Save, Plus, Trash2, Copy, ChevronDown, Loader2,
 } from "lucide-react"
 import { type CountryCode, COUNTRY_LABELS, getHolidaysForCountry } from "@/lib/holidays"
+import type { CompanyWorkSchedule } from "@/lib/db/schema"
 
 // ─── Data ───────────────────────────────────────────────────────────────────
 
@@ -81,52 +82,7 @@ interface Absence {
   id: string; employee: string; type: AbsenceType; dateFrom: string; dateTo: string; status: AbsenceStatus; comment: string
 }
 
-const MOCK_EMPLOYEES = ["Иванова Анна", "Петров Андрей", "Сидорова Ксения", "Козлов Дмитрий", "Новиков Роман"]
-
-// ─── Individual schedules ──────────────────────────────────────────────────
-
-interface IndividualSchedule {
-  employeeId: string
-  employeeName: string
-  days: Record<string, { active: boolean; start: string; end: string }>
-}
-
-const WEEKDAY_IDS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const
-const WEEKDAY_SHORT: Record<string, string> = { mon: "Пн", tue: "Вт", wed: "Ср", thu: "Чт", fri: "Пт", sat: "Сб", sun: "Вс" }
-
-function formatIndividualSchedule(days: Record<string, { active: boolean; start: string; end: string }>): string {
-  const enabled = WEEKDAY_IDS.map(id => days[id]?.active ? { day: WEEKDAY_SHORT[id], start: days[id].start, end: days[id].end } : null).filter(Boolean)
-  const disabled = WEEKDAY_IDS.map(id => !days[id]?.active ? WEEKDAY_SHORT[id] : null).filter(Boolean)
-  if (enabled.length === 0) return "Все дни — выходные"
-  const groups: { days: string[]; start: string; end: string }[] = []
-  for (const item of enabled) {
-    if (!item) continue
-    const last = groups[groups.length - 1]
-    if (last && last.start === item.start && last.end === item.end) last.days.push(item.day)
-    else groups.push({ days: [item.day], start: item.start, end: item.end })
-  }
-  const parts = groups.map(g => {
-    const d = g.days.length > 2 ? `${g.days[0]}–${g.days[g.days.length - 1]}` : g.days.join(", ")
-    return `${d} ${g.start}–${g.end}`
-  })
-  if (disabled.length > 0) {
-    const d = disabled.length > 2 ? `${disabled[0]}–${disabled[disabled.length - 1]}` : disabled.join(", ")
-    parts.push(`${d} выходной`)
-  }
-  return parts.join(", ")
-}
-
-const MOCK_INDIVIDUAL_SCHEDULES: IndividualSchedule[] = [
-  {
-    employeeId: "m1", employeeName: "Анна Иванова",
-    days: {
-      mon: { active: true, start: "10:00", end: "19:00" }, tue: { active: true, start: "10:00", end: "19:00" },
-      wed: { active: true, start: "10:00", end: "19:00" }, thu: { active: true, start: "10:00", end: "19:00" },
-      fri: { active: true, start: "10:00", end: "17:00" }, sat: { active: false, start: "10:00", end: "15:00" },
-      sun: { active: false, start: "10:00", end: "15:00" },
-    },
-  },
-]
+interface TeamMember { id: string; name: string }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -182,33 +138,70 @@ export default function CompanySchedulePage() {
   const [absences, setAbsences] = useState<Absence[]>([])
   const [absenceDialogOpen, setAbsenceDialogOpen] = useState(false)
   const [absForm, setAbsForm] = useState({ employee: "", type: "vacation" as AbsenceType, dateFrom: "", dateTo: "", comment: "" })
-  // Individual schedules
-  const [individualSchedules, setIndividualSchedules] = useState<IndividualSchedule[]>(MOCK_INDIVIDUAL_SCHEDULES)
-  const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null)
-  const [editingDays, setEditingDays] = useState<Record<string, { active: boolean; start: string; end: string }>>({})
-  const [savingSchedule, setSavingSchedule] = useState(false)
+  // Реальные сотрудники компании для выпадающего списка отсутствий.
+  const [employees, setEmployees] = useState<TeamMember[]>([])
+  // Загрузка/сохранение
+  const [loaded, setLoaded] = useState(false)
+  const [saving, setSaving] = useState(false)
 
-  const startEditSchedule = (emp: IndividualSchedule) => {
-    setEditingEmployeeId(emp.employeeId)
-    setEditingDays({ ...emp.days })
-  }
-
-  const saveIndividualSchedule = async () => {
-    if (!editingEmployeeId) return
-    setSavingSchedule(true)
-    try {
-      await fetch(`/api/team/${editingEmployeeId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ custom_schedule: { enabled: true, days: editingDays } }),
+  // Гидратация из standalone-хранилища компании.
+  useEffect(() => {
+    let cancelled = false
+    fetch("/api/companies/work-schedule")
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (cancelled || !data) return
+        const ws = (data.workSchedule ?? {}) as CompanyWorkSchedule
+        if (Array.isArray(ws.schedule) && ws.schedule.length === 7) setSchedule(ws.schedule)
+        if (ws.timezone) setTimezone(ws.timezone)
+        if (ws.country) setCountry(ws.country as CountryCode)
+        if (ws.lunch) { setLunchEnabled(ws.lunch.enabled); setLunchFrom(ws.lunch.from); setLunchTo(ws.lunch.to) }
+        if (Array.isArray(ws.customHolidays)) setCustomHolidays(ws.customHolidays.map(h => ({ ...h, isCustom: true })))
+        if (Array.isArray(ws.absences)) setAbsences(ws.absences as Absence[])
       })
-      setIndividualSchedules(prev => prev.map(e =>
-        e.employeeId === editingEmployeeId ? { ...e, days: editingDays } : e
-      ))
-      setEditingEmployeeId(null)
-      toast.success("Индивидуальный график сохранён")
-    } catch { toast.error("Ошибка сохранения") }
-    finally { setSavingSchedule(false) }
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoaded(true) })
+    return () => { cancelled = true }
+  }, [])
+
+  // Список сотрудников (для отсутствий) — реальная команда, не мок.
+  useEffect(() => {
+    let cancelled = false
+    fetch("/api/team")
+      .then(r => (r.ok ? r.json() : null))
+      .then(rows => {
+        if (cancelled || !Array.isArray(rows)) return
+        setEmployees((rows as { id: string; name: string; email?: string }[]).map(m => ({ id: m.id, name: m.name || m.email || "—" })))
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
+  // Единое сохранение всей страницы (standalone — просто пишем своё значение).
+  const handleSave = async (overrideAbsences?: Absence[]) => {
+    setSaving(true)
+    try {
+      const payload: CompanyWorkSchedule = {
+        schedule,
+        timezone,
+        country,
+        lunch: { enabled: lunchEnabled, from: lunchFrom, to: lunchTo },
+        // В хранилище — только пользовательские праздники (страновые подставляются из lib/holidays).
+        customHolidays: customHolidays.map(({ id, date, name }) => ({ id, date, name })),
+        absences: overrideAbsences ?? absences,
+      }
+      const res = await fetch("/api/companies/work-schedule", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) throw new Error("save failed")
+      toast.success("Расписание сохранено")
+    } catch {
+      toast.error("Не удалось сохранить расписание")
+    } finally {
+      setSaving(false)
+    }
   }
 
   // Accordion state
@@ -233,7 +226,7 @@ export default function CompanySchedulePage() {
 
   const addHoliday = () => {
     if (!newHolidayDate || !newHolidayName.trim()) return
-    setCustomHolidays((prev) => [...prev, { id: `h-${Date.now()}`, date: newHolidayDate, name: newHolidayName.trim(), isCustom: true }])
+    setCustomHolidays((prev) => [...prev, { id: `h-${prev.length}-${newHolidayDate}`, date: newHolidayDate, name: newHolidayName.trim(), isCustom: true }])
     setNewHolidayDate("")
     setNewHolidayName("")
   }
@@ -244,24 +237,29 @@ export default function CompanySchedulePage() {
 
   const addAbsence = () => {
     if (!absForm.employee || !absForm.dateFrom || !absForm.dateTo) return
-    setAbsences((prev) => [...prev, { ...absForm, id: `a-${Date.now()}`, status: "pending" }])
+    const next = [...absences, { ...absForm, id: `a-${absences.length}-${absForm.dateFrom}`, status: "planned" as AbsenceStatus }]
+    setAbsences(next)
     setAbsForm({ employee: "", type: "vacation", dateFrom: "", dateTo: "", comment: "" })
     setAbsenceDialogOpen(false)
-    toast.success("Отсутствие добавлено")
+    // Отсутствия персистим сразу — кнопка «Добавить» подразумевает сохранение.
+    handleSave(next)
+  }
+
+  const removeAbsence = (id: string) => {
+    const next = absences.filter((x) => x.id !== id)
+    setAbsences(next)
+    handleSave(next)
   }
 
   const lunchSummary = lunchEnabled ? `${lunchFrom}–${lunchTo}` : "Выключен"
   const holidaySummary = `${holidays.length} ${holidays.length === 1 ? "праздник" : holidays.length < 5 ? "праздника" : "праздников"} (${COUNTRY_LABELS[country]})`
   const absenceSummary = absences.length === 0 ? "Нет запланированных" : `${absences.length} запланировано`
-  const individualSummary = individualSchedules.length === 0
-    ? "Все по графику компании"
-    : `${individualSchedules.length} ${individualSchedules.length === 1 ? "сотрудник" : individualSchedules.length < 5 ? "сотрудника" : "сотрудников"} с индивидуальным графиком`
 
   return (
     <div>
       <div className="flex flex-col gap-4 mb-5">
         <div>
-          <h1 className="text-xl font-semibold text-foreground mb-0.5">Расписание компании</h1>
+          <div className="flex items-center gap-2"><Clock className="h-5 w-5 text-violet-600" /><h1 className="text-lg font-semibold">Расписание компании</h1></div>
           <p className="text-sm text-muted-foreground">График работы, перерывы, выходные и отпуска</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -295,7 +293,7 @@ export default function CompanySchedulePage() {
             <div className="flex-1 min-w-0">
               <span className="text-sm font-semibold text-foreground">Рабочие дни и часы</span>
               {!expanded.has("schedule") && (
-                <p className="text-xs text-muted-foreground truncate mt-0.5">{scheduleSummary(schedule)}</p>
+                <p className="text-xs text-muted-foreground truncate mt-0.5">{scheduleSummary(schedule)} · обед {lunchSummary}</p>
               )}
             </div>
             <div className="flex items-center gap-2">
@@ -363,8 +361,7 @@ export default function CompanySchedulePage() {
           )}
         </Card>
 
-        {/* ═══ Аккордеон 2: Праздничные дни (отдельный аккордеон «Обед»
-            упразднён — обед теперь живёт строкой внутри «Рабочие дни») ═══ */}
+        {/* ═══ Аккордеон 2: Праздничные дни ═══ */}
         <Card className="overflow-hidden">
           <button
             onClick={() => toggle("holidays")}
@@ -423,7 +420,7 @@ export default function CompanySchedulePage() {
           )}
         </Card>
 
-        {/* ═══ Аккордеон 4: Отпуска и отсутствия ═══ */}
+        {/* ═══ Аккордеон 3: Отпуска и отсутствия ═══ */}
         <Card className="overflow-hidden">
           <button
             onClick={() => toggle("absences")}
@@ -464,19 +461,19 @@ export default function CompanySchedulePage() {
                     <span />
                   </div>
                   {absences.map((a, idx) => {
-                    const st = ABSENCE_STATUS_CFG[a.status]
+                    const st = ABSENCE_STATUS_CFG[a.status] ?? ABSENCE_STATUS_CFG.planned
                     return (
                       <div key={a.id} className={cn(
                         "grid grid-cols-[1fr_90px_90px_90px_100px_40px] items-center px-4 py-1.5 border-b last:border-b-0",
                         idx % 2 === 0 ? "bg-background" : "bg-muted/10",
                       )}>
                         <span className="text-sm font-medium truncate">{a.employee}</span>
-                        <span className="text-sm text-muted-foreground">{ABSENCE_TYPES[a.type]}</span>
+                        <span className="text-sm text-muted-foreground">{ABSENCE_TYPES[a.type] ?? a.type}</span>
                         <span className="text-sm text-muted-foreground font-mono">{a.dateFrom}</span>
                         <span className="text-sm text-muted-foreground font-mono">{a.dateTo}</span>
                         <Badge variant="outline" className={cn("text-[10px] px-2 py-0 rounded-full font-medium border-transparent w-fit", st.cls)}>{st.label}</Badge>
                         <div className="flex justify-center">
-                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setAbsences((prev) => prev.filter((x) => x.id !== a.id))}>
+                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeAbsence(a.id)}>
                             <Trash2 className="size-3 text-muted-foreground" />
                           </Button>
                         </div>
@@ -489,103 +486,10 @@ export default function CompanySchedulePage() {
           )}
         </Card>
 
-        {/* ═══ Аккордеон 5: Индивидуальные графики ═══ */}
-        <Card className="overflow-hidden">
-          <button
-            onClick={() => toggle("individual")}
-            className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30 cursor-pointer"
-          >
-            <Users className="size-4 text-purple-600 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <span className="text-sm font-semibold text-foreground">Индивидуальные графики сотрудников</span>
-              {!expanded.has("individual") && (
-                <p className="text-xs text-muted-foreground mt-0.5">{individualSummary}</p>
-              )}
-            </div>
-            <ChevronDown className={cn("w-4 h-4 text-muted-foreground shrink-0 transition-transform", expanded.has("individual") && "rotate-180")} />
-          </button>
-          {expanded.has("individual") && (
-            <CardContent className="p-0 border-t">
-              {individualSchedules.length === 0 ? (
-                <div className="py-4 text-center text-sm text-muted-foreground">
-                  Все сотрудники работают по графику компании
-                </div>
-              ) : (
-                <>
-                  <div className="grid grid-cols-[1fr_2fr_40px] items-center px-4 py-1.5 bg-muted/20 border-b">
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Сотрудник</span>
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">График</span>
-                    <span />
-                  </div>
-                  {individualSchedules.map((emp, idx) => {
-                    const isEditing = editingEmployeeId === emp.employeeId
-                    return (
-                      <div key={emp.employeeId} className="border-b last:border-b-0">
-                        <div className={cn(
-                          "grid grid-cols-[1fr_2fr_40px] items-center px-4 py-1.5",
-                          idx % 2 === 0 ? "bg-background" : "bg-muted/10",
-                        )}>
-                          <span className="text-sm font-medium truncate">{emp.employeeName}</span>
-                          <span className="text-xs text-muted-foreground truncate">{formatIndividualSchedule(emp.days)}</span>
-                          <div className="flex justify-center">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6"
-                              title="Настроить график"
-                              onClick={() => isEditing ? setEditingEmployeeId(null) : startEditSchedule(emp)}
-                            >
-                              <Settings className={cn("size-3", isEditing ? "text-primary" : "text-muted-foreground")} />
-                            </Button>
-                          </div>
-                        </div>
-                        {isEditing && (
-                          <div className="px-4 py-2 bg-muted/5 border-t space-y-1">
-                            {WEEKDAY_IDS.map((dayId, di) => {
-                              const d = editingDays[dayId] ?? { active: false, start: "09:00", end: "18:00" }
-                              return (
-                                <div key={dayId} className={cn("grid grid-cols-[32px_40px_1fr] items-center py-1", di % 2 !== 0 && "bg-muted/10 -mx-4 px-4")}>
-                                  <Switch checked={d.active} onCheckedChange={v => setEditingDays(prev => ({ ...prev, [dayId]: { ...d, active: v } }))} className="scale-75" />
-                                  <span className={cn("text-xs font-medium", !d.active && "text-muted-foreground")}>{WEEKDAY_SHORT[dayId]}</span>
-                                  {d.active ? (
-                                    <div className="flex items-center gap-1.5">
-                                      <Select value={d.start} onValueChange={v => setEditingDays(prev => ({ ...prev, [dayId]: { ...d, start: v } }))}>
-                                        <SelectTrigger className="w-20 h-7 text-xs bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
-                                        <SelectContent>{HALF_HOURS.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
-                                      </Select>
-                                      <span className="text-muted-foreground text-[10px]">—</span>
-                                      <Select value={d.end} onValueChange={v => setEditingDays(prev => ({ ...prev, [dayId]: { ...d, end: v } }))}>
-                                        <SelectTrigger className="w-20 h-7 text-xs bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
-                                        <SelectContent>{HALF_HOURS.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
-                                      </Select>
-                                    </div>
-                                  ) : (
-                                    <span className="text-xs text-muted-foreground">Выходной</span>
-                                  )}
-                                </div>
-                              )
-                            })}
-                            <div className="flex justify-end gap-2 pt-1">
-                              <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => setEditingEmployeeId(null)}>Отмена</Button>
-                              <Button size="sm" className="text-xs h-7 gap-1" onClick={saveIndividualSchedule} disabled={savingSchedule}>
-                                {savingSchedule ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}Сохранить
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </>
-              )}
-            </CardContent>
-          )}
-        </Card>
-
         {/* ═══ Сохранить ═══ */}
         <div className="flex justify-end pb-2 pt-1">
-          <Button className="gap-2 h-9 px-5" onClick={() => toast.success("Расписание сохранено")}>
-            <Save className="size-4" />Сохранить
+          <Button className="gap-2 h-9 px-5" onClick={() => handleSave()} disabled={!loaded || saving}>
+            {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}Сохранить
           </Button>
         </div>
       </div>
@@ -598,8 +502,8 @@ export default function CompanySchedulePage() {
             <div className="space-y-1.5">
               <Label className="text-xs">Сотрудник</Label>
               <Select value={absForm.employee} onValueChange={(v) => setAbsForm({ ...absForm, employee: v })}>
-                <SelectTrigger className="h-9 text-sm bg-[var(--input-bg)]"><SelectValue placeholder="Выберите сотрудника" /></SelectTrigger>
-                <SelectContent>{MOCK_EMPLOYEES.map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
+                <SelectTrigger className="h-9 text-sm bg-[var(--input-bg)]"><SelectValue placeholder={employees.length ? "Выберите сотрудника" : "Нет сотрудников"} /></SelectTrigger>
+                <SelectContent>{employees.map((e) => <SelectItem key={e.id} value={e.name}>{e.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">

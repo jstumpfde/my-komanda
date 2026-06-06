@@ -47,6 +47,7 @@ export async function GET(
         anketaAnswers: candidates.anketaAnswers,
         demoProgressJson: candidates.demoProgressJson,
         aiScore: candidates.aiScore,
+        source: candidates.source,
       })
       .from(candidates)
       .where(isShortId(token) ? eq(candidates.shortId, token) : eq(candidates.token, token))
@@ -79,10 +80,12 @@ export async function GET(
       .from(vacancies)
       .innerJoin(companies, eq(vacancies.companyId, companies.id))
       .where(
-        and(
-          eq(vacancies.id, candidate.vacancyId),
-          isNull(vacancies.deletedAt),
-        ),
+        // Превью HR (source='preview') показываем даже для черновика/удалённой
+        // вакансии — это внутренний предпросмотр. Реальным кандидатам — только
+        // не удалённые (deleted_at IS NULL).
+        candidate.source === "preview"
+          ? eq(vacancies.id, candidate.vacancyId)
+          : and(eq(vacancies.id, candidate.vacancyId), isNull(vacancies.deletedAt)),
       )
       .limit(1)
 
@@ -101,7 +104,10 @@ export async function GET(
         postDemoSettings: demos.postDemoSettings,
       })
       .from(demos)
-      .where(eq(demos.vacancyId, vacancy.id))
+      // kind='demo': кандидату отдаём только демонстрацию. Без фильтра запись
+      // с kind='test' (таб «Тест», Этап 2.5) могла оказаться новее и подменить
+      // демо → кандидат видел пустой тест (критический баг).
+      .where(and(eq(demos.vacancyId, vacancy.id), eq(demos.kind, "demo")))
       .orderBy(sql`${demos.updatedAt} DESC`)
       .limit(1)
 
@@ -132,6 +138,25 @@ export async function GET(
         }
       : null
 
+    // #16/#25: тексты двух финальных экранов из descriptionJson.finalScreens.
+    // Если поля не заданы — frontend применит дефолты.
+    const finalScreensRaw = (dj.finalScreens && typeof dj.finalScreens === "object")
+      ? dj.finalScreens as Record<string, unknown>
+      : null
+    const finalScreens = finalScreensRaw
+      ? {
+          afterVideo: {
+            title:    typeof (finalScreensRaw.afterVideo as { title?: string } | undefined)?.title    === "string" ? (finalScreensRaw.afterVideo as { title: string }).title    : "",
+            subtitle: typeof (finalScreensRaw.afterVideo as { subtitle?: string } | undefined)?.subtitle === "string" ? (finalScreensRaw.afterVideo as { subtitle: string }).subtitle : "",
+            button:   typeof (finalScreensRaw.afterVideo as { button?: string } | undefined)?.button   === "string" ? (finalScreensRaw.afterVideo as { button: string }).button   : "",
+          },
+          afterAnketa: {
+            title:    typeof (finalScreensRaw.afterAnketa as { title?: string } | undefined)?.title    === "string" ? (finalScreensRaw.afterAnketa as { title: string }).title    : "",
+            subtitle: typeof (finalScreensRaw.afterAnketa as { subtitle?: string } | undefined)?.subtitle === "string" ? (finalScreensRaw.afterAnketa as { subtitle: string }).subtitle : "",
+          },
+        }
+      : null
+
     return apiSuccess({
       candidateName: candidate.name,
       vacancyTitle: vacancy.title,
@@ -150,6 +175,7 @@ export async function GET(
       aiScore: candidate.aiScore,
       postDemoSettings: demo.postDemoSettings ?? {},
       anketaIntro,
+      finalScreens,
       prefill,
     })
   } catch (err) {

@@ -14,6 +14,7 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { WorkshopLauncher } from "@/components/core/workshop-launcher"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { LENGTH_LABELS } from "@/lib/demo-types"
 import { toast } from "sonner"
 
@@ -469,21 +470,19 @@ function SortHeader({
   const active = sortField === field
   const Icon = active ? (sortDir === "asc" ? ChevronUp : ChevronDown) : ArrowUpDown
   return (
-    <th
+    <DataHeadCell
+      align={align}
       onClick={() => onClick(field)}
       className={cn(
-        "uppercase text-xs font-medium tracking-wider px-4 py-3 cursor-pointer select-none transition-colors hover:bg-muted",
-        active ? "text-foreground" : "text-muted-foreground",
-        align === "center" && "text-center",
-        align === "right" && "text-right",
-        align === "left" && "text-left",
+        "cursor-pointer select-none transition-colors hover:bg-muted",
+        active && "text-foreground",
       )}
     >
       <span className={cn("inline-flex items-center gap-1", align === "center" && "justify-center", align === "right" && "justify-end")}>
         {label}
         <Icon className={cn("w-3.5 h-3.5", active ? "text-foreground" : "text-muted-foreground/50")} />
       </span>
-    </th>
+    </DataHeadCell>
   )
 }
 
@@ -499,20 +498,18 @@ function MaterialTable({ items, onOpen, onPreview, onDelete, canEdit, canDelete,
   onSortClick: (f: SortField) => void
 }) {
   return (
-    <div className="rounded-xl border border-border overflow-hidden bg-card">
-      <table className="w-full">
-        <thead className="bg-muted/50 border-b border-border">
-          <tr>
-            <SortHeader label="Название"  field="name"      sortField={sortField} sortDir={sortDir} onClick={onSortClick} />
-            <SortHeader label="Тип"        field="type"      sortField={sortField} sortDir={sortDir} onClick={onSortClick} />
-            <SortHeader label="Формат"     field="format"    sortField={sortField} sortDir={sortDir} onClick={onSortClick} />
-            <th className="text-left uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Аудитория</th>
-            <th className="text-center uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Уроков / Страниц</th>
-            <SortHeader label="Обновлено"  field="updatedAt" sortField={sortField} sortDir={sortDir} onClick={onSortClick} />
-            <SortHeader label="Статус"     field="status"    sortField={sortField} sortDir={sortDir} onClick={onSortClick} />
-            <th className="text-right uppercase text-xs font-medium text-muted-foreground tracking-wider px-4 py-3">Действия</th>
-          </tr>
-        </thead>
+    <TableCard>
+      <DataTable>
+        <DataHead>
+          <SortHeader label="Название"  field="name"      sortField={sortField} sortDir={sortDir} onClick={onSortClick} />
+          <SortHeader label="Тип"        field="type"      sortField={sortField} sortDir={sortDir} onClick={onSortClick} />
+          <SortHeader label="Формат"     field="format"    sortField={sortField} sortDir={sortDir} onClick={onSortClick} />
+          <DataHeadCell>Аудитория</DataHeadCell>
+          <DataHeadCell align="center">Уроков / Страниц</DataHeadCell>
+          <SortHeader label="Обновлено"  field="updatedAt" sortField={sortField} sortDir={sortDir} onClick={onSortClick} />
+          <SortHeader label="Статус"     field="status"    sortField={sortField} sortDir={sortDir} onClick={onSortClick} />
+          <DataHeadCell align="right">Действия</DataHeadCell>
+        </DataHead>
         <tbody>
           {items.map((m) => {
             const typeMeta = TYPE_META[m.type]
@@ -524,21 +521,21 @@ function MaterialTable({ items, onOpen, onPreview, onDelete, canEdit, canDelete,
               (k): k is AudienceKey => k === "employees" || k === "candidates" || k === "clients",
             )
             return (
-              <tr
+              <DataRow
                 key={`${m.type}-${m.id}`}
-                className="border-b border-border/50 hover:bg-muted/50 transition-colors cursor-pointer"
+                className="cursor-pointer"
                 onClick={() => onOpen(m)}
               >
-                <td className="px-4 py-3 text-sm font-medium truncate max-w-sm">{m.name}</td>
-                <td className="px-4 py-3">
+                <DataCell className="font-medium truncate max-w-sm">{m.name}</DataCell>
+                <DataCell>
                   <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium", typeMeta.badgeClass)}>
                     {typeMeta.label}
                   </span>
-                </td>
-                <td className="px-4 py-3 text-sm text-muted-foreground">
+                </DataCell>
+                <DataCell className="text-muted-foreground">
                   {lengthInfo?.label ?? "—"}
-                </td>
-                <td className="px-4 py-3">
+                </DataCell>
+                <DataCell>
                   {audienceKeys.length === 0 ? (
                     <span className="text-xs text-muted-foreground">—</span>
                   ) : (
@@ -550,17 +547,17 @@ function MaterialTable({ items, onOpen, onPreview, onDelete, canEdit, canDelete,
                       ))}
                     </div>
                   )}
-                </td>
-                <td className="px-4 py-3 text-center text-sm text-muted-foreground">
+                </DataCell>
+                <DataCell align="center" className="text-muted-foreground">
                   {m.type === "demo" ? m.lessonsCount : "—"}
-                </td>
-                <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">{updatedAt}</td>
-                <td className="px-4 py-3">
+                </DataCell>
+                <DataCell className="text-muted-foreground whitespace-nowrap">{updatedAt}</DataCell>
+                <DataCell>
                   <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium whitespace-nowrap", statusMeta.badgeClass)}>
                     {statusMeta.label}
                   </span>
-                </td>
-                <td className="px-4 py-3">
+                </DataCell>
+                <DataCell align="right">
                   <div className="flex items-center gap-1 justify-end">
                     {canEdit && (
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={(e) => { e.stopPropagation(); onOpen(m) }}>
@@ -578,13 +575,13 @@ function MaterialTable({ items, onOpen, onPreview, onDelete, canEdit, canDelete,
                       </Button>
                     )}
                   </div>
-                </td>
-              </tr>
+                </DataCell>
+              </DataRow>
             )
           })}
         </tbody>
-      </table>
-    </div>
+      </DataTable>
+    </TableCard>
   )
 }
 

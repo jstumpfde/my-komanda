@@ -20,6 +20,8 @@ export type StageSlug =
   | "ai_screening"
   | "test_task_sent"
   | "test_task_done"
+  | "test_passed"
+  | "test_failed"
   | "scheduled"
   | "interview"
   | "reference_check"
@@ -28,7 +30,7 @@ export type StageSlug =
   | "hired"
   | "rejected"
 
-export type HhAction = "invitation" | "discard" | null
+export type HhAction = "invitation" | "discard" | "assessment" | null
 
 export type StageColor =
   | "slate"
@@ -77,7 +79,7 @@ export const STAGE_COLOR_CLASSES: Record<StageColor, string> = {
 }
 
 // ───────────────────────────────────────────────────────────────────
-// 14 системных стадий воронки
+// 16 стадий воронки (14 базовых + 2 исхода теста: test_passed/test_failed)
 // ───────────────────────────────────────────────────────────────────
 
 export const PLATFORM_STAGES: Record<StageSlug, StageDefinition> = {
@@ -133,7 +135,7 @@ export const PLATFORM_STAGES: Record<StageSlug, StageDefinition> = {
   },
   test_task_sent: {
     slug: "test_task_sent",
-    defaultLabel: "Задание отпр.",
+    defaultLabel: "Тест отправлен",
     defaultColor: "yellow",
     defaultHhAction: null,
     isSystem: false,
@@ -150,6 +152,26 @@ export const PLATFORM_STAGES: Record<StageSlug, StageDefinition> = {
     isTerminal: false,
     sortOrder: 7,
     description: "Кандидат прислал результат тестового",
+  },
+  test_passed: {
+    slug: "test_passed",
+    defaultLabel: "Тест пройден",
+    defaultColor: "green",
+    defaultHhAction: null,
+    isSystem: false,
+    isTerminal: false,
+    sortOrder: 7.5,           // между «Задание выполн.» и «Интервью наз.»
+    description: "Тестовое задание принято (AI/HR), кандидат двигается дальше",
+  },
+  test_failed: {
+    slug: "test_failed",
+    defaultLabel: "Тест не пройден",
+    defaultColor: "rose",     // отличаем от жёсткого «Отказ» (red)
+    defaultHhAction: null,    // без авто-discard — HR сам решает по hh
+    isSystem: false,
+    isTerminal: true,
+    sortOrder: 7.6,
+    description: "Тестовое задание отклонено по результатам проверки",
   },
   scheduled: {
     slug: "scheduled",
@@ -234,22 +256,69 @@ export const TERMINAL_STAGE_SLUGS: StageSlug[] = ALL_STAGE_SLUGS.filter(
   s => PLATFORM_STAGES[s].isTerminal,
 )
 
+// #13/#14: группы стадий для метрик. Используется в lib/vacancy-stats.ts,
+// в шапке вакансии и в аналитике/дашборде.
+//
+//   inProgress — кандидат в активной части воронки (сообщение отправлено,
+//                демо открыто, анкета сдана и т.д. — НЕ new, НЕ rejected,
+//                НЕ hired). Метрика "в работе".
+//   anketaFilled — кандидаты, заполнившие финальную анкету
+//                  (anketa_filled и всё что идёт ПОСЛЕ).
+//   demoOpened — открыли демо (demo_opened и далее, кроме rejected).
+//                Эта группа шире чем reзonate demo_progress_json IS NOT NULL.
+export const IN_PROGRESS_STAGE_SLUGS: StageSlug[] = [
+  "primary_contact", "demo_opened", "anketa_filled",
+  "ai_screening", "test_task_sent", "test_task_done", "test_passed",
+  "scheduled", "interview", "reference_check", "decision",
+  "offer_sent",
+]
+export const ANKETA_FILLED_STAGE_SLUGS: StageSlug[] = [
+  "anketa_filled", "ai_screening", "test_task_sent", "test_task_done", "test_passed",
+  "scheduled", "interview", "reference_check", "decision",
+  "offer_sent", "hired",
+]
+export const DEMO_OPENED_STAGE_SLUGS: StageSlug[] = [
+  "demo_opened", "anketa_filled", "ai_screening", "test_task_sent",
+  "test_task_done", "test_passed", "scheduled", "interview", "reference_check",
+  "decision", "offer_sent", "hired",
+]
+
 // ───────────────────────────────────────────────────────────────────
 // Legacy slug → читаемый лейбл
 // ───────────────────────────────────────────────────────────────────
-// В исторических данных встречаются slug, которых нет в PLATFORM_STAGES:
-// `demo`, `interviewed`, `final_decision`, `wants_contact`. По проду на 2026-05-11
-// все они = 0 записей в candidates.stage, но могут встречаться в stage_history.
-// Этот словарь обеспечивает читаемый fallback в getStageLabel — без него
-// история показывала бы slug как есть.
+// В исторических данных и в части пайплайна встречаются slug, которых нет в
+// PLATFORM_STAGES. По проду на 2026-05-29 они ЖИВЫЕ (а не нулевые, как было
+// в Ф2): demo=437, interviewed=85, final_decision=5, offer=100, preboarding=1.
+// Это вторая, параллельная система статусов (см. баг B9/Г1) — пока канон с ней
+// не объединён, этот словарь даёт читаемый fallback в getStageLabel, чтобы в UI
+// нигде не светился сырой slug.
 //
-// Удалить можно после Ф6, когда переписывание hh/sync и фильтра окончательно
+// offer — алиас канонического offer_sent (не отдельная стадия).
+// preboarding — этап между оффером и выходом; держим как алиас, не каноним.
+// Удалить можно после Г1, когда переписывание hh/sync и фильтра окончательно
 // уберёт упоминания этих slug из новых записей.
 export const LEGACY_STAGE_LABELS: Record<string, string> = {
   demo: "На демо",
   interviewed: "Прошёл интервью",
   final_decision: "Финальное решение",
   wants_contact: "Хочет контакт",
+  offer: "Оффер",
+  preboarding: "Пребординг",
+  talent_pool: "Резерв",      // цель кнопки «В резерв» в карточке кандидата
+  pending: "Ожидание",
+}
+
+// Цвет для legacy-slug — выравниваем по каноническому «родственнику», чтобы
+// бейджи выглядели одинаково во всех экранах через getStageColorClasses.
+export const LEGACY_STAGE_COLORS: Record<string, StageColor> = {
+  demo: "indigo",           // = demo_opened
+  interviewed: "purple",    // = interview
+  final_decision: "amber",  // = decision
+  offer: "emerald",         // = offer_sent
+  preboarding: "lime",      // между «Оффер» и «Нанят»
+  wants_contact: "slate",
+  talent_pool: "blue",
+  pending: "slate",
 }
 
 // ───────────────────────────────────────────────────────────────────
@@ -311,8 +380,32 @@ export interface VacancyPipelineV2 {
   stages: VacancyStageConfig[]
 }
 
-/** Дефолтный pipeline для новой вакансии. */
-export function getDefaultPipeline(preset: Exclude<FunnelPreset, "custom"> = "standard"): VacancyPipelineV2 {
+// Company-level дефолты hh-действий по стадиям (hiringDefaults.stageHhActions).
+export type CompanyStageHhActions = Partial<Record<StageSlug, HhAction>>
+
+// Company-level палитра: переименовать/перекрасить стадии разом
+// (hiringDefaults.stageLabels / hiringDefaults.stageColors).
+// Применяется как soft-дефолт — per-vacancy customLabel/customColor перекрывает.
+export type CompanyStagePalette = {
+  labels?: Partial<Record<StageSlug, string>>
+  colors?: Partial<Record<StageSlug, StageColor>>
+}
+
+/** hh-действие стадии: company-дефолт (если задан) перекрывает платформенный. */
+function defaultHhActionFor(slug: StageSlug, companyHhActions?: CompanyStageHhActions): HhAction {
+  if (companyHhActions && slug in companyHhActions) {
+    const v = companyHhActions[slug]
+    return v === "invitation" || v === "discard" || v === "assessment" ? v : null
+  }
+  return PLATFORM_STAGES[slug].defaultHhAction
+}
+
+/** Дефолтный pipeline для новой вакансии (с учётом company-маппинга hh и палитры). */
+export function getDefaultPipeline(
+  preset: Exclude<FunnelPreset, "custom"> = "standard",
+  companyHhActions?: CompanyStageHhActions,
+  companyPalette?: CompanyStagePalette,
+): VacancyPipelineV2 {
   const presetDef = FUNNEL_PRESETS[preset]
   return {
     version: 2,
@@ -320,9 +413,9 @@ export function getDefaultPipeline(preset: Exclude<FunnelPreset, "custom"> = "st
     stages: ALL_STAGE_SLUGS.map(slug => ({
       slug,
       enabled: presetDef.enabledStages.includes(slug),
-      customLabel: null,
-      customColor: null,
-      hhAction: PLATFORM_STAGES[slug].defaultHhAction,
+      customLabel: companyPalette?.labels?.[slug] ?? null,
+      customColor: companyPalette?.colors?.[slug] ?? null,
+      hhAction: defaultHhActionFor(slug, companyHhActions),
     })),
   }
 }
@@ -334,14 +427,18 @@ const FUNNEL_PRESET_SET: Set<FunnelPreset> = new Set(["fast", "standard", "deep"
 /**
  * Парсит сохранённый pipeline из vacancies.description_json.pipeline.
  * Невалидные/устаревшие/null значения → дефолт на пресете "standard".
- * Гарантирует, что в результате присутствуют ВСЕ 14 системных слугов,
+ * Гарантирует, что в результате присутствуют ВСЕ 16 слугов воронки,
  * даже если в сохранёнке кого-то не было.
  */
-export function parsePipeline(raw: unknown): VacancyPipelineV2 {
-  if (!raw || typeof raw !== "object") return getDefaultPipeline("standard")
+export function parsePipeline(
+  raw: unknown,
+  companyHhActions?: CompanyStageHhActions,
+  companyPalette?: CompanyStagePalette,
+): VacancyPipelineV2 {
+  if (!raw || typeof raw !== "object") return getDefaultPipeline("standard", companyHhActions, companyPalette)
   const obj = raw as Record<string, unknown>
   if (obj.version !== 2 || !Array.isArray(obj.stages)) {
-    return getDefaultPipeline("standard")
+    return getDefaultPipeline("standard", companyHhActions, companyPalette)
   }
 
   const savedByslug = new Map<StageSlug, Record<string, unknown>>()
@@ -362,19 +459,22 @@ export function parsePipeline(raw: unknown): VacancyPipelineV2 {
       return {
         slug,
         enabled: defaultEnabled,
-        customLabel: null,
-        customColor: null,
-        hhAction: PLATFORM_STAGES[slug].defaultHhAction,
+        customLabel: companyPalette?.labels?.[slug] ?? null,
+        customColor: companyPalette?.colors?.[slug] ?? null,
+        hhAction: defaultHhActionFor(slug, companyHhActions),
       }
     }
+    // Per-vacancy customLabel > company palette label > null
     const customLabel = typeof saved.customLabel === "string" && saved.customLabel.trim().length > 0
       ? saved.customLabel.trim()
-      : null
-    const customColor = typeof saved.customColor === "string" && STAGE_COLOR_SET.has(saved.customColor as StageColor)
-      ? (saved.customColor as StageColor)
-      : null
+      : (companyPalette?.labels?.[slug] ?? null)
+    // Per-vacancy customColor > company palette color > null
+    const savedColor = saved.customColor
+    const customColor = typeof savedColor === "string" && STAGE_COLOR_SET.has(savedColor as StageColor)
+      ? (savedColor as StageColor)
+      : (companyPalette?.colors?.[slug] ?? null)
     const hhAction: HhAction =
-      saved.hhAction === "invitation" || saved.hhAction === "discard"
+      saved.hhAction === "invitation" || saved.hhAction === "discard" || saved.hhAction === "assessment"
         ? saved.hhAction
         : null
     return {
@@ -414,7 +514,8 @@ export function getStageLabel(slug: string | null | undefined, pipeline?: Vacanc
 }
 
 export function getStageColor(slug: string | null | undefined, pipeline?: VacancyPipelineV2 | null): StageColor {
-  if (!slug || !STAGE_SLUG_SET.has(slug as StageSlug)) return "slate"
+  if (!slug) return "slate"
+  if (!STAGE_SLUG_SET.has(slug as StageSlug)) return LEGACY_STAGE_COLORS[slug] ?? "slate"
   const stageSlug = slug as StageSlug
   const cfg = findCfg(pipeline, stageSlug)
   if (cfg?.customColor) return cfg.customColor

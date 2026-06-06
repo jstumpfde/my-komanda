@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -13,7 +13,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Video, Building2, ExternalLink, ChevronLeft, ChevronRight, List, CalendarDays, CalendarRange, Kanban, Clock, Settings, Plus, GripVertical, Pencil, Trash2, Save, X, Bell, BellOff, LayoutGrid } from "lucide-react"
+import {Video, Building2, ExternalLink, ChevronLeft, ChevronRight, List, CalendarDays, CalendarRange, Clock, Settings, Plus, GripVertical, Pencil, Trash2, Save, X, Bell, BellOff, LayoutGrid} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 
@@ -61,26 +61,50 @@ const EMOJI_OPTIONS = ["📅", "🌅", "✅", "❌", "⏳", "🔥", "⭐", "📞
 // ─── Данные ──────────────────────────────────────────────────
 
 interface Interview {
-  id: number; date: Date; time: string; endTime: string; candidate: string; vacancy: string; interviewer: string; type: InterviewType; format: InterviewFormat; status: InterviewStatus
+  id: string; date: Date; time: string; endTime: string; candidate: string; vacancy: string; interviewer: string; type: InterviewType; format: InterviewFormat; status: InterviewStatus
 }
 
 const today2 = new Date()
-const d = (offset: number, h: number, m: number) => { const r = new Date(today2); r.setDate(r.getDate() + offset); r.setHours(h, m, 0, 0); return r }
 
-const ALL_INTERVIEWS: Interview[] = [
-  { id: 1, date: d(1, 10, 0), time: "10:00", endTime: "10:45", candidate: "Алексей Морозов", vacancy: "Менеджер по продажам", interviewer: "Анна И.", type: "Техническое", format: "Онлайн", status: "Подтверждено" },
-  { id: 2, date: d(2, 14, 30), time: "14:30", endTime: "15:15", candidate: "Мария Соколова", vacancy: "Product Manager", interviewer: "Елена С.", type: "HR", format: "Офис", status: "Ожидает" },
-  { id: 3, date: d(4, 11, 0), time: "11:00", endTime: "11:45", candidate: "Дмитрий Захаров", vacancy: "Backend Developer", interviewer: "Андрей К.", type: "Техническое", format: "Онлайн", status: "Подтверждено" },
-  { id: 4, date: d(7, 15, 0), time: "15:00", endTime: "16:00", candidate: "Ольга Новикова", vacancy: "UX Designer", interviewer: "Наталья В.", type: "Финальное", format: "Офис", status: "Ожидает" },
-  { id: 5, date: d(9, 9, 30), time: "09:30", endTime: "10:15", candidate: "Сергей Лебедев", vacancy: "DevOps Engineer", interviewer: "Кирилл Ф.", type: "HR", format: "Онлайн", status: "Подтверждено" },
-  { id: 6, date: d(0, 11, 30), time: "11:30", endTime: "12:15", candidate: "Анна Кузнецова", vacancy: "Data Analyst", interviewer: "Максим О.", type: "Техническое", format: "Онлайн", status: "Подтверждено" },
-  { id: 7, date: d(0, 16, 0), time: "16:00", endTime: "16:45", candidate: "Павел Воробьёв", vacancy: "QA Engineer", interviewer: "Светлана Б.", type: "HR", format: "Офис", status: "Ожидает" },
-  { id: 8, date: d(-3, 10, 0), time: "10:00", endTime: "10:45", candidate: "Татьяна Михайлова", vacancy: "Marketing", interviewer: "Елена С.", type: "Финальное", format: "Офис", status: "Пройдено" },
-  { id: 9, date: d(-5, 13, 0), time: "13:00", endTime: "13:45", candidate: "Роман Попов", vacancy: "iOS Developer", interviewer: "Андрей К.", type: "Техническое", format: "Онлайн", status: "Не явился" },
-  { id: 10, date: d(-7, 15, 30), time: "15:30", endTime: "16:15", candidate: "Екатерина Семёнова", vacancy: "HR BP", interviewer: "Наталья В.", type: "HR", format: "Офис", status: "Пройдено" },
-  { id: 11, date: d(-10, 9, 0), time: "09:00", endTime: "10:00", candidate: "Никита Григорьев", vacancy: "Android Dev", interviewer: "Кирилл Ф.", type: "Финальное", format: "Онлайн", status: "Пройдено" },
-  { id: 12, date: d(-2, 14, 0), time: "14:00", endTime: "14:45", candidate: "Виктор Лебедев", vacancy: "Менеджер по продажам", interviewer: "Анна И.", type: "Финальное", format: "Онлайн", status: "Отменено" },
-]
+// Событие календаря type='interview' → форма Interview для этой страницы.
+// candidate берём из title (HR его и заполняет), vacancy — по vacancyId через
+// мапу названий. Статус: cancelled→Отменено, прошедшее→Пройдено, tentative→Ожидает,
+// иначе Подтверждено. Тип/формат — из структурных полей, дефолты для старых событий.
+interface CalEvent {
+  id: string; title: string; startAt: string; endAt: string; status: string | null
+  vacancyId: string | null; interviewer: string | null; interviewType: string | null; interviewFormat: string | null
+  interviewStatus: string | null
+}
+function timeStr(dt: Date): string {
+  return `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`
+}
+function mapEventToInterview(ev: CalEvent, vacMap: Map<string, string>): Interview {
+  const start = new Date(ev.startAt)
+  const end = new Date(ev.endAt)
+  const now = new Date()
+  const ALL_ST = ["Подтверждено", "Ожидает", "Пройдено", "Не явился", "Отменено"] as const
+  let status: InterviewStatus
+  if (ev.interviewStatus && (ALL_ST as readonly string[]).includes(ev.interviewStatus)) {
+    // Явно выставленный статус интервью (включая «Не явился») имеет приоритет.
+    status = ev.interviewStatus as InterviewStatus
+  } else if (ev.status === "cancelled") status = "Отменено"
+  else if (end < now) status = "Пройдено"
+  else if (ev.status === "tentative") status = "Ожидает"
+  else status = "Подтверждено"
+  const type: InterviewType = (["Техническое", "HR", "Финальное"] as const).includes(ev.interviewType as InterviewType)
+    ? (ev.interviewType as InterviewType) : "HR"
+  const format: InterviewFormat = ev.interviewFormat === "Офис" ? "Офис" : "Онлайн"
+  return {
+    id: ev.id,
+    date: start,
+    time: timeStr(start),
+    endTime: timeStr(end),
+    candidate: ev.title || "Интервью",
+    vacancy: (ev.vacancyId && vacMap.get(ev.vacancyId)) || "—",
+    interviewer: ev.interviewer || "—",
+    type, format, status,
+  }
+}
 
 // ─── Утилиты ────────────────────────────────────────────────
 
@@ -131,7 +155,19 @@ function MiniCard({ iv, compact }: { iv: Interview; compact?: boolean }) {
 
 export default function InterviewsPage() {
   const [view, setView] = useState<ViewMode>("list")
-  const [interviews, setInterviews] = useState<Interview[]>(ALL_INTERVIEWS)
+  const [interviews, setInterviews] = useState<Interview[]>([])
+  const [vacOptions, setVacOptions] = useState<{ id: string; title: string }[]>([])
+  // Создание интервью прямо со страницы.
+  const [createOpen, setCreateOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [cName, setCName] = useState("")
+  const [cVacancyId, setCVacancyId] = useState("")
+  const [cDate, setCDate] = useState("")
+  const [cTime, setCTime] = useState("10:00")
+  const [cDuration, setCDuration] = useState("45")
+  const [cInterviewer, setCInterviewer] = useState("")
+  const [cType, setCType] = useState("HR")
+  const [cFormat, setCFormat] = useState("Онлайн")
   const [stages, setStages] = useState<Stage[]>(DEFAULT_STAGES)
   const [activeStage, setActiveStage] = useState<string>("upcoming")
   const [calMonth, setCalMonth] = useState(today2.getMonth())
@@ -142,7 +178,7 @@ export default function InterviewsPage() {
   const [dragIdx, setDragIdx] = useState<number | null>(null)
 
   // Drag-drop state for interviews
-  const [dragIvId, setDragIvId] = useState<number | null>(null)
+  const [dragIvId, setDragIvId] = useState<string | null>(null)
   const [dropTargetHour, setDropTargetHour] = useState<number | null>(null)
   const [dropTargetDay, setDropTargetDay] = useState<string | null>(null)
   const [dropTargetStatus, setDropTargetStatus] = useState<InterviewStatus | null>(null)
@@ -160,13 +196,88 @@ export default function InterviewsPage() {
 
   useEffect(() => { setStages(loadStages()) }, [])
 
-  // --- Interview drag helpers ---
-  const updateInterview = (id: number, patch: Partial<Interview>, msg: string) => {
-    setInterviews(prev => prev.map(iv => iv.id === id ? { ...iv, ...patch } : iv))
-    setNotifyDialog({ message: msg })
+  // Реальные интервью из календаря (type='interview') + список вакансий.
+  const loadInterviews = useCallback(async () => {
+    try {
+      const [evRes, vacRes] = await Promise.all([
+        fetch("/api/modules/hr/calendar?type=interview"),
+        fetch("/api/modules/hr/vacancies?limit=200"),
+      ])
+      const evJson = evRes.ok ? await evRes.json() : null
+      const events = (evJson?.data ?? evJson ?? []) as CalEvent[]
+      const vacJson = vacRes.ok ? await vacRes.json() : null
+      const vacs = (vacJson?.vacancies ?? vacJson?.data ?? []) as { id: string; title: string }[]
+      setVacOptions(vacs.map(v => ({ id: v.id, title: v.title })))
+      const vacMap = new Map(vacs.map(v => [v.id, v.title]))
+      setInterviews(events.map(ev => mapEventToInterview(ev, vacMap)))
+    } catch { setInterviews([]) }
+  }, [])
+  useEffect(() => { void loadInterviews() }, [loadInterviews])
+
+  const openCreate = () => {
+    const now = new Date()
+    setCName(""); setCVacancyId(""); setCInterviewer(""); setCType("HR"); setCFormat("Онлайн")
+    setCTime("10:00"); setCDuration("45")
+    setCDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`)
+    setCreateOpen(true)
+  }
+  const createInterview = async () => {
+    if (!cName.trim() || !cDate || !cTime) { toast.error("Заполните имя кандидата, дату и время"); return }
+    setCreating(true)
+    try {
+      const [h, m] = cTime.split(":").map(Number)
+      const start = new Date(cDate); start.setHours(h, m, 0, 0)
+      const end = new Date(start.getTime() + (parseInt(cDuration) || 45) * 60000)
+      const res = await fetch("/api/modules/hr/calendar", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: cName.trim(), type: "interview",
+          startAt: start.toISOString(), endAt: end.toISOString(),
+          vacancyId: cVacancyId || null, interviewer: cInterviewer || null,
+          interviewType: cType, interviewFormat: cFormat,
+        }),
+      })
+      if (!res.ok) throw new Error()
+      setCreateOpen(false)
+      await loadInterviews()
+      toast.success("Интервью запланировано")
+    } catch { toast.error("Не удалось создать интервью") } finally { setCreating(false) }
   }
 
-  const ivDragStart = (id: number) => setDragIvId(id)
+  // --- Interview drag helpers ---
+  // Меняет интервью локально + персистит в календарь (PATCH): перенос времени/даты
+  // пишет startAt/endAt, смена статуса маппится на статус события календаря
+  // (confirmed/tentative/cancelled). Тонкие статусы (Пройдено/Не явился) — только
+  // локально/производные, в календаре отдельно не хранятся.
+  const updateInterview = (id: string, patch: Partial<Interview>, msg: string) => {
+    const current = interviews.find(iv => iv.id === id)
+    setInterviews(prev => prev.map(iv => iv.id === id ? { ...iv, ...patch } : iv))
+    setNotifyDialog({ message: msg })
+    if (!current) return
+    const merged = { ...current, ...patch }
+    const body: Record<string, unknown> = {}
+    if (patch.time !== undefined || patch.endTime !== undefined || patch.date !== undefined) {
+      const [sh, sm] = merged.time.split(":").map(Number)
+      const [eh, em] = merged.endTime.split(":").map(Number)
+      const start = new Date(merged.date); start.setHours(sh, sm, 0, 0)
+      const end = new Date(merged.date); end.setHours(eh, em, 0, 0)
+      body.startAt = start.toISOString(); body.endAt = end.toISOString()
+    }
+    if (patch.status !== undefined) {
+      // Полный статус интервью — в interview_status; статус события календаря
+      // маппим к ближайшему (для согласованности календаря/конфликтов/C6).
+      body.interviewStatus = patch.status
+      body.status = patch.status === "Отменено" || patch.status === "Не явился" ? "cancelled"
+        : patch.status === "Ожидает" ? "tentative" : "confirmed"
+    }
+    if (Object.keys(body).length > 0) {
+      fetch(`/api/modules/hr/calendar/${id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      }).catch(() => {})
+    }
+  }
+
+  const ivDragStart = (id: string) => setDragIvId(id)
   const ivDragEnd = () => { setDragIvId(null); setDropTargetHour(null); setDropTargetDay(null); setDropTargetStatus(null) }
 
   // Day view: drop on hour
@@ -303,26 +414,28 @@ export default function InterviewsPage() {
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
-            {/* Header */}
+            {/* Header — единый стиль платформы (как Календарь): иконка violet + Tabs + primary */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-5">
-              <div>
-                <h1 className="text-2xl font-semibold text-foreground">Собеседования</h1>
-                <p className="text-muted-foreground text-sm">Запланированные и прошедшие интервью</p>
+              <div className="flex items-center gap-2">
+                <CalendarDays className="h-5 w-5 text-violet-600" />
+                <h1 className="text-lg font-semibold">Собеседования</h1>
               </div>
               <div className="flex items-center gap-2">
-                {/* View switcher */}
-                <div className="flex items-center bg-muted rounded-lg p-1 gap-0.5">
-                  {views.map(v => (
-                    <Button key={v.mode} variant={view === v.mode ? "default" : "ghost"} size="sm"
-                      className={cn("h-7 px-2 sm:px-3 text-xs gap-1", view === v.mode ? "shadow-sm" : "text-muted-foreground")}
-                      style={view === v.mode ? { backgroundColor: "#C0622F", color: "#fff" } : undefined}
-                      onClick={() => setView(v.mode)}>
-                      <v.icon className="w-3.5 h-3.5" /><span className="hidden sm:inline">{v.label}</span>
-                    </Button>
-                  ))}
-                </div>
-                <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => setSettingsOpen(true)}>
+                {/* View switcher — shadcn Tabs */}
+                <Tabs value={view} onValueChange={(v) => setView(v as ViewMode)}>
+                  <TabsList>
+                    {views.map(v => (
+                      <TabsTrigger key={v.mode} value={v.mode} className="gap-1 text-xs">
+                        <v.icon className="w-3.5 h-3.5" /><span className="hidden sm:inline">{v.label}</span>
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setSettingsOpen(true)}>
                   <Settings className="w-3.5 h-3.5" /><span className="hidden sm:inline">Настроить стадии</span>
+                </Button>
+                <Button size="sm" className="gap-1.5" onClick={openCreate}>
+                  <Plus className="w-3.5 h-3.5" /><span className="hidden sm:inline">Запланировать интервью</span>
                 </Button>
               </div>
             </div>
@@ -672,6 +785,73 @@ export default function InterviewsPage() {
       </Sheet>
 
       {/* ═══ Notify dialog ════════════════════════════════════ */}
+      {/* Создание интервью */}
+      <Dialog open={createOpen} onOpenChange={o => { if (!creating) setCreateOpen(o) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Запланировать интервью</DialogTitle></DialogHeader>
+          <div className="space-y-3 pt-1">
+            <div className="space-y-1">
+              <Label htmlFor="c-name">Кандидат *</Label>
+              <Input id="c-name" value={cName} onChange={e => setCName(e.target.value)} placeholder="Имя кандидата" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="c-vacancy">Вакансия</Label>
+              <Select value={cVacancyId || "none"} onValueChange={v => setCVacancyId(v === "none" ? "" : v)}>
+                <SelectTrigger id="c-vacancy"><SelectValue placeholder="Не указана" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Не указана</SelectItem>
+                  {vacOptions.map(v => <SelectItem key={v.id} value={v.id}>{v.title}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-1 col-span-1">
+                <Label htmlFor="c-date">Дата *</Label>
+                <Input id="c-date" type="date" value={cDate} onChange={e => setCDate(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="c-time">Время *</Label>
+                <Input id="c-time" type="time" value={cTime} onChange={e => setCTime(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="c-dur">Длит., мин</Label>
+                <Input id="c-dur" type="number" min={15} step={15} value={cDuration} onChange={e => setCDuration(e.target.value)} />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="c-interviewer">Интервьюер</Label>
+              <Input id="c-interviewer" value={cInterviewer} onChange={e => setCInterviewer(e.target.value)} placeholder="Кто проводит" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label htmlFor="c-type">Тип</Label>
+                <Select value={cType} onValueChange={setCType}>
+                  <SelectTrigger id="c-type"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {["Техническое", "HR", "Финальное"].map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="c-format">Формат</Label>
+                <Select value={cFormat} onValueChange={setCFormat}>
+                  <SelectTrigger id="c-format"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {["Онлайн", "Офис"].map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button className="flex-1" onClick={createInterview} disabled={creating || !cName.trim()}>
+                {creating ? "Создаю…" : "Запланировать"}
+              </Button>
+              <Button variant="ghost" onClick={() => setCreateOpen(false)} disabled={creating}>Отмена</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!notifyDialog} onOpenChange={o => { if (!o) setNotifyDialog(null) }}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Встреча перенесена</DialogTitle></DialogHeader>

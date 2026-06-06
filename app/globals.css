@@ -1,6 +1,8 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
+@plugin '@tailwindcss/typography';
+
 @custom-variant dark (&:is(.dark *));
 @custom-variant warm (&:is(.warm *));
 
@@ -220,5 +222,10 @@
   h2 { font-size: 1.25rem; font-weight: 700; margin: 0.5rem 0; }
   h3 { font-size: 1.1rem; font-weight: 600; margin: 0.5rem 0; }
 }
+
+/* Навигация в сайдбаре — это UI-список, а не контент. Убираем буллеты и левый
+   отступ, протёкшие из глобального правила `ul, ol { list-style: revert }` выше
+   (оно нужно только для контентных списков — статьи БЗ, описания). */
+[data-slot="sidebar-wrapper"] ul { list-style: none; padding-left: 0; }
 
 /* Powered by Company24 Agents · 2026 */

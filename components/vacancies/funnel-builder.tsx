@@ -1,0 +1,815 @@
+"use client"
+
+// Funnel Builder — конструктор воронки на вакансию.
+// См. drizzle/0127_funnel_builder.sql и lib/funnel-builder/blocks.ts.
+
+import { useEffect, useMemo, useState } from "react"
+import { toast } from "sonner"
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core"
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
+import { ChevronDown, Clock3, GripVertical, Loader2, Maximize2, Minimize2, Plus, RotateCcw, Save, Settings, Settings2, Star } from "lucide-react"
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import {
+  applyFunnelTemplate,
+  BLOCK_META,
+  FUNNEL_TEMPLATES,
+  normalizeFunnelConfig,
+  type FunnelBlock,
+  type FunnelBlockType,
+  type FunnelConfig,
+} from "@/lib/funnel-builder/blocks"
+import { BLOCK_SETTINGS_REGISTRY } from "@/lib/funnel-builder/block-settings"
+import { useVacancySettings } from "@/components/vacancies/vacancy-settings-context"
+import {
+  ManageFunnelTemplatesDialog,
+  SaveFunnelTemplateDialog,
+  type CompanyFunnelTemplate,
+} from "./company-funnel-templates-dialogs"
+
+export interface FunnelBuilderProps {
+  vacancyId: string
+}
+
+interface FunnelConfigResponse {
+  funnelBuilderEnabled: boolean
+  funnelConfigJson:     FunnelConfig
+}
+
+interface PlatformFunnelTemplate {
+  id:          string
+  name:        string
+  description: string | null
+  industry:    string | null
+  configJson:  unknown
+}
+
+interface PendingIncompatibility {
+  type:           FunnelBlockType
+  conflictTypes:  FunnelBlockType[]
+}
+
+export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
+  const [enabled, setEnabled] = useState<boolean | null>(null)
+  const [blocks, setBlocks] = useState<FunnelBlock[]>([])
+  const [saving, setSaving] = useState(false)
+  const [pendingConflict, setPendingConflict] = useState<PendingIncompatibility | null>(null)
+  const [openBlockType, setOpenBlockType] = useState<FunnelBlockType | null>(null)
+  const [sheetExpanded, setSheetExpanded] = useState(false)
+  const [pendingTemplate, setPendingTemplate] = useState<string | null>(null)
+  // Group 15: пер-компанийная библиотека шаблонов воронки.
+  const [companyTemplates, setCompanyTemplates] = useState<CompanyFunnelTemplate[]>([])
+  const [pendingCompanyTplId, setPendingCompanyTplId] = useState<string | null>(null)
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false)
+  const [manageDialogOpen, setManageDialogOpen] = useState(false)
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
+  // Group 16: пер-платформенные шаблоны воронки (is_published=true).
+  const [platformTemplates, setPlatformTemplates] = useState<PlatformFunnelTemplate[]>([])
+  const [pendingPlatformTplId, setPendingPlatformTplId] = useState<string | null>(null)
+
+  const reloadCompanyTemplates = async () => {
+    try {
+      const res = await fetch("/api/modules/hr/company-funnel-templates")
+      if (!res.ok) return
+      const data = await res.json() as { templates?: CompanyFunnelTemplate[] }
+      setCompanyTemplates(data.templates ?? [])
+    } catch {
+      // тихо — это не критично
+    }
+  }
+
+  const reloadPlatformTemplates = async () => {
+    try {
+      const res = await fetch("/api/modules/hr/funnel-templates/platform")
+      if (!res.ok) return
+      const data = await res.json() as { templates?: PlatformFunnelTemplate[] }
+      setPlatformTemplates(data.templates ?? [])
+    } catch {
+      // тихо — это не критично
+    }
+  }
+
+  useEffect(() => {
+    void reloadCompanyTemplates()
+    void reloadPlatformTemplates()
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/modules/hr/vacancies/${vacancyId}/funnel-config`)
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json() as Promise<FunnelConfigResponse>
+      })
+      .then((d) => {
+        if (cancelled) return
+        setEnabled(Boolean(d.funnelBuilderEnabled))
+        // Нормализуем: добавляем недостающие (новые) типы блоков — напр.
+        // «Стадии воронки»/«Дожим по тесту»/«FAQ» у вакансий, чей сохранённый
+        // funnelConfigJson создан до их появления. Иначе блоков нет в списке.
+        setBlocks(normalizeFunnelConfig(d.funnelConfigJson).blocks)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setEnabled(false)
+        setBlocks(normalizeFunnelConfig({}).blocks)
+      })
+    return () => { cancelled = true }
+  }, [vacancyId])
+
+  const saveConfig = async (next: {
+    funnelBuilderEnabled?: boolean
+    blocks?:               FunnelBlock[]
+  }) => {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/funnel-config`, {
+        method:  "PUT",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(next),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(typeof data.error === "string" ? data.error : `HTTP ${res.status}`)
+      }
+      return true
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Не удалось сохранить")
+      return false
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleToggleBuilder = async (next: boolean) => {
+    const prev = enabled
+    setEnabled(next)
+    const ok = await saveConfig({ funnelBuilderEnabled: next })
+    if (!ok) {
+      setEnabled(prev)
+      return
+    }
+    toast.success(next ? "Конструктор включён" : "Конструктор выключен", { duration: 1500 })
+  }
+
+  const applyBlocks = async (next: FunnelBlock[]) => {
+    const prev = blocks
+    setBlocks(next)
+    const ok = await saveConfig({ blocks: next })
+    if (!ok) setBlocks(prev)
+  }
+
+  const handleToggleBlock = async (type: FunnelBlockType) => {
+    const block = blocks.find((b) => b.type === type)
+    if (!block) return
+    const meta = BLOCK_META[type]
+    if (meta.required && block.enabled) return // required нельзя выключить
+
+    const turningOn = !block.enabled
+
+    // Включение блока с incompatibleWith — спросить подтверждение.
+    if (turningOn && meta.incompatibleWith.length > 0) {
+      const conflicts = meta.incompatibleWith.filter((conflictType) => {
+        const conflictBlock = blocks.find((b) => b.type === conflictType)
+        return conflictBlock?.enabled
+      })
+      if (conflicts.length > 0) {
+        setPendingConflict({ type, conflictTypes: conflicts })
+        return
+      }
+    }
+
+    const next = blocks.map((b) =>
+      b.type === type ? { ...b, enabled: turningOn } : b,
+    )
+    await applyBlocks(next)
+  }
+
+  const confirmTemplate = async () => {
+    if (!pendingTemplate) return
+    const tpl = FUNNEL_TEMPLATES[pendingTemplate]
+    setPendingTemplate(null)
+    if (!tpl) return
+    const next = applyFunnelTemplate(tpl, blocks)
+    await applyBlocks(next)
+    toast.success(`Шаблон «${tpl.name}» применён`, { duration: 1500 })
+  }
+
+  const confirmCompanyTemplate = async () => {
+    if (!pendingCompanyTplId) return
+    const tpl = companyTemplates.find((t) => t.id === pendingCompanyTplId)
+    setPendingCompanyTplId(null)
+    if (!tpl) return
+    // Шаблон компании хранит готовый набор блоков — нормализуем (на случай
+    // если список типов изменился с момента сохранения) и применяем целиком.
+    const normalized = normalizeFunnelConfig(tpl.configJson)
+    await applyBlocks(normalized.blocks)
+    toast.success(`Шаблон «${tpl.name}» применён`, { duration: 1500 })
+  }
+
+  const confirmPlatformTemplate = async () => {
+    if (!pendingPlatformTplId) return
+    const tpl = platformTemplates.find((t) => t.id === pendingPlatformTplId)
+    setPendingPlatformTplId(null)
+    if (!tpl) return
+    const normalized = normalizeFunnelConfig(tpl.configJson)
+    await applyBlocks(normalized.blocks)
+    toast.success(`Шаблон «${tpl.name}» применён`, { duration: 1500 })
+  }
+
+  const confirmConflict = async () => {
+    if (!pendingConflict) return
+    const { type, conflictTypes } = pendingConflict
+    setPendingConflict(null)
+    const next = blocks.map((b) => {
+      if (b.type === type) return { ...b, enabled: true }
+      if (conflictTypes.includes(b.type)) return { ...b, enabled: false }
+      return b
+    })
+    await applyBlocks(next)
+  }
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = blocks.findIndex((b) => b.type === active.id)
+    const newIndex = blocks.findIndex((b) => b.type === over.id)
+    if (oldIndex < 0 || newIndex < 0) return
+    const reordered = arrayMove(blocks, oldIndex, newIndex).map((b, idx) => ({
+      ...b,
+      order: idx + 1,
+    }))
+    await applyBlocks(reordered)
+  }
+
+  const itemIds = useMemo(() => blocks.map((b) => b.type), [blocks])
+
+  // T3: счётчик «N из M блоков включено» в шапке.
+  const enabledCount = useMemo(() => blocks.filter((b) => b.enabled).length, [blocks])
+
+  // T3: сброс к дефолту компании (или встроенному «Простой» если default не задан).
+  const handleReset = async () => {
+    const defaultTpl = companyTemplates.find((t) => t.isDefault)
+    if (defaultTpl) {
+      const normalized = normalizeFunnelConfig(defaultTpl.configJson)
+      await applyBlocks(normalized.blocks)
+      toast.success(`Воронка сброшена к шаблону «${defaultTpl.name}»`, { duration: 1500 })
+      return
+    }
+    const simple = FUNNEL_TEMPLATES.simple
+    const next = applyFunnelTemplate(simple, blocks)
+    await applyBlocks(next)
+    toast.success("Воронка сброшена к шаблону «Простой найм»", { duration: 1500 })
+  }
+
+  // Обработчик применения встроенного пресета: если конструктор не включён —
+  // автоматически включаем его вместе с применением шаблона.
+  const handleApplyPreset = async (key: string) => {
+    if (!enabled) {
+      // Сначала включаем конструктор, потом покажем confirm шаблона
+      const ok = await saveConfig({ funnelBuilderEnabled: true })
+      if (!ok) return
+      setEnabled(true)
+    }
+    setPendingTemplate(key)
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <CardTitle>Воронка</CardTitle>
+          <span className="ml-auto text-xs text-muted-foreground">
+            {enabledCount} из {blocks.length} блоков включено
+          </span>
+        </div>
+        <CardDescription>
+          Выберите готовый сценарий — он настроит воронку под вас. При необходимости донастройте блоки ниже.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+
+        {/* ── Пресеты (встроенные сценарии) — главный элемент ── */}
+        <div className="mb-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {Object.entries(FUNNEL_TEMPLATES).map(([key, template]) => (
+              <button
+                key={key}
+                type="button"
+                disabled={saving || enabled === null}
+                onClick={() => { void handleApplyPreset(key) }}
+                className="text-left rounded-lg border bg-card px-4 py-3 hover:border-primary hover:bg-primary/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <div className="text-sm font-medium leading-snug">{template.name}</div>
+                <div className="text-xs text-muted-foreground mt-0.5 leading-snug">{template.description}</div>
+              </button>
+            ))}
+          </div>
+
+          {/* Вторичные шаблоны + управление */}
+          <div className="flex items-center gap-2 mt-3 flex-wrap">
+            {(companyTemplates.length > 0 || platformTemplates.length > 0) && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" disabled={saving || enabled === null}>
+                    Ещё шаблоны
+                    <ChevronDown className="ml-1 h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-80">
+                  {companyTemplates.length > 0 && (
+                    <>
+                      <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                        Шаблоны компании
+                      </DropdownMenuLabel>
+                      {companyTemplates.map((tpl) => (
+                        <DropdownMenuItem
+                          key={tpl.id}
+                          onSelect={() => setPendingCompanyTplId(tpl.id)}
+                          className="flex flex-col items-start gap-0.5 py-2"
+                        >
+                          <span className="text-sm font-medium flex items-center gap-1.5 w-full">
+                            <span className="truncate">{tpl.name}</span>
+                            {tpl.isDefault && (
+                              <Star className="h-3 w-3 fill-amber-400 text-amber-500 shrink-0 ml-auto" />
+                            )}
+                          </span>
+                          {tpl.description && (
+                            <span className="text-xs text-muted-foreground line-clamp-2">{tpl.description}</span>
+                          )}
+                        </DropdownMenuItem>
+                      ))}
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
+                  {platformTemplates.length > 0 && (
+                    <>
+                      <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                        Платформенные шаблоны
+                      </DropdownMenuLabel>
+                      {platformTemplates.map((tpl) => (
+                        <DropdownMenuItem
+                          key={tpl.id}
+                          onSelect={() => setPendingPlatformTplId(tpl.id)}
+                          className="flex flex-col items-start gap-0.5 py-2"
+                        >
+                          <span className="text-sm font-medium flex items-center gap-1.5 w-full">
+                            <span className="truncate">{tpl.name}</span>
+                            {tpl.industry && (
+                              <Badge variant="outline" className="ml-auto text-[10px] shrink-0">
+                                {tpl.industry}
+                              </Badge>
+                            )}
+                          </span>
+                          {tpl.description && (
+                            <span className="text-xs text-muted-foreground line-clamp-2">{tpl.description}</span>
+                          )}
+                        </DropdownMenuItem>
+                      ))}
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={saving || enabled === null}
+              onClick={() => setSaveDialogOpen(true)}
+              className="text-muted-foreground hover:text-foreground gap-1.5"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Сохранить как шаблон
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={saving || enabled === null}
+              onClick={() => setManageDialogOpen(true)}
+              className="text-muted-foreground hover:text-foreground gap-1.5"
+            >
+              <Settings className="h-3.5 w-3.5" />
+              Управление шаблонами
+            </Button>
+          </div>
+        </div>
+
+        {/* ── Шаги воронки (тонкая настройка) ── */}
+        <div className="border-t pt-4">
+          <div className="flex items-center justify-between mb-3 gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-foreground">Шаги воронки</span>
+              <span className="text-xs text-muted-foreground">
+                {enabledCount} из {blocks.length} включено
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={saving || enabled === null}
+                onClick={() => setResetConfirmOpen(true)}
+                title="Сбросить к дефолту"
+              >
+                <RotateCcw className="h-4 w-4" />
+                <span className="sr-only">Сбросить к дефолту</span>
+              </Button>
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="funnel-builder-switch" className="text-xs text-muted-foreground cursor-pointer">
+                  {enabled ? "Включено" : "Выключено"}
+                </Label>
+                <Switch
+                  id="funnel-builder-switch"
+                  checked={Boolean(enabled)}
+                  onCheckedChange={handleToggleBuilder}
+                  disabled={enabled === null || saving}
+                />
+              </div>
+            </div>
+          </div>
+
+          {blocks.length > 0 ? (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
+                <div className="space-y-2">
+                  {blocks.map((block) => (
+                    <SortableBlockCard
+                      key={block.type}
+                      block={block}
+                      saving={saving}
+                      onToggle={() => handleToggleBlock(block.type)}
+                      onOpenSettings={() => setOpenBlockType(block.type)}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+          ) : (
+            <div className="text-sm text-muted-foreground py-6 text-center">
+              Загрузка блоков…
+            </div>
+          )}
+        </div>
+      </CardContent>
+
+      <AlertDialog
+        open={pendingConflict !== null}
+        onOpenChange={(open) => { if (!open) setPendingConflict(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingConflict && `Включить «${BLOCK_META[pendingConflict.type].label}»?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingConflict && (
+                <>
+                  Включение «{BLOCK_META[pendingConflict.type].label}» отключит{" "}
+                  {pendingConflict.conflictTypes
+                    .map((t) => `«${BLOCK_META[t].label}»`)
+                    .join(" и ")}
+                  . Продолжить?
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmConflict}>Включить</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={pendingTemplate !== null}
+        onOpenChange={(open) => { if (!open) setPendingTemplate(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingTemplate && `Применить шаблон «${FUNNEL_TEMPLATES[pendingTemplate]?.name}»?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Текущие настройки блоков воронки будут перезаписаны значениями
+              из шаблона. Сами настройки внутри блоков (тексты сообщений, пороги
+              и т. п.) сохранятся — изменится только список включённых блоков.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmTemplate}>Применить</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={pendingCompanyTplId !== null}
+        onOpenChange={(open) => { if (!open) setPendingCompanyTplId(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingCompanyTplId && `Применить шаблон «${companyTemplates.find((t) => t.id === pendingCompanyTplId)?.name ?? ""}»?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Текущий набор включённых блоков и их порядок будут заменены
+              сохранённым шаблоном. Настройки внутри блоков (тексты, пороги,
+              сценарии AI и т. п.) сохранятся — изменится только список
+              включённых блоков и порядок.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmCompanyTemplate}>Применить</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={pendingPlatformTplId !== null}
+        onOpenChange={(open) => { if (!open) setPendingPlatformTplId(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingPlatformTplId && `Применить шаблон «${platformTemplates.find((t) => t.id === pendingPlatformTplId)?.name ?? ""}»?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Это платформенный шаблон Company24 — рекомендованный набор блоков
+              для вашей отрасли. Текущий набор включённых блоков и их порядок
+              будут заменены. Настройки внутри блоков сохранятся.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmPlatformTemplate}>Применить</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={resetConfirmOpen}
+        onOpenChange={setResetConfirmOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Сбросить воронку?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {companyTemplates.find((t) => t.isDefault)
+                ? `Воронка будет приведена к шаблону компании по умолчанию — «${companyTemplates.find((t) => t.isDefault)?.name}».`
+                : "Воронка будет приведена к встроенному шаблону «Простой найм» (шаблон компании по умолчанию не задан)."}
+              {" "}Настройки внутри блоков сохранятся, изменится только список
+              включённых блоков и порядок.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { void handleReset() }}>Сбросить</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <SaveFunnelTemplateDialog
+        open={saveDialogOpen}
+        onOpenChange={setSaveDialogOpen}
+        currentBlocks={blocks}
+        onSaved={() => { void reloadCompanyTemplates() }}
+      />
+
+      <ManageFunnelTemplatesDialog
+        open={manageDialogOpen}
+        onOpenChange={setManageDialogOpen}
+        onChanged={() => { void reloadCompanyTemplates() }}
+      />
+
+      <Sheet
+        open={openBlockType !== null}
+        onOpenChange={(open) => { if (!open) { setOpenBlockType(null); setSheetExpanded(false) } }}
+      >
+        <SheetContent
+          side="right"
+          className={`overflow-y-auto p-6 flex flex-col ${sheetExpanded ? "w-screen max-w-none sm:max-w-none" : "w-full sm:max-w-2xl"}`}
+        >
+          {openBlockType && (() => {
+            const entry  = BLOCK_SETTINGS_REGISTRY[openBlockType]
+            const meta   = BLOCK_META[openBlockType]
+            const title  = entry?.title       ?? meta.label
+            const desc   = entry?.description ?? meta.description
+            const Comp   = entry?.component   ?? null
+            return (
+              <>
+                <SheetHeader className="px-0 shrink-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <SheetTitle>{title}</SheetTitle>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0 -mt-1 mr-6 gap-1.5 text-xs text-muted-foreground"
+                      onClick={() => setSheetExpanded((v) => !v)}
+                      title={sheetExpanded ? "Свернуть панель" : "Развернуть на весь экран"}
+                    >
+                      {sheetExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                      {sheetExpanded ? "Свернуть" : "На весь экран"}
+                    </Button>
+                  </div>
+                  <SheetDescription>{desc}</SheetDescription>
+                </SheetHeader>
+                <div className="mt-6 flex-1 pb-20">
+                  {Comp ? (
+                    <Comp vacancyId={vacancyId} onSaved={() => setOpenBlockType(null)} />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">В разработке — настроек для этого блока пока нет.</p>
+                  )}
+                </div>
+                <FunnelBlockSheetSaveFooter />
+              </>
+            )
+          })()}
+        </SheetContent>
+      </Sheet>
+    </Card>
+  )
+}
+
+interface SortableBlockCardProps {
+  block:          FunnelBlock
+  saving:         boolean
+  onToggle:       () => void
+  onOpenSettings: () => void
+}
+
+function SortableBlockCard({ block, saving, onToggle, onOpenSettings }: SortableBlockCardProps) {
+  const meta = BLOCK_META[block.type]
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: block.type })
+
+  const style: React.CSSProperties = {
+    transform:  CSS.Transform.toString(transform),
+    // T3: дольше плавный transition при reorder — dnd-kit отдаёт transition
+    // только во время drag, но если он null/undefined — оставляем нативный.
+    transition: transition ?? "transform 200ms ease",
+    opacity:    isDragging ? 0.5 : 1,
+  }
+
+  const Icon = meta.icon
+
+  // T3: блоки, у которых ещё нет UI настроек (нет entry в реестре или
+  // entry.component === null) — показываем badge «Скоро» вместо/в дополнение
+  // к обычным badges. Кнопка настроек остаётся (Sheet всё равно покажет
+  // «В разработке»), но дизайн сообщает HR что это work-in-progress.
+  const settingsEntry = BLOCK_SETTINGS_REGISTRY[block.type]
+  const hasSettingsUi = settingsEntry?.component != null
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5"
+    >
+      <button
+        type="button"
+        className="touch-none cursor-grab text-muted-foreground hover:text-foreground"
+        aria-label="Перетащить"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      <Icon className="h-5 w-5 text-muted-foreground shrink-0" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-medium truncate">{meta.label}</span>
+          {meta.required && (
+            <Badge variant="secondary" className="text-[10px]">обязательный</Badge>
+          )}
+          {!hasSettingsUi && (
+            <Badge variant="outline" className="text-[10px] gap-1 border-amber-300 text-amber-700 bg-amber-50">
+              <Clock3 className="h-3 w-3" />Скоро
+            </Badge>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground truncate">{meta.description}</p>
+      </div>
+      {meta.required ? (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {/* span обёртка нужна — disabled Switch не ловит hover */}
+              <span className="inline-flex">
+                <Switch checked={block.enabled} disabled />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>Обязательный блок</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ) : (
+        <Switch
+          checked={block.enabled}
+          onCheckedChange={onToggle}
+          disabled={saving}
+        />
+      )}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8"
+        aria-label="Настройки блока"
+        onClick={onOpenSettings}
+      >
+        <Settings2 className="h-4 w-4" />
+      </Button>
+    </div>
+  )
+}
+
+// #88: VacancyStickySaveBar (z-40 sticky) перекрывается Sheet overlay (z-50),
+// поэтому когда HR открывает настройки блока в Sheet — кнопка «Сохранить»
+// у нижнего края страницы недоступна. Дублируем её в подвале Sheet и зовём
+// тот же saveAll() из контекста, что и общая sticky-кнопка.
+function FunnelBlockSheetSaveFooter() {
+  const ctx = useVacancySettings()
+  if (!ctx) return null
+  const label = ctx.pendingCount > 1
+    ? `Сохранить (${ctx.pendingCount} изменения)`
+    : "Сохранить"
+  return (
+    <SheetFooter className="sticky bottom-0 -mx-6 -mb-6 px-6 py-3 mt-4 bg-background border-t shrink-0">
+      <Button
+        onClick={() => { void ctx.saveAll() }}
+        disabled={ctx.saving || !ctx.hasPending}
+        className="gap-2 h-10 px-5"
+      >
+        {ctx.saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+        {label}
+      </Button>
+    </SheetFooter>
+  )
+}

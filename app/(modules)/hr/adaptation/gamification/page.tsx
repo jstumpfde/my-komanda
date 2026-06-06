@@ -74,7 +74,7 @@ export default function GamificationPage() {
                 <Trophy className="w-5 h-5 text-amber-600" />
               </div>
               <div>
-                <h1 className="text-2xl font-semibold">Геймификация</h1>
+                <h1 className="text-lg font-semibold">Геймификация</h1>
                 <p className="text-sm text-muted-foreground">Лидерборд и бейджи адаптации</p>
               </div>
             </div>

@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { getCandidateByToken, type PublicCandidate } from "@/lib/candidate-tokens"
 import { DEFAULT_LESSONS, replaceVars, type Lesson, type Block } from "@/lib/course-types"
-import { getBrand, brandCssVars, type BrandConfig } from "@/lib/branding"
+import {getBrand, type BrandConfig} from "@/lib/branding"
 import { cn } from "@/lib/utils"
 import { cleanHtml } from "@/lib/clean-html"
 import {

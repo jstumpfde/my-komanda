@@ -29,6 +29,10 @@ import {
   Star,
   X,
   Loader2,
+  RotateCcw,
+  ClipboardList,
+  Trash2,
+  GitCompare,
 } from "lucide-react"
 
 export type BulkAction =
@@ -37,6 +41,12 @@ export type BulkAction =
   | "talent_pool"
   | "set_stage"
   | "toggle_favorite"
+  | "restore"
+  | "send_test"
+  | "compare"       // открыть страницу сравнения ответов
+  | "trash"         // в «Корзину» (мягкое удаление)
+  | "untrash"       // вернуть из «Корзины»
+  | "hard_delete"   // удалить навсегда
 
 interface StageOption {
   id: string
@@ -48,10 +58,30 @@ interface BulkActionsBarProps {
   stages: StageOption[]
   onClear: () => void
   onAction: (action: BulkAction, payload?: { stage?: string }) => Promise<void> | void
+  /**
+   * Если true — все выделенные кандидаты сейчас в стадии 'rejected'.
+   * Тогда вместо обычных действий показываем кнопку «Вернуть в воронку».
+   * Это единственный признак, что bulk_restore доступен — сервер дополнительно
+   * валидирует и вернёт 400 если хоть один не в rejected.
+   */
+  allRejected?: boolean
+  /**
+   * Режим «Корзина»: выделены удалённые карточки. Показываем «Восстановить»
+   * и «Удалить навсегда» вместо обычных действий.
+   */
+  trashedView?: boolean
+  /**
+   * Может ли текущий пользователь удалять кандидатов (админ / менеджер-админ /
+   * директор). Если нет — кнопки «Удалить» / «Удалить навсегда» скрыты.
+   */
+  canDelete?: boolean
 }
 
-export function BulkActionsBar({ count, stages, onClear, onAction }: BulkActionsBarProps) {
+export function BulkActionsBar({ count, stages, onClear, onAction, allRejected = false, trashedView = false, canDelete = false }: BulkActionsBarProps) {
   const [confirmRejectOpen, setConfirmRejectOpen] = useState(false)
+  const [confirmRestoreOpen, setConfirmRestoreOpen] = useState(false)
+  const [confirmTrashOpen, setConfirmTrashOpen] = useState(false)
+  const [confirmHardDeleteOpen, setConfirmHardDeleteOpen] = useState(false)
   const [busy, setBusy] = useState<BulkAction | null>(null)
 
   if (count === 0) return null
@@ -97,8 +127,49 @@ export function BulkActionsBar({ count, stages, onClear, onAction }: BulkActions
 
         <div className="flex-1" />
 
-        {/* Right: 5 actions */}
+        {/* Right: actions. Если все выделенные в 'rejected' — показываем
+            только «Вернуть в воронку» (отдельный bulk-restore флоу),
+            обычный набор действий скрываем (отказать/пригласить/... нет
+            смысла на уже отказанных). */}
         <div className="flex items-center gap-1.5 flex-nowrap justify-end">
+          {trashedView ? (
+            <>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 px-2.5 gap-1.5 text-sm text-emerald-700 border-emerald-300 hover:bg-emerald-500/10 hover:text-emerald-800 dark:text-emerald-300 dark:border-emerald-700"
+                disabled={!!busy}
+                onClick={() => run("untrash")}
+              >
+                {busy === "untrash" ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
+                <span className="hidden md:inline">Восстановить</span>
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 px-2.5 gap-1.5 text-sm text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                disabled={!!busy}
+                onClick={() => setConfirmHardDeleteOpen(true)}
+              >
+                {busy === "hard_delete" ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                <span className="hidden md:inline">Удалить навсегда</span>
+              </Button>
+            </>
+          ) : allRejected ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 px-2.5 gap-1.5 text-sm text-emerald-700 border-emerald-300 hover:bg-emerald-500/10 hover:text-emerald-800 dark:text-emerald-300 dark:border-emerald-700"
+              disabled={!!busy}
+              onClick={() => setConfirmRestoreOpen(true)}
+            >
+              {busy === "restore" ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
+              <span className="hidden md:inline">Вернуть в воронку</span>
+            </Button>
+          ) : <>
           <Button
             type="button"
             size="sm"
@@ -121,6 +192,18 @@ export function BulkActionsBar({ count, stages, onClear, onAction }: BulkActions
           >
             {busy === "invite" ? <Loader2 className="size-4 animate-spin" /> : <Calendar className="size-4" />}
             <span className="hidden md:inline">Пригласить</span>
+          </Button>
+
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 px-2.5 gap-1.5 text-sm text-teal-600 border-teal-300 hover:bg-teal-500/10 hover:text-teal-700 dark:text-teal-300 dark:border-teal-700"
+            disabled={!!busy}
+            onClick={() => run("send_test")}
+          >
+            {busy === "send_test" ? <Loader2 className="size-4 animate-spin" /> : <ClipboardList className="size-4" />}
+            <span className="hidden md:inline">Отправить тест</span>
           </Button>
 
           <Button
@@ -173,8 +256,99 @@ export function BulkActionsBar({ count, stages, onClear, onAction }: BulkActions
             {busy === "toggle_favorite" ? <Loader2 className="size-4 animate-spin" /> : <Star className="size-4" />}
             <span className="hidden md:inline">В избранное</span>
           </Button>
+
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 px-2.5 gap-1.5 text-sm text-indigo-600 border-indigo-300 hover:bg-indigo-500/10 hover:text-indigo-700 dark:text-indigo-300 dark:border-indigo-700"
+            disabled={!!busy}
+            onClick={() => run("compare")}
+          >
+            {busy === "compare" ? <Loader2 className="size-4 animate-spin" /> : <GitCompare className="size-4" />}
+            <span className="hidden md:inline">Сравнить</span>
+          </Button>
+
+          {canDelete && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 px-2.5 gap-1.5 text-sm text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+              disabled={!!busy}
+              onClick={() => setConfirmTrashOpen(true)}
+            >
+              {busy === "trash" ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+              <span className="hidden md:inline">Удалить</span>
+            </Button>
+          )}
+          </>}
         </div>
       </div>
+
+      <AlertDialog open={confirmRestoreOpen} onOpenChange={setConfirmRestoreOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Вернуть {count} {pluralize(count, "кандидата", "кандидатов", "кандидатов")} в воронку?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Каждый кандидат вернётся на стадию, с которой он был отклонён (по истории).
+              Если истории нет — на «Первичный контакт». Авто-обработка останется выключенной.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { setConfirmRestoreOpen(false); void run("restore") }}
+            >
+              Вернуть
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmTrashOpen} onOpenChange={setConfirmTrashOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить {count} {pluralize(count, "карточку", "карточки", "карточек")}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Карточки переедут в «Корзину»: пропадут из списков и счётчиков, автоматика по ним остановится.
+              Их можно вернуть из «Корзины». Окончательное удаление — оттуда же.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { setConfirmTrashOpen(false); void run("trash") }}
+            >
+              Удалить
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmHardDeleteOpen} onOpenChange={setConfirmHardDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить навсегда {count} {pluralize(count, "карточку", "карточки", "карточек")}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Карточки и все связанные данные (тесты, ответы, касания дожима) будут удалены безвозвратно.
+              Это действие нельзя отменить.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { setConfirmHardDeleteOpen(false); void run("hard_delete") }}
+            >
+              Удалить навсегда
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={confirmRejectOpen} onOpenChange={setConfirmRejectOpen}>
         <AlertDialogContent>

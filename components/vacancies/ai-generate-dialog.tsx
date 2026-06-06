@@ -11,8 +11,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { cn } from "@/lib/utils"
-import { Upload, FileText, Mic, MicOff, Sparkles, Loader2, Check, FileUp, Pencil, X } from "lucide-react"
+import {Upload, FileText, Mic, MicOff, Sparkles, Loader2, Check, FileUp, Pencil} from "lucide-react"
 import { toast } from "sonner"
 import type { Lesson } from "@/lib/course-types"
 import { createBlock } from "@/lib/course-types"

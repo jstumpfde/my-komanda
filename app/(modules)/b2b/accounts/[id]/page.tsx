@@ -7,7 +7,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { ArrowLeft, Building2, Clock, Lock } from "lucide-react"
+import {ArrowLeft, Clock, Lock} from "lucide-react"
 import {
   B2B_ACCOUNTS, B2B_DEALS, INFLUENCE_MAP, ENGAGEMENT_MAP,
   TIER_BADGES, RISK_COLORS, formatValueShort,
@@ -57,7 +57,7 @@ export default function B2BAccountDetailPage() {
               </Avatar>
               <div>
                 <div className="flex items-center gap-2">
-                  <h1 className="text-xl font-semibold">{account.name}</h1>
+                  <h1 className="text-lg font-semibold">{account.name}</h1>
                   {tier && <Badge variant="secondary" className={`text-xs border-0 ${tier.cls}`}>{tier.label}</Badge>}
                 </div>
                 <p className="text-sm text-muted-foreground">{account.industry} · {account.size} · {account.revenue}</p>

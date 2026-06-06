@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { invoices, subscriptionHistory, companies, plans } from "@/lib/db/schema"
+import {invoices, subscriptionHistory, plans} from "@/lib/db/schema"
 import { eq, count } from "drizzle-orm"
-import { apiError, requireCompany } from "@/lib/api-helpers"
+import { apiError, requireCompany, requireDirector } from "@/lib/api-helpers"
 
 export async function GET() {
   let user: Awaited<ReturnType<typeof requireCompany>>
@@ -24,7 +24,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   let user: Awaited<ReturnType<typeof requireCompany>>
   try {
-    user = await requireCompany()
+    user = await requireDirector()
   } catch (e) {
     return e as NextResponse
   }

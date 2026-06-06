@@ -6,18 +6,9 @@
 import type { FilterState } from "@/components/dashboard/candidate-filters"
 import type { Candidate } from "@/components/dashboard/candidate-card"
 
-// Ф6: filters.funnelStatuses теперь содержит ИЛИ slug стадий из lib/stages.ts
-// (когда фильтр вызывается из контекста вакансии с pipeline), ИЛИ UI-метки
-// (legacy для страниц без pipeline). FUNNEL_LABEL_TO_STAGE используется как
-// fallback для UI-меток. Slug'и проверяются прямым совпадением с col.id ниже.
-const FUNNEL_LABEL_TO_STAGE: Record<string, string[]> = {
-  "Всего откликов":     ["new"],
-  "Интервью назначено": ["scheduled"],
-  "Интервью пройдено": ["interview", "interviewed", "decision", "final_decision"],
-  "Оффер":              ["offer", "offer_sent"],
-  "Нанят":              ["hired"],
-  "Отказ":              ["rejected"],
-}
+// ТЗ-3 Ч.4: filters.funnelStatuses содержит ТОЛЬКО slug стадий из
+// lib/stages.ts. Legacy UI-метки («Демо пройдено» и т.п.) больше не
+// поддерживаются — фильтр всегда генерируется из PLATFORM_STAGES.
 
 function getDemoPercent(c: Candidate): number | null {
   // Приоритет — поле progressPercent из API (page-based, согласовано с UI)
@@ -133,6 +124,17 @@ export function applyCandidateFilters<C extends FilterableColumn>(
       if (filters.searchText && !c.name.toLowerCase().includes(filters.searchText.toLowerCase())) return false
       if (filters.cities.length > 0 && !filters.cities.includes(c.city)) return false
       if (((c as any).aiScore ?? c.score ?? 0) < filters.scoreMin) return false
+      // Раздельные слайдеры AI-скор: по резюме (resumeScore) и по анкете
+      // (aiScore). 0 = «не задан», фильтр пропускается. Кандидатов без
+      // скора (null) при активном фильтре — исключаем.
+      if ((filters.scoreMinResume ?? 0) > 0) {
+        const rs = (c as any).resumeScore
+        if (rs == null || rs < filters.scoreMinResume) return false
+      }
+      if ((filters.scoreMinAnketa ?? 0) > 0) {
+        const ai = (c as any).aiScore
+        if (ai == null || ai < filters.scoreMinAnketa) return false
+      }
       if (filters.sources.length > 0 && !filters.sources.includes(c.source)) return false
 
       // Work format
@@ -148,31 +150,15 @@ export function applyCandidateFilters<C extends FilterableColumn>(
       // Experience years (slider)
       if (!passesExperience(c, filters)) return false
 
-      // Funnel status — поддерживаем оба формата:
-      //   • slug ("new", "primary_contact", "decision", …) — Ф6, фильтр в
-      //     контексте вакансии с pipeline
-      //   • UI-метка ("Всего откликов", "Демо пройдено", …) — legacy
+      // ТЗ-3 Ч.4: фильтр по slug стадий. Если список пуст — пользователь
+      // снял все галочки → показываем всё.
       if (filters.funnelStatuses.length > 0) {
-        // Спец-кейс «Демо пройдено» — UI-метка, проверка по проценту демо
-        const demoOk =
-          filters.funnelStatuses.includes("Демо пройдено")
-            ? (getDemoPercent(c) ?? -1) >= 85
-            : false
-        const stagesAllowed = new Set<string>()
-        for (const entry of filters.funnelStatuses) {
-          if (entry === "Демо пройдено") continue
-          // Сначала проверяем как UI-метку
-          const ss = FUNNEL_LABEL_TO_STAGE[entry]
-          if (ss) {
-            ss.forEach((s) => stagesAllowed.add(s))
-          } else {
-            // Иначе считаем что это slug — добавляем как есть
-            stagesAllowed.add(entry)
-          }
-        }
-        const stageOk = stagesAllowed.size > 0 && stagesAllowed.has(col.id)
-        if (!demoOk && !stageOk) return false
+        if (!filters.funnelStatuses.includes(col.id)) return false
       }
+
+      // Скрыть отказы (отдельный тумблер). Колонка/стадия rejected отсекается
+      // независимо от whitelist — зеркалит серверный excludeRejected.
+      if (filters.hideRejected && (col.id === "rejected" || c.stage === "rejected")) return false
 
       // Demo progress
       if (!passesDemoProgress(c, filters.demoProgress)) return false

@@ -4,10 +4,12 @@ import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2, Star, Activity } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 
 interface MiniCandidate {
   id: string
   name: string
+  vacancyId?: string | null
   vacancyTitle: string
   demoTotalBlocks: number
   demoCompletedBlocks: number
@@ -24,7 +26,19 @@ function progressTextClass(percent: number | null, isActive: boolean): string {
   return cn("text-red-500", isActive && "animate-pulse")
 }
 
-export function CandidatesProgressMiniTable({ limit = 5 }: { limit?: number }) {
+export function CandidatesProgressMiniTable({
+  limit = 5,
+  vacancyId,
+  expanded = false,
+  maxExpanded = 20,
+}: {
+  limit?: number
+  // #49: фильтр по вакансии — если передан, показываем только её кандидатов.
+  vacancyId?: string
+  // #52: режим раскрытия — показывать до maxExpanded строк вместо limit.
+  expanded?: boolean
+  maxExpanded?: number
+}) {
   const router = useRouter()
   const [items, setItems] = useState<MiniCandidate[]>([])
   const [loading, setLoading] = useState(true)
@@ -43,12 +57,16 @@ export function CandidatesProgressMiniTable({ limit = 5 }: { limit?: number }) {
   }, [])
 
   const top = useMemo(() => {
-    const filtered = items.filter(
+    let filtered = items.filter(
       (c) => c.progressPercent !== null && c.demoCompletedBlocks > 0,
     )
+    if (vacancyId && vacancyId !== "all") {
+      filtered = filtered.filter((c) => c.vacancyId === vacancyId)
+    }
     filtered.sort((a, b) => (b.progressPercent ?? 0) - (a.progressPercent ?? 0))
-    return filtered.slice(0, limit)
-  }, [items, limit])
+    const slice = expanded ? maxExpanded : limit
+    return filtered.slice(0, slice)
+  }, [items, limit, vacancyId, expanded, maxExpanded])
 
   async function toggleFavorite(id: string) {
     const target = items.find((c) => c.id === id)
@@ -91,28 +109,23 @@ export function CandidatesProgressMiniTable({ limit = 5 }: { limit?: number }) {
   }
 
   return (
-    <div className="rounded-lg border border-border overflow-hidden">
-      <table className="w-full text-left">
-        <thead>
-          <tr className="bg-muted/50 border-b border-border">
-            <th className="px-2 py-2 w-[40px]"></th>
-            <th className="px-3 py-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">ФИО</th>
-            <th className="px-3 py-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Вакансия</th>
-            <th className="px-3 py-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Прогресс</th>
-            <th className="px-3 py-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Блоки</th>
-          </tr>
-        </thead>
+    <TableCard>
+      <DataTable className="text-left">
+        <DataHead>
+          <DataHeadCell width="40px"></DataHeadCell>
+          <DataHeadCell>ФИО</DataHeadCell>
+          <DataHeadCell>Вакансия</DataHeadCell>
+          <DataHeadCell>Прогресс</DataHeadCell>
+          <DataHeadCell>Блоки</DataHeadCell>
+        </DataHead>
         <tbody>
-          {top.map((c, i) => (
-            <tr
+          {top.map((c) => (
+            <DataRow
               key={c.id}
               onClick={() => router.push(`/hr/candidates/${c.id}`)}
-              className={cn(
-                "transition-colors cursor-pointer hover:bg-accent/40",
-                i < top.length - 1 && "border-b border-border/60",
-              )}
+              className="cursor-pointer hover:bg-accent/40"
             >
-              <td className="px-2 py-2.5" onClick={(e) => e.stopPropagation()}>
+              <DataCell className="px-2" onClick={(e) => e.stopPropagation()}>
                 <button
                   type="button"
                   onClick={(e) => {
@@ -129,12 +142,12 @@ export function CandidatesProgressMiniTable({ limit = 5 }: { limit?: number }) {
                     )}
                   />
                 </button>
-              </td>
-              <td className="px-3 py-2.5 text-sm font-medium text-foreground">{c.name}</td>
-              <td className="px-3 py-2.5 text-sm text-muted-foreground truncate max-w-[200px]">
+              </DataCell>
+              <DataCell className="font-medium text-foreground">{c.name}</DataCell>
+              <DataCell className="text-muted-foreground truncate max-w-[200px]">
                 {c.vacancyTitle}
-              </td>
-              <td className="px-3 py-2.5">
+              </DataCell>
+              <DataCell>
                 <span
                   className={cn(
                     "text-sm font-medium tabular-nums",
@@ -143,14 +156,14 @@ export function CandidatesProgressMiniTable({ limit = 5 }: { limit?: number }) {
                 >
                   {c.progressPercent}%
                 </span>
-              </td>
-              <td className="px-3 py-2.5 text-sm text-muted-foreground tabular-nums whitespace-nowrap">
+              </DataCell>
+              <DataCell className="text-muted-foreground tabular-nums whitespace-nowrap">
                 {c.demoCompletedBlocks} / {c.demoTotalBlocks}
-              </td>
-            </tr>
+              </DataCell>
+            </DataRow>
           ))}
         </tbody>
-      </table>
-    </div>
+      </DataTable>
+    </TableCard>
   )
 }

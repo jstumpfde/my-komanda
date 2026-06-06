@@ -1,10 +1,32 @@
 import { NextRequest } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
+import { createHash } from "crypto"
+import { eq, and } from "drizzle-orm"
+import { db } from "@/lib/db"
+import { vacancies } from "@/lib/db/schema"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import { requireAuth, apiError, apiSuccess } from "@/lib/api-helpers"
 import { AI_SAFETY_PROMPT, checkAiRateLimit, handleAiError } from "@/lib/ai-safety"
 import { checkRateLimit } from "@/lib/rate-limit"
 import { findBenchmark, adjustBenchmark, assessSalary, formatSalary, suggestTitles, marketStats, type SalaryBenchmark } from "@/lib/salary-benchmarks"
+
+// P0-28: ключевые поля анкеты, по которым считается inputHash. Любое
+// изменение из этого списка инвалидирует кеш AI-анализа. Не включаем
+// company-description (она почти не меняется) и focusedField (он чисто
+// UI'ный — фокус инпута).
+function computeInputHash(vacancyData: Record<string, unknown> | undefined): string {
+  if (!vacancyData) return ""
+  const keysOrdered = [
+    "vacancyTitle", "positionCategory", "positionCity",
+    "workFormats", "employment", "salaryFrom", "salaryTo", "bonus",
+    "responsibilities", "requirements",
+    "requiredSkills", "desiredSkills", "unacceptableSkills",
+    "stopFactors", "conditions", "conditionsCustom",
+    "experienceMin", "experienceIdeal",
+  ]
+  const seed = keysOrdered.map(k => `${k}:${JSON.stringify(vacancyData[k] ?? null)}`).join("|")
+  return createHash("sha256").update(seed).digest("hex")
+}
 
 const client = new Anthropic({ baseURL: getClaudeApiUrl() })
 
@@ -118,14 +140,17 @@ function staticAnalysis(body: Record<string, unknown>): AdvisorResponse {
     filled++
   }
 
-  // 6. Stop factors
+  // 6. Stop factors. «Неприемлемо» (unacceptableSkills) и aiStopFactors кормят
+  // AI-нокауты — любой из них достаточен, чтобы скрининг отсеивал. Структурные
+  // stopFactors (город/возраст/…) — отдельный необязательный пред-фильтр.
   const unacceptable = (d.unacceptableSkills as string[]) || []
+  const aiStops = (d.aiStopFactors as string[]) || []
   const stopFactors = (d.stopFactors as Array<{ enabled: boolean }>) || []
   const enabledStops = stopFactors.filter(f => f.enabled).length
-  if (unacceptable.length === 0 && enabledStops === 0) {
+  if (unacceptable.length === 0 && aiStops.length === 0 && enabledStops === 0) {
     sections.push({ id: "stopFactors", status: "error", title: "Стоп-факторы", message: "Добавьте стоп-факторы — без них AI-скрининг не сможет отсеивать неподходящих кандидатов", priority: 2 })
   } else {
-    sections.push({ id: "stopFactors", status: "ok", title: "Стоп-факторы", message: `${unacceptable.length + enabledStops} стоп-факторов`, priority: 10 })
+    sections.push({ id: "stopFactors", status: "ok", title: "Стоп-факторы", message: `${unacceptable.length + aiStops.length + enabledStops} стоп-факторов`, priority: 10 })
     filled++
   }
 
@@ -139,10 +164,13 @@ function staticAnalysis(body: Record<string, unknown>): AdvisorResponse {
     filled++
   }
 
-  // 8. Company description
-  const companyDesc = (body.companyDescription as string) || ""
+  // 8. Company description — заполнено, если есть либо в самой вакансии
+  // (блок «О компании» = d.companyDescription), либо в настройках компании
+  // (body.companyDescription). Раньше проверяли только настройки — и вакансия
+  // с заполненным описанием всё равно помечалась «не заполнено».
+  const companyDesc = ((d.companyDescription as string) || (body.companyDescription as string) || "")
   if (!companyDesc.trim()) {
-    sections.push({ id: "company", status: "warning", title: "О компании", message: "Заполните описание компании в Настройках → Компания. Вакансии с описанием получают на 30% больше откликов", priority: 7 })
+    sections.push({ id: "company", status: "warning", title: "О компании", message: "Заполните описание компании в блоке «О компании» или в Настройках → Компания. Вакансии с описанием получают на 30% больше откликов", priority: 7 })
   } else {
     sections.push({ id: "company", status: "ok", title: "О компании", message: "Заполнено", priority: 10 })
     filled++
@@ -276,6 +304,40 @@ export async function POST(req: NextRequest) {
 
   const focusedField = (body.focusedField as string) || ""
 
+  // P0-28: кеш. Если передан vacancyId — пробуем достать сохранённый
+  // результат и сравнить hash. Если совпал и не force=true → возвращаем
+  // кеш без вызова Claude. focusedField меняется при каждом фокусе инпута —
+  // его специально НЕ включаем в хеш, иначе кеш будет инвалидироваться
+  // на каждый клик. Для focusedField всё равно работает старый путь
+  // (Claude вызывается), но только когда оно прислано НЕпустым.
+  const vacancyId = typeof body.vacancyId === "string" ? body.vacancyId : null
+  const force = body.force === true
+  const inputHash = computeInputHash(vacancyData)
+
+  if (vacancyId && !force && !focusedField) {
+    try {
+      const [cached] = await db
+        .select({
+          score:      vacancies.aiQualityScore,
+          details:    vacancies.aiQualityDetails,
+          analyzedAt: vacancies.aiQualityAnalyzedAt,
+          hash:       vacancies.aiQualityInputHash,
+        })
+        .from(vacancies)
+        .where(and(eq(vacancies.id, vacancyId), eq(vacancies.companyId, tenantId)))
+        .limit(1)
+      if (cached?.details && cached.hash === inputHash) {
+        return apiSuccess({
+          ...(cached.details as AdvisorResponse),
+          _cached:     true,
+          _analyzedAt: cached.analyzedAt?.toISOString() ?? null,
+        })
+      }
+    } catch (err) {
+      console.warn("[vacancy-advisor] cache lookup failed:", err instanceof Error ? err.message : err)
+    }
+  }
+
   try {
     const prompt = buildPrompt(vacancyData, body, focusedField)
 
@@ -307,6 +369,46 @@ ${AI_SAFETY_PROMPT}`,
       parsed.sections = fallback.sections
     }
 
+    // Пост-обработка: «Неприемлемо» (unacceptableSkills) и aiStopFactors кормят
+    // AI-нокауты (lib/scoring/vacancy-spec). Если они заполнены — AI-скрининг
+    // отсеивает по этим пунктам, поэтому НЕ показываем КРИТИЧНО «Стоп-факторы
+    // пустое». Структурные стоп-факторы (город/возраст/опыт) — отдельный
+    // необязательный пред-фильтр, не повод для ошибки.
+    {
+      const unFilled = Array.isArray(vacancyData.unacceptableSkills) && (vacancyData.unacceptableSkills as unknown[]).length > 0
+      const aiFilled = Array.isArray(vacancyData.aiStopFactors) && (vacancyData.aiStopFactors as unknown[]).length > 0
+      if ((unFilled || aiFilled) && Array.isArray(parsed.sections)) {
+        for (const s of parsed.sections) {
+          if (s && (s.id === "stopFactors" || /стоп-фактор/i.test(s.title || "")) && s.status === "error") {
+            s.status = "ok"
+            s.message = "Заполнено («Неприемлемо»)"
+          }
+        }
+      }
+    }
+
+    // B5/#31: ложное «Критично: О компании отсутствует». Описание берётся либо
+    // из самой вакансии (vacancyData.companyDescription), либо из настроек
+    // компании (body.companyDescription). AI иногда не видит, что поле
+    // заполнено, и помечает секцию «company» как error. Чиним детерминированно:
+    //  • если описание реально есть — секцию в ok;
+    //  • если пусто — максимум warning (в статике «company» НИКОГДА не error,
+    //    это необязательное поле, а не блокер).
+    {
+      const companyDescFilled = (((vacancyData.companyDescription as string) || (body.companyDescription as string) || "")).trim().length > 0
+      if (Array.isArray(parsed.sections)) {
+        for (const s of parsed.sections) {
+          if (!s || !(s.id === "company" || /о компании/i.test(s.title || ""))) continue
+          if (companyDescFilled) {
+            s.status = "ok"
+            s.message = "Заполнено"
+          } else if (s.status === "error") {
+            s.status = "warning"
+          }
+        }
+      }
+    }
+
     // Merge static salary analysis if AI didn't return one
     if (!parsed.salaryAnalysis && fallback.salaryAnalysis) {
       parsed.salaryAnalysis = fallback.salaryAnalysis
@@ -322,7 +424,28 @@ ${AI_SAFETY_PROMPT}`,
       }
     }
 
-    return apiSuccess(parsed)
+    // P0-28: сохраняем результат в кеш. Не блокирующий — даже если запись
+    // не прошла, юзер получит свежий результат. Кешируем только когда
+    // запрос НЕ focusedField-driven, чтобы не перезаписывать общий анализ
+    // ответом на конкретное поле.
+    const analyzedAt = new Date()
+    if (vacancyId && !focusedField) {
+      try {
+        await db.update(vacancies)
+          .set({
+            aiQualityScore:      parsed.score,
+            aiQualityDetails:    parsed,
+            aiQualityAnalyzedAt: analyzedAt,
+            aiQualityInputHash:  inputHash,
+            updatedAt:           analyzedAt,
+          })
+          .where(and(eq(vacancies.id, vacancyId), eq(vacancies.companyId, tenantId)))
+      } catch (err) {
+        console.warn("[vacancy-advisor] cache save failed:", err instanceof Error ? err.message : err)
+      }
+    }
+
+    return apiSuccess({ ...parsed, _cached: false, _analyzedAt: analyzedAt.toISOString() })
   } catch (err) {
     // AI failed — return static fallback
     console.error("Vacancy advisor AI error:", handleAiError(err))
@@ -360,7 +483,8 @@ function buildPrompt(d: Record<string, unknown>, body: Record<string, unknown>, 
   parts.push(`Мин. опыт: ${d.experienceMin || "(пусто)"}`)
   parts.push(`Идеальный опыт: ${d.experienceIdeal || "(пусто)"}`)
 
-  const companyDesc = (body.companyDescription as string) || ""
+  // Описание из самой вакансии приоритетно, иначе — из настроек компании.
+  const companyDesc = ((d.companyDescription as string) || (body.companyDescription as string) || "")
   parts.push(`\n═══ О КОМПАНИИ ═══`)
   parts.push(companyDesc || "(описание не заполнено)")
 

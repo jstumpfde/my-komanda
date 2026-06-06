@@ -8,7 +8,6 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Progress } from "@/components/ui/progress"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Warehouse, Plus, MapPin, User, Maximize2 } from "lucide-react"
 import { toast } from "sonner"
@@ -94,7 +93,7 @@ export default function LogisticsWarehousesPage() {
                   <Warehouse className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-semibold">Склады</h1>
+                  <h1 className="text-lg font-semibold">Склады</h1>
                   <p className="text-sm text-muted-foreground">{warehouses.length} складских объекта</p>
                 </div>
               </div>

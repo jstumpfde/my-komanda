@@ -5,19 +5,25 @@
 // /api/cron/hh-import (X-Cron-Secret + respectWorkingHours=true).
 
 import { db } from "@/lib/db"
-import { hhResponses, candidates, vacancies, followUpCampaigns, followUpMessages, hhCandidates } from "@/lib/db/schema"
-import type { VacancyAiProcessSettings } from "@/lib/db/schema"
-import { and, asc, eq, isNull } from "drizzle-orm"
+import { hhResponses, candidates, vacancies, followUpCampaigns, followUpMessages, hhCandidates, companies } from "@/lib/db/schema"
+import type { VacancyAiProcessSettings, VacancyStopFactors, CompanyHiringDefaults } from "@/lib/db/schema"
+import {and, asc, eq, inArray, isNull, notInArray, or} from "drizzle-orm"
 import { getValidToken } from "@/lib/hh-helpers"
 import { changeNegotiationState, getNegotiationMessages } from "@/lib/hh-api"
 import { generateCandidateShortId } from "@/lib/short-id"
 import { extractHhResumeFields, toCandidateColumns } from "@/lib/hh/extract-resume-fields"
 import { saveCandidatePhoto } from "@/lib/hh/save-candidate-photo"
-import { generateTouchSchedule } from "@/lib/followup/schedule"
+import { generateTouchSchedule, mergeMessagesWithDefaults } from "@/lib/followup/schedule"
 import { DEFAULT_FOLLOWUP_NOT_OPENED } from "@/lib/followup/default-messages"
 import { isFollowUpPreset } from "@/lib/followup/presets"
 import { canSendNow } from "@/lib/schedule/can-send-now"
 import { screenResume } from "@/lib/ai-screen-resume"
+import { trySyncRejectToHh } from "@/lib/hh/sync-stage"
+import { scheduleRejection, rejectionDelayMinutes } from "@/lib/rejection/execute"
+import { startPrequalification } from "@/lib/prequalification/start"
+import { renderTemplate } from "@/lib/template-renderer"
+import { matchStopFactors, type StopFactorMatch } from "@/lib/funnel-builder/stop-factors-matcher"
+import { isBlockEnabled } from "@/lib/funnel-builder/runtime"
 
 const DEMO_INVITE_MESSAGE = "Здравствуйте! Спасибо за отклик. Мы подготовили короткую демонстрацию должности — 15 минут, и вы узнаете всё о задачах, команде и доходе."
 
@@ -93,14 +99,43 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
   const effDelayMs = Math.max(0, (reqDelaySeconds ?? 30) * 1000)
   const effInviteMsg = scopedAiSettings.inviteMessage?.trim() || DEMO_INVITE_MESSAGE
 
+  // P0-53: исключаем "застрявшие" отклики — те, чей привязанный кандидат уже
+  // в терминальной стадии (rejected/hired) или с auto_processing_stopped=true.
+  // Без этого фильтра cron берёт ORDER BY createdAt ASC LIMIT 50 → первые 50
+  // оказываются старыми stopped/rejected (silent-skip внутри цикла) → cron
+  // НИКОГДА не доходит до свежих кандидатов. Сегодня (22.05.2026) этот баг
+  // оставил 50 свежих откликов без первого сообщения.
+  const stuckRows = await db
+    .select({ id: candidates.id })
+    .from(candidates)
+    .innerJoin(vacancies, eq(vacancies.id, candidates.vacancyId))
+    .where(and(
+      eq(vacancies.companyId, companyId),
+      or(
+        inArray(candidates.stage, ["rejected", "hired"]),
+        eq(candidates.autoProcessingStopped, true),
+      ),
+    ))
+  const stuckIds = stuckRows.map(r => r.id)
+
+  const baseWhere = and(
+    eq(hhResponses.companyId, companyId),
+    eq(hhResponses.status, "response"),
+    hhVacancyFilter ? eq(hhResponses.hhVacancyId, hhVacancyFilter) : undefined,
+    // localCandidateId NULL = свежий, ещё не linked → пропускаем; иначе —
+    // не должен быть в списке stuck.
+    stuckIds.length > 0
+      ? or(
+          isNull(hhResponses.localCandidateId),
+          notInArray(hhResponses.localCandidateId, stuckIds),
+        )
+      : undefined,
+  )
+
   const newResponses = await db
     .select()
     .from(hhResponses)
-    .where(
-      hhVacancyFilter
-        ? and(eq(hhResponses.companyId, companyId), eq(hhResponses.status, "response"), eq(hhResponses.hhVacancyId, hhVacancyFilter))
-        : and(eq(hhResponses.companyId, companyId), eq(hhResponses.status, "response"))
-    )
+    .where(baseWhere)
     .orderBy(asc(hhResponses.createdAt))
     .limit(limit)
 
@@ -110,6 +145,23 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
 
   const localVacancies = await db.select().from(vacancies)
     .where(and(eq(vacancies.companyId, companyId), isNull(vacancies.deletedAt)))
+
+  // Company-level стоп-факторы: читаем ОДИН РАЗ вне цикла.
+  // stopFactorsApplyToAll — мастер-тумблер (дефолт false = выкл).
+  let companyStopFactors: VacancyStopFactors | null = null
+  let companyStopFactorsApplyToAll = false
+  {
+    const [companyRow] = await db
+      .select({ hiringDefaultsJson: companies.hiringDefaultsJson })
+      .from(companies)
+      .where(eq(companies.id, companyId))
+      .limit(1)
+    const hiringDefaults = (companyRow?.hiringDefaultsJson as CompanyHiringDefaults | null) ?? null
+    if (hiringDefaults?.stopFactorsApplyToAll === true && hiringDefaults.stopFactorsDefaults) {
+      companyStopFactors = hiringDefaults.stopFactorsDefaults
+      companyStopFactorsApplyToAll = true
+    }
+  }
 
   if (stopFlags) stopFlags.set(companyId, false)
 
@@ -147,18 +199,66 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
     const localVac = localVacancies.find(v => v.hhVacancyId === resp.hhVacancyId) || null
 
     // Проверка расписания — для cron'а: если нерабочее время / выходной /
-    // праздник — оставляем status='response', следующий cron подберёт.
+    // праздник — обычно оставляем status='response', следующий cron подберёт.
+    //
+    // Исключение (off-hours soft mode): если у вакансии включён альтернативный
+    // текст Сообщения 1 для нерабочего времени (firstMessageOffHoursEnabled) и
+    // он непустой — НЕ откладываем. Создаём кандидата и шлём ОДНО мягкое
+    // подтверждение вместо демо-приглашения и Сообщений 2/3, без авто-отказов.
+    // HR работает с кандидатом утром. Для вакансий с AI чат-ботом оставляем
+    // прежнее поведение (defer) — чат-бот сам ведёт диалог.
+    let offHoursSoftMode = false
     if (respectWorkingHours && localVac) {
       const check = canSendNow(localVac)
       if (!check.allowed) {
-        deferredOffHours++
-        results.push({
-          id:     resp.hhResponseId,
-          name:   resp.candidateName,
-          action: `deferred_${check.reason ?? "off_hours"}`,
-        })
-        continue
+        const offText = typeof localVac.firstMessageOffHoursText === "string"
+          ? localVac.firstMessageOffHoursText.trim()
+          : ""
+        if (
+          localVac.firstMessageOffHoursEnabled === true &&
+          offText.length > 0 &&
+          // Phase 3: «бот выключен» — через адаптер (флаг off → прежнее legacy).
+          !isBlockEnabled(localVac, "ai_chatbot", localVac.aiChatbotEnabled === true)
+        ) {
+          offHoursSoftMode = true
+        } else {
+          deferredOffHours++
+          results.push({
+            id:     resp.hhResponseId,
+            name:   resp.candidateName,
+            action: `deferred_${check.reason ?? "off_hours"}`,
+          })
+          continue
+        }
       }
+    }
+
+    // Атомарный claim: переводим hh_response в 'claimed' ДО реальной работы
+    // (но ПОСЛЕ off-hours проверки, чтобы defer-flow по-прежнему оставлял
+    // отклик в 'response'). Если CAS вернул 0 строк — другой cron-проход
+    // уже забрал этот отклик. Пропускаем.
+    //
+    // #45: раньше тут сразу выставляли 'invited', и hh-счётчик «новых» в
+    // нашей шапке (он считает status='response') моментально показывал 0,
+    // хотя сообщения ещё отправлялись по 1 в минуту в течение часа.
+    // Промежуточный 'claimed' означает «забрано из очереди, сообщение
+    // ещё не ушло»; getVacancyStats считает hhNew = response+claimed,
+    // поэтому счётчик уменьшается в темпе реальной отправки.
+    // Финальный UPDATE status='invited' ниже выставляется ПОСЛЕ успешного
+    // changeNegotiationState (или ниже по той же транзакции с локальной БД).
+    //
+    // Без этой защиты наблюдался баг (Петренко, 21.05.2026): два cron-прохода
+    // выбирали один и тот же hh_response в status='response', оба вызывали
+    // changeNegotiationState, и кандидат получал приветственное сообщение
+    // дважды с разницей в минуту.
+    const claimed = await db
+      .update(hhResponses)
+      .set({ status: "claimed" })
+      .where(and(eq(hhResponses.id, resp.id), eq(hhResponses.status, "response")))
+      .returning({ id: hhResponses.id })
+    if (claimed.length === 0) {
+      results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "already_claimed" })
+      continue
     }
 
     const raw = resp.rawData as {
@@ -183,6 +283,22 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
     const baseMessage = effInviteMsg
     const hhAction = "invitation"
     const newStatus = "invited"
+
+    // Per-vacancy AI settings — нужны для minScore-фильтра и сообщений
+    // отказа. scopedAiSettings заполняется только когда передан localVacancyId
+    // (ручной запуск), для cron'а используем настройки конкретной вакансии.
+    const aiSettings: VacancyAiProcessSettings =
+      (localVac?.aiProcessSettings as VacancyAiProcessSettings | null) ?? scopedAiSettings
+
+    // Если AI-скоринг резюме дал score ниже порога — отклоняем кандидата
+    // (reject) или оставляем в "new" для ручного разбора (keep_new),
+    // НЕ отправляя приглашение и НЕ запуская дожим.
+    // Сессия 9: добавлен action="prequalification" — запуск опросника.
+    let belowThreshold: {
+      score: number
+      threshold: number
+      action: "reject" | "keep_new" | "prequalification"
+    } | null = null
 
     try {
       let candidateToken: string | null = null
@@ -371,11 +487,55 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
         await db.update(candidates).set(setFields).where(eq(candidates.id, candidateId))
       }
 
+      // Стоп-факторы: два слоя — company-wide и per-vacancy.
+      // Применяем ДО AI-скоринга — экономит токены и соответствует семантике
+      // «жёстких» стопов: AI не должен «перезаписывать» явное HR-правило.
+      // Если фактор сработал — далее обработка идёт по ветке rejected.
+      //
+      // Данные кандидата (city/age/…) вычисляем один раз для обоих слоёв.
+      // hh-резюме отдаёт age напрямую или только birth_date — берём оба источника.
+      let stopFactorMatch: StopFactorMatch | null = null
+      const rawAgeUnknown = (raw?.resume?.["age"]) as unknown
+      let candAge: number | null = typeof rawAgeUnknown === "number" ? rawAgeUnknown : null
+      if (candAge == null && typeof extracted.birthDate === "string") {
+        const m = /^(\d{4})/.exec(extracted.birthDate)
+        if (m) candAge = new Date().getUTCFullYear() - Number(m[1])
+      }
+      const salaryRaw = (raw?.resume?.["salary"]) as { amount?: unknown } | null | undefined
+      const salaryAmount = typeof salaryRaw?.amount === "number" ? salaryRaw.amount : null
+      const candidateStopData = {
+        city:              candidateCity ?? null,
+        age:               candAge,
+        experienceYears:   extracted.experienceYears ?? null,
+        workFormat:        extracted.workFormat ?? null,
+        relocationReady:   extracted.relocationReady ?? null,
+        salaryExpectation: salaryAmount,
+      }
+
+      // Слой 1: company-wide (мастер-тумблер).
+      // Применяется НЕЗАВИСИМО от per-vacancy block toggle, но только если
+      // stopFactorsApplyToAll===true (дефолт: false — предохранитель) И набор непустой.
+      // Off-hours soft mode НЕ блокирует company-layer — это глобальное правило компании.
+      if (candidateId && companyStopFactorsApplyToAll && companyStopFactors && Object.keys(companyStopFactors).length > 0) {
+        stopFactorMatch = matchStopFactors(candidateStopData, companyStopFactors)
+      }
+
+      // Слой 2: per-vacancy (как было).
+      // Off-hours soft mode: не применяем стоп-факторы ночью (никаких авто-отказов).
+      // Funnel-флаг stopFactorsEnabled: только явный false выключает блок
+      // (undefined/отсутствует = включено — обратная совместимость).
+      if (!stopFactorMatch && candidateId && localVac && !offHoursSoftMode && isBlockEnabled(localVac, "stop_factors_resume", aiSettings.stopFactorsEnabled !== false)) {
+        const factors = (localVac as { stopFactorsJson?: VacancyStopFactors | null }).stopFactorsJson
+        if (factors && Object.keys(factors).length > 0) {
+          stopFactorMatch = matchStopFactors(candidateStopData, factors)
+        }
+      }
+
       // AI-скоринг резюме (resume_score) — выставляется ОДИН РАЗ при первом
       // приёме отклика. Если кандидат уже оценён ранее (resume_score IS NOT
       // NULL) — пропускаем, чтобы не тратить токены повторно. Полный AI-скор
       // (aiScore) считается отдельно после завершения демо.
-      if (candidateId && localVac) {
+      if (candidateId && localVac && !stopFactorMatch && !offHoursSoftMode) {
         try {
           const [scoreRow] = await db
             .select({ resumeScore: candidates.resumeScore })
@@ -402,18 +562,280 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                 aiIdealProfile:       (anketa.aiIdealProfile as string | undefined) ?? null,
                 aiRequiredHardSkills: (anketa.aiRequiredHardSkills as string[] | undefined) ?? null,
                 aiStopFactors:        (anketa.aiStopFactors as string[] | undefined) ?? null,
+                screeningQuestions:   (anketa.screeningQuestions as string[] | undefined) ?? null,
               },
             })
             if (result) {
               await db.update(candidates)
                 .set({ resumeScore: result.score })
                 .where(eq(candidates.id, candidateId))
+
+              // Два порога (Сессия 6):
+              //   score >= upper          → обычный invite (ничего не делаем здесь).
+              //   score <  lower          → мягкий отказ (belowThreshold action="reject").
+              //   lower ≤ score < upper   → mid-range, ветка по midRangeAction:
+              //     - "keep_new"          → belowThreshold action="keep_new"
+              //     - "direct_demo"       → invite (ничего)
+              //     - "prequalification"  → если prequalification.enabled — TODO
+              //       (отправка вопросов в Сессии 6b), пока fallback=invite.
+              //
+              // Legacy: minScore → minScoreLower (вычитываем для обратной
+              // совместимости со старым PATCH /ai-settings).
+              const lower = typeof aiSettings.minScoreLower === "number"
+                ? aiSettings.minScoreLower
+                : (typeof aiSettings.minScore === "number" ? aiSettings.minScore : 0)
+              const upper = typeof aiSettings.minScoreUpper === "number"
+                ? aiSettings.minScoreUpper
+                : 0
+
+              // ТЗ-3 Ч.2: глобальный режим воронки. Приоритет над midRangeAction.
+              //   - "prequal_then_demo" / "prequal_only" — запускаем предкв
+              //     для ВСЕХ кандидатов (если есть вопросы), независимо от
+              //     порогов. Лоу-скор reject выключен (P0-14).
+              //   - "direct_demo" (дефолт) — старая логика по midRangeAction.
+              const globalMode = aiSettings.prequalificationMode ?? "direct_demo"
+              const hasPqQuestions = (aiSettings.prequalification?.questions ?? []).some(q => q.text?.trim().length > 0)
+
+              if (globalMode === "prequal_then_demo" || globalMode === "prequal_only") {
+                if (hasPqQuestions) {
+                  belowThreshold = { score: result.score, threshold: upper || 0, action: "prequalification" }
+                }
+                // Нет вопросов → fallback на direct_demo (просто invite).
+              } else if (lower > 0 && result.score < lower) {
+                belowThreshold = { score: result.score, threshold: lower, action: "reject" }
+              } else if (upper > 0 && result.score < upper) {
+                const mid = aiSettings.midRangeAction ?? "direct_demo"
+                if (mid === "keep_new") {
+                  belowThreshold = { score: result.score, threshold: upper, action: "keep_new" }
+                } else if (mid === "prequalification") {
+                  // Сессия 9: реальный запуск опросника. Если предкв
+                  // выключена в табе «Демо и воронка» или нет вопросов —
+                  // по плану п.6 fallback на direct_demo (просто invite).
+                  const pqEnabled = aiSettings.prequalification?.enabled === true
+                  if (pqEnabled && hasPqQuestions) {
+                    belowThreshold = { score: result.score, threshold: upper, action: "prequalification" }
+                  }
+                }
+                // mid === "direct_demo" → invite (ничего не помечаем).
+              }
             }
           }
         } catch (err) {
           console.warn("[PQ] resume screening failed:", err instanceof Error ? err.message : err)
         }
       }
+
+      // Если кандидат не прошёл minScore — выполняем разветвление и
+      // выходим из обработки этого отклика. Приглашение и шедул дожима
+      // ниже под `if (!belowThreshold)` пропустятся.
+      if (belowThreshold && candidateId && localVac) {
+        try {
+          const [prev] = await db
+            .select({ stage: candidates.stage, stageHistory: candidates.stageHistory })
+            .from(candidates)
+            .where(eq(candidates.id, candidateId))
+            .limit(1)
+          const fromStage = prev?.stage ?? "new"
+          const history = (prev?.stageHistory as Array<Record<string, unknown>> | null) ?? []
+          const nowIso = new Date().toISOString()
+          const nowTs  = new Date()
+
+          // D5: авто-отказ по AI-скору. По умолчанию ВЫКЛ (autoRejectEnabled
+          // !== true) → reject-кандидаты падают в else (keep_new, ручной разбор)
+          // — поведение P0-14 сохранено. Включается HR'ом осознанно (OUTWARD).
+          if (aiSettings.autoRejectEnabled === true && belowThreshold.action === "reject") {
+            await db.update(candidates)
+              .set({
+                stage:                        "rejected",
+                autoProcessingStopped:        true,
+                autoProcessingStoppedReason:  "ai_min_score_below_threshold",
+                autoProcessingStoppedAt:      nowTs,
+                stageHistory: [...history, {
+                  from:      fromStage,
+                  to:        "rejected",
+                  at:        nowIso,
+                  reason:    "ai_min_score_below_threshold",
+                  score:     belowThreshold.score,
+                  threshold: belowThreshold.threshold,
+                }],
+                updatedAt: nowTs,
+              })
+              .where(eq(candidates.id, candidateId))
+
+            // Сообщение мягкого отказа через hh (discard_by_employer)
+            // с подстановкой имени/вакансии — переиспользуем sync-stage.
+            await trySyncRejectToHh(candidateId)
+          } else if (belowThreshold.action === "prequalification") {
+            // Сессия 9: запускаем опросник. Стадию кандидата не меняем —
+            // ставим только prequalificationStatus='pending' внутри start.
+            // hh_responses обновим как 'invited' (отклик из очереди уходит,
+            // решение по нему уже принято — задать вопросы).
+            await db.update(candidates).set({
+              stageHistory: [...history, {
+                from:      fromStage,
+                to:        fromStage,
+                at:        nowIso,
+                reason:    "prequalification_started",
+                score:     belowThreshold.score,
+                threshold: belowThreshold.threshold,
+              }],
+              updatedAt: nowTs,
+            }).where(eq(candidates.id, candidateId))
+
+            const pqResult = await startPrequalification(candidateId)
+            if (!pqResult.started) {
+              console.warn("[PQ] prequalification start failed:", pqResult.reason)
+            }
+          } else {
+            // keep_new: оставляем stage="new", но ставим автостоп —
+            // кандидат не попадёт в дальнейшую авто-обработку, ждёт ручного разбора.
+            await db.update(candidates)
+              .set({
+                autoProcessingStopped:        true,
+                autoProcessingStoppedReason:  "below_threshold_manual_review",
+                autoProcessingStoppedAt:      nowTs,
+                stageHistory: [...history, {
+                  from:      fromStage,
+                  to:        fromStage,
+                  at:        nowIso,
+                  reason:    "below_threshold_manual_review",
+                  score:     belowThreshold.score,
+                  threshold: belowThreshold.threshold,
+                }],
+                updatedAt: nowTs,
+              })
+              .where(eq(candidates.id, candidateId))
+          }
+
+          // hh_responses.status='invited' — отклик уходит из очереди разбора,
+          // повторно не подбирается. Решение по кандидату принято.
+          await db.update(hhResponses)
+            .set({ status: "invited", localCandidateId: candidateId })
+            .where(eq(hhResponses.id, resp.id))
+
+          console.log("[PQ] below-threshold", JSON.stringify({
+            tag:        "process-queue/below-threshold",
+            candidateId,
+            score:      belowThreshold.score,
+            threshold:  belowThreshold.threshold,
+            action:     belowThreshold.action,
+          }))
+
+          results.push({
+            id:     resp.hhResponseId,
+            name:   resp.candidateName,
+            action: belowThreshold.action === "reject"          ? "ai_rejected"
+                  : belowThreshold.action === "prequalification" ? "ai_prequalification"
+                  : "ai_kept_new",
+          })
+        } catch (btErr) {
+          console.error("[PQ] below-threshold handling failed:",
+            btErr instanceof Error ? btErr.message : btErr)
+        }
+      }
+
+      // #61: обработка стоп-фактора. Идёт ПОСЛЕ belowThreshold, но семантически
+      // независимо — фактор и AI не пересекаются (AI не запускался под
+      // !stopFactorMatch). Логика: отправляем кастомный rejectionText через
+      // hh discard и переводим кандидата в rejected с reason="stop_factor:{f}".
+      if (stopFactorMatch && candidateId && localVac) {
+        try {
+          const [prev] = await db
+            .select({ stage: candidates.stage, stageHistory: candidates.stageHistory })
+            .from(candidates)
+            .where(eq(candidates.id, candidateId))
+            .limit(1)
+          const fromStage = prev?.stage ?? "new"
+          const history = (prev?.stageHistory as Array<Record<string, unknown>> | null) ?? []
+          const nowIso = new Date().toISOString()
+          const nowTs  = new Date()
+
+          // Заход 3: отказ откладывается. Останавливаем автообработку и
+          // фиксируем причину, НО stage='rejected' и сообщение в hh ставит
+          // cron pending-rejections по истечении задержки вакансии (в рабочее
+          // время). Кастомный факторный текст рендерим СЕЙЧАС и сохраняем —
+          // иначе при отложенном отказе ушёл бы generic текст вакансии.
+          await db.update(candidates)
+            .set({
+              autoProcessingStopped:       true,
+              autoProcessingStoppedReason: `stop_factor:${stopFactorMatch.factor}`,
+              autoProcessingStoppedAt:     nowTs,
+              stageHistory: [...history, {
+                from:    fromStage,
+                to:      fromStage,
+                at:      nowIso,
+                reason:  `stop_factor_scheduled:${stopFactorMatch.factor}`,
+              }],
+              updatedAt: nowTs,
+            })
+            .where(eq(candidates.id, candidateId))
+
+          // Рендерим факторный текст отказа (на момент планирования) и
+          // передаём его в scheduleRejection — cron пошлёт именно его.
+          const nameParts = (resp.candidateName || "").trim().split(/\s+/)
+          const greetingName = nameParts[1] || nameParts[0] || "Здравствуйте"
+          const messageText = renderTemplate(stopFactorMatch.rejectionText, {
+            name:    greetingName,
+            vacancy: localVac.title || "",
+            company: "Company24",
+          })
+          await scheduleRejection({
+            candidateId,
+            reason:       `stop_factor:${stopFactorMatch.factor}`,
+            delayMinutes: rejectionDelayMinutes(aiSettings),
+            message:      messageText,
+          })
+
+          await db.update(hhResponses)
+            .set({ status: "invited", localCandidateId: candidateId })
+            .where(eq(hhResponses.id, resp.id))
+
+          console.log("[PQ] stop-factor scheduled", JSON.stringify({
+            tag:         "process-queue/stop-factor",
+            candidateId,
+            factor:      stopFactorMatch.factor,
+            delayMinutes: rejectionDelayMinutes(aiSettings),
+          }))
+
+          results.push({
+            id:     resp.hhResponseId,
+            name:   resp.candidateName,
+            action: `stop_factor_${stopFactorMatch.factor}`,
+          })
+        } catch (sfErr) {
+          console.error("[PQ] stop-factor handling failed:",
+            sfErr instanceof Error ? sfErr.message : sfErr)
+        }
+      }
+
+      // Дальше — отправка приглашения и шедул дожима. Под minScore-блок
+      // (belowThreshold) ничего из этого не выполняется: кандидат уже либо
+      // в "rejected" с отправленным отказом, либо помечен ручным разбором.
+      if (!belowThreshold && !stopFactorMatch) {
+
+      if (offHoursSoftMode && candidateId && localVac) {
+        // Off-hours: вместо демо-приглашения и серии Сообщений 2/3 планируем
+        // одно мягкое подтверждение через follow_up_messages
+        // (branch=first_msg_offhours) с задержкой. Cron /api/cron/follow-up
+        // отправит его даже вне рабочего окна. Демо/дожим/скоринг — НЕ запускаем,
+        // hh_response помечаем 'invited' (из очереди уходит), HR работает утром.
+        try {
+          const { scheduleOffHoursFirstMessage } = await import("@/lib/messaging/first-messages-chain")
+          await scheduleOffHoursFirstMessage({
+            candidateId,
+            vacancyId:    localVac.id,
+            text:         typeof localVac.firstMessageOffHoursText === "string" ? localVac.firstMessageOffHoursText : "",
+            delaySeconds: typeof localVac.firstMessageOffHoursDelaySeconds === "number" ? localVac.firstMessageOffHoursDelaySeconds : 15,
+          })
+        } catch (offErr) {
+          console.error("[PQ] off-hours soft message schedule failed:",
+            offErr instanceof Error ? offErr.message : offErr)
+        }
+        await db.update(hhResponses)
+          .set({ status: "invited", localCandidateId: candidateId })
+          .where(eq(hhResponses.id, resp.id))
+        results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "off_hours_soft_message" })
+      } else {
 
       // Проверяем — отправляли ли работодателю уже что-то по этому отклику.
       let previouslyInvited = false
@@ -454,25 +876,57 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
           }
         }
         const tokenForUrl = shortIdForUrl ?? candidateId
-        const demoUrl = `https://company24.pro/demo/${tokenForUrl}`
 
-        const messageText = previouslyInvited
-          ? (scopedAiSettings.reInviteMessage?.trim() || scopedAiSettings.inviteMessage?.trim() || DEMO_INVITE_MESSAGE)
-          : (scopedAiSettings.inviteMessage?.trim() || DEMO_INVITE_MESSAGE)
+        // content_step: если блок включён в Funnel Builder (Phase 3) → маршрутизируем URL
+        // по режиму; иначе — дефолт /demo/.
+        // Режимы: demo → /demo/, test → /test/ (квиз), task → /test/ (задание), presentation → без ссылки
+        const contentStepActive = isBlockEnabled(localVac, "content_step", false)
+        const contentStepMode = contentStepActive
+          ? ((localVac.descriptionJson as { contentStep?: { mode?: string } } | null)?.contentStep?.mode ?? "demo")
+          : "demo"
+        const demoUrl = contentStepMode === "test" || contentStepMode === "task"
+          ? `https://company24.pro/test/${tokenForUrl}`
+          : `https://company24.pro/demo/${tokenForUrl}`
 
-        const replaced = messageText
-          .replaceAll("[Имя]", candidateName)
-          .replaceAll("[имя]", candidateName)
-          .replaceAll("{имя}", candidateName)
-          .replaceAll("{Имя}", candidateName)
-          .replaceAll("[должность]", localVac.title || "")
-          .replaceAll("{должность}", localVac.title || "")
-          .replaceAll("[компания]", "Company24")
-          .replaceAll("{компания}", "Company24")
-          .replaceAll("[ссылка]", demoUrl)
-          .replaceAll("{ссылка}", demoUrl)
+        // Для «Презентации» — встраиваем текст в сообщение, без ссылки на /demo/
+        const presentationText = contentStepMode === "presentation"
+          ? ((localVac.descriptionJson as { contentStep?: { title?: string; description?: string } } | null)
+              ?.contentStep?.description ?? "")
+          : null
 
-        finalMessage = replaced.includes(demoUrl) ? replaced : replaced + "\n\n" + demoUrl
+        // #46: «Аварийное повторное сообщение» теперь opt-in.
+        // Применяется ТОЛЬКО когда:
+        //   - в hh-чате уже было сообщение от работодателя (previouslyInvited)
+        //   - HR явно включил recoveryMessageEnabled в табе «Сообщения»
+        //   - текст recoveryMessageText непустой
+        // Иначе шлём обычный inviteMessage (или DEMO_INVITE_MESSAGE как
+        // последний fallback). aiSettings.reInviteMessage (legacy) больше
+        // НЕ используется как автоматический fallback.
+        // Phase 3: recovery теперь зеркалится dual-write'ом — гейтим через адаптер.
+        const recoveryEnabled = isBlockEnabled(localVac, "recovery", localVac?.recoveryMessageEnabled === true)
+        const recoveryText = typeof localVac?.recoveryMessageText === "string"
+          ? localVac.recoveryMessageText.trim()
+          : ""
+        const messageText =
+          (previouslyInvited && recoveryEnabled && recoveryText.length > 0)
+            ? recoveryText
+            : (aiSettings.inviteMessage?.trim() || DEMO_INVITE_MESSAGE)
+
+        const replaced = renderTemplate(messageText, {
+          name:      candidateName,
+          vacancy:   localVac.title || "",
+          company:   "Company24",
+          demo_link: contentStepMode === "presentation" ? "" : demoUrl,
+        })
+
+        if (contentStepMode === "presentation") {
+          // Презентация: ссылку не добавляем — вместо неё текст из блока (если задан)
+          finalMessage = presentationText
+            ? replaced.trim() + "\n\n" + presentationText.trim()
+            : replaced.trim()
+        } else {
+          finalMessage = replaced.includes(demoUrl) ? replaced : replaced + "\n\n" + demoUrl
+        }
       }
 
       if (hhAction && finalMessage) {
@@ -501,6 +955,25 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       if (candidateId) updatePayload.localCandidateId = candidateId
       await db.update(hhResponses).set(updatePayload).where(eq(hhResponses.id, resp.id))
 
+      // #21: планирование msg2/msg3 серии первых сообщений. Msg1 уже
+      // отправлен выше через changeNegotiationState. baseAt = сейчас,
+      // cumulative задержки из vacancy.first_messages_chain. Если chain
+      // пустой или содержит только msg1 — scheduleFirstMessagesChain
+      // вернёт scheduled=0, ничего не сделает.
+      if (candidateId && localVac) {
+        try {
+          const { scheduleFirstMessagesChain } = await import("@/lib/messaging/first-messages-chain")
+          await scheduleFirstMessagesChain({
+            candidateId,
+            vacancyId: localVac.id,
+            baseAt:    new Date(),
+          })
+        } catch (chainErr) {
+          console.error("[PQ] schedule first-messages-chain failed:",
+            chainErr instanceof Error ? chainErr.message : chainErr)
+        }
+      }
+
       // Старт воронки дожима.
       if (candidateId && localVac) {
         try {
@@ -513,16 +986,65 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             ))
             .limit(1)
           if (campaign && isFollowUpPreset(campaign.preset) && campaign.preset !== "off") {
-            const messages = (campaign.customMessages && campaign.customMessages.length > 0)
-              ? campaign.customMessages
-              : DEFAULT_FOLLOWUP_NOT_OPENED
+            // Дедупликация: если у кандидата уже есть pending/sent касания
+            // в этой кампании — touches уже расписаны прошлым проходом
+            // process-queue. Повторно вставлять нельзя, иначе кандидат
+            // получит каждое касание дважды. Этот баг наблюдался для
+            // candidate f1e08a44-2a36-46f4-bd29-7d52d419a6f5 — приветственное
+            // сообщение с demo-ссылкой пришло дважды (08:25 и 08:26) после
+            // того как два cron-прогона hh-import нашли один и тот же
+            // hh_response в status='response' до того как первый успел
+            // обновить статус на 'invited'.
+            const [existingTouch] = await db
+              .select({ id: followUpMessages.id })
+              .from(followUpMessages)
+              .where(and(
+                eq(followUpMessages.candidateId, candidateId),
+                eq(followUpMessages.campaignId, campaign.id),
+                inArray(followUpMessages.status, ["pending", "sent"]),
+              ))
+              .limit(1)
+            if (existingTouch) {
+              console.info(`[PQ] follow-up touches already exist for ${candidateId} / campaign ${campaign.id}, skip insert`)
+              // Кампания всё равно стартанула, дальше invitedCount++ и т.д.
+              // Прерываем только вставку touches, продолжаем обработку.
+            } else {
+            // Мерджим кастомные тексты (могут быть короче 9) с дефолтами —
+            // generateTouchSchedule адресует слоты по messageIndexes из пресета.
+            const messages = mergeMessagesWithDefaults(campaign.customMessages, DEFAULT_FOLLOWUP_NOT_OPENED)
+            // Д0 = дата отклика на hh (negotiation.created_at).
+            // Если её нет в raw_data — fallback на момент разбора.
+            const rawCreatedAt = (raw as { created_at?: string } | null)?.created_at
+              ?? (raw?.["negotiation"] as { created_at?: string } | undefined)?.created_at
+            const parsedD0 = rawCreatedAt ? new Date(rawCreatedAt) : null
+            const d0Date   = parsedD0 && !Number.isNaN(parsedD0.getTime()) ? parsedD0 : new Date()
+            const d0Source: "hh_response" | "manual_review" =
+              parsedD0 && !Number.isNaN(parsedD0.getTime()) ? "hh_response" : "manual_review"
             // Свежий отклик — кандидат ещё не открыл демо, ставим ветку А.
-            const touches = generateTouchSchedule(
-              campaign.id, candidateId, campaign.preset, new Date(), messages, "not_opened",
-            )
+            // Группа 35: подтягиваем customDays из vacancy.descriptionJson
+            // (если HR задал кастомное расписание в UI дожима).
+            const djForDays = localVac.descriptionJson as Record<string, unknown> | null
+            const rawDays = Array.isArray(djForDays?.followupCustomDays)
+              ? (djForDays!.followupCustomDays as unknown[])
+              : null
+            const customDays = rawDays
+              ? rawDays.map(d => Number(d)).filter(d => Number.isFinite(d) && d >= 1 && d <= 365)
+              : null
+            const touches = generateTouchSchedule({
+              campaignId:  campaign.id,
+              candidateId,
+              preset:      campaign.preset,
+              d0Date,
+              d0Source,
+              messages,
+              branch:      "not_opened",
+              vacancy:     localVac,
+              customDays:  customDays && customDays.length > 0 ? customDays : null,
+            })
             if (touches.length > 0) {
               await db.insert(followUpMessages).values(touches)
             }
+            } // конец else (вставка touches, если дедуп не сработал)
           }
         } catch (followUpErr) {
           console.error("[PQ] schedule follow-up failed:",
@@ -532,6 +1054,8 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
 
       invitedCount++
       results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "invited" })
+      } // конец else (обычный invite-путь; off-hours soft mode обработан выше)
+      } // конец if (!belowThreshold && !stopFactorMatch) — отказ/keep_new/стоп-фактор обработан выше отдельной веткой
     } catch (err: unknown) {
       console.error("[PQ] FAIL", resp.candidateName, err instanceof Error ? err.message : err)
       results.push({

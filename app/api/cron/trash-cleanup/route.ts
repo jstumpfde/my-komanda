@@ -1,0 +1,248 @@
+// GET/POST /api/cron/trash-cleanup
+// Защищён X-Cron-Secret. Раз в сутки (03:00 МСК) удаляет НАВСЕГДА:
+//  • вакансии/материалы/анкеты в корзине дольше per-company trash_retention_days
+//    (вместе с вакансией — её кандидаты/демо/hh, см. lib/vacancies/hard-delete.ts);
+//  • единую Корзину /admin/clients (компании / пользователи-сироты /
+//    аннулированные счета) дольше ПЛАТФОРМЕННОГО срока
+//    platform_settings.trash_retention_days (дефолт 7, настраивается в UI Корзины).
+// Кандидаты других вакансий не затрагиваются (candidates.vacancy_id один-к-одному).
+//
+// Crontab на сервере (см. scripts / CLAUDE.md):
+//   0 0 * * * curl -s -X POST -H "X-Cron-Secret: $CRON_SECRET" \
+//     https://company24.pro/api/cron/trash-cleanup >> /var/log/trash-cleanup.log 2>&1
+//   (00:00 UTC = 03:00 МСК)
+
+import { NextRequest, NextResponse } from "next/server"
+import { and, eq, isNotNull, inArray, sql } from "drizzle-orm"
+import { db } from "@/lib/db"
+import { vacancies, companies, demoTemplates, questionnaireTemplates, users, invoices } from "@/lib/db/schema"
+import { checkCronAuth } from "@/lib/cron/auth"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
+import { hardDeleteVacancy } from "@/lib/vacancies/hard-delete"
+import { hardDeleteCompany } from "@/lib/companies/hard-delete"
+import { getTrashRetentionDays } from "@/lib/platform/settings"
+
+const CRON_NAME = "trash-cleanup"
+// Предохранитель: не сносим больше N вакансий за один прогон.
+const MAX_PER_RUN = 200
+// Компании сносим осторожнее — не больше N за прогон (это удаление целого тенанта).
+const MAX_COMPANIES_PER_RUN = 20
+
+async function handle(req: NextRequest) {
+  const auth = checkCronAuth(req)
+  if (!auth.ok) return auth.response
+
+  const run = await startCronRun(CRON_NAME).catch(() => null)
+  try {
+    // Единая Корзина /admin/clients (компании/пользователи/счета) использует
+    // ОДИН платформенный срок (platform_settings.trash_retention_days, дефолт 7).
+    // Корзины вакансий/материалов остаются на per-company trash_retention_days.
+    const platformRetentionDays = await getTrashRetentionDays()
+
+    // Кандидаты на удаление: в корзине дольше, чем trash_retention_days компании.
+    const due = await db
+      .select({
+        id:        vacancies.id,
+        companyId: vacancies.companyId,
+      })
+      .from(vacancies)
+      .innerJoin(companies, sql`${companies.id} = ${vacancies.companyId}`)
+      .where(and(
+        isNotNull(vacancies.deletedAt),
+        sql`${vacancies.deletedAt} < now() - make_interval(days => ${companies.trashRetentionDays})`,
+      ))
+      .orderBy(vacancies.deletedAt)
+      .limit(MAX_PER_RUN)
+
+    let deletedVacancies = 0
+    let deletedCandidates = 0
+    const errors: string[] = []
+
+    for (const v of due) {
+      try {
+        const res = await hardDeleteVacancy(v.id, v.companyId)
+        if (res.deleted) {
+          deletedVacancies++
+          deletedCandidates += res.candidates
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        errors.push(`${v.id}: ${msg}`)
+        console.error("[trash-cleanup] failed to delete vacancy", v.id, msg)
+      }
+    }
+
+    // ── Корзина материалов библиотеки (Этап 3) ──────────────────────────────
+    // demo_templates самодостаточны (нет зависимых строк) → bulk delete по id.
+    // retention per-company, поэтому условие через join с companies.
+    const dueTemplates = await db
+      .select({ id: demoTemplates.id, companyId: demoTemplates.tenantId })
+      .from(demoTemplates)
+      .innerJoin(companies, sql`${companies.id} = ${demoTemplates.tenantId}`)
+      .where(and(
+        isNotNull(demoTemplates.deletedAt),
+        sql`${demoTemplates.deletedAt} < now() - make_interval(days => ${companies.trashRetentionDays})`,
+      ))
+      .orderBy(demoTemplates.deletedAt)
+      .limit(MAX_PER_RUN)
+
+    let deletedTemplates = 0
+    const templatesByCompany: Record<string, number> = {}
+    if (dueTemplates.length > 0) {
+      try {
+        await db.delete(demoTemplates).where(inArray(demoTemplates.id, dueTemplates.map(t => t.id)))
+        deletedTemplates = dueTemplates.length
+        for (const t of dueTemplates) {
+          if (t.companyId) templatesByCompany[t.companyId] = (templatesByCompany[t.companyId] ?? 0) + 1
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        errors.push(`templates: ${msg}`)
+        console.error("[trash-cleanup] failed to delete templates", msg)
+      }
+    }
+
+    // ── Корзина шаблонов анкет (миграция 0147) ──────────────────────────────
+    // Самодостаточны (нет зависимых строк) → bulk delete по id. retention
+    // per-company через join с companies, как у demo_templates.
+    const dueQuestionnaires = await db
+      .select({ id: questionnaireTemplates.id, companyId: questionnaireTemplates.tenantId })
+      .from(questionnaireTemplates)
+      .innerJoin(companies, sql`${companies.id} = ${questionnaireTemplates.tenantId}`)
+      .where(and(
+        isNotNull(questionnaireTemplates.deletedAt),
+        sql`${questionnaireTemplates.deletedAt} < now() - make_interval(days => ${companies.trashRetentionDays})`,
+      ))
+      .orderBy(questionnaireTemplates.deletedAt)
+      .limit(MAX_PER_RUN)
+
+    let deletedQuestionnaires = 0
+    if (dueQuestionnaires.length > 0) {
+      try {
+        await db.delete(questionnaireTemplates).where(inArray(questionnaireTemplates.id, dueQuestionnaires.map(t => t.id)))
+        deletedQuestionnaires = dueQuestionnaires.length
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        errors.push(`questionnaires: ${msg}`)
+        console.error("[trash-cleanup] failed to delete questionnaire templates", msg)
+      }
+    }
+
+    // ── Единая Корзина /admin/clients (платформенный срок) ───────────────────
+    // Компании / пользователи / аннулированные счета удаляются по ОДНОМУ сроку
+    // platform_settings.trash_retention_days (дефолт 7), а не per-company.
+    const platformCutoff = sql`now() - make_interval(days => ${platformRetentionDays})`
+
+    // Компании. Необратимое удаление целого тенанта — осторожно: только из
+    // корзины (deleted_at), старше платформенного срока, малыми партиями.
+    // Доп. предохранитель: пропускаем компании с активной подпиской.
+    const dueCompanies = await db
+      .select({ id: companies.id })
+      .from(companies)
+      .where(and(
+        isNotNull(companies.deletedAt),
+        sql`${companies.subscriptionStatus} IS DISTINCT FROM 'active'`,
+        sql`${companies.deletedAt} < ${platformCutoff}`,
+      ))
+      .orderBy(companies.deletedAt)
+      .limit(MAX_COMPANIES_PER_RUN)
+
+    let deletedCompanies = 0
+    for (const c of dueCompanies) {
+      try {
+        const res = await hardDeleteCompany(c.id)
+        if (res.deleted) deletedCompanies++
+        else if (res.error) { errors.push(`company ${c.id}: ${res.error}`) }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        errors.push(`company ${c.id}: ${msg}`)
+        console.error("[trash-cleanup] failed to delete company", c.id, msg)
+      }
+    }
+
+    // Пользователи в корзине (deleted_at) старше платформенного срока.
+    // Удаляем только сирот: их компания НЕ в корзине (компания в корзине уйдёт
+    // целиком через hardDeleteCompany выше, отдельно юзеров трогать не нужно).
+    let deletedUsers = 0
+    const dueUsers = await db
+      .select({ id: users.id })
+      .from(users)
+      .leftJoin(companies, eq(users.companyId, companies.id))
+      .where(and(
+        isNotNull(users.deletedAt),
+        sql`${users.deletedAt} < ${platformCutoff}`,
+        sql`${companies.deletedAt} IS NULL`,
+      ))
+      .orderBy(users.deletedAt)
+      .limit(MAX_PER_RUN)
+    if (dueUsers.length > 0) {
+      try {
+        await db.delete(users).where(inArray(users.id, dueUsers.map(u => u.id)))
+        deletedUsers = dueUsers.length
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        errors.push(`users: ${msg}`)
+        console.error("[trash-cleanup] failed to delete users", msg)
+      }
+    }
+
+    // Аннулированные счета (= корзина счетов) старше платформенного срока.
+    // Не трогаем счета компаний, которые сами в корзине (уйдут каскадом).
+    let deletedInvoices = 0
+    const dueInvoices = await db
+      .select({ id: invoices.id })
+      .from(invoices)
+      .leftJoin(companies, eq(invoices.companyId, companies.id))
+      .where(and(
+        eq(invoices.status, "cancelled"),
+        sql`${invoices.createdAt} < ${platformCutoff}`,
+        sql`${companies.deletedAt} IS NULL`,
+      ))
+      .orderBy(invoices.createdAt)
+      .limit(MAX_PER_RUN)
+    if (dueInvoices.length > 0) {
+      try {
+        await db.delete(invoices).where(inArray(invoices.id, dueInvoices.map(i => i.id)))
+        deletedInvoices = dueInvoices.length
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        errors.push(`invoices: ${msg}`)
+        console.error("[trash-cleanup] failed to delete invoices", msg)
+      }
+    }
+
+    const metadata = {
+      due:               due.length,
+      platformRetentionDays,
+      deletedVacancies,
+      deletedCandidates,
+      deletedTemplates,
+      deletedQuestionnaires,
+      deletedCompanies,
+      deletedUsers,
+      deletedInvoices,
+      templatesByCompany,
+      errors:            errors.length,
+    }
+    if (run) await finishCronRun(run.id, errors.length > 0 ? "error" : "ok", metadata, errors[0])
+    return NextResponse.json({
+      ok: true,
+      vacancies_deleted: deletedVacancies,
+      templates_deleted: deletedTemplates,
+      questionnaires_deleted: deletedQuestionnaires,
+      companies_deleted: deletedCompanies,
+      users_deleted:     deletedUsers,
+      invoices_deleted:  deletedInvoices,
+      by_company:        templatesByCompany,
+      deletedCandidates,
+      errors:            errors.length,
+    })
+  } catch (err) {
+    if (run) await finishCronRun(run.id, "error", null, err instanceof Error ? err.message : String(err))
+    console.error("[trash-cleanup] fatal:", err)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+
+export async function POST(req: NextRequest) { return handle(req) }
+export async function GET(req: NextRequest)  { return handle(req) }

@@ -1,14 +1,18 @@
 import { NextRequest } from "next/server"
 import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, vacancies } from "@/lib/db/schema"
+import { candidates, vacancies, companies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { trySyncStageToHh } from "@/lib/hh/sync-stage"
+import { sendWebhook } from "@/lib/webhooks"
+import { sendToBitrix } from "@/lib/bitrix"
 
 const VALID_STAGES = [
   "new", "primary_contact", "demo", "demo_opened", "decision",
   "anketa_filled", "ai_screening", "interview", "final_decision",
   "hired", "rejected", "talent_pool", "pending", "preboarding",
+  // Этап 2: исходы тестового задания (lib/stages.ts test_passed/test_failed).
+  "test_task_done", "test_passed", "test_failed",
 ] as const
 type Stage = (typeof VALID_STAGES)[number]
 
@@ -89,6 +93,49 @@ export async function PUT(
         console.warn(`[stage-route] hh sync failed for ${id} (${stage}):`, err)
       })
     }
+
+    // Webhooks (hiring_defaults.webhooks): отправляем событие смены этапа во
+    // внешнюю систему компании, если HR задал URL и включил событие.
+    // Fire-and-forget — таймаут/ошибка не влияют на ответ. Раньше настройки
+    // webhooks ни к чему не были подключены (lib/webhooks.ts не вызывался).
+    void (async () => {
+      try {
+        const [company] = await db
+          .select({ hd: companies.hiringDefaultsJson })
+          .from(companies)
+          .where(eq(companies.id, user.companyId))
+          .limit(1)
+        const wh = (company?.hd as { webhooks?: { url?: string; events?: Record<string, boolean> } } | null)?.webhooks
+        if (wh?.url) {
+          const events = wh.events || {}
+          const payload = { candidateId: id, stage, previousStage: row.previousStage, vacancyId: updated.vacancyId }
+          if (events.stage_change) await sendWebhook(wh.url, "stage_change", payload)
+          if (stage === "rejected" && events.reject) await sendWebhook(wh.url, "reject", payload)
+        }
+
+        // O4: Битрикс24 — при достижении настроенного этапа создаём лид в CRM.
+        // trigger: конкретный этап (напр. 'offer') или 'all'. Без URL — ничего.
+        const bx = (company?.hd as { bitrix?: { url?: string; trigger?: string } } | null)?.bitrix
+        if (bx?.url && (bx.trigger === "all" || bx.trigger === stage)) {
+          const [cand] = await db
+            .select({ name: candidates.name, phone: candidates.phone, email: candidates.email, aiScore: candidates.aiScore, vacancyTitle: vacancies.title })
+            .from(candidates)
+            .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
+            .where(eq(candidates.id, id)).limit(1)
+          if (cand?.name) {
+            await sendToBitrix(bx.url, {
+              name: cand.name,
+              phone: cand.phone ?? undefined,
+              email: cand.email ?? undefined,
+              vacancyTitle: cand.vacancyTitle ?? undefined,
+              aiScore: cand.aiScore ?? undefined,
+            })
+          }
+        }
+      } catch (err) {
+        console.warn("[stage-route] webhook/bitrix dispatch failed:", err)
+      }
+    })()
 
     return apiSuccess(updated)
   } catch (err) {
