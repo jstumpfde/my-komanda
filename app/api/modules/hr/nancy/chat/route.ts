@@ -1,15 +1,16 @@
 // POST /api/modules/hr/nancy/chat
 //
-// AI-бэкенд Нэнси — голосового ассистента HR-платформы.
-// Принимает сообщение + контекст страницы + историю диалога.
+// AI-бэкенд Нэнси — голосового ассистента платформы Company24.
+// Принимает сообщение + контекст + историю.
 // Возвращает: { reply: string, actions?: NancyAction[] }
 //
-// Структурированные действия Нэнси передаются внутри <action>JSON</action> тегов:
+// Модуль-aware: строит system prompt под текущий раздел платформы.
+// Если передан knowledgeContext — включает материалы базы знаний.
+//
+// Структурированные действия внутри <action>JSON</action>:
 //   fill_outbound  — заполнить форму исходящего поиска
 //   search_outbound — запустить поиск
 //   navigate        — перейти на страницу
-//
-// Модель: claude-haiku-4-5 (быстрый, дешёвый — для real-time голоса важно).
 
 import { NextResponse } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
@@ -22,48 +23,62 @@ const client = new Anthropic({
 
 export interface NancyAction {
   type: "fill_outbound" | "search_outbound" | "navigate"
-  // fill_outbound
   textClauses?: Array<{ text: string; field: string }>
   area?: string
   experience?: string
   softCriteria?: string
-  // navigate
   href?: string
 }
 
 export interface NancyChatRequest {
   message: string
   context?: {
-    page?: string          // pathname, напр. "/hr/vacancies/abc/…"
+    page?: string
     vacancyId?: string
     vacancyTitle?: string
+    module?: string          // hr | knowledge | learning | sales | tasks | marketing | logistics | onboarding | platform
+    knowledgeContext?: string // материалы базы знаний (из /api/knowledge/ai-search)
   }
   history?: Array<{ role: "user" | "nancy"; text: string }>
 }
 
-const SYSTEM = `Ты — Нэнси, голосовой AI-ассистент HR-платформы Company24.
-Говоришь по-русски. Стиль: дружелюбный, живой, лаконичный (1-3 фразы). Без «Конечно!», без занудства.
+const BASE_SYSTEM = `Ты — Нэнси, AI-ассистент платформы Company24.pro.
+Говоришь по-русски. Тон: дружелюбный, профессиональный, лаконичный.
+Без «Конечно!», без пустых вводных фраз. Отвечай по делу — 1-4 предложения.`
 
-Твои задачи:
-- Помочь найти кандидатов через «Исходящий подбор»: задать вопросы и заполнить форму поиска
-- Ответить на вопросы о работе с платформой
-- Помочь перейти в нужный раздел
+const MODULE_HINTS: Record<string, string> = {
+  hr: `
+Ты находишься в HR-модуле. Помогаешь с вакансиями, кандидатами, наймом.
+Умеешь: заполнять форму исходящего поиска, запускать поиск, отвечать на вопросы по платформе, переходить в разделы.
 
 Когда нужно заполнить форму исходящего поиска — верни действие внутри тегов <action>…</action>:
-<action>{"type":"fill_outbound","textClauses":[{"text":"менеджер продаж","field":"TITLE"},{"text":"авиаперевозки","field":"EXPERIENCE"}],"area":"Москва","experience":"between3And6","softCriteria":"Опыт в B2B продажах промышленного оборудования"}</action>
-
+<action>{"type":"fill_outbound","textClauses":[{"text":"менеджер продаж","field":"TITLE"}],"area":"Москва","experience":"between3And6","softCriteria":"B2B-опыт"}</action>
 Поля textClauses: field ∈ TITLE | SKILLS | EXPERIENCE | COMPANY_NAME | EVERYWHERE.
-Поле experience: noExperience | between1And3 | between3And6 | moreThan6 — или не указывай если не важно.
+experience: noExperience | between1And3 | between3And6 | moreThan6.
+Когда говорят «ищи» / «начни» / «найди» — добавь: <action>{"type":"search_outbound"}</action>
+Для навигации: <action>{"type":"navigate","href":"/hr/vacancies"}</action>`,
 
-Когда HR говорит «ищи», «начни поиск», «найди», «давай» — добавь:
-<action>{"type":"search_outbound"}</action>
+  knowledge: `
+Ты находишься в базе знаний. Помогаешь найти информацию и создавать корпоративные документы.
+Если материалы компании переданы в контексте — используй их. Цитируй: «Согласно материалу «…»».
+Если информации нет — честно скажи и предложи создать документ.
+Умеешь создавать: регламенты, инструкции, скрипты, онбординг, FAQ, должностные инструкции.`,
 
-Когда нужен переход по платформе:
-<action>{"type":"navigate","href":"/hr/vacancies"}</action>
+  learning: `
+Ты находишься в модуле обучения. Помогаешь создавать AI-курсы, настраивать тренировки, назначать планы обучения.`,
 
-Доступные разделы платформы: /hr/vacancies (вакансии), /hr/calendar (календарь), /hr/candidates (кандидаты), /hr/interviews (интервью), /team (команда), /settings (настройки).
+  onboarding: `
+Ты AI-наставник для новых сотрудников. Отвечаешь на вопросы о компании, процессах, документах.
+Используй материалы базы знаний если они переданы в контексте.`,
 
-ВАЖНО: теги <action> в ответном тексте не видны пользователю — выводи их только для машины. В речи описывай действие словами: «Хорошо, заполняю форму поиска» или «Открываю вакансии».`
+  sales: `Ты находишься в CRM. Помогаешь с клиентами, сделками, воронкой продаж, скриптами.`,
+  tasks: `Ты находишься в задачах. Помогаешь с приоритизацией, декомпозицией, планированием.`,
+  marketing: `Ты находишься в маркетинге. Помогаешь с кампаниями, контентом, аналитикой.`,
+  logistics: `Ты находишься в логистике. Помогаешь со складами, заказами, поставщиками.`,
+  platform: `Ты находишься в настройках платформы. Помогаешь с профилем компании, командой, тарифом, интеграциями.`,
+}
+
+const SECTIONS = `/hr/vacancies (вакансии), /hr/calendar (календарь), /hr/candidates (кандидаты), /hr/interviews (интервью), /team (команда), /settings (настройки), /knowledge-v2 (база знаний), /learning (обучение)`
 
 export async function POST(req: Request) {
   let user
@@ -85,17 +100,31 @@ export async function POST(req: Request) {
   if (!message || message.length < 1) return apiError("Сообщение пустое", 400)
   if (message.length > 2000) return apiError("Сообщение слишком длинное", 400)
 
-  // Контекст страницы — добавляем к system prompt
-  const pageCtx = [
+  const mod = body.context?.module ?? "platform"
+  const moduleHint = MODULE_HINTS[mod] ?? MODULE_HINTS.platform
+
+  // Собираем system prompt
+  const systemParts: string[] = [BASE_SYSTEM, moduleHint]
+
+  // Контекст страницы
+  const pageLines = [
     body.context?.page ? `Текущая страница: ${body.context.page}` : null,
     body.context?.vacancyTitle ? `Вакансия: «${body.context.vacancyTitle}»` : null,
     body.context?.vacancyId ? `ID вакансии: ${body.context.vacancyId}` : null,
-  ].filter(Boolean).join("\n")
+  ].filter(Boolean)
+  if (pageLines.length) systemParts.push(pageLines.join("\n"))
 
-  const systemFull = pageCtx ? `${SYSTEM}\n\n${pageCtx}` : SYSTEM
+  // Материалы базы знаний
+  if (body.context?.knowledgeContext) {
+    systemParts.push(`Материалы компании:\n${body.context.knowledgeContext}`)
+  }
 
-  // История диалога → сообщения Claude
-  const history = (body.history ?? []).slice(-10) // последние 10 реплик
+  // Доступные разделы (для навигации)
+  systemParts.push(`Разделы платформы: ${SECTIONS}\nТеги <action> не видны пользователю — описывай действие словами.`)
+
+  const systemFull = systemParts.join("\n\n")
+
+  const history = (body.history ?? []).slice(-10)
   const messages: Anthropic.MessageParam[] = [
     ...history.map((m) => ({
       role: m.role === "nancy" ? ("assistant" as const) : ("user" as const),
@@ -114,16 +143,12 @@ export async function POST(req: Request) {
 
     const full = (resp.content[0] as { type: string; text?: string }).text ?? ""
 
-    // Извлекаем действия из <action>…</action> тегов
     const actionMatches = [...full.matchAll(/<action>([\s\S]*?)<\/action>/g)]
     const actions: NancyAction[] = []
     for (const m of actionMatches) {
-      try {
-        actions.push(JSON.parse(m[1]) as NancyAction)
-      } catch { /* невалидный JSON — пропускаем */ }
+      try { actions.push(JSON.parse(m[1]) as NancyAction) } catch { /* невалидный JSON */ }
     }
 
-    // Текст ответа — без action-тегов
     const reply = full.replace(/<action>[\s\S]*?<\/action>/g, "").trim()
 
     return NextResponse.json({ reply, actions: actions.length ? actions : undefined })
