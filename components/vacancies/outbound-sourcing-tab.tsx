@@ -374,6 +374,32 @@ export function OutboundSourcingTab({
 
   useEffect(() => { loadStatus() }, [loadStatus])
 
+  // ── Нэнси: события fill-outbound и search-outbound ──────────────────────────
+  useEffect(() => {
+    const onFill = (e: Event) => {
+      const detail = (e as CustomEvent<{
+        textClauses?: Array<{ text: string; field: string }>
+        area?: string
+        experience?: string
+        softCriteria?: string
+      }>).detail
+      if (detail.textClauses?.length) {
+        setClauses(detail.textClauses.map((c) => ({ text: c.text, field: c.field ?? "EVERYWHERE" })))
+      }
+      if (detail.area) setArea(detail.area)
+      if (detail.experience) setExperience(detail.experience)
+      if (detail.softCriteria) setSoftCriteria(detail.softCriteria)
+    }
+    const onSearch = () => void runSearch()
+    window.addEventListener("nancy:fill-outbound", onFill)
+    window.addEventListener("nancy:search-outbound", onSearch)
+    return () => {
+      window.removeEventListener("nancy:fill-outbound", onFill)
+      window.removeEventListener("nancy:search-outbound", onSearch)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const ranked = useMemo(
     () => [...items].sort((a, b) => (b.aiScore ?? -1) - (a.aiScore ?? -1)),
     [items],
