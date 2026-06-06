@@ -2003,7 +2003,7 @@ export default function VacancyPage() {
         <SidebarInset>
           <DashboardHeader />
           <main className="flex-1 overflow-auto bg-background">
-            <div className="py-6 space-y-4 animate-pulse" style={{ paddingLeft: 56, paddingRight: 56 }}>
+            <div className="py-6 px-4 sm:px-14 space-y-4 animate-pulse">
               <div className="h-8 w-64 bg-muted rounded" />
               <div className="h-4 w-40 bg-muted rounded" />
               <div className="flex gap-4 mt-6">
@@ -2025,7 +2025,7 @@ export default function VacancyPage() {
         <SidebarInset>
           <DashboardHeader />
           <main className="flex-1 overflow-auto bg-background">
-            <div className="py-6 flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center" style={{ paddingLeft: 56, paddingRight: 56 }}>
+            <div className="py-6 px-4 sm:px-14 flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center">
               <AlertTriangle className="w-12 h-12 text-muted-foreground/40" />
               <h2 className="text-xl font-semibold text-foreground">Вакансия не найдена</h2>
               <p className="text-sm text-muted-foreground">Вакансия не существует или у вас нет доступа к ней</p>
@@ -2046,10 +2046,10 @@ export default function VacancyPage() {
           {/* ═══ Fixed header: появляется только при скролле (под DashboardHeader) ═══ */}
           <div
             className={cn(
-              "fixed top-14 right-0 z-40 bg-background border-b shadow-sm py-2 transition-all duration-200",
+              "fixed top-14 right-0 z-40 bg-background border-b shadow-sm py-2 transition-all duration-200 px-4 sm:px-14",
               showStickyHeader ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2 pointer-events-none"
             )}
-            style={{ left: "var(--sidebar-effective-width, var(--sidebar-width, 16rem))", paddingLeft: 56, paddingRight: 56, transition: "left 200ms ease-linear" }}
+            style={{ left: "var(--sidebar-effective-width, var(--sidebar-width, 16rem))", transition: "left 200ms ease-linear" }}
           >
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -2078,7 +2078,7 @@ export default function VacancyPage() {
             </div>
           </div>
 
-          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+          <div className="py-6 px-4 sm:px-14">
             {/* ═══ Breadcrumb ═══════════════════════════════ */}
             <Button variant="ghost" size="sm" className="gap-1 text-sm text-muted-foreground -ml-2 mb-2" onClick={() => router.push("/hr/vacancies")}>
               <ChevronLeft className="w-3.5 h-3.5" />

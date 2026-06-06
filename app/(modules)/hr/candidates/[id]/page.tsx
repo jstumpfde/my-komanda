@@ -235,7 +235,7 @@ export default function CandidateDetailPage() {
 
   if (!candidate) {
     return (
-      <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+      <div className="py-6 px-4 sm:px-14">
         <Button variant="ghost" className="gap-1.5 mb-4" onClick={() => router.back()}>
           <ArrowLeft className="w-4 h-4" />Назад
         </Button>
@@ -256,7 +256,7 @@ export default function CandidateDetailPage() {
   })
 
   return (
-    <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+    <div className="py-6 px-4 sm:px-14">
       {/* ═══ Назад ═══ */}
       <Button variant="ghost" size="sm" className="gap-1.5 mb-4 -ml-2" onClick={() => router.back()}>
         <ArrowLeft className="w-4 h-4" />Назад к списку

@@ -327,7 +327,7 @@ export default function CalendarPage() {
       <SidebarInset>
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
-          <div className="flex flex-col h-[calc(100vh-3.5rem)]" style={{ paddingLeft: 56, paddingRight: 56 }}>
+          <div className="flex flex-col h-[calc(100vh-3.5rem)] px-4 sm:px-14">
           {/* Top bar — Row 1: Title */}
           <div className="flex items-center gap-2 pt-3 pb-2">
             <CalendarDays className="h-5 w-5 text-violet-600" />
