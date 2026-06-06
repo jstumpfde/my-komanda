@@ -2975,15 +2975,13 @@ export default function VacancyPage() {
                   {/* #18: Воронка перед Сообщениями — HR сначала проектирует
                       стадии и AI-фильтр, потом уже настраивает тексты. */}
                   {([
-                    { value: "page"           as const, label: "Брендинг",                       icon: Globe },
-                    { value: "sources"        as const, label: "Источники",                     icon: Link2 },
-                    { value: "funnel"         as const, label: "Воронка",                       icon: Kanban },
-                    { value: "funnel-builder" as const, label: "Конструктор воронки [Beta]",    icon: Workflow },
-                    { value: "messages"       as const, label: "Сообщения",                     icon: MessageCircle },
-                    { value: "followup"       as const, label: "Дожим",                         icon: MessageSquareText },
-                    { value: "aichatbot"      as const, label: "AI чат-бот",                    icon: Bot },
-                    { value: "ai"             as const, label: "Расписание",                    icon: Zap },
-                    { value: "integrations"   as const, label: "Интеграции",                    icon: Settings },
+                    { value: "page"           as const, label: "Брендинг",   icon: Globe },
+                    { value: "funnel-builder" as const, label: "Воронка",     icon: Workflow },
+                    { value: "sources"        as const, label: "Источники",   icon: Link2 },
+                    { value: "ai"             as const, label: "Расписание",  icon: Zap },
+                    { value: "integrations"   as const, label: "Интеграции",  icon: Settings },
+                    // Скрыты (контент доступен по прямой ?section=, настройки — внутри блоков «Воронки»):
+                    // funnel (старые стадии), messages, followup, aichatbot — покрыты блоками Конструктора.
                   ] satisfies { value: VacancyTabKey; label: string; icon: typeof Globe }[]).map((s) => (
                     <SettingsSubNavButton
                       key={s.value}
