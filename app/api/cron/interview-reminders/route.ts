@@ -5,14 +5,15 @@ import { calendarEvents, companies, notifications, type CompanyHiringDefaults } 
 import { checkCronAuth } from "@/lib/cron/auth"
 import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { sendToCompanyChannel } from "@/lib/telegram/send-to-company"
+import { sendCandidateMessage } from "@/lib/prequalification/start"
 
 // C6: напоминания об интервью (24ч/2ч до начала).
 //
 // Источник правды — записи календаря (calendar_events, type='interview').
-// Если интервью назначено — за 24 часа и за 2 часа до него HR/организатору
-// уходит напоминание: in-app (таблица notifications) + Telegram-канал компании
-// (если подключён). Это ВНУТРЕННЕЕ уведомление сотрудника — НЕ сообщение
-// кандидату (не outward).
+// Если интервью назначено — за 24 часа и за 2 часа до него:
+//   1) HR/организатору: in-app (notifications) + Telegram-канал компании (если подключён).
+//   2) Кандидату (если calendar_event.candidate_id заполнен): сообщение в hh-чат через
+//      sendCandidateMessage. Это OUTWARD — активировано явным решением (привязка кандидата).
 //
 // Идемпотентность: на самом событии метки remind_24h_sent_at / remind_2h_sent_at
 // (миграция 0172) — повторно не шлём. Тумблеры companies.hiringDefaultsJson
@@ -58,6 +59,7 @@ async function run(): Promise<{ scanned: number; sent24h: number; sent2h: number
       location:        calendarEvents.location,
       meetingUrl:      calendarEvents.meetingUrl,
       hiringDefaults:  companies.hiringDefaultsJson,
+      candidateId:     calendarEvents.candidateId,
     })
     .from(calendarEvents)
     .innerJoin(companies, eq(calendarEvents.companyId, companies.id))
@@ -127,7 +129,20 @@ async function run(): Promise<{ scanned: number; sent24h: number; sent2h: number
     // 2) Telegram-канал компании (если подключён — иначе тихо пропускается).
     await sendToCompanyChannel(ev.companyId, `⏰ <b>${title}</b>\n${body}`, { parseMode: "HTML" }).catch(() => {})
 
-    // 3) Метка отправки — против повторов. Если ≤2ч, гасим и 24ч-метку.
+    // 3) Сообщение кандидату в hh-чат (если событие привязано к кандидату).
+    if (ev.candidateId) {
+      const candidateLead = kind === "24h" ? "завтра" : "через 2 часа"
+      const candidateLocation = ev.interviewFormat === "Офис" && ev.location
+        ? `\n📍 ${ev.location}`
+        : ev.interviewFormat === "Онлайн" && ev.meetingUrl
+          ? `\n🔗 ${ev.meetingUrl}`
+          : ""
+      const candidateText =
+        `Здравствуйте! Напоминаем, что ${candidateLead} в ${when} запланировано собеседование.${candidateLocation}`
+      await sendCandidateMessage(ev.candidateId, candidateText).catch(() => {})
+    }
+
+    // 4) Метка отправки — против повторов. Если ≤2ч, гасим и 24ч-метку.
     await db.update(calendarEvents)
       .set(kind === "2h" ? { remind2hSentAt: now, remind24hSentAt: ev.remind24hSentAt ?? now } : { remind24hSentAt: now })
       .where(eq(calendarEvents.id, ev.id))
