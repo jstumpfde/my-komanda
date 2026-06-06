@@ -111,6 +111,7 @@ export async function PUT(
           const payload = { candidateId: id, stage, previousStage: row.previousStage, vacancyId: updated.vacancyId }
           if (events.stage_change) await sendWebhook(wh.url, "stage_change", payload)
           if (stage === "rejected" && events.reject) await sendWebhook(wh.url, "reject", payload)
+          if ((stage === "offer" || stage === "hired") && events.offer) await sendWebhook(wh.url, "offer", payload)
         }
 
         // O4: Битрикс24 — при достижении настроенного этапа создаём лид в CRM.
