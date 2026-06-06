@@ -49,6 +49,7 @@ export type FunnelBlockType =
   | "test_task"
   | "reference_check"
   | "offer"
+  | "content_step"
 
 export interface FunnelBlockMeta {
   type:             FunnelBlockType
@@ -236,6 +237,14 @@ export const BLOCK_META: Record<FunnelBlockType, FunnelBlockMeta> = {
     required:         false,
     incompatibleWith: [],
   },
+  content_step: {
+    type:             "content_step",
+    label:            "Контент-шаг (прототип)",
+    description:      "Презентация / Демо / Тест / Тестовое задание — один блок (концепт)",
+    icon:             ClipboardList,
+    required:         false,
+    incompatibleWith: [],
+  },
 }
 
 export const BLOCK_TYPES: FunnelBlockType[] = [
@@ -261,6 +270,7 @@ export const BLOCK_TYPES: FunnelBlockType[] = [
   "reference_check",
   "offer",
   "thank_you_screen",
+  "content_step",
 ]
 
 export interface FunnelBlock {
@@ -293,6 +303,7 @@ export function getDefaultFunnelConfig(): FunnelConfig {
     // Прочее — false (опционально, HR включит через UI).
     test_followup:    false,
     faq_templates:    false,
+    content_step:     false,
   }
   return {
     blocks: BLOCK_TYPES.map((type, idx) => ({

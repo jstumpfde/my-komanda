@@ -9,6 +9,7 @@ import { Loader2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
+import { ContentStepSettings } from "@/components/vacancies/content-step-settings"
 import { QuestionEditor } from "@/components/vacancies/anketa-tab"
 import { AutomationSettings } from "@/components/vacancies/automation-settings"
 import { FunnelTab } from "@/components/vacancies/funnel-tab"
@@ -338,6 +339,11 @@ function FaqTemplatesSettingsWrapped({ vacancyId }: BlockSettingsProps) {
   )
 }
 
+// Контент-шаг (прототип): компонент грузит данные сам, обёртка минимальная.
+function ContentStepSettingsWrapped({ vacancyId, onSaved }: BlockSettingsProps) {
+  return <ContentStepSettings vacancyId={vacancyId} onSaved={onSaved} />
+}
+
 // ─── Реестр ────────────────────────────────────────────────────────────────
 
 export const BLOCK_SETTINGS_REGISTRY: Partial<Record<FunnelBlockType, BlockSettingsEntry>> = {
@@ -450,5 +456,10 @@ export const BLOCK_SETTINGS_REGISTRY: Partial<Record<FunnelBlockType, BlockSetti
     component:   OfferSettings,
     title:       "Оффер",
     description: "Шаблон документа об оффере + электронная подпись",
+  },
+  content_step: {
+    component:   ContentStepSettingsWrapped,
+    title:       "Контент-шаг (прототип)",
+    description: "Презентация / Демо / Тест / Тестовое задание — один блок (концепт)",
   },
 }
