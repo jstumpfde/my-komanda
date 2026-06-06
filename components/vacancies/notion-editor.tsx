@@ -342,7 +342,7 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
     if (!lesson) { setPreviewMode(false); return null }
     const pct = ((previewIdx + 1) / demo.lessons.length) * 100
     return (
-      <div className="max-w-4xl mx-auto py-6 px-8">
+      <div className="max-w-5xl mx-auto py-6 px-6 sm:px-8">
         <div className="flex items-center justify-end mb-4">
           <Badge variant="outline" className="text-[10px]">Предпросмотр для кандидата</Badge>
         </div>
@@ -459,14 +459,32 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
               >
                 <ChevronRight className="w-4 h-4" />
               </Button>
-              {/* Добавить урок — снизу полосы (как «+ Урок» в развёрнутом виде).
-                  Всегда виден приглушённый «+» (без подписи), ярче при наведении.
-                  Раскрываем список — чтобы сразу был виден инлайн-ввод названия. */}
+              {/* Мини-список уроков: иконка (если есть) или первая буква названия —
+                  чтобы было видно, что внутри список, а не пустая полоса. Клик —
+                  выбрать урок и раскрыть. */}
+              <div className="flex-1 w-full overflow-y-auto flex flex-col items-center gap-1 py-1">
+                {demo.lessons.map((l) => (
+                  <button
+                    key={l.id}
+                    title={l.title || "Без названия"}
+                    onClick={() => { setActiveLessonId(l.id); setSidebarCollapsed(false) }}
+                    className={cn(
+                      "w-7 h-7 rounded-md flex items-center justify-center shrink-0 leading-none transition-colors",
+                      activeLessonId === l.id ? "bg-primary text-primary-foreground" : "hover:bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {l.emoji
+                      ? <span className="text-[15px]">{l.emoji}</span>
+                      : <span className="text-[11px] font-semibold">{(l.title || "").trim().charAt(0).toUpperCase() || "•"}</span>}
+                  </button>
+                ))}
+              </div>
+              {/* Добавить урок — снизу полосы (как «+ Урок» в развёрнутом виде). */}
               <button
                 type="button"
                 title="Добавить урок"
                 onClick={() => { setSidebarCollapsed(false); addLesson() }}
-                className="group/addc mt-auto w-full flex items-center justify-center pt-2 pb-1 border-t border-dashed border-border text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+                className="group/addc w-full flex items-center justify-center pt-2 pb-1 border-t border-dashed border-border text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
               </button>

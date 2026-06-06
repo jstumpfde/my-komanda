@@ -21,6 +21,21 @@ function blockHasScoredContent(lessons: Lesson[]): boolean {
   return lessons.some(l => Array.isArray(l.blocks) && l.blocks.some(b => b.type === "task" || b.type === "media"))
 }
 
+/** Блок «привязан к воронке» (используется в обработке кандидатов). Фаза 1: легаси
+ *  demo/test реально читает рантайм → «Активно». Новые block:* пока не подключены
+ *  → «Черновик». Фаза 2 будет считать это из реальных связей с этапами воронки. */
+function blockIsLinked(kind: string): boolean {
+  return kind === "demo" || kind === "test"
+}
+
+/** Дата последнего изменения: ДД.ММ.ГГГГ ЧЧ:ММ */
+function fmtDate(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ""
+  const p = (n: number) => String(n).padStart(2, "0")
+  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
 function blockToDemo(block: ContentBlock): Demo {
   return {
     id: block.id,
@@ -272,6 +287,16 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
             Блок
           </button>
         </div>
+
+        {/* Статус блока: Активно (привязан к воронке) / Черновик + дата изменения */}
+        {selectedBlock && (
+          <div className="shrink-0 text-[11px] leading-tight text-right hidden lg:block mr-1">
+            <span className={cn("font-medium", blockIsLinked(selectedBlock.kind) ? "text-emerald-600" : "text-amber-600")}>
+              {blockIsLinked(selectedBlock.kind) ? "● Активно" : "○ Черновик"}
+            </span>
+            <span className="text-muted-foreground/60"> · изм. {fmtDate(selectedBlock.updatedAt)}</span>
+          </div>
+        )}
 
         {/* Действия редактора выбранного блока — справа */}
         {selectedBlock && (
