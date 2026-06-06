@@ -146,6 +146,7 @@ export function DataSelectHeadCell({
       <Checkbox
         checked={indeterminate ? "indeterminate" : !!checked}
         onCheckedChange={(v) => onCheckedChange?.(v === true)}
+        style={{ display: "block", width: "1rem", height: "1rem", minHeight: "1rem", maxHeight: "1rem" }}
       />
     </th>
   )
@@ -184,8 +185,8 @@ export function DataSelectCell({
   className?: string
 }) {
   return (
-    <td className={cn("pl-5 pr-2 py-3 w-10", className)} onClick={(e) => e.stopPropagation()}>
-      <Checkbox checked={!!checked} onCheckedChange={(v) => onCheckedChange?.(v === true)} />
+    <td className={cn("pl-5 pr-2 py-3 w-10", className)} style={{ verticalAlign: "middle" }} onClick={(e) => e.stopPropagation()}>
+      <Checkbox checked={!!checked} onCheckedChange={(v) => onCheckedChange?.(v === true)} style={{ display: "block", width: "1rem", height: "1rem", minHeight: "1rem", maxHeight: "1rem" }} />
     </td>
   )
 }

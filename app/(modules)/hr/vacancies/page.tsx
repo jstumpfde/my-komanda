@@ -595,7 +595,7 @@ export default function VacanciesPage() {
       <SidebarInset>
         <DashboardHeader />
         <div className="flex-1 overflow-auto bg-background min-w-0">
-          <div className="py-6 px-4 sm:px-14">
+          <div className="pt-6 pb-36 md:pb-6 px-4 sm:px-14">
             {/* Header */}
             <div className="flex items-center justify-between mb-5">
               <div>
@@ -794,10 +794,8 @@ export default function VacanciesPage() {
                           i < filtered.length - 1 && "border-b border-border/60",
                         )}
                         onClick={() => router.push(`/hr/vacancies/${v.id}`)}>
-                        <td className="pl-5 pr-2 py-3.5 align-middle w-10" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-center h-4 w-4">
-                            <Checkbox checked={selected.has(v.id)} onCheckedChange={() => toggleOne(v.id)} />
-                          </div>
+                        <td className="pl-5 pr-2 py-3.5 w-10" style={{ verticalAlign: "middle" }} onClick={(e) => e.stopPropagation()}>
+                          <Checkbox checked={selected.has(v.id)} onCheckedChange={() => toggleOne(v.id)} style={{ display: "block", width: "1rem", height: "1rem", minHeight: "1rem", maxHeight: "1rem" }} />
                         </td>
                         <td className="px-4 py-3.5 font-medium text-sm text-foreground" style={{ minWidth: 450 }}>{v.title}</td>
                         <td className="px-4 py-3.5 text-sm text-muted-foreground">{v.city ?? "—"}</td>
