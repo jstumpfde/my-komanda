@@ -843,11 +843,14 @@ export const demos = pgTable("demos", {
   // Этап 2.5: дискриминатор материала вакансии. 'demo' — демонстрация
   // должности (таб «Демонстрация»), 'test' — тестовое задание (таб «Тест»).
   // Одна запись на (vacancy_id, kind). Миграция 0142.
-  kind: text("kind").notNull().default("demo"), // 'demo' | 'test'
+  kind: text("kind").notNull().default("demo"), // 'demo' | 'test' | 'block:<uuid>'
   title: text("title").notNull(),
   status: text("status").default("draft"), // 'draft' | 'published'
   lessonsJson: jsonb("lessons_json").notNull().default("[]"),
   postDemoSettings: jsonb("post_demo_settings").default({}),
+  // Миграция 0179: динамические блоки контента
+  sortOrder: integer("sort_order").notNull().default(0),
+  contentType: text("content_type").notNull().default("presentation"), // 'presentation' | 'test' | 'task'
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })

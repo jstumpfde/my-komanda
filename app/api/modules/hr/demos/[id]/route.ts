@@ -10,10 +10,13 @@ async function getOwnedDemo(demoId: string, companyId: string) {
     .select({
       id: demos.id,
       vacancyId: demos.vacancyId,
+      kind: demos.kind,
       title: demos.title,
       status: demos.status,
       lessonsJson: demos.lessonsJson,
       postDemoSettings: demos.postDemoSettings,
+      sortOrder: demos.sortOrder,
+      contentType: demos.contentType,
       createdAt: demos.createdAt,
       updatedAt: demos.updatedAt,
     })
@@ -62,6 +65,8 @@ export async function PUT(
       status?: unknown
       lessons_json?: unknown
       post_demo_settings?: unknown
+      content_type?: unknown
+      sort_order?: unknown
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -83,6 +88,14 @@ export async function PUT(
         ? existing.postDemoSettings as Record<string, unknown>
         : {}
       updates.postDemoSettings = { ...prev, ...(body.post_demo_settings as Record<string, unknown>) }
+    }
+    // Миграция 0179: content_type и sort_order для динамических блоков контента
+    const CONTENT_TYPES = ["presentation", "test", "task"]
+    if (typeof body.content_type === "string" && CONTENT_TYPES.includes(body.content_type)) {
+      updates.contentType = body.content_type
+    }
+    if (typeof body.sort_order === "number" && Number.isInteger(body.sort_order) && body.sort_order >= 0) {
+      updates.sortOrder = body.sort_order
     }
 
     const [updated] = await db

@@ -33,14 +33,13 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
-import { CourseTab, type CourseTabHandle } from "@/components/vacancies/course-tab"
+import { ContentBlocksTab } from "@/components/vacancies/content-blocks-tab"
 import { AnketaTab, type AnketaTabHandle } from "@/components/vacancies/anketa-tab"
-import type { NotionEditorHandle } from "@/components/vacancies/notion-editor"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, RefreshCw, Bot, Workflow, ListChecks, FilePlus, UserSearch, Trash2} from "lucide-react"
+import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, RefreshCw, Bot, Workflow, FilePlus, UserSearch, Trash2} from "lucide-react"
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-factors-settings"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -801,7 +800,6 @@ export default function VacancyPage() {
   const urlTab = rawUrlTab === "automation" ? "settings"
     : (rawUrlTab === "course" || rawUrlTab === "test") ? "content"
     : rawUrlTab
-  const initialContentSubTab: "demo" | "test" = rawUrlTab === "test" ? "test" : "demo"
   const rawUrlSection = rawUrlTab === "automation" ? "ai" : (searchParams?.get("section") ?? null)
   // Миграция старых section-значений на новые 6 табов.
   // general → page (стартовая вкладка с брендингом), automation → ai.
@@ -894,17 +892,8 @@ export default function VacancyPage() {
   const [offerLoading, setOfferLoading] = useState(false)
   const [offerEditing, setOfferEditing] = useState(false)
 
-  // Course editor toolbar state
-  const courseEditorRef = useRef<NotionEditorHandle>(null)
-  const courseTabRef = useRef<CourseTabHandle>(null)
-  const [courseEditorSaveStatus, setCourseEditorSaveStatus] = useState<"saved" | "saving">("saved")
-  // Этап 2.5: таб «Тест» — клон таба «Демонстрация» (CourseTab kind="test").
-  const testEditorRef = useRef<NotionEditorHandle>(null)
-  const testTabRef = useRef<CourseTabHandle>(null)
-  const [testEditorSaveStatus, setTestEditorSaveStatus] = useState<"saved" | "saving">("saved")
-
-  // Объединённый таб «Контент»: под-табы «Демонстрация» (kind=demo) / «Тест» (kind=test).
-  const [contentSubTab, setContentSubTab] = useState<"demo" | "test">(initialContentSubTab)
+  // Таб «Контент» = динамические блоки (ContentBlocksTab со встроенным
+  // редактором/тулбаром). Прежние course/test refs и состояние под-таба удалены.
 
   // Anketa external save handle: AnketaTab вызывает registerHandle({save})
   // при mount, мы держим ссылку и зелёная кнопка «Сохранить» в шапке таба
@@ -2440,138 +2429,6 @@ export default function VacancyPage() {
                     </DropdownMenu>
                   </div>
                 )}
-                {activeTab === "content" && contentSubTab === "demo" && (
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <div className="relative">
-                      <div className="flex items-center">
-                        <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 rounded-r-none border-r-0" onClick={() => courseEditorRef.current?.save()}>
-                          {courseEditorSaveStatus === "saving" ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <Check className="w-3.5 h-3.5" />
-                          )}
-                          Сохранить
-                        </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm" className="h-8 px-2 rounded-l-none">
-                              <ChevronDown className="w-3 h-3 opacity-50" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start">
-                            <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => courseEditorRef.current?.openSaveTemplate()}>
-                              <Save className="w-3.5 h-3.5" />В библиотеку
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => courseEditorRef.current?.downloadTxt()}>
-                              <Download className="w-3.5 h-3.5" />Скачать
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                      <span className={cn("absolute left-1/2 -translate-x-1/2 top-full mt-0.5 text-[10px] leading-none whitespace-nowrap transition-colors", courseEditorSaveStatus === "saving" ? "text-amber-500" : "text-muted-foreground/40")}>
-                        {courseEditorSaveStatus === "saving" ? "Сохранение..." : "✓ Сохранено"}
-                      </span>
-                    </div>
-                    {/* Предпросмотр демонстрации глазами кандидата (/demo). */}
-                    <Button
-                      variant="outline" size="sm" className="gap-1.5 text-xs h-8"
-                      onClick={async () => {
-                        try {
-                          await courseEditorRef.current?.save()
-                          const res = await fetch(`/api/modules/hr/vacancies/${id}/preview-candidate`, { method: "POST" })
-                          const json = await res.json().catch(() => null)
-                          if (!res.ok || !json?.token) { toast.error("Не удалось открыть предпросмотр"); return }
-                          window.open(`${window.location.origin}/demo/${json.token}?as=hr`, "_blank", "noopener,noreferrer")
-                        } catch { toast.error("Ошибка сети") }
-                      }}
-                    >
-                      <Eye className="w-3.5 h-3.5" />Предпросмотр
-                    </Button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8">
-                          <Sparkles className="w-3.5 h-3.5" />Создать из...
-                          <ChevronDown className="w-3 h-3 ml-0.5 opacity-50" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start">
-                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => courseTabRef.current?.resetBlank()}>
-                          <FilePlus className="w-3.5 h-3.5" />Создать с нуля
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => courseEditorRef.current?.openLibrary()}>
-                          <BookOpen className="w-3.5 h-3.5" />Из библиотеки
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                )}
-                {activeTab === "content" && contentSubTab === "test" && (
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <div className="relative">
-                      <div className="flex items-center">
-                        <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 rounded-r-none border-r-0" onClick={() => testEditorRef.current?.save()}>
-                          {testEditorSaveStatus === "saving" ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <Check className="w-3.5 h-3.5" />
-                          )}
-                          Сохранить
-                        </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm" className="h-8 px-2 rounded-l-none">
-                              <ChevronDown className="w-3 h-3 opacity-50" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start">
-                            <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => testEditorRef.current?.openSaveTemplate()}>
-                              <Save className="w-3.5 h-3.5" />В библиотеку
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => testEditorRef.current?.downloadTxt()}>
-                              <Download className="w-3.5 h-3.5" />Скачать
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                      <span className={cn("absolute left-1/2 -translate-x-1/2 top-full mt-0.5 text-[10px] leading-none whitespace-nowrap transition-colors", testEditorSaveStatus === "saving" ? "text-amber-500" : "text-muted-foreground/40")}>
-                        {testEditorSaveStatus === "saving" ? "Сохранение..." : "✓ Сохранено"}
-                      </span>
-                    </div>
-                    {/* Предпросмотр теста глазами кандидата: превью-кандидат + /test/{token}.
-                        Открывает реальную страницу /test со встроенной отправкой и экраном
-                        «Спасибо» (отдельная кнопка/URL не нужны — отправка встроена). */}
-                    <Button
-                      variant="outline" size="sm" className="gap-1.5 text-xs h-8"
-                      onClick={async () => {
-                        try {
-                          await testEditorRef.current?.save()
-                          const res = await fetch(`/api/modules/hr/vacancies/${id}/preview-candidate`, { method: "POST" })
-                          const json = await res.json().catch(() => null)
-                          if (!res.ok || !json?.token) { toast.error("Не удалось открыть предпросмотр"); return }
-                          window.open(`${window.location.origin}/test/${json.token}?as=hr`, "_blank", "noopener,noreferrer")
-                        } catch { toast.error("Ошибка сети") }
-                      }}
-                    >
-                      <Eye className="w-3.5 h-3.5" />Предпросмотр
-                    </Button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8">
-                          <Sparkles className="w-3.5 h-3.5" />Создать из...
-                          <ChevronDown className="w-3 h-3 ml-0.5 opacity-50" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start">
-                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => testTabRef.current?.resetBlank()}>
-                          <FilePlus className="w-3.5 h-3.5" />Создать с нуля
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => testEditorRef.current?.openLibrary()}>
-                          <BookOpen className="w-3.5 h-3.5" />Из библиотеки
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                )}
                 {activeTab === "analytics" && (
                   <AnalyticsFilterButton
                     anPeriod={anPeriod} setAnPeriod={setAnPeriod}
@@ -2669,36 +2526,11 @@ export default function VacancyPage() {
                 )}
               </TabsContent>
 
-              {/* Объединённый таб «Контент»: под-табы Демонстрация / Тест.
-                  Один и тот же CourseTab, разница только в kind (demo/test). */}
+              {/* Таб «Контент»: динамический список блоков (имя+тип+редактор).
+                  Фаза 1 — легаси demo/test показываются как первые блоки,
+                  рантайм их по-прежнему читает по kind. */}
               <TabsContent value="content">
-                <Tabs value={contentSubTab} onValueChange={(v) => setContentSubTab(v as "demo" | "test")}>
-                  <TabsList className="mb-3">
-                    <TabsTrigger value="demo" className="gap-1.5"><BookOpen className="w-3.5 h-3.5" />Демонстрация</TabsTrigger>
-                    <TabsTrigger value="test" className="gap-1.5"><ListChecks className="w-3.5 h-3.5" />Тест</TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="demo">
-                    <CourseTab
-                      vacancyId={id}
-                      vacancyTitle={vacancyTitle}
-                      editorRef={courseEditorRef}
-                      tabRef={courseTabRef}
-                      onSaveStatusChange={setCourseEditorSaveStatus}
-                    />
-                  </TabsContent>
-
-                  <TabsContent value="test">
-                    <CourseTab
-                      vacancyId={id}
-                      vacancyTitle={vacancyTitle}
-                      kind="test"
-                      editorRef={testEditorRef}
-                      tabRef={testTabRef}
-                      onSaveStatusChange={setTestEditorSaveStatus}
-                    />
-                  </TabsContent>
-                </Tabs>
+                <ContentBlocksTab vacancyId={id} vacancyTitle={vacancyTitle} />
               </TabsContent>
 
               <TabsContent value="outbound">
