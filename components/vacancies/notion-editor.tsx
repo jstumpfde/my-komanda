@@ -153,6 +153,12 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
 
   const activeLesson = demo.lessons.find((l) => l.id === activeLessonId)
 
+  // Высота панели уроков: минимум ~5 строк (даже если уроков меньше), дальше
+  // растёт по числу уроков. Свёрнутый и развёрнутый виды — одинаковой высоты.
+  const LESSON_ROW_H = 30           // высота строки урока (изм. ~29px + запас)
+  const LESSON_PANEL_CHROME = 84    // шапка (45) + паддинги списка (8) + кнопка «+ Урок» (31)
+  const lessonsPanelHeight = `min(${LESSON_PANEL_CHROME + Math.max(5, demo.lessons.length) * LESSON_ROW_H}px, 100%)`
+
   // Save helper
   const save = useCallback((lessons: Lesson[]) => {
     setSaveStatus("saving")
@@ -441,7 +447,7 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
         {showSidebar && (
           sidebarCollapsed ? (
             /* Свёрнутый вид — узкая полоска: раскрыть сверху, ниже сразу — добавить урок */
-            <div className="flex-shrink-0 self-start border border-border rounded-xl bg-card overflow-hidden flex flex-col items-center py-2 gap-1" style={{ width: 36 }}>
+            <div className="flex-shrink-0 self-start border border-border rounded-xl bg-card overflow-hidden flex flex-col items-center py-2 gap-1" style={{ width: 36, height: lessonsPanelHeight }}>
               <Button
                 size="sm"
                 variant="ghost"
@@ -464,32 +470,19 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
               </button>
             </div>
           ) : (
-            <div className="w-[260px] flex-shrink-0 self-start max-h-full border border-border rounded-xl bg-card overflow-hidden flex flex-col">
-              <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-                <div className="flex items-center gap-1">
-                  {/* Правка 1: кнопка свернуть */}
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-6 w-6 p-0 -ml-1"
-                    title="Свернуть список уроков"
-                    onClick={() => setSidebarCollapsed(true)}
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                  </Button>
-                  <h4 className="text-sm font-semibold text-foreground">Уроки</h4>
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs px-2">
-                      <Plus className="w-3 h-3" />Урок
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
-                    <DropdownMenuItem onClick={addLesson}><Plus className="w-3.5 h-3.5 mr-2" />Новый пустой урок</DropdownMenuItem>
-                    <DropdownMenuItem disabled={!copiedLesson} onClick={pasteLesson}><ClipboardPaste className="w-3.5 h-3.5 mr-2" />Вставить скопированный</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+            <div className="w-[260px] flex-shrink-0 self-start border border-border rounded-xl bg-card overflow-hidden flex flex-col" style={{ height: lessonsPanelHeight }}>
+              <div className="flex items-center gap-1 px-3 py-2 border-b border-border">
+                {/* кнопка свернуть */}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 w-6 p-0 -ml-1"
+                  title="Свернуть список уроков"
+                  onClick={() => setSidebarCollapsed(true)}
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </Button>
+                <h4 className="text-sm font-semibold text-foreground">Уроки</h4>
               </div>
 
               <div className="flex-1 overflow-y-auto px-1.5 py-1">
