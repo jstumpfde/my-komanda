@@ -114,6 +114,8 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "idle">("saved")
   const [dragLessonIdx, setDragLessonIdx] = useState<number | null>(null)
   const [dragOverLessonIdx, setDragOverLessonIdx] = useState<number | null>(null)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const renamingOriginalTitle = useRef<string>("")
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Library + save-template state
@@ -432,94 +434,150 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
       <div className="flex gap-4 flex-1 min-h-0">
 
         {/* LEFT — Lesson list */}
-        {showSidebar && <div className="w-[260px] flex-shrink-0 border border-border rounded-xl bg-card overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-            <h4 className="text-sm font-semibold text-foreground">Уроки</h4>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs px-2">
-                  <Plus className="w-3 h-3" />Урок
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={addLesson}><Plus className="w-3.5 h-3.5 mr-2" />Новый пустой урок</DropdownMenuItem>
-                <DropdownMenuItem disabled={!copiedLesson} onClick={pasteLesson}><ClipboardPaste className="w-3.5 h-3.5 mr-2" />Вставить скопированный</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-1.5 py-1">
-            {demo.lessons.map((lesson, i) => {
-              const isActive = activeLessonId === lesson.id
-              const isRenaming = renamingLessonId === lesson.id
-              return (
-                <DropdownMenu
-                  key={lesson.id}
-                  open={contextMenuLessonId === lesson.id}
-                  onOpenChange={(v) => { if (!v) setContextMenuLessonId(null) }}
-                >
-                  <div
-                    draggable={!isRenaming}
-                    onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; setDragLessonIdx(i) }}
-                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDragOverLessonIdx(i) }}
-                    onDragEnd={() => { setDragLessonIdx(null); setDragOverLessonIdx(null) }}
-                    onDrop={(e) => { e.preventDefault(); dropLesson(i) }}
-                    onClick={() => { if (!isRenaming) switchLesson(lesson.id) }}
-                    onContextMenu={(e) => { e.preventDefault(); setContextMenuLessonId(lesson.id) }}
-                    className={cn(
-                      "flex items-center gap-1.5 pl-1 pr-2 py-1.5 rounded-lg cursor-pointer group transition-all text-sm select-none",
-                      isActive ? "bg-primary text-primary-foreground" : "hover:bg-muted/60 text-foreground",
-                      dragLessonIdx === i && "opacity-30",
-                      dragOverLessonIdx === i && dragLessonIdx !== i && "ring-2 ring-primary/50 bg-primary/5"
-                    )}
+        {showSidebar && (
+          sidebarCollapsed ? (
+            /* Свёрнутый вид — узкая полоска с кнопкой раскрыть */
+            <div className="flex-shrink-0 border border-border rounded-xl bg-card overflow-hidden flex flex-col items-center py-2 gap-2" style={{ width: 36 }}>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 w-7 p-0"
+                title="Раскрыть список уроков"
+                onClick={() => setSidebarCollapsed(false)}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+          ) : (
+            <div className="w-[260px] flex-shrink-0 border border-border rounded-xl bg-card overflow-hidden flex flex-col">
+              <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+                <div className="flex items-center gap-1">
+                  {/* Правка 1: кнопка свернуть */}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 w-6 p-0 -ml-1"
+                    title="Свернуть список уроков"
+                    onClick={() => setSidebarCollapsed(true)}
                   >
-                    <GripVertical className={cn("w-3 h-3 flex-shrink-0 cursor-grab active:cursor-grabbing", isActive ? "text-primary-foreground/40" : "text-muted-foreground/30 group-hover:text-muted-foreground/60")} />
-                    {/* <span className="text-xl flex-shrink-0 leading-none">{lesson.emoji}</span> */}
-                    {isRenaming ? (
-                      <input
-                        autoFocus
-                        className="flex-1 text-xs font-medium bg-transparent border-b border-primary-foreground/40 outline-none min-w-0"
-                        value={lesson.title}
-                        onChange={(e) => updateLesson(lesson.id, { title: e.target.value })}
-                        onBlur={() => setRenamingLessonId(null)}
-                        onKeyDown={(e) => { if (e.key === "Enter") setRenamingLessonId(null) }}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    ) : (
-                      <span className="flex-1 truncate text-[12px] font-medium">{lesson.title}</span>
-                    )}
-                  </div>
-                  <DropdownMenuTrigger className="sr-only" />
-                  <DropdownMenuContent align="start" className="w-44">
-                    <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); setRenamingLessonId(lesson.id) }}>
-                      <Pencil className="w-3.5 h-3.5 mr-2" />Переименовать
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); setCopiedLesson(lesson); toast.success("Скопировано") }}>
-                      <Copy className="w-3.5 h-3.5 mr-2" />Копировать
-                    </DropdownMenuItem>
-                    <DropdownMenuItem disabled={!copiedLesson} onClick={() => { setContextMenuLessonId(null); pasteLesson() }}>
-                      <ClipboardPaste className="w-3.5 h-3.5 mr-2" />Вставить
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); duplicateLesson(i) }}>
-                      <Copy className="w-3.5 h-3.5 mr-2" />Дублировать
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); moveLessonDir(i, -1) }} disabled={i === 0}>
-                      <ArrowUp className="w-3.5 h-3.5 mr-2" />Переместить вверх
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); moveLessonDir(i, 1) }} disabled={i === demo.lessons.length - 1}>
-                      <ArrowDown className="w-3.5 h-3.5 mr-2" />Переместить вниз
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); setDeleteConfirmId(lesson.id) }} className="text-destructive focus:text-destructive">
-                      <Trash2 className="w-3.5 h-3.5 mr-2" />Удалить
-                    </DropdownMenuItem>
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </Button>
+                  <h4 className="text-sm font-semibold text-foreground">Уроки</h4>
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs px-2">
+                      <Plus className="w-3 h-3" />Урок
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuItem onClick={addLesson}><Plus className="w-3.5 h-3.5 mr-2" />Новый пустой урок</DropdownMenuItem>
+                    <DropdownMenuItem disabled={!copiedLesson} onClick={pasteLesson}><ClipboardPaste className="w-3.5 h-3.5 mr-2" />Вставить скопированный</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-              )
-            })}
-          </div>
-        </div>}
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-1.5 py-1">
+                {demo.lessons.map((lesson, i) => {
+                  const isActive = activeLessonId === lesson.id
+                  const isRenaming = renamingLessonId === lesson.id
+                  return (
+                    <DropdownMenu
+                      key={lesson.id}
+                      open={contextMenuLessonId === lesson.id}
+                      onOpenChange={(v) => { if (!v) setContextMenuLessonId(null) }}
+                    >
+                      <div
+                        draggable={!isRenaming}
+                        onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; setDragLessonIdx(i) }}
+                        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDragOverLessonIdx(i) }}
+                        onDragEnd={() => { setDragLessonIdx(null); setDragOverLessonIdx(null) }}
+                        onDrop={(e) => { e.preventDefault(); dropLesson(i) }}
+                        onClick={() => { if (!isRenaming) switchLesson(lesson.id) }}
+                        onContextMenu={(e) => { e.preventDefault(); setContextMenuLessonId(lesson.id) }}
+                        className={cn(
+                          "flex items-center gap-1.5 pl-1 pr-2 py-1.5 rounded-lg cursor-pointer group transition-all text-sm select-none",
+                          isActive ? "bg-primary text-primary-foreground" : "hover:bg-muted/60 text-foreground",
+                          dragLessonIdx === i && "opacity-30",
+                          dragOverLessonIdx === i && dragLessonIdx !== i && "ring-2 ring-primary/50 bg-primary/5"
+                        )}
+                      >
+                        <GripVertical className={cn("w-3 h-3 flex-shrink-0 cursor-grab active:cursor-grabbing", isActive ? "text-primary-foreground/40" : "text-muted-foreground/30 group-hover:text-muted-foreground/60")} />
+                        {/* <span className="text-xl flex-shrink-0 leading-none">{lesson.emoji}</span> */}
+                        {isRenaming ? (
+                          <input
+                            autoFocus
+                            className="flex-1 text-xs font-medium bg-transparent border-b border-primary-foreground/40 outline-none min-w-0"
+                            value={lesson.title}
+                            onChange={(e) => updateLesson(lesson.id, { title: e.target.value })}
+                            onBlur={() => setRenamingLessonId(null)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") { setRenamingLessonId(null) }
+                              if (e.key === "Escape") {
+                                // Откат к оригинальному названию
+                                updateLesson(lesson.id, { title: renamingOriginalTitle.current })
+                                setRenamingLessonId(null)
+                              }
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          /* Правка 3: двойной клик → инлайн-переименование */
+                          <span
+                            className="flex-1 truncate text-[12px] font-medium"
+                            onDoubleClick={(e) => {
+                              e.stopPropagation()
+                              renamingOriginalTitle.current = lesson.title
+                              setRenamingLessonId(lesson.id)
+                            }}
+                          >{lesson.title}</span>
+                        )}
+                      </div>
+                      <DropdownMenuTrigger className="sr-only" />
+                      <DropdownMenuContent align="start" className="w-44">
+                        <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); renamingOriginalTitle.current = lesson.title; setRenamingLessonId(lesson.id) }}>
+                          <Pencil className="w-3.5 h-3.5 mr-2" />Переименовать
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); setCopiedLesson(lesson); toast.success("Скопировано") }}>
+                          <Copy className="w-3.5 h-3.5 mr-2" />Копировать
+                        </DropdownMenuItem>
+                        <DropdownMenuItem disabled={!copiedLesson} onClick={() => { setContextMenuLessonId(null); pasteLesson() }}>
+                          <ClipboardPaste className="w-3.5 h-3.5 mr-2" />Вставить
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); duplicateLesson(i) }}>
+                          <Copy className="w-3.5 h-3.5 mr-2" />Дублировать
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); moveLessonDir(i, -1) }} disabled={i === 0}>
+                          <ArrowUp className="w-3.5 h-3.5 mr-2" />Переместить вверх
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); moveLessonDir(i, 1) }} disabled={i === demo.lessons.length - 1}>
+                          <ArrowDown className="w-3.5 h-3.5 mr-2" />Переместить вниз
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); setDeleteConfirmId(lesson.id) }} className="text-destructive focus:text-destructive">
+                          <Trash2 className="w-3.5 h-3.5 mr-2" />Удалить
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )
+                })}
+              </div>
+
+              {/* Правка 2: кнопка «+ Урок» снизу списка */}
+              <div className="px-1.5 py-1.5 border-t border-border">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="w-full h-7 gap-1 text-xs justify-start px-2 text-muted-foreground hover:text-foreground"
+                  onClick={addLesson}
+                >
+                  <Plus className="w-3 h-3" />Урок
+                </Button>
+              </div>
+            </div>
+          )
+        )}
 
         {/* RIGHT — Notion-style block editor */}
         <div className="flex-1 min-w-0 overflow-y-auto">
