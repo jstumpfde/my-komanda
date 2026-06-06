@@ -45,6 +45,7 @@ interface PostDemoSettings {
     city?: { enabled: boolean; required: boolean }
   }
   navButtonColor?: string
+  navButtonText?: string
 }
 
 type FormFieldKey = "firstName" | "lastName" | "email" | "phone" | "telegram" | "birthDate" | "city"
@@ -1438,7 +1439,7 @@ export default function DemoPage() {
               "Завершить"
             ) : (
               <>
-                Далее
+                {data.postDemoSettings?.navButtonText || "Далее"}
                 <ChevronRight className="ml-1 h-5 w-5" />
               </>
             )}

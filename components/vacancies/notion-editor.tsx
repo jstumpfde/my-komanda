@@ -88,7 +88,18 @@ interface NotionEditorProps {
   vacancyId?: string
   onOpenLibrary?: () => void
   navButtonColor?: string
+  navButtonText?: string
+  onNavButtonChange?: (color: string | null, text: string | null) => void
 }
+
+const NAV_BUTTON_PRESET_COLORS = [
+  { hex: "#3b82f6", label: "Синий" },
+  { hex: "#ef4444", label: "Красный" },
+  { hex: "#22c55e", label: "Зелёный" },
+  { hex: "#f97316", label: "Оранжевый" },
+  { hex: "#8b5cf6", label: "Фиолетовый" },
+  { hex: "#000000", label: "Чёрный" },
+]
 
 // ─── Slash command menu ────────────────────────────────────────────────────
 
@@ -107,7 +118,7 @@ const SLASH_ITEMS = [
 
 // ─── Main component ────────────────────────────────────────────────────────
 
-export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(function NotionEditorInner({ demo, onBack, onUpdate, onSaveStatusChange, hideToolbar = false, showSidebar = true, vacancyId, onOpenLibrary, navButtonColor }, ref) {
+export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(function NotionEditorInner({ demo, onBack, onUpdate, onSaveStatusChange, hideToolbar = false, showSidebar = true, vacancyId, onOpenLibrary, navButtonColor, navButtonText, onNavButtonChange }, ref) {
   const [activeLessonId, setActiveLessonId] = useState(demo.lessons[0]?.id || "")
   const [previewMode, setPreviewMode] = useState(false)
   const [previewIdx, setPreviewIdx] = useState(0)
@@ -119,6 +130,8 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
   const [dragLessonIdx, setDragLessonIdx] = useState<number | null>(null)
   const [dragOverLessonIdx, setDragOverLessonIdx] = useState<number | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  // Локальный стейт для текста кнопки «Далее» (синхронизируется с пропом при маунте)
+  const [localNavText, setLocalNavText] = useState(navButtonText || "")
   const renamingOriginalTitle = useRef<string>("")
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -500,7 +513,7 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
             </div>
           ) : (
             <div className="w-[260px] flex-shrink-0 self-start border border-border rounded-xl bg-card overflow-hidden flex flex-col" style={{ height: lessonsPanelHeight }}>
-              <div className="flex items-center gap-1 px-3 py-2 border-b border-border">
+              <div className="flex items-center gap-1 px-3 py-2 border-b border-border shrink-0">
                 {/* кнопка свернуть */}
                 <Button
                   size="sm"
@@ -514,7 +527,7 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
                 <h4 className="text-sm font-semibold text-foreground">Уроки</h4>
               </div>
 
-              <div className="flex-1 overflow-y-auto px-1.5 py-1">
+              <div className="flex-1 overflow-y-auto px-1.5 py-1 min-h-0">
                 {demo.lessons.map((lesson, i) => {
                   const isActive = activeLessonId === lesson.id
                   const isRenaming = renamingLessonId === lesson.id
@@ -610,18 +623,76 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
                   )
                 })}
 
-                {/* Добавить урок — сразу под последним уроком. Всегда виден «+ Урок»
-                    (как сверху), приглушённый; при наведении — ярче. */}
-                <button
-                  type="button"
-                  title="Добавить урок"
-                  onClick={addLesson}
-                  className="group/add w-full mt-1 border-t border-dashed border-border px-2 pt-2 pb-1.5 flex items-center justify-center gap-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span className="text-xs">Урок</span>
-                </button>
               </div>
+
+              {/* Редактор кнопки «Далее» — фиксированный футер, всегда виден */}
+              {onNavButtonChange && (
+                <div className="shrink-0 border-t border-border px-2.5 py-2.5 space-y-2">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Кнопка «Далее»</p>
+                  {/* Текст кнопки */}
+                  <Input
+                    value={localNavText}
+                    onChange={(e) => setLocalNavText(e.target.value)}
+                    onBlur={() => onNavButtonChange(navButtonColor ?? null, localNavText || null)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.currentTarget.blur()
+                      }
+                    }}
+                    placeholder="Далее"
+                    className="h-7 text-xs px-2"
+                  />
+                  {/* Цветовая палитра */}
+                  <div className="flex items-center gap-1.5">
+                    {/* Бренд (сброс) */}
+                    <button
+                      title="Цвет бренда (по умолчанию)"
+                      onClick={() => onNavButtonChange(null, localNavText || null)}
+                      className={cn(
+                        "w-4 h-4 rounded-full border-2 transition-all shrink-0",
+                        !navButtonColor ? "border-foreground/50 scale-110" : "border-transparent hover:scale-105"
+                      )}
+                      style={{ background: "linear-gradient(135deg, #6366f1 50%, #8b5cf6 50%)" }}
+                    />
+                    {NAV_BUTTON_PRESET_COLORS.map(({ hex, label }) => {
+                      const active = navButtonColor === hex
+                      return (
+                        <button
+                          key={hex}
+                          title={label}
+                          onClick={() => onNavButtonChange(active ? null : hex, localNavText || null)}
+                          className={cn(
+                            "w-4 h-4 rounded-full border-2 transition-all shrink-0",
+                            active ? "border-foreground/50 scale-110" : "border-transparent hover:scale-105"
+                          )}
+                          style={{ backgroundColor: hex }}
+                        />
+                      )
+                    })}
+                  </div>
+                  {/* Мини-превью кнопки */}
+                  <div className="flex justify-center">
+                    <span
+                      className="inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-medium text-white"
+                      style={{ backgroundColor: navButtonColor || "var(--primary)" }}
+                    >
+                      {localNavText || "Далее"}
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* + Урок — всегда внизу, не прокручивается */}
+              <button
+                type="button"
+                title="Добавить урок"
+                onClick={addLesson}
+                className="shrink-0 w-full border-t border-dashed border-border px-2 pt-2 pb-1.5 flex items-center justify-center gap-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span className="text-xs">Урок</span>
+              </button>
             </div>
           )
         )}

@@ -16,15 +16,6 @@ import { useContentBlocks, type ContentBlock } from "@/hooks/use-content-blocks"
 import { NotionEditor, type NotionEditorHandle } from "./notion-editor"
 import { createBlock, type Demo, type Lesson } from "@/lib/course-types"
 
-const NAV_BUTTON_COLORS = [
-  { hex: "#3b82f6", label: "Синий" },
-  { hex: "#ef4444", label: "Красный" },
-  { hex: "#22c55e", label: "Зелёный" },
-  { hex: "#f97316", label: "Оранжевый" },
-  { hex: "#8b5cf6", label: "Фиолетовый" },
-  { hex: "#000000", label: "Чёрный" },
-]
-
 /** Блок «оценивается ИИ», если внутри есть формы: вопросы (task) или запись медиа от кандидата (media). */
 function blockHasScoredContent(lessons: Lesson[]): boolean {
   return lessons.some(l => Array.isArray(l.blocks) && l.blocks.some(b => b.type === "task" || b.type === "media"))
@@ -348,46 +339,13 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
         )}
       </div>
 
-      {/* Статус блока + цвет кнопок — отдельной строкой под чипами, выровнено вправо */}
+      {/* Статус блока — отдельной строкой под чипами, выровнено вправо (под «Предпросмотр») */}
       {selectedBlock && (
-        <div className="flex items-center justify-end gap-3 -mt-1">
-          {/* Цвет кнопок «Далее/Назад» */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] text-muted-foreground/70">Кнопки:</span>
-            {/* «Бренд» — сбрасывает кастомный цвет */}
-            <button
-              title="Цвет бренда (по умолчанию)"
-              onClick={() => saveSettings(selectedBlock.id, { navButtonColor: null })}
-              className={cn(
-                "w-4 h-4 rounded-full border-2 transition-all shrink-0",
-                !selectedBlock.postDemoSettings?.navButtonColor
-                  ? "border-foreground/50 scale-110"
-                  : "border-transparent hover:scale-105"
-              )}
-              style={{ background: "linear-gradient(135deg, #6366f1 50%, #8b5cf6 50%)" }}
-            />
-            {NAV_BUTTON_COLORS.map(({ hex, label }) => {
-              const active = selectedBlock.postDemoSettings?.navButtonColor === hex
-              return (
-                <button
-                  key={hex}
-                  title={label}
-                  onClick={() => saveSettings(selectedBlock.id, { navButtonColor: active ? null : hex })}
-                  className={cn(
-                    "w-4 h-4 rounded-full border-2 transition-all shrink-0",
-                    active ? "border-foreground/50 scale-110" : "border-transparent hover:scale-105"
-                  )}
-                  style={{ backgroundColor: hex }}
-                />
-              )
-            })}
-          </div>
-          <div className="text-[11px] leading-tight text-right">
-            <span className={cn("font-medium", blockIsLinked(selectedBlock.kind) ? "text-emerald-600" : "text-amber-600")}>
-              {blockIsLinked(selectedBlock.kind) ? "● Активно" : "○ Черновик"}
-            </span>
-            <span className="text-muted-foreground/60"> · изм. {fmtDate(selectedBlock.updatedAt)}</span>
-          </div>
+        <div className="text-[11px] leading-tight -mt-1 text-right">
+          <span className={cn("font-medium", blockIsLinked(selectedBlock.kind) ? "text-emerald-600" : "text-amber-600")}>
+            {blockIsLinked(selectedBlock.kind) ? "● Активно" : "○ Черновик"}
+          </span>
+          <span className="text-muted-foreground/60"> · изм. {fmtDate(selectedBlock.updatedAt)}</span>
         </div>
       )}
 
@@ -406,6 +364,8 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
             showSidebar={true}
             vacancyId={vacancyId}
             navButtonColor={typeof selectedBlock.postDemoSettings?.navButtonColor === "string" ? selectedBlock.postDemoSettings.navButtonColor : undefined}
+            navButtonText={typeof selectedBlock.postDemoSettings?.navButtonText === "string" ? selectedBlock.postDemoSettings.navButtonText : undefined}
+            onNavButtonChange={(color, text) => saveSettings(selectedBlock.id, { navButtonColor: color, navButtonText: text })}
           />
         ) : (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
