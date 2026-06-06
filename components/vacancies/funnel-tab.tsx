@@ -241,7 +241,7 @@ export function FunnelTab({ vacancyId, initialPipeline, onSaved }: FunnelTabProp
                 )}
                 {cfg.hhAction && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground">
-                    {cfg.hhAction === "invitation" ? "hh: пригласить" : "hh: отказать"}
+                    {cfg.hhAction === "invitation" ? "hh: пригласить" : cfg.hhAction === "assessment" ? "hh: тест" : "hh: отказать"}
                   </span>
                 )}
                 <Popover open={editingStage === slug} onOpenChange={(open) => setEditingStage(open ? slug : null)}>
@@ -392,7 +392,7 @@ function StageEditor({
         <Label className="text-xs">Действие в hh.ru при переходе в эту стадию</Label>
         <RadioGroup
           value={localHhAction ?? "none"}
-          onValueChange={(v) => setLocalHhAction(v === "invitation" || v === "discard" ? v : null)}
+          onValueChange={(v) => setLocalHhAction(v === "invitation" || v === "discard" || v === "assessment" ? v : null)}
           className="gap-2"
         >
           <label className="flex items-center gap-2 text-sm cursor-pointer">
@@ -402,6 +402,10 @@ function StageEditor({
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <RadioGroupItem value="invitation" />
             <span>Пригласить (hh-приглашение)</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <RadioGroupItem value="assessment" />
+            <span>Тестовое задание (hh-assessment)</span>
           </label>
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <RadioGroupItem value="discard" />

@@ -30,7 +30,7 @@ export type StageSlug =
   | "hired"
   | "rejected"
 
-export type HhAction = "invitation" | "discard" | null
+export type HhAction = "invitation" | "discard" | "assessment" | null
 
 export type StageColor =
   | "slate"
@@ -458,7 +458,7 @@ export function parsePipeline(raw: unknown, companyHhActions?: CompanyStageHhAct
       ? (saved.customColor as StageColor)
       : null
     const hhAction: HhAction =
-      saved.hhAction === "invitation" || saved.hhAction === "discard"
+      saved.hhAction === "invitation" || saved.hhAction === "discard" || saved.hhAction === "assessment"
         ? saved.hhAction
         : null
     return {

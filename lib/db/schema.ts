@@ -149,7 +149,7 @@ export interface CompanyHiringDefaults {
   // Маппинг воронки → hh.ru на уровне компании: какое действие hh.ru шлётся
   // при входе кандидата в стадию. Ключ — slug стадии, значение —
   // "invitation"|"discard"|null. Дефолт для вакансий, где воронка не кастомизирована.
-  stageHhActions?: Record<string, "invitation" | "discard" | null>
+  stageHhActions?: Record<string, "invitation" | "discard" | "assessment" | null>
   // Настройки доступа ролей (HR → Настройки → Роли и доступ). Хранятся
   // на уровне компании (общие, не per-user), чтобы шарились между всеми.
   rolePermissions?: {

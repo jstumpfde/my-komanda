@@ -84,9 +84,9 @@ export function FunnelAutomationSection({
 
   // ── Маппинг стадий → hh.ru ──
   const [stageHhActions, setStageHhActions] = useState<
-    Record<string, "invitation" | "discard" | null>
+    Record<string, "invitation" | "discard" | "assessment" | null>
   >(
-    (defaults.stageHhActions as Record<string, "invitation" | "discard" | null>) ?? {},
+    (defaults.stageHhActions as Record<string, "invitation" | "discard" | "assessment" | null>) ?? {},
   )
   const [savingStageHh, setSavingStageHh] = useState(false)
 
@@ -324,7 +324,7 @@ export function FunnelAutomationSection({
                       setStageHhActions((prev) => ({
                         ...prev,
                         [slug]:
-                          v === "invitation" || v === "discard" ? v : null,
+                          v === "invitation" || v === "discard" || v === "assessment" ? v : null,
                       }))
                     }
                   >
@@ -335,6 +335,9 @@ export function FunnelAutomationSection({
                       <SelectItem value="none">Ничего не делать</SelectItem>
                       <SelectItem value="invitation">
                         Пригласить (hh-приглашение)
+                      </SelectItem>
+                      <SelectItem value="assessment">
+                        Тестовое задание (hh-тест)
                       </SelectItem>
                       <SelectItem value="discard">Отказать (hh-отказ)</SelectItem>
                     </SelectContent>
