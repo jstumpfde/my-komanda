@@ -1,15 +1,16 @@
 "use client"
 
 import { useState, useRef, useCallback, useEffect } from "react"
+import { Button } from "@/components/ui/button"
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Loader2, Plus, Pencil, Trash2, Sparkles, FileText, AlertCircle } from "lucide-react"
+import { Loader2, Plus, Pencil, Trash2, Sparkles, FileText, AlertCircle, Save, BookOpen, Eye } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { useContentBlocks, type ContentBlock } from "@/hooks/use-content-blocks"
-import { NotionEditor } from "./notion-editor"
+import { NotionEditor, type NotionEditorHandle } from "./notion-editor"
 import type { Demo, Lesson } from "@/lib/course-types"
 
 /** Блок «оценивается ИИ», если внутри есть формы: вопросы (task) или запись медиа от кандидата (media). */
@@ -45,6 +46,11 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
   const [renamingValue, setRenamingValue] = useState("")
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+
+  // Управление редактором выбранного блока (общий ряд кнопок справа)
+  const editorRef = useRef<NotionEditorHandle>(null)
+  const [saveStatus, setSaveStatus] = useState<"saved" | "saving">("saved")
+  const [aiBusy, setAiBusy] = useState(false)
 
   // Drag-reorder (горизонтальный)
   const dragIdxRef = useRef<number | null>(null)
@@ -95,6 +101,11 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
       title: updated.title !== selectedBlock.title ? updated.title : undefined,
     })
   }, [selectedBlock, updateBlock])
+
+  const handleAI = useCallback(async () => {
+    setAiBusy(true)
+    try { await editorRef.current?.generateWithAI() } finally { setAiBusy(false) }
+  }, [])
 
   // Drag-and-drop reorder
   const handleDragStart = (idx: number) => { dragIdxRef.current = idx }
@@ -156,13 +167,11 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
   }
 
   return (
-    <div className="flex flex-col gap-3 min-h-0" style={{ height: "calc(100vh - 210px)" }}>
-      {/* ─── Верхняя полоса — блоки контента (по порядку показа) ─── */}
-      <div className="shrink-0">
-        <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5 px-0.5">
-          Блоки контента · по порядку показа кандидату
-        </p>
-        <div className="flex items-stretch gap-2 overflow-x-auto pb-1">
+    <div className="flex flex-col gap-3 min-h-0" style={{ height: "calc(100vh - 200px)" }}>
+      {/* ─── Единый ряд: слева чипы-блоки (скролл), справа действия редактора ─── */}
+      <div className="flex items-center gap-3 shrink-0">
+        {/* Блоки контента — по порядку показа кандидату */}
+        <div className="flex items-center gap-2 overflow-x-auto flex-1 min-w-0 pb-0.5">
           {blocks.map((block, idx) => {
             const isActive = selectedId === block.id
             const isRenaming = renamingId === block.id
@@ -177,7 +186,7 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
                 onDragEnd={handleDragEnd}
                 onClick={() => { if (!isRenaming) setSelectedId(block.id) }}
                 className={cn(
-                  "group relative flex items-center gap-1.5 rounded-lg border px-2.5 py-2 cursor-pointer select-none shrink-0 transition-colors",
+                  "group relative flex items-center gap-1.5 rounded-lg border px-2.5 h-9 cursor-pointer select-none shrink-0 transition-colors",
                   isActive
                     ? "border-primary bg-primary/10 text-foreground"
                     : "border-border bg-card hover:bg-muted/60 text-foreground",
@@ -185,7 +194,6 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
                 )}
                 title="Перетащите, чтобы изменить порядок"
               >
-                {/* Порядковый номер */}
                 <span className={cn(
                   "text-[10px] font-semibold w-4 h-4 rounded flex items-center justify-center shrink-0",
                   isActive ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
@@ -213,7 +221,6 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
                   >{block.title}</span>
                 )}
 
-                {/* Авто-метка «ИИ» — если внутри есть вопросы/задание/запись */}
                 {scored && !isRenaming && (
                   <span
                     className="inline-flex items-center gap-0.5 text-[9px] font-medium text-primary shrink-0"
@@ -223,7 +230,6 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
                   </span>
                 )}
 
-                {/* Действия — на ховере */}
                 {!isRenaming && (
                   <span className="hidden group-hover:inline-flex items-center gap-0.5 shrink-0 ml-0.5">
                     <button
@@ -241,29 +247,55 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
               </div>
             )
           })}
-
-          {/* Добавить блок */}
-          <button
-            type="button"
-            disabled={creating}
-            onClick={handleAddBlock}
-            className="shrink-0 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-2.5 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
-          >
-            {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-            Блок
-          </button>
         </div>
+
+        {/* Добавить блок — всегда виден между чипами и действиями */}
+        <button
+          type="button"
+          disabled={creating}
+          onClick={handleAddBlock}
+          className="shrink-0 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-2.5 h-9 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+        >
+          {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+          Блок
+        </button>
+
+        {/* Действия редактора выбранного блока — справа */}
+        {selectedBlock && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className={cn("text-[11px] mr-0.5 transition-colors hidden sm:inline", saveStatus === "saving" ? "text-amber-500" : "text-muted-foreground/40")}>
+              {saveStatus === "saving" ? "Сохранение…" : "✓ Сохранено"}
+            </span>
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => editorRef.current?.save()}>
+              <Save className="w-3.5 h-3.5" />Сохранить
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={handleAI} disabled={aiBusy} title="Сгенерировать черновик через AI">
+              {aiBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}AI
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => editorRef.current?.openLibrary()} title="Из библиотеки">
+              <BookOpen className="w-3.5 h-3.5" />
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => editorRef.current?.openSaveTemplate()} title="В библиотеку">
+              <Save className="w-3.5 h-3.5" />
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => editorRef.current?.openPreview()}>
+              <Eye className="w-3.5 h-3.5" />Превью
+            </Button>
+          </div>
+        )}
       </div>
 
-      {/* ─── Редактор выбранного блока (во всю ширину) ─── */}
+      {/* ─── Редактор выбранного блока (во всю ширину, без своего тулбара/заголовка) ─── */}
       <div className="flex-1 min-h-0 overflow-hidden">
         {selectedBlock ? (
           <NotionEditor
             key={selectedBlock.id}
+            ref={editorRef}
             demo={blockToDemo(selectedBlock)}
             onBack={() => {}}
             onUpdate={handleEditorUpdate}
-            hideToolbar={false}
+            onSaveStatusChange={setSaveStatus}
+            hideToolbar={true}
             showSidebar={true}
             vacancyId={vacancyId}
           />

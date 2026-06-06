@@ -57,6 +57,7 @@ export interface NotionEditorHandle {
   openLibrary: () => void
   openSaveTemplate: () => void
   downloadTxt: () => void
+  generateWithAI: () => Promise<void>
 }
 
 function htmlToPlainText(html: string): string {
@@ -249,7 +250,8 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
     },
-  }), [saveNow, onOpenLibrary, demo])
+    generateWithAI,
+  }), [saveNow, onOpenLibrary, demo, generateWithAI])
 
   // Lesson ops
   const updateLesson = (lessonId: string, patch: Partial<Lesson>) =>
