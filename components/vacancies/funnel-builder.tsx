@@ -1,6 +1,6 @@
 "use client"
 
-// Funnel Builder MVP — экспериментальный конструктор воронки на вакансию.
+// Funnel Builder — конструктор воронки на вакансию.
 // См. drizzle/0127_funnel_builder.sql и lib/funnel-builder/blocks.ts.
 
 import { useEffect, useMemo, useState } from "react"
@@ -320,36 +320,61 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
     toast.success("Воронка сброшена к шаблону «Простой найм»", { duration: 1500 })
   }
 
+  // Обработчик применения встроенного пресета: если конструктор не включён —
+  // автоматически включаем его вместе с применением шаблона.
+  const handleApplyPreset = async (key: string) => {
+    if (!enabled) {
+      // Сначала включаем конструктор, потом покажем confirm шаблона
+      const ok = await saveConfig({ funnelBuilderEnabled: true })
+      if (!ok) return
+      setEnabled(true)
+    }
+    setPendingTemplate(key)
+  }
+
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
-          <CardTitle>Конструктор воронки</CardTitle>
-          <Badge variant="outline">Beta</Badge>
-          {enabled && (
-            <span className="ml-auto text-xs text-muted-foreground">
-              {enabledCount} из {blocks.length} блоков включено
-            </span>
-          )}
+          <CardTitle>Воронка</CardTitle>
+          <span className="ml-auto text-xs text-muted-foreground">
+            {enabledCount} из {blocks.length} блоков включено
+          </span>
         </div>
         <CardDescription>
-          Экспериментальный режим. Перетаскивайте блоки чтобы изменить порядок.
-          Включите тумблер чтобы протестировать новый формат настройки воронки.
+          Выберите готовый сценарий — он настроит воронку под вас. При необходимости донастройте блоки ниже.
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="flex items-center justify-between mb-4 gap-2">
-          <Label className="text-sm font-medium">Использовать конструктор воронки</Label>
-          <div className="flex items-center gap-2">
-            {enabled && (
+
+        {/* ── Пресеты (встроенные сценарии) — главный элемент ── */}
+        <div className="mb-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {Object.entries(FUNNEL_TEMPLATES).map(([key, template]) => (
+              <button
+                key={key}
+                type="button"
+                disabled={saving || enabled === null}
+                onClick={() => { void handleApplyPreset(key) }}
+                className="text-left rounded-lg border bg-card px-4 py-3 hover:border-primary hover:bg-primary/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <div className="text-sm font-medium leading-snug">{template.name}</div>
+                <div className="text-xs text-muted-foreground mt-0.5 leading-snug">{template.description}</div>
+              </button>
+            ))}
+          </div>
+
+          {/* Вторичные шаблоны + управление */}
+          <div className="flex items-center gap-2 mt-3 flex-wrap">
+            {(companyTemplates.length > 0 || platformTemplates.length > 0) && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" disabled={saving}>
-                    Применить шаблон
+                  <Button variant="outline" size="sm" disabled={saving || enabled === null}>
+                    Ещё шаблоны
                     <ChevronDown className="ml-1 h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-80">
+                <DropdownMenuContent align="start" className="w-80">
                   {companyTemplates.length > 0 && (
                     <>
                       <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -399,87 +424,94 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
                           )}
                         </DropdownMenuItem>
                       ))}
-                      <DropdownMenuSeparator />
                     </>
                   )}
-                  <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Встроенные
-                  </DropdownMenuLabel>
-                  {Object.entries(FUNNEL_TEMPLATES).map(([key, template]) => (
-                    <DropdownMenuItem
-                      key={key}
-                      onSelect={() => setPendingTemplate(key)}
-                      className="flex flex-col items-start gap-0.5 py-2"
-                    >
-                      <span className="text-sm font-medium">{template.name}</span>
-                      <span className="text-xs text-muted-foreground">{template.description}</span>
-                    </DropdownMenuItem>
-                  ))}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onSelect={() => setSaveDialogOpen(true)}
-                    className="flex items-center gap-2 py-2"
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span className="text-sm">Сохранить текущую как шаблон…</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onSelect={() => setManageDialogOpen(true)}
-                    className="flex items-center gap-2 py-2"
-                  >
-                    <Settings className="h-4 w-4" />
-                    <span className="text-sm">Управление шаблонами…</span>
-                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
-            {enabled && (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={saving || enabled === null}
+              onClick={() => setSaveDialogOpen(true)}
+              className="text-muted-foreground hover:text-foreground gap-1.5"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Сохранить как шаблон
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={saving || enabled === null}
+              onClick={() => setManageDialogOpen(true)}
+              className="text-muted-foreground hover:text-foreground gap-1.5"
+            >
+              <Settings className="h-3.5 w-3.5" />
+              Управление шаблонами
+            </Button>
+          </div>
+        </div>
+
+        {/* ── Шаги воронки (тонкая настройка) ── */}
+        <div className="border-t pt-4">
+          <div className="flex items-center justify-between mb-3 gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-foreground">Шаги воронки</span>
+              <span className="text-xs text-muted-foreground">
+                {enabledCount} из {blocks.length} включено
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
-                disabled={saving}
+                disabled={saving || enabled === null}
                 onClick={() => setResetConfirmOpen(true)}
                 title="Сбросить к дефолту"
               >
                 <RotateCcw className="h-4 w-4" />
                 <span className="sr-only">Сбросить к дефолту</span>
               </Button>
-            )}
-            <Switch
-              checked={Boolean(enabled)}
-              onCheckedChange={handleToggleBuilder}
-              disabled={enabled === null || saving}
-            />
-          </div>
-        </div>
-
-        {enabled && (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
-              <div className="space-y-2">
-                {blocks.map((block) => (
-                  <SortableBlockCard
-                    key={block.type}
-                    block={block}
-                    saving={saving}
-                    onToggle={() => handleToggleBlock(block.type)}
-                    onOpenSettings={() => setOpenBlockType(block.type)}
-                  />
-                ))}
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="funnel-builder-switch" className="text-xs text-muted-foreground cursor-pointer">
+                  {enabled ? "Включено" : "Выключено"}
+                </Label>
+                <Switch
+                  id="funnel-builder-switch"
+                  checked={Boolean(enabled)}
+                  onCheckedChange={handleToggleBuilder}
+                  disabled={enabled === null || saving}
+                />
               </div>
-            </SortableContext>
-          </DndContext>
-        )}
-
-        {!enabled && (
-          <div className="text-sm text-muted-foreground py-8 text-center">
-            Конструктор выключен. Используется классическая воронка из других табов настроек.
+            </div>
           </div>
-        )}
+
+          {blocks.length > 0 ? (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
+                <div className="space-y-2">
+                  {blocks.map((block) => (
+                    <SortableBlockCard
+                      key={block.type}
+                      block={block}
+                      saving={saving}
+                      onToggle={() => handleToggleBlock(block.type)}
+                      onOpenSettings={() => setOpenBlockType(block.type)}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+          ) : (
+            <div className="text-sm text-muted-foreground py-6 text-center">
+              Загрузка блоков…
+            </div>
+          )}
+        </div>
       </CardContent>
 
       <AlertDialog
