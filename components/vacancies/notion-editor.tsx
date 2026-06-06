@@ -25,11 +25,12 @@ import {
   Bold, Italic, Underline, Strikethrough, AlignLeft, AlignCenter, AlignRight,
   Heading1, Heading2, Heading3, List as ListIcon, ListOrdered, Link2, Hash,
   Type, ImageIcon, Video, Music, FileText, Info, MousePointerClick, CheckSquare,
-  ChevronLeft, ChevronRight, Mic, Highlighter, Loader2,
+  ChevronLeft, ChevronRight, Mic, Highlighter, Loader2, Clapperboard,
 } from "lucide-react"
 import { toast } from "sonner"
-import type { Demo, Block, BlockType, Lesson } from "@/lib/course-types"
+import type { Demo, Block, BlockType, Lesson, StoriesCard } from "@/lib/course-types"
 import {BLOCK_TYPE_META, createBlock} from "@/lib/course-types"
+import { StoriesPlayer } from "@/components/vacancies/stories-player"
 import { resolveOptionPoints } from "@/lib/score-test-objective"
 import { TEMPLATE_VARIABLES } from "@/lib/templates/demo-templates"
 import { LibraryDialog } from "./library-dialog"
@@ -100,6 +101,7 @@ const SLASH_ITEMS = [
   { type: "button" as BlockType, icon: <MousePointerClick className="w-4 h-4" />, inlineIcon: <MousePointerClick className="w-[17px] h-[17px]" />, label: "Кнопка", desc: "Кнопка-ссылка" },
   { type: "task" as BlockType, icon: <CheckSquare className="w-4 h-4" />, inlineIcon: <CheckSquare className="w-[17px] h-[17px]" />, label: "Задание", desc: "Вопросы кандидату" },
   { type: "media" as BlockType, icon: <Video className="w-4 h-4" />, inlineIcon: <Video className="w-[17px] h-[17px]" />, label: "Запись медиа", desc: "Запись видео/аудио/фото от кандидата" },
+  { type: "stories" as BlockType, icon: <Clapperboard className="w-4 h-4" />, inlineIcon: <Clapperboard className="w-[17px] h-[17px]" />, label: "Сторис", desc: "Вертикальные/горизонтальные карточки и видео" },
 ]
 
 // ─── Main component ────────────────────────────────────────────────────────
@@ -2621,6 +2623,163 @@ function MediaEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch:
   )
 }
 
+// ─── Stories editor block ──────────────────────────────────────────────────
+
+function StoriesEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partial<Block>) => void }) {
+  const cards: StoriesCard[] = block.storiesCards ?? []
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleAddFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ""
+
+    const mediaType: StoriesCard["mediaType"] = file.type.startsWith("video/") ? "video" : "image"
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      const res = await fetch("/api/upload", { method: "POST", body: formData })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Ошибка загрузки" }))
+        toast.error(err.error || "Ошибка загрузки")
+        setUploading(false)
+        return
+      }
+      const data = await res.json()
+      const newCard: StoriesCard = { id: `sc-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, mediaType, url: data.url }
+      onUpdate({ storiesCards: [...cards, newCard] })
+    } catch {
+      // Fallback — blob/dataURL
+      let url: string
+      if (mediaType === "video") {
+        url = URL.createObjectURL(file)
+      } else {
+        url = await new Promise<string>((resolve) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.readAsDataURL(file)
+        })
+      }
+      const newCard: StoriesCard = { id: `sc-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, mediaType, url }
+      onUpdate({ storiesCards: [...cards, newCard] })
+    }
+    setUploading(false)
+  }
+
+  const updateCard = (id: string, patch: Partial<StoriesCard>) => {
+    onUpdate({ storiesCards: cards.map(c => c.id === id ? { ...c, ...patch } : c) })
+  }
+
+  const removeCard = (id: string) => {
+    onUpdate({ storiesCards: cards.filter(c => c.id !== id) })
+  }
+
+  const moveCard = (id: string, dir: -1 | 1) => {
+    const idx = cards.findIndex(c => c.id === id)
+    if (idx === -1) return
+    const newCards = [...cards]
+    const target = idx + dir
+    if (target < 0 || target >= newCards.length) return
+    ;[newCards[idx], newCards[target]] = [newCards[target], newCards[idx]]
+    onUpdate({ storiesCards: newCards })
+  }
+
+  return (
+    <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <Clapperboard className="w-4 h-4" />
+          <span>Сторис</span>
+          {cards.length > 0 && (
+            <span className="text-xs bg-primary/10 text-primary rounded px-1.5 py-0.5">{cards.length} карточек</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {uploading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border hover:border-primary/50 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+          >
+            <Plus className="w-3.5 h-3.5" />Добавить карточку
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,video/*"
+            className="hidden"
+            onChange={handleAddFile}
+          />
+        </div>
+      </div>
+
+      {cards.length === 0 ? (
+        <div className="text-xs text-muted-foreground text-center py-3">
+          Нажмите «Добавить карточку» — поддерживаются фото и видео (вертикальные и горизонтальные)
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {cards.map((card, idx) => (
+            <div key={card.id} className="flex items-center gap-3 p-2 rounded-lg border border-border bg-background">
+              {/* Миниатюра */}
+              <div className="w-12 h-16 rounded-md overflow-hidden bg-muted shrink-0 flex items-center justify-center">
+                {card.mediaType === "image" ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={card.url} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="flex flex-col items-center gap-0.5 text-muted-foreground">
+                    <Video className="w-5 h-5" />
+                    <span className="text-[9px]">видео</span>
+                  </div>
+                )}
+              </div>
+              {/* Подпись */}
+              <div className="flex-1 min-w-0">
+                <input
+                  type="text"
+                  value={card.caption || ""}
+                  onChange={(e) => updateCard(card.id, { caption: e.target.value })}
+                  placeholder="Подпись (необязательно)"
+                  maxLength={120}
+                  className="w-full text-xs border border-border rounded-md px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-primary/50"
+                />
+              </div>
+              {/* Действия */}
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => moveCard(card.id, -1)}
+                  disabled={idx === 0}
+                  className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 hover:bg-muted transition-colors"
+                  title="Выше"
+                >
+                  <ArrowUp className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => moveCard(card.id, 1)}
+                  disabled={idx === cards.length - 1}
+                  className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 hover:bg-muted transition-colors"
+                  title="Ниже"
+                >
+                  <ArrowDown className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => removeCard(card.id)}
+                  className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                  title="Удалить"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Media / other block types ─────────────────────────────────────────────
 
 function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdate: (patch: Partial<Block>) => void; onRemove: () => void }) {
@@ -3155,6 +3314,9 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
     case "media":
       return <MediaEditorBlock block={block} onUpdate={onUpdate} />
 
+    case "stories":
+      return <StoriesEditorBlock block={block} onUpdate={onUpdate} />
+
     default:
       return (
         <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 text-sm text-muted-foreground flex items-center gap-2">
@@ -3211,6 +3373,11 @@ const TOOLBAR_BLOCK_ITEMS: { type: BlockType; label: string; light: { bg: string
     type: "media", label: "Запись",
     light: { bg: "#FDE7E7", icon: "#B91C1C" }, dark: { bg: "#231515", icon: "#F87171" },
     svg: (c) => <><circle cx="12" cy="12" r="9" stroke={c} strokeWidth="1.3"/><circle cx="12" cy="12" r="4" fill={c}/></>,
+  },
+  {
+    type: "stories", label: "Сторис",
+    light: { bg: "#EEEDFE", icon: "#534AB7" }, dark: { bg: "#1e1e2a", icon: "#AFA9EC" },
+    svg: (c) => <><rect x="3" y="2" width="7" height="20" rx="2" stroke={c} strokeWidth="1.3"/><rect x="13" y="5" width="8" height="14" rx="2" stroke={c} strokeWidth="1.3"/><path d="M8 10l-1.5 2 1.5 2" stroke={c} strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></>,
   },
 ]
 
@@ -4303,6 +4470,8 @@ function SimplePreviewBlock({ block }: { block: Block }) {
         </div>
       )
     }
+    case "stories":
+      return <StoriesPlayer cards={block.storiesCards ?? []} />
     default:
       return null
   }

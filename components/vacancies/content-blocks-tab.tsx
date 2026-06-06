@@ -339,9 +339,9 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
         )}
       </div>
 
-      {/* Статус блока — отдельной строкой под чипами (на уровне заголовка), не теснит чипы */}
+      {/* Статус блока — отдельной строкой под чипами, выровнено вправо (под «Предпросмотр») */}
       {selectedBlock && (
-        <div className="text-[11px] leading-tight -mt-1">
+        <div className="text-[11px] leading-tight -mt-1 text-right">
           <span className={cn("font-medium", blockIsLinked(selectedBlock.kind) ? "text-emerald-600" : "text-amber-600")}>
             {blockIsLinked(selectedBlock.kind) ? "● Активно" : "○ Черновик"}
           </span>

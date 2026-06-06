@@ -12,6 +12,7 @@ import { CheckCircle2, ChevronRight, Loader2, Video as VideoIcon, Mic, Camera, S
 import type { Block, Lesson, Question } from "@/lib/course-types"
 import { resolveBrand } from "@/lib/brand-colors"
 import { VideoEmbed } from "@/components/blocks/VideoEmbed"
+import { StoriesPlayer } from "@/components/vacancies/stories-player"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1357,6 +1358,9 @@ export default function DemoPage() {
                       {block.fileName || "Скачать файл"}
                     </span>
                   </a>
+                )}
+                {block.type === "stories" && (
+                  <StoriesPlayer cards={block.storiesCards ?? []} />
                 )}
                 {block.type === "media" && (
                   <MediaBlock

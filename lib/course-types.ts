@@ -1,4 +1,11 @@
-export type BlockType = "text" | "image" | "video" | "audio" | "file" | "info" | "button" | "task" | "media"
+export type BlockType = "text" | "image" | "video" | "audio" | "file" | "info" | "button" | "task" | "media" | "stories"
+
+export interface StoriesCard {
+  id: string
+  mediaType: "image" | "video"
+  url: string
+  caption?: string
+}
 
 export type ImageLayout = "full" | "image-left" | "image-right"
 export type AudioLayout = "full" | "audio-left" | "audio-right"
@@ -100,6 +107,8 @@ export interface Block {
   mediaMaxDuration?: number | null  // секунды, null = без лимита
   mediaRequired?: boolean
   mediaInstruction?: string
+  // stories-блок — карусель карточек (фото + видео)
+  storiesCards?: StoriesCard[]
 }
 
 export interface Lesson {
@@ -149,6 +158,7 @@ export const BLOCK_TYPE_META: { type: BlockType; icon: string; label: string }[]
   { type: "button", icon: "🔘", label: "Кнопка" },
   { type: "task", icon: "✅", label: "Задание" },
   { type: "media", icon: "🎥", label: "Запись медиа" },
+  { type: "stories", icon: "▶", label: "Сторис" },
 ]
 
 export function defaultQuestion(): Question {
@@ -173,6 +183,7 @@ export function createBlock(type: BlockType): Block {
     mediaMaxDuration: type === "media" ? 60 : undefined,
     mediaRequired: type === "media" ? false : undefined,
     mediaInstruction: type === "media" ? "" : undefined,
+    storiesCards: type === "stories" ? [] : undefined,
   }
 }
 
