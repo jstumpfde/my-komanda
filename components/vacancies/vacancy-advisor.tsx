@@ -85,6 +85,43 @@ const SECTION_MAP: Record<string, string> = {
 
 const AI_SCREENING_FIELDS = new Set(["responsibilities", "requirements", "skills", "stopFactors"])
 
+// ── Static section tips (instant, no AI call) ────────────────────────────────
+
+const SECTION_TIPS: Record<string, { icon: string; text: string }> = {
+  title: {
+    icon: "✏️",
+    text: "Хорошее название — конкретное и без шаблонных слов вроде «динамичный» или «перспективный». Укажите специализацию и уровень: «Frontend-разработчик (React, middle)» — лучше чем «Разработчик». Короткие названия набирают на 15–20% больше откликов.",
+  },
+  salary: {
+    icon: "💰",
+    text: "Вакансии с указанной вилкой зарплат получают в 2–3 раза больше откликов. Если указываете «до», оставляйте реалистичный максимум — завышенный потолок снижает конверсию из отклика в оффер. Укажите периодичность выплат и тип занятости.",
+  },
+  responsibilities: {
+    icon: "📋",
+    text: "Пишите обязанности от глагола действия: «Развивать клиентскую базу» лучше, чем «Работа с клиентами». Ограничьтесь 5–8 пунктами — длинный список отпугивает кандидатов. Первые 2–3 пункта — самые важные, их видят раньше остальных.",
+  },
+  requirements: {
+    icon: "🎯",
+    text: "Разделите требования на обязательные и желательные. Не копируйте требования из других вакансий — добавляйте только то, что реально нужно. Длинный список требований при скромной зарплате — главная причина низкого отклика.",
+  },
+  skills: {
+    icon: "⚡",
+    text: "Добавьте 3–5 ключевых hard skill и 1–2 soft skill. Слишком длинный список «стоп-скиллов» сужает воронку. AI-скоринг проверяет навыки из резюме — чем точнее список, тем точнее отбор кандидатов.",
+  },
+  stopFactors: {
+    icon: "🚫",
+    text: "Стоп-факторы — автоматический фильтр на входе. Активируйте только те, что действительно критичны: каждый включённый стоп-фактор сокращает поток на 10–30%. Гражданство и документы — самые распространённые ограничения.",
+  },
+  conditions: {
+    icon: "🏢",
+    text: "Конкретные условия повышают доверие: напишите адрес офиса, формат работы (удалённо/офис/гибрид), график. Бонусы и льготы лучше перечислить списком — они напрямую влияют на анализ мотивации в этой панели.",
+  },
+  company: {
+    icon: "🏷️",
+    text: "Раздел «О компании» влияет на первое впечатление. Укажите сферу, размер команды и что делает компанию особенной. Кандидаты с сильной мотивацией читают этот раздел — он помогает привлечь «правильных» людей.",
+  },
+}
+
 // ── Experience insight data ─────────────────────────────────────────────────
 
 const EXPERIENCE_INSIGHTS: Record<string, { label: string; volumePercent: number; qualityPercent: number; tip: string }> = {
@@ -276,24 +313,46 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
     </div>
   )
 
+  const staticTip = focusedField ? SECTION_TIPS[focusedField] ?? null : null
+
   function renderContent() {
     if (!result && loading) {
       return (
-        <div className="flex flex-col items-center gap-3 py-8">
-          <Loader2 className="w-6 h-6 text-primary animate-spin" />
-          <p className="text-xs text-muted-foreground">Анализирую анкету...</p>
+        <div className="space-y-3">
+          {staticTip && (
+            <div key={focusedField} className="rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800 p-3 animate-in fade-in duration-200">
+              <div className="flex items-start gap-2">
+                <span className="text-base leading-none mt-0.5 shrink-0">{staticTip.icon}</span>
+                <p className="text-xs leading-relaxed text-amber-900 dark:text-amber-200">{staticTip.text}</p>
+              </div>
+            </div>
+          )}
+          <div className="flex flex-col items-center gap-3 py-8">
+            <Loader2 className="w-6 h-6 text-primary animate-spin" />
+            <p className="text-xs text-muted-foreground">Анализирую анкету...</p>
+          </div>
         </div>
       )
     }
 
     if (!result) {
       return (
-        <div className="flex flex-col items-center gap-3 py-8 text-center">
-          <Bot className="w-8 h-8 text-muted-foreground" />
-          <p className="text-xs text-muted-foreground px-4">Анализ ещё не запускался. Нажмите кнопку чтобы оценить вакансию.</p>
-          <Button size="sm" variant="outline" onClick={() => fetchAnalysis(undefined, { force: true })} disabled={loading}>
-            <Sparkles className="w-3.5 h-3.5 mr-1.5" />Запустить анализ
-          </Button>
+        <div className="space-y-3">
+          {staticTip && (
+            <div key={focusedField} className="rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800 p-3 animate-in fade-in duration-200">
+              <div className="flex items-start gap-2">
+                <span className="text-base leading-none mt-0.5">{staticTip.icon}</span>
+                <p className="text-xs leading-relaxed text-amber-900 dark:text-amber-200">{staticTip.text}</p>
+              </div>
+            </div>
+          )}
+          <div className="flex flex-col items-center gap-3 py-8 text-center">
+            <Bot className="w-8 h-8 text-muted-foreground" />
+            <p className="text-xs text-muted-foreground px-4">Анализ ещё не запускался. Нажмите кнопку чтобы оценить вакансию.</p>
+            <Button size="sm" variant="outline" onClick={() => fetchAnalysis(undefined, { force: true })} disabled={loading}>
+              <Sparkles className="w-3.5 h-3.5 mr-1.5" />Запустить анализ
+            </Button>
+          </div>
         </div>
       )
     }
@@ -314,8 +373,18 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
           </p>
         </div>
 
-        {/* Context tip */}
-        {result.contextTip && (
+        {/* Static contextual tip (instant, no AI call) */}
+        {staticTip && (
+          <div key={focusedField} className="rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800 p-3 animate-in fade-in duration-200">
+            <div className="flex items-start gap-2">
+              <span className="text-base leading-none mt-0.5 shrink-0">{staticTip.icon}</span>
+              <p className="text-xs leading-relaxed text-amber-900 dark:text-amber-200">{staticTip.text}</p>
+            </div>
+          </div>
+        )}
+
+        {/* AI context tip (from last analysis) */}
+        {result.contextTip && !staticTip && (
           <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 animate-in fade-in duration-300">
             <div className="flex items-start gap-2">
               <Sparkles className="w-4 h-4 text-primary mt-0.5 shrink-0" />
