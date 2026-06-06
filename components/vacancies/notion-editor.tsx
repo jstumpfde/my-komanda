@@ -252,9 +252,13 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
   const switchLesson = (id: string) => setActiveLessonId(id)
 
   const addLesson = () => {
-    const l: Lesson = { id: `les-${Date.now()}`, emoji: "📝", title: "Новый урок", blocks: [createBlock("text")] }
+    const l: Lesson = { id: `les-${Date.now()}`, emoji: "📝", title: "", blocks: [createBlock("text")] }
     save([...demo.lessons, l])
     setActiveLessonId(l.id)
+    // Сразу открыть инлайн-ввод названия нового урока (поверх плашки).
+    // Пустой заголовок → виден placeholder; при сохранении пустого подставится «Новый урок».
+    renamingOriginalTitle.current = ""
+    setRenamingLessonId(l.id)
   }
 
   const duplicateLesson = (idx: number) => {
@@ -507,15 +511,25 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
                         {isRenaming ? (
                           <input
                             autoFocus
-                            className="flex-1 text-xs font-medium bg-transparent border-b border-primary-foreground/40 outline-none min-w-0"
+                            placeholder="Название урока…"
+                            className="flex-1 text-xs font-medium bg-transparent border-b border-primary-foreground/40 outline-none min-w-0 placeholder:opacity-50"
                             value={lesson.title}
                             onChange={(e) => updateLesson(lesson.id, { title: e.target.value })}
-                            onBlur={() => setRenamingLessonId(null)}
+                            onFocus={(e) => e.currentTarget.select()}
+                            onBlur={() => {
+                              // Сохранить: пустое имя → «Новый урок»
+                              if (!lesson.title.trim()) updateLesson(lesson.id, { title: "Новый урок" })
+                              setRenamingLessonId(null)
+                            }}
                             onKeyDown={(e) => {
-                              if (e.key === "Enter") { setRenamingLessonId(null) }
+                              if (e.key === "Enter") {
+                                e.preventDefault()
+                                if (!lesson.title.trim()) updateLesson(lesson.id, { title: "Новый урок" })
+                                setRenamingLessonId(null)
+                              }
                               if (e.key === "Escape") {
-                                // Откат к оригинальному названию
-                                updateLesson(lesson.id, { title: renamingOriginalTitle.current })
+                                // Откат к оригинальному названию (для нового урока — «Новый урок»)
+                                updateLesson(lesson.id, { title: renamingOriginalTitle.current || "Новый урок" })
                                 setRenamingLessonId(null)
                               }
                             }}
