@@ -595,7 +595,7 @@ export default function VacanciesPage() {
       <SidebarInset>
         <DashboardHeader />
         <div className="flex-1 overflow-auto bg-background min-w-0">
-          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+          <div className="py-6 px-4 sm:px-14">
             {/* Header */}
             <div className="flex items-center justify-between mb-5">
               <div>
@@ -613,9 +613,9 @@ export default function VacanciesPage() {
                     </button>
                   ))}
                 </div>
-                <Button onClick={handleQuickCreate} disabled={creating}>
-                  {creating ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Plus className="size-4 mr-1.5" />}
-                  Создать вакансию
+                <Button onClick={handleQuickCreate} disabled={creating} title="Создать вакансию">
+                  {creating ? <Loader2 className="size-4 sm:mr-1.5 animate-spin" /> : <Plus className="size-4 sm:mr-1.5" />}
+                  <span className="hidden sm:inline">Создать вакансию</span>
                 </Button>
               </div>
             </div>
