@@ -876,7 +876,23 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
           }
         }
         const tokenForUrl = shortIdForUrl ?? candidateId
-        const demoUrl = `https://company24.pro/demo/${tokenForUrl}`
+
+        // content_step: если блок включён в Funnel Builder (Phase 3) → маршрутизируем URL
+        // по режиму; иначе — дефолт /demo/.
+        // Режимы: demo → /demo/, test → /test/ (квиз), task → /test/ (задание), presentation → без ссылки
+        const contentStepActive = isBlockEnabled(localVac, "content_step", false)
+        const contentStepMode = contentStepActive
+          ? ((localVac.descriptionJson as { contentStep?: { mode?: string } } | null)?.contentStep?.mode ?? "demo")
+          : "demo"
+        const demoUrl = contentStepMode === "test" || contentStepMode === "task"
+          ? `https://company24.pro/test/${tokenForUrl}`
+          : `https://company24.pro/demo/${tokenForUrl}`
+
+        // Для «Презентации» — встраиваем текст в сообщение, без ссылки на /demo/
+        const presentationText = contentStepMode === "presentation"
+          ? ((localVac.descriptionJson as { contentStep?: { title?: string; description?: string } } | null)
+              ?.contentStep?.description ?? "")
+          : null
 
         // #46: «Аварийное повторное сообщение» теперь opt-in.
         // Применяется ТОЛЬКО когда:
@@ -900,10 +916,17 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
           name:      candidateName,
           vacancy:   localVac.title || "",
           company:   "Company24",
-          demo_link: demoUrl,
+          demo_link: contentStepMode === "presentation" ? "" : demoUrl,
         })
 
-        finalMessage = replaced.includes(demoUrl) ? replaced : replaced + "\n\n" + demoUrl
+        if (contentStepMode === "presentation") {
+          // Презентация: ссылку не добавляем — вместо неё текст из блока (если задан)
+          finalMessage = presentationText
+            ? replaced.trim() + "\n\n" + presentationText.trim()
+            : replaced.trim()
+        } else {
+          finalMessage = replaced.includes(demoUrl) ? replaced : replaced + "\n\n" + demoUrl
+        }
       }
 
       if (hhAction && finalMessage) {
