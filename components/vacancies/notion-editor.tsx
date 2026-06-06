@@ -23,7 +23,7 @@ import {
   GripVertical, Plus, Save, Eye, Sparkles, BookOpen, X, MoreHorizontal, Pencil, ClipboardPaste,
   Copy, Trash2, ArrowUp, ArrowDown,
   Bold, Italic, Underline, Strikethrough, AlignLeft, AlignCenter, AlignRight,
-  Heading1, Heading2, Heading3, List as ListIcon, ListOrdered, Link2, Hash, Smile,
+  Heading1, Heading2, Heading3, List as ListIcon, ListOrdered, Link2, Hash,
   Type, ImageIcon, Video, Music, FileText, Info, MousePointerClick, CheckSquare,
   ChevronLeft, ChevronRight, Mic, Highlighter, Loader2,
 } from "lucide-react"
@@ -1117,8 +1117,17 @@ function NotionLessonEditor({ lesson, onUpdateLesson, onUpdateBlock, onInsertBlo
 
       {/* Lesson title */}
       {!hideLessonTitle && (
-        <div className="flex items-center gap-3 mb-0 group/title">
-          <EmojiBtn current={lesson.emoji} onSelect={(v) => onUpdateLesson({ emoji: v })} />
+        <div className="relative flex items-center mb-0 group/title">
+          {lesson.emoji ? (
+            <span className="mr-3 shrink-0">
+              <EmojiBtn current={lesson.emoji} onSelect={(v) => onUpdateLesson({ emoji: v })} />
+            </span>
+          ) : (
+            // Нет иконки — заголовок выровнен по левому краю; «+» появляется в левом поле при наведении
+            <span className="absolute right-full mr-1 top-1/2 -translate-y-1/2">
+              <EmojiBtn current="" onSelect={(v) => onUpdateLesson({ emoji: v })} />
+            </span>
+          )}
           <input
             className="flex-1 text-3xl font-bold bg-transparent outline-none text-foreground placeholder:text-muted-foreground/30 leading-tight pt-0.5"
             value={lesson.title}
@@ -3858,7 +3867,7 @@ function EmojiBtn({ current, onSelect }: { current: string; onSelect: (v: string
         )}
         title={current ? "Сменить иконку" : "Добавить иконку"}
       >
-        {current || <Smile className="w-5 h-5" />}
+        {current || <Plus className="w-5 h-5" />}
       </button>
 
       {open && pos && typeof document !== "undefined" && (
