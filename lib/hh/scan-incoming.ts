@@ -31,6 +31,7 @@ import { isBlockEnabled } from "@/lib/funnel-builder/runtime"
 import { saveCandidatePhoto } from "@/lib/hh/save-candidate-photo"
 import { extractHhResumeFields } from "@/lib/hh/extract-resume-fields"
 import { matchCallIntentKeyword, renderInsistTemplate } from "@/lib/messaging/call-intent"
+import { matchStopWord, matchStopWordList } from "@/lib/followup/stop-words"
 import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
 import { processPrequalificationAnswer } from "@/lib/prequalification/process-answer"
 
@@ -420,6 +421,8 @@ export async function scanIncomingMessages(opts: {
         aiChatbotPrompt:   vacancies.aiChatbotPrompt,
         funnelRuntimeEnabled: vacancies.funnelRuntimeEnabled,
         funnelConfigJson:     vacancies.funnelConfigJson,
+        stopWordsJson:        vacancies.stopWordsJson,
+        aiProcessSettings:    vacancies.aiProcessSettings,
       })
       .from(candidates)
       .innerJoin(vacancies, eq(vacancies.id, candidates.vacancyId))
@@ -506,21 +509,31 @@ export async function scanIncomingMessages(opts: {
         }
       }
 
-      // Шаг 1: regex stop_word → жёсткий отказ. Делаем до callIntent,
-      // потому что отказ важнее («не хочу созваниваться» = отказ).
-// P0-14 disabled:       if (matchStopWord(text)) {
-// P0-14 disabled:         const sent = await applyRejection({
-// P0-14 disabled:           candidateId,
-// P0-14 disabled:           reason: "stop_word_regex",
-// P0-14 disabled:           hhResponseId: resp.hhResponseId,
-// P0-14 disabled:           accessToken,
-// P0-14 disabled:           sendFarewellFlag: true,
-// P0-14 disabled:         })
-// P0-14 disabled:         result.rejectedRegex++
-// P0-14 disabled:         rejected = true
-// P0-14 disabled:         console.info(`[scan-incoming] ${candidateId} regex_stop_word farewell=${sent} text="${preview}"`)
-// P0-14 disabled:         break
-// P0-14 disabled:       }
+      // Шаг 1: стоп-слова чата → жёсткий отказ. Делаем до callIntent.
+      // Если у вакансии настроен кастомный список (stopWordsJson) — substring-match;
+      // иначе fallback на hardcoded STOP_WORDS с word-boundary.
+      {
+        const swFlag = (candVac?.aiProcessSettings as { stopWordsChatEnabled?: boolean } | null)?.stopWordsChatEnabled
+        if (isBlockEnabled(candVac, "stop_words_chat", swFlag !== false)) {
+          const vacStopWords = (candVac?.stopWordsJson ?? []).filter((s): s is string => typeof s === "string")
+          const matched = vacStopWords.length > 0
+            ? matchStopWordList(text, vacStopWords) !== null
+            : matchStopWord(text)
+          if (matched) {
+            const sent = await applyRejection({
+              candidateId,
+              reason:          "stop_word_regex",
+              hhResponseId:    resp.hhResponseId,
+              accessToken,
+              sendFarewellFlag: true,
+            })
+            result.rejectedRegex++
+            rejected = true
+            console.info(`[scan-incoming] ${candidateId} stop_word farewell=${sent} text="${preview}"`)
+            break
+          }
+        }
+      }
 
       // Шаг 1.4: Предквалификация (Сессия 9). Если у кандидата идёт опрос —
       // парсим ответ через AI Haiku и обновляем qualification_answers.
