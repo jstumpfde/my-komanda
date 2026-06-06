@@ -30,6 +30,9 @@ export interface CalendarEvent {
   interviewer?: string | null
   interviewType?: string | null
   interviewFormat?: string | null
+  // #14: адрес офиса или ссылка на видео-звонок
+  location?: string | null
+  meetingUrl?: string | null
 }
 
 export interface DaySchedule {

@@ -52,6 +52,9 @@ export interface EventFormData {
   interviewer?: string
   interviewType?: string
   interviewFormat?: string
+  // #14: адрес (Офис) или ссылка на видео-звонок (Онлайн)
+  location?: string
+  meetingUrl?: string
 }
 
 const INTERVIEW_TYPES = ["Техническое", "HR", "Финальное"]
@@ -94,6 +97,8 @@ export function EventModal({
   const [interviewer, setInterviewer] = useState("")
   const [interviewType, setInterviewType] = useState("HR")
   const [interviewFormat, setInterviewFormat] = useState("Онлайн")
+  const [location, setLocation] = useState("")
+  const [meetingUrl, setMeetingUrl] = useState("")
   const [vacancies, setVacancies] = useState<{ id: string; title: string }[]>([])
 
   // Список вакансий для селектора (подгружаем при открытии).
@@ -118,6 +123,8 @@ export function EventModal({
       setInterviewer(event.interviewer ?? "")
       setInterviewType(event.interviewType ?? "HR")
       setInterviewFormat(event.interviewFormat ?? "Онлайн")
+      setLocation(event.location ?? "")
+      setMeetingUrl(event.meetingUrl ?? "")
     } else if (defaultDate) {
       const start = defaultDate
       const end = new Date(start.getTime() + 60 * 60 * 1000)
@@ -132,6 +139,8 @@ export function EventModal({
       setInterviewer("")
       setInterviewType("HR")
       setInterviewFormat("Онлайн")
+      setLocation("")
+      setMeetingUrl("")
     }
     setConflict(null)
   }, [event, defaultDate, open])
@@ -185,6 +194,8 @@ export function EventModal({
         interviewer:     isInterview ? interviewer : "",
         interviewType:   isInterview ? interviewType : "",
         interviewFormat: isInterview ? interviewFormat : "",
+        location:        isInterview && interviewFormat === "Офис" ? location : "",
+        meetingUrl:      isInterview && interviewFormat === "Онлайн" ? meetingUrl : "",
       })
       onClose()
     } finally {
@@ -296,6 +307,18 @@ export function EventModal({
                   </Select>
                 </div>
               </div>
+              {interviewFormat === "Офис" && (
+                <div className="space-y-1">
+                  <Label htmlFor="iv-location">Адрес офиса</Label>
+                  <Input id="iv-location" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="ул. Ленина, 1, оф. 305" />
+                </div>
+              )}
+              {interviewFormat === "Онлайн" && (
+                <div className="space-y-1">
+                  <Label htmlFor="iv-meeting-url">Ссылка на видео-звонок</Label>
+                  <Input id="iv-meeting-url" value={meetingUrl} onChange={(e) => setMeetingUrl(e.target.value)} placeholder="https://meet.google.com/..." />
+                </div>
+              )}
             </div>
           )}
 

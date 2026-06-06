@@ -58,6 +58,8 @@ export async function PATCH(
     if (body.interviewType !== undefined) updateData.interviewType = body.interviewType
     if (body.interviewFormat !== undefined) updateData.interviewFormat = body.interviewFormat
     if (body.interviewStatus !== undefined) updateData.interviewStatus = body.interviewStatus
+    if (body.location !== undefined) updateData.location = body.location
+    if (body.meetingUrl !== undefined) updateData.meetingUrl = body.meetingUrl
     if (body.scope !== undefined) {
       updateData.scope = (body.scope === "hr" || body.scope === "personal") ? body.scope : "company"
     }

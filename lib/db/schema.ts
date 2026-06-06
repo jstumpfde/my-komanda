@@ -1736,6 +1736,9 @@ export const calendarEvents = pgTable("calendar_events", {
   interviewType:    text("interview_type"),    // Техническое | HR | Финальное
   interviewFormat:  text("interview_format"),   // Онлайн | Офис
   interviewStatus:  text("interview_status"),    // Подтверждено|Ожидает|Пройдено|Не явился|Отменено
+  // #14: адрес офиса (для Офис) / ссылка на видео-звонок (для Онлайн)
+  location:    text("location"),
+  meetingUrl:  text("meeting_url"),
   scope:       text("scope").notNull().default("company"), // company|hr|personal
   createdAt:   timestamp("created_at").defaultNow(),
   updatedAt:   timestamp("updated_at").defaultNow(),

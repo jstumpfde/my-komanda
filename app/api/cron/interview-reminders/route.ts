@@ -54,6 +54,9 @@ async function run(): Promise<{ scanned: number; sent24h: number; sent2h: number
       createdBy:       calendarEvents.createdBy,
       remind24hSentAt: calendarEvents.remind24hSentAt,
       remind2hSentAt:  calendarEvents.remind2hSentAt,
+      interviewFormat: calendarEvents.interviewFormat,
+      location:        calendarEvents.location,
+      meetingUrl:      calendarEvents.meetingUrl,
       hiringDefaults:  companies.hiringDefaultsJson,
     })
     .from(calendarEvents)
@@ -100,7 +103,13 @@ async function run(): Promise<{ scanned: number; sent24h: number; sent2h: number
 
     const lead = kind === "24h" ? "через 24 часа" : "через 2 часа"
     const title = `Интервью ${lead}`
-    const body = `«${ev.title}» — ${when}`
+    // #14: добавляем адрес или ссылку к тексту напоминания
+    const locationLine = ev.interviewFormat === "Офис" && ev.location
+      ? `\n📍 ${ev.location}`
+      : ev.interviewFormat === "Онлайн" && ev.meetingUrl
+        ? `\n🔗 ${ev.meetingUrl}`
+        : ""
+    const body = `«${ev.title}» — ${when}${locationLine}`
 
     // 1) In-app уведомление организатору (или всем HR тенанта, если автор неизвестен).
     await db.insert(notifications).values({
