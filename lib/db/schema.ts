@@ -150,6 +150,10 @@ export interface CompanyHiringDefaults {
   // при входе кандидата в стадию. Ключ — slug стадии, значение —
   // "invitation"|"discard"|null. Дефолт для вакансий, где воронка не кастомизирована.
   stageHhActions?: Record<string, "invitation" | "discard" | "assessment" | null>
+  // Палитра стадий на уровне компании: переименование и перекраска.
+  // Применяется как soft-дефолт — per-vacancy customLabel/customColor перекрывает.
+  stageLabels?: Record<string, string>
+  stageColors?: Record<string, string>
   // Настройки доступа ролей (HR → Настройки → Роли и доступ). Хранятся
   // на уровне компании (общие, не per-user), чтобы шарились между всеми.
   rolePermissions?: {

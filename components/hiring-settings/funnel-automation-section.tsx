@@ -8,11 +8,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Save, GitBranch, Zap, Bell } from "lucide-react"
+import { Save, GitBranch, Zap, Bell, Palette } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import type { CompanyHiringDefaults } from "@/lib/db/schema"
-import { PLATFORM_STAGES, FUNNEL_PRESETS, type StageSlug } from "@/lib/stages"
+import {
+  ALL_STAGE_SLUGS,
+  PLATFORM_STAGES,
+  FUNNEL_PRESETS,
+  STAGE_COLOR_CLASSES,
+  type StageSlug,
+  type StageColor,
+} from "@/lib/stages"
 
 // ─── Словарь сценариев воронки ──────────────────────────────────────────────
 // Скопировано из hiring-settings/page.tsx для автономной работы компонента.
@@ -68,6 +75,19 @@ const FUNNEL_SCENARIOS: Record<string, { label: string; description: string; sta
   },
 }
 
+// ─── Палитра цветов (для редактора стадий) ───────────────────────────────────
+const COLOR_ORDER: StageColor[] = [
+  "blue", "indigo", "violet", "purple", "emerald",
+  "green", "amber", "orange", "rose", "red", "slate",
+]
+const STAGE_DOT_CLASSES: Record<StageColor, string> = {
+  slate: "bg-slate-500",   blue: "bg-blue-500",    indigo: "bg-indigo-500",
+  violet: "bg-violet-500", purple: "bg-purple-500", amber: "bg-amber-500",
+  orange: "bg-orange-500", yellow: "bg-yellow-500", lime: "bg-lime-500",
+  green: "bg-green-500",   emerald: "bg-emerald-500", rose: "bg-rose-500",
+  red: "bg-destructive",
+}
+
 // ─── Компонент ───────────────────────────────────────────────────────────────
 
 export function FunnelAutomationSection({
@@ -89,6 +109,15 @@ export function FunnelAutomationSection({
     (defaults.stageHhActions as Record<string, "invitation" | "discard" | "assessment" | null>) ?? {},
   )
   const [savingStageHh, setSavingStageHh] = useState(false)
+
+  // ── Палитра стадий (переименование / перекраска) ──
+  const [stageLabels, setStageLabels] = useState<Record<string, string>>(
+    (defaults.stageLabels as Record<string, string> | undefined) ?? {},
+  )
+  const [stageColors, setStageColors] = useState<Record<string, string>>(
+    (defaults.stageColors as Record<string, string> | undefined) ?? {},
+  )
+  const [savingPalette, setSavingPalette] = useState(false)
 
   // ── Автоматизация воронки ──
   const [autoDemo, setAutoDemo] = useState(defaults.automation?.autoDemo ?? true)
@@ -139,6 +168,19 @@ export function FunnelAutomationSection({
       toast.error("Не удалось сохранить")
     } finally {
       setSavingStageHh(false)
+    }
+  }
+
+  // ── Сохранение: Палитра стадий ──
+  const handleSavePalette = async () => {
+    setSavingPalette(true)
+    try {
+      await onPatch({ stageLabels, stageColors })
+      toast.success("Палитра стадий сохранена")
+    } catch {
+      toast.error("Не удалось сохранить")
+    } finally {
+      setSavingPalette(false)
     }
   }
 
@@ -359,6 +401,67 @@ export function FunnelAutomationSection({
             >
               <Save className="size-3.5" />
               {savingStageHh ? "Сохранение…" : "Сохранить"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Блок 3.5: Палитра стадий ── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Palette className="w-4 h-4" />
+            Палитра стадий
+          </CardTitle>
+          <CardDescription>
+            Дефолтные названия и цвета для всех вакансий компании.
+            Можно переопределить в настройках конкретной вакансии.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="rounded-lg border divide-y">
+            {ALL_STAGE_SLUGS.map((slug: StageSlug) => {
+              const def = PLATFORM_STAGES[slug]
+              const label = stageLabels[slug] ?? ""
+              const color = (stageColors[slug] as StageColor | undefined) ?? def.defaultColor
+              return (
+                <div key={slug} className="flex items-center gap-3 px-3 py-2">
+                  <div className="flex gap-0.5 shrink-0">
+                    {COLOR_ORDER.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setStageColors(prev => ({ ...prev, [slug]: c }))}
+                        className={`w-3 h-3 rounded-full ${STAGE_DOT_CLASSES[c]} transition-all ${color === c ? "ring-1 ring-offset-1 ring-foreground" : "opacity-40 hover:opacity-80"}`}
+                        aria-label={c}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-xs text-muted-foreground w-28 shrink-0 truncate">
+                    {def.defaultLabel}
+                  </span>
+                  <Input
+                    value={label}
+                    onChange={(e) => setStageLabels(prev => ({ ...prev, [slug]: e.target.value }))}
+                    placeholder={def.defaultLabel}
+                    className="h-7 text-xs flex-1"
+                  />
+                </div>
+              )
+            })}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Пустое поле — используется платформенное название.
+          </p>
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              className="h-8 text-xs gap-1.5"
+              onClick={handleSavePalette}
+              disabled={savingPalette}
+            >
+              <Save className="size-3.5" />
+              {savingPalette ? "Сохранение…" : "Сохранить"}
             </Button>
           </div>
         </CardContent>

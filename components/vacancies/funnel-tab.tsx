@@ -22,6 +22,7 @@ import {
   type VacancyPipelineV2,
   type VacancyStageConfig,
   type HhAction,
+  type CompanyStagePalette,
 } from "@/lib/stages"
 import { cn } from "@/lib/utils"
 
@@ -53,10 +54,11 @@ const STAGE_DOT_CLASSES: Record<StageColor, string> = {
 export interface FunnelTabProps {
   vacancyId: string
   initialPipeline: VacancyPipelineV2
+  companyPalette?: CompanyStagePalette
   onSaved?: (pipeline: VacancyPipelineV2) => void
 }
 
-export function FunnelTab({ vacancyId, initialPipeline, onSaved }: FunnelTabProps) {
+export function FunnelTab({ vacancyId, initialPipeline, companyPalette, onSaved }: FunnelTabProps) {
   const [pipeline, setPipeline] = useState<VacancyPipelineV2>(initialPipeline)
   const [editingStage, setEditingStage] = useState<StageSlug | null>(null)
   const [saving, setSaving] = useState(false)
@@ -64,7 +66,7 @@ export function FunnelTab({ vacancyId, initialPipeline, onSaved }: FunnelTabProp
   const dirty = JSON.stringify(pipeline) !== JSON.stringify(savedPipeline)
 
   const handlePresetChange = (newPreset: Exclude<FunnelPreset, "custom">) => {
-    setPipeline(getDefaultPipeline(newPreset))
+    setPipeline(getDefaultPipeline(newPreset, undefined, companyPalette))
   }
 
   const handleStageToggle = (slug: StageSlug, enabled: boolean) => {

@@ -383,19 +383,28 @@ export interface VacancyPipelineV2 {
 // Company-level дефолты hh-действий по стадиям (hiringDefaults.stageHhActions).
 export type CompanyStageHhActions = Partial<Record<StageSlug, HhAction>>
 
+// Company-level палитра: переименовать/перекрасить стадии разом
+// (hiringDefaults.stageLabels / hiringDefaults.stageColors).
+// Применяется как soft-дефолт — per-vacancy customLabel/customColor перекрывает.
+export type CompanyStagePalette = {
+  labels?: Partial<Record<StageSlug, string>>
+  colors?: Partial<Record<StageSlug, StageColor>>
+}
+
 /** hh-действие стадии: company-дефолт (если задан) перекрывает платформенный. */
 function defaultHhActionFor(slug: StageSlug, companyHhActions?: CompanyStageHhActions): HhAction {
   if (companyHhActions && slug in companyHhActions) {
     const v = companyHhActions[slug]
-    return v === "invitation" || v === "discard" ? v : null
+    return v === "invitation" || v === "discard" || v === "assessment" ? v : null
   }
   return PLATFORM_STAGES[slug].defaultHhAction
 }
 
-/** Дефолтный pipeline для новой вакансии (с учётом company-маппинга hh, если задан). */
+/** Дефолтный pipeline для новой вакансии (с учётом company-маппинга hh и палитры). */
 export function getDefaultPipeline(
   preset: Exclude<FunnelPreset, "custom"> = "standard",
   companyHhActions?: CompanyStageHhActions,
+  companyPalette?: CompanyStagePalette,
 ): VacancyPipelineV2 {
   const presetDef = FUNNEL_PRESETS[preset]
   return {
@@ -404,8 +413,8 @@ export function getDefaultPipeline(
     stages: ALL_STAGE_SLUGS.map(slug => ({
       slug,
       enabled: presetDef.enabledStages.includes(slug),
-      customLabel: null,
-      customColor: null,
+      customLabel: companyPalette?.labels?.[slug] ?? null,
+      customColor: companyPalette?.colors?.[slug] ?? null,
       hhAction: defaultHhActionFor(slug, companyHhActions),
     })),
   }
@@ -421,11 +430,15 @@ const FUNNEL_PRESET_SET: Set<FunnelPreset> = new Set(["fast", "standard", "deep"
  * Гарантирует, что в результате присутствуют ВСЕ 16 слугов воронки,
  * даже если в сохранёнке кого-то не было.
  */
-export function parsePipeline(raw: unknown, companyHhActions?: CompanyStageHhActions): VacancyPipelineV2 {
-  if (!raw || typeof raw !== "object") return getDefaultPipeline("standard", companyHhActions)
+export function parsePipeline(
+  raw: unknown,
+  companyHhActions?: CompanyStageHhActions,
+  companyPalette?: CompanyStagePalette,
+): VacancyPipelineV2 {
+  if (!raw || typeof raw !== "object") return getDefaultPipeline("standard", companyHhActions, companyPalette)
   const obj = raw as Record<string, unknown>
   if (obj.version !== 2 || !Array.isArray(obj.stages)) {
-    return getDefaultPipeline("standard", companyHhActions)
+    return getDefaultPipeline("standard", companyHhActions, companyPalette)
   }
 
   const savedByslug = new Map<StageSlug, Record<string, unknown>>()
@@ -446,17 +459,20 @@ export function parsePipeline(raw: unknown, companyHhActions?: CompanyStageHhAct
       return {
         slug,
         enabled: defaultEnabled,
-        customLabel: null,
-        customColor: null,
+        customLabel: companyPalette?.labels?.[slug] ?? null,
+        customColor: companyPalette?.colors?.[slug] ?? null,
         hhAction: defaultHhActionFor(slug, companyHhActions),
       }
     }
+    // Per-vacancy customLabel > company palette label > null
     const customLabel = typeof saved.customLabel === "string" && saved.customLabel.trim().length > 0
       ? saved.customLabel.trim()
-      : null
-    const customColor = typeof saved.customColor === "string" && STAGE_COLOR_SET.has(saved.customColor as StageColor)
-      ? (saved.customColor as StageColor)
-      : null
+      : (companyPalette?.labels?.[slug] ?? null)
+    // Per-vacancy customColor > company palette color > null
+    const savedColor = saved.customColor
+    const customColor = typeof savedColor === "string" && STAGE_COLOR_SET.has(savedColor as StageColor)
+      ? (savedColor as StageColor)
+      : (companyPalette?.colors?.[slug] ?? null)
     const hhAction: HhAction =
       saved.hhAction === "invitation" || saved.hhAction === "discard" || saved.hhAction === "assessment"
         ? saved.hhAction

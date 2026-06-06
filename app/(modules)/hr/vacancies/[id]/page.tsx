@@ -76,7 +76,7 @@ import { RecoveryMessageSettings } from "@/components/vacancies/recovery-message
 import { FirstMessagesChainEditor } from "@/components/vacancies/first-messages-chain-editor"
 import { FunnelBuilder } from "@/components/vacancies/funnel-builder"
 import { FunnelTab } from "@/components/vacancies/funnel-tab"
-import { parsePipeline, type CompanyStageHhActions } from "@/lib/stages"
+import { parsePipeline, type CompanyStageHhActions, type CompanyStagePalette } from "@/lib/stages"
 import { BrandingOverrideSwitch } from "@/components/vacancies/branding-override-switch"
 import { VacancySettingsProvider, VacancyTabPendingDot, VacancyStickySaveBar, useVacancySectionRegister, useSafeSubTabSwitch, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
 import {
@@ -228,12 +228,16 @@ export default function VacancyPage() {
   // Company-дефолты hh-маппинга воронки — чтобы редактор стадий показывал их
   // (а не платформенные) для вакансий без своей воронки.
   const [companyHhActions, setCompanyHhActions] = useState<CompanyStageHhActions | undefined>(undefined)
+  const [companyPalette, setCompanyPalette] = useState<CompanyStagePalette | undefined>(undefined)
   useEffect(() => {
     fetch("/api/modules/hr/company/hiring-defaults").then(r => r.ok ? r.json() : null).then(j => {
-      const sha = j?.hiringDefaults?.stageHhActions
-      if (sha && typeof sha === "object") setCompanyHhActions(sha as CompanyStageHhActions)
-      // Загружаем список бренд-компаний для брендинг-секции
       const hd = j?.hiringDefaults
+      const sha = hd?.stageHhActions
+      if (sha && typeof sha === "object") setCompanyHhActions(sha as CompanyStageHhActions)
+      if (hd && (hd.stageLabels || hd.stageColors)) {
+        setCompanyPalette({ labels: hd.stageLabels, colors: hd.stageColors })
+      }
+      // Загружаем список бренд-компаний для брендинг-секции
       if (hd && Array.isArray(hd.brandCompanies)) {
         setBrandCompaniesData(hd.brandCompanies.filter((c: { id: string; name: string }) => c?.name?.trim()))
       }
@@ -3313,9 +3317,10 @@ export default function VacancyPage() {
                   {/* Редактор стадий воронки (стадии/цвета/названия + действие в hh.ru
                       на каждую стадию). Дефолты hh — из company-маппинга. */}
                   <FunnelTab
-                    key={`funnel-${companyHhActions ? "co" : "pf"}`}
+                    key={`funnel-${companyHhActions ? "co" : "pf"}-${companyPalette ? "pa" : "np"}`}
                     vacancyId={id}
-                    initialPipeline={parsePipeline((apiVacancy?.descriptionJson as { pipeline?: unknown } | undefined)?.pipeline, companyHhActions)}
+                    initialPipeline={parsePipeline((apiVacancy?.descriptionJson as { pipeline?: unknown } | undefined)?.pipeline, companyHhActions, companyPalette)}
+                    companyPalette={companyPalette}
                     onSaved={() => refetchVacancy()}
                   />
                   <VacancyPrequalificationSettings
