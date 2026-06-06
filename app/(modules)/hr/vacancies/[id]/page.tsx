@@ -2620,7 +2620,7 @@ export default function VacancyPage() {
                             : `Данные по всей вакансии${anPeriod === "all" ? "" : " за выбранный период"}`}
                         </p>
                         <Select value={anPeriod} onValueChange={setAnPeriod}>
-                          <SelectTrigger className="w-[200px] h-8 text-xs">
+                          <SelectTrigger className="w-full sm:w-[200px] h-8 text-xs">
                             <SelectValue placeholder="Период" />
                           </SelectTrigger>
                           <SelectContent>

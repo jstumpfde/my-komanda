@@ -303,7 +303,7 @@ export default function CandidateDetailPage() {
           )}
 
           {/* Actions */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 flex-wrap">
             <Button size="sm" className="gap-1.5 text-xs" onClick={() => changeStage("scheduled")} disabled={stageChanging}>
               <UserPlus className="w-3.5 h-3.5" />Пригласить
             </Button>
@@ -316,7 +316,7 @@ export default function CandidateDetailPage() {
               <XCircle className="w-3.5 h-3.5" />Отказать
             </Button>
             <Select value={candidate.stage} onValueChange={(v) => changeStage(v)}>
-              <SelectTrigger className="h-8 w-[160px] text-xs bg-[var(--input-bg)]"><SelectValue placeholder="Сменить этап" /></SelectTrigger>
+              <SelectTrigger className="h-8 w-full sm:w-[160px] text-xs bg-[var(--input-bg)]"><SelectValue placeholder="Сменить этап" /></SelectTrigger>
               <SelectContent>
                 {MANUAL_STAGES.map((key) => (
                   <SelectItem key={key} value={key}>{getStageLabel(key)}</SelectItem>

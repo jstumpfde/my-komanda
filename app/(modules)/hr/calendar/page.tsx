@@ -446,11 +446,11 @@ export default function CalendarPage() {
                     <CardTitle className="text-sm flex items-center gap-2"><Clock className="size-4" />Рабочее время</CardTitle>
                     <CardDescription>Настройте расписание для каждого дня недели</CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-1.5">
+                  <CardContent className="space-y-1.5 overflow-x-auto">
                     {DAYS_ORDER.map(({ day, label }) => {
                       const s = weekSchedule[day]
                       return (
-                        <div key={day} className="flex items-center gap-2">
+                        <div key={day} className="flex items-center gap-2 min-w-max">
                           <Switch checked={s.enabled} onCheckedChange={v => updateDay(day, { enabled: v })} className="scale-90" />
                           <span className={cn("w-6 text-xs font-semibold shrink-0", s.enabled ? "text-foreground" : "text-muted-foreground")}>{label}</span>
                           <Select value={s.start} onValueChange={v => updateDay(day, { start: v })} disabled={!s.enabled}>
