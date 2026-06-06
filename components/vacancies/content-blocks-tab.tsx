@@ -3,37 +3,20 @@
 import { useState, useRef, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Loader2, Plus, GripVertical, Pencil, Trash2, ChevronDown, Presentation, TestTube2, ClipboardList, AlertCircle } from "lucide-react"
+import { Loader2, Plus, GripVertical, Pencil, Trash2, Sparkles, FileText, AlertCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { useContentBlocks, type ContentBlock, type ContentType } from "@/hooks/use-content-blocks"
+import { useContentBlocks, type ContentBlock } from "@/hooks/use-content-blocks"
 import { NotionEditor } from "./notion-editor"
 import type { Demo, Lesson } from "@/lib/course-types"
 
-const CONTENT_TYPE_LABELS: Record<ContentType, string> = {
-  presentation: "Презентация",
-  test: "Тест",
-  task: "Задание",
-}
-
-const CONTENT_TYPE_ICONS: Record<ContentType, React.ReactNode> = {
-  presentation: <Presentation className="w-3 h-3" />,
-  test: <TestTube2 className="w-3 h-3" />,
-  task: <ClipboardList className="w-3 h-3" />,
-}
-
-const CONTENT_TYPE_VARIANT: Record<ContentType, "default" | "secondary" | "outline"> = {
-  presentation: "secondary",
-  test: "outline",
-  task: "default",
+/** Блок «оценивается ИИ», если внутри есть формы: вопросы (task) или запись медиа от кандидата (media). */
+function blockHasScoredContent(lessons: Lesson[]): boolean {
+  return lessons.some(l => Array.isArray(l.blocks) && l.blocks.some(b => b.type === "task" || b.type === "media"))
 }
 
 function blockToDemo(block: ContentBlock): Demo {
@@ -56,26 +39,24 @@ interface ContentBlocksTabProps {
   vacancyTitle?: string | null
 }
 
-export function ContentBlocksTab({ vacancyId, vacancyTitle }: ContentBlocksTabProps) {
+export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
   const { blocks, loading, error, createBlock, updateBlock, deleteBlock, reorder } = useContentBlocks(vacancyId)
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [creatingType, setCreatingType] = useState<ContentType | null>(null)
-  const [newBlockTitle, setNewBlockTitle] = useState("")
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renamingValue, setRenamingValue] = useState("")
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [creating, setCreating] = useState(false)
 
   // Drag-reorder
   const dragIdxRef = useRef<number | null>(null)
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
 
-  // Выбор первого блока по умолчанию после загрузки
+  // Выбор первого блока после загрузки / сброс при удалении выбранного
   useEffect(() => {
     if (!loading && blocks.length > 0 && !selectedId) {
       setSelectedId(blocks[0].id)
     }
-    // Если выбранный блок удалён — сбрасываем
     if (selectedId && !blocks.find(b => b.id === selectedId)) {
       setSelectedId(blocks.length > 0 ? blocks[0].id : null)
     }
@@ -83,32 +64,20 @@ export function ContentBlocksTab({ vacancyId, vacancyTitle }: ContentBlocksTabPr
 
   const selectedBlock = blocks.find(b => b.id === selectedId) ?? null
 
-  // Создание нового блока
-  const handleCreateBlock = useCallback(async (type: ContentType) => {
-    const title = newBlockTitle.trim() ||
-      (type === "presentation" ? "Новая презентация" :
-       type === "test" ? "Новый тест" : "Новое задание")
-    const block = await createBlock(type, title)
+  // Создать блок и сразу открыть инлайн-ввод имени (тип не выбираем — свободный контент)
+  const handleAddBlock = useCallback(async () => {
+    setCreating(true)
+    const block = await createBlock("presentation", "Новый блок")
+    setCreating(false)
     if (block) {
       setSelectedId(block.id)
-      toast.success("Блок создан")
+      setRenamingId(block.id)
+      setRenamingValue("Новый блок")
     } else {
       toast.error("Не удалось создать блок")
     }
-    setCreatingType(null)
-    setNewBlockTitle("")
-  }, [createBlock, newBlockTitle])
+  }, [createBlock])
 
-  // Начать создание: показываем инлайн-форму имени под кнопкой типа
-  const startCreating = useCallback((type: ContentType) => {
-    setCreatingType(type)
-    setNewBlockTitle(
-      type === "presentation" ? "Новая презентация" :
-      type === "test" ? "Новый тест" : "Новое задание"
-    )
-  }, [])
-
-  // Переименование
   const startRenaming = useCallback((block: ContentBlock) => {
     setRenamingId(block.id)
     setRenamingValue(block.title)
@@ -116,7 +85,7 @@ export function ContentBlocksTab({ vacancyId, vacancyTitle }: ContentBlocksTabPr
 
   const commitRename = useCallback((id: string) => {
     const val = renamingValue.trim()
-    if (val) updateBlock(id, { title: val })
+    updateBlock(id, { title: val || "Новый блок" })
     setRenamingId(null)
   }, [renamingValue, updateBlock])
 
@@ -131,10 +100,7 @@ export function ContentBlocksTab({ vacancyId, vacancyTitle }: ContentBlocksTabPr
 
   // Drag-and-drop reorder
   const handleDragStart = (idx: number) => { dragIdxRef.current = idx }
-  const handleDragOver = (e: React.DragEvent, idx: number) => {
-    e.preventDefault()
-    setDragOverIdx(idx)
-  }
+  const handleDragOver = (e: React.DragEvent, idx: number) => { e.preventDefault(); setDragOverIdx(idx) }
   const handleDrop = async (e: React.DragEvent, idx: number) => {
     e.preventDefault()
     const fromIdx = dragIdxRef.current
@@ -169,46 +135,20 @@ export function ContentBlocksTab({ vacancyId, vacancyTitle }: ContentBlocksTabPr
   }
 
   // Пустое состояние
-  if (blocks.length === 0 && !creatingType) {
+  if (blocks.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
         <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-          <Presentation className="w-6 h-6 text-muted-foreground" />
+          <FileText className="w-6 h-6 text-muted-foreground" />
         </div>
         <div>
           <p className="font-medium text-foreground">Блоков контента нет</p>
-          <p className="text-sm text-muted-foreground mt-1">Добавьте презентацию, тест или задание</p>
+          <p className="text-sm text-muted-foreground mt-1">Создайте блок и наполните его чем угодно — текст, видео, вопросы, задание</p>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button size="sm" className="gap-1.5">
-              <Plus className="w-3.5 h-3.5" />
-              Добавить блок
-              <ChevronDown className="w-3 h-3 ml-0.5 opacity-70" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem onClick={() => startCreating("presentation")} className="gap-2">
-              <Presentation className="w-4 h-4" />Презентация
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => startCreating("test")} className="gap-2">
-              <TestTube2 className="w-4 h-4" />Тест
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => startCreating("task")} className="gap-2">
-              <ClipboardList className="w-4 h-4" />Задание
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        {/* Инлайн-форма имени нового блока */}
-        {creatingType && (
-          <NewBlockForm
-            type={creatingType}
-            value={newBlockTitle}
-            onChange={setNewBlockTitle}
-            onCreate={() => handleCreateBlock(creatingType)}
-            onCancel={() => { setCreatingType(null); setNewBlockTitle("") }}
-          />
-        )}
+        <Button size="sm" className="gap-1.5" disabled={creating} onClick={handleAddBlock}>
+          {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+          Добавить блок
+        </Button>
       </div>
     )
   }
@@ -216,136 +156,100 @@ export function ContentBlocksTab({ vacancyId, vacancyTitle }: ContentBlocksTabPr
   return (
     <div className="flex gap-4 min-h-0" style={{ height: "calc(100vh - 220px)" }}>
       {/* ─── Левая панель — список блоков ─── */}
-      <div className="w-60 shrink-0 flex flex-col gap-1 overflow-y-auto pr-1">
-        <p className="text-[11px] uppercase tracking-wider text-muted-foreground px-1 mb-1">Блоки контента</p>
+      <div className="w-64 shrink-0 self-start max-h-full flex flex-col border border-border rounded-xl bg-card overflow-hidden">
+        <div className="px-3 py-2.5 border-b border-border">
+          <h4 className="text-sm font-semibold text-foreground">Блоки контента</h4>
+          <p className="text-[11px] text-muted-foreground mt-0.5">По порядку показа кандидату</p>
+        </div>
 
-        {blocks.map((block, idx) => (
-          <div
-            key={block.id}
-            draggable
-            onDragStart={() => handleDragStart(idx)}
-            onDragOver={(e) => handleDragOver(e, idx)}
-            onDrop={(e) => handleDrop(e, idx)}
-            onDragEnd={handleDragEnd}
-            className={cn(
-              "group flex items-center gap-1.5 rounded-lg px-2 py-2 cursor-pointer border transition-all select-none",
-              selectedId === block.id
-                ? "bg-primary/10 border-primary/30 text-foreground"
-                : "border-transparent hover:bg-muted/60",
-              dragOverIdx === idx && "border-primary/50 bg-primary/5"
-            )}
-            onClick={() => setSelectedId(block.id)}
-          >
-            {/* Drag handle */}
-            <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 cursor-grab" />
-
-            {/* Имя или поле переименования */}
-            <div className="flex-1 min-w-0">
-              {renamingId === block.id ? (
-                <Input
-                  autoFocus
-                  value={renamingValue}
-                  onChange={e => setRenamingValue(e.target.value)}
-                  onBlur={() => commitRename(block.id)}
-                  onKeyDown={e => {
-                    if (e.key === "Enter") commitRename(block.id)
-                    if (e.key === "Escape") setRenamingId(null)
-                  }}
-                  className="h-6 text-xs px-1 py-0"
-                  onClick={e => e.stopPropagation()}
-                />
-              ) : (
-                <span className="text-xs font-medium truncate block">{block.title}</span>
-              )}
-            </div>
-
-            {/* Бэдж типа + действия */}
-            <div className="flex items-center gap-1 shrink-0">
-              <Badge
-                variant={CONTENT_TYPE_VARIANT[block.contentType]}
-                className="text-[9px] h-4 px-1 gap-0.5 hidden group-hover:hidden sm:flex"
+        <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5">
+          {blocks.map((block, idx) => {
+            const isActive = selectedId === block.id
+            const isRenaming = renamingId === block.id
+            const scored = blockHasScoredContent(block.lessons)
+            return (
+              <div
+                key={block.id}
+                draggable={!isRenaming}
+                onDragStart={() => handleDragStart(idx)}
+                onDragOver={(e) => handleDragOver(e, idx)}
+                onDrop={(e) => handleDrop(e, idx)}
+                onDragEnd={handleDragEnd}
+                onClick={() => { if (!isRenaming) setSelectedId(block.id) }}
+                className={cn(
+                  "group flex items-center gap-1.5 rounded-lg pl-1 pr-1.5 py-2 cursor-pointer transition-colors select-none",
+                  isActive ? "bg-primary text-primary-foreground" : "hover:bg-muted/60 text-foreground",
+                  dragOverIdx === idx && dragIdxRef.current !== idx && "ring-2 ring-primary/40"
+                )}
               >
-                {CONTENT_TYPE_ICONS[block.contentType]}
-                {CONTENT_TYPE_LABELS[block.contentType]}
-              </Badge>
+                <GripVertical className={cn(
+                  "w-3.5 h-3.5 shrink-0 cursor-grab active:cursor-grabbing",
+                  isActive ? "text-primary-foreground/40" : "text-muted-foreground/30 group-hover:text-muted-foreground/60"
+                )} />
 
-              {/* Контекст-меню */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
-                  <button className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-muted transition-opacity">
-                    <ChevronDown className="w-3 h-3 text-muted-foreground" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-44">
-                  <DropdownMenuItem className="gap-2 text-xs" onClick={e => { e.stopPropagation(); startRenaming(block) }}>
-                    <Pencil className="w-3.5 h-3.5" />Переименовать
-                  </DropdownMenuItem>
-                  {/* Сменить тип */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger className="flex items-center gap-2 text-xs w-full px-2 py-1.5 hover:bg-accent rounded-sm cursor-default">
-                      {CONTENT_TYPE_ICONS[block.contentType]}
-                      <span className="flex-1 text-left">Тип: {CONTENT_TYPE_LABELS[block.contentType]}</span>
-                      <ChevronDown className="w-3 h-3 opacity-50" />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                      {(["presentation", "test", "task"] as ContentType[]).map(ct => (
-                        <DropdownMenuItem
-                          key={ct}
-                          className="gap-2 text-xs"
-                          onClick={e => { e.stopPropagation(); updateBlock(block.id, { contentType: ct }) }}
-                        >
-                          {CONTENT_TYPE_ICONS[ct]}
-                          {CONTENT_TYPE_LABELS[ct]}
-                          {block.contentType === ct && <span className="ml-auto text-primary">✓</span>}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <DropdownMenuItem
-                    className="gap-2 text-xs text-destructive focus:text-destructive"
-                    onClick={e => { e.stopPropagation(); setDeleteConfirmId(block.id) }}
+                {isRenaming ? (
+                  <input
+                    autoFocus
+                    value={renamingValue}
+                    onChange={(e) => setRenamingValue(e.target.value)}
+                    onFocus={(e) => e.currentTarget.select()}
+                    onBlur={() => commitRename(block.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") { e.preventDefault(); commitRename(block.id) }
+                      if (e.key === "Escape") setRenamingId(null)
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    placeholder="Название блока…"
+                    className="flex-1 min-w-0 text-xs font-medium bg-transparent border-b border-primary-foreground/40 outline-none placeholder:opacity-50"
+                  />
+                ) : (
+                  <span
+                    className="flex-1 min-w-0 truncate text-xs font-medium"
+                    onDoubleClick={(e) => { e.stopPropagation(); startRenaming(block) }}
+                  >{block.title}</span>
+                )}
+
+                {/* Авто-метка «ИИ-оценка» — если внутри есть вопросы/задание/запись */}
+                {scored && !isRenaming && (
+                  <Badge
+                    variant={isActive ? "secondary" : "outline"}
+                    className="text-[9px] h-4 px-1 gap-0.5 shrink-0 group-hover:hidden"
+                    title="Содержит формы (вопросы/задание/запись) — оценивает ИИ"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />Удалить
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-        ))}
+                    <Sparkles className="w-2.5 h-2.5" />ИИ
+                  </Badge>
+                )}
 
-        {/* Форма нового блока (инлайн под списком) */}
-        {creatingType && (
-          <NewBlockForm
-            type={creatingType}
-            value={newBlockTitle}
-            onChange={setNewBlockTitle}
-            onCreate={() => handleCreateBlock(creatingType)}
-            onCancel={() => { setCreatingType(null); setNewBlockTitle("") }}
-          />
-        )}
+                {/* Действия — на ховере */}
+                {!isRenaming && (
+                  <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
+                    <button
+                      title="Переименовать"
+                      onClick={(e) => { e.stopPropagation(); startRenaming(block) }}
+                      className={cn("p-0.5 rounded hover:bg-black/10", isActive && "hover:bg-white/20")}
+                    ><Pencil className="w-3.5 h-3.5" /></button>
+                    <button
+                      title="Удалить"
+                      onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(block.id) }}
+                      className={cn("p-0.5 rounded hover:bg-black/10", isActive ? "hover:bg-white/20" : "text-muted-foreground hover:text-destructive")}
+                    ><Trash2 className="w-3.5 h-3.5" /></button>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
 
-        {/* Кнопка «+ Блок» */}
-        {!creatingType && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="gap-1.5 text-xs mt-1 justify-start text-muted-foreground hover:text-foreground">
-                <Plus className="w-3.5 h-3.5" />
-                Добавить блок
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem onClick={() => startCreating("presentation")} className="gap-2 text-xs">
-                <Presentation className="w-3.5 h-3.5" />Презентация
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => startCreating("test")} className="gap-2 text-xs">
-                <TestTube2 className="w-3.5 h-3.5" />Тест
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => startCreating("task")} className="gap-2 text-xs">
-                <ClipboardList className="w-3.5 h-3.5" />Задание
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+        {/* Добавить блок — снизу */}
+        <button
+          type="button"
+          disabled={creating}
+          onClick={handleAddBlock}
+          className="w-full border-t border-dashed border-border px-2 py-2.5 flex items-center justify-center gap-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors text-xs"
+        >
+          {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+          Блок
+        </button>
       </div>
 
       {/* ─── Правая панель — редактор выбранного блока ─── */}
@@ -393,45 +297,6 @@ export function ContentBlocksTab({ vacancyId, vacancyTitle }: ContentBlocksTabPr
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  )
-}
-
-// ─── Инлайн-форма создания блока ───────────────────────────────────────────
-
-interface NewBlockFormProps {
-  type: ContentType
-  value: string
-  onChange: (v: string) => void
-  onCreate: () => void
-  onCancel: () => void
-}
-
-function NewBlockForm({ type, value, onChange, onCreate, onCancel }: NewBlockFormProps) {
-  return (
-    <div className="flex flex-col gap-1.5 p-2 border border-primary/30 rounded-lg bg-primary/5 mt-1">
-      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-        Новый блок — {CONTENT_TYPE_LABELS[type]}
-      </p>
-      <Input
-        autoFocus
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        onKeyDown={e => {
-          if (e.key === "Enter") onCreate()
-          if (e.key === "Escape") onCancel()
-        }}
-        placeholder="Название блока"
-        className="h-7 text-xs"
-      />
-      <div className="flex gap-1">
-        <Button size="sm" className="h-6 text-xs flex-1" onClick={onCreate}>
-          Создать
-        </Button>
-        <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={onCancel}>
-          Отмена
-        </Button>
-      </div>
     </div>
   )
 }
