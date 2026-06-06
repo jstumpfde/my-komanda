@@ -127,7 +127,7 @@ export default function AccessRequestsPage() {
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
-                <Inbox className="size-5 text-blue-500" />
+                <Inbox className="size-5 text-violet-600" />
                 <h1 className="text-lg font-semibold">Заявки на подключение</h1>
                 {newCount > 0 && (
                   <Badge className="bg-blue-500 text-white text-xs">{newCount} новых</Badge>

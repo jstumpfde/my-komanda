@@ -46,7 +46,7 @@ export default function TaskProjectsPage() {
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
-                <FolderKanban className="size-5 text-sky-500" />
+                <FolderKanban className="size-5 text-violet-600" />
                 <h1 className="text-lg font-semibold">Проекты</h1>
               </div>
               <Button className="gap-1.5" onClick={() => setShowNew(true)}>
