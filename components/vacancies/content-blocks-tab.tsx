@@ -6,12 +6,15 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Loader2, Plus, Pencil, Trash2, Sparkles, FileText, AlertCircle, Save, BookOpen, Eye } from "lucide-react"
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Loader2, Plus, Pencil, Trash2, Sparkles, FileText, AlertCircle, Save, BookOpen, Eye, Check, Download, ChevronDown, FilePlus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { useContentBlocks, type ContentBlock } from "@/hooks/use-content-blocks"
 import { NotionEditor, type NotionEditorHandle } from "./notion-editor"
-import type { Demo, Lesson } from "@/lib/course-types"
+import { createBlock, type Demo, type Lesson } from "@/lib/course-types"
 
 /** Блок «оценивается ИИ», если внутри есть формы: вопросы (task) или запись медиа от кандидата (media). */
 function blockHasScoredContent(lessons: Lesson[]): boolean {
@@ -50,7 +53,7 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
   // Управление редактором выбранного блока (общий ряд кнопок справа)
   const editorRef = useRef<NotionEditorHandle>(null)
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving">("saved")
-  const [aiBusy, setAiBusy] = useState(false)
+  const [resetConfirmId, setResetConfirmId] = useState<string | null>(null)
 
   // Drag-reorder (горизонтальный)
   const dragIdxRef = useRef<number | null>(null)
@@ -102,10 +105,20 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
     })
   }, [selectedBlock, updateBlock])
 
-  const handleAI = useCallback(async () => {
-    setAiBusy(true)
-    try { await editorRef.current?.generateWithAI() } finally { setAiBusy(false) }
-  }, [])
+  // «Создать с нуля» — сбросить контент блока к одному пустому уроку.
+  const blockHasContent = (b: ContentBlock | null) =>
+    !!b && b.lessons.some(l => (l.title || "").trim() || l.blocks?.some(bl => (bl.content || "").trim() || (bl.questions?.length ?? 0) > 0))
+
+  const doResetBlank = useCallback((id: string) => {
+    updateBlock(id, { lessons: [{ id: `les-${Date.now()}`, emoji: "", title: "Новый урок", blocks: [createBlock("text")] }] })
+    setResetConfirmId(null)
+  }, [updateBlock])
+
+  const handleResetBlank = useCallback(() => {
+    if (!selectedBlock) return
+    if (blockHasContent(selectedBlock)) setResetConfirmId(selectedBlock.id)
+    else doResetBlank(selectedBlock.id)
+  }, [selectedBlock, doResetBlank])
 
   // Drag-and-drop reorder
   const handleDragStart = (idx: number) => { dragIdxRef.current = idx }
@@ -247,39 +260,65 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
               </div>
             )
           })}
-        </div>
 
-        {/* Добавить блок — всегда виден между чипами и действиями */}
-        <button
-          type="button"
-          disabled={creating}
-          onClick={handleAddBlock}
-          className="shrink-0 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-2.5 h-9 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
-        >
-          {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-          Блок
-        </button>
+          {/* «+ Блок» — сразу за крайним чипом, едет вправо при добавлении */}
+          <button
+            type="button"
+            disabled={creating}
+            onClick={handleAddBlock}
+            className="shrink-0 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-2.5 h-9 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+          >
+            {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+            Блок
+          </button>
+        </div>
 
         {/* Действия редактора выбранного блока — справа */}
         {selectedBlock && (
           <div className="flex items-center gap-1.5 shrink-0">
-            <span className={cn("text-[11px] mr-0.5 transition-colors hidden sm:inline", saveStatus === "saving" ? "text-amber-500" : "text-muted-foreground/40")}>
-              {saveStatus === "saving" ? "Сохранение…" : "✓ Сохранено"}
-            </span>
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => editorRef.current?.save()}>
-              <Save className="w-3.5 h-3.5" />Сохранить
-            </Button>
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={handleAI} disabled={aiBusy} title="Сгенерировать черновик через AI">
-              {aiBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}AI
-            </Button>
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => editorRef.current?.openLibrary()} title="Из библиотеки">
-              <BookOpen className="w-3.5 h-3.5" />
-            </Button>
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => editorRef.current?.openSaveTemplate()} title="В библиотеку">
-              <Save className="w-3.5 h-3.5" />
-            </Button>
+            {/* Сохранить (split): Сохранить + ▼ (В библиотеку / Скачать) */}
+            <div className="flex items-center">
+              <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 rounded-r-none border-r-0" onClick={() => editorRef.current?.save()}>
+                {saveStatus === "saving" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                Сохранить
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 px-2 rounded-l-none">
+                    <ChevronDown className="w-3 h-3 opacity-50" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => editorRef.current?.openSaveTemplate()}>
+                    <Save className="w-3.5 h-3.5" />В библиотеку
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => editorRef.current?.downloadTxt()}>
+                    <Download className="w-3.5 h-3.5" />Скачать
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            {/* Создать из... (dropdown): Создать с нуля / Из библиотеки */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8">
+                  <Sparkles className="w-3.5 h-3.5" />Создать из...
+                  <ChevronDown className="w-3 h-3 ml-0.5 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem className="gap-2 cursor-pointer" onClick={handleResetBlank}>
+                  <FilePlus className="w-3.5 h-3.5" />Создать с нуля
+                </DropdownMenuItem>
+                <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => editorRef.current?.openLibrary()}>
+                  <BookOpen className="w-3.5 h-3.5" />Из библиотеки
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => editorRef.current?.openPreview()}>
-              <Eye className="w-3.5 h-3.5" />Превью
+              <Eye className="w-3.5 h-3.5" />Предпросмотр
             </Button>
           </div>
         )}
@@ -328,6 +367,24 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
               }}
             >
               Удалить
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Подтверждение «Создать с нуля» — затирание текущего контента блока */}
+      <AlertDialog open={!!resetConfirmId} onOpenChange={open => { if (!open) setResetConfirmId(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Создать с нуля?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Текущий контент блока будет заменён одним пустым уроком. Это действие нельзя отменить.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { if (resetConfirmId) doResetBlank(resetConfirmId) }}>
+              Создать с нуля
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
