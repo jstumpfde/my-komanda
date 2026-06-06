@@ -22,7 +22,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { ChevronDown, Clock3, GripVertical, Loader2, Plus, RotateCcw, Save, Settings, Settings2, Star } from "lucide-react"
+import { ChevronDown, Clock3, GripVertical, Loader2, Maximize2, Minimize2, Plus, RotateCcw, Save, Settings, Settings2, Star } from "lucide-react"
 
 import {
   AlertDialog,
@@ -112,6 +112,7 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
   const [saving, setSaving] = useState(false)
   const [pendingConflict, setPendingConflict] = useState<PendingIncompatibility | null>(null)
   const [openBlockType, setOpenBlockType] = useState<FunnelBlockType | null>(null)
+  const [sheetExpanded, setSheetExpanded] = useState(false)
   const [pendingTemplate, setPendingTemplate] = useState<string | null>(null)
   // Group 15: пер-компанийная библиотека шаблонов воронки.
   const [companyTemplates, setCompanyTemplates] = useState<CompanyFunnelTemplate[]>([])
@@ -649,9 +650,12 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
 
       <Sheet
         open={openBlockType !== null}
-        onOpenChange={(open) => { if (!open) setOpenBlockType(null) }}
+        onOpenChange={(open) => { if (!open) { setOpenBlockType(null); setSheetExpanded(false) } }}
       >
-        <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto p-6 flex flex-col">
+        <SheetContent
+          side="right"
+          className={`overflow-y-auto p-6 flex flex-col ${sheetExpanded ? "w-screen max-w-none sm:max-w-none" : "w-full sm:max-w-2xl"}`}
+        >
           {openBlockType && (() => {
             const entry  = BLOCK_SETTINGS_REGISTRY[openBlockType]
             const meta   = BLOCK_META[openBlockType]
@@ -661,7 +665,20 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
             return (
               <>
                 <SheetHeader className="px-0 shrink-0">
-                  <SheetTitle>{title}</SheetTitle>
+                  <div className="flex items-start justify-between gap-2">
+                    <SheetTitle>{title}</SheetTitle>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0 -mt-1 mr-6 gap-1.5 text-xs text-muted-foreground"
+                      onClick={() => setSheetExpanded((v) => !v)}
+                      title={sheetExpanded ? "Свернуть панель" : "Развернуть на весь экран"}
+                    >
+                      {sheetExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                      {sheetExpanded ? "Свернуть" : "На весь экран"}
+                    </Button>
+                  </div>
                   <SheetDescription>{desc}</SheetDescription>
                 </SheetHeader>
                 <div className="mt-6 flex-1 pb-20">
