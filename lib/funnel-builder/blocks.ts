@@ -255,6 +255,7 @@ export const BLOCK_TYPES: FunnelBlockType[] = [
   "recovery",
   "prequalification",
   "demo",
+  "content_step",
   "video_intro",
   "anketa",
   "ai_anketa_score",
@@ -270,7 +271,6 @@ export const BLOCK_TYPES: FunnelBlockType[] = [
   "reference_check",
   "offer",
   "thank_you_screen",
-  "content_step",
 ]
 
 export interface FunnelBlock {
