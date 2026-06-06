@@ -195,7 +195,7 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
   }
 
   return (
-    <div className="flex flex-col gap-3 min-h-0" style={{ height: "calc(100vh - 200px)" }}>
+    <div className="flex flex-col gap-3">
       {/* ─── Единый ряд: слева чипы-блоки (скролл), справа действия редактора ─── */}
       <div className="flex items-center gap-3 shrink-0">
         {/* Блоки контента — по порядку показа кандидату */}
@@ -288,16 +288,6 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
           </button>
         </div>
 
-        {/* Статус блока: Активно (привязан к воронке) / Черновик + дата изменения */}
-        {selectedBlock && (
-          <div className="shrink-0 text-[11px] leading-tight text-right hidden lg:block mr-1">
-            <span className={cn("font-medium", blockIsLinked(selectedBlock.kind) ? "text-emerald-600" : "text-amber-600")}>
-              {blockIsLinked(selectedBlock.kind) ? "● Активно" : "○ Черновик"}
-            </span>
-            <span className="text-muted-foreground/60"> · изм. {fmtDate(selectedBlock.updatedAt)}</span>
-          </div>
-        )}
-
         {/* Действия редактора выбранного блока — справа */}
         {selectedBlock && (
           <div className="flex items-center gap-1.5 shrink-0">
@@ -347,10 +337,21 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
             </Button>
           </div>
         )}
+
+        {/* Статус блока — в самом правом краю, чтобы не теснить чипы */}
+        {selectedBlock && (
+          <div className="shrink-0 text-[11px] leading-tight text-right hidden xl:block">
+            <span className={cn("font-medium", blockIsLinked(selectedBlock.kind) ? "text-emerald-600" : "text-amber-600")}>
+              {blockIsLinked(selectedBlock.kind) ? "● Активно" : "○ Черновик"}
+            </span>
+            <span className="text-muted-foreground/60"> · изм. {fmtDate(selectedBlock.updatedAt)}</span>
+          </div>
+        )}
       </div>
 
-      {/* ─── Редактор выбранного блока (во всю ширину, без своего тулбара/заголовка) ─── */}
-      <div className="flex-1 min-h-0 overflow-hidden">
+      {/* ─── Редактор выбранного блока (во всю ширину, без своего тулбара/заголовка).
+           Без фикс-высоты/overflow — превью кандидата прокручивается до кнопок «Назад/Далее». ─── */}
+      <div className="min-h-0">
         {selectedBlock ? (
           <NotionEditor
             key={selectedBlock.id}

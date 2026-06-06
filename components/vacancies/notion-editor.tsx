@@ -344,7 +344,7 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
     return (
       <div className="max-w-5xl mx-auto py-6 px-6 sm:px-8">
         <div className="flex items-center justify-end mb-4">
-          <Badge variant="outline" className="text-[10px]">Предпросмотр для кандидата</Badge>
+          <Badge variant="outline" className="text-[10px]">Предпросмотр</Badge>
         </div>
         <div className="flex items-center gap-3 mb-5">
           <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
@@ -3203,9 +3203,9 @@ const TOOLBAR_BLOCK_ITEMS: { type: BlockType; label: string; light: { bg: string
     svg: (c) => <><rect x="3" y="3" width="18" height="18" rx="4" stroke={c} strokeWidth="1.3"/><path d="M8 12l3 3 5-5" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></>,
   },
   {
-    type: "button", label: "Задание",
+    type: "button", label: "Кнопка",
     light: { bg: "#FAEEDA", icon: "#854F0B" }, dark: { bg: "#1f1a0e", icon: "#FBBF24" },
-    svg: (c) => <path d="M12 2l3 6.5h6.5l-5.2 4 2 6.5L12 15.5 5.7 19l2-6.5L2.5 8.5H9z" stroke={c} strokeWidth="1.3" strokeLinejoin="round" fill="none"/>,
+    svg: (c) => <><rect x="3" y="8" width="18" height="8" rx="4" stroke={c} strokeWidth="1.3" fill="none"/><path d="M7.5 12h6" stroke={c} strokeWidth="1.4" strokeLinecap="round"/></>,
   },
   {
     type: "media", label: "Запись",
