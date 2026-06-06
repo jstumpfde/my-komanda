@@ -12,7 +12,7 @@ import { and, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancies, outboundSearches, outboundCandidates } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
-import { searchResumes, snippetExperienceYears, type OutboundCriteria, type ResumeSnippet } from "@/lib/hh/outbound"
+import { searchResumes, snippetExperienceYears, type OutboundCriteria, type ResumeSnippet, type TextClause, type TextSearchField, type TextLogic } from "@/lib/hh/outbound"
 
 interface SearchBody {
   vacancyId?: string
@@ -48,6 +48,8 @@ export async function POST(req: Request) {
 
   // Допустимые значения hh-справочников (сверены с /dictionaries, /languages).
   // Фильтруем вход по белым спискам — мусор/инъекции в query не попадут.
+  const SEARCH_FIELD = new Set(["EVERYWHERE", "TITLE", "COMPANY_NAME", "SKILLS", "EXPERIENCE"])
+  const TEXT_LOGIC = new Set(["all", "any", "phrase"])
   const EMPLOYMENT = new Set(["full", "part", "project", "volunteer", "probation"])
   const SCHEDULE = new Set(["fullDay", "shift", "flexible", "remote", "flyInFlyOut"])
   const EDUCATION = new Set(["secondary", "special_secondary", "unfinished_higher", "higher", "bachelor", "master", "candidate", "doctor"])
@@ -93,7 +95,21 @@ export async function POST(req: Request) {
     ;[ageFrom, ageTo] = [ageTo, ageFrom]
   }
 
+  // textClauses: валидируем каждый клауз по белым спискам.
+  const rawClauses = body.criteria?.textClauses
+  const textClauses: TextClause[] | undefined = Array.isArray(rawClauses)
+    ? (rawClauses as unknown[])
+        .filter((c): c is Record<string, unknown> => typeof c === "object" && c !== null)
+        .map((c) => ({
+          text: typeof c.text === "string" ? c.text.trim().slice(0, 500) : "",
+          field: SEARCH_FIELD.has(String(c.field ?? "")) ? (c.field as TextSearchField) : "EVERYWHERE",
+          logic: TEXT_LOGIC.has(String(c.logic ?? "")) ? (c.logic as TextLogic) : "all",
+        }))
+        .filter((c) => c.text.length > 0)
+    : undefined
+
   const criteria: OutboundCriteria = {
+    textClauses: textClauses && textClauses.length ? textClauses : undefined,
     text: body.criteria?.text?.trim() || undefined,
     area: body.criteria?.area?.trim() || undefined,
     experience: body.criteria?.experience || undefined,

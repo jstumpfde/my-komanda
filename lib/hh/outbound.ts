@@ -24,11 +24,26 @@ const USER_AGENT = "Company24/1.0 (company24.pro)"
 export const DAILY_SEARCH_VIEW_LIMIT = 50
 export const DAILY_TOTAL_VIEW_LIMIT = 500
 
+// ─── Целевой текстовый поиск (multi-clause) ─────────────────────────────────
+// hh GET /resumes принимает несколько пар text+search_field — каждый клауз
+// AND-ится. Позволяет одновременно фильтровать по должности, навыкам, опыту
+// и компании в одном запросе.
+export type TextSearchField = "EVERYWHERE" | "TITLE" | "COMPANY_NAME" | "SKILLS" | "EXPERIENCE"
+export type TextLogic = "all" | "any" | "phrase"
+
+export interface TextClause {
+  text: string
+  field?: TextSearchField   // default: EVERYWHERE
+  logic?: TextLogic         // default: all
+}
+
 // ─── Критерии поиска ────────────────────────────────────────────────────────
 // Нормализованная форма критериев (хранится в outbound_searches.criteria и
 // приходит от UI). Все поля опциональны.
 export interface OutboundCriteria {
-  text?: string            // ключевые слова (заголовок/навыки)
+  // Многострочный целевой поиск (field-targeted). Перекрывает text если задан.
+  textClauses?: TextClause[]
+  text?: string            // ключевые слова — legacy/fallback когда textClauses нет
   area?: string            // hh area id (например "1" = Москва). По названию города
                            // маппинг делает UI/роут через /areas — здесь только id.
   experience?: string      // hh experience id: noExperience | between1And3 | between3And6 | moreThan6
@@ -186,7 +201,19 @@ export async function searchResumes(
   criteria: OutboundCriteria,
 ): Promise<ResumeSearchResult> {
   const qs = new URLSearchParams()
-  if (criteria.text) qs.set("text", criteria.text)
+  // Multi-field search: каждый клауз → отдельная тройка text+search_field+text_logic.
+  // hh AND-ит все клаузы. Если textClauses не задан — fallback на criteria.text.
+  if (criteria.textClauses?.length) {
+    for (const clause of criteria.textClauses) {
+      const t = clause.text?.trim()
+      if (!t) continue
+      qs.append("text", t)
+      qs.append("search_field", clause.field ?? "EVERYWHERE")
+      qs.append("text_logic", clause.logic ?? "all")
+    }
+  } else if (criteria.text) {
+    qs.set("text", criteria.text)
+  }
   if (criteria.area) {
     const areaId = await resolveAreaId(companyId, criteria.area)
     if (areaId) qs.set("area", areaId)

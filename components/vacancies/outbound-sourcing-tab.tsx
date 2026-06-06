@@ -16,7 +16,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
-import { Loader2, Search, Send, AlertCircle, CheckCircle2, ChevronDown, Wand2, Sparkles } from "lucide-react"
+import { Loader2, Search, Send, AlertCircle, CheckCircle2, ChevronDown, Wand2, Sparkles, Plus, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -113,6 +113,15 @@ const LANGUAGE_LEVEL_OPTIONS = [
   { value: "c1", label: "C1" },
   { value: "c2", label: "C2" },
   { value: "l1", label: "Родной" },
+]
+
+// Поля резюме для целевого текстового поиска (hh search_field).
+const FIELD_OPTIONS = [
+  { value: "EVERYWHERE",   label: "Везде" },
+  { value: "TITLE",        label: "Должность" },
+  { value: "SKILLS",       label: "Навыки" },
+  { value: "EXPERIENCE",   label: "Опыт работы" },
+  { value: "COMPANY_NAME", label: "Компания" },
 ]
 
 // Авто-скоринг: скорим только первые N результатов hh (топ по релевантности).
@@ -213,7 +222,8 @@ export function OutboundSourcingTab({
   anketaLanguages, anketaEducation,
 }: Props) {
   // Критерии (автозаполнены, редактируемы).
-  const [text, setText] = useState(vacancyKeywords ?? vacancyTitle ?? "")
+  // clauses — многострочный целевой поиск; каждая строка = отдельный hh-клауз.
+  const [clauses, setClauses] = useState([{ text: vacancyKeywords ?? vacancyTitle ?? "", field: "EVERYWHERE" }])
   const [area, setArea] = useState(vacancyCity ?? "")
   const [experience, setExperience] = useState(mapVacancyExperience(vacancyRequiredExperience))
   const [salaryFrom, setSalaryFrom] = useState(vacancySalaryMin ? String(vacancySalaryMin) : "")
@@ -313,8 +323,12 @@ export function OutboundSourcingTab({
       })
       const data = await res.json()
       if (!res.ok) { toast.error(data.error ?? "Ошибка генерации критериев"); return }
-      const { criteria, softCriteria: sc } = data
-      if (criteria.text) setText(criteria.text)
+      const { criteria, textClauses: tc, softCriteria: sc } = data
+      if (tc?.length) {
+        setClauses((tc as { text: string; field: string }[]).map((c) => ({ text: c.text, field: c.field ?? "EVERYWHERE" })))
+      } else if (criteria.text) {
+        setClauses([{ text: criteria.text, field: "EVERYWHERE" }])
+      }
       if (criteria.area) setArea(criteria.area)
       if (criteria.experience && criteria.experience !== "any") setExperience(criteria.experience)
       if (criteria.salaryFrom) setSalaryFrom(String(criteria.salaryFrom))
@@ -395,9 +409,7 @@ export function OutboundSourcingTab({
         body: JSON.stringify({
           vacancyId,
           criteria: {
-            text: text.trim() || undefined,
-            // area — пока название города; реальный hh area id маппится позже
-            // (Фаза 1: передаём как есть, hh поиск принимает text+area).
+            textClauses: clauses.filter((c) => c.text.trim()).map((c) => ({ text: c.text.trim(), field: c.field })),
             area: area.trim() || undefined,
             experience: experience === "any" ? undefined : experience,
             salaryFrom: salaryFrom ? Number(salaryFrom) : undefined,
@@ -565,11 +577,47 @@ export function OutboundSourcingTab({
           />
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="lg:col-span-2 space-y-1.5">
-            <Label className="text-xs">Ключевые слова</Label>
-            <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="напр. менеджер по продажам" className="h-8 text-sm" />
+        {/* Многострочный целевой поиск — каждая строка AND-ится */}
+        <div className="space-y-1.5">
+          <Label className="text-xs">Что искать <span className="text-muted-foreground font-normal">(можно добавить несколько условий — AND)</span></Label>
+          <div className="space-y-2">
+            {clauses.map((clause, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <Select value={clause.field} onValueChange={(v) => setClauses((prev) => prev.map((c, j) => j === i ? { ...c, field: v } : c))}>
+                  <SelectTrigger className="h-8 text-sm w-36 shrink-0"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {FIELD_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value} className="text-sm">{o.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Input
+                  value={clause.text}
+                  onChange={(e) => setClauses((prev) => prev.map((c, j) => j === i ? { ...c, text: e.target.value } : c))}
+                  placeholder={
+                    clause.field === "TITLE" ? "менеджер продаж" :
+                    clause.field === "EXPERIENCE" ? "авиаперевозки B2B промышленность" :
+                    clause.field === "COMPANY_NAME" ? "Siemens Bosch" :
+                    clause.field === "SKILLS" ? "CRM Excel переговоры" :
+                    "ключевые слова"
+                  }
+                  className="h-8 text-sm flex-1"
+                />
+                {clauses.length > 1 && (
+                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive" onClick={() => setClauses((prev) => prev.filter((_, j) => j !== i))}>
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+            ))}
+            {clauses.length < 4 && (
+              <Button type="button" variant="ghost" size="sm" className="h-7 gap-1.5 text-xs text-muted-foreground px-1" onClick={() => setClauses((prev) => [...prev, { text: "", field: "EVERYWHERE" }])}>
+                <Plus className="h-3 w-3" />
+                Добавить условие
+              </Button>
+            )}
           </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-1.5">
             <Label className="text-xs">Город</Label>
             <Input value={area} onChange={(e) => setArea(e.target.value)} placeholder="Москва" className="h-8 text-sm" />
