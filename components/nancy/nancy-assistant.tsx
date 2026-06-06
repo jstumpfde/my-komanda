@@ -384,12 +384,8 @@ export function NancyAssistant() {
           width={64}
           height={64}
           className="w-full h-full object-cover"
-          onError={(e) => {
-            // Fallback: скрыть картинку, показать «N»
-            ;(e.target as HTMLImageElement).style.display = "none"
-          }}
+          onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }}
         />
-        <span className="absolute text-lg font-bold select-none">N</span>
       </button>
     )
   }
