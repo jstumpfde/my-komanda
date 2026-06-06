@@ -134,7 +134,7 @@ export default function AssignmentPage() {
                 <ChevronLeft className="w-4 h-4" />
               </Button>
               <div>
-                <h1 className="text-xl font-semibold">
+                <h1 className="text-lg font-semibold">
                   {assignment.employeeId ? `Сотрудник ${assignment.employeeId.slice(0, 8)}` : "Назначение"}
                 </h1>
                 <p className="text-sm text-muted-foreground">Старт: {startDate}</p>

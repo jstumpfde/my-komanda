@@ -90,7 +90,7 @@ export default function LogisticsReturnsPage() {
                   <RotateCcw className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-semibold">Возвраты</h1>
+                  <h1 className="text-lg font-semibold">Возвраты</h1>
                   <p className="text-sm text-muted-foreground">{returns.length} возвратов</p>
                 </div>
               </div>

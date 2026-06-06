@@ -125,7 +125,7 @@ export default function LogisticsInventoryPage() {
                   <Package className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-semibold">Товары на складе</h1>
+                  <h1 className="text-lg font-semibold">Товары на складе</h1>
                   <p className="text-sm text-muted-foreground">{items.length} позиций</p>
                 </div>
               </div>

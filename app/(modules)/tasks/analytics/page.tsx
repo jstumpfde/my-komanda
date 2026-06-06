@@ -33,7 +33,7 @@ export default function TaskAnalyticsPage() {
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="flex items-center gap-2 mb-6">
               <BarChart3 className="size-5 text-sky-500" />
-              <h1 className="text-xl font-semibold">Аналитика задач</h1>
+              <h1 className="text-lg font-semibold">Аналитика задач</h1>
             </div>
 
             {/* Stats cards */}

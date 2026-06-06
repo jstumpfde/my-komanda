@@ -56,7 +56,7 @@ export default function SalesPipelinePage() {
                 <TrendingDown className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <h1 className="text-2xl font-semibold">Воронка продаж</h1>
+                <h1 className="text-lg font-semibold">Воронка продаж</h1>
                 <p className="text-sm text-muted-foreground">Конверсия по этапам и анализ источников</p>
               </div>
             </div>

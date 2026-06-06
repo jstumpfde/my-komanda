@@ -429,7 +429,7 @@ export default function KnowledgeV2CreatePage() {
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="max-w-5xl mx-auto">
               <div className="mb-6">
-                <h1 className="text-2xl font-semibold">Создать корпоративный материал</h1>
+                <h1 className="text-lg font-semibold">Создать корпоративный материал</h1>
               </div>
 
               {/* Building-blocks preview row */}

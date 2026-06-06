@@ -83,7 +83,7 @@ export default function LogisticsReportsPage() {
                 <FileText className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <h1 className="text-2xl font-semibold">Отчёты</h1>
+                <h1 className="text-lg font-semibold">Отчёты</h1>
                 <p className="text-sm text-muted-foreground">Выгрузка данных по складу и логистике</p>
               </div>
             </div>

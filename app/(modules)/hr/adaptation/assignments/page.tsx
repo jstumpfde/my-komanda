@@ -112,7 +112,7 @@ export default function AdaptationAssignmentsPage() {
                   <Users className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-semibold">Назначения</h1>
+                  <h1 className="text-lg font-semibold">Назначения</h1>
                   <p className="text-sm text-muted-foreground">Сотрудники на программах адаптации</p>
                 </div>
               </div>

@@ -599,7 +599,7 @@ export default function VacanciesPage() {
             {/* Header */}
             <div className="flex items-center justify-between mb-5">
               <div>
-                <h1 className="text-xl font-semibold text-foreground">Вакансии</h1>
+                <h1 className="text-lg font-semibold text-foreground">Вакансии</h1>
                 {!loading && <p className="text-sm text-muted-foreground mt-0.5">{total} вакансий</p>}
               </div>
               <div className="flex items-center gap-2">

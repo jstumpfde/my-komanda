@@ -136,7 +136,7 @@ export default function EmployeeSkillsPage({ params }: { params: Promise<{ id: s
             <ArrowLeft className="size-4" />
           </Button>
           <div>
-            <h1 className="text-xl font-semibold">Профиль навыков</h1>
+            <h1 className="text-lg font-semibold">Профиль навыков</h1>
             <p className="text-sm text-muted-foreground">{employeeId}</p>
           </div>
         </div>

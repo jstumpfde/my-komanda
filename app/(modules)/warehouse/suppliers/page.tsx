@@ -94,7 +94,7 @@ export default function LogisticsSuppliersPage() {
                   <Users className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-semibold">Поставщики</h1>
+                  <h1 className="text-lg font-semibold">Поставщики</h1>
                   <p className="text-sm text-muted-foreground">{suppliers.length} поставщиков</p>
                 </div>
               </div>

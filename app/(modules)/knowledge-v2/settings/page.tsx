@@ -536,7 +536,7 @@ export default function KnowledgeSettingsPage() {
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="max-w-3xl mx-auto space-y-4">
               <div className="mb-4">
-                <h1 className="text-xl font-semibold text-foreground mb-1">Настройки базы знаний</h1>
+                <h1 className="text-lg font-semibold text-foreground mb-1">Настройки базы знаний</h1>
                 <p className="text-muted-foreground text-sm">
                   Подключите собственного Telegram-бота и следите за актуальностью материалов
                 </p>

@@ -851,7 +851,7 @@ export default function CreateDemoPage() {
 
               {/* Header */}
               <div>
-                <h1 className="text-xl font-semibold">Новая презентация должности</h1>
+                <h1 className="text-lg font-semibold">Новая презентация должности</h1>
                 <p className="text-sm text-muted-foreground mt-0.5">Выберите способ создания</p>
               </div>
 

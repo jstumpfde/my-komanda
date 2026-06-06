@@ -85,7 +85,7 @@ export default function AchievementsPage() {
               <div>
                 <div className="flex items-center gap-2">
                   <Trophy className="size-5 text-amber-500" />
-                  <h1 className="text-xl font-semibold">Рейтинг обучения</h1>
+                  <h1 className="text-lg font-semibold">Рейтинг обучения</h1>
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
                   Баллы начисляются за уроки (+10), курсы (+50), идеальные тесты (+30) и тренировки (+20)

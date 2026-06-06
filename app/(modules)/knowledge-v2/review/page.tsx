@@ -101,7 +101,7 @@ export default function KnowledgeReviewPage() {
               <div>
                 <div className="flex items-center gap-2">
                   <ClipboardCheck className="size-5 text-amber-500" />
-                  <h1 className="text-xl font-semibold">На проверке</h1>
+                  <h1 className="text-lg font-semibold">На проверке</h1>
                   {items.length > 0 && (
                     <Badge variant="secondary" className="bg-amber-100 text-amber-700">
                       {items.length}

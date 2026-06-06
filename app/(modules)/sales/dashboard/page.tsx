@@ -69,7 +69,7 @@ export default function SalesDashboardPage() {
                   <LayoutDashboard className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-semibold">CRM Дашборд</h1>
+                  <h1 className="text-lg font-semibold">CRM Дашборд</h1>
                   <p className="text-sm text-muted-foreground">Обзор продаж и активности команды</p>
                 </div>
               </div>

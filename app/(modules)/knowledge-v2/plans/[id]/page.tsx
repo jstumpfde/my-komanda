@@ -135,7 +135,7 @@ export default function LearningPlanDetailPage({
                   <ArrowLeft className="w-4 h-4" />
                   Все планы
                 </Link>
-                <h1 className="text-xl font-semibold">{plan.title}</h1>
+                <h1 className="text-lg font-semibold">{plan.title}</h1>
                 {plan.description && (
                   <p className="text-sm text-muted-foreground mt-1">{plan.description}</p>
                 )}

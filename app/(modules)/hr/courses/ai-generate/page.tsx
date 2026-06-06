@@ -475,7 +475,7 @@ export default function AiGeneratePage() {
                 <Link href="/hr/courses"><ArrowLeft className="size-4" /></Link>
               </Button>
               <div>
-                <h1 className="text-xl font-semibold flex items-center gap-2">
+                <h1 className="text-lg font-semibold flex items-center gap-2">
                   <Sparkles className="size-5 text-violet-500" />
                   AI-генератор курсов
                 </h1>

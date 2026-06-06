@@ -57,7 +57,7 @@ export default function B2BAccountDetailPage() {
               </Avatar>
               <div>
                 <div className="flex items-center gap-2">
-                  <h1 className="text-xl font-semibold">{account.name}</h1>
+                  <h1 className="text-lg font-semibold">{account.name}</h1>
                   {tier && <Badge variant="secondary" className={`text-xs border-0 ${tier.cls}`}>{tier.label}</Badge>}
                 </div>
                 <p className="text-sm text-muted-foreground">{account.industry} · {account.size} · {account.revenue}</p>

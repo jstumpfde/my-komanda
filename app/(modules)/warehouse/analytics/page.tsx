@@ -86,7 +86,7 @@ export default function LogisticsAnalyticsPage() {
                 <BarChart3 className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <h1 className="text-2xl font-semibold">Аналитика склада</h1>
+                <h1 className="text-lg font-semibold">Аналитика склада</h1>
                 <p className="text-sm text-muted-foreground">Оборачиваемость, ABC-анализ, движение товаров</p>
               </div>
             </div>

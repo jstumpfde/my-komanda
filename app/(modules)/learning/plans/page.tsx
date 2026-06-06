@@ -202,7 +202,7 @@ export default function LearningPlansPage() {
             <div className="max-w-6xl mx-auto space-y-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h1 className="text-xl font-semibold">Планы обучения</h1>
+                  <h1 className="text-lg font-semibold">Планы обучения</h1>
                   <p className="text-sm text-muted-foreground mt-0.5">
                     Индивидуальные траектории для сотрудников
                   </p>

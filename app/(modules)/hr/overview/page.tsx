@@ -269,7 +269,7 @@ export default function HrOverviewPage() {
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             {/* Header */}
             <div className="mb-5">
-              <h1 className="text-xl font-semibold text-foreground">{getGreeting()}!</h1>
+              <h1 className="text-lg font-semibold text-foreground">{getGreeting()}!</h1>
               <p className="text-sm text-muted-foreground capitalize">{formatDate()}</p>
             </div>
 

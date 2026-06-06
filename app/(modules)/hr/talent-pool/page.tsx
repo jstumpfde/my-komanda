@@ -307,7 +307,7 @@ export default function TalentPoolPage() {
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="flex items-center justify-between mb-5">
               <div>
-                <h1 className="text-2xl font-semibold">Резерв</h1>
+                <h1 className="text-lg font-semibold">Резерв</h1>
                 <p className="text-sm text-muted-foreground">База пассивных кандидатов и кампании прогрева</p>
               </div>
             </div>

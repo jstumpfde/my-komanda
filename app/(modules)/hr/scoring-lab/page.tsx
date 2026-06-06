@@ -98,7 +98,7 @@ export default function ScoringLabPage() {
 
             <div className="flex items-center gap-2 mb-1">
               <FlaskConical className="w-5 h-5 text-primary" />
-              <h1 className="text-2xl font-semibold text-foreground">Лаборатория скоринга</h1>
+              <h1 className="text-lg font-semibold text-foreground">Лаборатория скоринга</h1>
               <Badge variant="outline" className="ml-2">прототип</Badge>
             </div>
             <p className="text-muted-foreground text-sm mb-5">

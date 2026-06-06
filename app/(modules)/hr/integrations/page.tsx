@@ -12,7 +12,7 @@ export default function IntegrationsPage() {
   if (!hasAccess(["platform_admin", "admin", "director", "client"])) {
     return (
       <div className="max-w-2xl mx-auto py-16 text-center">
-        <h1 className="text-xl font-semibold mb-2">Доступ ограничен</h1>
+        <h1 className="text-lg font-semibold mb-2">Доступ ограничен</h1>
         <p className="text-sm text-muted-foreground">У вас нет доступа к этому разделу.</p>
       </div>
     )

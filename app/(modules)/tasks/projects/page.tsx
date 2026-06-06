@@ -47,7 +47,7 @@ export default function TaskProjectsPage() {
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
                 <FolderKanban className="size-5 text-sky-500" />
-                <h1 className="text-xl font-semibold">Проекты</h1>
+                <h1 className="text-lg font-semibold">Проекты</h1>
               </div>
               <Button className="gap-1.5" onClick={() => setShowNew(true)}>
                 <Plus className="size-4" />

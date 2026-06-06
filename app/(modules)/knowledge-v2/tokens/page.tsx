@@ -84,7 +84,7 @@ export default function TokensPage() {
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="max-w-6xl mx-auto space-y-6">
               <div>
-                <h1 className="text-xl font-semibold">Расход AI-токенов</h1>
+                <h1 className="text-lg font-semibold">Расход AI-токенов</h1>
                 <p className="text-sm text-muted-foreground mt-0.5">
                   Агрегированная статистика по всем запросам к AI
                 </p>

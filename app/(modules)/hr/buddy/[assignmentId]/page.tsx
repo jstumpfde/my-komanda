@@ -150,7 +150,7 @@ export default function BuddyAssignmentPage() {
                 <ChevronLeft className="w-4 h-4" />
               </Button>
               <div>
-                <h1 className="text-xl font-semibold">
+                <h1 className="text-lg font-semibold">
                   {data.employeeId ? `Сотрудник ${data.employeeId.slice(0, 8)}` : "Назначение"}
                 </h1>
                 <p className="text-sm text-muted-foreground">{data.planTitle ?? "—"}</p>

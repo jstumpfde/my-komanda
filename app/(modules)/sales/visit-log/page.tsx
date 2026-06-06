@@ -177,7 +177,7 @@ export default function VisitLogPage() {
             {/* Header */}
             <div className="flex items-center gap-2">
               <Activity className="size-5 text-blue-500" />
-              <h1 className="text-xl font-semibold">Журнал посещений</h1>
+              <h1 className="text-lg font-semibold">Журнал посещений</h1>
             </div>
 
             {/* Loading */}

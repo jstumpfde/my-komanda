@@ -286,7 +286,7 @@ function DashboardContent() {
                 верхнем углу один, как просили. */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h1 className="text-xl font-semibold">
+                <h1 className="text-lg font-semibold">
                   {effectiveName
                     ? `${getGreeting()}, ${effectiveName.split(" ")[0]}!`
                     : `${getGreeting()}!`}
