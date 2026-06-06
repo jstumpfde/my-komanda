@@ -940,6 +940,8 @@ export interface PostDemoSettings {
   testReminderEnabled?:  boolean
   testReminderDays?:     number[]
   testReminderMessages?: string[]
+  // Цвет кнопок навигации «Далее/Назад» у кандидата. undefined/null → бренд-цвет компании.
+  navButtonColor?: string
 }
 
 export interface AnketaAutoReplySettings {

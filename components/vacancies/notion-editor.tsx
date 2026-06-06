@@ -87,6 +87,7 @@ interface NotionEditorProps {
   showSidebar?: boolean
   vacancyId?: string
   onOpenLibrary?: () => void
+  navButtonColor?: string
 }
 
 // ─── Slash command menu ────────────────────────────────────────────────────
@@ -106,7 +107,7 @@ const SLASH_ITEMS = [
 
 // ─── Main component ────────────────────────────────────────────────────────
 
-export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(function NotionEditorInner({ demo, onBack, onUpdate, onSaveStatusChange, hideToolbar = false, showSidebar = true, vacancyId, onOpenLibrary }, ref) {
+export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(function NotionEditorInner({ demo, onBack, onUpdate, onSaveStatusChange, hideToolbar = false, showSidebar = true, vacancyId, onOpenLibrary, navButtonColor }, ref) {
   const [activeLessonId, setActiveLessonId] = useState(demo.lessons[0]?.id || "")
   const [previewMode, setPreviewMode] = useState(false)
   const [previewIdx, setPreviewIdx] = useState(0)
@@ -370,11 +371,17 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
             <ChevronLeft className="w-4 h-4 mr-1" />Назад
           </Button>
           {previewIdx < demo.lessons.length - 1 ? (
-            <Button onClick={() => setPreviewIdx(previewIdx + 1)}>
+            <Button
+              onClick={() => setPreviewIdx(previewIdx + 1)}
+              style={navButtonColor ? { backgroundColor: navButtonColor, borderColor: navButtonColor } : undefined}
+            >
               Далее<ChevronRight className="w-4 h-4 ml-1" />
             </Button>
           ) : (
-            <Button onClick={() => setPreviewMode(false)}>Завершить ✓</Button>
+            <Button
+              onClick={() => setPreviewMode(false)}
+              style={navButtonColor ? { backgroundColor: navButtonColor, borderColor: navButtonColor } : undefined}
+            >Завершить ✓</Button>
           )}
         </div>
       </div>

@@ -16,6 +16,7 @@ export interface ContentBlock {
   sortOrder: number
   createdAt: string
   updatedAt: string
+  postDemoSettings?: Record<string, unknown>
 }
 
 interface ApiContentBlock {
@@ -29,6 +30,7 @@ interface ApiContentBlock {
   sortOrder: number
   createdAt: string
   updatedAt: string
+  postDemoSettings?: Record<string, unknown>
 }
 
 function apiBlockToBlock(d: ApiContentBlock): ContentBlock {
@@ -44,6 +46,7 @@ function apiBlockToBlock(d: ApiContentBlock): ContentBlock {
     sortOrder: d.sortOrder ?? 0,
     createdAt: d.createdAt,
     updatedAt: d.updatedAt,
+    postDemoSettings: d.postDemoSettings ?? {},
   }
 }
 
@@ -60,6 +63,7 @@ interface UseContentBlocksResult {
   error: string | null
   createBlock: (contentType: ContentType, title: string) => Promise<ContentBlock | null>
   updateBlock: (id: string, patch: BlockPatch) => void
+  saveSettings: (id: string, settings: Record<string, unknown>) => Promise<void>
   deleteBlock: (id: string) => Promise<boolean>
   reorder: (idsInOrder: string[]) => Promise<void>
 }
@@ -198,6 +202,21 @@ export function useContentBlocks(vacancyId: string | null): UseContentBlocksResu
     }
   }, [])
 
+  const saveSettings = useCallback(async (id: string, settings: Record<string, unknown>) => {
+    // Оптимистичный апдейт postDemoSettings
+    setBlocks(prev => prev.map(b => {
+      if (b.id !== id) return b
+      return { ...b, postDemoSettings: { ...(b.postDemoSettings ?? {}), ...settings } }
+    }))
+    try {
+      await fetch(`/api/modules/hr/demos/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ post_demo_settings: settings }),
+      })
+    } catch { /* silent — оптимистичный апдейт уже применён */ }
+  }, [])
+
   const reorder = useCallback(async (idsInOrder: string[]) => {
     // Оптимистичный апдейт sort_order
     setBlocks(prev => {
@@ -225,5 +244,5 @@ export function useContentBlocks(vacancyId: string | null): UseContentBlocksResu
     )
   }, [blocks])
 
-  return { blocks, loading, error, createBlock, updateBlock, deleteBlock, reorder }
+  return { blocks, loading, error, createBlock, updateBlock, saveSettings, deleteBlock, reorder }
 }

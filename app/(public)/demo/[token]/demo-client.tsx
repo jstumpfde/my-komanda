@@ -44,6 +44,7 @@ interface PostDemoSettings {
     birthDate?: { enabled: boolean; required: boolean }
     city?: { enabled: boolean; required: boolean }
   }
+  navButtonColor?: string
 }
 
 type FormFieldKey = "firstName" | "lastName" | "email" | "phone" | "telegram" | "birthDate" | "city"
@@ -944,6 +945,7 @@ export default function DemoPage() {
   const brandColor = brand.primary
   const bgColor = brand.bg
   const textColor = brand.text
+  const navBtnColor = data.postDemoSettings?.navButtonColor || brandColor
 
   // ─── Final screen: form + thank you ────────────────────────────────────────
 
@@ -1428,7 +1430,7 @@ export default function DemoPage() {
             disabled={hasRequiredUnanswered || saving || isAnyMediaUploading}
             title={isAnyMediaUploading ? "Дождитесь окончания загрузки видео" : undefined}
             className="flex-1 h-12 text-base font-medium"
-            style={{ backgroundColor: brandColor }}
+            style={{ backgroundColor: navBtnColor, borderColor: navBtnColor }}
           >
             {saving || isAnyMediaUploading ? (
               <Loader2 className="h-5 w-5 animate-spin" />
