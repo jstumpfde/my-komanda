@@ -612,8 +612,8 @@ export function OutboundSourcingTab({
           />
         </div>
 
-        {/* ─── Расширенный фильтр — раскрыт по умолчанию ─── */}
-        <Collapsible defaultOpen>
+        {/* ─── Расширенный фильтр ─── */}
+        <Collapsible>
           <CollapsibleTrigger className="flex w-full items-center justify-between text-xs font-medium text-muted-foreground hover:text-foreground [&[data-state=open]>svg]:rotate-180">
             <span className="flex items-center gap-2">
               Расширенный фильтр
