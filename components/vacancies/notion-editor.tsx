@@ -457,14 +457,14 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
               >
                 <ChevronRight className="w-4 h-4" />
               </Button>
-              {/* Добавить урок — сразу под кнопкой раскрытия. Всегда виден приглушённый
-                  «+» (без подписи), ярче при наведении. Раскрываем список —
-                  чтобы сразу был виден инлайн-ввод названия. */}
+              {/* Добавить урок — снизу полосы (как «+ Урок» в развёрнутом виде).
+                  Всегда виден приглушённый «+» (без подписи), ярче при наведении.
+                  Раскрываем список — чтобы сразу был виден инлайн-ввод названия. */}
               <button
                 type="button"
                 title="Добавить урок"
                 onClick={() => { setSidebarCollapsed(false); addLesson() }}
-                className="group/addc w-full flex items-center justify-center pt-2 pb-1 border-t border-dashed border-border text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+                className="group/addc mt-auto w-full flex items-center justify-center pt-2 pb-1 border-t border-dashed border-border text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
               </button>
