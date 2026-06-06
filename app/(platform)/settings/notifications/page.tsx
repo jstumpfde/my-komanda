@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { Bell } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { Card, CardContent } from "@/components/ui/card"
 import { NotificationSettings } from "@/components/notification-settings"
@@ -52,7 +53,10 @@ export default function NotificationsSettingsPage() {
   return (
     <>
       <div className="mb-4">
-        <h1 className="text-xl font-semibold text-foreground mb-1">Уведомления</h1>
+        <div className="flex items-center gap-2 mb-1">
+          <Bell className="h-5 w-5 text-violet-600" />
+          <h1 className="text-lg font-semibold text-foreground">Уведомления</h1>
+        </div>
         <p className="text-muted-foreground text-sm">Настройте каналы и события уведомлений по модулям</p>
       </div>
 

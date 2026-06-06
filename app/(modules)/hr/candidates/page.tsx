@@ -259,7 +259,10 @@ export default function CandidatesPage() {
             {/* Header */}
             <div className="flex items-center justify-between mb-5">
               <div>
-                <h1 className="text-lg font-semibold text-foreground">Кандидаты</h1>
+                <div className="flex items-center gap-2">
+                  <Users className="h-5 w-5 text-violet-600" />
+                  <h1 className="text-lg font-semibold text-foreground">Кандидаты</h1>
+                </div>
                 <p className="text-sm text-muted-foreground mt-0.5">
                   {filtered.length} из {candidates.length}
                   {total > candidates.length ? ` (всего ${total})` : ""} кандидатов

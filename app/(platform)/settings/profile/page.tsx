@@ -278,7 +278,10 @@ export default function ProfileSettingsPage() {
   return (
         <>
             <div className="mb-4">
-              <h1 className="text-xl font-semibold text-foreground mb-1">Профиль</h1>
+              <div className="flex items-center gap-2 mb-1">
+                <User className="h-5 w-5 text-violet-600" />
+                <h1 className="text-lg font-semibold text-foreground">Профиль</h1>
+              </div>
               <p className="text-muted-foreground text-sm">Личные данные и настройки безопасности</p>
             </div>
 
