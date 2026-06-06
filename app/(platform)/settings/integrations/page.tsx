@@ -128,7 +128,7 @@ export default function IntegrationsPage() {
   return (
         <>
 <div className="mb-4">
-              <h1 className="text-xl font-semibold text-foreground mb-1">Интеграции</h1>
+              <div className="flex items-center gap-2"><Link2 className="h-5 w-5 text-violet-600" /><h1 className="text-lg font-semibold">Интеграции</h1></div>
               <p className="text-muted-foreground text-sm">Подключение внешних сервисов и синхронизация данных</p>
             </div>
 

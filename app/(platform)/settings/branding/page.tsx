@@ -261,7 +261,7 @@ export default function BrandingPage() {
   return (
     <>
       <div className="mb-4">
-        <h1 className="text-xl font-semibold text-foreground mb-1">Брендинг</h1>
+        <div className="flex items-center gap-2"><Palette className="h-5 w-5 text-violet-600" /><h1 className="text-lg font-semibold">Брендинг</h1></div>
         <p className="text-muted-foreground text-sm">Логотип, название, слоган и домен</p>
       </div>
 

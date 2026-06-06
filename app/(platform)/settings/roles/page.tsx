@@ -276,8 +276,11 @@ export default function RolesPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Роли и доступ</h1>
-        <p className="text-muted-foreground mt-1">Управление правами доступа для каждой роли в системе</p>
+        <div className="flex items-center gap-2 pt-3 pb-2">
+          <Shield className="h-5 w-5 text-violet-600" />
+          <h1 className="text-lg font-semibold">Роли и доступ</h1>
+        </div>
+        <p className="text-muted-foreground mt-0">Управление правами доступа для каждой роли в системе</p>
       </div>
 
       <div className="flex items-start gap-3 px-4 py-3 rounded-lg bg-blue-50 border border-blue-100 text-sm text-blue-700">

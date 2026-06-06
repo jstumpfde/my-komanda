@@ -259,7 +259,7 @@ export default function CompanySchedulePage() {
     <div>
       <div className="flex flex-col gap-4 mb-5">
         <div>
-          <h1 className="text-xl font-semibold text-foreground mb-0.5">Расписание компании</h1>
+          <div className="flex items-center gap-2"><Clock className="h-5 w-5 text-violet-600" /><h1 className="text-lg font-semibold">Расписание компании</h1></div>
           <p className="text-sm text-muted-foreground">График работы, перерывы, выходные и отпуска</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
