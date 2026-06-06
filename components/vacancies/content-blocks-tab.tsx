@@ -337,17 +337,17 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
             </Button>
           </div>
         )}
-
-        {/* Статус блока — в самом правом краю, чтобы не теснить чипы */}
-        {selectedBlock && (
-          <div className="shrink-0 text-[11px] leading-tight text-right hidden xl:block">
-            <span className={cn("font-medium", blockIsLinked(selectedBlock.kind) ? "text-emerald-600" : "text-amber-600")}>
-              {blockIsLinked(selectedBlock.kind) ? "● Активно" : "○ Черновик"}
-            </span>
-            <span className="text-muted-foreground/60"> · изм. {fmtDate(selectedBlock.updatedAt)}</span>
-          </div>
-        )}
       </div>
+
+      {/* Статус блока — отдельной строкой под чипами (на уровне заголовка), не теснит чипы */}
+      {selectedBlock && (
+        <div className="text-[11px] leading-tight -mt-1">
+          <span className={cn("font-medium", blockIsLinked(selectedBlock.kind) ? "text-emerald-600" : "text-amber-600")}>
+            {blockIsLinked(selectedBlock.kind) ? "● Активно" : "○ Черновик"}
+          </span>
+          <span className="text-muted-foreground/60"> · изм. {fmtDate(selectedBlock.updatedAt)}</span>
+        </div>
+      )}
 
       {/* ─── Редактор выбранного блока (во всю ширину, без своего тулбара/заголовка).
            Без фикс-высоты/overflow — превью кандидата прокручивается до кнопок «Назад/Далее». ─── */}
