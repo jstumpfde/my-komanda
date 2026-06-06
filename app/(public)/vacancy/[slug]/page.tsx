@@ -316,6 +316,21 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
             )}
           </section>
 
+          {/* #38: кнопка «Откликнуться» под заголовком — справа на десктопе, по центру на мобильном */}
+          {screen === "landing" && (
+            <div className="flex justify-center sm:justify-end -mt-2">
+              <Button
+                size="lg"
+                className="w-full sm:w-auto px-8 text-base font-semibold text-white rounded-xl shadow-md"
+                style={{ backgroundColor: accentColor }}
+                onClick={() => setScreen("form")}
+              >
+                Откликнуться
+                <ArrowRight className="w-5 h-5 ml-2" />
+              </Button>
+            </div>
+          )}
+
           {/* Описание */}
           <section>
             <h2 className="text-xl font-semibold mb-4">О вакансии</h2>
