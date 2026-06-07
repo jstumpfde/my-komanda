@@ -196,6 +196,7 @@
   main { padding-bottom: 68px !important; }
   /* Minimum touch targets */
   button, a, [role="button"] { min-height: 36px; }
+  button[data-slot="switch"] { min-height: 0 !important; }
   input, select, textarea { min-height: 44px; font-size: 16px !important; }
 }
 
