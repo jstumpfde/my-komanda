@@ -116,6 +116,12 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Только директор может менять права ролей" }, { status: 403 });
   }
 
+  // B5: candidateColumns — единые колонки списка кандидатов; меняет только директор/platform_admin.
+  if ("candidateColumns" in patch &&
+      !["director", "client", "platform_admin", "admin"].includes(ctx.role)) {
+    return NextResponse.json({ error: "Только директор компании может настраивать колонки" }, { status: 403 });
+  }
+
   const [company] = await db
     .select({ hiringDefaultsJson: companies.hiringDefaultsJson })
     .from(companies)

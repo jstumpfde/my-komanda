@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -91,6 +92,7 @@ const CHANNEL_LABELS: Record<string, string> = { tg: "Telegram", whatsapp: "What
 
 // ─── Component ──────────────────────────────────────────
 export default function TalentPoolPage() {
+  const router = useRouter()
   const [candidates, setCandidates] = useState<TalentCandidate[]>([])
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [addOpen, setAddOpen] = useState(false)
@@ -414,7 +416,7 @@ export default function TalentPoolPage() {
                         {filtered.map((c) => {
                           const st = STATUS_CFG[c.status]
                           return (
-                            <DataRow key={c.id}>
+                            <DataRow key={c.id} className="cursor-pointer" onClick={() => router.push(`/hr/candidates/${c.id}`)}>
                               <DataCell className="font-medium text-foreground/85">{c.name}</DataCell>
                               <DataCell className="text-muted-foreground">{c.position}</DataCell>
                               <DataCell className="text-muted-foreground">{c.company}</DataCell>
@@ -424,7 +426,7 @@ export default function TalentPoolPage() {
                                   {c.referralName && (
                                     <>
                                       <span className="text-[11px] text-muted-foreground">· {c.referralName}</span>
-                                      <button className="text-violet-600 hover:scale-110 transition-transform" onClick={() => { setThanked((prev) => { const next = new Set(prev); next.add(c.id); return next }); toast.success(`Спасибо отправлено ${c.referralName}!`) }}><Heart className={cn("w-3 h-3", thanked.has(c.id) && "fill-violet-600")} /></button>
+                                      <button className="text-violet-600 hover:scale-110 transition-transform" onClick={(e) => { e.stopPropagation(); setThanked((prev) => { const next = new Set(prev); next.add(c.id); return next }); toast.success(`Спасибо отправлено ${c.referralName}!`) }}><Heart className={cn("w-3 h-3", thanked.has(c.id) && "fill-violet-600")} /></button>
                                     </>
                                   )}
                                 </div>
@@ -438,8 +440,9 @@ export default function TalentPoolPage() {
                               <DataCell className="text-xs text-muted-foreground">{formatDate(c.lastContact)}</DataCell>
                               <DataCell>
                                 <div className="flex items-center gap-1">
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Написать" onClick={() => toast.info("Открыть чат")}><Send className="w-3 h-3" /></Button>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Удалить" onClick={() => handleDelete(c)}><Trash2 className="w-3 h-3" /></Button>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Открыть профиль" onClick={(e) => { e.stopPropagation(); router.push(`/hr/candidates/${c.id}`) }}><Eye className="w-3 h-3" /></Button>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Написать" onClick={(e) => { e.stopPropagation(); toast.info("Открыть чат") }}><Send className="w-3 h-3" /></Button>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Удалить" onClick={(e) => { e.stopPropagation(); handleDelete(c) }}><Trash2 className="w-3 h-3" /></Button>
                                 </div>
                               </DataCell>
                             </DataRow>

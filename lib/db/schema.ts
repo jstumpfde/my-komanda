@@ -161,6 +161,10 @@ export interface CompanyHiringDefaults {
     // true → HR-менеджеры тоже видят таб «Корзина» и могут восстанавливать/удалять.
     hrManagerTrashAccess?: boolean
   }
+  // B5: единые колонки списка кандидатов для всей компании.
+  // Настраивает только директор; остальные HR видят read-only.
+  // Ключи соответствуют CardDisplaySettings из components/dashboard/card-settings.tsx.
+  candidateColumns?: Record<string, boolean>
 }
 
 // ── CompanyLegalContact (drizzle/0177) ──
