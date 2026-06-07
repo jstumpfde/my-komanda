@@ -2354,7 +2354,7 @@ export default function VacancyPage() {
                     )}
                     <CandidateFilters
                       filters={filters}
-                      onFiltersChange={setFilters}
+                      onFiltersChange={(f) => { setFilters(f); if (useListPaginated) paginated.setPage(1) }}
                       // Источник фасетов (города/источники в фильтре). В режиме
                       // списка kanban-`columns` пуст — берём видимые из paginated,
                       // иначе секция «Города» не показывается.
