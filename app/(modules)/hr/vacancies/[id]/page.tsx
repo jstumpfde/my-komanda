@@ -2321,21 +2321,23 @@ export default function VacancyPage() {
               <div className="mb-3 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
                 <div className="flex items-center justify-between gap-3 min-w-max">
                 <TabsList className="shrink-0">
-                  {/* Запущенные вакансии (active|published) — фокус на работе
-                      с кандидатами: Кандидаты → Аналитика → Анкета → Демо.
-                      Черновики — фокус на настройке: Анкета → Демо → Кандидаты → Аналитика. */}
+                  {/* B8: группируем по смыслу. Активная — сначала работа с людьми
+                      (Кандидаты → Аналитика → Исходящий подбор), потом настройка
+                      (Вакансия → Контент). Черновик — сначала настройка
+                      (Вакансия → Контент), потом работа с людьми. Настройки всегда
+                      последними (рендерятся отдельным TabsTrigger ниже). */}
                   {((status === "active" || status === "published") ? [
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
                     { value: "analytics", icon: BarChart3, label: "Аналитика" },
+                    { value: "outbound", icon: UserSearch, label: "Исходящий подбор" },
                     { value: "anketa", icon: ClipboardList, label: "Вакансия" },
                     { value: "content", icon: BookOpen, label: "Контент" },
-                    { value: "outbound", icon: UserSearch, label: "Исходящий подбор" },
                   ] : [
                     { value: "anketa", icon: ClipboardList, label: "Вакансия" },
                     { value: "content", icon: BookOpen, label: "Контент" },
-                    { value: "outbound", icon: UserSearch, label: "Исходящий подбор" },
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
                     { value: "analytics", icon: BarChart3, label: "Аналитика" },
+                    { value: "outbound", icon: UserSearch, label: "Исходящий подбор" },
                   ]).map(tab => (
                     <TabsTrigger key={tab.value} value={tab.value} className="gap-1.5">
                       <tab.icon className="w-3.5 h-3.5" />{tab.label}
