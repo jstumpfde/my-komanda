@@ -74,6 +74,8 @@ export async function handleConversationTurn(conversation: Conversation, incomin
       serviceContext,
     })
 
+    console.log(`[sales:handle-turn] conv=${conversation.id} action=${result.action} category=${result.category ?? "-"}`)
+
     if (result.action === "sent" && result.reply) {
       // Короткое «минутку…» перед основным ответом (если включено настройками).
       if (result.preMessage) {
@@ -149,6 +151,7 @@ async function tryCreateBooking(
       serviceContextText,
       todayISO,
     })
+    console.log(`[sales:handle-turn] extraction shouldBook=${extraction.shouldBook} svc=${extraction.serviceName} date=${extraction.date} time=${extraction.time} conf=${extraction.confidence}`)
     if (!extraction.shouldBook || extraction.confidence < 0.6) return
 
     const res = await createBookingFromExtraction({
@@ -158,6 +161,7 @@ async function tryCreateBooking(
       clientName: conversation.externalUserName,
       autoConfirm: settings.booking.autoConfirm ?? false,
     })
+    console.log(`[sales:handle-turn] createBooking created=${res.created} reason=${res.reason ?? "-"} status=${res.status ?? "-"}`)
 
     // Сообщаем клиенту результат (подтверждение или «время занято»).
     if (res.confirmationText) {
