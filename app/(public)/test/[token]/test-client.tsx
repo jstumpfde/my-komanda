@@ -209,6 +209,13 @@ export function TestClient({ token }: { token: string }) {
   const [answer, setAnswer] = useState("")                            // legacy textarea
   const [submitting, setSubmitting] = useState(false)
 
+  // ── Name-gate для анонимных кандидатов («Новый кандидат») ──
+  const [nameGate, setNameGate] = useState<"idle" | "show" | "done">("idle")
+  const [gateName, setGateName] = useState("")
+  const [gatePhone, setGatePhone] = useState("")
+  const [gateSubmitting, setGateSubmitting] = useState(false)
+  const [gateError, setGateError] = useState("")
+
   useEffect(() => {
     fetch(`/api/public/test/${token}`)
       .then(async (r) => {
@@ -221,6 +228,10 @@ export function TestClient({ token }: { token: string }) {
         // страницу с вопросами (видел бы только экран «Спасибо»).
         const isPreview = new URLSearchParams(window.location.search).get("as") === "hr"
         setStatus(d.alreadySubmitted && !isPreview ? "done" : "ready")
+        // Показать gate для анонимных (имя-заглушка) — кроме превью HR
+        if (!isPreview && (!d.candidateName.trim() || d.candidateName === "Новый кандидат")) {
+          setNameGate("show")
+        }
       })
       .catch(() => { setErrorMsg("Ошибка сети"); setStatus("error") })
   }, [token])
@@ -273,6 +284,26 @@ export function TestClient({ token }: { token: string }) {
     ? questions.some(({ q }) => (answers[q.id] ?? "").trim().length > 0)
     : answer.trim().length >= MIN_LEN
   const canSubmit = hasStructured ? (anyAnswered && !requiredMissing) : anyAnswered
+
+  const submitGate = async () => {
+    if (!gateName.trim()) return
+    setGateSubmitting(true)
+    setGateError("")
+    try {
+      const r = await fetch(`/api/public/candidate-update/${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: gateName.trim(), phone: gatePhone.trim() || undefined }),
+      })
+      const json = await r.json().catch(() => null)
+      if (!r.ok) { setGateError(json?.error || "Не удалось сохранить"); setGateSubmitting(false); return }
+      // Обновляем локальное имя чтобы шаблоны {{Имя}} заработали
+      setData(prev => prev ? { ...prev, candidateName: gateName.trim() } : prev)
+      setNameGate("done")
+    } catch {
+      setGateError("Ошибка сети"); setGateSubmitting(false)
+    }
+  }
 
   const submit = async () => {
     if (!canSubmit) return
@@ -387,6 +418,58 @@ export function TestClient({ token }: { token: string }) {
         <CheckCircle2 className="w-12 h-12" style={{ color: primary }} />
         <h1 className="text-xl font-bold">Спасибо!</h1>
         <p className="text-sm opacity-80 max-w-md">Мы рассмотрим ваш ответ и свяжемся с вами.</p>
+      </div>
+    )
+  }
+
+  // Gate: запрашиваем имя у анонимного кандидата перед показом теста
+  if (status === "ready" && nameGate === "show") {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-6" style={{ backgroundColor: bg, color: text }}>
+        <div className="w-full max-w-sm space-y-5">
+          {data?.companyName && (
+            <p className="text-xs uppercase tracking-wider opacity-60 text-center">{data.companyName}</p>
+          )}
+          <div className="text-center space-y-1">
+            <h2 className="text-xl font-bold">Представьтесь</h2>
+            <p className="text-sm opacity-70">Укажите ваши данные перед началом теста</p>
+          </div>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium block">
+                Имя <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={gateName}
+                onChange={e => setGateName(e.target.value)}
+                placeholder="Ваше имя"
+                className="w-full rounded-lg border border-black/15 bg-white p-2.5 text-sm outline-none focus:border-black/30 text-slate-900"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium block">Телефон</label>
+              <input
+                type="tel"
+                value={gatePhone}
+                onChange={e => setGatePhone(e.target.value)}
+                placeholder="+7 999 000-00-00"
+                className="w-full rounded-lg border border-black/15 bg-white p-2.5 text-sm outline-none focus:border-black/30 text-slate-900"
+              />
+            </div>
+            <button
+              onClick={submitGate}
+              disabled={!gateName.trim() || gateSubmitting}
+              className="w-full inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+              style={{ backgroundColor: primary }}
+            >
+              {gateSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              Продолжить
+            </button>
+            {gateError && <p className="text-sm text-red-600">{gateError}</p>}
+          </div>
+        </div>
       </div>
     )
   }
