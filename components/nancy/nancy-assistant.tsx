@@ -413,6 +413,20 @@ export function NancyAssistant() {
   // Держим sendMessageRef актуальным, чтобы startListening не зависел от него напрямую
   useEffect(() => { sendMessageRef.current = sendMessage }, [sendMessage])
 
+  // ── Сообщение об ошибке микрофона ──
+  const micErrorText = (e: unknown): string => {
+    const name = (e as { name?: string })?.name
+    if (name === "NotAllowedError" || name === "SecurityError") {
+      return "Доступ к микрофону запрещён. Разреши его для этого сайта: в Safari — «Настройки сайта» → Микрофон → Разрешить, затем обнови страницу."
+    }
+    if (name === "NotFoundError") return "Микрофон не найден. Проверь, что он подключён."
+    return "Не удалось включить микрофон. Попробуй ещё раз или проверь разрешения браузера."
+  }
+  const showMicError = useCallback((e: unknown) => {
+    console.error("[nancy] mic error:", (e as { name?: string })?.name ?? e)
+    setMessages((prev) => [...prev, { id: `err-${Date.now()}`, role: "nancy", text: micErrorText(e) }])
+  }, [])
+
   // ── Микрофон (одиночный) ──
   const toggleMic = useCallback(async () => {
     if (listening) {
@@ -420,18 +434,27 @@ export function NancyAssistant() {
       setListening(false)
       return
     }
-    const ok = await ensureMic().catch(() => false)
-    if (!ok) return
-    startListening()
-  }, [listening, startListening])
+    try {
+      const ok = await ensureMic()
+      if (!ok) { showMicError(new Error("no audio api")); return }
+      startListening()
+    } catch (e) {
+      showMicError(e)
+    }
+  }, [listening, startListening, showMicError])
 
   // ── Режим разговора ──
   const toggleConvMode = useCallback(async () => {
     const next = !convModeRef.current
     if (next) {
       // ensureMic вызывается в обработчике клика → Safari разрешает микрофон
-      const ok = await ensureMic().catch(() => false)
-      if (!ok) return
+      try {
+        const ok = await ensureMic()
+        if (!ok) { showMicError(new Error("no audio api")); return }
+      } catch (e) {
+        showMicError(e)
+        return
+      }
       convModeRef.current = true
       setConvMode(true)
       if (!thinkingRef.current) startListening()
@@ -443,7 +466,7 @@ export function NancyAssistant() {
       stopCurrentSpeech()
       releaseMic()
     }
-  }, [startListening, stopCurrentSpeech])
+  }, [startListening, stopCurrentSpeech, showMicError])
 
   const statusText = listening ? "Слушаю..." : thinking ? "Думаю..." : speaking ? "Говорю..." : convMode ? "Режим разговора" : null
 

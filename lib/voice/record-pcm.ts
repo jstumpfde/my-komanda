@@ -33,20 +33,30 @@ export function micSupported(): boolean {
   )
 }
 
-// Должна вызываться из обработчика пользовательского жеста (клик по кнопке),
-// чтобы Safari разрешил AudioContext и доступ к микрофону. Переиспользует
-// контекст и поток между циклами «слушания», чтобы не переспрашивать доступ.
+// Должна вызываться из обработчика пользовательского жеста (клик по кнопке).
+// Переиспользует контекст и поток между циклами «слушания».
+//
+// ВАЖНО про Safari: getUserMedia должен вызываться СРАЗУ в рамках жеста, без
+// предшествующего await — иначе Safari «теряет» активацию жеста и блокирует
+// микрофон без запроса. Поэтому getUserMedia идёт ПЕРВЫМ, а resume() —
+// уже после (к этому моменту жест не нужен).
+//
+// Бросает при ошибке доступа к микрофону (NotAllowedError и т.п.), чтобы
+// вызыватель показал понятное сообщение. Возвращает false только если в
+// браузере нет Web Audio API вовсе.
 export async function ensureMic(): Promise<boolean> {
   const Ctx = getAudioContextClass()
-  if (!Ctx) return false
-  if (!sharedCtx) sharedCtx = new Ctx()
-  if (sharedCtx.state === "suspended") {
-    try { await sharedCtx.resume() } catch { /* ignore */ }
+  if (!Ctx || typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+    return false
   }
   if (!sharedStream) {
     sharedStream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     })
+  }
+  if (!sharedCtx) sharedCtx = new Ctx()
+  if (sharedCtx.state === "suspended") {
+    try { await sharedCtx.resume() } catch { /* ignore */ }
   }
   return true
 }
