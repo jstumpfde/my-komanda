@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { companies, type CompanyHiringDefaults } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { requireCompany } from "@/lib/api-helpers";
+import { logAudit } from "@/lib/audit/log";
 
 // GET — текущие дефолты найма компании
 export async function GET() {
@@ -127,6 +128,22 @@ export async function PATCH(req: NextRequest) {
     .update(companies)
     .set({ hiringDefaultsJson: merged })
     .where(eq(companies.id, ctx.companyId));
+
+  // O3: аудит изменения срока хранения ПДн (ФЗ-152).
+  if ("dataRetention" in patch && patch.dataRetention !== current.dataRetention) {
+    void logAudit({
+      tenantId:   ctx.companyId,
+      userId:     ctx.id,
+      userEmail:  ctx.email ?? null,
+      action:     "data_retention_change",
+      entityType: "company",
+      entityId:   ctx.companyId,
+      meta: {
+        oldValue: current.dataRetention ?? null,
+        newValue: patch.dataRetention,
+      },
+    });
+  }
 
   return NextResponse.json({ hiringDefaults: merged });
 }
