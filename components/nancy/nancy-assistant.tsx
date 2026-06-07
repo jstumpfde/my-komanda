@@ -190,7 +190,8 @@ export function NancyAssistant() {
   const currentAudioRef = useRef<HTMLAudioElement | null>(null)
   const convModeRef     = useRef(false)
   const thinkingRef     = useRef(false)
-  const sendMessageRef  = useRef<(text: string) => Promise<void>>(async () => {})
+  const sendMessageRef      = useRef<(text: string) => Promise<void>>(async () => {})
+  const startListeningRef   = useRef<() => void>(() => {})
 
   // ── Поддержка микрофона ──
   useEffect(() => {
@@ -295,16 +296,33 @@ export function NancyAssistant() {
     rec.lang = "ru-RU"
     rec.interimResults = false
     rec.maxAlternatives = 1
-    rec.onstart  = () => setListening(true)
-    rec.onend    = () => setListening(false)
-    rec.onerror  = () => setListening(false)
+    rec.onstart = () => setListening(true)
+    let captured = false
     rec.onresult = (e: SpeechRecognitionEvent) => {
+      captured = true
       const transcript = e.results[0]?.[0]?.transcript ?? ""
       if (transcript) void sendMessageRef.current(transcript)
+    }
+    rec.onend = () => {
+      setListening(false)
+      // В режиме разговора: если речь не была распознана (тишина/тайм-аут) — сразу перезапустить
+      if (convModeRef.current && !captured) {
+        setTimeout(() => startListeningRef.current(), 300)
+      }
+    }
+    rec.onerror = (e: Event) => {
+      setListening(false)
+      const err = (e as SpeechRecognitionErrorEvent).error
+      if (convModeRef.current && err !== "not-allowed" && err !== "service-not-allowed") {
+        setTimeout(() => startListeningRef.current(), 800)
+      }
     }
     recognitionRef.current = rec
     rec.start()
   }, [stopCurrentSpeech])
+
+  // Держим ref актуальным
+  useEffect(() => { startListeningRef.current = startListening }, [startListening])
 
   // ── Отправка сообщения ──
   const sendMessage = useCallback(async (text: string) => {
