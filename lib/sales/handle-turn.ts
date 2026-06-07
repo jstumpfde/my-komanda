@@ -15,7 +15,9 @@ import { processSalesMessage } from "@/lib/ai/sales-chatbot-processor"
 import { getSalesBotConfig } from "./bot-config"
 import { sendToConversation, pauseForHuman, recordMessage, type Conversation } from "./conversations"
 import { buildServiceContext } from "./service-context"
-import type { SalesChatbotSettings } from "@/lib/ai/sales-chatbot-settings"
+import { resolveSalesChatbotSettings, type SalesChatbotSettings } from "@/lib/ai/sales-chatbot-settings"
+import { extractBookingConfirmation } from "./booking-extraction"
+import { createBookingFromExtraction } from "./create-booking"
 
 // Кап на каждую задержку, чтобы один диалог не висел вечно.
 const SLEEP_CAP_MS = 60_000
@@ -88,6 +90,19 @@ export async function handleConversationTurn(conversation: Conversation, incomin
         text: result.reply,
         parseMode: "plain",
       })
+
+      // Если клиент подтвердил конкретную запись — создаём предварительную бронь
+      // (статус pending/confirmed по настройке booking.autoConfirm).
+      if (result.category === "booking_scheduling" || result.category === "ready_to_buy") {
+        await tryCreateBooking(
+          conversation,
+          incomingText,
+          result.reply,
+          history,
+          serviceContext.contextText,
+          (config?.settings as SalesChatbotSettings | null) ?? null,
+        )
+      }
       return
     }
 
@@ -108,5 +123,54 @@ export async function handleConversationTurn(conversation: Conversation, incomin
     // action === "skipped" → бот намеренно молчит, ничего не делаем.
   } catch (err) {
     console.error("[sales:handle-turn] failed:", err)
+  }
+}
+
+// Попытка зафиксировать бронь, если клиент подтвердил конкретный слот.
+// Извлекаем услугу/дату/время из диалога и создаём предварительную бронь.
+// Дефолт безопасный: статус "pending" (админ подтверждает), если только в
+// настройках не включён booking.autoConfirm.
+async function tryCreateBooking(
+  conversation: Conversation,
+  clientText: string,
+  botReply: string,
+  history: Array<{ role: "user" | "assistant"; text: string }>,
+  serviceContextText: string | null,
+  rawSettings: SalesChatbotSettings | null,
+): Promise<void> {
+  try {
+    const settings = resolveSalesChatbotSettings(rawSettings)
+    const todayISO = new Date().toISOString().slice(0, 10)
+
+    const extraction = await extractBookingConfirmation({
+      history,
+      latestClientText: clientText,
+      latestBotReply: botReply,
+      serviceContextText,
+      todayISO,
+    })
+    if (!extraction.shouldBook || extraction.confidence < 0.6) return
+
+    const res = await createBookingFromExtraction({
+      tenantId: conversation.tenantId,
+      extraction,
+      contactId: conversation.contactId,
+      clientName: conversation.externalUserName,
+      autoConfirm: settings.booking.autoConfirm ?? false,
+    })
+
+    // Сообщаем клиенту результат (подтверждение или «время занято»).
+    if (res.confirmationText) {
+      await sendToConversation(conversation, {
+        to: conversation.externalUserId,
+        text: res.confirmationText,
+        parseMode: "plain",
+      })
+    }
+    if (res.created) {
+      console.log(`[sales:handle-turn] бронь создана (${res.status}) conv=${conversation.id}`)
+    }
+  } catch (err) {
+    console.error("[sales:handle-turn] tryCreateBooking failed:", err)
   }
 }
