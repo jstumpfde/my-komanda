@@ -655,10 +655,13 @@ export default function LibraryPage() {
       <SidebarInset>
         <DashboardHeader />
         <div className="flex-1 overflow-auto bg-background min-w-0">
-          <div className="px-6 py-6 lg:px-10">
-            <div className="mb-6">
-              <h1 className="text-2xl font-bold tracking-tight">Библиотека</h1>
-              <p className="text-sm text-muted-foreground mt-1">Шаблоны анкет, демонстраций, блоков и тестов</p>
+          <div className="pt-6 pb-6 px-4 sm:px-14">
+            <div className="mb-5">
+              <div className="flex items-center gap-2">
+                <BookOpen className="h-5 w-5 text-violet-600" />
+                <h1 className="text-lg font-semibold">Библиотека</h1>
+              </div>
+              <p className="text-sm text-muted-foreground mt-0.5">Шаблоны анкет, демонстраций, блоков и тестов</p>
             </div>
 
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabKey)}>

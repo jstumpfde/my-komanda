@@ -31,7 +31,7 @@ export default function CreateVacancyPage() {
 
       const id = result.data?.id ?? result.id
       toast.success("Вакансия создана — заполните анкету")
-      router.push(id ? `/hr/vacancies/${id}` : "/hr/vacancies")
+      router.push(id ? `/hr/vacancies/${id}?tab=anketa` : "/hr/vacancies")
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Ошибка"
       toast.error(`Не удалось создать вакансию: ${msg}`)

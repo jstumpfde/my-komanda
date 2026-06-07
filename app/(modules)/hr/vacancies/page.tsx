@@ -357,7 +357,7 @@ export default function VacanciesPage() {
         throw new Error(errBody.error || `HTTP ${res.status}`)
       }
       const data = await res.json() as { id: string }
-      router.push(`/hr/vacancies/${data.id}`)
+      router.push(`/hr/vacancies/${data.id}?tab=anketa`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Неизвестная ошибка"
       toast.error(`Не удалось создать вакансию: ${msg}`)
