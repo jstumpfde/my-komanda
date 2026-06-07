@@ -397,7 +397,7 @@ export default function CandidatesPage() {
                           )}
                         </DataCell>
                         <DataCell className="text-muted-foreground tabular-nums whitespace-nowrap">
-                          {c.demoTotalBlocks === 0 ? "—" : `${c.demoCompletedBlocks} / ${c.demoTotalBlocks}`}
+                          {c.demoTotalBlocks === 0 ? "—" : `${Math.min(c.demoCompletedBlocks, c.demoTotalBlocks)} / ${c.demoTotalBlocks}`}
                         </DataCell>
                         <DataCell className="text-muted-foreground whitespace-nowrap">{formatDate(c.createdAt)}</DataCell>
                         <DataCell className="text-muted-foreground">{SOURCE_LABELS[c.source ?? ""] ?? c.source ?? "—"}</DataCell>
