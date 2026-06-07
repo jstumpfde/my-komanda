@@ -52,8 +52,11 @@ export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeC
   // Все режимы (Воронка/Канбан/Плитки) — только у администратора платформы.
   // Все остальные (менеджер платформы + клиентские роли) видят только «Список».
   const showAllViews = role === "platform_admin"
+  // B5: колонки настраивает только директор/platform_admin; остальные HR — read-only.
+  const canEditColumns = ["director", "client", "platform_admin", "admin"].includes(role)
 
   const handleToggle = (key: keyof CardDisplaySettings) => {
+    if (!canEditColumns) return
     // undefined трактуем как «включено» (см. checked выше), поэтому переключаем
     // от отображаемого состояния: false → true, иначе → false.
     const next = { ...settings, [key]: settings[key] === false }
@@ -116,7 +119,7 @@ export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeC
           <div className="border-t pt-3 space-y-3">
             <div className="flex items-center justify-between">
               <h4 className="font-medium text-sm">Настройки отображения</h4>
-              {onReset && (
+              {onReset && canEditColumns && (
                 <button
                   type="button"
                   onClick={onReset}
@@ -128,14 +131,25 @@ export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeC
                 </button>
               )}
             </div>
+            {!canEditColumns && (
+              <p className="text-[11px] text-muted-foreground">
+                Колонки настраивает директор компании
+              </p>
+            )}
             <div className="space-y-2.5">
               {DISPLAY_TOGGLES.map(({ key, label }) => (
                 <div key={key} className="flex items-center justify-between">
-                  <Label htmlFor={`vs-${key}`} className="text-sm font-normal cursor-pointer">{label}</Label>
+                  <Label
+                    htmlFor={`vs-${key}`}
+                    className={cn("text-sm font-normal", canEditColumns ? "cursor-pointer" : "cursor-default opacity-60")}
+                  >
+                    {label}
+                  </Label>
                   <Switch
                     id={`vs-${key}`}
                     checked={settings[key] !== false}
                     onCheckedChange={() => handleToggle(key)}
+                    disabled={!canEditColumns}
                   />
                 </div>
               ))}
