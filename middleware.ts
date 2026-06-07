@@ -43,6 +43,7 @@ const PUBLIC_PREFIXES = [
   "/api/plans",
   "/api/dev",
   "/api/public/",
+  "/api/tts",
   "/intake/",
   "/vacancy-view/",
   "/demo/",
