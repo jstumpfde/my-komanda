@@ -837,13 +837,19 @@ export default function VacancyPage() {
     rawUrlSection && (SETTINGS_SECTION_IDS as readonly string[]).includes(rawUrlSection)
       ? (rawUrlSection as SettingsSectionId)
       : "page"
-  const [activeTab, setActiveTab] = useState(urlTab ?? defaultTab)
+  // Если ?tab есть в URL — используем его; иначе "_pending" до загрузки статуса.
+  // tabAutoSyncedRef установит правильный дефолт (candidates/settings) при
+  // первой загрузке apiVacancy — после чего URL-sync запишет его в адресную строку.
+  // Это исключает прыжок таба: без ?tab не фиксируем "settings" до получения статуса.
+  const [activeTab, setActiveTab] = useState(urlTab ?? "_pending")
 
   // URL-sync: при любом изменении activeTab (клик таба → Tabs onValueChange →
   // setActiveTab, и т.п.) обновляем ?tab=… в адресной строке. Без этого
   // tabFromUrl на line 441 не обновляется → useListPaginated может остаться
   // false при переключении на «Кандидаты», и список грузится без пагинации.
+  // "_pending" не пишем в URL — дожидаемся реального дефолта от tabAutoSyncedRef.
   useEffect(() => {
+    if (activeTab === "_pending") return
     const current = searchParams?.get("tab") ?? null
     if (current === activeTab) return
     const sp = new URLSearchParams(searchParams?.toString() ?? "")

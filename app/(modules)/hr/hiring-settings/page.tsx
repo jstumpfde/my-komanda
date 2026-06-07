@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -32,6 +33,8 @@ const TABS: { value: TabKey; label: string; icon: typeof Settings }[] = [
 // ─── Страница ────────────────────────────────────────────────────────────────
 
 export default function HiringSettingsPage() {
+  const router = useRouter()
+
   // ── Инициализация таба из ?tab=integrations (и других) ──
   const [activeTab, setActiveTab] = useState<TabKey>(() => {
     if (typeof window !== "undefined") {
@@ -40,6 +43,15 @@ export default function HiringSettingsPage() {
     }
     return "funnel"
   })
+
+  // ── Sync активного таба в URL при смене ──
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search)
+    if (sp.get("tab") === activeTab) return
+    sp.set("tab", activeTab)
+    router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
 
   // ── Единый источник данных ──
   const [defaults, setDefaults] = useState<CompanyHiringDefaults | null>(null)
