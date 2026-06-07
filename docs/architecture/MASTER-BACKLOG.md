@@ -45,7 +45,8 @@
 - ✅ **Platform Admin → «Сроки»** — TLS-серты / hh-токены / кроны / бэкапы в реальном времени.
 - ✅ **Страница сравнения кандидатов** — сворачивание ячеек, ресайз колонок, AI-группировка ответов.
 - ✅ **S2 унификация таблиц** — ~69 сырых table → data-table примитивы по всем модулям (e63fedb6 и др.).
-- ✅ **Дизайн-эталон** — DESIGN-REFERENCE.md; свип заголовков 7 HR-страниц (620e33e4).
+- ✅ **Дизайн-эталон** — DESIGN-REFERENCE.md; свип заголовков всех HR-страниц: 7 (620e33e4) + scoring-lab/agents/preboarding/buddy (38b56f5f). Все HR-модули = violet-600 + h-5 w-5.
+- ✅ **assessment в hh-маппинге** — уже реализован в lib/stages.ts + funnel-tab.tsx + funnel-automation-section.tsx (HhAction = "invitation"|"discard"|"assessment").
 
 ---
 
