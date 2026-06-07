@@ -14,7 +14,8 @@
 //  - Развернуть на весь экран
 //  - HR-действия: fill_outbound / search_outbound / navigate (window events)
 //  - TTS: Yandex SpeechKit (Алёна) → browser SpeechSynthesis fallback
-//  - STT: browser Web Speech API (Chrome/Edge/Safari)
+//  - STT: запись PCM (Web Audio API) → Yandex SpeechKit STT
+//         (работает в Safari/Chrome/Yandex, hands-free режим разговора)
 
 import Image from "next/image"
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -26,6 +27,10 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import {
+  ensureMic, releaseMic, listenOnce, micSupported as micIsSupported,
+  type ListenHandle,
+} from "@/lib/voice/record-pcm"
 
 // ─── Типы ──────────────────────────────────────────────────────────────────
 
@@ -184,7 +189,7 @@ export function NancyAssistant() {
   const [savingId,     setSavingId]     = useState<string | null>(null)
   const [convMode,     setConvMode]     = useState(false)
 
-  const recognitionRef  = useRef<SpeechRecognition | null>(null)
+  const listenHandleRef = useRef<ListenHandle | null>(null)
   const messagesEndRef  = useRef<HTMLDivElement>(null)
   const inputRef        = useRef<HTMLInputElement>(null)
   const currentAudioRef = useRef<HTMLAudioElement | null>(null)
@@ -193,12 +198,9 @@ export function NancyAssistant() {
   const sendMessageRef      = useRef<(text: string) => Promise<void>>(async () => {})
   const startListeningRef   = useRef<() => void>(() => {})
 
-  // ── Поддержка микрофона ──
+  // ── Поддержка микрофона (Web Audio API — работает в Safari/Chrome/Yandex) ──
   useEffect(() => {
-    setMicSupported(
-      typeof window !== "undefined" &&
-      ("SpeechRecognition" in window || "webkitSpeechRecognition" in window),
-    )
+    setMicSupported(micIsSupported())
   }, [])
 
   // ── Автоскролл ──
@@ -285,47 +287,46 @@ export function NancyAssistant() {
     if (typeof window !== "undefined") window.speechSynthesis?.cancel()
   }, [])
 
-  // ── Начать слушать (без зависимости от sendMessage — использует ref) ──
-  const startListening = useCallback(() => {
-    const SpeechRec =
-      (window as Window & { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition ??
-      (window as Window & { webkitSpeechRecognition?: typeof SpeechRecognition }).webkitSpeechRecognition
-    if (!SpeechRec) return
-    stopCurrentSpeech()
-    const rec = new SpeechRec()
-    rec.lang = "ru-RU"
-    rec.interimResults = false
-    rec.maxAlternatives = 1
-    rec.onstart = () => setListening(true)
-    let captured = false
-    rec.onresult = (e: SpeechRecognitionEvent) => {
-      captured = true
-      const transcript = e.results[0]?.[0]?.transcript ?? ""
-      if (transcript) void sendMessageRef.current(transcript)
-    }
-    rec.onend = () => {
-      setListening(false)
-      // В режиме разговора: если речь не была распознана (тишина/тайм-аут) — сразу перезапустить
-      if (convModeRef.current && !captured) {
-        setTimeout(() => startListeningRef.current(), 300)
-      }
-    }
-    rec.onerror = (e: Event) => {
-      setListening(false)
-      const err = (e as SpeechRecognitionErrorEvent).error
-      if (convModeRef.current && err !== "not-allowed" && err !== "service-not-allowed") {
-        setTimeout(() => startListeningRef.current(), 800)
-      }
-    }
-    recognitionRef.current = rec
+  // ── Распознать записанный фрагмент через Yandex STT ──
+  const recognizePcm = useCallback(async (pcm: ArrayBuffer): Promise<string> => {
     try {
-      rec.start()
+      const res = await fetch("/api/modules/hr/nancy/stt", {
+        method: "POST",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: pcm,
+      })
+      if (!res.ok) return ""
+      const data = (await res.json()) as { text?: string }
+      return (data.text ?? "").trim()
     } catch {
-      // rec.start() бросает синхронно (InvalidStateError и др.) — не попадает в onerror
-      setListening(false)
-      if (convModeRef.current) setTimeout(() => startListeningRef.current(), 600)
+      return ""
     }
-  }, [stopCurrentSpeech])
+  }, [])
+
+  // ── Начать слушать (запись PCM + Yandex STT — работает в Safari) ──
+  const startListening = useCallback(() => {
+    if (thinkingRef.current) return
+    listenHandleRef.current?.abort()
+    stopCurrentSpeech()
+    listenHandleRef.current = listenOnce({
+      onStart: () => setListening(true),
+      onResult: async (pcm) => {
+        setListening(false)
+        const text = await recognizePcm(pcm)
+        if (text) {
+          // sendMessage сам перезапустит слушание после ответа (в режиме разговора)
+          void sendMessageRef.current(text)
+        } else if (convModeRef.current) {
+          setTimeout(() => startListeningRef.current(), 300)
+        }
+      },
+      onNoSpeech: () => {
+        setListening(false)
+        if (convModeRef.current) setTimeout(() => startListeningRef.current(), 300)
+      },
+      onError: () => setListening(false),
+    })
+  }, [stopCurrentSpeech, recognizePcm])
 
   // Держим ref актуальным
   useEffect(() => { startListeningRef.current = startListening }, [startListening])
@@ -413,25 +414,34 @@ export function NancyAssistant() {
   useEffect(() => { sendMessageRef.current = sendMessage }, [sendMessage])
 
   // ── Микрофон (одиночный) ──
-  const toggleMic = useCallback(() => {
+  const toggleMic = useCallback(async () => {
     if (listening) {
-      recognitionRef.current?.stop()
+      listenHandleRef.current?.abort()
       setListening(false)
       return
     }
+    const ok = await ensureMic().catch(() => false)
+    if (!ok) return
     startListening()
   }, [listening, startListening])
 
   // ── Режим разговора ──
-  const toggleConvMode = useCallback(() => {
+  const toggleConvMode = useCallback(async () => {
     const next = !convModeRef.current
-    convModeRef.current = next
-    setConvMode(next)
     if (next) {
+      // ensureMic вызывается в обработчике клика → Safari разрешает микрофон
+      const ok = await ensureMic().catch(() => false)
+      if (!ok) return
+      convModeRef.current = true
+      setConvMode(true)
       if (!thinkingRef.current) startListening()
     } else {
-      recognitionRef.current?.stop()
+      convModeRef.current = false
+      setConvMode(false)
+      listenHandleRef.current?.abort()
+      setListening(false)
       stopCurrentSpeech()
+      releaseMic()
     }
   }, [startListening, stopCurrentSpeech])
 
@@ -520,8 +530,10 @@ export function NancyAssistant() {
           onClick={() => {
             setOpen(false); setExpanded(false)
             convModeRef.current = false; setConvMode(false)
-            recognitionRef.current?.stop()
+            listenHandleRef.current?.abort()
+            setListening(false)
             stopCurrentSpeech()
+            releaseMic()
           }}
           className="text-white/70 hover:text-white transition-colors"
           aria-label="Закрыть"
