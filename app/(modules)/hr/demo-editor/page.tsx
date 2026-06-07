@@ -115,6 +115,9 @@ function buildDemoFromDb(dbId: string, title: string, lessonsJson: unknown[]): D
 
 // ─── Главный компонент ──────────────────────────────────────────────────────
 
+type DemoEditorTabKey = "demo-notion" | "candidates" | "analytics" | "automation" | "publish" | "settings"
+const VALID_DEMO_EDITOR_TABS: DemoEditorTabKey[] = ["demo-notion", "candidates", "analytics", "automation", "publish", "settings"]
+
 function DemoEditorContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -125,7 +128,17 @@ function DemoEditorContent() {
   const [vacancyTitle, setVacancyTitle] = useState<string>("Демонстрация")
   const [loading, setLoading] = useState<boolean>(true)
   const [saving, setSaving] = useState<boolean>(false)
-  const [activeTab, setActiveTab] = useState("demo-notion")
+  const [activeTab, setActiveTab] = useState<DemoEditorTabKey>(() => {
+    const t = searchParams?.get("tab") as DemoEditorTabKey | null
+    return t && VALID_DEMO_EDITOR_TABS.includes(t) ? t : "demo-notion"
+  })
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search)
+    if (sp.get("tab") === activeTab) return
+    sp.set("tab", activeTab)
+    router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false)
 
   // Debounce для autosave
