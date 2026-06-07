@@ -75,7 +75,7 @@ const SECTIONS: SectionRow[] = [
   { key: "vacancies",        label: "Вакансии",             defaults: { director: true,  hr_lead: true,  hr_manager: true,  department_head: false, observer: false } },
   { key: "candidates",       label: "Кандидаты",            defaults: { director: true,  hr_lead: true,  hr_manager: true,  department_head: false, observer: false } },
   { key: "interviews",       label: "Интервью",             defaults: { director: true,  hr_lead: true,  hr_manager: true,  department_head: false, observer: false } },
-  { key: "talent_pool",      label: "Talent Pool",          defaults: { director: true,  hr_lead: true,  hr_manager: true,  department_head: false, observer: false } },
+  { key: "talent_pool",      label: "Резерв",               defaults: { director: true,  hr_lead: true,  hr_manager: true,  department_head: false, observer: false } },
   { key: "hr_analytics",     label: "Аналитика найма",      defaults: { director: true,  hr_lead: true,  hr_manager: false, department_head: false, observer: false } },
   { key: "templates",        label: "Шаблоны / Библиотека", defaults: { director: true,  hr_lead: true,  hr_manager: true,  department_head: false, observer: false } },
   { key: "hiring_settings",  label: "Настройки найма",      defaults: { director: true,  hr_lead: true,  hr_manager: false, department_head: false, observer: false } },
