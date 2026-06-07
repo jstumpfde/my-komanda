@@ -49,6 +49,7 @@ interface TalentCandidate {
   comment: string
   score: number
   scoreBreakdown: ScoreBreakdown
+  _type?: "entry" | "candidate"
 }
 
 interface CampaignStep {
@@ -128,6 +129,7 @@ export default function TalentPoolPage() {
           telegram: r.telegram ? "@" + r.telegram : "",
           comment: "", score: sc,
           scoreBreakdown: ZERO_BREAKDOWN,
+          _type: "candidate" as const,
         }
       })
       const fromEntries: TalentCandidate[] = (Array.isArray(eData?.entries) ? eData.entries : []).map((e: {
@@ -143,6 +145,7 @@ export default function TalentPoolPage() {
         email: e.email || "", phone: e.phone || "", telegram: e.telegram || "",
         comment: e.comment || "", score: e.score || 0,
         scoreBreakdown: ZERO_BREAKDOWN,
+        _type: "entry",
       }))
       setCandidates([...fromEntries, ...fromCandidates])
     } catch { /* пусто */ }
@@ -180,6 +183,14 @@ export default function TalentPoolPage() {
     setAddOpen(false)
     toast.success("Кандидат добавлен в резерв")
     await loadAll()
+  }
+
+  const handleDelete = async (c: TalentCandidate) => {
+    if (c._type === "entry") {
+      const res = await fetch(`/api/modules/hr/talent-pool/entries/${c.id}`, { method: "DELETE" })
+      if (!res.ok) { toast.error("Не удалось удалить"); return }
+    }
+    setCandidates((p) => p.filter((x) => x.id !== c.id))
   }
 
   // CSV-импорт: первая строка — заголовки (имя/должность/компания/источник/
@@ -428,7 +439,7 @@ export default function TalentPoolPage() {
                               <DataCell>
                                 <div className="flex items-center gap-1">
                                   <Button variant="ghost" size="icon" className="h-7 w-7" title="Написать" onClick={() => toast.info("Открыть чат")}><Send className="w-3 h-3" /></Button>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Удалить" onClick={() => setCandidates((p) => p.filter((x) => x.id !== c.id))}><Trash2 className="w-3 h-3" /></Button>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Удалить" onClick={() => handleDelete(c)}><Trash2 className="w-3 h-3" /></Button>
                                 </div>
                               </DataCell>
                             </DataRow>
