@@ -25,7 +25,10 @@ node_modules
 .next-prev/
 
 # User uploads (videos, photos, files from candidates)
-public/uploads/
+# Без слеша — чтобы матчить и директорию (локально), и симлинк (на проде
+# public/uploads -> /var/www/uploads), иначе git видит симлинк как untracked
+# и deploy-prod-safe.sh падает на проверке чистоты дерева.
+public/uploads
 
 # Backup files from hotfixes (e.g. *.bak, *.bak-postdemo-mode, *.bak-stopword)
 *.bak
