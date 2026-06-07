@@ -2979,13 +2979,15 @@ export default function VacancyPage() {
                                         e.target.value = ""
                                         return
                                       }
-                                      const reader = new FileReader()
-                                      reader.onload = () => {
-                                        const base64 = reader.result as string
-                                        setBrandLogo(base64)
-                                        saveBranding({ logo: base64 })
-                                      }
-                                      reader.readAsDataURL(file)
+                                      const fd = new FormData()
+                                      fd.append("file", file)
+                                      fetch("/api/upload/vacancy-logo", { method: "POST", body: fd })
+                                        .then(r => r.ok ? r.json() : Promise.reject(r))
+                                        .then((data: { logoUrl: string }) => {
+                                          setBrandLogo(data.logoUrl)
+                                          saveBranding({ logo: data.logoUrl })
+                                        })
+                                        .catch(() => toast.error("Не удалось загрузить логотип"))
                                       e.target.value = ""
                                     }}
                                   />
