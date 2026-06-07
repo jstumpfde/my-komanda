@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -12,31 +12,46 @@ import { ContactFormModal, type ContactFormData } from "@/components/sales/conta
 import { Users, Plus, Search } from "lucide-react"
 import { toast } from "sonner"
 
-const MOCK_COMPANIES = [
-  { id: "1", name: 'ООО "Ромашка"' },
-  { id: "2", name: 'ЗАО "Альфа Групп"' },
-  { id: "3", name: "ИП Петров" },
-  { id: "4", name: 'ООО "ТехноПлюс"' },
-  { id: "5", name: 'ООО "СтройМастер"' },
-]
-
-const MOCK_CONTACTS: SalesContact[] = [
-  { id: "1", companyId: "1", firstName: "Иван", lastName: "Петров", middleName: "Сергеевич", position: "Генеральный директор", department: "Руководство", phone: "+7 (495) 111-22-33", mobile: "+7 (999) 111-22-33", email: "i.petrov@romashka.ru", telegram: "@ipetrov", whatsapp: "+79991112233", comment: null, isPrimary: true, status: "active", companyName: 'ООО "Ромашка"' },
-  { id: "2", companyId: "1", firstName: "Мария", lastName: "Сидорова", middleName: null, position: "HR-директор", department: "HR", phone: "+7 (495) 111-22-34", mobile: null, email: "m.sidorova@romashka.ru", telegram: "@msidorova", whatsapp: null, comment: "Отвечает за подбор", isPrimary: false, status: "active", companyName: 'ООО "Ромашка"' },
-  { id: "3", companyId: "1", firstName: "Алексей", lastName: "Козлов", middleName: "Игоревич", position: "CTO", department: "IT", phone: null, mobile: "+7 (999) 222-33-44", email: "a.kozlov@romashka.ru", telegram: "@akozlov", whatsapp: null, comment: null, isPrimary: false, status: "active", companyName: 'ООО "Ромашка"' },
-  { id: "4", companyId: "2", firstName: "Елена", lastName: "Волкова", middleName: "Андреевна", position: "Финансовый директор", department: "Финансы", phone: "+7 (495) 222-33-44", mobile: "+7 (999) 333-44-55", email: "e.volkova@alfagroup.ru", telegram: "@evolkova", whatsapp: "+79993334455", comment: "Согласует бюджеты", isPrimary: true, status: "active", companyName: 'ЗАО "Альфа Групп"' },
-  { id: "5", companyId: "2", firstName: "Дмитрий", lastName: "Новиков", middleName: null, position: "Руководитель отдела продаж", department: "Продажи", phone: "+7 (495) 222-33-45", mobile: null, email: "d.novikov@alfagroup.ru", telegram: null, whatsapp: null, comment: null, isPrimary: false, status: "active", companyName: 'ЗАО "Альфа Групп"' },
-  { id: "6", companyId: "3", firstName: "Сергей", lastName: "Петров", middleName: "Алексеевич", position: "Индивидуальный предприниматель", department: null, phone: "+7 (812) 333-44-55", mobile: "+7 (999) 444-55-66", email: "petrov@mail.ru", telegram: "@spetrov", whatsapp: "+79994445566", comment: null, isPrimary: true, status: "active", companyName: "ИП Петров" },
-  { id: "7", companyId: "4", firstName: "Ольга", lastName: "Смирнова", middleName: "Владимировна", position: "Директор по персоналу", department: "HR", phone: "+7 (843) 444-55-66", mobile: null, email: "o.smirnova@technoplus.ru", telegram: "@osmirnova", whatsapp: null, comment: "Основной контакт по найму", isPrimary: true, status: "active", companyName: 'ООО "ТехноПлюс"' },
-  { id: "8", companyId: "5", firstName: "Андрей", lastName: "Кузнецов", middleName: null, position: "Прораб", department: "Строительство", phone: "+7 (343) 555-66-77", mobile: "+7 (999) 555-66-77", email: "a.kuznetsov@stroymaster.ru", telegram: null, whatsapp: "+79995556677", comment: null, isPrimary: true, status: "active", companyName: 'ООО "СтройМастер"' },
-]
+type CompanyOption = { id: string; name: string }
 
 export default function SalesContactsPage() {
-  const [contacts, setContacts] = useState<SalesContact[]>(MOCK_CONTACTS)
+  const [contacts, setContacts] = useState<SalesContact[]>([])
+  const [companies, setCompanies] = useState<CompanyOption[]>([])
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [filterCompany, setFilterCompany] = useState("all")
   const [filterStatus, setFilterStatus] = useState("all")
   const [modalOpen, setModalOpen] = useState(false)
+
+  // Загружаем контакты и компании параллельно
+  useEffect(() => {
+    setLoading(true)
+    Promise.all([
+      fetch("/api/modules/sales/contacts").then((r) => r.json()),
+      fetch("/api/modules/sales/companies").then((r) => r.json()),
+    ])
+      .then(([contactsData, companiesData]) => {
+        const companiesList: CompanyOption[] = (companiesData.companies ?? []).map(
+          (c: { id: string; name: string }) => ({ id: c.id, name: c.name }),
+        )
+        const companyMap = new Map(companiesList.map((c) => [c.id, c.name]))
+
+        // Маппим: добавляем companyName из загруженных компаний
+        const mapped: SalesContact[] = (contactsData.contacts ?? []).map(
+          (c: Omit<SalesContact, "companyName">) => ({
+            ...c,
+            companyName: c.companyId ? (companyMap.get(c.companyId) ?? "—") : null,
+          }),
+        )
+        setContacts(mapped)
+        setCompanies(companiesList)
+      })
+      .catch(() => {
+        setContacts([])
+        setCompanies([])
+      })
+      .finally(() => setLoading(false))
+  }, [])
 
   const filtered = contacts.filter((c) => {
     const fullName = `${c.lastName} ${c.firstName} ${c.middleName || ""}`.toLowerCase()
@@ -47,38 +62,63 @@ export default function SalesContactsPage() {
   })
 
   const handleCreate = (data: ContactFormData) => {
-    const company = MOCK_COMPANIES.find((c) => c.id === data.companyId)
-    const newContact: SalesContact = {
-      id: String(Date.now()),
-      companyId: data.companyId || null,
-      firstName: data.firstName,
-      lastName: data.lastName,
-      middleName: data.middleName || null,
-      position: data.position || null,
-      department: data.department || null,
-      phone: data.phone || null,
-      mobile: data.mobile || null,
-      email: data.email || null,
-      telegram: data.telegram || null,
-      whatsapp: data.whatsapp || null,
-      comment: data.comment || null,
-      isPrimary: data.isPrimary,
-      status: "active",
-      companyName: company?.name || "—",
-    }
-    setContacts((prev) => [newContact, ...prev])
-    setModalOpen(false)
-    toast.success("Контакт добавлен")
+    const company = companies.find((c) => c.id === data.companyId)
+    fetch("/api/modules/sales/contacts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        first_name: data.firstName,
+        last_name: data.lastName,
+        middle_name: data.middleName || null,
+        company_id: data.companyId || null,
+        position: data.position || null,
+        department: data.department || null,
+        phone: data.phone || null,
+        mobile: data.mobile || null,
+        email: data.email || null,
+        telegram: data.telegram || null,
+        whatsapp: data.whatsapp || null,
+        comment: data.comment || null,
+        is_primary: data.isPrimary,
+      }),
+    })
+      .then((r) => r.json())
+      .then((created) => {
+        const newContact: SalesContact = {
+          ...created,
+          companyName: company?.name ?? null,
+        }
+        setContacts((prev) => [newContact, ...prev])
+        setModalOpen(false)
+        toast.success("Контакт добавлен")
+      })
+      .catch(() => toast.error("Не удалось добавить контакт"))
   }
 
   const handleArchive = (contact: SalesContact) => {
-    setContacts((prev) => prev.map((c) => c.id === contact.id ? { ...c, status: "archive" } : c))
-    toast.success("Контакт перемещён в архив")
+    fetch("/api/modules/sales/contacts", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: contact.id }),
+    })
+      .then(() => {
+        setContacts((prev) => prev.map((c) => c.id === contact.id ? { ...c, status: "archive" } : c))
+        toast.success("Контакт перемещён в архив")
+      })
+      .catch(() => toast.error("Не удалось архивировать контакт"))
   }
 
   const handleRestore = (contact: SalesContact) => {
-    setContacts((prev) => prev.map((c) => c.id === contact.id ? { ...c, status: "active" } : c))
-    toast.success("Контакт восстановлен")
+    fetch("/api/modules/sales/contacts", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: contact.id, status: "active" }),
+    })
+      .then(() => {
+        setContacts((prev) => prev.map((c) => c.id === contact.id ? { ...c, status: "active" } : c))
+        toast.success("Контакт восстановлен")
+      })
+      .catch(() => toast.error("Не удалось восстановить контакт"))
   }
 
   return (
@@ -96,7 +136,9 @@ export default function SalesContactsPage() {
                 </div>
                 <div>
                   <h1 className="text-lg font-semibold">Контакты</h1>
-                  <p className="text-sm text-muted-foreground">{contacts.length} контактов в базе</p>
+                  <p className="text-sm text-muted-foreground">
+                    {loading ? "Загрузка…" : `${contacts.length} контактов в базе`}
+                  </p>
                 </div>
               </div>
               <Button className="gap-1.5" onClick={() => setModalOpen(true)}>
@@ -115,7 +157,7 @@ export default function SalesContactsPage() {
                 <SelectTrigger className="w-[200px] h-9 border border-input rounded-md"><SelectValue placeholder="Компания" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Все компании</SelectItem>
-                  {MOCK_COMPANIES.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  {companies.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                 </SelectContent>
               </Select>
               <Select value={filterStatus} onValueChange={setFilterStatus}>
@@ -128,12 +170,22 @@ export default function SalesContactsPage() {
               </Select>
             </div>
 
+            {/* Loading / empty state */}
+            {loading && (
+              <p className="text-sm text-muted-foreground py-10 text-center">Загрузка контактов…</p>
+            )}
+            {!loading && filtered.length === 0 && (
+              <p className="text-sm text-muted-foreground py-10 text-center">Пока нет данных</p>
+            )}
+
             {/* Table */}
-            <ContactsTable
-              contacts={filtered}
-              onArchive={handleArchive}
-              onRestore={handleRestore}
-            />
+            {!loading && filtered.length > 0 && (
+              <ContactsTable
+                contacts={filtered}
+                onArchive={handleArchive}
+                onRestore={handleRestore}
+              />
+            )}
           </div>
         </main>
       </SidebarInset>
@@ -142,7 +194,7 @@ export default function SalesContactsPage() {
         open={modalOpen}
         onOpenChange={setModalOpen}
         onSubmit={handleCreate}
-        companies={MOCK_COMPANIES}
+        companies={companies}
       />
     </SidebarProvider>
   )

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -12,22 +12,32 @@ import { CompanyFormModal, type CompanyFormData } from "@/components/sales/compa
 import { Building2, Plus, Search, SlidersHorizontal, Settings2 } from "lucide-react"
 import { toast } from "sonner"
 
-const MOCK_COMPANIES: SalesCompany[] = [
-  { id: "1", name: 'ООО "Ромашка"', inn: "7701234567", kpp: "770101001", ogrn: null, industry: "IT", city: "Москва", address: null, website: "romashka.ru", phone: "+7 (495) 111-22-33", email: "info@romashka.ru", revenue: "50–200 млн ₽", employeesCount: 120, description: null, logoUrl: null, type: "client", status: "active", contactsCount: 3, vacanciesCount: 2 },
-  { id: "2", name: 'ЗАО "Альфа Групп"', inn: "7709876543", kpp: "770901001", ogrn: null, industry: "Финансы", city: "Москва", address: null, website: "alfagroup.ru", phone: "+7 (495) 222-33-44", email: "info@alfagroup.ru", revenue: "500 млн – 1 млрд ₽", employeesCount: 450, description: null, logoUrl: null, type: "client", status: "active", contactsCount: 5, vacanciesCount: 1 },
-  { id: "3", name: "ИП Петров", inn: "771234567890", kpp: null, ogrn: null, industry: "Ритейл", city: "Санкт-Петербург", address: null, website: null, phone: "+7 (812) 333-44-55", email: "petrov@mail.ru", revenue: "до 10 млн ₽", employeesCount: 5, description: null, logoUrl: null, type: "client", status: "active", contactsCount: 1, vacanciesCount: 0 },
-  { id: "4", name: 'ООО "ТехноПлюс"', inn: "5001234567", kpp: "500101001", ogrn: null, industry: "Производство", city: "Казань", address: null, website: "technoplus.ru", phone: "+7 (843) 444-55-66", email: "info@technoplus.ru", revenue: "200–500 млн ₽", employeesCount: 200, description: null, logoUrl: null, type: "client", status: "active", contactsCount: 2, vacanciesCount: 3 },
-  { id: "5", name: 'ООО "СтройМастер"', inn: "6601234567", kpp: "660101001", ogrn: null, industry: "Строительство", city: "Екатеринбург", address: null, website: "stroymaster.ru", phone: "+7 (343) 555-66-77", email: "info@stroymaster.ru", revenue: "10–50 млн ₽", employeesCount: 35, description: null, logoUrl: null, type: "client", status: "archive", contactsCount: 1, vacanciesCount: 0 },
-]
-
-const INDUSTRIES = ["IT", "Финансы", "Ритейл", "Производство", "Строительство", "Логистика", "Медицина", "Другое"]
-
 export default function SalesClientsPage() {
-  const [companies, setCompanies] = useState<SalesCompany[]>(MOCK_COMPANIES)
+  const [companies, setCompanies] = useState<SalesCompany[]>([])
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [filterType, setFilterType] = useState("all")
   const [filterStatus, setFilterStatus] = useState("all")
   const [modalOpen, setModalOpen] = useState(false)
+
+  useEffect(() => {
+    setLoading(true)
+    fetch("/api/modules/sales/companies")
+      .then((r) => r.json())
+      .then((data) => {
+        // API не возвращает contactsCount/vacanciesCount — подставляем 0
+        const mapped: SalesCompany[] = (data.companies ?? []).map(
+          (c: Omit<SalesCompany, "contactsCount" | "vacanciesCount">) => ({
+            ...c,
+            contactsCount: 0,
+            vacanciesCount: 0,
+          }),
+        )
+        setCompanies(mapped)
+      })
+      .catch(() => setCompanies([]))
+      .finally(() => setLoading(false))
+  }, [])
 
   const filtered = companies.filter((c) => {
     if (search && !c.name.toLowerCase().includes(search.toLowerCase()) && !(c.inn || "").includes(search)) return false
@@ -37,40 +47,63 @@ export default function SalesClientsPage() {
   })
 
   const handleCreate = (data: CompanyFormData) => {
-    const newCompany: SalesCompany = {
-      id: String(Date.now()),
-      name: data.name,
-      inn: data.inn || null,
-      kpp: null,
-      ogrn: data.ogrn || null,
-      industry: data.industry || null,
-      city: data.city || null,
-      address: data.address || null,
-      website: data.website || null,
-      phone: data.phone || null,
-      email: data.email || null,
-      revenue: data.revenue || null,
-      employeesCount: data.employeesCount ? parseInt(data.employeesCount) : null,
-      description: data.description || null,
-      logoUrl: null,
-      type: data.type,
-      status: "active",
-      contactsCount: 0,
-      vacanciesCount: 0,
-    }
-    setCompanies((prev) => [newCompany, ...prev])
-    setModalOpen(false)
-    toast.success("Компания добавлена")
+    fetch("/api/modules/sales/companies", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: data.name,
+        inn: data.inn || null,
+        ogrn: data.ogrn || null,
+        industry: data.industry || null,
+        city: data.city || null,
+        address: data.address || null,
+        website: data.website || null,
+        phone: data.phone || null,
+        email: data.email || null,
+        revenue: data.revenue || null,
+        employees_count: data.employeesCount ? parseInt(data.employeesCount) : null,
+        description: data.description || null,
+        type: data.type,
+      }),
+    })
+      .then((r) => r.json())
+      .then((created) => {
+        const newCompany: SalesCompany = {
+          ...created,
+          contactsCount: 0,
+          vacanciesCount: 0,
+        }
+        setCompanies((prev) => [newCompany, ...prev])
+        setModalOpen(false)
+        toast.success("Компания добавлена")
+      })
+      .catch(() => toast.error("Не удалось добавить компанию"))
   }
 
   const handleArchive = (company: SalesCompany) => {
-    setCompanies((prev) => prev.map((c) => c.id === company.id ? { ...c, status: "archive" } : c))
-    toast.success("Компания перемещена в архив")
+    fetch("/api/modules/sales/companies", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: company.id }),
+    })
+      .then(() => {
+        setCompanies((prev) => prev.map((c) => c.id === company.id ? { ...c, status: "archive" } : c))
+        toast.success("Компания перемещена в архив")
+      })
+      .catch(() => toast.error("Не удалось архивировать компанию"))
   }
 
   const handleRestore = (company: SalesCompany) => {
-    setCompanies((prev) => prev.map((c) => c.id === company.id ? { ...c, status: "active" } : c))
-    toast.success("Компания восстановлена")
+    fetch("/api/modules/sales/companies", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: company.id, status: "active" }),
+    })
+      .then(() => {
+        setCompanies((prev) => prev.map((c) => c.id === company.id ? { ...c, status: "active" } : c))
+        toast.success("Компания восстановлена")
+      })
+      .catch(() => toast.error("Не удалось восстановить компанию"))
   }
 
   return (
@@ -88,7 +121,9 @@ export default function SalesClientsPage() {
                 </div>
                 <div>
                   <h1 className="text-lg font-semibold">Компании</h1>
-                  <p className="text-sm text-muted-foreground">{companies.length} компаний в базе</p>
+                  <p className="text-sm text-muted-foreground">
+                    {loading ? "Загрузка…" : `${companies.length} компаний в базе`}
+                  </p>
                 </div>
               </div>
               <Button className="gap-1.5" onClick={() => setModalOpen(true)}>
@@ -123,12 +158,22 @@ export default function SalesClientsPage() {
               <Button variant="outline" size="sm" className="h-9 gap-1.5"><Settings2 className="w-3.5 h-3.5" />Настройки</Button>
             </div>
 
+            {/* Loading / empty state */}
+            {loading && (
+              <p className="text-sm text-muted-foreground py-10 text-center">Загрузка компаний…</p>
+            )}
+            {!loading && filtered.length === 0 && (
+              <p className="text-sm text-muted-foreground py-10 text-center">Пока нет данных</p>
+            )}
+
             {/* Table */}
-            <CompaniesTable
-              companies={filtered}
-              onArchive={handleArchive}
-              onRestore={handleRestore}
-            />
+            {!loading && filtered.length > 0 && (
+              <CompaniesTable
+                companies={filtered}
+                onArchive={handleArchive}
+                onRestore={handleRestore}
+              />
+            )}
           </div>
         </main>
       </SidebarInset>
