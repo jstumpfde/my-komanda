@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { Slider } from "@/components/ui/slider"
 import { Loader2, Volume2, Bot } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { UserRole } from "@/lib/auth"
@@ -65,6 +66,7 @@ export default function VoiceSettingsPage() {
   const [speed,      setSpeed]      = useState(1.1)
   const [ttsEnabled, setTtsEnabled] = useState(true)
   const [testing,    setTesting]    = useState(false)
+  const [previewText, setPreviewText] = useState("")
 
   // ── Ассистент ──
   const [enabled,            setEnabled]            = useState(true)
@@ -119,11 +121,12 @@ export default function VoiceSettingsPage() {
   const testVoice = async () => {
     setTesting(true)
     const voiceName = VOICES.find(v => v.id === voice)?.label ?? voice
+    const text = previewText.trim() || `Привет! Меня зовут ${name.trim() || voiceName}. Рада помочь!`
     const resp = await fetch("/api/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        text: `Привет! Меня зовут ${name.trim() || voiceName}. Рада помочь!`,
+        text: text.slice(0, 500),
         voice, emotion, speed,
       }),
     })
@@ -356,26 +359,56 @@ export default function VoiceSettingsPage() {
               </div>
             </div>
 
-            {/* Скорость */}
+            {/* Скорость — плавный слайдер для тонкой настройки темпа */}
             <div className="space-y-3">
-              <Label className="text-sm font-semibold">Скорость речи</Label>
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-semibold">Темп речи</Label>
+                <span className="text-sm tabular-nums text-violet-600 font-medium">{speed.toFixed(2)}×</span>
+              </div>
+              <Slider
+                value={[speed]}
+                min={0.7}
+                max={1.5}
+                step={0.05}
+                onValueChange={(v) => setSpeed(Number(v[0].toFixed(2)))}
+                className="py-1"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Медленнее</span>
+                <span>Нормально</span>
+                <span>Быстрее</span>
+              </div>
+              {/* Быстрые пресеты */}
+              <div className="flex gap-2 flex-wrap pt-1">
                 {SPEEDS.map(s => (
                   <button
                     key={s.id}
                     type="button"
                     onClick={() => setSpeed(s.id)}
                     className={cn(
-                      "rounded-lg border px-4 py-2 text-sm transition-all",
-                      speed === s.id
+                      "rounded-lg border px-3 py-1 text-xs transition-all",
+                      Math.abs(speed - s.id) < 0.001
                         ? "border-violet-600 bg-violet-50 dark:bg-violet-950/30 text-violet-700 dark:text-violet-300"
-                        : "hover:border-muted-foreground/40"
+                        : "hover:border-muted-foreground/40 text-muted-foreground"
                     )}
                   >
                     {s.label}
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Текст для репетиции */}
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Текст для прослушивания</Label>
+              <Textarea
+                value={previewText}
+                onChange={e => setPreviewText(e.target.value)}
+                placeholder="Введите свою фразу, чтобы отрепетировать звучание. Пусто — стандартное приветствие."
+                rows={2}
+                maxLength={500}
+              />
+              <p className="text-xs text-muted-foreground">Меняйте голос, интонацию и темп и слушайте на своей фразе, пока не добьётесь идеала.</p>
             </div>
 
             {/* Тест */}
