@@ -14,6 +14,7 @@ import { salesMessages } from "@/lib/db/schema"
 import { processSalesMessage } from "@/lib/ai/sales-chatbot-processor"
 import { getSalesBotConfig } from "./bot-config"
 import { sendToConversation, pauseForHuman, recordMessage, type Conversation } from "./conversations"
+import { buildServiceContext } from "./service-context"
 import type { SalesChatbotSettings } from "@/lib/ai/sales-chatbot-settings"
 
 // Кап на каждую задержку, чтобы один диалог не висел вечно.
@@ -53,6 +54,8 @@ export async function handleConversationTurn(conversation: Conversation, incomin
   try {
     const config = await getSalesBotConfig(conversation.tenantId)
     const history = await getRecentHistory(conversation.id, incomingText)
+    // Реальные услуги/мастера/свободные слоты салона для системного промпта.
+    const serviceContext = await buildServiceContext(conversation.tenantId)
 
     const result = await processSalesMessage({
       incomingText,
@@ -66,7 +69,7 @@ export async function handleConversationTurn(conversation: Conversation, incomin
         settings: (config?.settings as SalesChatbotSettings | null) ?? null,
       },
       conversationStatus: conversation.status,
-      // serviceContext: реальные услуги/слоты подключим в Спринте 3 (booking).
+      serviceContext,
     })
 
     if (result.action === "sent" && result.reply) {
