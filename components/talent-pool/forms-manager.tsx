@@ -131,7 +131,7 @@ export function FormsManager({ open, onOpenChange, enabledSources }: FormsManage
                 <DataRow key={f.id}>
                   <DataCell className="font-medium">{f.name}</DataCell>
                   <DataCell>
-                    <Badge variant="outline" className={cn("text-[10px] border-transparent", f.type === "internal" ? "bg-purple-500/10 text-purple-700" : "bg-blue-500/10 text-blue-700")}>
+                    <Badge variant="outline" className={cn("text-[10px] border-transparent", f.type === "internal" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
                       {f.type === "internal" ? "Внутренняя" : "Внешняя"}
                     </Badge>
                   </DataCell>
@@ -230,7 +230,7 @@ export function FormsManager({ open, onOpenChange, enabledSources }: FormsManage
 
             {/* Внутренняя — подсказка */}
             {newType === "internal" && (
-              <div className="p-2 bg-purple-50 dark:bg-purple-950/20 rounded border border-purple-200 dark:border-purple-900/30">
+              <div className="p-2 bg-primary/5 rounded border border-primary/20">
                 <p className="text-[11px] text-muted-foreground">Внутренняя форма: поиск сотрудника, должность, комментарий. Доступна только авторизованным пользователям платформы.</p>
               </div>
             )}

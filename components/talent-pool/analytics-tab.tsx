@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { Users, UserPlus, TrendingUp, Clock, Sparkles, Loader2 } from "lucide-react"
+import { Users, UserPlus, TrendingUp, Clock, Sparkles, Info, Loader2 } from "lucide-react"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts"
 
 interface AnalyticsData {
@@ -39,10 +39,10 @@ export function AnalyticsTab() {
   const empty = kpi.pool === 0
 
   const kpiCards = [
-    { label: "В пуле", value: String(kpi.pool), icon: Users, color: "text-blue-600" },
-    { label: "Новых за месяц", value: `+${kpi.newThisMonth}`, icon: UserPlus, color: "text-emerald-600" },
-    { label: "Конверсия в найм", value: `${kpi.conversion}%`, icon: TrendingUp, color: "text-purple-600" },
-    { label: "Ср. время в пуле", value: `${kpi.avgDays} дн`, icon: Clock, color: "text-amber-600" },
+    { label: "В пуле", value: String(kpi.pool), icon: Users },
+    { label: "Новых за месяц", value: `+${kpi.newThisMonth}`, icon: UserPlus },
+    { label: "Конверсия в найм", value: `${kpi.conversion}%`, icon: TrendingUp },
+    { label: "Ср. время в пуле", value: `${kpi.avgDays} дн`, icon: Clock },
   ]
 
   return (
@@ -54,9 +54,9 @@ export function AnalyticsTab() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <p className="text-xs text-muted-foreground">{k.label}</p>
-                <k.icon className={cn("w-4 h-4", k.color)} />
+                <k.icon className="w-4 h-4 text-violet-600" />
               </div>
-              <p className={cn("text-2xl font-bold mt-1", k.color)}>{k.value}</p>
+              <p className="text-2xl font-bold mt-1 text-foreground">{k.value}</p>
             </CardContent>
           </Card>
         ))}
@@ -77,8 +77,8 @@ export function AnalyticsTab() {
               <AreaChart data={dynamics}>
                 <defs>
                   <linearGradient id="addedGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="hiredGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
@@ -89,7 +89,7 @@ export function AnalyticsTab() {
                 <XAxis dataKey="month" tick={{ fontSize: 11 }} className="text-muted-foreground" />
                 <YAxis tick={{ fontSize: 11 }} allowDecimals={false} className="text-muted-foreground" />
                 <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                <Area type="monotone" dataKey="added" name="Добавлено" stroke="#6366f1" fill="url(#addedGrad)" strokeWidth={2} />
+                <Area type="monotone" dataKey="added" name="Добавлено" stroke="hsl(var(--primary))" fill="url(#addedGrad)" strokeWidth={2} />
                 <Area type="monotone" dataKey="hired" name="Нанято" stroke="#10b981" fill="url(#hiredGrad)" strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
@@ -134,10 +134,10 @@ export function AnalyticsTab() {
               </div>
             ))}
             {scoringBySource.length > 0 && (
-              <div className="flex items-start gap-2 mt-3 p-3 bg-purple-50 dark:bg-purple-950/20 rounded-lg border border-purple-200 dark:border-purple-900/30">
-                <Sparkles className="w-4 h-4 text-purple-600 mt-0.5 shrink-0" />
+              <div className="flex items-start gap-2 mt-3 p-3 bg-primary/5 rounded-lg border border-primary/20">
+                <Sparkles className="w-4 h-4 text-violet-600 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-xs font-semibold text-purple-700 dark:text-purple-400">AI-инсайт</p>
+                  <p className="text-xs font-semibold">AI-инсайт</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Лучший средний скоринг — у источника «{scoringBySource[0]?.source}» ({scoringBySource[0]?.score}).
                     Стоит наращивать приток кандидатов из него.
@@ -156,12 +156,13 @@ export function AnalyticsTab() {
               {funnel.map((step, i) => {
                 const maxCount = funnel[0]?.count || 1
                 const pctNum = (step.count / maxCount) * 100
+                const opacity = Math.max(0.5, 0.9 - i * 0.08)
                 return (
                   <div key={step.stage} className="flex items-center gap-3">
                     <span className="text-xs text-muted-foreground w-36 shrink-0">{step.stage}</span>
                     <div className="flex-1 h-6 bg-muted rounded overflow-hidden relative">
                       <div className="h-full rounded transition-all"
-                        style={{ width: `${pctNum}%`, backgroundColor: `hsl(${250 - i * 30}, 70%, ${55 + i * 5}%)` }} />
+                        style={{ width: `${pctNum}%`, backgroundColor: `hsl(var(--primary))`, opacity }} />
                       <span className="absolute inset-0 flex items-center justify-center text-[11px] font-semibold">
                         {step.count} ({step.pct})
                       </span>

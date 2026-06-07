@@ -77,7 +77,7 @@ export function ReferralLinks({ links, bonusPerHire, loading, onAdd, onDelete }:
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm flex items-center gap-1.5">
-              <Link className="w-4 h-4 text-purple-600" />
+              <Link className="w-4 h-4 text-violet-600" />
               Ссылки сотрудников
             </CardTitle>
             <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => setAddOpen(true)}>

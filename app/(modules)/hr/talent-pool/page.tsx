@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -71,13 +72,13 @@ interface Campaign {
 }
 
 // ─── Status config ──────────────────────────────────────
-const STATUS_CFG: Record<TalentStatus, { label: string; emoji: string; cls: string }> = {
-  cold: { label: "Холодный", emoji: "🟡", cls: "bg-amber-500/10 text-amber-700 border-transparent px-2.5 py-0.5" },
-  warming: { label: "В прогреве", emoji: "🔵", cls: "bg-blue-500/10 text-blue-700 border-transparent px-2.5 py-0.5" },
-  hot: { label: "Горячий", emoji: "🟢", cls: "bg-emerald-500/10 text-emerald-700 border-transparent px-2.5 py-0.5" },
-  ideal: { label: "Идеальный 🔥", emoji: "🔴", cls: "bg-red-500/10 text-red-700 border-transparent px-2.5 py-0.5" },
-  refused: { label: "Отказался", emoji: "🔴", cls: "bg-red-500/5 text-red-600 border-transparent px-2.5 py-0.5" },
-  hired: { label: "Нанят", emoji: "⚫", cls: "bg-muted text-muted-foreground border-transparent px-2.5 py-0.5" },
+const STATUS_CFG: Record<TalentStatus, { label: string; cls: string }> = {
+  cold: { label: "Холодный", cls: "bg-muted text-muted-foreground border-transparent px-2.5 py-0.5" },
+  warming: { label: "В прогреве", cls: "bg-amber-500/10 text-amber-700 border-transparent px-2.5 py-0.5" },
+  hot: { label: "Горячий", cls: "bg-emerald-500/10 text-emerald-700 border-transparent px-2.5 py-0.5" },
+  ideal: { label: "Идеальный", cls: "bg-primary/10 text-primary border-transparent px-2.5 py-0.5" },
+  refused: { label: "Отказался", cls: "bg-red-500/5 text-red-600 border-transparent px-2.5 py-0.5" },
+  hired: { label: "Нанят", cls: "bg-muted text-muted-foreground border-transparent px-2.5 py-0.5" },
 }
 
 function scoreToStatus(score: number): TalentStatus {
@@ -91,6 +92,7 @@ const CHANNEL_LABELS: Record<string, string> = { tg: "Telegram", whatsapp: "What
 
 // ─── Component ──────────────────────────────────────────
 export default function TalentPoolPage() {
+  const router = useRouter()
   const [candidates, setCandidates] = useState<TalentCandidate[]>([])
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [addOpen, setAddOpen] = useState(false)
@@ -321,7 +323,7 @@ export default function TalentPoolPage() {
                     <SelectTrigger className="w-36 h-8 text-xs border border-border"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Все статусы</SelectItem>
-                      {Object.entries(STATUS_CFG).map(([k, v]) => <SelectItem key={k} value={k}>{v.emoji} {v.label}</SelectItem>)}
+                      {Object.entries(STATUS_CFG).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
                   <Popover>
@@ -383,7 +385,7 @@ export default function TalentPoolPage() {
                     </label>
                   </Button>
                   <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => setAddOpen(true)}><Plus className="w-3.5 h-3.5" />Добавить</Button>
-                  <Button size="sm" className="h-8 text-xs gap-1.5 bg-purple-600 hover:bg-purple-700 border border-purple-700" onClick={() => setCampaignOpen(true)}><Rocket className="w-3.5 h-3.5" />Запустить кампанию</Button>
+                  <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setCampaignOpen(true)}><Rocket className="w-3.5 h-3.5" />Запустить кампанию</Button>
                 </div>
 
                 <TableCard>
@@ -414,7 +416,7 @@ export default function TalentPoolPage() {
                         {filtered.map((c) => {
                           const st = STATUS_CFG[c.status]
                           return (
-                            <DataRow key={c.id}>
+                            <DataRow key={c.id} className="cursor-pointer" onClick={() => router.push(`/hr/candidates/${c.id}`)}>
                               <DataCell className="font-medium text-foreground/85">{c.name}</DataCell>
                               <DataCell className="text-muted-foreground">{c.position}</DataCell>
                               <DataCell className="text-muted-foreground">{c.company}</DataCell>
@@ -424,7 +426,7 @@ export default function TalentPoolPage() {
                                   {c.referralName && (
                                     <>
                                       <span className="text-[11px] text-muted-foreground">· {c.referralName}</span>
-                                      <button className="text-pink-500 hover:scale-110 transition-transform" onClick={() => { setThanked((prev) => { const next = new Set(prev); next.add(c.id); return next }); toast.success(`Спасибо отправлено ${c.referralName}!`) }}><Heart className={cn("w-3 h-3", thanked.has(c.id) && "fill-pink-500")} /></button>
+                                      <button className="text-violet-600 hover:scale-110 transition-transform" onClick={(e) => { e.stopPropagation(); setThanked((prev) => { const next = new Set(prev); next.add(c.id); return next }); toast.success(`Спасибо отправлено ${c.referralName}!`) }}><Heart className={cn("w-3 h-3", thanked.has(c.id) && "fill-violet-600")} /></button>
                                     </>
                                   )}
                                 </div>
@@ -434,12 +436,13 @@ export default function TalentPoolPage() {
                                   <ScoringBadge score={c.score} breakdown={c.scoreBreakdown} size="sm" />
                                 </div>
                               </DataCell>
-                              <DataCell><Badge variant="outline" className={cn("text-[10px]", st.cls)}>{st.emoji} {st.label}</Badge></DataCell>
+                              <DataCell><Badge variant="outline" className={cn("text-[10px]", st.cls)}>{st.label}</Badge></DataCell>
                               <DataCell className="text-xs text-muted-foreground">{formatDate(c.lastContact)}</DataCell>
                               <DataCell>
                                 <div className="flex items-center gap-1">
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Написать" onClick={() => toast.info("Открыть чат")}><Send className="w-3 h-3" /></Button>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Удалить" onClick={() => handleDelete(c)}><Trash2 className="w-3 h-3" /></Button>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Открыть профиль" onClick={(e) => { e.stopPropagation(); router.push(`/hr/candidates/${c.id}`) }}><Eye className="w-3 h-3" /></Button>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Написать" onClick={(e) => { e.stopPropagation(); toast.info("Открыть чат") }}><Send className="w-3 h-3" /></Button>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Удалить" onClick={(e) => { e.stopPropagation(); handleDelete(c) }}><Trash2 className="w-3 h-3" /></Button>
                                 </div>
                               </DataCell>
                             </DataRow>

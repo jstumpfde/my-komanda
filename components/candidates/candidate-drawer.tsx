@@ -47,6 +47,8 @@ import {
   Play,
   RotateCcw,
   Pencil,
+  Maximize2,
+  Minimize2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -541,6 +543,7 @@ export function CandidateDrawer({
   vacancyPipeline,
   vacancyAnketa,
 }: CandidateDrawerProps) {
+  const [sheetExpanded, setSheetExpanded] = useState(false)
   const [candidate, setCandidate] = useState<ApiCandidate | null>(null)
   // Notes хранятся в demo_progress_json у самого кандидата — отдельный
   // /notes-запрос сделал бы тот же select, поэтому держим notes как локальное
@@ -933,9 +936,13 @@ export function CandidateDrawer({
       if (!next && typeof document !== "undefined" && document.pictureInPictureElement) {
         document.exitPictureInPicture().catch(() => {})
       }
+      if (!next) setSheetExpanded(false)
       onOpenChange(next)
     }}>
-      <SheetContent side="right" className="w-full sm:max-w-lg p-0 flex flex-col">
+      <SheetContent side="right" className={cn(
+        "w-full p-0 flex flex-col",
+        sheetExpanded ? "max-w-none sm:max-w-none w-screen" : "sm:max-w-2xl",
+      )}>
         {/* sr-only title/description: гарантируют наличие aria-labelledby
             и aria-describedby у Radix Dialog даже когда candidate ещё грузится
             или не найден — иначе библиотека пишет варнинги в консоль. */}
@@ -945,6 +952,15 @@ export function CandidateDrawer({
         <SheetDescription className="sr-only">
           Подробная информация о кандидате
         </SheetDescription>
+        {/* Развернуть на весь экран (слева от стандартного крестика Radix) */}
+        <button
+          type="button"
+          onClick={() => setSheetExpanded((v) => !v)}
+          title={sheetExpanded ? "Свернуть панель" : "Развернуть на весь экран"}
+          className="absolute right-12 top-4 z-20 inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+        >
+          {sheetExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+        </button>
         {/* ── Header ─────────────────────────────────────────────────── */}
         <SheetHeader className="px-6 pt-6 pb-4 border-b border-border shrink-0">
           {loadingCandidate ? (

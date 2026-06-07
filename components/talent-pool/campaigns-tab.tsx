@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { Rocket, Flame, TrendingUp, Plus, Mail, Send, Pause, Play, Trash2, Loader2 } from "lucide-react"
+import { Rocket, Flame, TrendingUp, Plus, Mail, Send, Pause, Play, Trash2, Loader2, Info } from "lucide-react"
 
 interface Campaign {
   id: string
@@ -81,9 +81,9 @@ export function CampaignsTab() {
   }
 
   const kpiCards = [
-    { label: "Активных кампаний", value: String(kpi.active), icon: Rocket, color: "text-blue-600" },
-    { label: "В прогреве", value: String(kpi.warming), icon: Flame, color: "text-orange-600" },
-    { label: "Конверсия", value: `${kpi.conversion}%`, icon: TrendingUp, color: "text-emerald-600" },
+    { label: "Активных кампаний", value: String(kpi.active), icon: Rocket },
+    { label: "В прогреве", value: String(kpi.warming), icon: Flame },
+    { label: "Конверсия", value: `${kpi.conversion}%`, icon: TrendingUp },
   ]
 
   return (
@@ -95,19 +95,20 @@ export function CampaignsTab() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <p className="text-xs text-muted-foreground">{k.label}</p>
-                <k.icon className={cn("w-4 h-4", k.color)} />
+                <k.icon className="w-4 h-4 text-violet-600" />
               </div>
-              <p className={cn("text-2xl font-bold mt-1", k.color)}>{k.value}</p>
+              <p className="text-2xl font-bold mt-1 text-foreground">{k.value}</p>
             </CardContent>
           </Card>
         ))}
       </div>
 
       <div className="flex items-center justify-between">
-        <p className="text-[11px] text-muted-foreground">
-          ℹ️ Отправка касаний кандидатам — скоро. Сейчас кампании можно создавать и вести.
-        </p>
-        <Button size="sm" className="h-8 text-xs gap-1.5 bg-purple-600 hover:bg-purple-700" onClick={() => setLaunchOpen(true)}>
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <Info className="w-3.5 h-3.5 shrink-0" />
+          <span>Отправка касаний кандидатам — скоро. Сейчас кампании можно создавать и вести.</span>
+        </div>
+        <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setLaunchOpen(true)}>
           <Plus className="w-3.5 h-3.5" />Создать кампанию
         </Button>
       </div>
@@ -193,7 +194,7 @@ export function CampaignsTab() {
                   <button key={ch} type="button"
                     onClick={() => setForm({ ...form, channel: ch })}
                     className={cn("text-xs h-8 rounded-md border transition-colors",
-                      form.channel === ch ? "border-purple-500 bg-purple-500/10 text-purple-700 font-medium" : "hover:bg-muted/50")}>
+                      form.channel === ch ? "border-primary bg-primary/10 text-primary font-medium" : "hover:bg-muted/50")}>
                     {CHANNEL_LABEL[ch]}
                   </button>
                 ))}
