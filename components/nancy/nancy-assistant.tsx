@@ -16,6 +16,7 @@
 //  - TTS: Yandex SpeechKit (Алёна) → browser SpeechSynthesis fallback
 //  - STT: запись PCM (Web Audio API) → Yandex SpeechKit STT
 //         (работает в Safari/Chrome/Yandex, hands-free режим разговора)
+//  - Конфиг: /api/modules/hr/nancy/config — enabled/name/greeting/visibleToRoles/modules
 
 import Image from "next/image"
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -31,6 +32,7 @@ import {
   ensureMic, releaseMic, listenOnce, micSupported as micIsSupported,
   type ListenHandle,
 } from "@/lib/voice/record-pcm"
+import { useAuth } from "@/lib/auth"
 
 // ─── Типы ──────────────────────────────────────────────────────────────────
 
@@ -49,6 +51,15 @@ interface NancyAction {
   experience?: string
   softCriteria?: string
   href?: string
+}
+
+interface NancyConfig {
+  enabled: boolean
+  name: string
+  greeting: string
+  visibleToRoles: string[]
+  modules: string[]
+  customInstructions: string
 }
 
 // ─── Модуль-контекст ────────────────────────────────────────────────────────
@@ -177,6 +188,21 @@ async function speakText(
 export function NancyAssistant() {
   const pathname = usePathname()
   const mod      = detectModule(pathname)
+  const { role } = useAuth()
+
+  // ── Конфиг ассистента (загружается при монтировании) ──
+  const [config, setConfig] = useState<NancyConfig | null>(null)
+  const [configLoaded, setConfigLoaded] = useState(false)
+
+  useEffect(() => {
+    fetch("/api/modules/hr/nancy/config")
+      .then(r => r.ok ? r.json() : null)
+      .then((data: NancyConfig | null) => {
+        setConfig(data)
+      })
+      .catch(() => setConfig(null))
+      .finally(() => setConfigLoaded(true))
+  }, [])
 
   const [open,     setOpen]     = useState(false)
   const [expanded, setExpanded] = useState(false)
@@ -213,16 +239,17 @@ export function NancyAssistant() {
   useEffect(() => {
     if (prevModRef.current === mod) return
     prevModRef.current = mod
+    const welcomeText = config?.greeting?.trim() || WELCOME[mod]
     setMessages((prev) =>
-      prev.map((m) => m.id === "welcome" ? { ...m, text: WELCOME[mod] } : m),
+      prev.map((m) => m.id === "welcome" ? { ...m, text: welcomeText } : m),
     )
-  }, [mod])
+  }, [mod, config])
 
   // ── Открытие: добавить приветствие ──
   useEffect(() => {
     if (!open) return
     if (messages.length > 0) return
-    const greeting = WELCOME[mod]
+    const greeting = config?.greeting?.trim() || WELCOME[mod]
     setMessages([{ id: "welcome", role: "nancy", text: greeting }])
     setSpeaking(true)
     void speakText(greeting, () => setSpeaking(false))
@@ -445,6 +472,25 @@ export function NancyAssistant() {
     }
   }, [startListening, stopCurrentSpeech])
 
+  // ── Проверка видимости по конфигу ──
+  // Ждём загрузки конфига (configLoaded), затем применяем правила.
+  // Если конфиг недоступен (ошибка сети) — показываем ассистента по умолчанию.
+  if (!configLoaded) return null
+
+  if (config) {
+    // enabled === false → скрыть полностью
+    if (config.enabled === false) return null
+
+    // Проверяем модуль (если задан непустой список)
+    if (config.modules.length > 0 && !config.modules.includes(mod)) return null
+
+    // Проверяем роль (если задан непустой список)
+    if (config.visibleToRoles.length > 0 && role && !config.visibleToRoles.includes(role)) return null
+  }
+
+  // Имя ассистента: кастомное или дефолт «Нэнси»
+  const assistantName = config?.name?.trim() || "Нэнси"
+
   const statusText = listening ? "Слушаю..." : thinking ? "Думаю..." : speaking ? "Говорю..." : convMode ? "Режим разговора" : null
 
   // ── Кнопка-триггер ──
@@ -458,12 +504,12 @@ export function NancyAssistant() {
           "overflow-hidden hover:scale-105 active:scale-95 transition-transform",
           "flex items-center justify-center bg-violet-600 text-white",
         )}
-        aria-label="Нэнси — AI-ассистент"
-        title="Нэнси — AI-ассистент"
+        aria-label={`${assistantName} — AI-ассистент`}
+        title={`${assistantName} — AI-ассистент`}
       >
         <Image
           src="/nancy-avatar.png"
-          alt="Нэнси"
+          alt={assistantName}
           width={64}
           height={64}
           className="w-full h-full object-cover"
@@ -490,7 +536,7 @@ export function NancyAssistant() {
         <div className="h-9 w-9 rounded-full overflow-hidden border-2 border-white/30 shrink-0 bg-white/20">
           <Image
             src="/nancy-avatar.png"
-            alt="Нэнси"
+            alt={assistantName}
             width={36}
             height={36}
             className="w-full h-full object-cover"
@@ -498,7 +544,7 @@ export function NancyAssistant() {
           />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="font-semibold text-sm leading-tight">Нэнси</div>
+          <div className="font-semibold text-sm leading-tight">{assistantName}</div>
           <div className="text-[11px] text-white/70 leading-tight">
             {statusText ?? "AI-ассистент"}
           </div>
@@ -643,7 +689,7 @@ export function NancyAssistant() {
             className={cn("h-8 w-8 shrink-0", listening && "animate-pulse")}
             onClick={toggleMic}
             disabled={thinking}
-            title={listening ? "Остановить запись" : "Говорить с Нэнси"}
+            title={listening ? "Остановить запись" : `Говорить с ${assistantName}`}
           >
             {listening ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
           </Button>

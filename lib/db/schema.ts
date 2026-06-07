@@ -193,12 +193,25 @@ export interface CompanyWorkSchedule {
 }
 
 // ── NancyVoiceSettings (drizzle/0182) ──
+// Хранится в companies.nancy_voice_json (jsonb). БЕЗ миграции — jsonb принимает любые поля.
 export interface NancyVoiceSettings {
+  // ── Голос (TTS) ──
   voice?:      string  // alena | filipp | oksana | jane | zahar | ermil
   emotion?:    string  // good | neutral | evil
   speed?:      number  // 0.8 .. 1.5
   ttsEnabled?: boolean // false = только браузерный fallback
+
+  // ── Ассистент ──
+  enabled?:            boolean   // глобальный вкл/выкл (по умолчанию true)
+  name?:               string    // кастомное имя (по умолчанию «Нэнси»)
+  greeting?:           string    // кастомное приветствие (если пусто — дефолтные под модуль)
+  visibleToRoles?:     string[]  // какие роли видят ассистента (пусто/undefined = все)
+  modules?:            string[]  // в каких модулях показывать (пусто/undefined = все)
+  customInstructions?: string    // доп. инструкции к системному промпту
 }
+
+/** Алиас для удобного именования — тот же тип */
+export type NancyAssistantSettings = NancyVoiceSettings
 
 // Индивидуальный рабочий график сотрудника (users.custom_schedule).
 // Настраивается самим сотрудником в Профиле.
