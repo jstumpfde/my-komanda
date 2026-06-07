@@ -254,7 +254,7 @@ export default function BrandingPage() {
         window.dispatchEvent(new Event("company-updated"))
       }
     } catch {
-      toast.success("Брендинг сохранён локально")
+      toast.error("Не удалось сохранить брендинг")
     } finally { setSaving(false) }
   }
 
