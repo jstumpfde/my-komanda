@@ -24,7 +24,10 @@ export default function MarketingAnalyticsPage() {
               <div className="w-20 h-20 rounded-2xl bg-purple-500/10 flex items-center justify-center mb-6">
                 <BarChart3 className="w-10 h-10 text-purple-500" />
               </div>
-              <h1 className="text-2xl font-bold mb-2">Детальная аналитика</h1>
+              <div className="flex items-center gap-2 pt-3 pb-2">
+                <BarChart3 className="h-5 w-5 text-violet-600" />
+                <h1 className="text-lg font-semibold">Детальная аналитика</h1>
+              </div>
               <p className="text-muted-foreground max-w-md mb-8">
                 AI-анализ эффективности каналов, прогноз бюджета, автоматические отчёты
               </p>

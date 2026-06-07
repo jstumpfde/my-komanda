@@ -164,7 +164,10 @@ export default function AnalyticsPage() {
             {/* Header + Filter */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
-                <h1 className="text-2xl font-semibold text-foreground mb-1">Аналитика</h1>
+                <div className="flex items-center gap-2 pt-3 pb-2">
+                  <BarChart3 className="h-5 w-5 text-violet-600" />
+                  <h1 className="text-lg font-semibold">Аналитика</h1>
+                </div>
                 <p className="text-muted-foreground text-sm">Статистика по найму</p>
               </div>
               <Select value={vacancyFilter} onValueChange={setVacancyFilter}>

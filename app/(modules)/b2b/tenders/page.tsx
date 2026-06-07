@@ -6,7 +6,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Plus } from "lucide-react"
+import { Plus, ClipboardList } from "lucide-react"
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { TENDERS, TENDER_STATUS_MAP, formatValueShort } from "@/lib/b2b/demo-data"
 
@@ -20,7 +20,10 @@ export default function B2BTendersPage() {
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">Тендеры</h1>
+                <div className="flex items-center gap-2 pt-3 pb-2">
+                  <ClipboardList className="h-5 w-5 text-violet-600" />
+                  <h1 className="text-lg font-semibold">Тендеры</h1>
+                </div>
                 <p className="text-sm text-muted-foreground mt-1">Участие в тендерах и госзакупках</p>
               </div>
               <TooltipProvider>

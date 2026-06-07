@@ -7,6 +7,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
+import { Phone } from "lucide-react"
 import {CALL_HISTORY, CALL_RESULTS, RESULT_MAP, formatDuration, SENTIMENT_EMOJI} from "@/lib/dialer/demo-data"
 
 export default function DialerHistoryPage() {
@@ -29,7 +30,10 @@ export default function DialerHistoryPage() {
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="mb-6">
-              <h1 className="text-2xl font-bold tracking-tight">История звонков</h1>
+              <div className="flex items-center gap-2 pt-3 pb-2">
+                <Phone className="h-5 w-5 text-violet-600" />
+                <h1 className="text-lg font-semibold">История звонков</h1>
+              </div>
               <p className="text-sm text-muted-foreground mt-1">Все звонки бота-звонаря</p>
             </div>
 

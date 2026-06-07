@@ -150,8 +150,9 @@ export default function ReviewsPage() {
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Отзывы</h1>
+      <div className="flex items-center gap-2 pt-3 pb-2">
+        <MessageSquare className="h-5 w-5 text-violet-600" />
+        <h1 className="text-lg font-semibold">Отзывы</h1>
       </div>
 
       {/* Summary */}

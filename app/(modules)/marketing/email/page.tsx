@@ -6,7 +6,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
-import {Plus, Mail, Eye, UserMinus} from "lucide-react"
+import { Plus, Mail, Eye, UserMinus } from "lucide-react"
 
 const kpiCards = [
   { title: "Подписчиков", value: "4 821", icon: Mail, color: "text-blue-500", bg: "bg-blue-50" },
@@ -68,7 +68,10 @@ export default function EmailPage() {
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Email-рассылки</h1>
+        <div className="flex items-center gap-2 pt-3 pb-2">
+          <Mail className="h-5 w-5 text-violet-600" />
+          <h1 className="text-lg font-semibold">Email-рассылки</h1>
+        </div>
         <Button>
           <Plus className="h-4 w-4 mr-2" />
           Новая рассылка

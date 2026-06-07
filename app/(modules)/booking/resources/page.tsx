@@ -91,7 +91,10 @@ export default function BookingResourcesPage() {
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">Ресурсы</h1>
+                <div className="flex items-center gap-2 pt-3 pb-2">
+                  <Users className="h-5 w-5 text-violet-600" />
+                  <h1 className="text-lg font-semibold">Ресурсы</h1>
+                </div>
                 <p className="text-sm text-muted-foreground mt-1">Специалисты, кабинеты и оборудование</p>
               </div>
               <Button className="rounded-xl shadow-sm hover:shadow-md gap-1.5" onClick={openCreate}>

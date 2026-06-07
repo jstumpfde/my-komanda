@@ -24,7 +24,10 @@ export default function B2BAnalyticsPage() {
               <div className="w-20 h-20 rounded-2xl bg-blue-500/10 flex items-center justify-center mb-6">
                 <BarChart3 className="w-10 h-10 text-blue-500" />
               </div>
-              <h1 className="text-2xl font-bold mb-2">Аналитика B2B продаж</h1>
+              <div className="flex items-center gap-2 pt-3 pb-2">
+                <BarChart3 className="h-5 w-5 text-violet-600" />
+                <h1 className="text-lg font-semibold">Аналитика B2B продаж</h1>
+              </div>
               <p className="text-muted-foreground max-w-md mb-8">AI-анализ pipeline, прогнозы и рекомендации для B2B-отдела</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl w-full">
                 {FEATURES.map((f) => (

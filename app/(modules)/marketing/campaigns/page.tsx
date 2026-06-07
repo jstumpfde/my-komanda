@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
-import {Plus} from "lucide-react"
+import { Plus, Megaphone } from "lucide-react"
 import { CAMPAIGNS, CHANNEL_MAP, MARKETING_CHANNELS } from "@/lib/marketing/demo-data"
 
 const STATUSES: Record<string, { label: string; cls: string }> = {
@@ -37,7 +37,10 @@ export default function CampaignsPage() {
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">Рекламные кампании</h1>
+                <div className="flex items-center gap-2 pt-3 pb-2">
+                  <Megaphone className="h-5 w-5 text-violet-600" />
+                  <h1 className="text-lg font-semibold">Рекламные кампании</h1>
+                </div>
                 <p className="text-sm text-muted-foreground mt-1">Управление кампаниями по всем каналам</p>
               </div>
               <TooltipProvider>

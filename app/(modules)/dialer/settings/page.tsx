@@ -4,7 +4,7 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
-import { Phone, Mic, Link2, Clock, Lock } from "lucide-react"
+import { Phone, Mic, Link2, Clock, Lock, Settings } from "lucide-react"
 
 const INTEGRATIONS = [
   { name: "SIP-транк", desc: "Манго Офис, Билайн Бизнес, МегаФон Виртуальная АТС", icon: Phone, color: "#3B82F6" },
@@ -22,7 +22,10 @@ export default function DialerSettingsPage() {
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="mb-6">
-              <h1 className="text-2xl font-bold tracking-tight">Настройки бот-звонаря</h1>
+              <div className="flex items-center gap-2 pt-3 pb-2">
+                <Settings className="h-5 w-5 text-violet-600" />
+                <h1 className="text-lg font-semibold">Настройки бот-звонаря</h1>
+              </div>
               <p className="text-sm text-muted-foreground mt-1">Интеграции с телефонией и голосовыми движками</p>
             </div>
 

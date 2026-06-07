@@ -6,7 +6,7 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import {Clock, CalendarDays, Bell, Check, Lock} from "lucide-react"
+import { Clock, CalendarDays, Bell, Check, Lock } from "lucide-react"
 import { BOOKING_MODES } from "@/lib/booking/constants"
 
 export default function BookingSettingsPage() {
@@ -21,7 +21,10 @@ export default function BookingSettingsPage() {
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="mb-6">
-              <h1 className="text-2xl font-bold tracking-tight">Настройки бронирования</h1>
+              <div className="flex items-center gap-2 pt-3 pb-2">
+                <CalendarDays className="h-5 w-5 text-violet-600" />
+                <h1 className="text-lg font-semibold">Настройки бронирования</h1>
+              </div>
               <p className="text-sm text-muted-foreground mt-1">Режим работы, сетка и уведомления</p>
             </div>
 

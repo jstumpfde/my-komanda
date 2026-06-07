@@ -70,7 +70,10 @@ export default function B2BDashboardPage() {
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="mb-6">
-              <h1 className="text-2xl font-bold tracking-tight">B2B Продажи</h1>
+              <div className="flex items-center gap-2 pt-3 pb-2">
+                <Building2 className="h-5 w-5 text-violet-600" />
+                <h1 className="text-lg font-semibold">B2B Продажи</h1>
+              </div>
               <p className="text-sm text-muted-foreground mt-1">Длинные сделки, аккаунты и тендеры</p>
             </div>
 

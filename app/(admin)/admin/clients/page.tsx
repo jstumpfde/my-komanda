@@ -69,9 +69,9 @@ function AdminClientsInner() {
           <div className="py-6 px-6 lg:px-14">
 
             {/* Заголовок */}
-            <div className="flex items-center gap-2 mb-1">
-              <Shield className="w-5 h-5 text-primary" />
-              <h1 className="text-2xl font-semibold text-foreground">Клиенты</h1>
+            <div className="flex items-center gap-2 pt-3 pb-2">
+              <Building2 className="h-5 w-5 text-violet-600" />
+              <h1 className="text-lg font-semibold">Клиенты</h1>
             </div>
             <p className="text-muted-foreground text-sm mb-5">Управление компаниями, пользователями и счетами платформы</p>
 

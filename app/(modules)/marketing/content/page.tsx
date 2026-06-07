@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, Sparkles, Pencil, Trash2, Search } from "lucide-react"
+import { Plus, Sparkles, Pencil, Trash2, Search, FileText } from "lucide-react"
 
 const allPosts = [
   { id: 1, channel: "ВКонтакте", emoji: "💙", title: "Кейс: как мы помогли клиенту вырасти в 2 раза за квартал", status: "Опубликовано", date: "20 мар 2026" },
@@ -47,7 +47,10 @@ export default function ContentPage() {
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Контент-фабрика</h1>
+        <div className="flex items-center gap-2 pt-3 pb-2">
+          <FileText className="h-5 w-5 text-violet-600" />
+          <h1 className="text-lg font-semibold">Контент-фабрика</h1>
+        </div>
         <div className="flex gap-2">
           <Button variant="outline">
             <Sparkles className="h-4 w-4 mr-2" />

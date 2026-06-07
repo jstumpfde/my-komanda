@@ -13,7 +13,7 @@ import { getOnboarding, isOnboardingComplete, remainingSteps } from "@/lib/onboa
 import Link from "next/link"
 import {
   Users, UserCheck, Calendar, AlertTriangle, ArrowRight,
-  Rocket, Clock, Briefcase, Loader2,
+  Rocket, Clock, Briefcase, Loader2, LayoutDashboard,
 } from "lucide-react"
 
 // ─── Типы ─────────────────────────────────────────────────────────────────────
@@ -211,9 +211,12 @@ export default function OverviewPage() {
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             {/* Greeting */}
             <div className="mb-6">
-              <h1 className="text-2xl font-semibold text-foreground">
-                {getGreeting()}{name ? `, ${name}` : ""}! ☀️
-              </h1>
+              <div className="flex items-center gap-2 pt-3 pb-2">
+                <LayoutDashboard className="h-5 w-5 text-violet-600" />
+                <h1 className="text-lg font-semibold">
+                  {getGreeting()}{name ? `, ${name}` : ""}! ☀️
+                </h1>
+              </div>
               <p className="text-muted-foreground text-sm capitalize">{formatDate()}</p>
             </div>
 
