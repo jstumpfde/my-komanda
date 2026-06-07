@@ -130,6 +130,11 @@ export default function PreboardingPage() {
         <DashboardHeader title="Пребординг и ребординг" subtitle="Подготовка до первого дня и возврат после отсутствия" />
         <main className="p-6 space-y-6">
 
+          <div className="flex items-center gap-2 pt-3 pb-2">
+            <Rocket className="h-5 w-5 text-violet-600" />
+            <h1 className="text-lg font-semibold">Пребординг и ребординг</h1>
+          </div>
+
           {/* Шаблон пребординга: таймлайн */}
           <div>
             <h2 className="text-sm font-medium text-muted-foreground mb-3">Типовой план пребординга</h2>

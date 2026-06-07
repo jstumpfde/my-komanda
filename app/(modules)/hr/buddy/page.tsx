@@ -52,14 +52,9 @@ export default function BuddyDashboardPage() {
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
 
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-rose-500/10 flex items-center justify-center">
-                <HeartHandshake className="w-5 h-5 text-rose-600" />
-              </div>
-              <div>
-                <h1 className="text-lg font-semibold">Наставник</h1>
-                <p className="text-sm text-muted-foreground">Мои подопечные на адаптации</p>
-              </div>
+            <div className="flex items-center gap-2 pt-3 pb-2">
+              <HeartHandshake className="h-5 w-5 text-violet-600" />
+              <h1 className="text-lg font-semibold">Наставник</h1>
             </div>
 
             {loading ? (
