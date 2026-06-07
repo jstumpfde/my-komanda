@@ -92,7 +92,7 @@ export default function VoiceSettingsPage() {
     <div className="max-w-2xl space-y-8">
       <div className="flex items-center gap-3">
         <Volume2 className="h-5 w-5 text-violet-600" />
-        <h1 className="text-xl font-bold">Голос ассистентов</h1>
+        <h1 className="text-xl font-bold">Ассистент Нэнси — голос</h1>
       </div>
 
       {/* Вкл/выкл */}

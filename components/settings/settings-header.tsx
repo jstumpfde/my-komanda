@@ -34,7 +34,7 @@ const navItems: { href: string; label: string; icon: typeof Building2; roles?: U
   { href: "/settings/branding",      label: "Брендинг",       icon: Palette,    roles: COMPANY_ROLES, group: "Профиль и компания" },
   { href: "/settings/integrations",  label: "Интеграции",     icon: Plug,       roles: COMPANY_ROLES, group: "Интеграции" },
   { href: "/settings/schedule",      label: "Расписание",     icon: Clock,      roles: COMPANY_ROLES, group: "Профиль и компания" },
-  { href: "/settings/voice",         label: "Голос",          icon: Volume2,    roles: COMPANY_ROLES, group: "Профиль и компания" },
+  { href: "/settings/voice",         label: "Ассистент",      icon: Volume2,    roles: COMPANY_ROLES, group: "Профиль и компания" },
   { href: "/settings/notifications", label: "Уведомления",    icon: Bell,       group: "Служебные" },
   { href: "/settings/billing",       label: "Тариф и оплата", icon: CreditCard, roles: COMPANY_ROLES, group: "Служебные" },
   { href: "/settings/legal",         label: "Юр. документы",  icon: ScrollText, roles: COMPANY_ROLES, group: "Служебные" },
