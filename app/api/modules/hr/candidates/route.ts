@@ -254,10 +254,31 @@ export async function GET(req: NextRequest) {
       const pageSize      = Math.min(100, Math.max(1, Number.parseInt(pageSizeParam ?? "50", 10) || 50))
       const offset        = (page - 1) * pageSize
 
+      // Серверные фильтры для компанийского списка кандидатов (без vacancyId).
+      const listConds: SQL[] = []
+      if (stageParam && stageParam !== "all") {
+        listConds.push(eq(candidates.stage, stageParam))
+      }
+      const listSourceParam = url.searchParams.get("source")
+      if (listSourceParam && listSourceParam !== "all") {
+        listConds.push(eq(candidates.source, listSourceParam))
+      }
+      const listVacancyTitle = url.searchParams.get("vacancyTitle")
+      if (listVacancyTitle && listVacancyTitle !== "all") {
+        listConds.push(eq(vacancies.title, listVacancyTitle))
+      }
+      const listSearch = url.searchParams.get("search")?.trim()
+      if (listSearch) {
+        const esc = listSearch.replace(/[\\%_]/g, (m) => "\\" + m)
+        const pat = `%${esc}%`
+        listConds.push(sql`(${candidates.name} ILIKE ${pat} OR ${candidates.email} ILIKE ${pat} OR ${candidates.phone} ILIKE ${pat})`)
+      }
+
       const whereExpr = and(
         eq(vacancies.companyId, user.companyId),
         or(isNull(candidates.source), ne(candidates.source, "preview")),
         deletedFilter,
+        ...listConds,
       )
 
       let total = 0

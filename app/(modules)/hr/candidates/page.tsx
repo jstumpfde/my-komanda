@@ -124,10 +124,23 @@ export default function CandidatesPage() {
 
   const PAGE_SIZE = 50
 
+  // Серверные фильтры: меняются → сбрасываем на стр.1 и перегружаем.
+  const filterParams = useMemo(() => {
+    const ps = new URLSearchParams()
+    if (statusFilter !== "all") ps.set("stage", statusFilter)
+    if (sourceFilter !== "all") ps.set("source", sourceFilter)
+    if (debouncedSearch.trim()) ps.set("search", debouncedSearch.trim())
+    if (vacancyFilter !== "all") ps.set("vacancyTitle", vacancyFilter)
+    return ps
+  }, [statusFilter, sourceFilter, debouncedSearch, vacancyFilter])
+
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    fetch(`/api/modules/hr/candidates?page=1&pageSize=${PAGE_SIZE}`)
+    const qs = new URLSearchParams(filterParams)
+    qs.set("page", "1")
+    qs.set("pageSize", String(PAGE_SIZE))
+    fetch(`/api/modules/hr/candidates?${qs}`)
       .then(r => r.ok ? r.json() : Promise.reject())
       .then((data: { items?: Candidate[]; total?: number; hasMore?: boolean }) => {
         if (cancelled) return
@@ -145,14 +158,17 @@ export default function CandidatesPage() {
       })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [])
+  }, [filterParams]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadMore = async () => {
     if (loadingMore || !hasMore) return
     setLoadingMore(true)
     try {
       const nextPage = page + 1
-      const res = await fetch(`/api/modules/hr/candidates?page=${nextPage}&pageSize=${PAGE_SIZE}`)
+      const qs = new URLSearchParams(filterParams)
+      qs.set("page", String(nextPage))
+      qs.set("pageSize", String(PAGE_SIZE))
+      const res = await fetch(`/api/modules/hr/candidates?${qs}`)
       if (!res.ok) throw new Error()
       const data = await res.json() as { items?: Candidate[]; total?: number; hasMore?: boolean }
       const items = Array.isArray(data.items) ? data.items : []
