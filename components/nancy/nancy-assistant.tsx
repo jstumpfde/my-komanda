@@ -318,7 +318,13 @@ export function NancyAssistant() {
       }
     }
     recognitionRef.current = rec
-    rec.start()
+    try {
+      rec.start()
+    } catch {
+      // rec.start() бросает синхронно (InvalidStateError и др.) — не попадает в onerror
+      setListening(false)
+      if (convModeRef.current) setTimeout(() => startListeningRef.current(), 600)
+    }
   }, [stopCurrentSpeech])
 
   // Держим ref актуальным
@@ -388,7 +394,7 @@ export function NancyAssistant() {
       void speakText(reply, () => {
         setSpeaking(false)
         if (convModeRef.current && !thinkingRef.current) {
-          setTimeout(() => startListening(), 400)
+          setTimeout(() => startListening(), 600)
         }
       }, currentAudioRef)
     } catch {
@@ -396,7 +402,7 @@ export function NancyAssistant() {
       setMessages((prev) => [...prev, { id: `err-${Date.now()}`, role: "nancy", text: errText }])
       void speakText(errText, () => {
         setSpeaking(false)
-        if (convModeRef.current && !thinkingRef.current) setTimeout(() => startListening(), 400)
+        if (convModeRef.current && !thinkingRef.current) setTimeout(() => startListening(), 600)
       }, currentAudioRef)
     } finally {
       setThinking(false)
