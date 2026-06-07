@@ -21,7 +21,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { usePathname } from "next/navigation"
 import {
   Mic, MicOff, X, Send, Loader2, Volume2,
-  Maximize2, Minimize2, BookmarkPlus, Check,
+  Maximize2, Minimize2, BookmarkPlus, Check, PhoneCall,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -112,7 +112,11 @@ function getBestRussianVoice(): SpeechSynthesisVoice | null {
   return voices.find((v) => v.lang.startsWith("ru")) ?? null
 }
 
-async function speakText(text: string, onEnd?: () => void) {
+async function speakText(
+  text: string,
+  onEnd?: () => void,
+  audioRef?: React.MutableRefObject<HTMLAudioElement | null>,
+) {
   if (!text) { onEnd?.(); return }
 
   try {
@@ -125,8 +129,10 @@ async function speakText(text: string, onEnd?: () => void) {
       const blob = await res.blob()
       const url  = URL.createObjectURL(blob)
       const audio = new Audio(url)
-      audio.onended = () => { URL.revokeObjectURL(url); onEnd?.() }
-      audio.onerror = () => { URL.revokeObjectURL(url); onEnd?.() }
+      if (audioRef) audioRef.current = audio
+      const cleanup = () => { URL.revokeObjectURL(url); if (audioRef) audioRef.current = null; onEnd?.() }
+      audio.onended = cleanup
+      audio.onerror = cleanup
       await audio.play()
       return
     }
@@ -171,15 +177,20 @@ export function NancyAssistant() {
   const [expanded, setExpanded] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [input,    setInput]    = useState("")
-  const [listening,  setListening]  = useState(false)
-  const [thinking,   setThinking]   = useState(false)
-  const [speaking,   setSpeaking]   = useState(false)
+  const [listening,    setListening]    = useState(false)
+  const [thinking,     setThinking]     = useState(false)
+  const [speaking,     setSpeaking]     = useState(false)
   const [micSupported, setMicSupported] = useState(false)
-  const [savingId, setSavingId] = useState<string | null>(null)
+  const [savingId,     setSavingId]     = useState<string | null>(null)
+  const [convMode,     setConvMode]     = useState(false)
 
-  const recognitionRef = useRef<SpeechRecognition | null>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const inputRef       = useRef<HTMLInputElement>(null)
+  const recognitionRef  = useRef<SpeechRecognition | null>(null)
+  const messagesEndRef  = useRef<HTMLDivElement>(null)
+  const inputRef        = useRef<HTMLInputElement>(null)
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null)
+  const convModeRef     = useRef(false)
+  const thinkingRef     = useRef(false)
+  const sendMessageRef  = useRef<(text: string) => Promise<void>>(async () => {})
 
   // ── Поддержка микрофона ──
   useEffect(() => {
@@ -261,6 +272,40 @@ export function NancyAssistant() {
     }
   }, [])
 
+  // ── Синхронизация thinkingRef ──
+  useEffect(() => { thinkingRef.current = thinking }, [thinking])
+
+  // ── Остановить текущий синтез ──
+  const stopCurrentSpeech = useCallback(() => {
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause()
+      currentAudioRef.current = null
+    }
+    if (typeof window !== "undefined") window.speechSynthesis?.cancel()
+  }, [])
+
+  // ── Начать слушать (без зависимости от sendMessage — использует ref) ──
+  const startListening = useCallback(() => {
+    const SpeechRec =
+      (window as Window & { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition ??
+      (window as Window & { webkitSpeechRecognition?: typeof SpeechRecognition }).webkitSpeechRecognition
+    if (!SpeechRec) return
+    stopCurrentSpeech()
+    const rec = new SpeechRec()
+    rec.lang = "ru-RU"
+    rec.interimResults = false
+    rec.maxAlternatives = 1
+    rec.onstart  = () => setListening(true)
+    rec.onend    = () => setListening(false)
+    rec.onerror  = () => setListening(false)
+    rec.onresult = (e: SpeechRecognitionEvent) => {
+      const transcript = e.results[0]?.[0]?.transcript ?? ""
+      if (transcript) void sendMessageRef.current(transcript)
+    }
+    recognitionRef.current = rec
+    rec.start()
+  }, [stopCurrentSpeech])
+
   // ── Отправка сообщения ──
   const sendMessage = useCallback(async (text: string) => {
     const trimmed = text.trim()
@@ -322,47 +367,51 @@ export function NancyAssistant() {
       if (data.actions?.length) handleActions(data.actions)
 
       setSpeaking(true)
-      void speakText(reply, () => setSpeaking(false))
+      void speakText(reply, () => {
+        setSpeaking(false)
+        if (convModeRef.current && !thinkingRef.current) {
+          setTimeout(() => startListening(), 400)
+        }
+      }, currentAudioRef)
     } catch {
       const errText = "Нет связи. Попробуй ещё раз."
       setMessages((prev) => [...prev, { id: `err-${Date.now()}`, role: "nancy", text: errText }])
-      void speakText(errText, () => setSpeaking(false))
+      void speakText(errText, () => {
+        setSpeaking(false)
+        if (convModeRef.current && !thinkingRef.current) setTimeout(() => startListening(), 400)
+      }, currentAudioRef)
     } finally {
       setThinking(false)
     }
-  }, [messages, pathname, mod, handleActions])
+  }, [messages, pathname, mod, handleActions, startListening])
 
-  // ── Микрофон ──
+  // Держим sendMessageRef актуальным, чтобы startListening не зависел от него напрямую
+  useEffect(() => { sendMessageRef.current = sendMessage }, [sendMessage])
+
+  // ── Микрофон (одиночный) ──
   const toggleMic = useCallback(() => {
     if (listening) {
       recognitionRef.current?.stop()
       setListening(false)
       return
     }
+    startListening()
+  }, [listening, startListening])
 
-    const SpeechRec =
-      (window as Window & { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition ??
-      (window as Window & { webkitSpeechRecognition?: typeof SpeechRecognition }).webkitSpeechRecognition
-    if (!SpeechRec) return
-
-    window.speechSynthesis?.cancel()
-
-    const rec = new SpeechRec()
-    rec.lang = "ru-RU"
-    rec.interimResults = false
-    rec.maxAlternatives = 1
-    rec.onstart  = () => setListening(true)
-    rec.onend    = () => setListening(false)
-    rec.onerror  = () => setListening(false)
-    rec.onresult = (e: SpeechRecognitionEvent) => {
-      const transcript = e.results[0]?.[0]?.transcript ?? ""
-      if (transcript) void sendMessage(transcript)
+  // ── Режим разговора ──
+  const toggleConvMode = useCallback(() => {
+    const next = !convModeRef.current
+    convModeRef.current = next
+    setConvMode(next)
+    if (next) {
+      if (!thinkingRef.current) startListening()
+    } else {
+      recognitionRef.current?.stop()
+      stopCurrentSpeech()
     }
-    recognitionRef.current = rec
-    rec.start()
-  }, [listening, sendMessage])
+  }, [startListening, stopCurrentSpeech])
 
-  const statusText = listening ? "Слушаю..." : thinking ? "Думаю..." : speaking ? "Говорю..." : null
+  const statusText = listening ? "Слушаю..." : thinking ? "Думаю..." : speaking ? "Говорю..." : convMode ? "Режим разговора" : null
 
   // ── Кнопка-триггер ──
   if (!open) {
@@ -421,6 +470,21 @@ export function NancyAssistant() {
           </div>
         </div>
         {speaking && <Volume2 className="h-4 w-4 text-white/80 animate-pulse shrink-0" />}
+        {micSupported && (
+          <button
+            onClick={toggleConvMode}
+            className={cn(
+              "transition-colors rounded-full p-0.5",
+              convMode
+                ? "text-white bg-white/25 ring-1 ring-white/50"
+                : "text-white/70 hover:text-white",
+            )}
+            title={convMode ? "Выйти из режима разговора" : "Голосовой разговор"}
+            aria-label={convMode ? "Выйти из режима разговора" : "Голосовой разговор"}
+          >
+            <PhoneCall className={cn("h-4 w-4", convMode && "animate-pulse")} />
+          </button>
+        )}
         <button
           onClick={() => setExpanded((v) => !v)}
           className="text-white/70 hover:text-white transition-colors"
@@ -429,7 +493,12 @@ export function NancyAssistant() {
           {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
         </button>
         <button
-          onClick={() => { setOpen(false); setExpanded(false); window.speechSynthesis?.cancel() }}
+          onClick={() => {
+            setOpen(false); setExpanded(false)
+            convModeRef.current = false; setConvMode(false)
+            recognitionRef.current?.stop()
+            stopCurrentSpeech()
+          }}
           className="text-white/70 hover:text-white transition-colors"
           aria-label="Закрыть"
         >
