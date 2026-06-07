@@ -77,7 +77,7 @@ export function FormLinks() {
       {/* Header */}
       <div>
         <div className="flex items-center gap-2 mb-1">
-          <Link className="w-4 h-4 text-purple-600" />
+          <Link className="w-4 h-4 text-violet-600" />
           <h3 className="text-sm font-semibold">Источники и ссылки</h3>
         </div>
         <p className="text-xs text-muted-foreground">Короткие ссылки для отслеживания источников кандидатов</p>
@@ -164,7 +164,7 @@ export function FormLinks() {
           <div className="flex items-center gap-2 mb-2">
             <Code className="w-4 h-4 text-muted-foreground" />
             <span className="text-xs font-semibold">Полная страница (HTML)</span>
-            <Badge variant="outline" className="text-[9px] border-transparent bg-blue-500/10 text-blue-700">Способ 4</Badge>
+            <Badge variant="secondary" className="text-[9px]">Способ 4</Badge>
           </div>
           <p className="text-[11px] text-muted-foreground mb-2">Вставьте этот код на вашу HTML-страницу для отображения формы.</p>
           <div className="p-2 bg-muted/30 rounded border">

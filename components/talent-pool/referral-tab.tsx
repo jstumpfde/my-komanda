@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { Users, UserCheck, TrendingUp, Banknote, Gift, CheckCircle2, Pencil, Save } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
 import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { ReferralLinks, type ReferralLink } from "./referral-links"
 
@@ -96,10 +97,10 @@ export function ReferralTab() {
   const topReferrers = [...links].sort((a, b) => b.referred - a.referred || b.hired - a.hired).slice(0, 5)
 
   const kpi = [
-    { label: "Всего рефералов", value: String(totalReferrals), icon: Users, color: "text-blue-600" },
-    { label: "Нанято", value: String(totalHired), icon: UserCheck, color: "text-emerald-600" },
-    { label: "Сотрудников", value: String(links.length), icon: TrendingUp, color: "text-purple-600" },
-    { label: "Выплачено", value: `${totalPaid.toLocaleString("ru-RU")} ₽`, icon: Banknote, color: "text-amber-600" },
+    { label: "Всего рефералов", value: String(totalReferrals), icon: Users },
+    { label: "Нанято", value: String(totalHired), icon: UserCheck },
+    { label: "Сотрудников", value: String(links.length), icon: TrendingUp },
+    { label: "Выплачено", value: `${totalPaid.toLocaleString("ru-RU")} ₽`, icon: Banknote },
   ]
 
   return (
@@ -111,9 +112,9 @@ export function ReferralTab() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <p className="text-xs text-muted-foreground">{k.label}</p>
-                <k.icon className={cn("w-4 h-4", k.color)} />
+                <k.icon className="w-4 h-4 text-violet-600" />
               </div>
-              <p className={cn("text-2xl font-bold mt-1", k.color)}>{k.value}</p>
+              <p className="text-2xl font-bold mt-1 text-foreground">{k.value}</p>
             </CardContent>
           </Card>
         ))}
@@ -172,7 +173,7 @@ export function ReferralTab() {
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm flex items-center gap-1.5">
-                <Gift className="w-4 h-4 text-purple-600" />
+                <Gift className="w-4 h-4 text-violet-600" />
                 Правила программы
               </CardTitle>
               {!editingRules ? (
@@ -232,9 +233,10 @@ export function ReferralTab() {
                     onChange={(e) => setDraft({ ...draft, maxActiveReferrals: parseInt(e.target.value) || 0 })} />
                 </div>
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={draft.standardScreening}
-                    onChange={(e) => setDraft({ ...draft, standardScreening: e.target.checked })}
-                    className="rounded border-border" />
+                  <Checkbox
+                    checked={draft.standardScreening}
+                    onCheckedChange={(checked) => setDraft({ ...draft, standardScreening: !!checked })}
+                  />
                   <span className="text-xs text-muted-foreground">Стандартный отбор обязателен</span>
                 </label>
                 <div className="flex gap-2 pt-1">
