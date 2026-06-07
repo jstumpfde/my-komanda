@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Plus, Eye, Pencil, Trash2, Loader2, Copy, BookOpen, FileText, Search, Puzzle, ListChecks, RotateCcw, Trash, AlertTriangle, MoreHorizontal, Globe, Lock } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -405,8 +405,11 @@ function PermanentDeleteDialog({ target, open, onOpenChange, onDeleted }: {
 
 type TabKey = "questionnaires" | "demos" | "blocks" | "tests" | "trash"
 
+const VALID_LIBRARY_TABS: TabKey[] = ["questionnaires", "demos", "blocks", "tests", "trash"]
+
 export default function LibraryPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [templates, setTemplates] = useState<TemplateData[]>([])
   const [questionnaires, setQuestionnaires] = useState<QuestionnaireTemplate[]>([])
   const [loading, setLoading] = useState(true)
@@ -416,7 +419,10 @@ export default function LibraryPage() {
   const [deleting, setDeleting] = useState(false)
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
   // Анкеты — главное, с них начинают → вкладка по умолчанию.
-  const [activeTab, setActiveTab] = useState<TabKey>("questionnaires")
+  const [activeTab, setActiveTab] = useState<TabKey>(() => {
+    const t = searchParams?.get("tab") as TabKey | null
+    return t && VALID_LIBRARY_TABS.includes(t) ? t : "questionnaires"
+  })
   const [search, setSearch] = useState("")
   const [createOpen, setCreateOpen] = useState(false)
   // Корзина: удалённые материалы и анкеты грузятся отдельными запросами.
@@ -497,10 +503,15 @@ export default function LibraryPage() {
   }
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const tab = new URLSearchParams(window.location.search).get("tab") as TabKey | null
-      if (tab && ["questionnaires", "demos", "blocks", "tests", "trash"].includes(tab)) setActiveTab(tab)
+    const sp = new URLSearchParams(window.location.search)
+    if (sp.get("tab") !== activeTab) {
+      sp.set("tab", activeTab)
+      router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
+
+  useEffect(() => {
     fetchTemplates()
     fetchQuestionnaires()
     fetchTrashed()
