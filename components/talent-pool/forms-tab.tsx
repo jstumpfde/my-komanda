@@ -143,7 +143,7 @@ export function FormsTab({ enabledSources }: FormsTabProps) {
                   </Badge>
                 </div>
                 <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                  <Badge variant="outline" className={cn("text-[9px] border-transparent", form.type === "internal" ? "bg-purple-500/10 text-purple-700" : "bg-blue-500/10 text-blue-700")}>
+                  <Badge variant="outline" className={cn("text-[9px] border-transparent", form.type === "internal" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
                     {form.type === "internal" ? "Внутр." : "Внешн."}
                   </Badge>
                   <span>{form.source}</span>
@@ -174,7 +174,7 @@ export function FormsTab({ enabledSources }: FormsTabProps) {
               >
                 <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
                 <span className="text-xs font-semibold truncate flex-1">{form.name}</span>
-                <Badge variant="outline" className={cn("text-[9px] border-transparent shrink-0", form.type === "internal" ? "bg-purple-500/10 text-purple-700" : "bg-blue-500/10 text-blue-700")}>
+                <Badge variant="outline" className={cn("text-[9px] border-transparent shrink-0", form.type === "internal" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
                   {form.type === "internal" ? "Внутр." : "Внешн."}
                 </Badge>
                 <span className="text-[11px] text-muted-foreground shrink-0">{form.source}</span>
