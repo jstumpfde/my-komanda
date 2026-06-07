@@ -2833,7 +2833,7 @@ export default function VacancyPage() {
                     { value: "page"           as const, label: "Брендинг",   icon: Globe },
                     { value: "funnel-builder" as const, label: "Воронка",     icon: Workflow },
                     { value: "sources"        as const, label: "Источники",   icon: Link2 },
-                    { value: "ai"             as const, label: "Расписание",  icon: Zap },
+                    { value: "ai"             as const, label: "Расписание",  icon: Clock },
                     { value: "integrations"   as const, label: "Интеграции",  icon: Settings },
                     // Скрыты (контент доступен по прямой ?section=, настройки — внутри блоков «Воронки»):
                     // funnel (старые стадии), messages, followup, aichatbot — покрыты блоками Конструктора.
