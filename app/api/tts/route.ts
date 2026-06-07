@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(req: NextRequest) {
-  const { text } = await req.json()
+  const { text, voice, emotion, speed } = await req.json()
   if (!text) return NextResponse.json({ error: 'no text' }, { status: 400 })
 
   const params = new URLSearchParams({
     text,
     lang: 'ru-RU',
-    voice: 'alena',
-    emotion: 'good',
-    speed: '1.0',
+    voice:   voice   ?? 'alena',
+    emotion: emotion ?? 'good',
+    speed:   String(speed ?? 1.0),
     format: 'mp3',
     sampleRateHertz: '48000',
     folderId: process.env.YANDEX_FOLDER_ID!,

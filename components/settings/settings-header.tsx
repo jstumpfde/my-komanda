@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react"
 import { toast } from "sonner"
 import { useSidebar } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
-import { Sun, Moon, Coffee, PanelLeftClose, PanelLeft, Bell, Building2, CreditCard, Users, Plug, Clock, User, LogOut, Palette, ScrollText, Shield, ChevronDown, Loader2 } from "lucide-react"
+import { Sun, Moon, Coffee, PanelLeftClose, PanelLeft, Bell, Building2, CreditCard, Users, Plug, Clock, User, LogOut, Palette, ScrollText, Shield, ChevronDown, Loader2, Volume2 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -34,6 +34,7 @@ const navItems: { href: string; label: string; icon: typeof Building2; roles?: U
   { href: "/settings/branding",      label: "Брендинг",       icon: Palette,    roles: COMPANY_ROLES, group: "Профиль и компания" },
   { href: "/settings/integrations",  label: "Интеграции",     icon: Plug,       roles: COMPANY_ROLES, group: "Интеграции" },
   { href: "/settings/schedule",      label: "Расписание",     icon: Clock,      roles: COMPANY_ROLES, group: "Профиль и компания" },
+  { href: "/settings/voice",         label: "Голос",          icon: Volume2,    roles: COMPANY_ROLES, group: "Профиль и компания" },
   { href: "/settings/notifications", label: "Уведомления",    icon: Bell,       group: "Служебные" },
   { href: "/settings/billing",       label: "Тариф и оплата", icon: CreditCard, roles: COMPANY_ROLES, group: "Служебные" },
   { href: "/settings/legal",         label: "Юр. документы",  icon: ScrollText, roles: COMPANY_ROLES, group: "Служебные" },

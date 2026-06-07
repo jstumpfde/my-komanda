@@ -1,17 +1,14 @@
 // POST /api/modules/hr/nancy/tts
 //
-// Проксирует текст → Yandex SpeechKit (голос Алёна) → возвращает audio/mpeg.
-// Если YANDEX_API_KEY не задан → 204 (клиент использует браузерный fallback).
-//
-// Yandex SpeechKit v1 TTS:
-//   POST https://tts.api.cloud.yandex.net/speech/v1/tts:synthesize
-//   Auth: Api-Key {YANDEX_API_KEY}
-//   Body (form-urlencoded): text + voice=alena + emotion=good + lang=ru-RU + format=mp3 + speed=1.1
-//
-// Квота Yandex: 1 млн символов/месяц на free-tier (после регистрации в Yandex Cloud).
-// Для Нэнси (короткие фразы 50-200 симв) — хватит надолго.
+// Проксирует текст → Yandex SpeechKit → возвращает audio/mpeg.
+// Голос/интонация/скорость берутся из companies.nancy_voice_json (настройки компании).
+// Если YANDEX_API_KEY не задан или ttsEnabled=false → 204 (браузерный fallback).
 
 import { requireCompany } from "@/lib/api-helpers"
+import { db } from "@/lib/db"
+import { companies } from "@/lib/db/schema"
+import { eq } from "drizzle-orm"
+import type { NancyVoiceSettings } from "@/lib/db/schema"
 
 const YANDEX_TTS_URL = "https://tts.api.cloud.yandex.net/speech/v1/tts:synthesize"
 
@@ -22,11 +19,9 @@ export async function POST(req: Request) {
   } catch (res) {
     return res as Response
   }
-  void user
 
   const key = process.env.YANDEX_API_KEY
   if (!key) {
-    // Нет ключа — клиент использует браузерный SpeechSynthesis
     return new Response(null, { status: 204 })
   }
 
@@ -39,14 +34,25 @@ export async function POST(req: Request) {
   }
   if (!text) return new Response(null, { status: 400 })
 
+  // Настройки голоса компании
+  const [company] = await db
+    .select({ nancyVoiceJson: companies.nancyVoiceJson })
+    .from(companies)
+    .where(eq(companies.id, user.companyId))
+    .limit(1)
+  const v = (company?.nancyVoiceJson ?? {}) as NancyVoiceSettings
+  if (v.ttsEnabled === false) {
+    return new Response(null, { status: 204 })
+  }
+
   try {
     const form = new URLSearchParams({
       text:     text.slice(0, 5000),
-      voice:    "alena",
-      emotion:  "good",
+      voice:    v.voice   ?? "alena",
+      emotion:  v.emotion ?? "good",
       lang:     "ru-RU",
       format:   "mp3",
-      speed:    "1.1",
+      speed:    String(v.speed ?? 1.1),
       folderId: process.env.YANDEX_FOLDER_ID ?? "",
     })
 
@@ -60,7 +66,6 @@ export async function POST(req: Request) {
     })
 
     if (!yttRes.ok) {
-      // Yandex недоступен — клиент использует браузерный fallback
       console.warn("[nancy/tts] Yandex TTS error:", yttRes.status)
       return new Response(null, { status: 204 })
     }
