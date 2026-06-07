@@ -72,10 +72,10 @@ interface Campaign {
 
 // ─── Status config ──────────────────────────────────────
 const STATUS_CFG: Record<TalentStatus, { label: string; cls: string }> = {
-  cold: { label: "Холодный", cls: "bg-amber-500/10 text-amber-700 border-transparent px-2.5 py-0.5" },
-  warming: { label: "В прогреве", cls: "bg-blue-500/10 text-blue-700 border-transparent px-2.5 py-0.5" },
+  cold: { label: "Холодный", cls: "bg-muted text-muted-foreground border-transparent px-2.5 py-0.5" },
+  warming: { label: "В прогреве", cls: "bg-amber-500/10 text-amber-700 border-transparent px-2.5 py-0.5" },
   hot: { label: "Горячий", cls: "bg-emerald-500/10 text-emerald-700 border-transparent px-2.5 py-0.5" },
-  ideal: { label: "Идеальный", cls: "bg-red-500/10 text-red-700 border-transparent px-2.5 py-0.5" },
+  ideal: { label: "Идеальный", cls: "bg-primary/10 text-primary border-transparent px-2.5 py-0.5" },
   refused: { label: "Отказался", cls: "bg-red-500/5 text-red-600 border-transparent px-2.5 py-0.5" },
   hired: { label: "Нанят", cls: "bg-muted text-muted-foreground border-transparent px-2.5 py-0.5" },
 }
