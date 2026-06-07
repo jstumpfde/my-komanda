@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -91,8 +91,24 @@ function scoreToStatus(score: number): TalentStatus {
 const CHANNEL_LABELS: Record<string, string> = { tg: "Telegram", whatsapp: "WhatsApp", email: "Email" }
 
 // ─── Component ──────────────────────────────────────────
+
+type TalentTabKey = "base" | "campaigns" | "referrals" | "analytics" | "forms"
+const VALID_TALENT_TABS: TalentTabKey[] = ["base", "campaigns", "referrals", "analytics", "forms"]
+
 export default function TalentPoolPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const [activeTab, setActiveTab] = useState<TalentTabKey>(() => {
+    const t = searchParams?.get("tab") as TalentTabKey | null
+    return t && VALID_TALENT_TABS.includes(t) ? t : "base"
+  })
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search)
+    if (sp.get("tab") === activeTab) return
+    sp.set("tab", activeTab)
+    router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
   const [candidates, setCandidates] = useState<TalentCandidate[]>([])
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [addOpen, setAddOpen] = useState(false)
@@ -303,7 +319,7 @@ export default function TalentPoolPage() {
               </div>
             </div>
 
-            <Tabs defaultValue="base">
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TalentTabKey)}>
               <TabsList className="mb-4">
                 <TabsTrigger value="base" className="gap-1.5"><Users className="w-3.5 h-3.5" />База</TabsTrigger>
                 <TabsTrigger value="campaigns" className="gap-1.5"><Rocket className="w-3.5 h-3.5" />Кампании</TabsTrigger>
