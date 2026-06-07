@@ -116,12 +116,12 @@ export default function TalentPoolPage() {
         id: string; name: string; source: string | null;
         aiScore: number | null; resumeScore: number | null; score: number | null;
         email: string | null; phone: string | null; telegram: string | null;
-        updatedAt: string | null; vacancyTitle: string | null
+        updatedAt: string | null; vacancyTitle: string | null; companyName: string | null
       }): TalentCandidate => {
         const sc = r.aiScore ?? r.resumeScore ?? r.score ?? 0
         return {
           id: r.id, name: r.name,
-          position: "—", company: r.vacancyTitle || "—",
+          position: r.vacancyTitle || "—", company: r.companyName || "—",
           source: r.source || "—",
           status: scoreToStatus(sc),
           lastContact: r.updatedAt ? new Date(r.updatedAt) : new Date(),

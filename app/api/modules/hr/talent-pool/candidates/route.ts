@@ -3,7 +3,7 @@
 import { NextResponse } from "next/server"
 import { and, eq, desc, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, vacancies } from "@/lib/db/schema"
+import { candidates, vacancies, companies } from "@/lib/db/schema"
 import { requireCompany } from "@/lib/api-helpers"
 
 export async function GET() {
@@ -22,9 +22,11 @@ export async function GET() {
         telegram:     candidates.telegramUsername,
         updatedAt:    candidates.updatedAt,
         vacancyTitle: vacancies.title,
+        companyName:  companies.name,
       })
       .from(candidates)
       .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
+      .innerJoin(companies, eq(vacancies.companyId, companies.id))
       .where(and(
         eq(vacancies.companyId, user.companyId),
         eq(candidates.stage, "talent_pool"),
