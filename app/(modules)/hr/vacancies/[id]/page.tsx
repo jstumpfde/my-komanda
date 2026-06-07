@@ -221,6 +221,8 @@ export default function VacancyPage() {
   const params = useParams()
   const router = useRouter()
   const id = params.id as string
+  // B5: роль поднята наверх — нужна в setCardSettings и useEffect для user-prefs
+  const { role } = useAuth()
 
   // ── Real API data ──────────────────────────────────────────
   const { vacancy: apiVacancy, loading: vacancyLoading, error: vacancyError, refetch: refetchVacancy } = useVacancy(id)
@@ -240,6 +242,10 @@ export default function VacancyPage() {
       // Загружаем список бренд-компаний для брендинг-секции
       if (hd && Array.isArray(hd.brandCompanies)) {
         setBrandCompaniesData(hd.brandCompanies.filter((c: { id: string; name: string }) => c?.name?.trim()))
+      }
+      // B5: колонки списка кандидатов единые для компании
+      if (hd?.candidateColumns && typeof hd.candidateColumns === "object" && Object.keys(hd.candidateColumns).length > 0) {
+        setCardSettingsLocal((prev) => ({ ...prev, ...hd.candidateColumns } as typeof prev))
       }
     }).catch(() => {})
   }, [])
@@ -697,9 +703,8 @@ export default function VacancyPage() {
     // Не-админам доступен только «Список» (см. ViewSettings). Сохранённый
     // kanban/funnel не гидратируем, иначе застрянут без переключателя режимов.
     setViewModeLocal((role === "platform_admin" ? userPrefs.viewMode : "list") as ViewMode)
-    if (userPrefs.columns && Object.keys(userPrefs.columns).length > 0) {
-      setCardSettingsLocal((prev) => ({ ...prev, ...userPrefs.columns } as typeof prev))
-    }
+    // B5: колонки теперь per-company (hiring-defaults), не per-user.
+    // userPrefs.columns намеренно НЕ гидратируем в cardSettings.
   }, [userPrefsLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const setViewMode = useCallback((mode: ViewMode) => {
@@ -709,8 +714,16 @@ export default function VacancyPage() {
 
   const setCardSettings = useCallback((next: CardDisplaySettings) => {
     setCardSettingsLocal(next)
-    persistColumns(next as unknown as Record<string, boolean>)
-  }, [persistColumns])
+    // B5: колонки per-company — сохраняем в hiring-defaults только если директор/platform_admin.
+    // Остальные HR могут видеть колонки, но менять не могут (гард также на сервере).
+    if (["director", "client", "platform_admin", "admin"].includes(role)) {
+      fetch("/api/modules/hr/company/hiring-defaults", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidateColumns: next as unknown as Record<string, boolean> }),
+      }).catch(() => {})
+    }
+  }, [role])
 // filters перемещён выше — см. строку перед useCandidates
   const [drawerCandidateId, setDrawerCandidateId] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -1222,7 +1235,6 @@ export default function VacancyPage() {
     }
   }
 
-  const { role } = useAuth()
   const canAdd = isPlatformRole(role)
   // Удалять кандидатов могут только администратор / менеджер-админ / директор.
   const canDeleteCandidates = (["platform_admin", "platform_manager", "director"] as string[]).includes(role)
