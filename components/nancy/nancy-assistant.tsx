@@ -30,6 +30,7 @@ import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import {
   ensureMic, releaseMic, listenOnce, micSupported as micIsSupported,
+  playThroughSharedContext, micSessionActive, stopSharedPlayback,
   type ListenHandle,
 } from "@/lib/voice/record-pcm"
 import { useAuth } from "@/lib/auth"
@@ -142,7 +143,15 @@ async function speakText(
       body: JSON.stringify({ text }),
     })
     if (res.ok && res.status !== 204) {
-      const blob = await res.blob()
+      const data = await res.arrayBuffer()
+      // В режиме разговора (общий аудио-контекст активен) играем TTS через него —
+      // на iOS Safari new Audio() во время записи рвёт аудио-сессию, и после
+      // первого ответа микрофон перестаёт слушать. Один контекст держит цикл.
+      if (micSessionActive()) {
+        const played = await playThroughSharedContext(data, () => onEnd?.())
+        if (played) return
+      }
+      const blob = new Blob([data], { type: "audio/mpeg" })
       const url  = URL.createObjectURL(blob)
       const audio = new Audio(url)
       if (audioRef) audioRef.current = audio
@@ -311,6 +320,7 @@ export function NancyAssistant() {
       currentAudioRef.current.pause()
       currentAudioRef.current = null
     }
+    stopSharedPlayback()
     if (typeof window !== "undefined") window.speechSynthesis?.cancel()
   }, [])
 

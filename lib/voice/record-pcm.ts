@@ -64,8 +64,53 @@ export async function ensureMic(): Promise<boolean> {
 export function releaseMic(): void {
   try { sharedStream?.getTracks().forEach((t) => t.stop()) } catch { /* ignore */ }
   sharedStream = null
+  try { sharedPlaybackSource?.stop() } catch { /* ignore */ }
+  sharedPlaybackSource = null
   try { void sharedCtx?.close() } catch { /* ignore */ }
   sharedCtx = null
+}
+
+/** Активен ли общий аудио-контекст (т.е. идёт сессия разговора). */
+export function micSessionActive(): boolean {
+  return sharedCtx !== null
+}
+
+let sharedPlaybackSource: AudioBufferSourceNode | null = null
+
+// Проигрывание TTS-аудио (mp3/любой) через ОБЩИЙ AudioContext, разблокированный
+// первым тапом. Зачем: на iOS Safari проигрывание через new Audio() во время
+// записи переключает аудио-сессию и «глушит» recording-контекст — после первого
+// ответа микрофон больше не слушает (баг «отвечает 1 раз»). Один общий контекст
+// держит сессию живой, и цикл разговора продолжается.
+// Возвращает false, если общего контекста нет (вызвавшему — fallback на new Audio).
+export async function playThroughSharedContext(
+  audioData: ArrayBuffer,
+  onEnd?: () => void,
+): Promise<boolean> {
+  if (!sharedCtx) return false
+  try {
+    if (sharedCtx.state === "suspended") { try { await sharedCtx.resume() } catch { /* ignore */ } }
+    // decodeAudioData: промис-форма (Safari поддерживает с 14.1).
+    const buf = await sharedCtx.decodeAudioData(audioData.slice(0))
+    try { sharedPlaybackSource?.stop() } catch { /* ignore */ }
+    const src = sharedCtx.createBufferSource()
+    src.buffer = buf
+    src.connect(sharedCtx.destination)
+    sharedPlaybackSource = src
+    src.onended = () => {
+      if (sharedPlaybackSource === src) sharedPlaybackSource = null
+      onEnd?.()
+    }
+    src.start()
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function stopSharedPlayback(): void {
+  try { sharedPlaybackSource?.stop() } catch { /* ignore */ }
+  sharedPlaybackSource = null
 }
 
 export interface ListenHandle {
