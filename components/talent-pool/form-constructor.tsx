@@ -220,14 +220,14 @@ export function FormConstructor({ enabledSources, editForm, onSave }: FormConstr
             <input type="radio" name="domain" checked={domainType === "subdomain"} onChange={() => setDomainType("subdomain")} />
             <div>
               <span className="text-xs">Поддомен Company24</span>
-              <Badge variant="outline" className="text-[9px] ml-2 border-transparent bg-purple-500/10 text-purple-700">Тариф Бизнес</Badge>
+              <Badge variant="secondary" className="text-[9px] ml-2">Тариф Бизнес</Badge>
             </div>
           </label>
           <label className="flex items-center gap-2 cursor-pointer opacity-50">
             <input type="radio" name="domain" checked={domainType === "custom"} onChange={() => setDomainType("custom")} />
             <div>
               <span className="text-xs">Свой домен</span>
-              <Badge variant="outline" className="text-[9px] ml-2 border-transparent bg-purple-500/10 text-purple-700">Тариф Масштаб</Badge>
+              <Badge variant="secondary" className="text-[9px] ml-2">Тариф Масштаб</Badge>
             </div>
           </label>
         </div>
@@ -237,7 +237,7 @@ export function FormConstructor({ enabledSources, editForm, onSave }: FormConstr
       <div className="grid gap-1.5">
         <Label className="text-xs font-semibold">Превью шапки формы</Label>
         <Card className="overflow-hidden">
-          <div className="bg-gradient-to-r from-purple-600 to-indigo-600 px-5 py-4">
+          <div className="bg-gradient-to-r from-primary to-primary/80 px-5 py-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
                 <Building2 className="w-5 h-5 text-white" />
@@ -254,7 +254,7 @@ export function FormConstructor({ enabledSources, editForm, onSave }: FormConstr
               {fields.filter((f) => f.enabled).map((f) => f.label).join(" · ")}
             </p>
             <div className="flex gap-2">
-              <Button size="sm" className="h-7 text-xs bg-purple-600 hover:bg-purple-700">Откликнуться</Button>
+              <Button size="sm" className="h-7 text-xs">Откликнуться</Button>
               <Button size="sm" variant="outline" className="h-7 text-xs">Подробнее</Button>
             </div>
           </CardContent>
