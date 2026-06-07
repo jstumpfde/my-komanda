@@ -125,14 +125,17 @@ export default function CandidatesPage() {
   const PAGE_SIZE = 50
 
   // Серверные фильтры: меняются → сбрасываем на стр.1 и перегружаем.
+  // B6: ВСЕ фильтры серверные (включая «Избранные») — иначе на пагинации
+  // клиентский фильтр видел только загруженную страницу.
   const filterParams = useMemo(() => {
     const ps = new URLSearchParams()
     if (statusFilter !== "all") ps.set("stage", statusFilter)
     if (sourceFilter !== "all") ps.set("source", sourceFilter)
     if (debouncedSearch.trim()) ps.set("search", debouncedSearch.trim())
     if (vacancyFilter !== "all") ps.set("vacancyTitle", vacancyFilter)
+    if (favoriteOnly) ps.set("favorite", "true")
     return ps
-  }, [statusFilter, sourceFilter, debouncedSearch, vacancyFilter])
+  }, [statusFilter, sourceFilter, debouncedSearch, vacancyFilter, favoriteOnly])
 
   useEffect(() => {
     let cancelled = false
@@ -245,33 +248,37 @@ export default function CandidatesPage() {
     })
   }
 
-  // Dynamic vacancy filter options from data
+  // Полный список вакансий компании для выпадашки (раньше строился только из
+  // загруженной страницы кандидатов → для больших тенантов был неполным, и
+  // нужную вакансию нельзя было выбрать — часть B6).
+  const [allVacancyTitles, setAllVacancyTitles] = useState<string[]>([])
+  useEffect(() => {
+    fetch("/api/modules/hr/vacancies")
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then((data) => {
+        const list = Array.isArray(data) ? data
+          : Array.isArray(data?.items) ? data.items
+          : Array.isArray(data?.data) ? data.data
+          : []
+        const titles = [...new Set(
+          (list as { title?: string }[]).map(v => v?.title).filter((t): t is string => !!t)
+        )].sort((a, b) => a.localeCompare(b, "ru"))
+        setAllVacancyTitles(titles)
+      })
+      .catch(() => {})
+  }, [])
+
   const vacancyOptions = useMemo(() => {
-    const titles = [...new Set(candidates.map(c => c.vacancyTitle).filter(Boolean))]
+    const titles = allVacancyTitles.length > 0
+      ? allVacancyTitles
+      : [...new Set(candidates.map(c => c.vacancyTitle).filter(Boolean))]
     return [{ value: "all", label: "Все вакансии" }, ...titles.map(t => ({ value: t, label: t }))]
-  }, [candidates])
+  }, [allVacancyTitles, candidates])
 
+  // Фильтрация — серверная (filterParams). Здесь только клиентская сортировка
+  // уже загруженных строк (B6: убрали клиентские фильтры, ломавшие пагинацию).
   const filtered = useMemo(() => {
-    let result = candidates
-
-    if (debouncedSearch.trim()) {
-      const q = debouncedSearch.trim().toLowerCase()
-      result = result.filter((c) => c.name.toLowerCase().includes(q))
-    }
-    if (statusFilter !== "all") {
-      result = result.filter((c) => c.stage === statusFilter)
-    }
-    if (vacancyFilter !== "all") {
-      result = result.filter((c) => c.vacancyTitle === vacancyFilter)
-    }
-    if (sourceFilter !== "all") {
-      result = result.filter((c) => c.source === sourceFilter)
-    }
-    if (favoriteOnly) {
-      result = result.filter((c) => c.isFavorite)
-    }
-
-    result = [...result].sort((a, b) => {
+    return [...candidates].sort((a, b) => {
       if (!colSort) return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       const mul = colSort.dir === "asc" ? 1 : -1
       if (colSort.column === "status") return mul * ((STATUS_ORDER[a.stage] ?? 9) - (STATUS_ORDER[b.stage] ?? 9))
@@ -281,9 +288,7 @@ export default function CandidatesPage() {
       if (colSort.column === "blocks") return mul * (a.demoCompletedBlocks - b.demoCompletedBlocks)
       return 0
     })
-
-    return result
-  }, [candidates, debouncedSearch, statusFilter, vacancyFilter, sourceFilter, favoriteOnly, colSort])
+  }, [candidates, colSort])
 
   const allSelected = filtered.length > 0 && filtered.every((c) => selected.has(c.id))
   const toggleOne = (id: string) => { setSelected((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n }) }

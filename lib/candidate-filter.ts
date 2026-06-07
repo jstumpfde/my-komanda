@@ -1,7 +1,9 @@
-// HR-020: общий клиентский фильтр кандидатов для списка/канбана.
-// Все фильтры из FilterState применяются здесь. Если у кандидата нет
-// данных по полю (null/undefined) — он НЕ отфильтровывается (включается),
-// чтобы фильтр не «съедал» неполные карточки и не зависел от seed.
+// HR-020 / B6: общий клиентский фильтр кандидатов для канбана/воронки/плиток.
+// Категориальные и числовые фильтры СУЖАЮТ выборку: при активном фильтре
+// кандидаты без данных по полю (null/пусто) ИСКЛЮЧАЮТСЯ — единообразно с
+// серверным фильтром списка (app/api/modules/hr/candidates). Иначе у тенантов
+// с незаполненными полями фильтр был no-op (B6, Орлинк). Исключение —
+// зарплата (есть отдельный тумблер «скрыть без ЗП»).
 
 import type { FilterState } from "@/components/dashboard/candidate-filters"
 import type { Candidate } from "@/components/dashboard/candidate-card"
@@ -80,7 +82,7 @@ function passesExperience(c: Candidate, filters: FilterState): boolean {
   const { experienceMin, experienceMax } = filters
   if (experienceMin === 0 && experienceMax === 20) return true
   const ey = c.experienceYears
-  if (ey == null) return true
+  if (ey == null) return false  // фильтр активен, данных нет — исключаем (как сервер)
   return ey >= experienceMin && ey <= experienceMax
 }
 
@@ -99,13 +101,13 @@ function passesArrayMembership<T extends string>(
   filterValues: string[],
 ): boolean {
   if (filterValues.length === 0) return true
-  if (!candidateValues || candidateValues.length === 0) return true   // нет данных — не блокируем
+  if (!candidateValues || candidateValues.length === 0) return false   // нет данных — исключаем
   return candidateValues.some((v) => filterValues.includes(v))
 }
 
 function passesBoolFlag(value: boolean | null | undefined, filter: "any" | "yes" | "no"): boolean {
   if (filter === "any") return true
-  if (value == null) return true   // нет данных — не блокируем
+  if (value == null) return false   // нет данных — исключаем
   return filter === "yes" ? value === true : value === false
 }
 
@@ -137,10 +139,9 @@ export function applyCandidateFilters<C extends FilterableColumn>(
       }
       if (filters.sources.length > 0 && !filters.sources.includes(c.source)) return false
 
-      // Work format
+      // Work format — при активном фильтре null исключаем (как сервер).
       if (filters.workFormats.length > 0) {
-        if (c.workFormat && !filters.workFormats.includes(c.workFormat)) return false
-        // если null — пропускаем (не блокируем)
+        if (!c.workFormat || !filters.workFormats.includes(c.workFormat)) return false
       }
 
       // Relocation / business trips
@@ -175,27 +176,21 @@ export function applyCandidateFilters<C extends FilterableColumn>(
       // Education level (codes)
       if (!passesArrayMembership(c.educationLevel ? [c.educationLevel] : null, filters.education)) return false
 
-      // Languages (codes) — учитываем otherLanguages если выбрано "other"
+      // Languages (codes) — при активном фильтре пустой список исключаем.
       if (filters.languages.length > 0) {
         const langs = c.languages ?? []
-        if (langs.length > 0) {
-          const matched = langs.some((l) => filters.languages.includes(l))
-          if (!matched) return false
-        }
+        if (langs.length === 0 || !langs.some((l) => filters.languages.includes(l))) return false
       }
 
-      // Skills (Russian labels) — на keySkills (новое) или skills (legacy fallback)
+      // Skills — на keySkills (новое) или skills (legacy fallback).
       if (filters.skills.length > 0) {
         const cs = c.keySkills && c.keySkills.length > 0 ? c.keySkills : (c.skills ?? [])
-        if (cs.length > 0) {
-          const matched = cs.some((s) => filters.skills.includes(s))
-          if (!matched) return false
-        }
+        if (cs.length === 0 || !cs.some((s) => filters.skills.includes(s))) return false
       }
 
-      // Industry
+      // Industry — при активном фильтре null исключаем.
       if (filters.industries.length > 0) {
-        if (c.industry && !filters.industries.includes(c.industry)) return false
+        if (!c.industry || !filters.industries.includes(c.industry)) return false
       }
 
       return true

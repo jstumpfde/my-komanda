@@ -273,6 +273,11 @@ export async function GET(req: NextRequest) {
         const pat = `%${esc}%`
         listConds.push(sql`(${candidates.name} ILIKE ${pat} OR ${candidates.email} ILIKE ${pat} OR ${candidates.phone} ILIKE ${pat})`)
       }
+      // B6: «Избранные» — серверный фильтр (раньше был только клиентский на
+      // /hr/candidates → не видел кандидатов за пределами загруженной страницы).
+      if (url.searchParams.get("favorite") === "true") {
+        listConds.push(eq(candidates.isFavorite, true))
+      }
 
       const whereExpr = and(
         eq(vacancies.companyId, user.companyId),
@@ -518,11 +523,17 @@ export async function GET(req: NextRequest) {
       filterConds.push(sql`(${candidates.experienceYears} IS NOT NULL AND ${candidates.experienceYears} <= ${Number(maxExp)})`)
     }
 
+    // B6 (07.06.2026): категориальные фильтры СУЖАЮТ выборку — кандидаты с
+    // NULL/пустым полем исключаются при активном фильтре. Раньше тут было
+    // «включать NULL» (фильтр «не блокирует»), но это давало no-op у тенантов
+    // с незаполненными полями (напр. Орлинк: industry 100% NULL → фильтр
+    // показывал всех). Теперь поведение единообразно с age/experience, которые
+    // и так исключают NULL: пользователь выбрал значение → список сужается.
     const workFormatsParam = url.searchParams.get("workFormat")
     if (workFormatsParam) {
       const list = workFormatsParam.split(",").filter(Boolean)
       if (list.length > 0) {
-        filterConds.push(or(isNull(candidates.workFormat), inArray(candidates.workFormat, list)) as SQL)
+        filterConds.push(inArray(candidates.workFormat, list) as SQL)
       }
     }
 
@@ -530,7 +541,7 @@ export async function GET(req: NextRequest) {
     if (eduParam) {
       const list = eduParam.split(",").filter(Boolean)
       if (list.length > 0) {
-        filterConds.push(or(isNull(candidates.educationLevel), inArray(candidates.educationLevel, list)) as SQL)
+        filterConds.push(inArray(candidates.educationLevel, list) as SQL)
       }
     }
 
@@ -542,7 +553,8 @@ export async function GET(req: NextRequest) {
     if (langParam) {
       const list = langParam.split(",").filter(Boolean)
       if (list.length > 0) {
-        filterConds.push(sql`(COALESCE(array_length(${candidates.languages}, 1), 0) = 0 OR ${candidates.languages} && ${toPgTextArrayLiteral(list)}::text[])`)
+        // && (overlap): NULL/пустой массив не пересекается → кандидат исключён.
+        filterConds.push(sql`${candidates.languages} && ${toPgTextArrayLiteral(list)}::text[]`)
       }
     }
 
@@ -550,7 +562,7 @@ export async function GET(req: NextRequest) {
     if (skillsParam) {
       const list = skillsParam.split(",").filter(Boolean)
       if (list.length > 0) {
-        filterConds.push(sql`(COALESCE(array_length(${candidates.keySkills}, 1), 0) = 0 OR ${candidates.keySkills} && ${toPgTextArrayLiteral(list)}::text[])`)
+        filterConds.push(sql`${candidates.keySkills} && ${toPgTextArrayLiteral(list)}::text[]`)
       }
     }
 
@@ -558,20 +570,20 @@ export async function GET(req: NextRequest) {
     if (industryParam) {
       const list = industryParam.split(",").filter(Boolean)
       if (list.length > 0) {
-        filterConds.push(or(isNull(candidates.industry), inArray(candidates.industry, list)) as SQL)
+        filterConds.push(inArray(candidates.industry, list) as SQL)
       }
     }
 
     const relocParam = url.searchParams.get("relocationReady")
     if (relocParam === "true" || relocParam === "false") {
       const want = relocParam === "true"
-      filterConds.push(sql`(${candidates.relocationReady} IS NULL OR ${candidates.relocationReady} = ${want})`)
+      filterConds.push(sql`${candidates.relocationReady} = ${want}`)
     }
 
     const tripsParam = url.searchParams.get("businessTripsReady")
     if (tripsParam === "true" || tripsParam === "false") {
       const want = tripsParam === "true"
-      filterConds.push(sql`(${candidates.businessTripsReady} IS NULL OR ${candidates.businessTripsReady} = ${want})`)
+      filterConds.push(sql`${candidates.businessTripsReady} = ${want}`)
     }
 
     // Дата отклика: candidates.created_at между dateFrom (включительно)
