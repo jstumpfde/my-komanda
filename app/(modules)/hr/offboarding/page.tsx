@@ -107,6 +107,10 @@ export default function OffboardingPage() {
       <SidebarInset>
         <DashboardHeader title="Offboarding" subtitle="Увольнение и передача дел" />
         <main className="p-6 space-y-6">
+          <div className="flex items-center gap-2 pt-3 pb-2">
+            <UserMinus className="h-5 w-5 text-violet-600" />
+            <h1 className="text-lg font-semibold">Offboarding</h1>
+          </div>
 
           {/* Сводка */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

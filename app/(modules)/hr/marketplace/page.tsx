@@ -65,6 +65,10 @@ export default function MarketplacePage() {
       <SidebarInset>
         <DashboardHeader title="Маркетплейс навыков" subtitle="Внутренние проекты и заявки сотрудников" />
         <main className="p-6 space-y-6">
+          <div className="flex items-center gap-2 pt-3 pb-2">
+            <Store className="h-5 w-5 text-violet-600" />
+            <h1 className="text-lg font-semibold">Маркетплейс навыков</h1>
+          </div>
 
           {/* Сводка */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
