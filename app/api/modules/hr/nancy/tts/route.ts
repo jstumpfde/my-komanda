@@ -41,12 +41,13 @@ export async function POST(req: Request) {
 
   try {
     const form = new URLSearchParams({
-      text:    text.slice(0, 5000),
-      voice:   "alena",
-      emotion: "good",
-      lang:    "ru-RU",
-      format:  "mp3",
-      speed:   "1.1",
+      text:     text.slice(0, 5000),
+      voice:    "alena",
+      emotion:  "good",
+      lang:     "ru-RU",
+      format:   "mp3",
+      speed:    "1.1",
+      folderId: process.env.YANDEX_FOLDER_ID ?? "",
     })
 
     const yttRes = await fetch(YANDEX_TTS_URL, {
