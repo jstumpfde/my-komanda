@@ -7,7 +7,7 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Check, X, Zap, Lock } from "lucide-react"
+import { Check, X, Zap, Lock, Package } from "lucide-react"
 import Link from "next/link"
 
 // ─── Данные тарифов ────────────────────────────────────────────────────────────
@@ -147,7 +147,10 @@ function UpgradeContent() {
 
           {/* Заголовок таблицы */}
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Выберите тариф</h1>
+            <div className="flex items-center gap-2 pt-3 pb-2">
+              <Package className="h-5 w-5 text-violet-600" />
+              <h1 className="text-lg font-semibold">Выберите тариф</h1>
+            </div>
             <p className="text-muted-foreground mt-1">
               Сравните возможности и выберите подходящий план для вашей компании
             </p>

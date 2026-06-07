@@ -6,7 +6,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Plus, Pencil, MessageSquare, HelpCircle, Presentation, ShieldCheck, Target, Database, Heart } from "lucide-react"
+import { Plus, Pencil, MessageSquare, HelpCircle, Presentation, ShieldCheck, Target, Database, Heart, ClipboardCheck } from "lucide-react"
 import { QC_CHECKLIST } from "@/lib/qc/demo-data"
 
 const CRITERIA_ICONS: Record<string, typeof MessageSquare> = {
@@ -29,7 +29,10 @@ export default function QCChecklistsPage() {
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">Чек-листы оценки</h1>
+                <div className="flex items-center gap-2 pt-3 pb-2">
+                  <ClipboardCheck className="h-5 w-5 text-violet-600" />
+                  <h1 className="text-lg font-semibold">Чек-листы оценки</h1>
+                </div>
                 <p className="text-sm text-muted-foreground mt-1">Критерии для оценки звонков менеджеров</p>
               </div>
               <div className="flex gap-2">
