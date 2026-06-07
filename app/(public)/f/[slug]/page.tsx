@@ -31,10 +31,14 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
     .from(companies).where(eq(companies.id, link.companyId)).limit(1)
 
   let title = link.name || "Анкета кандидата"
+  let formSlogan = ""
+  let formFields: import("@/lib/db/schema").TalentFormField[] = []
   if (link.formId) {
-    const [form] = await db.select({ name: talentForms.name }).from(talentForms)
-      .where(eq(talentForms.id, link.formId)).limit(1)
+    const [form] = await db.select({ name: talentForms.name, slogan: talentForms.slogan, fieldsJson: talentForms.fieldsJson })
+      .from(talentForms).where(eq(talentForms.id, link.formId)).limit(1)
     if (form?.name) title = form.name
+    if (form?.slogan) formSlogan = form.slogan
+    if (form?.fieldsJson?.length) formFields = form.fieldsJson
   }
 
   return (
@@ -43,7 +47,8 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
       companyName={(company?.brandName?.trim() || company?.name?.trim() || "Компания") as string}
       logo={(company?.logoUrl as string | null) ?? null}
       title={title}
-      slogan=""
+      slogan={formSlogan}
+      fields={formFields}
     />
   )
 }
