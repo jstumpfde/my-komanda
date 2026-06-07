@@ -15,6 +15,10 @@
 import { NextResponse } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
 import { requireCompany, apiError } from "@/lib/api-helpers"
+import { db } from "@/lib/db"
+import { companies } from "@/lib/db/schema"
+import type { NancyVoiceSettings } from "@/lib/db/schema"
+import { eq } from "drizzle-orm"
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -41,10 +45,6 @@ export interface NancyChatRequest {
   }
   history?: Array<{ role: "user" | "nancy"; text: string }>
 }
-
-const BASE_SYSTEM = `Ты — Нэнси, AI-ассистент платформы Company24.pro.
-Говоришь по-русски. Тон: дружелюбный, профессиональный, лаконичный.
-Без «Конечно!», без пустых вводных фраз. Отвечай по делу — 1-4 предложения.`
 
 const MODULE_HINTS: Record<string, string> = {
   hr: `
@@ -87,7 +87,6 @@ export async function POST(req: Request) {
   } catch (res) {
     return res as Response
   }
-  void user
 
   let body: NancyChatRequest
   try {
@@ -100,11 +99,26 @@ export async function POST(req: Request) {
   if (!message || message.length < 1) return apiError("Сообщение пустое", 400)
   if (message.length > 2000) return apiError("Сообщение слишком длинное", 400)
 
+  // Читаем конфиг ассистента для компании (кастомное имя и доп. инструкции)
+  const [company] = await db
+    .select({ nancyVoiceJson: companies.nancyVoiceJson })
+    .from(companies)
+    .where(eq(companies.id, user.companyId))
+    .limit(1)
+
+  const cfg = (company?.nancyVoiceJson ?? {}) as NancyVoiceSettings
+  const assistantName = cfg.name?.trim() || "Нэнси"
+
+  // Базовый системный промпт с подстановкой имени
+  const baseSystem = `Ты — ${assistantName}, AI-ассистент платформы Company24.pro.
+Говоришь по-русски. Тон: дружелюбный, профессиональный, лаконичный.
+Без «Конечно!», без пустых вводных фраз. Отвечай по делу — 1-4 предложения.`
+
   const mod = body.context?.module ?? "platform"
   const moduleHint = MODULE_HINTS[mod] ?? MODULE_HINTS.platform
 
   // Собираем system prompt
-  const systemParts: string[] = [BASE_SYSTEM, moduleHint]
+  const systemParts: string[] = [baseSystem, moduleHint]
 
   // Контекст страницы
   const pageLines = [
@@ -121,6 +135,11 @@ export async function POST(req: Request) {
 
   // Доступные разделы (для навигации)
   systemParts.push(`Разделы платформы: ${SECTIONS}\nТеги <action> не видны пользователю — описывай действие словами.`)
+
+  // Кастомные инструкции компании (добавляются последними, имеют наибольший приоритет)
+  if (cfg.customInstructions?.trim()) {
+    systemParts.push(`Дополнительные инструкции компании:\n${cfg.customInstructions.trim()}`)
+  }
 
   const systemFull = systemParts.join("\n\n")
 
