@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { AlertCircle, Trash2 } from "lucide-react"
+import { AlertCircle, Trash2, Users } from "lucide-react"
 import type { CalendarEvent } from "./week-view"
 
 interface Room {
@@ -47,6 +47,7 @@ export interface EventFormData {
   endAt: string
   description: string
   roomId: string
+  participants?: string[]
   // Поля интервью (отправляются только для type='interview').
   vacancyId?: string | null
   interviewer?: string
@@ -92,6 +93,8 @@ export function EventModal({
   const [scope, setScope] = useState("company")
   const [conflict, setConflict] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([])
+  const [companyUsers, setCompanyUsers] = useState<{ id: string; name: string }[]>([])
   // Поля интервью
   const [vacancyId, setVacancyId] = useState("")
   const [interviewer, setInterviewer] = useState("")
@@ -101,12 +104,18 @@ export function EventModal({
   const [meetingUrl, setMeetingUrl] = useState("")
   const [vacancies, setVacancies] = useState<{ id: string; title: string }[]>([])
 
-  // Список вакансий для селектора (подгружаем при открытии).
+  // Список вакансий и пользователей компании (подгружаем при открытии).
   useEffect(() => {
     if (!open) return
     fetch("/api/modules/hr/vacancies?limit=200")
       .then(r => r.ok ? r.json() : null)
       .then(j => { const v = j?.vacancies ?? j?.data ?? []; setVacancies(v.map((x: { id: string; title: string }) => ({ id: x.id, title: x.title }))) })
+      .catch(() => {})
+    fetch("/api/team")
+      .then(r => r.ok ? r.json() : null)
+      .then((j: { id: string; name: string }[] | null) => {
+        if (Array.isArray(j)) setCompanyUsers(j.map(u => ({ id: u.id, name: u.name })))
+      })
       .catch(() => {})
   }, [open])
 
@@ -143,19 +152,18 @@ export function EventModal({
       setMeetingUrl("")
     }
     setConflict(null)
+    setSelectedParticipantIds([])
   }, [event, defaultDate, open])
 
-  // #60: авто-проверка пересечений при изменении времени/переговорной (дебаунс).
+  // #60/#C4: авто-проверка пересечений при изменении времени/переговорной/участников (дебаунс).
   useEffect(() => {
     if (!open) return
     const t = setTimeout(() => { void checkConflicts() }, 400)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, startAt, endAt, roomId])
+  }, [open, startAt, endAt, roomId, selectedParticipantIds])
 
-  // #60: авто-проверка конфликтов времени. Покрывает и занятость переговорной,
-  // и общее пересечение по времени (двойное бронирование слота). Не блокирует
-  // сохранение — только мягкое предупреждение.
+  // #60/#C4: проверка конфликтов: переговорная + время + занятость участников.
   const checkConflicts = async () => {
     if (!startAt || !endAt) { setConflict(null); return }
     const s = new Date(startAt), e = new Date(endAt)
@@ -163,6 +171,7 @@ export function EventModal({
     const params = new URLSearchParams({ start: s.toISOString(), end: e.toISOString() })
     if (roomId) params.set("roomId", roomId)
     if (event?.id) params.set("excludeId", event.id)
+    if (selectedParticipantIds.length > 0) params.set("participantIds", selectedParticipantIds.join(","))
     try {
       const res = await fetch(`/api/modules/hr/calendar/conflicts?${params}`)
       if (!res.ok) return
@@ -170,8 +179,11 @@ export function EventModal({
       const data = json.data ?? json
       const room: { title: string }[] = data.roomConflicts ?? []
       const time: { title: string }[] = data.timeConflicts ?? []
+      const parts: { userName: string; eventTitle: string }[] = data.participantConflicts ?? []
       if (room.length) {
         setConflict(`Переговорная занята: ${room.map(c => c.title).join(", ")}`)
+      } else if (parts.length) {
+        setConflict(`Занят${parts.length > 1 ? "ы" : ""}: ${parts.map(p => `${p.userName} (${p.eventTitle})`).join("; ")}`)
       } else if (time.length) {
         setConflict(`В это время уже запланировано: ${time.map(c => c.title).join(", ")}`)
       } else {
@@ -190,6 +202,7 @@ export function EventModal({
       const isInterview = type === "interview"
       await onSave({
         title, type, scope, startAt, endAt, description, roomId,
+        participants: selectedParticipantIds.length > 0 ? selectedParticipantIds : undefined,
         vacancyId:       isInterview ? (vacancyId || null) : null,
         interviewer:     isInterview ? interviewer : "",
         interviewType:   isInterview ? interviewType : "",
@@ -375,6 +388,36 @@ export function EventModal({
               </div>
             )}
           </div>
+
+          {companyUsers.length > 0 && (
+            <div className="space-y-1.5">
+              <Label className="flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5" />
+                Участники
+              </Label>
+              <div className="flex flex-wrap gap-1.5">
+                {companyUsers.map(u => {
+                  const selected = selectedParticipantIds.includes(u.id)
+                  return (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => setSelectedParticipantIds(prev =>
+                        selected ? prev.filter(id => id !== u.id) : [...prev, u.id]
+                      )}
+                      className={`rounded-full px-2.5 py-0.5 text-xs border transition-colors ${
+                        selected
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-background text-muted-foreground border-border hover:border-muted-foreground/60"
+                      }`}
+                    >
+                      {u.name}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="space-y-1">
             <Label htmlFor="description">Описание</Label>

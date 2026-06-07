@@ -15,7 +15,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
-import { ChevronLeft, ChevronRight, Check, Save, Loader2 } from "lucide-react"
+import { ChevronLeft, ChevronRight, Check, Save, Loader2, Plus } from "lucide-react"
 import { toast } from "sonner"
 
 import type { Company, CompanyProduct, Vacancy, WizardDraft, Industry } from "@/lib/company-types"
@@ -502,7 +502,10 @@ export default function CreateVacancyPage() {
 
             {/* ── Page title ── */}
             <div className="mb-6">
-              <h1 className="text-xl font-bold text-foreground">Создание вакансии</h1>
+              <div className="flex items-center gap-2 pt-3 pb-2">
+                <Plus className="h-5 w-5 text-violet-600" />
+                <h1 className="text-lg font-semibold">Создание вакансии</h1>
+              </div>
               <p className="text-sm text-muted-foreground mt-0.5">
                 Заполните анкету — данные используются для AI-скоринга кандидатов
               </p>

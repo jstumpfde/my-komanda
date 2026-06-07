@@ -714,6 +714,15 @@ export default function VacancyPage() {
 // filters перемещён выше — см. строку перед useCandidates
   const [drawerCandidateId, setDrawerCandidateId] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const drawerAnketa = useMemo(() => {
+    const a = (apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.anketa as Record<string, unknown> | undefined
+    if (!a) return null
+    return {
+      aiIdealProfile: typeof a.aiIdealProfile === "string" && a.aiIdealProfile.trim() ? a.aiIdealProfile.trim() : null,
+      aiRequiredHardSkills: Array.isArray(a.aiRequiredHardSkills) && (a.aiRequiredHardSkills as string[]).length > 0 ? a.aiRequiredHardSkills as string[] : null,
+      aiStopFactors: Array.isArray(a.aiStopFactors) && (a.aiStopFactors as string[]).length > 0 ? a.aiStopFactors as string[] : null,
+    }
+  }, [apiVacancy])
   // Bulk-selection state (только список — выделение между кандидатами)
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Set<string>>(new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
@@ -2345,7 +2354,7 @@ export default function VacancyPage() {
                     )}
                     <CandidateFilters
                       filters={filters}
-                      onFiltersChange={setFilters}
+                      onFiltersChange={(f) => { setFilters(f); if (useListPaginated) paginated.setPage(1) }}
                       // Источник фасетов (города/источники в фильтре). В режиме
                       // списка kanban-`columns` пуст — берём видимые из paginated,
                       // иначе секция «Города» не показывается.
@@ -2380,6 +2389,7 @@ export default function VacancyPage() {
                       viewMode={viewMode}
                       onViewModeChange={setViewMode}
                       testTableHref={`/hr/vacancies/${id}/test-table`}
+                      onReset={() => setCardSettings(defaultSettings)}
                     />
                   </div>
                 )}
@@ -2833,7 +2843,7 @@ export default function VacancyPage() {
                     { value: "page"           as const, label: "Брендинг",   icon: Globe },
                     { value: "funnel-builder" as const, label: "Воронка",     icon: Workflow },
                     { value: "sources"        as const, label: "Источники",   icon: Link2 },
-                    { value: "ai"             as const, label: "Расписание",  icon: Zap },
+                    { value: "ai"             as const, label: "Расписание",  icon: Clock },
                     { value: "integrations"   as const, label: "Интеграции",  icon: Settings },
                     // Скрыты (контент доступен по прямой ?section=, настройки — внутри блоков «Воронки»):
                     // funnel (старые стадии), messages, followup, aichatbot — покрыты блоками Конструктора.
@@ -2979,13 +2989,15 @@ export default function VacancyPage() {
                                         e.target.value = ""
                                         return
                                       }
-                                      const reader = new FileReader()
-                                      reader.onload = () => {
-                                        const base64 = reader.result as string
-                                        setBrandLogo(base64)
-                                        saveBranding({ logo: base64 })
-                                      }
-                                      reader.readAsDataURL(file)
+                                      const fd = new FormData()
+                                      fd.append("file", file)
+                                      fetch("/api/upload/vacancy-logo", { method: "POST", body: fd })
+                                        .then(r => r.ok ? r.json() : Promise.reject(r))
+                                        .then((data: { logoUrl: string }) => {
+                                          setBrandLogo(data.logoUrl)
+                                          saveBranding({ logo: data.logoUrl })
+                                        })
+                                        .catch(() => toast.error("Не удалось загрузить логотип"))
                                       e.target.value = ""
                                     }}
                                   />
@@ -3877,6 +3889,7 @@ export default function VacancyPage() {
           if (!open) setDrawerCandidateId(null)
         }}
         onToggleFavorite={handleToggleFavorite}
+        vacancyAnketa={drawerAnketa}
         onStageChange={(candidateId, newStage) => {
           // Sync kanban columns when stage changes in drawer
           setColumns((prev) => {

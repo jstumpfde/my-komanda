@@ -24,6 +24,7 @@ import { startPrequalification } from "@/lib/prequalification/start"
 import { renderTemplate } from "@/lib/template-renderer"
 import { matchStopFactors, type StopFactorMatch } from "@/lib/funnel-builder/stop-factors-matcher"
 import { isBlockEnabled } from "@/lib/funnel-builder/runtime"
+import { sendWebhook } from "@/lib/webhooks"
 
 const DEMO_INVITE_MESSAGE = "Здравствуйте! Спасибо за отклик. Мы подготовили короткую демонстрацию должности — 15 минут, и вы узнаете всё о задачах, команде и доходе."
 
@@ -150,6 +151,8 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
   // stopFactorsApplyToAll — мастер-тумблер (дефолт false = выкл).
   let companyStopFactors: VacancyStopFactors | null = null
   let companyStopFactorsApplyToAll = false
+  let companyWebhookUrl: string | null = null
+  let companyWebhookEvents: Record<string, boolean> = {}
   {
     const [companyRow] = await db
       .select({ hiringDefaultsJson: companies.hiringDefaultsJson })
@@ -160,6 +163,10 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
     if (hiringDefaults?.stopFactorsApplyToAll === true && hiringDefaults.stopFactorsDefaults) {
       companyStopFactors = hiringDefaults.stopFactorsDefaults
       companyStopFactorsApplyToAll = true
+    }
+    if (hiringDefaults?.webhooks?.url) {
+      companyWebhookUrl = hiringDefaults.webhooks.url
+      companyWebhookEvents = hiringDefaults.webhooks.events ?? {}
     }
   }
 
@@ -423,6 +430,15 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
               await db.update(candidates).set({ photoUrl: local }).where(eq(candidates.id, newCand.id))
             }
           }
+          if (companyWebhookUrl && companyWebhookEvents.new_candidate) {
+            void sendWebhook(companyWebhookUrl, "new_candidate", {
+              candidateId: newCand.id,
+              vacancyId:   localVac.id,
+              name:        newCand.name,
+              source:      "hh",
+              stage:       targetStage,
+            })
+          }
         }
       } else if (candidateId) {
         // Защитный backfill: заполняем только пустые поля, заполненные не трогаем.
@@ -563,12 +579,21 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                 aiRequiredHardSkills: (anketa.aiRequiredHardSkills as string[] | undefined) ?? null,
                 aiStopFactors:        (anketa.aiStopFactors as string[] | undefined) ?? null,
                 screeningQuestions:   (anketa.screeningQuestions as string[] | undefined) ?? null,
+                aiWeights:            (anketa.aiWeights as Record<string, string> | undefined) ?? null,
               },
             })
             if (result) {
               await db.update(candidates)
                 .set({ resumeScore: result.score })
                 .where(eq(candidates.id, candidateId))
+              if (companyWebhookUrl && companyWebhookEvents.ai_screening) {
+                void sendWebhook(companyWebhookUrl, "ai_screening", {
+                  candidateId,
+                  vacancyId: localVac?.id ?? null,
+                  score:     result.score,
+                  decision:  (result as { decision?: string }).decision ?? null,
+                })
+              }
 
               // Два порога (Сессия 6):
               //   score >= upper          → обычный invite (ничего не делаем здесь).

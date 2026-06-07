@@ -472,7 +472,8 @@ export default function CompanyProfilePage() {
     <>
       <div className="mb-4">
         <div className="flex items-center gap-3 mb-1">
-          <h1 className="text-xl font-semibold text-foreground">Профиль компании</h1>
+          <Building2 className="h-5 w-5 text-violet-600" />
+          <h1 className="text-lg font-semibold text-foreground">Профиль компании</h1>
           {autoSaveStatus === "saving" && (
             <span className="text-xs text-muted-foreground flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />Сохранение...</span>
           )}

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server"
 import { db } from "@/lib/db"
-import { calendarEvents } from "@/lib/db/schema"
+import { calendarEvents, calendarEventParticipants } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { eq, and } from "drizzle-orm"
 
@@ -69,6 +69,16 @@ export async function PATCH(
       .set(updateData)
       .where(eq(calendarEvents.id, id))
       .returning()
+
+    // C4: обновляем участников (если переданы — заменяем полностью)
+    if (body.participants !== undefined && Array.isArray(body.participants)) {
+      await db.delete(calendarEventParticipants).where(eq(calendarEventParticipants.eventId, id))
+      if (body.participants.length > 0) {
+        await db.insert(calendarEventParticipants).values(
+          (body.participants as string[]).map((userId) => ({ eventId: id, userId, status: "pending" }))
+        )
+      }
+    }
 
     return apiSuccess(updated)
   } catch (err: unknown) {

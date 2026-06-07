@@ -18,7 +18,7 @@ export default function LegalSettingsPage() {
   if (!isPlatformAdmin && !canEditCompanyPolicy) {
     return (
       <div className="max-w-2xl mx-auto py-16 text-center">
-        <h1 className="text-xl font-semibold mb-2">Доступ ограничен</h1>
+        <h1 className="text-lg font-semibold mb-2">Доступ ограничен</h1>
         <p className="text-sm text-muted-foreground">
           Эта страница доступна только администраторам и руководителям компании.
         </p>
@@ -29,7 +29,10 @@ export default function LegalSettingsPage() {
   return (
     <>
       <div className="mb-4">
-        <h1 className="text-xl font-semibold text-foreground mb-1">Юридические документы</h1>
+        <div className="flex items-center gap-2 mb-1">
+          <ScrollText className="h-5 w-5 text-violet-600" />
+          <h1 className="text-lg font-semibold text-foreground">Юридические документы</h1>
+        </div>
         <p className="text-muted-foreground text-sm">
           Тексты юридических документов, опубликованные на сайте. Изменения вступают в силу сразу после сохранения.
         </p>

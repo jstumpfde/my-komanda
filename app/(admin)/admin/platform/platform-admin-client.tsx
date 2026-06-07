@@ -172,10 +172,10 @@ export function PlatformAdminClient({
   return (
     <div className="container mx-auto p-6 max-w-7xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <ShieldAlert className="w-6 h-6 text-red-500" />
-          Platform Admin
-        </h1>
+        <div className="flex items-center gap-2 pt-3 pb-2">
+          <ShieldAlert className="h-5 w-5 text-violet-600" />
+          <h1 className="text-lg font-semibold">Platform Admin</h1>
+        </div>
         <p className="text-sm text-muted-foreground mt-1">
           Скрытый раздел. Действия затрагивают ВСЕ компании платформы.
         </p>

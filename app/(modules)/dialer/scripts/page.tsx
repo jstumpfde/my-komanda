@@ -29,7 +29,10 @@ export default function DialerScriptsPage() {
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">Скрипты обзвона</h1>
+                <div className="flex items-center gap-2 pt-3 pb-2">
+                  <PhoneOutgoing className="h-5 w-5 text-violet-600" />
+                  <h1 className="text-lg font-semibold">Скрипты обзвона</h1>
+                </div>
                 <p className="text-sm text-muted-foreground mt-1">Шаблоны разговоров для AI-агента</p>
               </div>
               <div className="flex gap-2">

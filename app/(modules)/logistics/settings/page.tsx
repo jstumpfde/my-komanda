@@ -138,7 +138,10 @@ export default function LogisticsSettingsPage() {
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">Настройки логистики</h1>
+                <div className="flex items-center gap-2 pt-3 pb-2">
+                  <Settings className="h-5 w-5 text-violet-600" />
+                  <h1 className="text-lg font-semibold">Настройки логистики</h1>
+                </div>
                 <p className="text-sm text-muted-foreground mt-1">Регионы, транспорт, маржа и уведомления</p>
               </div>
               <Button className="rounded-xl shadow-sm hover:shadow-md gap-1.5" onClick={handleSave}>

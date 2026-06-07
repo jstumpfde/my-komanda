@@ -48,7 +48,10 @@ export default function HrSchedulePage() {
         <div className="flex-1 overflow-auto bg-background min-w-0">
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="mb-6">
-              <h1 className="text-lg font-semibold text-foreground mb-1">Расписание</h1>
+              <div className="flex items-center gap-2 pt-3 pb-2">
+                <Clock className="h-5 w-5 text-violet-600" />
+                <h1 className="text-lg font-semibold">Расписание</h1>
+              </div>
               <p className="text-sm text-muted-foreground">Рабочие часы для интервью и встреч с кандидатами</p>
             </div>
 

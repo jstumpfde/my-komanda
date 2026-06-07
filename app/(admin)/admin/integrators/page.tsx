@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { toast } from "sonner"
-import { Handshake, Plus, Loader2, ExternalLink } from "lucide-react"
+import { Handshake, Plus, Loader2, ExternalLink, Users } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 
@@ -101,9 +101,9 @@ export default function AdminIntegratorsPage() {
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="flex items-center justify-between mb-6">
               <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <Handshake className="w-5 h-5 text-primary" />
-                  <h1 className="text-2xl font-semibold text-foreground">Интеграторы</h1>
+                <div className="flex items-center gap-2 pt-3 pb-2">
+                  <Users className="h-5 w-5 text-violet-600" />
+                  <h1 className="text-lg font-semibold">Интеграторы</h1>
                 </div>
                 <p className="text-muted-foreground text-sm">Партнёры и реселлеры платформы</p>
               </div>

@@ -38,7 +38,7 @@ export default function AgentsPage() {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h1 className="text-lg font-semibold tracking-tight flex items-center gap-2">
-                  <Bot className="h-6 w-6 text-primary" />
+                  <Bot className="h-5 w-5 text-violet-600" />
                   AI-агенты
                 </h1>
                 <p className="text-sm text-muted-foreground mt-1">

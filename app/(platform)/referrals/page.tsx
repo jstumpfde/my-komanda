@@ -24,7 +24,7 @@ import {
 } from "@/lib/referral-types"
 import {
   Users, UserPlus, Gift, Wallet, TrendingUp, Copy, Check,
-  Link2, QrCode, ExternalLink, Plus, Save,
+  Link2, QrCode, ExternalLink, Plus, Save, Share2,
 } from "lucide-react"
 
 export default function ReferralsPage() {
@@ -93,7 +93,10 @@ export default function ReferralsPage() {
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
               <div>
-                <h1 className="text-2xl font-semibold text-foreground mb-1">Реферальная программа</h1>
+                <div className="flex items-center gap-2 pt-3 pb-2">
+                  <Share2 className="h-5 w-5 text-violet-600" />
+                  <h1 className="text-lg font-semibold">Реферальная программа</h1>
+                </div>
                 <p className="text-muted-foreground text-sm">Привлекайте кандидатов через партнёров и сотрудников</p>
               </div>
               <Button className="gap-1.5" onClick={() => setAddOpen(true)}>

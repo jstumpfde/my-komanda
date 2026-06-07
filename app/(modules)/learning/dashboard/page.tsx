@@ -146,9 +146,9 @@ export default function LearningDashboardPage() {
         <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
           <div className="flex items-center justify-between mb-6">
             <div>
-              <div className="flex items-center gap-2">
-                <GraduationCap className="w-5 h-5 text-violet-500" />
-                <h1 className="text-2xl font-bold tracking-tight">Обучение</h1>
+              <div className="flex items-center gap-2 pt-3 pb-2">
+                <GraduationCap className="h-5 w-5 text-violet-600" />
+                <h1 className="text-lg font-semibold">Обучение</h1>
               </div>
               <p className="text-sm text-muted-foreground mt-1">Прогресс сотрудников, курсы, тренировки и рейтинг</p>
             </div>

@@ -7,7 +7,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ShieldCheck, Download, Trash2 } from "lucide-react"
+import { ShieldCheck, Download, Trash2, Settings } from "lucide-react"
 import { useAuth } from "@/lib/auth"
 
 // ФЗ-152: страница просмотра журнала аудита операций с ПДн кандидатов.
@@ -26,8 +26,9 @@ interface AuditEntry {
 }
 
 const ACTION_LABELS: Record<string, { label: string; icon: typeof Download; cls: string }> = {
-  candidate_export: { label: "Экспорт кандидатов", icon: Download, cls: "bg-blue-500/10 text-blue-700 border-blue-200" },
-  candidate_delete: { label: "Удаление кандидатов", icon: Trash2, cls: "bg-red-500/10 text-red-700 border-red-200" },
+  candidate_export:     { label: "Экспорт кандидатов",    icon: Download,  cls: "bg-blue-500/10 text-blue-700 border-blue-200" },
+  candidate_delete:     { label: "Удаление кандидатов",   icon: Trash2,    cls: "bg-red-500/10 text-red-700 border-red-200" },
+  data_retention_change:{ label: "Срок хранения ПДн",     icon: Settings,  cls: "bg-amber-500/10 text-amber-700 border-amber-200" },
 }
 
 function fmtDate(s: string): string {
@@ -95,6 +96,7 @@ export default function AuditLogPage() {
                   <SelectItem value="all">Все события</SelectItem>
                   <SelectItem value="candidate_export">Экспорт кандидатов</SelectItem>
                   <SelectItem value="candidate_delete">Удаление кандидатов</SelectItem>
+                  <SelectItem value="data_retention_change">Срок хранения ПДн</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -125,6 +127,11 @@ export default function AuditLogPage() {
                         const Icon = cfg?.icon
                         const kind = e.meta && typeof e.meta.kind === "string" ? e.meta.kind : null
                         const scope = e.meta && typeof e.meta.scope === "string" ? e.meta.scope : null
+                        const oldVal = e.meta && "oldValue" in e.meta ? String(e.meta.oldValue ?? "—") : null
+                        const newVal = e.meta && "newValue" in e.meta ? String(e.meta.newValue ?? "—") : null
+                        const contextText = oldVal !== null && newVal !== null
+                          ? `${oldVal} → ${newVal}`
+                          : [scope && `охват: ${scope}`, kind && `тип: ${kind}`].filter(Boolean).join(" · ") || "—"
                         return (
                           <DataRow key={e.id}>
                             <DataCell className="whitespace-nowrap text-muted-foreground">{fmtDate(e.createdAt)}</DataCell>
@@ -138,7 +145,7 @@ export default function AuditLogPage() {
                             </DataCell>
                             <DataCell align="right" className="tabular-nums">{e.count ?? "—"}</DataCell>
                             <DataCell className="text-muted-foreground text-xs">
-                              {[scope && `охват: ${scope}`, kind && `тип: ${kind}`].filter(Boolean).join(" · ") || "—"}
+                              {contextText}
                             </DataCell>
                             <DataCell className="text-muted-foreground font-mono text-xs">{e.ip ?? "—"}</DataCell>
                           </DataRow>

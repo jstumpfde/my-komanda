@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -62,6 +63,7 @@ const EMOJI_OPTIONS = ["📅", "🌅", "✅", "❌", "⏳", "🔥", "⭐", "📞
 
 interface Interview {
   id: string; date: Date; time: string; endTime: string; candidate: string; vacancy: string; interviewer: string; type: InterviewType; format: InterviewFormat; status: InterviewStatus
+  candidateId: string | null
 }
 
 const today2 = new Date()
@@ -72,7 +74,7 @@ const today2 = new Date()
 // иначе Подтверждено. Тип/формат — из структурных полей, дефолты для старых событий.
 interface CalEvent {
   id: string; title: string; startAt: string; endAt: string; status: string | null
-  vacancyId: string | null; interviewer: string | null; interviewType: string | null; interviewFormat: string | null
+  vacancyId: string | null; candidateId: string | null; interviewer: string | null; interviewType: string | null; interviewFormat: string | null
   interviewStatus: string | null
 }
 function timeStr(dt: Date): string {
@@ -103,6 +105,7 @@ function mapEventToInterview(ev: CalEvent, vacMap: Map<string, string>): Intervi
     vacancy: (ev.vacancyId && vacMap.get(ev.vacancyId)) || "—",
     interviewer: ev.interviewer || "—",
     type, format, status,
+    candidateId: ev.candidateId ?? null,
   }
 }
 
@@ -154,6 +157,7 @@ function MiniCard({ iv, compact }: { iv: Interview; compact?: boolean }) {
 // ─── Компонент ──────────────────────────────────────────────
 
 export default function InterviewsPage() {
+  const router = useRouter()
   const [view, setView] = useState<ViewMode>("list")
   const [interviews, setInterviews] = useState<Interview[]>([])
   const [vacOptions, setVacOptions] = useState<{ id: string; title: string }[]>([])
@@ -479,7 +483,7 @@ export default function InterviewsPage() {
                             <Badge variant="outline" className="text-[10px] gap-1">{iv.format === "Онлайн" ? <Video className="w-3 h-3" /> : <Building2 className="w-3 h-3" />}{iv.format}</Badge>
                           </div>
                         </div>
-                        <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => toast.info(`Открыть ${iv.candidate}`)}><ExternalLink className="h-3.5 w-3.5" /> Открыть</Button>
+                        <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}><ExternalLink className="h-3.5 w-3.5" /> Открыть</Button>
                       </div>
                     </CardContent>
                   </Card>
@@ -568,7 +572,7 @@ export default function InterviewsPage() {
                               className={cn("rounded-lg border p-2.5 flex items-center justify-between cursor-grab active:cursor-grabbing transition-opacity", STATUS_STYLES[iv.status], dragIvId === iv.id && "opacity-40 scale-95")}
                             >
                               <div><div className="flex items-center gap-2"><span className="text-sm font-semibold">{iv.candidate}</span><Badge variant="outline" className="text-[10px]">{iv.type}</Badge></div><p className="text-xs text-muted-foreground">{iv.vacancy} · {iv.time}–{iv.endTime} · {iv.format}</p></div>
-                              <Button variant="outline" size="sm" className="h-7 text-xs shrink-0" onClick={() => toast.info(`Открыть ${iv.candidate}`)}>Открыть</Button>
+                              <Button variant="outline" size="sm" className="h-7 text-xs shrink-0" onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}>Открыть</Button>
                             </div>
                           ))}
                         </div>

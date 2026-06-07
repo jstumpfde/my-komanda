@@ -422,11 +422,11 @@ export default function AdminClientPage() {
                   <Link href="/admin/clients"><ArrowLeft className="w-4 h-4" /></Link>
                 </Button>
                 <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                    <Building2 className="w-4 h-4 text-primary" />
-                  </div>
                   <div>
-                    <h1 className="text-xl font-semibold text-foreground">{company?.name ?? "Клиент"}</h1>
+                    <div className="flex items-center gap-2 pt-3 pb-2">
+                      <Building2 className="h-5 w-5 text-violet-600" />
+                      <h1 className="text-lg font-semibold">{company?.name ?? "Клиент"}</h1>
+                    </div>
                     <div className="flex items-center gap-2 mt-0.5">
                       {company?.inn && <span className="text-xs text-muted-foreground">ИНН {company.inn}</span>}
                       <Badge variant="outline" className={cn("text-xs", status.cls)}>{status.label}</Badge>

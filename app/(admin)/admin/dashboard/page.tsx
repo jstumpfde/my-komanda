@@ -135,9 +135,9 @@ export default function AdminDashboardPage() {
 
             {/* Заголовок */}
             <div>
-              <div className="flex items-center gap-2 mb-1">
-                <LayoutDashboard className="w-5 h-5 text-primary" />
-                <h1 className="text-2xl font-semibold text-foreground">Дашборд администратора</h1>
+              <div className="flex items-center gap-2 pt-3 pb-2">
+                <LayoutDashboard className="h-5 w-5 text-violet-600" />
+                <h1 className="text-lg font-semibold">Дашборд администратора</h1>
               </div>
               <p className="text-muted-foreground text-sm">Ключевые метрики платформы</p>
             </div>

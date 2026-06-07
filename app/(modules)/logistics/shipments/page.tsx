@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
   Truck, CheckCircle, AlertTriangle, FileText,
-  Eye, EyeOff, LayoutGrid, List, Sparkles,
+  Eye, EyeOff, LayoutGrid, List, Sparkles, Ship,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
@@ -77,7 +77,10 @@ export default function LogisticsShipmentsPage() {
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="mb-6">
-              <h1 className="text-2xl font-bold tracking-tight">Активные перевозки</h1>
+              <div className="flex items-center gap-2 pt-3 pb-2">
+                <Ship className="h-5 w-5 text-violet-600" />
+                <h1 className="text-lg font-semibold">Активные перевозки</h1>
+              </div>
               <p className="text-sm text-muted-foreground mt-1">Трекинг и управление перевозками</p>
             </div>
 

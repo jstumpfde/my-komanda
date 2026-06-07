@@ -124,10 +124,23 @@ export default function CandidatesPage() {
 
   const PAGE_SIZE = 50
 
+  // Серверные фильтры: меняются → сбрасываем на стр.1 и перегружаем.
+  const filterParams = useMemo(() => {
+    const ps = new URLSearchParams()
+    if (statusFilter !== "all") ps.set("stage", statusFilter)
+    if (sourceFilter !== "all") ps.set("source", sourceFilter)
+    if (debouncedSearch.trim()) ps.set("search", debouncedSearch.trim())
+    if (vacancyFilter !== "all") ps.set("vacancyTitle", vacancyFilter)
+    return ps
+  }, [statusFilter, sourceFilter, debouncedSearch, vacancyFilter])
+
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    fetch(`/api/modules/hr/candidates?page=1&pageSize=${PAGE_SIZE}`)
+    const qs = new URLSearchParams(filterParams)
+    qs.set("page", "1")
+    qs.set("pageSize", String(PAGE_SIZE))
+    fetch(`/api/modules/hr/candidates?${qs}`)
       .then(r => r.ok ? r.json() : Promise.reject())
       .then((data: { items?: Candidate[]; total?: number; hasMore?: boolean }) => {
         if (cancelled) return
@@ -145,14 +158,17 @@ export default function CandidatesPage() {
       })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [])
+  }, [filterParams]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadMore = async () => {
     if (loadingMore || !hasMore) return
     setLoadingMore(true)
     try {
       const nextPage = page + 1
-      const res = await fetch(`/api/modules/hr/candidates?page=${nextPage}&pageSize=${PAGE_SIZE}`)
+      const qs = new URLSearchParams(filterParams)
+      qs.set("page", String(nextPage))
+      qs.set("pageSize", String(PAGE_SIZE))
+      const res = await fetch(`/api/modules/hr/candidates?${qs}`)
       if (!res.ok) throw new Error()
       const data = await res.json() as { items?: Candidate[]; total?: number; hasMore?: boolean }
       const items = Array.isArray(data.items) ? data.items : []
@@ -167,6 +183,8 @@ export default function CandidatesPage() {
     }
   }
 
+  const [bulkLoading, setBulkLoading] = useState(false)
+
   const changeStage = async (candidateId: string, stage: string, candidateName: string) => {
     try {
       const res = await fetch(`/api/modules/hr/candidates/${candidateId}/stage`, {
@@ -178,6 +196,28 @@ export default function CandidatesPage() {
       setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, stage } : c))
       toast.success(`${candidateName}: ${getStageLabel(stage)}`)
     } catch { toast.error("Ошибка смены этапа") }
+  }
+
+  const bulkChangeStage = async (stage: string) => {
+    const ids = [...selected]
+    if (ids.length === 0) return
+    setBulkLoading(true)
+    try {
+      await Promise.all(ids.map(id =>
+        fetch(`/api/modules/hr/candidates/${id}/stage`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ stage }),
+        })
+      ))
+      setCandidates(prev => prev.map(c => selected.has(c.id) ? { ...c, stage } : c))
+      setSelected(new Set())
+      toast.success(`${ids.length} кандидатов: ${getStageLabel(stage)}`)
+    } catch {
+      toast.error("Ошибка массового действия")
+    } finally {
+      setBulkLoading(false)
+    }
   }
 
   async function toggleFavorite(id: string) {
@@ -259,7 +299,10 @@ export default function CandidatesPage() {
             {/* Header */}
             <div className="flex items-center justify-between mb-5">
               <div>
-                <h1 className="text-lg font-semibold text-foreground">Кандидаты</h1>
+                <div className="flex items-center gap-2">
+                  <Users className="h-5 w-5 text-violet-600" />
+                  <h1 className="text-lg font-semibold text-foreground">Кандидаты</h1>
+                </div>
                 <p className="text-sm text-muted-foreground mt-0.5">
                   {filtered.length} из {candidates.length}
                   {total > candidates.length ? ` (всего ${total})` : ""} кандидатов
@@ -309,7 +352,24 @@ export default function CandidatesPage() {
               </Button>
             </div>
 
-            {selected.size > 0 && <div className="text-xs text-muted-foreground mb-2">Выбрано: {selected.size}</div>}
+            {selected.size > 0 && (
+              <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-primary/5 border border-primary/20">
+                <span className="text-sm font-medium text-primary mr-1">Выбрано: {selected.size}</span>
+                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" disabled={bulkLoading} onClick={() => bulkChangeStage("scheduled")}>
+                  <UserPlus className="size-3.5" />На интервью
+                </Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" disabled={bulkLoading} onClick={() => bulkChangeStage("talent_pool")}>
+                  <Archive className="size-3.5" />В резерв
+                </Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-destructive hover:text-destructive" disabled={bulkLoading} onClick={() => bulkChangeStage("rejected")}>
+                  <XCircle className="size-3.5" />Отказать
+                </Button>
+                {bulkLoading && <Loader2 className="size-4 animate-spin text-muted-foreground ml-1" />}
+                <button type="button" className="ml-auto text-xs text-muted-foreground hover:text-foreground transition-colors" onClick={() => setSelected(new Set())}>
+                  Снять выделение
+                </button>
+              </div>
+            )}
 
             {/* Loading */}
             {loading && (
@@ -394,7 +454,7 @@ export default function CandidatesPage() {
                           )}
                         </DataCell>
                         <DataCell className="text-muted-foreground tabular-nums whitespace-nowrap">
-                          {c.demoTotalBlocks === 0 ? "—" : `${c.demoCompletedBlocks} / ${c.demoTotalBlocks}`}
+                          {c.demoTotalBlocks === 0 ? "—" : `${Math.min(c.demoCompletedBlocks, c.demoTotalBlocks)} / ${c.demoTotalBlocks}`}
                         </DataCell>
                         <DataCell className="text-muted-foreground whitespace-nowrap">{formatDate(c.createdAt)}</DataCell>
                         <DataCell className="text-muted-foreground">{SOURCE_LABELS[c.source ?? ""] ?? c.source ?? "—"}</DataCell>

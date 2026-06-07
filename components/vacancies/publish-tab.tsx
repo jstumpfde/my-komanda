@@ -113,7 +113,7 @@ h1{font-size:28px;font-weight:800;color:${text};margin-bottom:8px;line-height:1.
 <h1>${vacancy.title}</h1>
 ${slogan ? `<p class="slogan">${slogan}</p>\n` : ""}<p class="meta">${vacancy.city || ""}${salary ? " · " + salary : ""}</p>
 <div class="highlights">
-<div class="highlight"><span class="check">✓</span>Доход от ${vacancy.salaryFrom ? Math.round(vacancy.salaryFrom * 1.5).toLocaleString("ru-RU") + " ₽" : "конкурентный"} через 3 месяца</div>
+<div class="highlight"><span class="check">✓</span>${vacancy.salaryFrom ? "Доход от " + Math.round(vacancy.salaryFrom * 1.5).toLocaleString("ru-RU") + " ₽ через 3 месяца" : "Доход выше среднего по рынку через 3 месяца"}</div>
 <div class="highlight"><span class="check">✓</span>Обучение и наставник с первого дня</div>
 <div class="highlight"><span class="check">✓</span>Карьерный рост до руководителя за 6-12 мес.</div>
 <div class="highlight"><span class="check">✓</span>Современный офис${vacancy.city ? " в " + vacancy.city : ""}</div>

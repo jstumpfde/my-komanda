@@ -11,7 +11,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Loader2, ShieldCheck, Users, Lock, Pencil } from "lucide-react"
+import { Loader2, ShieldCheck, Users, Lock, Pencil, Shield } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import type { AccessLevel, RolePermissions } from "@/app/api/admin/roles/route"
@@ -288,16 +288,14 @@ export default function AdminRolesPage() {
           <div className="py-6 space-y-8" style={{ paddingLeft: 56, paddingRight: 56 }}>
 
             {/* Header */}
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                <ShieldCheck className="w-5 h-5 text-primary" />
+            <div>
+              <div className="flex items-center gap-2 pt-3 pb-2">
+                <Shield className="h-5 w-5 text-violet-600" />
+                <h1 className="text-lg font-semibold">Роли и доступ</h1>
               </div>
-              <div>
-                <h1 className="text-2xl font-semibold">Роли и доступ</h1>
-                <p className="text-sm text-muted-foreground">
-                  Управление правами доступа по ролям для всех пользователей платформы
-                </p>
-              </div>
+              <p className="text-sm text-muted-foreground">
+                Управление правами доступа по ролям для всех пользователей платформы
+              </p>
             </div>
 
             {loading ? (

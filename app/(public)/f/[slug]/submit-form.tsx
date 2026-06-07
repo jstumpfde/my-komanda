@@ -1,6 +1,77 @@
 "use client"
 
 import { useState } from "react"
+import type { TalentFormField } from "@/lib/db/schema"
+
+// Form builder field keys that map to supported DB columns.
+// firstName/lastName both collapse into the single `name` column.
+const KEY_TO_STATE: Record<string, keyof FormState | null> = {
+  firstName:   "name",
+  lastName:    "name",
+  email:       "email",
+  phone:       "phone",
+  telegram:    "telegram",
+  position:    "position",
+  company:     "company",
+  comment:     "comment",
+  coverLetter: "comment",
+  city:        null,      // no DB column yet
+  resume:      null,
+  portfolio:   null,
+  referrer:    null,
+  employee:    null,
+}
+
+interface FormState {
+  name: string; phone: string; email: string; telegram: string
+  position: string; company: string; comment: string
+}
+
+interface RenderedField {
+  stateKey: keyof FormState
+  label: string
+  required: boolean
+  multiline?: boolean
+  placeholder?: string
+}
+
+function buildFields(fields: TalentFormField[]): RenderedField[] | null {
+  const enabled = fields.filter(f => f.enabled && KEY_TO_STATE[f.key] !== undefined && KEY_TO_STATE[f.key] !== null)
+  if (!enabled.length) return null
+
+  const seen = new Set<keyof FormState>()
+  const result: RenderedField[] = []
+
+  for (const f of enabled) {
+    const stateKey = KEY_TO_STATE[f.key] as keyof FormState | null
+    if (!stateKey || seen.has(stateKey)) continue
+    seen.add(stateKey)
+
+    const isComment = stateKey === "comment"
+    // When firstName AND lastName both exist, show combined label
+    const label = (f.key === "firstName" || f.key === "lastName")
+      ? (fields.some(x => x.enabled && x.key === "lastName" && f.key === "firstName") ? "Имя и фамилия" : f.label)
+      : f.label
+
+    result.push({ stateKey, label, required: f.required, multiline: isComment })
+  }
+
+  // Guarantee name is first if present
+  const nameIdx = result.findIndex(r => r.stateKey === "name")
+  if (nameIdx > 0) result.unshift(...result.splice(nameIdx, 1))
+
+  return result
+}
+
+// Fallback hardcoded fields when form has no field config.
+const STATIC_FIELDS: RenderedField[] = [
+  { stateKey: "name",     label: "Имя",               required: true,  placeholder: "Имя Фамилия" },
+  { stateKey: "phone",    label: "Телефон",            required: false, placeholder: "+7 ..." },
+  { stateKey: "email",    label: "Email",              required: false, placeholder: "you@mail.ru" },
+  { stateKey: "telegram", label: "Telegram",           required: false, placeholder: "@username" },
+  { stateKey: "position", label: "Желаемая должность", required: false },
+  { stateKey: "comment",  label: "Комментарий",        required: false, multiline: true },
+]
 
 interface Props {
   slug: string
@@ -8,19 +79,25 @@ interface Props {
   logo: string | null
   title: string
   slogan: string
+  fields: TalentFormField[]
 }
 
-export function SubmitForm({ slug, companyName, logo, title, slogan }: Props) {
-  const [form, setForm] = useState({ name: "", phone: "", email: "", telegram: "", position: "", comment: "" })
+export function SubmitForm({ slug, companyName, logo, title, slogan, fields }: Props) {
+  const [form, setForm] = useState<FormState>({ name: "", phone: "", email: "", telegram: "", position: "", company: "", comment: "" })
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState("")
 
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+  const renderedFields = buildFields(fields) ?? STATIC_FIELDS
+
+  const set = (k: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm(p => ({ ...p, [k]: e.target.value }))
 
   const submit = async () => {
     if (!form.name.trim()) { setError("Укажите имя"); return }
+    const requiredMissing = renderedFields.find(f => f.required && !form[f.stateKey].trim())
+    if (requiredMissing) { setError(`Заполните поле «${requiredMissing.label}»`); return }
+
     setSubmitting(true); setError("")
     try {
       const res = await fetch("/api/public/talent-form", {
@@ -61,16 +138,21 @@ export function SubmitForm({ slug, companyName, logo, title, slogan }: Props) {
               <h1 className="text-lg font-bold text-slate-900">{title || "Анкета кандидата"}</h1>
               <p className="text-sm text-slate-500 mt-1 mb-5">Заполните форму — это займёт меньше минуты.</p>
               <div className="space-y-3">
-                <Field label="Имя" required value={form.name} onChange={set("name")} placeholder="Имя Фамилия" />
-                <Field label="Телефон" value={form.phone} onChange={set("phone")} placeholder="+7 ..." />
-                <Field label="Email" value={form.email} onChange={set("email")} placeholder="you@mail.ru" />
-                <Field label="Telegram" value={form.telegram} onChange={set("telegram")} placeholder="@username" />
-                <Field label="Желаемая должность" value={form.position} onChange={set("position")} placeholder="" />
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Комментарий</label>
-                  <textarea value={form.comment} onChange={set("comment")} rows={3}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-slate-400 resize-y" />
-                </div>
+                {renderedFields.map(f =>
+                  f.multiline ? (
+                    <div key={f.stateKey}>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                        {f.label}{f.required && <span className="text-red-500"> *</span>}
+                      </label>
+                      <textarea value={form[f.stateKey]} onChange={set(f.stateKey)} rows={3}
+                        className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-slate-400 resize-y" />
+                    </div>
+                  ) : (
+                    <Field key={f.stateKey} label={f.label} required={f.required}
+                      value={form[f.stateKey]} onChange={set(f.stateKey)}
+                      placeholder={f.placeholder} />
+                  )
+                )}
                 {error && <p className="text-sm text-red-600">{error}</p>}
                 <button onClick={submit} disabled={submitting}
                   className="w-full h-11 rounded-xl bg-slate-900 text-white font-semibold text-sm hover:bg-slate-800 disabled:opacity-60">

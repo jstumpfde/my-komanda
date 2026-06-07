@@ -318,7 +318,7 @@ export function CandidatesProgressList({
                       Блоки
                     </p>
                     <p className="text-sm font-medium text-foreground tabular-nums">
-                      {c.demoCompletedBlocks} / {c.demoTotalBlocks}
+                      {Math.min(c.demoCompletedBlocks, c.demoTotalBlocks)} / {c.demoTotalBlocks}
                     </p>
                   </div>
                   <div>

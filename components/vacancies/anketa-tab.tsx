@@ -1551,6 +1551,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
           <Input
             value={data.vacancyTitle}
             onChange={e => { set("vacancyTitle", e.target.value); onTitleChange?.(e.target.value) }}
+            onFocus={() => setAdvisorFocusedField("title")}
             placeholder="Менеджер по продажам"
             className="h-11 text-lg bg-[var(--input-bg)] border border-input w-full"
             maxLength={75}
@@ -1737,6 +1738,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
           <Textarea
             value={data.companyDescription}
             onChange={e => set("companyDescription", e.target.value)}
+            onFocus={() => setAdvisorFocusedField("company")}
             placeholder="Краткое описание компании для кандидатов..."
             rows={5}
             className="w-full text-sm bg-[var(--input-bg)] border border-input"
@@ -2134,7 +2136,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
 
       {/* ── 7. Условия ── */}
       <Section title="Условия" number={7} filled={sectionFilled(7)} id="section-7">
-        <div className="flex flex-wrap gap-x-4 gap-y-2">
+        <div className="flex flex-wrap gap-x-4 gap-y-2" onFocus={() => setAdvisorFocusedField("conditions")}>
           {CONDITIONS_OPTIONS.map(opt => (
             <label key={opt} className="flex items-center gap-1.5">
               <Checkbox checked={data.conditions.includes(opt)} onCheckedChange={() => toggleArray("conditions", opt)} />

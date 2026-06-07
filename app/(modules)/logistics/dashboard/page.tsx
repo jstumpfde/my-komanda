@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import {
   Truck, Inbox, Send, DollarSign, Percent,
-  Sparkles,
+  Sparkles, LayoutDashboard,
 } from "lucide-react"
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid,
@@ -112,7 +112,10 @@ export default function LogisticsDashboardPage() {
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="mb-6">
-              <h1 className="text-2xl font-bold tracking-tight">Логистика — Дашборд</h1>
+              <div className="flex items-center gap-2 pt-3 pb-2">
+                <LayoutDashboard className="h-5 w-5 text-violet-600" />
+                <h1 className="text-lg font-semibold">Логистика — Дашборд</h1>
+              </div>
               <p className="text-sm text-muted-foreground mt-1">Перевозки, расчёты и аналитика</p>
             </div>
 

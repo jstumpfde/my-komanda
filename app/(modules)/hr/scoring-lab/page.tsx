@@ -97,7 +97,7 @@ export default function ScoringLabPage() {
           <div className="py-6 px-6 lg:px-14 max-w-[1400px]">
 
             <div className="flex items-center gap-2 mb-1">
-              <FlaskConical className="w-5 h-5 text-primary" />
+              <FlaskConical className="w-5 h-5 text-violet-600" />
               <h1 className="text-lg font-semibold text-foreground">Лаборатория скоринга</h1>
               <Badge variant="outline" className="ml-2">прототип</Badge>
             </div>

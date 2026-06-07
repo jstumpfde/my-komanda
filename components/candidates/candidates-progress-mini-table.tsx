@@ -158,7 +158,7 @@ export function CandidatesProgressMiniTable({
                 </span>
               </DataCell>
               <DataCell className="text-muted-foreground tabular-nums whitespace-nowrap">
-                {c.demoCompletedBlocks} / {c.demoTotalBlocks}
+                {Math.min(c.demoCompletedBlocks, c.demoTotalBlocks)} / {c.demoTotalBlocks}
               </DataCell>
             </DataRow>
           ))}

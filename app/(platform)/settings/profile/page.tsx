@@ -16,7 +16,7 @@ import { Loader2, User, Mail, Lock, Shield, Save, Eye, EyeOff, Camera, Trash2, C
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-import { useAuth } from "@/lib/auth"
+import { useAuth, ROLE_LABELS } from "@/lib/auth"
 import type { UserCustomSchedule } from "@/lib/db/schema"
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -34,20 +34,18 @@ const DEFAULT_DAYS: Record<string, ScheduleDay> = {
   sun: { active: false, start: "10:00", end: "15:00" },
 }
 
-const ROLE_LABELS: Record<string, string> = {
-  admin: "Администратор",
-  manager: "Менеджер",
-  client: "Клиент",
-  client_hr: "HR-клиент",
-  candidate: "Кандидат",
-}
-
 const ROLE_COLORS: Record<string, string> = {
+  platform_admin: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
+  platform_manager: "bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800",
   admin: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
-  manager: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800",
-  client: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800",
-  client_hr: "bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-200 dark:border-violet-800",
-  candidate: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800",
+  director: "bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-200 dark:border-violet-800",
+  client: "bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-200 dark:border-violet-800",
+  hr_lead: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+  hr_manager: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+  department_head: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800",
+  observer: "bg-gray-500/10 text-gray-700 dark:text-gray-400 border-gray-200 dark:border-gray-800",
+  tester_hr: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800",
+  employee: "bg-gray-500/10 text-gray-700 dark:text-gray-400 border-gray-200 dark:border-gray-800",
 }
 
 interface UserProfile {
@@ -278,7 +276,10 @@ export default function ProfileSettingsPage() {
   return (
         <>
             <div className="mb-4">
-              <h1 className="text-xl font-semibold text-foreground mb-1">Профиль</h1>
+              <div className="flex items-center gap-2 mb-1">
+                <User className="h-5 w-5 text-violet-600" />
+                <h1 className="text-lg font-semibold text-foreground">Профиль</h1>
+              </div>
               <p className="text-muted-foreground text-sm">Личные данные и настройки безопасности</p>
             </div>
 
@@ -373,7 +374,7 @@ export default function ProfileSettingsPage() {
                             className={`text-xs ${ROLE_COLORS[displayRole] ?? ROLE_COLORS.client}`}
                           >
                             <Shield className="w-3 h-3 mr-1" />
-                            {ROLE_LABELS[displayRole] ?? displayRole}
+                            {(ROLE_LABELS as Record<string, string>)[displayRole] ?? displayRole}
                           </Badge>
                         </div>
                       </div>

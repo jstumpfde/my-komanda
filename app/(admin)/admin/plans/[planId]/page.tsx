@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ArrowLeft, Save, Loader2 } from "lucide-react"
+import { ArrowLeft, Save, Loader2, Package } from "lucide-react"
 import Link from "next/link"
 
 interface ModuleState {
@@ -144,7 +144,10 @@ export default function AdminPlanEditPage() {
                 <Link href="/admin/plans"><ArrowLeft className="w-4 h-4" /></Link>
               </Button>
               <div>
-                <h1 className="text-xl font-semibold text-foreground">Редактировать тариф</h1>
+                <div className="flex items-center gap-2 pt-3 pb-2">
+                  <Package className="h-5 w-5 text-violet-600" />
+                  <h1 className="text-lg font-semibold">Редактировать тариф</h1>
+                </div>
                 <p className="text-sm text-muted-foreground">{plan?.name}</p>
               </div>
             </div>

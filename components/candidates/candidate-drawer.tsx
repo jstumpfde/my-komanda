@@ -502,6 +502,12 @@ export interface CandidateDrawerProps {
    * См. parsePipeline(vacancy.descriptionJson?.pipeline) на стороне родителя.
    */
   vacancyPipeline?: VacancyPipelineV2 | null
+  /** VA4: AI-критерии вакансии — показываются в табе «AI-оценка» как контекст. */
+  vacancyAnketa?: {
+    aiIdealProfile?: string | null
+    aiRequiredHardSkills?: string[] | null
+    aiStopFactors?: string[] | null
+  } | null
 }
 
 // Ищем URL видео-визитки в anketaAnswers. Структура такая же, как
@@ -533,6 +539,7 @@ export function CandidateDrawer({
   onStageChange,
   onToggleFavorite,
   vacancyPipeline,
+  vacancyAnketa,
 }: CandidateDrawerProps) {
   const [candidate, setCandidate] = useState<ApiCandidate | null>(null)
   // Notes хранятся в demo_progress_json у самого кандидата — отдельный
@@ -1310,6 +1317,35 @@ export function CandidateDrawer({
 
               {/* ── AI-оценка ────────────────────────────────────── */}
               <TabsContent value="ai" className="px-6 py-4 pb-28 mt-0 space-y-4">
+                {/* VA4: критерии вакансии — контекст для HR */}
+                {vacancyAnketa && (vacancyAnketa.aiIdealProfile || (vacancyAnketa.aiRequiredHardSkills?.length ?? 0) > 0 || (vacancyAnketa.aiStopFactors?.length ?? 0) > 0) && (
+                  <section className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-2">
+                    <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Критерии оценки</h3>
+                    {vacancyAnketa.aiIdealProfile && (
+                      <p className="text-xs text-foreground leading-relaxed">{vacancyAnketa.aiIdealProfile}</p>
+                    )}
+                    {(vacancyAnketa.aiRequiredHardSkills?.length ?? 0) > 0 && (
+                      <div>
+                        <p className="text-[11px] font-medium text-muted-foreground mb-1">Hard-навыки:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {vacancyAnketa.aiRequiredHardSkills!.map((s, i) => (
+                            <Badge key={i} variant="outline" className="text-[10px] py-0 px-1.5">{s}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {(vacancyAnketa.aiStopFactors?.length ?? 0) > 0 && (
+                      <div>
+                        <p className="text-[11px] font-medium text-muted-foreground mb-1">Стоп-факторы:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {vacancyAnketa.aiStopFactors!.map((s, i) => (
+                            <Badge key={i} variant="outline" className="text-[10px] py-0 px-1.5 bg-red-500/10 text-red-700 border-red-200">{s}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </section>
+                )}
                 {candidate.aiScoreV2Details && (
                   <AiMatchCardV2
                     details={candidate.aiScoreV2Details}

@@ -5,7 +5,7 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import {Plus, Link, Unlink} from "lucide-react"
+import { Plus, Link, Unlink, Globe } from "lucide-react"
 
 const accounts = [
   {
@@ -57,7 +57,10 @@ export default function SocialPage() {
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Социальные сети</h1>
+        <div className="flex items-center gap-2 pt-3 pb-2">
+          <Globe className="h-5 w-5 text-violet-600" />
+          <h1 className="text-lg font-semibold">Социальные сети</h1>
+        </div>
         <Button>
           <Plus className="h-4 w-4 mr-2" />
           Запланировать пост

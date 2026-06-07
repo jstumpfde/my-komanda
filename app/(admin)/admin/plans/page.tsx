@@ -9,7 +9,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
-import { LayoutGrid, Pencil } from "lucide-react"
+import { LayoutGrid, Pencil, Package } from "lucide-react"
 import Link from "next/link"
 
 function formatPrice(kopecks: number) {
@@ -64,12 +64,12 @@ export default async function AdminPlansPage() {
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
-            <div className="flex items-center gap-2 mb-6">
-              <LayoutGrid className="w-5 h-5 text-primary" />
-              <div>
-                <h1 className="text-2xl font-semibold text-foreground">Тарифы</h1>
-                <p className="text-muted-foreground text-sm">Управление тарифными планами и модулями</p>
+            <div className="mb-6">
+              <div className="flex items-center gap-2 pt-3 pb-2">
+                <Package className="h-5 w-5 text-violet-600" />
+                <h1 className="text-lg font-semibold">Тарифы</h1>
               </div>
+              <p className="text-muted-foreground text-sm">Управление тарифными планами и модулями</p>
             </div>
 
             <TableCard>

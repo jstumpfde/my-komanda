@@ -9,6 +9,7 @@ import {
   Eye, Users, DollarSign, Wallet,
   Search, Send, Globe, Mail, Gift,
   Sparkles, CheckCircle2, AlertTriangle, Info,
+  LayoutDashboard,
 } from "lucide-react"
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
@@ -113,7 +114,10 @@ export default function MarketingDashboardPage() {
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             {/* Header */}
             <div className="mb-6">
-              <h1 className="text-2xl font-bold tracking-tight">Маркетинг — Дашборд</h1>
+              <div className="flex items-center gap-2 pt-3 pb-2">
+                <LayoutDashboard className="h-5 w-5 text-violet-600" />
+                <h1 className="text-lg font-semibold">Маркетинг — Дашборд</h1>
+              </div>
               <p className="text-sm text-muted-foreground mt-1">Метрики каналов, лиды и эффективность рекламы</p>
             </div>
 

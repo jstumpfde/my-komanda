@@ -95,8 +95,8 @@ export default function ModuleAccessPage() {
   return (
     <>
       <div className="mb-4">
-        <h1 className="text-xl font-semibold text-foreground flex items-center gap-2 mb-1">
-          <Shield className="w-5 h-5 text-muted-foreground" />
+        <h1 className="text-lg font-semibold text-foreground flex items-center gap-2 mb-1">
+          <Shield className="w-5 h-5 text-violet-600" />
           Доступ к модулям
         </h1>
         <p className="text-sm text-muted-foreground">Настройте роли сотрудников в каждом модуле</p>

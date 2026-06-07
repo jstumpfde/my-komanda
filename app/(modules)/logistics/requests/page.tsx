@@ -109,7 +109,10 @@ export default function LogisticsRequestsPage() {
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">Запросы на расчёт</h1>
+                <div className="flex items-center gap-2 pt-3 pb-2">
+                  <Inbox className="h-5 w-5 text-violet-600" />
+                  <h1 className="text-lg font-semibold">Запросы на расчёт</h1>
+                </div>
                 <p className="text-sm text-muted-foreground mt-1">Входящие запросы и офферы клиентам</p>
               </div>
               <Button className="rounded-xl shadow-sm hover:shadow-md gap-1.5" onClick={() => setModalOpen(true)}>

@@ -7,7 +7,7 @@
 // ТОЛЬКО для оценки UX — к рантайму и кандидатам НЕ подключён.
 
 import { useEffect, useId, useState } from "react"
-import { AlertCircle, Loader2, Save } from "lucide-react"
+import { AlertCircle, ArrowRight, Loader2, Save } from "lucide-react"
 import { toast } from "sonner"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -17,7 +17,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
-import { CourseTab } from "@/components/vacancies/course-tab"
 import { TestTaskSettings } from "@/components/vacancies/test-task-settings"
 
 // ─── Типы ─────────────────────────────────────────────────────────────────────
@@ -227,17 +226,33 @@ export function ContentStepSettings({ vacancyId, onSaved }: Props) {
             </div>
           )}
 
-          {/* Демонстрация — реальный редактор уроков/медиа (самосохраняется) */}
+          {/* Демонстрация — открыть редактор в таб «Контент» (не встраиваем, тесно в Sheet 672px) */}
           {mode === "demo" && (
-            <div className="border-t pt-4">
-              <CourseTab vacancyId={vacancyId} kind="demo" />
+            <div className="border-t pt-4 space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Редактор демонстрации доступен в табе «Контент» вакансии.
+              </p>
+              <Button variant="outline" size="sm" className="gap-1.5" asChild>
+                <a href={`/hr/vacancies/${vacancyId}?tab=content`} target="_blank" rel="noreferrer">
+                  Открыть редактор демо
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </a>
+              </Button>
             </div>
           )}
 
-          {/* Тест (квиз) — реальный редактор квиза (самосохраняется) */}
+          {/* Тест (квиз) — открыть редактор в таб «Контент» (не встраиваем, тесно в Sheet 672px) */}
           {mode === "test" && (
-            <div className="border-t pt-4">
-              <CourseTab vacancyId={vacancyId} kind="test" />
+            <div className="border-t pt-4 space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Редактор квиза доступен в табе «Контент» вакансии.
+              </p>
+              <Button variant="outline" size="sm" className="gap-1.5" asChild>
+                <a href={`/hr/vacancies/${vacancyId}?tab=content`} target="_blank" rel="noreferrer">
+                  Открыть редактор квиза
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </a>
+              </Button>
             </div>
           )}
 

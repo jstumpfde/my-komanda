@@ -71,10 +71,10 @@ export async function POST(
     }
 
     const { token } = await params
-    const body = (await req.json()) as { email?: string; phone?: string; city?: string; experience?: string }
+    const body = (await req.json()) as { email?: string; phone?: string; city?: string; experience?: string; name?: string }
 
     const [candidate] = await db
-      .select({ id: candidates.id })
+      .select({ id: candidates.id, name: candidates.name })
       .from(candidates)
       .where(eq(candidates.token, token))
       .limit(1)
@@ -84,6 +84,10 @@ export async function POST(
     }
 
     const updates: Record<string, unknown> = { updatedAt: new Date() }
+    // Разрешаем задать имя только если оно ещё не установлено (placeholder)
+    if (body.name?.trim() && (!candidate.name || candidate.name === "Новый кандидат")) {
+      updates.name = body.name.trim()
+    }
     if (body.email?.trim()) updates.email = body.email.trim()
     if (body.phone?.trim()) updates.phone = body.phone.trim()
     if (body.city?.trim()) updates.city = body.city.trim()

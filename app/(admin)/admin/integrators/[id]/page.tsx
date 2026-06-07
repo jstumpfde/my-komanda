@@ -147,9 +147,9 @@ export default function IntegratorDetailPage({ params }: { params: Promise<{ id:
                 <ArrowLeft className="w-4 h-4" />
               </Button>
               <div>
-                <div className="flex items-center gap-2">
-                  <Handshake className="w-5 h-5 text-primary" />
-                  <h1 className="text-xl font-semibold text-foreground">
+                <div className="flex items-center gap-2 pt-3 pb-2">
+                  <Users className="h-5 w-5 text-violet-600" />
+                  <h1 className="text-lg font-semibold">
                     {integrator?.companyName || "Интегратор"}
                   </h1>
                   {integrator?.levelName && (

@@ -17,7 +17,7 @@ import { toast } from "sonner"
 import {DEFAULT_TARIFFS, type Tariff, type TariffFeatures} from "@/lib/tariff-types"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import {
-  Plus, Pencil, Trash2, Check, X, Shield, Save, UserPlus, Archive,
+  Plus, Pencil, Trash2, Check, X, Shield, Save, UserPlus, Archive, Package,
 } from "lucide-react"
 
 export default function AdminTariffsPage() {
@@ -135,9 +135,9 @@ export default function AdminTariffsPage() {
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
             <div className="flex items-center justify-between mb-6">
               <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <Shield className="w-5 h-5 text-primary" />
-                  <h1 className="text-2xl font-semibold text-foreground">Управление тарифами</h1>
+                <div className="flex items-center gap-2 pt-3 pb-2">
+                  <Package className="h-5 w-5 text-violet-600" />
+                  <h1 className="text-lg font-semibold">Управление тарифами</h1>
                 </div>
                 <p className="text-muted-foreground text-sm">Только для администраторов</p>
               </div>

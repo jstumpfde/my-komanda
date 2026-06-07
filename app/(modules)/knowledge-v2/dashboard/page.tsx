@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
-  BookOpen, CheckCircle2, Clock, AlertTriangle, FileWarning,
+  BookOpen, BookMarked, CheckCircle2, Clock, AlertTriangle, FileWarning,
   Sparkles, Users, TrendingUp, Plus, Trophy,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -261,7 +261,10 @@ export default function KnowledgeDashboardPage() {
         <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">Дашборд базы знаний</h1>
+              <div className="flex items-center gap-2 pt-3 pb-2">
+                <BookMarked className="h-5 w-5 text-violet-600" />
+                <h1 className="text-lg font-semibold">Дашборд базы знаний</h1>
+              </div>
               <p className="text-sm text-muted-foreground mt-1">Обучение, материалы и активность сотрудников</p>
             </div>
             <Button asChild>

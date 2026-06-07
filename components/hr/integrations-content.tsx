@@ -10,6 +10,7 @@ import {
   Plug, RefreshCw, Loader2, CheckCircle2, XCircle, Clock, Building2, Stethoscope, AlertCircle, Mail, IdCard,
   Plus, ChevronDown,
 } from "lucide-react"
+import { useAuth } from "@/lib/auth"
 
 interface HHStatus {
   connected: boolean
@@ -46,6 +47,8 @@ function formatDate(d: string | null | undefined): string {
 }
 
 export function IntegrationsContent() {
+  const { hasAccess } = useAuth()
+  const isPlatformAdmin = hasAccess(["platform_admin"])
   const [status, setStatus] = useState<HHStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
@@ -302,10 +305,9 @@ export function IntegrationsContent() {
         Управление вакансиями и откликами происходит в карточке каждой вакансии. Здесь — только подключение площадок.
       </p>
 
-      {/* Другие площадки — единый вход «Добавить источник» (#39). Вместо
-          россыпи faded-карточек «Скоро» — одна карточка в стиле hh, по клику
-          раскрывает список площадок в разработке. */}
-      <div className="pt-2">
+      {/* Другие площадки — только платформенному администратору (I5).
+          Обычные клиенты не видят «Скоро»-заглушки. */}
+      {isPlatformAdmin && <div className="pt-2">
         <h2 className="text-base font-semibold text-foreground mb-3">Другие площадки</h2>
         <Card className="rounded-xl border border-border overflow-hidden">
           <button
@@ -344,7 +346,7 @@ export function IntegrationsContent() {
             </div>
           )}
         </Card>
-      </div>
+      </div>}
     </div>
   )
 }
