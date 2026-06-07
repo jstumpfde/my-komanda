@@ -8,7 +8,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { Eye, ChevronDown } from "lucide-react"
+import { Eye, ChevronDown, RotateCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth"
 import type { CardDisplaySettings } from "./card-settings"
@@ -21,6 +21,8 @@ interface ViewSettingsProps {
   onViewModeChange: (mode: ViewMode) => void
   /** Если задан — в меню появляется пункт «Тест» (таблица ответов на отдельной странице). */
   testTableHref?: string
+  /** Сброс к стандартным настройкам колонок */
+  onReset?: () => void
 }
 
 const VIEW_MODES: Array<{ value: ViewMode; label: string }> = [
@@ -45,7 +47,7 @@ const DISPLAY_TOGGLES: Array<{ key: keyof CardDisplaySettings; label: string }> 
   { key: "showActions",       label: "Кнопки действий" },
 ]
 
-export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeChange, testTableHref }: ViewSettingsProps) {
+export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeChange, testTableHref, onReset }: ViewSettingsProps) {
   const { role } = useAuth()
   // Все режимы (Воронка/Канбан/Плитки) — только у администратора платформы.
   // Все остальные (менеджер платформы + клиентские роли) видят только «Список».
@@ -112,7 +114,20 @@ export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeC
             </div>
           </div>
           <div className="border-t pt-3 space-y-3">
-            <h4 className="font-medium text-sm">Настройки отображения</h4>
+            <div className="flex items-center justify-between">
+              <h4 className="font-medium text-sm">Настройки отображения</h4>
+              {onReset && (
+                <button
+                  type="button"
+                  onClick={onReset}
+                  className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                  title="Сбросить к стандартным"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Сбросить
+                </button>
+              )}
+            </div>
             <div className="space-y-2.5">
               {DISPLAY_TOGGLES.map(({ key, label }) => (
                 <div key={key} className="flex items-center justify-between">
