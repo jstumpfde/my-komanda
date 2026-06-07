@@ -16,7 +16,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
-import { Loader2, Search, Send, AlertCircle, CheckCircle2, ChevronDown, Wand2, Sparkles, Plus, X } from "lucide-react"
+import { Loader2, Search, Send, AlertCircle, CheckCircle2, ChevronDown, Wand2, Sparkles, Plus, X, ExternalLink, Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -186,11 +186,25 @@ interface Props {
 // образование в анкете НЕ структурированы — поэтому не маппятся (см. отчёт).
 
 // Формат работы (анкета, рус.) → hh schedule id (SCHEDULE_OPTIONS).
+// Базовые: Офис/Удалёнка/Гибрид — однозначные.
+// Анкетные графики: «5/2» — стандартный полный день; «2/2» / «Сменный» — сменный;
+// «Свободный» / «Гибкий» — гибкий (freelance/flexible).
 const ANKETA_WORKFORMAT_TO_HH_SCHEDULE: Record<string, string> = {
   "Офис": "fullDay",
   "Удалёнка": "remote",
   "Гибрид": "flexible",
+  "5/2": "fullDay",
+  "2/2": "shift",
+  "Сменный": "shift",
+  "Свободный": "flexible",
+  "Гибкий": "flexible",
 }
+
+// Валидные hh education_level коды (whitelist). Значения вне списка пропускаются.
+const HH_EDUCATION_WHITELIST = new Set([
+  "secondary", "special_secondary", "unfinished_higher",
+  "higher", "bachelor", "master", "candidate", "doctor",
+])
 
 // Занятость (анкета, рус.) → hh employment id (EMPLOYMENT_OPTIONS).
 const ANKETA_EMPLOYMENT_TO_HH: Record<string, string> = {
@@ -223,7 +237,7 @@ export function OutboundSourcingTab({
 }: Props) {
   // Критерии (автозаполнены, редактируемы).
   // clauses — многострочный целевой поиск; каждая строка = отдельный hh-клауз.
-  const [clauses, setClauses] = useState([{ text: vacancyKeywords ?? vacancyTitle ?? "", field: "EVERYWHERE" }])
+  const [clauses, setClauses] = useState([{ text: vacancyKeywords ?? vacancyTitle ?? "", field: "TITLE" }])
   const [area, setArea] = useState(vacancyCity ?? "")
   const [experience, setExperience] = useState(mapVacancyExperience(vacancyRequiredExperience))
   const [salaryFrom, setSalaryFrom] = useState(vacancySalaryMin ? String(vacancySalaryMin) : "")
@@ -293,8 +307,10 @@ export function OutboundSourcingTab({
 
     if (mappedSchedule.length) setSchedule([...new Set(mappedSchedule)])
     if (mappedEmployment.length) setEmployment([...new Set(mappedEmployment)])
-    // Образование — hh education_level id; "" в анкете = любое (не трогаем).
-    if (anketaEducation) setEducationLevel(anketaEducation)
+    // Образование — hh education_level id; "" или значение вне whitelist → пропускаем.
+    if (anketaEducation && HH_EDUCATION_WHITELIST.has(anketaEducation)) {
+      setEducationLevel(anketaEducation)
+    }
     // Языки: одиночные UI-селекты заполняем ПЕРВЫМ языком анкеты,
     // а в поиск (criteria.language) уйдут ВСЕ языки из анкеты (extraLanguages).
     const uniqueLanguages = [...new Set(mappedLanguages)]
@@ -864,6 +880,37 @@ export function OutboundSourcingTab({
           </span>
         )}
       </div>
+
+      {/* ─── Инструкция «как подключить» (только при неактивном доступе) ─── */}
+      {status && !access?.active && (
+        <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-3">
+          <div className="flex items-start gap-2.5">
+            <Info className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-foreground">Как подключить исходящий подбор</p>
+              <p className="text-xs text-muted-foreground">
+                Поиск по базе резюме hh.ru требует платного доступа. Подключается через личный кабинет работодателя на hh.ru.
+              </p>
+            </div>
+          </div>
+          <ol className="space-y-1.5 text-xs text-foreground/80 pl-6 list-decimal">
+            <li>Зайдите в личный кабинет работодателя на hh.ru под вашим аккаунтом.</li>
+            <li>Перейдите в раздел <span className="font-medium">«Услуги» → «Доступ к базе резюме»</span> и выберите подходящий тариф.</li>
+            <li>После оплаты обновите страницу — статус сменится на «активен» и кнопка «Пригласить» разблокируется.</li>
+          </ol>
+          <div>
+            <a
+              href="https://hh.ru/price/dbaccess"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              Купить доступ на hh.ru
+            </a>
+          </div>
+        </div>
+      )}
 
       {/* ─── Список найденных ─── */}
       {ranked.length > 0 && (

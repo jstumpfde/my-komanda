@@ -129,8 +129,8 @@ export async function POST(req: Request) {
       continue
     }
 
-    // Приглашение через negotiations.
-    // TODO: формат negotiations требует верификации по docs/employer_negotiations.md.
+    // Приглашение через negotiations (двухшаговый поток: GET applicable + POST).
+    // Формат сверен с docs/employer_negotiations.md и hh OpenAPI (invite-applicant-to-vacancy).
     const inviteRes = await inviteResumeToVacancy(companyId, {
       hhVacancyId: vac.hhVacancyId,
       resumeId,
