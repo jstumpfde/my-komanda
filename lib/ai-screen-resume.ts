@@ -28,6 +28,7 @@ export interface ResumeScreenInput {
     aiRequiredHardSkills?: string[] | null
     aiStopFactors?: string[] | null
     screeningQuestions?: string[] | null
+    aiWeights?: Record<string, string> | null
   }
 }
 
@@ -39,23 +40,48 @@ export interface ResumeScreenResult {
 
 const client = new Anthropic({ baseURL: getClaudeApiUrl() })
 
-const SYSTEM_PROMPT = `Ты — HR-аналитик. Оцени резюме кандидата на соответствие вакансии.
+const WEIGHT_AXIS_LABELS: Record<string, string> = {
+  industry_experience: "Опыт в отрасли / релевантность по годам",
+  specific_skills:     "Соответствие hard-навыков из требований",
+  salary_match:        "Зарплатные ожидания vs позиция",
+  management:          "Опыт управления",
+  education:           "Профильное образование",
+}
+const WEIGHT_LEVEL_LABELS: Record<string, string> = {
+  critical:  "Критично (ключевой критерий — снижает балл сильнее всего)",
+  important: "Важно",
+  nice:      "Желательно",
+}
+const DEFAULT_WEIGHTS_SECTION =
+  `- Соответствие hard-навыков из требований — 40%
+- Опыт в отрасли / релевантность по годам — 30%
+- Зарплатные ожидания vs позиция — 15%
+- Локация (город / готовность к удалёнке / релокации) — 15%`
+
+function buildWeightsSection(aiWeights?: Record<string, string> | null): string {
+  if (!aiWeights || Object.keys(aiWeights).length === 0) return DEFAULT_WEIGHTS_SECTION
+  const lines: string[] = []
+  for (const [key, level] of Object.entries(aiWeights)) {
+    if (level === "irrelevant") continue
+    const label = WEIGHT_AXIS_LABELS[key] ?? key
+    const levelLabel = WEIGHT_LEVEL_LABELS[level]
+    if (!levelLabel) continue
+    lines.push(`- ${label}: ${levelLabel}`)
+  }
+  return lines.length > 0 ? lines.join("\n") : DEFAULT_WEIGHTS_SECTION
+}
+
+const SYSTEM_PROMPT_BASE = `Ты — HR-аналитик. Оцени резюме кандидата на соответствие вакансии.
 
 Верни ТОЛЬКО валидный JSON без markdown-обёртки и без пояснений:
 {"score": <0-100>, "verdict": "match"|"weak"|"stop", "summary": "<1-2 коротких предложения по-русски>"}
 
-Веса критериев:
-- Соответствие hard-навыков из требований — 40%
-- Опыт в отрасли / релевантность по годам — 30%
-- Зарплатные ожидания vs позиция — 15%
-- Локация (город / готовность к удалёнке / релокации) — 15%
-
-Правила:
+ПРАВИЛА ОБЯЗАТЕЛЬНЫЕ:
 - Если сработал ХОТЯ БЫ ОДИН стоп-фактор — score=0, verdict="stop", в summary укажи какой именно.
 - Иначе: verdict="weak" при score 0-39, verdict="match" при score 40-100.
 - Если данных в резюме совсем мало (нет навыков, опыта, города) — score не выше 50, summary: "Недостаточно данных в резюме".
 - Не выдумывай факты, которых нет в резюме.
-- Если заданы «Вопросы для скрининга» — учти их при оценке: чем полнее резюме отвечает на них в пользу кандидата, тем выше score; явное несоответствие снижает score. Это НЕ стоп-факторы (балл не обнуляют).` + AI_SAFETY_PROMPT
+- Если заданы «Вопросы для скрининга» — учти их при оценке: чем полнее резюме отвечает на них в пользу кандидата, тем выше score; явное несоответствие снижает score. Это НЕ стоп-факторы (балл не обнуляют).`
 
 export async function screenResume(input: ResumeScreenInput): Promise<ResumeScreenResult | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY
@@ -81,13 +107,18 @@ export async function screenResume(input: ResumeScreenInput): Promise<ResumeScre
 - Образование: ${r.educationLevel || "—"}
 - Формат работы: ${r.workFormat || "—"}`
 
+  const systemPrompt = `${SYSTEM_PROMPT_BASE}
+
+Веса критериев:
+${buildWeightsSection(v.aiWeights)}` + AI_SAFETY_PROMPT
+
   let raw = ""
   try {
     const response = await client.messages.create({
       model:       "claude-haiku-4-5-20251001",
       max_tokens:  300,
       temperature: 0,
-      system:      SYSTEM_PROMPT,
+      system:      systemPrompt,
       messages:    [{ role: "user", content: userMessage }],
     })
     const content = response.content[0]

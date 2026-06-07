@@ -579,6 +579,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                 aiRequiredHardSkills: (anketa.aiRequiredHardSkills as string[] | undefined) ?? null,
                 aiStopFactors:        (anketa.aiStopFactors as string[] | undefined) ?? null,
                 screeningQuestions:   (anketa.screeningQuestions as string[] | undefined) ?? null,
+                aiWeights:            (anketa.aiWeights as Record<string, string> | undefined) ?? null,
               },
             })
             if (result) {
