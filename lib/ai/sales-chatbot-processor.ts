@@ -170,7 +170,16 @@ export async function processSalesMessage(
       serviceContext: input.serviceContext?.contextText,
     })
 
-    const raw = await callClaudeSonnet(input.incomingText, system, 800)
+    // Включаем историю диалога в промпт генератора, чтобы бот держал контекст
+    // и не здоровался повторно (callClaudeSonnet принимает один текст).
+    const convo = (input.history ?? [])
+      .map((h) => `${h.role === "user" ? "Клиент" : "Ассистент"}: ${h.text}`)
+      .join("\n")
+    const userPrompt = convo
+      ? `Контекст диалога:\n${convo}\n\nНовое сообщение клиента: ${input.incomingText}`
+      : input.incomingText
+
+    const raw = await callClaudeSonnet(userPrompt, system, 800)
     const reply = raw.trim()
 
     // Пустой ответ — не рискуем отправлять, эскалируем
@@ -185,19 +194,49 @@ export async function processSalesMessage(
     }
 
     // ── Шаг 8: Post-filter ответа (Haiku) ───────────────────────────────────
-    const post = await validateSalesReply(reply, {
+    const postCtx = {
       serviceName: input.serviceContext?.serviceName ?? null,
       priceRange: input.serviceContext?.priceRange ?? null,
-    })
+    }
+    let finalReply = reply
+    let post = await validateSalesReply(finalReply, postCtx)
 
+    // Post-filter (Haiku) вероятностный и склонен ЛОЖНО блокировать легальный ответ
+    // (цена/слот/мастер из данных) как unauthorized_promise. Политика:
+    //   1) при не-clean — ОДНА корректирующая перегенерация с явным указанием правил;
+    //      используем усиленную версию как финальную.
+    //   2) ЖЁСТКО блокируем (эскалация, бот молчит) только серьёзное и редкое:
+    //      system_leak / role_break.
+    //   3) unauthorized_promise / offtopic после ретрая НЕ глушим — генератор (Sonnet)
+    //      и так держит guardrails; глушить ложняки хуже для клиента. Логируем.
     if (post.category !== "clean") {
-      // Ответ нарушает правила — эскалируем, не отправляем клиенту
-      return {
-        handled: true,
-        action: "escalated",
-        escalationReason: `post:${post.category}`,
-        category: intent.category,
-        confidence: intent.confidence,
+      const fixSystem =
+        system +
+        `\n\nВАЖНО: предыдущий черновик ответа был отклонён фильтром (причина: ${post.category}). ` +
+        `Перепиши ответ СТРОГО по правилам: не обещай скидок/акций/гарантий и НЕ подтверждай запись окончательно ` +
+        `(только «предварительно записываю, администратор подтвердит»); называй цены/мастеров/время ТОЛЬКО из данных контекста; ` +
+        `держись темы салона и записи.`
+      const retry = (await callClaudeSonnet(userPrompt, fixSystem, 800)).trim()
+      if (retry) {
+        finalReply = retry // усиленная правилами версия — её и отправим
+        post = await validateSalesReply(retry, postCtx)
+      }
+
+      if (post.category === "system_leak" || post.category === "role_break") {
+        // Серьёзное нарушение — не отправляем, передаём человеку.
+        return {
+          handled: true,
+          action: "escalated",
+          escalationReason: `post:${post.category}`,
+          category: intent.category,
+          confidence: intent.confidence,
+        }
+      }
+
+      if (post.category !== "clean") {
+        console.warn(
+          `[sales-chatbot-processor] post:${post.category} после ретрая — отправляю усиленный ответ (не глушу ложняк)`,
+        )
       }
     }
 
@@ -224,7 +263,7 @@ export async function processSalesMessage(
     return {
       handled: true,
       action: "sent",
-      reply,
+      reply: finalReply,
       category: intent.category,
       confidence: intent.confidence,
       preMessage,
