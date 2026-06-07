@@ -192,6 +192,14 @@ export interface CompanyWorkSchedule {
   }[]
 }
 
+// ── NancyVoiceSettings (drizzle/0182) ──
+export interface NancyVoiceSettings {
+  voice?:      string  // alena | filipp | oksana | jane | zahar | ermil
+  emotion?:    string  // good | neutral | evil
+  speed?:      number  // 0.8 .. 1.5
+  ttsEnabled?: boolean // false = только браузерный fallback
+}
+
 // Индивидуальный рабочий график сотрудника (users.custom_schedule).
 // Настраивается самим сотрудником в Профиле.
 export interface UserCustomSchedule {
@@ -309,6 +317,8 @@ export const companies = pgTable("companies", {
   // companies.* — телефон/email могут отличаться от основных реквизитов.
   // Подставляются в генератор политики (раздел «куда обращаться»). Миграция 0177.
   legalContactJson:         jsonb("legal_contact_json").$type<CompanyLegalContact>().notNull().default({}),
+  // Настройки голоса ассистента Нэнси (TTS Yandex SpeechKit). Миграция 0182.
+  nancyVoiceJson:           jsonb("nancy_voice_json").$type<NancyVoiceSettings>().notNull().default({}),
   // Корзина компаний (миграция 0148): NULL — активна; не-NULL — в корзине,
   // cron trash-cleanup удалит навсегда через trash_retention_days. Признак
   // корзины — deleted_at (как у вакансий), отдельного статуса не вводим.
