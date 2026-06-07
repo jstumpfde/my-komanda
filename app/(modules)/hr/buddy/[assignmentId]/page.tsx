@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -57,9 +57,24 @@ const MEETING_STATUS: Record<string, { label: string; color: string }> = {
   rescheduled: { label: "Перенесена",     color: "text-amber-600" },
 }
 
+type BuddyTabKey = "progress" | "tasks" | "meetings" | "feedback"
+const VALID_BUDDY_TABS: BuddyTabKey[] = ["progress", "tasks", "meetings", "feedback"]
+
 export default function BuddyAssignmentPage() {
   const { assignmentId } = useParams<{ assignmentId: string }>()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const [activeTab, setActiveTab] = useState<BuddyTabKey>(() => {
+    const t = searchParams?.get("tab") as BuddyTabKey | null
+    return t && VALID_BUDDY_TABS.includes(t) ? t : "progress"
+  })
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search)
+    if (sp.get("tab") === activeTab) return
+    sp.set("tab", activeTab)
+    router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
   const [data, setData] = useState<Assignment | null>(null)
   const [loading, setLoading] = useState(true)
   const [taskOpen, setTaskOpen] = useState(false)
@@ -171,7 +186,7 @@ export default function BuddyAssignmentPage() {
             </div>
 
             {/* Tabs */}
-            <Tabs defaultValue="progress">
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as BuddyTabKey)}>
               <TabsList className="mb-4">
                 <TabsTrigger value="progress">Прогресс</TabsTrigger>
                 <TabsTrigger value="tasks">Задачи ({data.tasks.length})</TabsTrigger>
