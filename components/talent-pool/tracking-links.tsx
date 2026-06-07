@@ -9,7 +9,6 @@ import { toast } from "sonner"
 import { Plus, Copy, Trash2, Link } from "lucide-react"
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 
-// ─── Mock data ─────────────────────────────────────────
 interface TrackingLink {
   id: string
   name: string
@@ -19,32 +18,13 @@ interface TrackingLink {
   conversion: string
 }
 
-const MOCK_LINKS: Record<string, TrackingLink[]> = {
-  Telegram: [
-    { id: "tl1", name: "DevOps Moscow", url: "company24.pro/apply?src=telegram&place=devops-moscow", clicks: 145, applications: 12, conversion: "8.3%" },
-    { id: "tl2", name: "HR Network", url: "company24.pro/apply?src=telegram&place=hr-network", clicks: 89, applications: 5, conversion: "5.6%" },
-  ],
-  VK: [
-    { id: "tl3", name: "Работа в IT", url: "company24.pro/apply?src=vk&place=rabota-it", clicks: 234, applications: 18, conversion: "7.7%" },
-  ],
-  "Сайт компании": [
-    { id: "tl4", name: "Карьерная страница", url: "company24.pro/apply?src=website&place=career", clicks: 567, applications: 34, conversion: "6.0%" },
-  ],
-  LinkedIn: [
-    { id: "tl5", name: "Backend", url: "company24.pro/apply?src=linkedin&place=backend", clicks: 312, applications: 22, conversion: "7.1%" },
-  ],
-  "QR-код": [
-    { id: "tl6", name: "HRTech конференция", url: "company24.pro/apply?src=qr&place=hrtech", clicks: 78, applications: 9, conversion: "11.5%" },
-  ],
-}
-
 interface TrackingLinksProps {
   sourceName: string
   sourceId: string
 }
 
 export function TrackingLinks({ sourceName, sourceId }: TrackingLinksProps) {
-  const [links, setLinks] = useState<TrackingLink[]>(MOCK_LINKS[sourceName] || [])
+  const [links, setLinks] = useState<TrackingLink[]>([])
   const [createMode, setCreateMode] = useState(false)
   const [newName, setNewName] = useState("")
   const [newTarget, setNewTarget] = useState("pool")

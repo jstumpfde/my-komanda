@@ -88,35 +88,10 @@ function scoreToStatus(score: number): TalentStatus {
 
 const CHANNEL_LABELS: Record<string, string> = { tg: "Telegram", whatsapp: "WhatsApp", email: "Email" }
 
-// ─── Test data ──────────────────────────────────────────
-const INITIAL_CANDIDATES: TalentCandidate[] = [
-  { id: "t1", name: "Андрей Фёдоров", position: "Менеджер по продажам", company: "СберРешения", source: "Реферал", referralName: "Анна Иванова", status: "warming", lastContact: new Date(Date.now() - 14 * 86400000), email: "andrey@mail.ru", phone: "+7 903 111-22-33", telegram: "@andrey_f", comment: "Опыт 5 лет B2B", score: 45, scoreBreakdown: { experience: 60, skills: 45, culture: 35, motivation: 40, availability: 45 } },
-  { id: "t2", name: "Ксения Воробьёва", position: "HR-менеджер", company: "Яндекс", source: "LinkedIn", status: "hot", lastContact: new Date(Date.now() - 3 * 86400000), email: "ks@yandex.ru", phone: "+7 916 444-55-66", telegram: "@ks_hr", comment: "Ищет новые проекты", score: 72, scoreBreakdown: { experience: 80, skills: 75, culture: 70, motivation: 65, availability: 70 } },
-  { id: "t3", name: "Максим Егоров", position: "DevOps инженер", company: "Ozon", source: "Конференция", status: "ideal", lastContact: new Date(Date.now() - 1 * 86400000), email: "max@ozon.ru", phone: "+7 925 777-88-99", telegram: "@maxdev", comment: "Заинтересован в оффере", score: 88, scoreBreakdown: { experience: 92, skills: 90, culture: 85, motivation: 88, availability: 85 } },
-  { id: "t4", name: "Ольга Петрова", position: "Бухгалтер", company: "1С-Рарус", source: "Реферал", referralName: "Дмитрий Козлов", status: "cold", lastContact: new Date(Date.now() - 30 * 86400000), email: "olga@1c.ru", phone: "+7 999 000-11-22", telegram: "", comment: "Не рассматривает смену работы", score: 23, scoreBreakdown: { experience: 30, skills: 20, culture: 25, motivation: 15, availability: 25 } },
-  { id: "t5", name: "Роман Кузнецов", position: "Product Manager", company: "VK", source: "hh.ru", status: "warming", lastContact: new Date(Date.now() - 7 * 86400000), email: "roman@vk.com", phone: "+7 912 333-44-55", telegram: "@roman_pm", comment: "", score: 55, scoreBreakdown: { experience: 65, skills: 55, culture: 50, motivation: 50, availability: 55 } },
-]
-
-const INITIAL_CAMPAIGNS: Campaign[] = [
-  { id: "c1", name: "Продажники Q2 2026", candidates: 34, currentStep: 2, totalSteps: 5, openRate: 72, status: "active", steps: [
-    { id: "s1", day: 0, text: "Здравствуйте! Мы ищем сильного менеджера по продажам. Хотели бы рассказать о позиции?", channel: "tg" },
-    { id: "s2", day: 3, text: "Подготовили обзор позиции с цифрами. Взгляните?", channel: "tg" },
-    { id: "s3", day: 7, text: "Статья: как растут менеджеры в нашей команде →", channel: "email" },
-    { id: "s4", day: 30, text: "Напоминаю о вакансии — позиция ещё открыта", channel: "tg" },
-    { id: "s5", day: 90, text: "Последнее сообщение: скоро закрываем позицию", channel: "tg" },
-  ]},
-  { id: "c2", name: "IT-специалисты — прогрев", candidates: 18, currentStep: 1, totalSteps: 4, openRate: 65, status: "paused", steps: [
-    { id: "s6", day: 0, text: "Привет! Видели ваш профиль, впечатляет стек. Хотели бы пообщаться", channel: "tg" },
-    { id: "s7", day: 5, text: "Наш стек: React + Go + K8s. Вот что делаем →", channel: "email" },
-    { id: "s8", day: 14, text: "Открылась позиция Senior — может заинтересовать?", channel: "tg" },
-    { id: "s9", day: 60, text: "Как дела? Появились новые позиции в команде", channel: "tg" },
-  ]},
-]
-
 // ─── Component ──────────────────────────────────────────
 export default function TalentPoolPage() {
   const [candidates, setCandidates] = useState<TalentCandidate[]>([])
-  const [campaigns, setCampaigns] = useState(INITIAL_CAMPAIGNS)
+  const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [addOpen, setAddOpen] = useState(false)
   const [campaignOpen, setCampaignOpen] = useState(false)
   const [search, setSearch] = useState("")
