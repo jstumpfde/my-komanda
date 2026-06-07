@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, Suspense } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Plus, Eye, Pencil, Trash2, Loader2, Copy, BookOpen, FileText, Search, Puzzle, ListChecks, RotateCcw, Trash, AlertTriangle, MoreHorizontal, Globe, Lock } from "lucide-react"
@@ -407,7 +407,7 @@ type TabKey = "questionnaires" | "demos" | "blocks" | "tests" | "trash"
 
 const VALID_LIBRARY_TABS: TabKey[] = ["questionnaires", "demos", "blocks", "tests", "trash"]
 
-export default function LibraryPage() {
+function LibraryContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [templates, setTemplates] = useState<TemplateData[]>([])
@@ -871,5 +871,13 @@ export default function LibraryPage() {
         onDeleted={() => { setPermanentTarget(null); fetchTrashed() }}
       />
     </SidebarProvider>
+  )
+}
+
+export default function LibraryPage() {
+  return (
+    <Suspense fallback={null}>
+      <LibraryContent />
+    </Suspense>
   )
 }

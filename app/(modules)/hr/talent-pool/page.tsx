@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
@@ -95,7 +95,7 @@ const CHANNEL_LABELS: Record<string, string> = { tg: "Telegram", whatsapp: "What
 type TalentTabKey = "base" | "campaigns" | "referrals" | "analytics" | "forms"
 const VALID_TALENT_TABS: TalentTabKey[] = ["base", "campaigns", "referrals", "analytics", "forms"]
 
-export default function TalentPoolPage() {
+function TalentPoolContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState<TalentTabKey>(() => {
@@ -582,5 +582,13 @@ export default function TalentPoolPage() {
       </Dialog>
 
     </SidebarProvider>
+  )
+}
+
+export default function TalentPoolPage() {
+  return (
+    <Suspense fallback={null}>
+      <TalentPoolContent />
+    </Suspense>
   )
 }

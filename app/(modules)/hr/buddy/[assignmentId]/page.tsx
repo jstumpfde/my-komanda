@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, Suspense } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
@@ -60,7 +60,7 @@ const MEETING_STATUS: Record<string, { label: string; color: string }> = {
 type BuddyTabKey = "progress" | "tasks" | "meetings" | "feedback"
 const VALID_BUDDY_TABS: BuddyTabKey[] = ["progress", "tasks", "meetings", "feedback"]
 
-export default function BuddyAssignmentPage() {
+function BuddyAssignmentContent() {
   const { assignmentId } = useParams<{ assignmentId: string }>()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -435,5 +435,13 @@ export default function BuddyAssignmentPage() {
         </DialogContent>
       </Dialog>
     </SidebarProvider>
+  )
+}
+
+export default function BuddyAssignmentPage() {
+  return (
+    <Suspense fallback={null}>
+      <BuddyAssignmentContent />
+    </Suspense>
   )
 }

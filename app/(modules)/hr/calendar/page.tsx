@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
   addWeeks,
@@ -76,7 +76,7 @@ const FILTER_OPTIONS: { value: FilterMode; label: string }[] = [
 const VALID_VIEW_MODES: ViewMode[] = ["week", "day", "month"]
 const VALID_FILTER_MODES: FilterMode[] = ["all", "mine", "hr"]
 
-export default function CalendarPage() {
+function CalendarContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
@@ -704,5 +704,13 @@ export default function CalendarPage() {
         </main>
       </SidebarInset>
     </SidebarProvider>
+  )
+}
+
+export default function CalendarPage() {
+  return (
+    <Suspense fallback={null}>
+      <CalendarContent />
+    </Suspense>
   )
 }
