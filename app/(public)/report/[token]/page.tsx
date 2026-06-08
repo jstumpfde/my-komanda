@@ -22,19 +22,28 @@ export default function PublicReportPage() {
   const token = params?.token
   const tv = search.get("tv") === "1"
 
-  const [period, setPeriod] = useState<Period>(parsePeriod(search.get("period")))
+  const initFrom = search.get("from")
+  const initTo = search.get("to")
+  const [period, setPeriod] = useState<Period>(initFrom ? "custom" : parsePeriod(search.get("period")))
+  const [customFrom, setCustomFrom] = useState<Date | null>(initFrom ? new Date(initFrom) : null)
+  const [customTo, setCustomTo] = useState<Date | null>(initTo ? new Date(initTo) : null)
   const [vacancyId, setVacancyId] = useState<string>(search.get("vacancyId") || "all")
   const [data, setData] = useState<ReportData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notFound, setNotFound] = useState(false)
 
-  const loadData = useCallback((p: Period, v: string, silent = false) => {
+  const loadData = useCallback((p: Period, v: string, cf: Date | null, ct: Date | null, silent = false) => {
     if (!token) return
     if (!silent) setLoading(true)
     setError(null)
     const qs = new URLSearchParams()
-    if (p !== "all") qs.set("period", p)
+    if (p === "custom" && cf) {
+      qs.set("from", cf.toISOString())
+      if (ct) qs.set("to", ct.toISOString())
+    } else if (p !== "all") {
+      qs.set("period", p)
+    }
     if (v !== "all") qs.set("vacancyId", v)
     const s = qs.toString()
     fetch(`/api/public/report/${token}${s ? `?${s}` : ""}`)
@@ -47,13 +56,19 @@ export default function PublicReportPage() {
       .finally(() => setLoading(false))
   }, [token])
 
-  useEffect(() => { loadData(period, vacancyId) }, [period, vacancyId, loadData])
+  useEffect(() => { loadData(period, vacancyId, customFrom, customTo) }, [period, vacancyId, customFrom, customTo, loadData])
 
   // Авто-обновление (тихое) — особенно важно для TV.
   useEffect(() => {
-    const id = setInterval(() => loadData(period, vacancyId, true), REFRESH_MS)
+    const id = setInterval(() => loadData(period, vacancyId, customFrom, customTo, true), REFRESH_MS)
     return () => clearInterval(id)
-  }, [period, vacancyId, loadData])
+  }, [period, vacancyId, customFrom, customTo, loadData])
+
+  const handlePeriodChange = (p: Period) => { setCustomFrom(null); setCustomTo(null); setPeriod(p) }
+  const handleRangeChange = (from: Date | null, to: Date | null) => {
+    if (!from) { setCustomFrom(null); setCustomTo(null); setPeriod("all"); return }
+    setCustomFrom(from); setCustomTo(to); setPeriod("custom")
+  }
 
   if (notFound) {
     return (
@@ -85,7 +100,10 @@ export default function PublicReportPage() {
           loading={loading}
           error={error}
           period={period}
-          onPeriodChange={setPeriod}
+          onPeriodChange={handlePeriodChange}
+          customFrom={customFrom}
+          customTo={customTo}
+          onRangeChange={handleRangeChange}
           vacancyId={vacancyId}
           onVacancyChange={setVacancyId}
           variant={tv ? "tv" : "public"}

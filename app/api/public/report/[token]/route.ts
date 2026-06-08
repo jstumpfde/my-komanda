@@ -21,8 +21,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ token: string }
     const url = new URL(req.url)
     const period = parsePeriod(url.searchParams.get("period"))
     const vacancyId = url.searchParams.get("vacancyId")
+    const fromRaw = url.searchParams.get("from")
+    const toRaw = url.searchParams.get("to")
+    const from = fromRaw ? new Date(fromRaw) : null
+    const to = toRaw ? new Date(toRaw) : null
 
-    const data = await buildReport(share.companyId, { period, vacancyId })
+    const data = await buildReport(share.companyId, { period, vacancyId, from, to })
     return apiSuccess(data)
   } catch (err) {
     if (err instanceof Response) return err

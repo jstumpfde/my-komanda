@@ -9,8 +9,12 @@ export async function GET(request: Request) {
     const url = new URL(request.url)
     const period = parsePeriod(url.searchParams.get("period"))
     const vacancyId = url.searchParams.get("vacancyId")
+    const fromRaw = url.searchParams.get("from")
+    const toRaw = url.searchParams.get("to")
+    const from = fromRaw ? new Date(fromRaw) : null
+    const to = toRaw ? new Date(toRaw) : null
 
-    const data = await buildReport(user.companyId, { period, vacancyId })
+    const data = await buildReport(user.companyId, { period, vacancyId, from, to })
     return apiSuccess(data)
   } catch (err) {
     if (err instanceof Response) throw err

@@ -10,42 +10,61 @@ import { REJECTION_REASONS, REJECTION_INITIATORS, autoReasonKey, autoReasonLabel
 import { PLATFORM_STAGES, ALL_STAGE_SLUGS } from "@/lib/stages"
 import { CONTACT_CHANNELS, CONTACT_OUTCOMES } from "@/lib/hr/contacts"
 
-export type ReportPeriod = "today" | "week" | "month" | "quarter" | "all"
+export type ReportPeriod =
+  | "today" | "yesterday"
+  | "this_week" | "last_week"
+  | "this_month" | "last_month"
+  | "all" | "custom"
+
+const PERIOD_VALUES: ReportPeriod[] = [
+  "today", "yesterday", "this_week", "last_week", "this_month", "last_month", "all", "custom",
+]
 
 export function parsePeriod(raw: string | null): ReportPeriod {
-  if (raw === "today" || raw === "week" || raw === "month" || raw === "quarter") return raw
-  return "all"
+  return (PERIOD_VALUES as string[]).includes(raw ?? "") ? (raw as ReportPeriod) : "all"
+}
+
+function startOfDay(d: Date): Date { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
+function endOfDay(d: Date): Date { const x = new Date(d); x.setHours(23, 59, 59, 999); return x }
+
+// Понедельник как начало недели (ISO). 0=вс → откатываем на 6 дней.
+function startOfWeek(d: Date): Date {
+  const x = startOfDay(d)
+  const day = x.getDay()
+  const diff = (day === 0 ? 6 : day - 1)
+  x.setDate(x.getDate() - diff)
+  return x
 }
 
 function periodRange(period: ReportPeriod): { from: Date | null; to: Date | null } {
-  if (period === "all") return { from: null, to: null }
+  if (period === "all" || period === "custom") return { from: null, to: null }
 
   const now = new Date()
-  const to = new Date(now)
-  to.setHours(23, 59, 59, 999)
 
-  if (period === "today") {
-    const from = new Date(now)
-    from.setHours(0, 0, 0, 0)
-    return { from, to }
+  switch (period) {
+    case "today":
+      return { from: startOfDay(now), to: endOfDay(now) }
+    case "yesterday": {
+      const y = new Date(now); y.setDate(y.getDate() - 1)
+      return { from: startOfDay(y), to: endOfDay(y) }
+    }
+    case "this_week":
+      return { from: startOfWeek(now), to: endOfDay(now) }
+    case "last_week": {
+      const start = startOfWeek(now); start.setDate(start.getDate() - 7)
+      const end = new Date(start); end.setDate(end.getDate() + 6)
+      return { from: start, to: endOfDay(end) }
+    }
+    case "this_month":
+      return { from: startOfDay(new Date(now.getFullYear(), now.getMonth(), 1)), to: endOfDay(now) }
+    case "last_month": {
+      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      const end = new Date(now.getFullYear(), now.getMonth(), 0) // последний день пред. месяца
+      return { from: startOfDay(start), to: endOfDay(end) }
+    }
+    default:
+      return { from: null, to: null }
   }
-  if (period === "week") {
-    const from = new Date(now)
-    from.setDate(from.getDate() - 6)
-    from.setHours(0, 0, 0, 0)
-    return { from, to }
-  }
-  if (period === "month") {
-    const from = new Date(now)
-    from.setDate(from.getDate() - 29)
-    from.setHours(0, 0, 0, 0)
-    return { from, to }
-  }
-  // quarter
-  const from = new Date(now)
-  from.setDate(from.getDate() - 89)
-  from.setHours(0, 0, 0, 0)
-  return { from, to }
 }
 
 function dateFilter<T extends { createdAt: unknown }>(
@@ -62,12 +81,20 @@ function dateFilter<T extends { createdAt: unknown }>(
 export interface BuildReportOptions {
   period?: ReportPeriod
   vacancyId?: string | null
+  /** Кастомный диапазон (с календаря) — перекрывает пресет периода. */
+  from?: Date | null
+  to?: Date | null
 }
 
 export async function buildReport(companyId: string, opts: BuildReportOptions = {}) {
-  const period = opts.period ?? "all"
   const vacancyId = opts.vacancyId && opts.vacancyId !== "all" ? opts.vacancyId : null
-  const { from, to } = periodRange(period)
+
+  // Кастомный диапазон с календаря перекрывает пресет.
+  const hasCustom = !!(opts.from || opts.to)
+  const period: ReportPeriod = hasCustom ? "custom" : (opts.period ?? "all")
+  const { from, to } = hasCustom
+    ? { from: opts.from ? startOfDay(opts.from) : null, to: opts.to ? endOfDay(opts.to) : null }
+    : periodRange(period)
 
   const candidateDateFilters = dateFilter(candidates, from, to)
   const eventDateFilters = dateFilter(calendarEvents, from, to)
@@ -403,6 +430,7 @@ export async function buildReport(companyId: string, opts: BuildReportOptions = 
 
   return {
     period,
+    range: { from: from ? from.toISOString() : null, to: to ? to.toISOString() : null },
     vacancyId: vacancyId ?? "all",
     vacancyOptions: vacancyOptionRows.map(v => ({ id: v.id, title: v.title })),
     kpi: {

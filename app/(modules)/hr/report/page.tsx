@@ -13,7 +13,9 @@ import { ReportView, type ReportData, type Period } from "@/components/hr/report
 
 // ─── Кнопка «Поделиться» ──────────────────────────────────────────────────────
 
-function ShareButton({ period, vacancyId }: { period: Period; vacancyId: string }) {
+function ShareButton({ period, vacancyId, from, to }: {
+  period: Period; vacancyId: string; from: string | null; to: string | null
+}) {
   const [open, setOpen] = useState(false)
   const [token, setToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -32,7 +34,12 @@ function ShareButton({ period, vacancyId }: { period: Period; vacancyId: string 
   const buildUrl = (tv: boolean) => {
     if (!token) return ""
     const params = new URLSearchParams()
-    if (period !== "all") params.set("period", period)
+    if (period === "custom" && from) {
+      params.set("from", from)
+      if (to) params.set("to", to)
+    } else if (period !== "all") {
+      params.set("period", period)
+    }
     if (vacancyId !== "all") params.set("vacancyId", vacancyId)
     if (tv) params.set("tv", "1")
     const qs = params.toString()
@@ -149,17 +156,24 @@ function ShareButton({ period, vacancyId }: { period: Period; vacancyId: string 
 
 function ReportContent() {
   const [period, setPeriod] = useState<Period>("all")
+  const [customFrom, setCustomFrom] = useState<Date | null>(null)
+  const [customTo, setCustomTo] = useState<Date | null>(null)
   const [vacancyId, setVacancyId] = useState<string>("all")
   const [data, setData] = useState<ReportData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const loadData = useCallback((p: Period, v: string) => {
+  const loadData = useCallback((p: Period, v: string, cf: Date | null, ct: Date | null) => {
     let cancelled = false
     setLoading(true)
     setError(null)
     const params = new URLSearchParams()
-    if (p !== "all") params.set("period", p)
+    if (p === "custom" && cf) {
+      params.set("from", cf.toISOString())
+      if (ct) params.set("to", ct.toISOString())
+    } else if (p !== "all") {
+      params.set("period", p)
+    }
     if (v !== "all") params.set("vacancyId", v)
     const qs = params.toString()
     fetch(`/api/modules/hr/report${qs ? `?${qs}` : ""}`)
@@ -171,9 +185,23 @@ function ReportContent() {
   }, [])
 
   useEffect(() => {
-    const cancel = loadData(period, vacancyId)
+    const cancel = loadData(period, vacancyId, customFrom, customTo)
     return cancel
-  }, [period, vacancyId, loadData])
+  }, [period, vacancyId, customFrom, customTo, loadData])
+
+  // Пресет периода — сбрасывает кастомный диапазон.
+  const handlePeriodChange = (p: Period) => {
+    setCustomFrom(null)
+    setCustomTo(null)
+    setPeriod(p)
+  }
+  // Применение диапазона с календаря (null,null = сброс на «За всё время»).
+  const handleRangeChange = (from: Date | null, to: Date | null) => {
+    if (!from) { setCustomFrom(null); setCustomTo(null); setPeriod("all"); return }
+    setCustomFrom(from)
+    setCustomTo(to)
+    setPeriod("custom")
+  }
 
   return (
     <SidebarProvider defaultOpen={true}>
@@ -187,11 +215,21 @@ function ReportContent() {
               loading={loading}
               error={error}
               period={period}
-              onPeriodChange={setPeriod}
+              onPeriodChange={handlePeriodChange}
+              customFrom={customFrom}
+              customTo={customTo}
+              onRangeChange={handleRangeChange}
               vacancyId={vacancyId}
               onVacancyChange={setVacancyId}
               variant="app"
-              shareSlot={<ShareButton period={period} vacancyId={vacancyId} />}
+              shareSlot={
+                <ShareButton
+                  period={period}
+                  vacancyId={vacancyId}
+                  from={customFrom ? customFrom.toISOString() : null}
+                  to={customTo ? customTo.toISOString() : null}
+                />
+              }
             />
           </div>
         </main>

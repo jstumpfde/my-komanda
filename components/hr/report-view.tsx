@@ -5,25 +5,42 @@
 // variant: "app" — внутри платформы; "public" — публичная ссылка;
 // "tv" — крупный режим для телевизора (увеличенные шрифты, без хедера).
 
+import { useState } from "react"
+import type { DateRange } from "react-day-picker"
 import {
-  Briefcase, Users, Calendar, CheckCircle2, XCircle,
+  Briefcase, Users, CalendarDays, CheckCircle2, XCircle,
   TrendingUp, BarChart3, Phone,
 } from "lucide-react"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
+import { Button } from "@/components/ui/button"
 
 // ─── Период ──────────────────────────────────────────────────────────────────
 
-export type Period = "today" | "week" | "month" | "quarter" | "all"
+export type Period =
+  | "today" | "yesterday"
+  | "this_week" | "last_week"
+  | "this_month" | "last_month"
+  | "all" | "custom"
 
 export const PERIOD_OPTIONS: { id: Period; label: string }[] = [
-  { id: "today",   label: "Сегодня" },
-  { id: "week",    label: "Неделя" },
-  { id: "month",   label: "Месяц" },
-  { id: "quarter", label: "Квартал" },
-  { id: "all",     label: "За всё время" },
+  { id: "today",      label: "Сегодня" },
+  { id: "yesterday",  label: "Вчера" },
+  { id: "this_week",  label: "Эта неделя" },
+  { id: "last_week",  label: "Пр. неделя" },
+  { id: "this_month", label: "Этот месяц" },
+  { id: "last_month", label: "Пр. месяц" },
+  { id: "all",        label: "За всё время" },
 ]
+
+function fmtDate(iso: string | null): string {
+  if (!iso) return ""
+  const d = new Date(iso)
+  return d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" })
+}
 
 // ─── Типы ───────────────────────────────────────────────────────────────────
 
@@ -38,6 +55,7 @@ export interface VacancyOption { id: string; title: string }
 
 export interface ReportData {
   period: Period
+  range: { from: string | null; to: string | null }
   vacancyId: string
   vacancyOptions: VacancyOption[]
   kpi: {
@@ -116,6 +134,65 @@ function PeriodFilter({ value, onChange, tv }: { value: Period; onChange: (p: Pe
         </button>
       ))}
     </div>
+  )
+}
+
+// ─── Календарь (диапазон дат) ────────────────────────────────────────────────
+
+function CalendarRangeFilter({ active, from, to, onApply, tv }: {
+  active: boolean
+  from: Date | null
+  to: Date | null
+  onApply: (from: Date | null, to: Date | null) => void
+  tv?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [range, setRange] = useState<DateRange | undefined>(
+    from ? { from, to: to ?? undefined } : undefined
+  )
+
+  const label = active && from
+    ? `${from.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}${to ? ` — ${to.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}` : ""}`
+    : "Календарь"
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className={[
+            "inline-flex items-center gap-1.5 rounded-full font-medium transition-colors border",
+            tv ? "px-4 py-2 text-base" : "px-3 py-1 text-sm",
+            active
+              ? "bg-violet-600 text-white border-violet-600 shadow-sm"
+              : "bg-muted text-muted-foreground border-transparent hover:bg-muted/80",
+          ].join(" ")}
+        >
+          <CalendarDays className={tv ? "w-4 h-4" : "w-3.5 h-3.5"} />
+          {label}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-auto p-0">
+        <Calendar
+          mode="range"
+          selected={range}
+          onSelect={setRange}
+          numberOfMonths={1}
+          defaultMonth={from ?? undefined}
+        />
+        <div className="flex items-center justify-between gap-2 border-t p-2">
+          <Button variant="ghost" size="sm" onClick={() => { setRange(undefined); onApply(null, null); setOpen(false) }}>
+            Сбросить
+          </Button>
+          <Button
+            size="sm"
+            disabled={!range?.from}
+            onClick={() => { onApply(range?.from ?? null, range?.to ?? range?.from ?? null); setOpen(false) }}
+          >
+            Применить
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -411,6 +488,11 @@ export interface ReportViewProps {
   error?: string | null
   period: Period
   onPeriodChange: (p: Period) => void
+  /** Текущий кастомный диапазон (когда выбран календарь). */
+  customFrom?: Date | null
+  customTo?: Date | null
+  /** Применить кастомный диапазон с календаря (null,null = сбросить). */
+  onRangeChange?: (from: Date | null, to: Date | null) => void
   vacancyId: string
   onVacancyChange: (v: string) => void
   variant?: "app" | "public" | "tv"
@@ -420,17 +502,22 @@ export interface ReportViewProps {
 
 export function ReportView({
   data, loading, error, period, onPeriodChange,
+  customFrom = null, customTo = null, onRangeChange,
   vacancyId, onVacancyChange, variant = "app", shareSlot,
 }: ReportViewProps) {
   const tv = variant === "tv"
   const kpi = data?.kpi
-  const periodLabel = PERIOD_OPTIONS.find(o => o.id === period)?.label ?? ""
   const vacancyOptions = data?.vacancyOptions ?? []
   const selectedVacancy = vacancyId !== "all" ? vacancyOptions.find(v => v.id === vacancyId)?.title : null
 
+  // Текст «Период: …» — из фактического диапазона ответа (или «За всё время»).
+  const periodText = period === "all" || !data?.range?.from
+    ? "За всё время"
+    : `${fmtDate(data.range.from)}${data.range.to ? ` — ${fmtDate(data.range.to)}` : ""}`
+
   return (
     <div className={tv ? "space-y-6" : "space-y-5"}>
-      {/* Шапка */}
+      {/* Шапка: заголовок слева, «Период: …» + Поделиться справа */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-3">
           <BarChart3 className={`${tv ? "w-9 h-9" : "w-6 h-6"} text-violet-500`} />
@@ -441,12 +528,32 @@ export function ReportView({
             </p>
           </div>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <VacancyFilter value={vacancyId} options={vacancyOptions} onChange={onVacancyChange} tv={tv} />
-          <PeriodFilter value={period} onChange={onPeriodChange} tv={tv} />
+        <div className="flex items-center gap-3">
+          <span className={`${tv ? "text-base" : "text-sm"} text-muted-foreground whitespace-nowrap`}>
+            Период: <span className="font-semibold text-foreground">{periodText}</span>
+          </span>
           {shareSlot}
         </div>
       </div>
+
+      {/* Панель фильтров: пресеты · календарь · вакансии (справа) */}
+      {variant !== "tv" && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <PeriodFilter value={period} onChange={onPeriodChange} tv={tv} />
+          {onRangeChange && (
+            <CalendarRangeFilter
+              active={period === "custom"}
+              from={customFrom}
+              to={customTo}
+              onApply={onRangeChange}
+              tv={tv}
+            />
+          )}
+          <div className="ml-auto">
+            <VacancyFilter value={vacancyId} options={vacancyOptions} onChange={onVacancyChange} tv={tv} />
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">{error}</div>
@@ -456,7 +563,7 @@ export function ReportView({
       <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 ${tv ? "gap-4" : "gap-3"}`}>
         <KpiCard icon={Briefcase}    label="Активных вакансий"  value={kpi?.activeVacancies ?? "—"}    bg="bg-emerald-500" tv={tv} />
         <KpiCard icon={Users}        label="Откликов всего"     value={kpi?.totalCandidates ?? "—"}    bg="bg-blue-500"    tv={tv} />
-        <KpiCard icon={Calendar}     label="Назначено интервью" value={kpi?.interviewScheduled ?? "—"} bg="bg-violet-500"  tv={tv} />
+        <KpiCard icon={CalendarDays} label="Назначено интервью" value={kpi?.interviewScheduled ?? "—"} bg="bg-violet-500"  tv={tv} />
         <KpiCard icon={CheckCircle2} label="Проведено интервью" value={kpi?.interviewConducted ?? "—"} bg="bg-indigo-500"  tv={tv} />
         <KpiCard icon={XCircle}      label="Отказов"            value={kpi?.totalRejected ?? "—"}      bg="bg-rose-500"    tv={tv} />
       </div>
@@ -487,7 +594,7 @@ export function ReportView({
         <div className="flex items-center gap-2 mb-4">
           <Phone className={`${tv ? "w-5 h-5" : "w-4 h-4"} text-violet-500`} />
           <p className={`${tv ? "text-sm" : "text-xs"} text-muted-foreground`}>
-            Контакты с кандидатами, зафиксированные HR · {periodLabel}
+            Контакты с кандидатами, зафиксированные HR · {periodText}
           </p>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
