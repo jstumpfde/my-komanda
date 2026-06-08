@@ -160,6 +160,26 @@ export interface CompanyHiringDefaults {
   // Маппинг воронки → SuperJob: действие при входе кандидата в стадию.
   // Интеграция в разработке — конфиг сохраняется сейчас, применится после подключения.
   stageSjActions?: Record<string, string>
+  // Включённые стадии воронки компании (редактор стадий).
+  // Ключ — slug стадии, значение — true/false. Системные (isSystem=true) всегда true.
+  enabledStages?: Record<string, boolean>
+  // Порядок стадий в воронке (slug[]).
+  // Если не задан — используется платформенный sortOrder.
+  stageOrder?: string[]
+  // Пресеты воронки компании (сохранённые конфигурации).
+  // Хранятся здесь же, в hiring_defaults_json — нет смысла в отдельной таблице.
+  companyFunnelPresets?: Array<{
+    id:            string    // uuid
+    name:          string
+    createdAt:     string    // ISO date
+    enabledStages: Record<string, boolean>
+    stageOrder:    string[]
+    stageLabels:   Record<string, string>
+    stageColors:   Record<string, string>
+    stageHhActions:    Record<string, string | null>
+    stageAvitoActions: Record<string, string>
+    stageSjActions:    Record<string, string>
+  }>
   // Настройки доступа ролей (HR → Настройки → Роли и доступ). Хранятся
   // на уровне компании (общие, не per-user), чтобы шарились между всеми.
   rolePermissions?: {
