@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { PresenceTab } from "./presence-tab"
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
@@ -183,6 +184,7 @@ export function PlatformAdminClient({
 
       <Tabs defaultValue="migrations">
         <TabsList>
+          <TabsTrigger value="presence">Присутствие</TabsTrigger>
           <TabsTrigger value="migrations">Migrations</TabsTrigger>
           <TabsTrigger value="companies">Companies ({companiesTotal})</TabsTrigger>
           <TabsTrigger value="vacancies">AI vacancies ({vacancies.length})</TabsTrigger>
@@ -194,6 +196,9 @@ export function PlatformAdminClient({
           <TabsTrigger value="logs">Logs</TabsTrigger>
         </TabsList>
 
+        <TabsContent value="presence" className="mt-4">
+          <PresenceTab />
+        </TabsContent>
         <TabsContent value="migrations" className="mt-4">
           <MigrationsTab items={migrations} />
         </TabsContent>
