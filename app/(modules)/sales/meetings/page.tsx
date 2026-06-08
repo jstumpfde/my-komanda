@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -9,202 +9,180 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Calendar, Plus, Phone, Users, Monitor, Presentation, Clock, MapPin } from "lucide-react"
+import { Calendar, Plus, Clock, User, Scissors, Phone, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 
-type MeetingType = "call" | "meeting" | "demo" | "presentation"
-type MeetingStatus = "scheduled" | "done" | "cancelled"
+// ─── Типы ────────────────────────────────────────────────────────────────────
 
-interface Meeting {
+interface Booking {
   id: string
-  type: MeetingType
-  title: string
+  serviceId: string | null
+  resourceId: string | null
+  clientName: string
+  clientPhone: string | null
   date: string
-  time: string
-  duration: string
-  participants: string[]
-  deal: string
-  status: MeetingStatus
-  agenda: string
-  isToday: boolean
+  startTime: string
+  endTime: string
+  status: string
+  notes: string | null
+  price: number | null
+  serviceName: string | null
+  serviceColor: string | null
+  serviceDuration: number | null
+  resourceName: string | null
 }
 
-const TYPE_CONFIG: Record<MeetingType, { label: string; icon: typeof Phone; color: string }> = {
-  call: { label: "Звонок", icon: Phone, color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
-  meeting: { label: "Встреча", icon: Users, color: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400" },
-  demo: { label: "Демо", icon: Monitor, color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
-  presentation: { label: "Презентация", icon: Presentation, color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" },
-}
+interface SvcOpt { id: string; name: string; duration: number; price: number | null }
+interface ResOpt { id: string; name: string }
 
-const STATUS_CONFIG: Record<MeetingStatus, { label: string; color: string }> = {
-  scheduled: { label: "Запланировано", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
-  done: { label: "Завершено", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" },
+const STATUS_DISPLAY: Record<string, { label: string; color: string }> = {
+  confirmed: { label: "Запланировано", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+  completed: { label: "Завершено", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" },
   cancelled: { label: "Отменено", color: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400" },
+  no_show:   { label: "Не пришёл", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
 }
 
-const WEEK_DAYS = [
-  { label: "Пн 25.03", key: "mon" },
-  { label: "Вт 26.03", key: "tue" },
-  { label: "Ср 27.03", key: "wed" },
-  { label: "Чт 28.03", key: "thu" },
-  { label: "Пт 29.03", key: "fri", today: true },
-  { label: "Сб 30.03", key: "sat" },
-  { label: "Вс 31.03", key: "sun" },
-]
+const WD = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"]
 
-const INITIAL_MEETINGS: Meeting[] = [
-  {
-    id: "1", type: "call", title: "Уточнение требований",
-    date: "25.03", time: "10:00", duration: "30 мин",
-    participants: ["Алексей Иванов", "Иван Смирнов"],
-    deal: "ООО Техностар", status: "done",
-    agenda: "Обсудить детали внедрения CRM",
-    isToday: false,
-  },
-  {
-    id: "2", type: "demo", title: "Демонстрация платформы",
-    date: "26.03", time: "14:00", duration: "1 ч",
-    participants: ["Мария Петрова", "Павел Орлов", "Роман Федоров"],
-    deal: "ЗАО Капитал", status: "done",
-    agenda: "Показать функционал модуля продаж",
-    isToday: false,
-  },
-  {
-    id: "3", type: "meeting", title: "Переговоры по контракту",
-    date: "29.03", time: "11:00", duration: "1.5 ч",
-    participants: ["Алексей Иванов", "Роман Федоров"],
-    deal: "ЗАО Капитал", status: "scheduled",
-    agenda: "Согласование условий и скидок",
-    isToday: true,
-  },
-  {
-    id: "4", type: "call", title: "Follow-up после КП",
-    date: "29.03", time: "15:30", duration: "20 мин",
-    participants: ["Мария Петрова", "Михаил Волков"],
-    deal: "АО Альфа Ресурс", status: "scheduled",
-    agenda: "Получить обратную связь по коммерческому предложению",
-    isToday: true,
-  },
-  {
-    id: "5", type: "presentation", title: "Финальная презентация",
-    date: "31.03", time: "10:00", duration: "2 ч",
-    participants: ["Алексей Иванов", "Мария Петрова", "Дмитрий Козлов"],
-    deal: "ГК Вектор", status: "scheduled",
-    agenda: "Финальное согласование проекта с топ-менеджментом",
-    isToday: false,
-  },
-  {
-    id: "6", type: "meeting", title: "Знакомство с командой",
-    date: "01.04", time: "13:00", duration: "45 мин",
-    participants: ["Сергей Новиков", "Елена Тихонова"],
-    deal: "ООО СтройГрупп", status: "scheduled",
-    agenda: "Первичные переговоры о сотрудничестве",
-    isToday: false,
-  },
-]
-
-const DEALS = ["ООО Техностар", "ГК Вектор", "ЗАО Капитал", "ООО Горизонт", "АО Альфа Ресурс", "ООО СтройГрупп"]
-const MANAGERS = ["Алексей Иванов", "Мария Петрова", "Дмитрий Козлов", "Сергей Новиков"]
+function pad(n: number) { return String(n).padStart(2, "0") }
+function isoDate(d: Date) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` }
+function shortDate(iso: string) { const [, m, d] = iso.split("-"); return `${d}.${m}` }
+function addMinutes(hhmm: string, min: number): string {
+  const [h, m] = hhmm.split(":").map(Number)
+  const t = h * 60 + m + min
+  return `${pad(Math.floor((t % 1440) / 60))}:${pad(t % 60)}`
+}
+function formatPrice(kopecks: number | null) {
+  if (kopecks == null) return null
+  return `${Math.round(kopecks / 100)}₽`
+}
 
 export default function SalesMeetingsPage() {
-  const [meetings, setMeetings] = useState<Meeting[]>(INITIAL_MEETINGS)
+  const [bookings, setBookings] = useState<Booking[]>([])
+  const [services, setServices] = useState<SvcOpt[]>([])
+  const [resources, setResources] = useState<ResOpt[]>([])
+  const [loading, setLoading] = useState(true)
   const [sheetOpen, setSheetOpen] = useState(false)
-  const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [selected, setSelected] = useState<Booking | null>(null)
 
-  const [form, setForm] = useState({
-    type: "call" as MeetingType,
-    title: "",
-    date: "",
-    time: "",
-    duration: "30 мин",
-    participants: "",
-    deal: "",
-    agenda: "",
-  })
+  const [form, setForm] = useState({ serviceId: "", resourceId: "", date: "", time: "", clientName: "", clientPhone: "", notes: "" })
 
-  const todayMeetings = meetings.filter(m => m.isToday)
-  const upcomingMeetings = meetings.filter(m => !m.isToday && m.status === "scheduled")
-  const pastMeetings = meetings.filter(m => m.status === "done")
-
-  const handleCreate = () => {
-    if (!form.title) { toast.error("Введите название встречи"); return }
-    const newMeeting: Meeting = {
-      id: String(Date.now()),
-      type: form.type,
-      title: form.title,
-      date: form.date || "—",
-      time: form.time || "—",
-      duration: form.duration,
-      participants: form.participants ? form.participants.split(",").map(p => p.trim()) : [],
-      deal: form.deal || "—",
-      status: "scheduled",
-      agenda: form.agenda,
-      isToday: false,
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch("/api/modules/booking/bookings")
+      const j = await res.json()
+      const d = j?.data ?? j
+      setBookings((d.bookings ?? []) as Booking[])
+    } catch {
+      setBookings([])
+    } finally {
+      setLoading(false)
     }
-    setMeetings(prev => [...prev, newMeeting])
-    setSheetOpen(false)
-    setForm({ type: "call", title: "", date: "", time: "", duration: "30 мин", participants: "", deal: "", agenda: "" })
-    toast.success("Встреча запланирована")
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    fetch("/api/modules/booking/services")
+      .then((r) => r.json())
+      .then((j) => { const d = j?.data ?? j; setServices((d.services ?? []) as SvcOpt[]) })
+      .catch(() => {})
+    fetch("/api/modules/booking/resources")
+      .then((r) => r.json())
+      .then((j) => { const d = j?.data ?? j; setResources(((d.resources ?? []) as ResOpt[])) })
+      .catch(() => {})
+  }, [])
+
+  const todayStr = isoDate(new Date())
+
+  const { today, upcoming, past } = useMemo(() => {
+    const t: Booking[] = [], u: Booking[] = [], p: Booking[] = []
+    for (const b of bookings) {
+      const active = b.status === "confirmed"
+      if (active && b.date === todayStr) t.push(b)
+      else if (active && b.date > todayStr) u.push(b)
+      else p.push(b)
+    }
+    return { today: t, upcoming: u, past: p }
+  }, [bookings, todayStr])
+
+  // Неделя (Пн–Вс) с количеством записей по датам.
+  const week = useMemo(() => {
+    const now = new Date()
+    const monday = new Date(now); const off = (now.getDay() + 6) % 7
+    monday.setDate(now.getDate() - off)
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(monday); d.setDate(monday.getDate() + i)
+      const iso = isoDate(d)
+      return { iso, label: `${WD[d.getDay()]} ${shortDate(iso)}`, today: iso === todayStr, count: bookings.filter((b) => b.date === iso && b.status === "confirmed").length }
+    })
+  }, [bookings, todayStr])
+
+  const handleCreate = async () => {
+    if (!form.serviceId) { toast.error("Выберите услугу"); return }
+    if (!form.clientName.trim()) { toast.error("Введите имя клиента"); return }
+    if (!form.date || !form.time) { toast.error("Укажите дату и время"); return }
+    const svc = services.find((s) => s.id === form.serviceId)
+    const endTime = addMinutes(form.time, svc?.duration ?? 60)
+    setSaving(true)
+    try {
+      const res = await fetch("/api/modules/booking/bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          serviceId: form.serviceId,
+          resourceId: form.resourceId || null,
+          clientName: form.clientName.trim(),
+          clientPhone: form.clientPhone || null,
+          date: form.date,
+          startTime: form.time,
+          endTime,
+          notes: form.notes || null,
+          price: svc?.price ?? null,
+        }),
+      })
+      if (!res.ok) {
+        const d = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(d.error)
+      }
+      setSheetOpen(false)
+      setForm({ serviceId: "", resourceId: "", date: "", time: "", clientName: "", clientPhone: "", notes: "" })
+      toast.success("Запись создана")
+      load()
+    } catch (e) {
+      toast.error(e instanceof Error && e.message ? e.message : "Не удалось создать запись")
+    } finally {
+      setSaving(false)
+    }
   }
 
-  function MeetingCard({ meeting }: { meeting: Meeting }) {
-    const typeConfig = TYPE_CONFIG[meeting.type]
-    const TypeIcon = typeConfig.icon
+  function BookingCard({ b }: { b: Booking }) {
+    const st = STATUS_DISPLAY[b.status] ?? STATUS_DISPLAY.confirmed
     return (
       <div
-        className={cn(
-          "border rounded-xl p-4 bg-card cursor-pointer",
-          meeting.isToday && "border-primary/50 bg-primary/5"
-        )}
-        onClick={() => setSelectedMeeting(meeting)}
+        className={cn("border rounded-xl p-4 bg-card cursor-pointer hover:bg-muted/30 transition-colors", b.date === todayStr && b.status === "confirmed" && "border-primary/50 bg-primary/5")}
+        onClick={() => setSelected(b)}
       >
         <div className="flex items-start gap-3 mb-2">
-          <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0", typeConfig.color)}>
-            <TypeIcon className="w-4 h-4" />
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: (b.serviceColor || "#6B7280") + "22" }}>
+            <Scissors className="w-4 h-4" style={{ color: b.serviceColor || "#6B7280" }} />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-sm font-semibold text-foreground">{meeting.title}</p>
-              {meeting.isToday && <Badge className="text-[10px] border-0 bg-primary/10 text-primary py-0">Сегодня</Badge>}
-            </div>
-            <p className="text-xs text-muted-foreground">{meeting.deal}</p>
+            <p className="text-sm font-semibold text-foreground truncate">{b.serviceName || "Услуга"}</p>
+            <p className="text-xs text-muted-foreground truncate">{b.clientName}</p>
           </div>
-          <Badge className={cn("text-xs border-0 shrink-0", STATUS_CONFIG[meeting.status].color)}>
-            {STATUS_CONFIG[meeting.status].label}
-          </Badge>
+          <Badge className={cn("text-xs border-0 shrink-0", st.color)}>{st.label}</Badge>
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-          <div className="flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            {meeting.date} {meeting.time}
-          </div>
-          <div className="flex items-center gap-1">
-            <MapPin className="w-3 h-3" />
-            {meeting.duration}
-          </div>
-          <div className="flex items-center gap-1">
-            <Users className="w-3 h-3" />
-            {meeting.participants.length} участников
-          </div>
+          <div className="flex items-center gap-1"><Clock className="w-3 h-3" />{shortDate(b.date)} {b.startTime}–{b.endTime}</div>
+          {b.resourceName && <div className="flex items-center gap-1"><User className="w-3 h-3" />{b.resourceName}</div>}
+          {formatPrice(b.price) && <span className="font-medium text-foreground">{formatPrice(b.price)}</span>}
         </div>
-        {meeting.participants.length > 0 && (
-          <div className="flex items-center gap-1 mt-2">
-            {meeting.participants.slice(0, 3).map((p, i) => (
-              <Avatar key={i} className="w-5 h-5">
-                <AvatarFallback className="text-[8px] bg-primary/10 text-primary">
-                  {p.split(" ").map(w => w[0]).join("").slice(0, 2)}
-                </AvatarFallback>
-              </Avatar>
-            ))}
-            {meeting.participants.length > 3 && (
-              <span className="text-xs text-muted-foreground">+{meeting.participants.length - 3}</span>
-            )}
-          </div>
-        )}
       </div>
     )
   }
@@ -223,214 +201,164 @@ export default function SalesMeetingsPage() {
                   <Calendar className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <h1 className="text-lg font-semibold">Встречи</h1>
-                  <p className="text-sm text-muted-foreground">Неделя 25–31 марта 2026</p>
+                  <h1 className="text-lg font-semibold">Встречи и записи</h1>
+                  <p className="text-sm text-muted-foreground">Записи клиентов на услуги</p>
                 </div>
               </div>
-              <Button className="gap-1.5" onClick={() => setSheetOpen(true)}>
+              <Button className="gap-1.5" onClick={() => setSheetOpen(true)} disabled={services.length === 0}>
                 <Plus className="w-4 h-4" />
-                Запланировать
+                Записать
               </Button>
             </div>
 
-            {/* Week mini-calendar */}
-            <div className="flex gap-1 mb-6 overflow-x-auto pb-1">
-              {WEEK_DAYS.map((day) => {
-                const count = meetings.filter(m => m.date.startsWith(day.label.split(" ")[1]?.split(".").reverse().join(".").slice(0, 5) || "")).length
-                return (
-                  <div key={day.key} className={cn(
-                    "flex-1 min-w-[68px] text-center p-2 rounded-xl border text-xs transition-colors",
-                    day.today ? "bg-primary text-primary-foreground border-primary" : "bg-muted/30 border-border"
-                  )}>
-                    <p className="font-medium">{day.label.split(" ")[0]}</p>
-                    <p className={cn("text-[10px]", day.today ? "text-primary-foreground/80" : "text-muted-foreground")}>
-                      {day.label.split(" ")[1]}
-                    </p>
-                    {count > 0 && (
-                      <div className={cn("w-4 h-4 rounded-full flex items-center justify-center mx-auto mt-1 text-[9px] font-bold",
-                        day.today ? "bg-white text-primary" : "bg-primary text-white"
-                      )}>
-                        {count}
+            {loading ? (
+              <div className="flex items-center justify-center py-20 text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin mr-2" /> Загрузка…
+              </div>
+            ) : (
+              <>
+                {/* Неделя */}
+                <div className="flex gap-1 mb-6 overflow-x-auto pb-1">
+                  {week.map((day) => (
+                    <div key={day.iso} className={cn("flex-1 min-w-[68px] text-center p-2 rounded-xl border text-xs transition-colors", day.today ? "bg-primary text-primary-foreground border-primary" : "bg-muted/30 border-border")}>
+                      <p className="font-medium">{day.label.split(" ")[0]}</p>
+                      <p className={cn("text-[10px]", day.today ? "text-primary-foreground/80" : "text-muted-foreground")}>{day.label.split(" ")[1]}</p>
+                      {day.count > 0 && (
+                        <div className={cn("w-4 h-4 rounded-full flex items-center justify-center mx-auto mt-1 text-[9px] font-bold", day.today ? "bg-white text-primary" : "bg-primary text-white")}>{day.count}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {bookings.length === 0 ? (
+                  <div className="text-center py-16 border rounded-xl bg-card">
+                    <Calendar className="h-10 w-10 mx-auto text-muted-foreground/40 mb-2" />
+                    <p className="text-sm font-medium text-foreground">Записей пока нет</p>
+                    <p className="text-sm text-muted-foreground">{services.length === 0 ? "Сначала добавьте услуги в Настройках CRM." : "Нажмите «Записать», чтобы создать первую."}</p>
+                  </div>
+                ) : (
+                  <>
+                    {today.length > 0 && (
+                      <div className="mb-6">
+                        <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                          Сегодня · {today.length}
+                        </h2>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{today.map((b) => <BookingCard key={b.id} b={b} />)}</div>
                       </div>
                     )}
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Today's meetings */}
-            {todayMeetings.length > 0 && (
-              <div className="mb-6">
-                <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                  Сегодня · {todayMeetings.length} встречи
-                </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {todayMeetings.map(m => <MeetingCard key={m.id} meeting={m} />)}
-                </div>
-              </div>
-            )}
-
-            {/* Upcoming */}
-            {upcomingMeetings.length > 0 && (
-              <div className="mb-6">
-                <h2 className="text-sm font-semibold text-foreground mb-3">Предстоящие</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {upcomingMeetings.map(m => <MeetingCard key={m.id} meeting={m} />)}
-                </div>
-              </div>
-            )}
-
-            {/* Past */}
-            {pastMeetings.length > 0 && (
-              <div>
-                <h2 className="text-sm font-semibold text-muted-foreground mb-3">Прошедшие</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 opacity-70">
-                  {pastMeetings.map(m => <MeetingCard key={m.id} meeting={m} />)}
-                </div>
-              </div>
+                    {upcoming.length > 0 && (
+                      <div className="mb-6">
+                        <h2 className="text-sm font-semibold text-foreground mb-3">Предстоящие</h2>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{upcoming.map((b) => <BookingCard key={b.id} b={b} />)}</div>
+                      </div>
+                    )}
+                    {past.length > 0 && (
+                      <div>
+                        <h2 className="text-sm font-semibold text-muted-foreground mb-3">Прошедшие</h2>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 opacity-70">{past.map((b) => <BookingCard key={b.id} b={b} />)}</div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
             )}
           </div>
         </main>
       </SidebarInset>
 
-      {/* Schedule Sheet */}
+      {/* Создание записи */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent className="sm:max-w-md overflow-y-auto">
           <SheetHeader>
-            <SheetTitle className="flex items-center gap-2">
-              <Calendar className="w-5 h-5" />
-              Запланировать встречу
-            </SheetTitle>
+            <SheetTitle className="flex items-center gap-2"><Calendar className="w-5 h-5" />Новая запись</SheetTitle>
           </SheetHeader>
           <div className="space-y-4 mt-6">
             <div className="space-y-1.5">
-              <Label>Тип</Label>
-              <Select value={form.type} onValueChange={v => setForm(p => ({ ...p, type: v as MeetingType }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Label>Услуга *</Label>
+              <Select value={form.serviceId} onValueChange={(v) => setForm((p) => ({ ...p, serviceId: v }))}>
+                <SelectTrigger><SelectValue placeholder="Выберите услугу" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="call">Звонок</SelectItem>
-                  <SelectItem value="meeting">Встреча</SelectItem>
-                  <SelectItem value="demo">Демо</SelectItem>
-                  <SelectItem value="presentation">Презентация</SelectItem>
+                  {services.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}{s.price != null ? ` · ${Math.round(s.price / 100)}₽` : ""}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
-              <Label>Название *</Label>
-              <Input placeholder="Обсуждение КП" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} />
-            </div>
+            {resources.length > 0 && (
+              <div className="space-y-1.5">
+                <Label>Мастер</Label>
+                <Select value={form.resourceId} onValueChange={(v) => setForm((p) => ({ ...p, resourceId: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Любой" /></SelectTrigger>
+                  <SelectContent>
+                    {resources.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>Дата</Label>
-                <Input type="date" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
+                <Label>Дата *</Label>
+                <Input type="date" value={form.date} onChange={(e) => setForm((p) => ({ ...p, date: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
-                <Label>Время</Label>
-                <Input type="time" value={form.time} onChange={e => setForm(p => ({ ...p, time: e.target.value }))} />
+                <Label>Время *</Label>
+                <Input type="time" value={form.time} onChange={(e) => setForm((p) => ({ ...p, time: e.target.value }))} />
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label>Длительность</Label>
-              <Select value={form.duration} onValueChange={v => setForm(p => ({ ...p, duration: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {["15 мин", "30 мин", "45 мин", "1 ч", "1.5 ч", "2 ч"].map(d => (
-                    <SelectItem key={d} value={d}>{d}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Клиент *</Label>
+              <Input placeholder="Имя клиента" value={form.clientName} onChange={(e) => setForm((p) => ({ ...p, clientName: e.target.value }))} />
             </div>
             <div className="space-y-1.5">
-              <Label>Участники (через запятую)</Label>
-              <Input placeholder="Алексей Иванов, Иван Смирнов" value={form.participants} onChange={e => setForm(p => ({ ...p, participants: e.target.value }))} />
+              <Label>Телефон</Label>
+              <Input placeholder="+7…" value={form.clientPhone} onChange={(e) => setForm((p) => ({ ...p, clientPhone: e.target.value }))} />
             </div>
             <div className="space-y-1.5">
-              <Label>Сделка / Клиент</Label>
-              <Select value={form.deal} onValueChange={v => setForm(p => ({ ...p, deal: v }))}>
-                <SelectTrigger><SelectValue placeholder="Без привязки" /></SelectTrigger>
-                <SelectContent>
-                  {DEALS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Повестка</Label>
-              <Textarea placeholder="Цели и темы встречи..." value={form.agenda} onChange={e => setForm(p => ({ ...p, agenda: e.target.value }))} rows={2} />
+              <Label>Заметка</Label>
+              <Textarea placeholder="Комментарий к записи…" value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} rows={2} />
             </div>
             <div className="flex gap-2 pt-2">
               <Button variant="outline" className="flex-1" onClick={() => setSheetOpen(false)}>Отмена</Button>
-              <Button className="flex-1" onClick={handleCreate}>Запланировать</Button>
+              <Button className="flex-1" onClick={handleCreate} disabled={saving}>
+                {saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}Записать
+              </Button>
             </div>
           </div>
         </SheetContent>
       </Sheet>
 
-      {/* Meeting Detail Sheet */}
-      <Sheet open={!!selectedMeeting} onOpenChange={open => { if (!open) setSelectedMeeting(null) }}>
+      {/* Детали записи */}
+      <Sheet open={!!selected} onOpenChange={(open) => { if (!open) setSelected(null) }}>
         <SheetContent className="sm:max-w-md overflow-y-auto">
-          {selectedMeeting && (
+          {selected && (
             <>
               <SheetHeader className="mb-4">
                 <div className="flex items-center gap-3">
-                  <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", TYPE_CONFIG[selectedMeeting.type].color)}>
-                    {(() => { const Icon = TYPE_CONFIG[selectedMeeting.type].icon; return <Icon className="w-5 h-5" /> })()}
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: (selected.serviceColor || "#6B7280") + "22" }}>
+                    <Scissors className="w-5 h-5" style={{ color: selected.serviceColor || "#6B7280" }} />
                   </div>
                   <div>
-                    <SheetTitle>{selectedMeeting.title}</SheetTitle>
-                    <p className="text-sm text-muted-foreground">{TYPE_CONFIG[selectedMeeting.type].label}</p>
+                    <SheetTitle>{selected.serviceName || "Услуга"}</SheetTitle>
+                    <p className="text-sm text-muted-foreground">{(STATUS_DISPLAY[selected.status] ?? STATUS_DISPLAY.confirmed).label}</p>
                   </div>
                 </div>
               </SheetHeader>
-
-              <div className="space-y-4">
-                <div className="flex flex-col gap-2 text-sm">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Clock className="w-4 h-4" />
-                    <span>{selectedMeeting.date} в {selectedMeeting.time} · {selectedMeeting.duration}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Briefcase className="w-4 h-4" />
-                    <span>{selectedMeeting.deal}</span>
-                  </div>
-                </div>
-
-                {selectedMeeting.agenda && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground mb-1">ПОВЕСТКА</p>
-                    <p className="text-sm text-foreground">{selectedMeeting.agenda}</p>
+              <div className="space-y-3 text-sm">
+                <div className="flex items-center gap-2 text-muted-foreground"><Clock className="w-4 h-4" /><span>{shortDate(selected.date)} в {selected.startTime}–{selected.endTime}</span></div>
+                <div className="flex items-center gap-2 text-muted-foreground"><User className="w-4 h-4" /><span>{selected.clientName}</span></div>
+                {selected.clientPhone && <div className="flex items-center gap-2 text-muted-foreground"><Phone className="w-4 h-4" /><span>{selected.clientPhone}</span></div>}
+                {selected.resourceName && <div className="flex items-center gap-2 text-muted-foreground"><Scissors className="w-4 h-4" /><span>{selected.resourceName}</span></div>}
+                {formatPrice(selected.price) && <div className="font-semibold text-foreground">{formatPrice(selected.price)}</div>}
+                {selected.notes && (
+                  <div className="pt-2">
+                    <p className="text-xs font-semibold text-muted-foreground mb-1">ЗАМЕТКА</p>
+                    <p className="text-sm text-foreground">{selected.notes}</p>
                   </div>
                 )}
-
-                <div>
-                  <p className="text-xs font-semibold text-muted-foreground mb-2">УЧАСТНИКИ</p>
-                  <div className="space-y-1.5">
-                    {selectedMeeting.participants.map((p, i) => (
-                      <div key={i} className="flex items-center gap-2">
-                        <Avatar className="w-7 h-7">
-                          <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                            {p.split(" ").map(w => w[0]).join("").slice(0, 2)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="text-sm text-foreground">{p}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
               </div>
             </>
           )}
         </SheetContent>
       </Sheet>
     </SidebarProvider>
-  )
-}
-
-function Briefcase({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M16 20H8a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2z" />
-      <path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
-    </svg>
   )
 }

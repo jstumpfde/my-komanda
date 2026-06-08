@@ -25,15 +25,8 @@ export default function SalesClientsPage() {
     fetch("/api/modules/sales/companies")
       .then((r) => r.json())
       .then((data) => {
-        // API не возвращает contactsCount/vacanciesCount — подставляем 0
-        const mapped: SalesCompany[] = (data.companies ?? []).map(
-          (c: Omit<SalesCompany, "contactsCount" | "vacanciesCount">) => ({
-            ...c,
-            contactsCount: 0,
-            vacanciesCount: 0,
-          }),
-        )
-        setCompanies(mapped)
+        // API возвращает contactsCount/dealsCount (агрегаты по тенанту).
+        setCompanies((data.companies ?? []) as SalesCompany[])
       })
       .catch(() => setCompanies([]))
       .finally(() => setLoading(false))
@@ -71,7 +64,7 @@ export default function SalesClientsPage() {
         const newCompany: SalesCompany = {
           ...created,
           contactsCount: 0,
-          vacanciesCount: 0,
+          dealsCount: 0,
         }
         setCompanies((prev) => [newCompany, ...prev])
         setModalOpen(false)

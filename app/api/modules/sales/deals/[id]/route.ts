@@ -3,6 +3,7 @@ import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { salesDeals, salesCompanies, salesContacts, users } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { runStageAutomations } from "@/lib/sales/automations"
 
 export async function GET(
   _req: NextRequest,
@@ -61,6 +62,17 @@ export async function PUT(
     const { id } = await params
     const body = await req.json()
 
+    // Текущая стадия — чтобы запустить автоматизации только при реальной смене.
+    let prevStage: string | null = null
+    if (body.stage !== undefined) {
+      const [cur] = await db
+        .select({ stage: salesDeals.stage })
+        .from(salesDeals)
+        .where(and(eq(salesDeals.id, id), eq(salesDeals.tenantId, user.companyId)))
+        .limit(1)
+      prevStage = cur?.stage ?? null
+    }
+
     const updateData: Record<string, unknown> = { updatedAt: new Date() }
 
     if (body.title !== undefined) updateData.title = body.title
@@ -71,6 +83,10 @@ export async function PUT(
       if (body.stage === "won" || body.stage === "lost") {
         updateData.closedAt = new Date()
       }
+    }
+    // Явный closedAt (терминальные стадии воронки записи: showed/no_show и т.п.).
+    if (body.closedAt !== undefined) {
+      updateData.closedAt = body.closedAt ? new Date(body.closedAt) : null
     }
     if (body.priority !== undefined) updateData.priority = body.priority
     if (body.probability !== undefined) updateData.probability = body.probability
@@ -90,6 +106,12 @@ export async function PUT(
       .returning()
 
     if (!updated) return apiError("Not found", 404)
+
+    // Автоматизации воронки — при реальной смене стадии.
+    if (body.stage !== undefined && body.stage !== prevStage) {
+      await runStageAutomations(user.companyId, id, body.stage)
+    }
+
     return apiSuccess(updated)
   } catch (err) {
     if (err instanceof Response) return err

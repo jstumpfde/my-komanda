@@ -31,7 +31,7 @@ export interface SalesCompany {
   type: string
   status: string
   contactsCount?: number
-  vacanciesCount?: number
+  dealsCount?: number
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -82,6 +82,8 @@ export function CompaniesTable({ companies, onEdit, onArchive, onRestore, sortCo
           <DataHeadCell>ИНН</DataHeadCell>
           <DataHeadCell>Отрасль</DataHeadCell>
           <DataHeadCell>Город</DataHeadCell>
+          <DataHeadCell align="right">Контакты</DataHeadCell>
+          <DataHeadCell align="right">Сделки</DataHeadCell>
           <DataHeadCell>
             <button type="button" onClick={() => onSort?.("status")} className="inline-flex items-center gap-1 hover:text-foreground transition-colors">
               Статус <ArrowUpDown className={cn("w-4 h-4", sortColumn === "status" ? "text-foreground" : "opacity-60")} />
@@ -106,6 +108,8 @@ export function CompaniesTable({ companies, onEdit, onArchive, onRestore, sortCo
               <DataCell className="text-muted-foreground font-mono">{company.inn || "—"}</DataCell>
               <DataCell className="text-muted-foreground">{company.industry || "—"}</DataCell>
               <DataCell className="text-muted-foreground">{company.city || "—"}</DataCell>
+              <DataCell align="right" className="text-muted-foreground tabular-nums">{company.contactsCount ?? 0}</DataCell>
+              <DataCell align="right" className="text-muted-foreground tabular-nums">{company.dealsCount ?? 0}</DataCell>
               <DataCell>
                 <Badge className={cn("text-xs border-0", STATUS_COLORS[company.status] || STATUS_COLORS.active)}>
                   {STATUS_LABELS[company.status] || company.status}

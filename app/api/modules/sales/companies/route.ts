@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import {eq, and, ilike, or, count} from "drizzle-orm"
 import { db } from "@/lib/db"
-import { salesCompanies } from "@/lib/db/schema"
+import { salesCompanies, salesContacts, salesDeals } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 
 export async function GET(req: NextRequest) {
@@ -44,7 +44,28 @@ export async function GET(req: NextRequest) {
       .where(where)
       .orderBy(salesCompanies.createdAt)
 
-    return apiSuccess({ companies: rows, total: totalResult?.value ?? 0 })
+    // Счётчики контактов и сделок по компаниям тенанта (grouped, без N+1).
+    const contactCounts = await db
+      .select({ companyId: salesContacts.companyId, value: count() })
+      .from(salesContacts)
+      .where(eq(salesContacts.tenantId, user.companyId))
+      .groupBy(salesContacts.companyId)
+    const dealCounts = await db
+      .select({ companyId: salesDeals.companyId, value: count() })
+      .from(salesDeals)
+      .where(eq(salesDeals.tenantId, user.companyId))
+      .groupBy(salesDeals.companyId)
+
+    const contactMap = new Map(contactCounts.map((r) => [r.companyId, r.value]))
+    const dealMap = new Map(dealCounts.map((r) => [r.companyId, r.value]))
+
+    const companies = rows.map((c) => ({
+      ...c,
+      contactsCount: contactMap.get(c.id) ?? 0,
+      dealsCount: dealMap.get(c.id) ?? 0,
+    }))
+
+    return apiSuccess({ companies, total: totalResult?.value ?? 0 })
   } catch (err) {
     if (err instanceof Response) return err
     return apiError("Internal server error", 500)

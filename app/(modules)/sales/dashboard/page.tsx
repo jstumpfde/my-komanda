@@ -1,5 +1,7 @@
 "use client"
 
+import { useState, useEffect, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -8,53 +10,134 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
-  LayoutDashboard, TrendingUp, Briefcase, CheckCircle2, Target,
-  Plus, UserPlus, ClipboardList, ArrowUpRight, Clock, Phone,
-  Calendar, DollarSign, AlertCircle,
+  LayoutDashboard, Briefcase, CheckCircle2, Target,
+  Plus, DollarSign, Loader2, PackageOpen,
 } from "lucide-react"
 import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { cn } from "@/lib/utils"
+import { getDefaultStages, type CrmStage } from "@/lib/crm/deal-stages"
+import type { DealItem } from "@/app/(modules)/sales/deals/page"
 
-const KPI_CARDS = [
-  { label: "Сделок в работе", value: "34", delta: "+5 за неделю", icon: Briefcase, color: "text-blue-600", bg: "bg-blue-500/10" },
-  { label: "Сумма воронки", value: "18 450 000 ₽", delta: "+2.1М за неделю", icon: DollarSign, color: "text-emerald-600", bg: "bg-emerald-500/10" },
-  { label: "Закрыто в этом месяце", value: "8", delta: "4 250 000 ₽", icon: CheckCircle2, color: "text-purple-600", bg: "bg-purple-500/10" },
-  { label: "Конверсия", value: "23.5%", delta: "+1.2% к прошлому мес.", icon: Target, color: "text-amber-600", bg: "bg-amber-500/10" },
-]
-
-const PIPELINE_STAGES = [
-  { label: "Новая", count: 12, amount: 5_200_000, color: "bg-slate-400" },
-  { label: "Переговоры", count: 9, amount: 4_800_000, color: "bg-blue-500" },
-  { label: "КП отправлено", count: 7, amount: 3_900_000, color: "bg-amber-500" },
-  { label: "Согласование", count: 4, amount: 2_900_000, color: "bg-purple-500" },
-  { label: "Закрыта", count: 8, amount: 4_250_000, color: "bg-emerald-500" },
-]
-
-const RECENT_ACTIVITY = [
-  { id: 1, type: "deal_created", text: "Новая сделка: ООО Техностар", sub: "Алексей Иванов · 850 000 ₽", time: "10 мин назад", icon: Plus, color: "text-blue-600 bg-blue-100 dark:bg-blue-900/30" },
-  { id: 2, type: "meeting_scheduled", text: "Встреча запланирована: Демо для Альфа", sub: "Мария Петрова · завтра 14:00", time: "32 мин назад", icon: Calendar, color: "text-purple-600 bg-purple-100 dark:bg-purple-900/30" },
-  { id: 3, type: "task_done", text: "Задача выполнена: отправить КП", sub: "Дмитрий Козлов · сделка Бета Групп", time: "1 ч назад", icon: CheckCircle2, color: "text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30" },
-  { id: 4, type: "call_logged", text: "Звонок записан: ООО Прогресс", sub: "Алексей Иванов · 18 мин", time: "2 ч назад", icon: Phone, color: "text-amber-600 bg-amber-100 dark:bg-amber-900/30" },
-  { id: 5, type: "deal_moved", text: "Сделка перешла: КП → Согласование", sub: "Мария Петрова · ЗАО Капитал", time: "3 ч назад", icon: ArrowUpRight, color: "text-blue-600 bg-blue-100 dark:bg-blue-900/30" },
-  { id: 6, type: "deal_created", text: "Новая сделка: ИП Соколов А.В.", sub: "Сергей Новиков · 320 000 ₽", time: "5 ч назад", icon: Plus, color: "text-blue-600 bg-blue-100 dark:bg-blue-900/30" },
-  { id: 7, type: "task_overdue", text: "Просроченная задача: перезвонить", sub: "Дмитрий Козлов · ООО Горизонт", time: "6 ч назад", icon: AlertCircle, color: "text-red-600 bg-red-100 dark:bg-red-900/30" },
-  { id: 8, type: "meeting_done", text: "Встреча завершена: Презентация", sub: "Алексей Иванов · ГК Вектор", time: "вчера", icon: CheckCircle2, color: "text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30" },
-]
-
-const TOP_MANAGERS = [
-  { name: "Алексей Иванов", initials: "АИ", deals: 14, amount: 6_200_000, conversion: 31 },
-  { name: "Мария Петрова", initials: "МП", deals: 11, amount: 5_100_000, conversion: 28 },
-  { name: "Дмитрий Козлов", initials: "ДК", deals: 9, amount: 4_300_000, conversion: 22 },
-  { name: "Сергей Новиков", initials: "СН", deals: 7, amount: 2_900_000, conversion: 19 },
-]
-
-function formatMoney(n: number) {
+function formatMoney(kopecks: number) {
+  const n = kopecks / 100
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}М ₽`
   if (n >= 1_000) return `${(n / 1_000).toFixed(0)}К ₽`
-  return `${n} ₽`
+  return `${Math.round(n)} ₽`
+}
+
+function initials(name: string): string {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("")
+}
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const min = Math.floor(diff / 60000)
+  if (min < 1) return "только что"
+  if (min < 60) return `${min} мин назад`
+  const h = Math.floor(min / 60)
+  if (h < 24) return `${h} ч назад`
+  const d = Math.floor(h / 24)
+  if (d === 1) return "вчера"
+  return `${d} дн назад`
 }
 
 export default function SalesDashboardPage() {
+  const router = useRouter()
+  const [deals, setDeals] = useState<DealItem[]>([])
+  const [stages, setStages] = useState<CrmStage[]>(() => getDefaultStages("b2b"))
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    fetch("/api/modules/sales/deals")
+      .then((r) => r.json())
+      .then((d) => setDeals(d.deals ?? []))
+      .catch(() => setDeals([]))
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    fetch("/api/modules/sales/settings")
+      .then((r) => r.json())
+      .then((j) => {
+        const d = j?.data ?? j
+        if (Array.isArray(d?.stages) && d.stages.length) setStages(d.stages as CrmStage[])
+      })
+      .catch(() => {})
+  }, [])
+
+  const wonIds = useMemo(() => new Set(stages.filter((s) => s.probability >= 100).map((s) => s.id)), [stages])
+  const lostIds = useMemo(() => new Set(stages.filter((s) => s.probability <= 0).map((s) => s.id)), [stages])
+
+  // ── KPI ──
+  const kpi = useMemo(() => {
+    const inWork = deals.filter((d) => !wonIds.has(d.stage) && !lostIds.has(d.stage))
+    const pipelineAmount = inWork.reduce((s, d) => s + (d.amount || 0), 0)
+    const won = deals.filter((d) => wonIds.has(d.stage))
+    const lost = deals.filter((d) => lostIds.has(d.stage))
+    const now = new Date()
+    const wonThisMonth = won.filter((d) => {
+      if (!d.closedAt) return false
+      const dt = new Date(d.closedAt)
+      return dt.getFullYear() === now.getFullYear() && dt.getMonth() === now.getMonth()
+    })
+    const closedAmount = wonThisMonth.reduce((s, d) => s + (d.amount || 0), 0)
+    const closedTotal = won.length + lost.length
+    const conversion = closedTotal > 0 ? Math.round((won.length / closedTotal) * 1000) / 10 : 0
+    return {
+      inWorkCount: inWork.length,
+      pipelineAmount,
+      wonThisMonthCount: wonThisMonth.length,
+      closedAmount,
+      conversion,
+    }
+  }, [deals, wonIds, lostIds])
+
+  const kpiCards = [
+    { label: "Сделок в работе", value: String(kpi.inWorkCount), icon: Briefcase, color: "text-blue-600", bg: "bg-blue-500/10" },
+    { label: "Сумма воронки", value: formatMoney(kpi.pipelineAmount), icon: DollarSign, color: "text-emerald-600", bg: "bg-emerald-500/10" },
+    { label: "Закрыто в этом месяце", value: String(kpi.wonThisMonthCount), sub: formatMoney(kpi.closedAmount), icon: CheckCircle2, color: "text-purple-600", bg: "bg-purple-500/10" },
+    { label: "Конверсия", value: `${kpi.conversion}%`, icon: Target, color: "text-amber-600", bg: "bg-amber-500/10" },
+  ]
+
+  // ── Воронка ──
+  const pipeline = useMemo(() => {
+    const ordered = stages.filter((s) => !lostIds.has(s.id))
+    const byStage = new Map<string, { count: number; amount: number }>()
+    for (const s of ordered) byStage.set(s.id, { count: 0, amount: 0 })
+    for (const d of deals) {
+      const cell = byStage.get(d.stage)
+      if (cell) { cell.count++; cell.amount += d.amount || 0 }
+    }
+    return ordered.map((s) => ({ id: s.id, label: s.label, color: s.color, ...(byStage.get(s.id) ?? { count: 0, amount: 0 }) }))
+  }, [deals, stages, lostIds])
+  const pipelineMaxAmount = Math.max(1, ...pipeline.map((s) => s.amount))
+
+  // ── Последние сделки ──
+  const recent = useMemo(() => {
+    return [...deals]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 8)
+  }, [deals])
+
+  // ── Топ-менеджеры ──
+  const managers = useMemo(() => {
+    const map = new Map<string, { name: string; total: number; won: number; amount: number }>()
+    for (const d of deals) {
+      const name = d.assignedToName || "Без ответственного"
+      const cell = map.get(name) ?? { name, total: 0, won: 0, amount: 0 }
+      cell.total++
+      if (wonIds.has(d.stage)) { cell.won++; cell.amount += d.amount || 0 }
+      map.set(name, cell)
+    }
+    return [...map.values()]
+      .map((m) => ({ ...m, conversion: m.total > 0 ? Math.round((m.won / m.total) * 100) : 0 }))
+      .sort((a, b) => b.amount - a.amount || b.total - a.total)
+      .slice(0, 6)
+  }, [deals, wonIds])
+
+  const hasDeals = deals.length > 0
+
   return (
     <SidebarProvider defaultOpen={true}>
       <DashboardSidebar />
@@ -73,138 +156,151 @@ export default function SalesDashboardPage() {
                   <p className="text-sm text-muted-foreground">Обзор продаж и активности команды</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" className="gap-1.5">
-                  <ClipboardList className="w-4 h-4" />
-                  Задача
-                </Button>
-                <Button size="sm" variant="outline" className="gap-1.5">
-                  <UserPlus className="w-4 h-4" />
-                  Клиент
-                </Button>
-                <Button size="sm" className="gap-1.5">
-                  <Plus className="w-4 h-4" />
-                  Новая сделка
-                </Button>
+              <Button size="sm" className="gap-1.5" onClick={() => router.push("/sales/deals")}>
+                <Plus className="w-4 h-4" />
+                Сделки
+              </Button>
+            </div>
+
+            {loading ? (
+              <div className="flex items-center justify-center py-20 text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin mr-2" /> Загрузка…
               </div>
-            </div>
+            ) : (
+              <>
+                {/* KPI Cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                  {kpiCards.map((kpiCard) => (
+                    <Card key={kpiCard.label}>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center", kpiCard.bg)}>
+                            <kpiCard.icon className={cn("w-4 h-4", kpiCard.color)} />
+                          </div>
+                        </div>
+                        <p className="text-2xl font-bold text-foreground">{kpiCard.value}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{kpiCard.label}</p>
+                        {kpiCard.sub && <p className="text-xs text-emerald-600 mt-1">{kpiCard.sub}</p>}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
 
-            {/* KPI Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-              {KPI_CARDS.map((kpi) => (
-                <Card key={kpi.label}>
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center", kpi.bg)}>
-                        <kpi.icon className={cn("w-4 h-4", kpi.color)} />
-                      </div>
+                {!hasDeals ? (
+                  <Card>
+                    <CardContent className="py-16 text-center space-y-3">
+                      <PackageOpen className="h-10 w-10 mx-auto text-muted-foreground/40" />
+                      <p className="text-sm font-medium text-foreground">Пока нет сделок</p>
+                      <p className="text-sm text-muted-foreground">Создайте первую сделку — и здесь появится сводка.</p>
+                      <Button variant="outline" size="sm" onClick={() => router.push("/sales/deals")}>К сделкам</Button>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                      {/* Pipeline Summary */}
+                      <Card className="lg:col-span-2">
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-base">Воронка продаж</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-3">
+                            {pipeline.map((stage) => {
+                              const pct = Math.round((stage.amount / pipelineMaxAmount) * 100)
+                              return (
+                                <div key={stage.id} className="flex items-center gap-3">
+                                  <div className="w-28 text-sm text-muted-foreground shrink-0 truncate">{stage.label}</div>
+                                  <div className="flex-1 h-7 bg-muted/30 rounded-md overflow-hidden relative">
+                                    <div
+                                      className="h-full rounded-md transition-all flex items-center px-2 justify-end min-w-[1.5rem]"
+                                      style={{ width: `${Math.max(pct, 6)}%`, backgroundColor: stage.color }}
+                                    >
+                                      <span className="text-xs font-semibold text-white">{stage.count}</span>
+                                    </div>
+                                  </div>
+                                  <div className="text-sm font-medium text-foreground w-24 text-right shrink-0">
+                                    {stage.amount > 0 ? formatMoney(stage.amount) : "—"}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Recent deals */}
+                      <Card>
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-base">Последние сделки</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                          <div className="divide-y">
+                            {recent.map((d) => (
+                              <button
+                                key={d.id}
+                                onClick={() => router.push(`/sales/deals/${d.id}`)}
+                                className="w-full flex items-start gap-2.5 px-4 py-2.5 text-left hover:bg-muted/40 transition-colors"
+                              >
+                                <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-blue-600 bg-blue-100 dark:bg-blue-900/30">
+                                  <Plus className="w-3.5 h-3.5" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-medium text-foreground leading-tight truncate">{d.title}</p>
+                                  <p className="text-[10px] text-muted-foreground truncate">
+                                    {(d.companyName || "Без компании")}{d.amount ? ` · ${formatMoney(d.amount)}` : ""}
+                                  </p>
+                                </div>
+                                <span className="text-[10px] text-muted-foreground shrink-0 mt-0.5">{relativeTime(d.createdAt)}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
                     </div>
-                    <p className="text-2xl font-bold text-foreground">{kpi.value}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{kpi.label}</p>
-                    <p className="text-xs text-emerald-600 mt-1 flex items-center gap-0.5">
-                      <TrendingUp className="w-3 h-3" />
-                      {kpi.delta}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-              {/* Pipeline Summary */}
-              <Card className="lg:col-span-2">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Воронка продаж</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {PIPELINE_STAGES.map((stage) => {
-                      const maxAmount = Math.max(...PIPELINE_STAGES.map(s => s.amount))
-                      const pct = Math.round((stage.amount / maxAmount) * 100)
-                      return (
-                        <div key={stage.label} className="flex items-center gap-3">
-                          <div className="w-28 text-sm text-muted-foreground shrink-0">{stage.label}</div>
-                          <div className="flex-1 h-7 bg-muted/30 rounded-md overflow-hidden relative">
-                            <div
-                              className={cn("h-full rounded-md transition-all flex items-center px-2 justify-end", stage.color)}
-                              style={{ width: `${pct}%` }}
-                            >
-                              <span className="text-xs font-semibold text-white">{stage.count}</span>
-                            </div>
-                          </div>
-                          <div className="text-sm font-medium text-foreground w-24 text-right shrink-0">
-                            {formatMoney(stage.amount)}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Recent Activity */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Последние действия</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="divide-y">
-                    {RECENT_ACTIVITY.map((item) => (
-                      <div key={item.id} className="flex items-start gap-2.5 px-4 py-2.5">
-                        <div className={cn("w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5", item.color)}>
-                          <item.icon className="w-3.5 h-3.5" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-foreground leading-tight">{item.text}</p>
-                          <p className="text-[10px] text-muted-foreground">{item.sub}</p>
-                        </div>
-                        <span className="text-[10px] text-muted-foreground shrink-0 mt-0.5">{item.time}</span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Top Managers */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Топ менеджеры</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <DataTable>
-                  <DataHead>
-                    <DataHeadCell>#</DataHeadCell>
-                    <DataHeadCell>Менеджер</DataHeadCell>
-                    <DataHeadCell align="right">Сделок</DataHeadCell>
-                    <DataHeadCell align="right">Сумма</DataHeadCell>
-                    <DataHeadCell align="right">Конверсия</DataHeadCell>
-                  </DataHead>
-                  <tbody>
-                    {TOP_MANAGERS.map((mgr, i) => (
-                      <DataRow key={mgr.name}>
-                        <DataCell className="text-muted-foreground">{i + 1}</DataCell>
-                        <DataCell>
-                          <div className="flex items-center gap-2.5">
-                            <Avatar className="w-7 h-7">
-                              <AvatarFallback className="text-xs bg-primary/10 text-primary">{mgr.initials}</AvatarFallback>
-                            </Avatar>
-                            <span className="text-sm font-medium text-foreground">{mgr.name}</span>
-                          </div>
-                        </DataCell>
-                        <DataCell align="right" className="font-medium text-foreground">{mgr.deals}</DataCell>
-                        <DataCell align="right" className="font-medium text-foreground">{formatMoney(mgr.amount)}</DataCell>
-                        <DataCell align="right">
-                          <Badge variant={mgr.conversion >= 28 ? "default" : "secondary"} className="text-xs">
-                            {mgr.conversion}%
-                          </Badge>
-                        </DataCell>
-                      </DataRow>
-                    ))}
-                  </tbody>
-                </DataTable>
-              </CardContent>
-            </Card>
+                    {/* Top Managers */}
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Топ менеджеры</CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-0">
+                        <DataTable>
+                          <DataHead>
+                            <DataHeadCell>#</DataHeadCell>
+                            <DataHeadCell>Менеджер</DataHeadCell>
+                            <DataHeadCell align="right">Сделок</DataHeadCell>
+                            <DataHeadCell align="right">Выручка</DataHeadCell>
+                            <DataHeadCell align="right">Конверсия</DataHeadCell>
+                          </DataHead>
+                          <tbody>
+                            {managers.map((mgr, i) => (
+                              <DataRow key={mgr.name}>
+                                <DataCell className="text-muted-foreground">{i + 1}</DataCell>
+                                <DataCell>
+                                  <div className="flex items-center gap-2.5">
+                                    <Avatar className="w-7 h-7">
+                                      <AvatarFallback className="text-xs bg-primary/10 text-primary">{initials(mgr.name)}</AvatarFallback>
+                                    </Avatar>
+                                    <span className="text-sm font-medium text-foreground">{mgr.name}</span>
+                                  </div>
+                                </DataCell>
+                                <DataCell align="right" className="font-medium text-foreground">{mgr.total}</DataCell>
+                                <DataCell align="right" className="font-medium text-foreground">{mgr.amount > 0 ? formatMoney(mgr.amount) : "—"}</DataCell>
+                                <DataCell align="right">
+                                  <Badge variant={mgr.conversion >= 28 ? "default" : "secondary"} className="text-xs">
+                                    {mgr.conversion}%
+                                  </Badge>
+                                </DataCell>
+                              </DataRow>
+                            ))}
+                          </tbody>
+                        </DataTable>
+                      </CardContent>
+                    </Card>
+                  </>
+                )}
+              </>
+            )}
           </div>
         </main>
       </SidebarInset>
