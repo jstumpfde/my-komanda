@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Save, GitBranch, Zap, Bell, Palette } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Save, GitBranch, Zap, Bell, Layers } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import type { CompanyHiringDefaults } from "@/lib/db/schema"
@@ -88,6 +89,9 @@ const STAGE_DOT_CLASSES: Record<StageColor, string> = {
   red: "bg-destructive",
 }
 
+// Стадии, показываемые в единой таблице: все из ALL_STAGE_SLUGS
+const TABLE_STAGES = ALL_STAGE_SLUGS
+
 // ─── Компонент ───────────────────────────────────────────────────────────────
 
 export function FunnelAutomationSection({
@@ -102,22 +106,25 @@ export function FunnelAutomationSection({
     defaults.funnelScenario ?? "standard",
   )
 
-  // ── Маппинг стадий → hh.ru ──
+  // ── Единая таблица стадий ──
   const [stageHhActions, setStageHhActions] = useState<
     Record<string, "invitation" | "discard" | "assessment" | null>
   >(
     (defaults.stageHhActions as Record<string, "invitation" | "discard" | "assessment" | null>) ?? {},
   )
-  const [savingStageHh, setSavingStageHh] = useState(false)
-
-  // ── Палитра стадий (переименование / перекраска) ──
   const [stageLabels, setStageLabels] = useState<Record<string, string>>(
     (defaults.stageLabels as Record<string, string> | undefined) ?? {},
   )
   const [stageColors, setStageColors] = useState<Record<string, string>>(
     (defaults.stageColors as Record<string, string> | undefined) ?? {},
   )
-  const [savingPalette, setSavingPalette] = useState(false)
+  const [stageAvitoActions, setStageAvitoActions] = useState<Record<string, string>>(
+    (defaults.stageAvitoActions as Record<string, string> | undefined) ?? {},
+  )
+  const [stageSjActions, setStageSjActions] = useState<Record<string, string>>(
+    (defaults.stageSjActions as Record<string, string> | undefined) ?? {},
+  )
+  const [savingStages, setSavingStages] = useState(false)
 
   // ── Автоматизация воронки ──
   const [autoDemo, setAutoDemo] = useState(defaults.automation?.autoDemo ?? true)
@@ -158,29 +165,22 @@ export function FunnelAutomationSection({
     }
   }
 
-  // ── Сохранение: Маппинг воронки → hh.ru ──
-  const handleSaveStageHh = async () => {
-    setSavingStageHh(true)
+  // ── Сохранение: единая таблица стадий ──
+  const handleSaveStages = async () => {
+    setSavingStages(true)
     try {
-      await onPatch({ stageHhActions })
-      toast.success("Маппинг воронки → hh.ru сохранён")
+      await onPatch({
+        stageHhActions,
+        stageLabels,
+        stageColors,
+        stageAvitoActions,
+        stageSjActions,
+      })
+      toast.success("Настройки стадий сохранены")
     } catch {
       toast.error("Не удалось сохранить")
     } finally {
-      setSavingStageHh(false)
-    }
-  }
-
-  // ── Сохранение: Палитра стадий ──
-  const handleSavePalette = async () => {
-    setSavingPalette(true)
-    try {
-      await onPatch({ stageLabels, stageColors })
-      toast.success("Палитра стадий сохранена")
-    } catch {
-      toast.error("Не удалось сохранить")
-    } finally {
-      setSavingPalette(false)
+      setSavingStages(false)
     }
   }
 
@@ -328,140 +328,196 @@ export function FunnelAutomationSection({
         </Button>
       </div>
 
-      {/* ── Блок 3: Маппинг воронки → hh.ru ── */}
+      {/* ── Блок 3: Единая таблица стадий ── */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <GitBranch className="w-4 h-4" />
-            Воронка → действия в hh.ru
+            <Layers className="w-4 h-4" />
+            Стадии воронки
           </CardTitle>
           <CardDescription>
-            Что делать в hh.ru, когда кандидат входит в стадию воронки. Это дефолт
-            компании — применяется к вакансиям, где воронка не настроена отдельно.
-            На конкретной вакансии можно переопределить.
-            <br />
-            <span className="text-[11px]">
-              Совет: ставьте «Пригласить» на первый контакт, «Ничего» на промежуточные,
-              «Отказать» — только на финальный отказ.
-            </span>
+            Цвет, название и действия на джоб-бордах для каждой стадии.
+            Это дефолт компании — применяется ко всем вакансиям, если не переопределено отдельно.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="rounded-lg border divide-y">
-            {FUNNEL_PRESETS.standard.enabledStages.map((slug: StageSlug) => {
-              const def = PLATFORM_STAGES[slug]
-              const val =
-                slug in stageHhActions
-                  ? stageHhActions[slug]
-                  : def.defaultHhAction
-              return (
-                <div
-                  key={slug}
-                  className="flex items-center justify-between gap-3 px-3 py-2"
-                >
-                  <span className="text-sm">{def.defaultLabel}</span>
-                  <Select
-                    value={val ?? "none"}
-                    onValueChange={(v) =>
-                      setStageHhActions((prev) => ({
-                        ...prev,
-                        [slug]:
-                          v === "invitation" || v === "discard" || v === "assessment" ? v : null,
-                      }))
-                    }
-                  >
-                    <SelectTrigger className="h-8 text-xs w-[200px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Ничего не делать</SelectItem>
-                      <SelectItem value="invitation">
-                        Пригласить (hh-приглашение)
-                      </SelectItem>
-                      <SelectItem value="assessment">
-                        Тестовое задание (hh-тест)
-                      </SelectItem>
-                      <SelectItem value="discard">Отказать (hh-отказ)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )
-            })}
-          </div>
-          <p className="text-[11px] text-muted-foreground">
-            Приглашение/отказ уходят в hh-чат кандидата с текстом из настроек
-            вакансии. Работает только для откликов с hh.ru.
-          </p>
-          <div className="flex justify-end">
-            <Button
-              size="sm"
-              className="h-8 text-xs gap-1.5"
-              onClick={handleSaveStageHh}
-              disabled={savingStageHh}
-            >
-              <Save className="size-3.5" />
-              {savingStageHh ? "Сохранение…" : "Сохранить"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          {/* Таблица с горизонтальным скроллом на мобиле */}
+          <div className="overflow-x-auto rounded-lg border">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead>
+                <tr className="border-b bg-muted/40">
+                  <th className="px-3 py-2 text-left text-sm font-medium text-muted-foreground w-[120px]">
+                    Стадия
+                  </th>
+                  <th className="px-3 py-2 text-left text-sm font-medium text-muted-foreground w-[120px]">
+                    Цвет
+                  </th>
+                  <th className="px-3 py-2 text-left text-sm font-medium text-muted-foreground">
+                    Название
+                  </th>
+                  <th className="px-3 py-2 text-left text-sm font-medium text-muted-foreground w-[170px]">
+                    hh.ru
+                  </th>
+                  <th className="px-3 py-2 text-left text-sm font-medium text-muted-foreground w-[155px]">
+                    <span>Авито</span>{" "}
+                    <Badge variant="secondary" className="text-[10px] px-1 py-0 align-middle">скоро</Badge>
+                  </th>
+                  <th className="px-3 py-2 text-left text-sm font-medium text-muted-foreground w-[155px]">
+                    <span>SuperJob</span>{" "}
+                    <Badge variant="secondary" className="text-[10px] px-1 py-0 align-middle">скоро</Badge>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {TABLE_STAGES.map((slug: StageSlug) => {
+                  const def = PLATFORM_STAGES[slug]
+                  const color = (stageColors[slug] as StageColor | undefined) ?? def.defaultColor
+                  const label = stageLabels[slug] ?? ""
+                  const hhVal =
+                    slug in stageHhActions
+                      ? stageHhActions[slug]
+                      : def.defaultHhAction
+                  const avitoVal = stageAvitoActions[slug] ?? "none"
+                  const sjVal = stageSjActions[slug] ?? "none"
 
-      {/* ── Блок 3.5: Палитра стадий ── */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Palette className="w-4 h-4" />
-            Палитра стадий
-          </CardTitle>
-          <CardDescription>
-            Дефолтные названия и цвета для всех вакансий компании.
-            Можно переопределить в настройках конкретной вакансии.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="rounded-lg border divide-y">
-            {ALL_STAGE_SLUGS.map((slug: StageSlug) => {
-              const def = PLATFORM_STAGES[slug]
-              const label = stageLabels[slug] ?? ""
-              const color = (stageColors[slug] as StageColor | undefined) ?? def.defaultColor
-              return (
-                <div key={slug} className="flex items-center gap-3 px-3 py-2">
-                  <div className="flex gap-0.5 shrink-0">
-                    {COLOR_ORDER.map((c) => (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() => setStageColors(prev => ({ ...prev, [slug]: c }))}
-                        className={`w-3 h-3 rounded-full ${STAGE_DOT_CLASSES[c]} transition-all ${color === c ? "ring-1 ring-offset-1 ring-foreground" : "opacity-40 hover:opacity-80"}`}
-                        aria-label={c}
-                      />
-                    ))}
-                  </div>
-                  <span className="text-xs text-muted-foreground w-28 shrink-0 truncate">
-                    {def.defaultLabel}
-                  </span>
-                  <Input
-                    value={label}
-                    onChange={(e) => setStageLabels(prev => ({ ...prev, [slug]: e.target.value }))}
-                    placeholder={def.defaultLabel}
-                    className="h-7 text-xs flex-1"
-                  />
-                </div>
-              )
-            })}
+                  return (
+                    <tr key={slug} className="hover:bg-muted/20 transition-colors">
+                      {/* Стадия */}
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-muted-foreground truncate max-w-[100px]">
+                            {def.defaultLabel}
+                          </span>
+                          {def.isSystem && (
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0">
+                              системная
+                            </Badge>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Цвет */}
+                      <td className="px-3 py-2">
+                        <div className="flex gap-0.5 flex-wrap">
+                          {COLOR_ORDER.map((c) => (
+                            <button
+                              key={c}
+                              type="button"
+                              onClick={() => setStageColors(prev => ({ ...prev, [slug]: c }))}
+                              className={cn(
+                                "w-3 h-3 rounded-full transition-all",
+                                STAGE_DOT_CLASSES[c],
+                                color === c
+                                  ? "ring-1 ring-offset-1 ring-foreground"
+                                  : "opacity-40 hover:opacity-80",
+                              )}
+                              aria-label={c}
+                            />
+                          ))}
+                        </div>
+                      </td>
+
+                      {/* Название */}
+                      <td className="px-3 py-2">
+                        <Input
+                          value={label}
+                          onChange={(e) =>
+                            setStageLabels(prev => ({ ...prev, [slug]: e.target.value }))
+                          }
+                          placeholder={def.defaultLabel}
+                          className="h-7 text-xs"
+                        />
+                      </td>
+
+                      {/* hh.ru */}
+                      <td className="px-3 py-2">
+                        <Select
+                          value={hhVal ?? "none"}
+                          onValueChange={(v) =>
+                            setStageHhActions((prev) => ({
+                              ...prev,
+                              [slug]:
+                                v === "invitation" || v === "discard" || v === "assessment"
+                                  ? v
+                                  : null,
+                            }))
+                          }
+                        >
+                          <SelectTrigger className="h-7 text-xs w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Ничего</SelectItem>
+                            <SelectItem value="invitation">Пригласить</SelectItem>
+                            <SelectItem value="assessment">Тестовое задание</SelectItem>
+                            <SelectItem value="discard">Отказать</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </td>
+
+                      {/* Авито */}
+                      <td className="px-3 py-2">
+                        <Select
+                          value={avitoVal}
+                          onValueChange={(v) =>
+                            setStageAvitoActions((prev) => ({ ...prev, [slug]: v }))
+                          }
+                        >
+                          <SelectTrigger className="h-7 text-xs w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Ничего</SelectItem>
+                            <SelectItem value="invitation">Пригласить</SelectItem>
+                            <SelectItem value="discard">Отказать</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </td>
+
+                      {/* SuperJob */}
+                      <td className="px-3 py-2">
+                        <Select
+                          value={sjVal}
+                          onValueChange={(v) =>
+                            setStageSjActions((prev) => ({ ...prev, [slug]: v }))
+                          }
+                        >
+                          <SelectTrigger className="h-7 text-xs w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Ничего</SelectItem>
+                            <SelectItem value="invitation">Пригласить</SelectItem>
+                            <SelectItem value="discard">Отказать</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
-          <p className="text-[11px] text-muted-foreground">
-            Пустое поле — используется платформенное название.
-          </p>
+
+          {/* Подсказки */}
+          <div className="space-y-1">
+            <p className="text-[11px] text-muted-foreground">
+              Пустое название — используется платформенное. Системные стадии («новый», «отказ») нельзя выключить, но можно переименовать и перекрасить.
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              Авито и SuperJob — интеграции в разработке; действия сохранятся и применятся после подключения. Сейчас работает hh.ru.
+            </p>
+          </div>
+
           <div className="flex justify-end">
             <Button
               size="sm"
               className="h-8 text-xs gap-1.5"
-              onClick={handleSavePalette}
-              disabled={savingPalette}
+              onClick={handleSaveStages}
+              disabled={savingStages}
             >
               <Save className="size-3.5" />
-              {savingPalette ? "Сохранение…" : "Сохранить"}
+              {savingStages ? "Сохранение…" : "Сохранить стадии"}
             </Button>
           </div>
         </CardContent>
