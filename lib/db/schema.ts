@@ -746,6 +746,11 @@ export const vacancies = pgTable("vacancies", {
   ]),
   // Кастомные периоды (например, корпоративные отпуска). { from: "YYYY-MM-DD", to, label }.
   scheduleCustomHolidays:     jsonb("schedule_custom_holidays").$type<{ from: string; to: string; label: string }[]>().notNull().default([]),
+  // Источники откликов на вакансию (миграция 0191).
+  // Определяет, с каких площадок принимаются отклики.
+  // Дефолт ['hh'] — существующие вакансии работают как раньше.
+  // При добавлении 'avito' система начинает принимать входящие из Авито Messenger.
+  channelSources:             jsonb("channel_sources").$type<Array<"hh" | "avito">>().notNull().default(["hh"]),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
