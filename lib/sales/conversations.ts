@@ -193,6 +193,14 @@ export async function pauseForHuman(conversationId: string): Promise<void> {
     .where(eq(salesConversations.id, conversationId))
 }
 
+// Пометить диалог как «забронировал» — исключает из дожима.
+export async function markBooked(conversationId: string): Promise<void> {
+  await db
+    .update(salesConversations)
+    .set({ bookedAt: new Date(), updatedAt: new Date() })
+    .where(eq(salesConversations.id, conversationId))
+}
+
 // Показать клиенту индикатор «печатает…» (если канал поддерживает).
 export async function sendTypingIndicator(conversation: Conversation): Promise<void> {
   const account = await getChannelAccountById(conversation.channelAccountId)

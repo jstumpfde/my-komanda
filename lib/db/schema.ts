@@ -507,6 +507,9 @@ export const salesConversations = pgTable("sales_conversations", {
   dealId:           uuid("deal_id").references(() => salesDeals.id, { onDelete: "set null" }),
   status:           text("status").default("active").notNull(), // active|paused_for_human|closed
   lastMessageAt:    timestamp("last_message_at"),
+  bookedAt:         timestamp("booked_at"),            // когда создана бронь — исключает из дожима
+  followupCount:    integer("followup_count").default(0),  // сколько раз дожали
+  lastFollowupAt:   timestamp("last_followup_at"),     // когда дожимали последний раз
   createdAt:        timestamp("created_at").defaultNow(),
   updatedAt:        timestamp("updated_at").defaultNow(),
 }, (t) => [

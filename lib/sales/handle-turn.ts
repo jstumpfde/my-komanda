@@ -18,6 +18,7 @@ import {
   recordMessage,
   sendTypingIndicator,
   sendViaConversationChannel,
+  markBooked,
   type Conversation,
 } from "./conversations"
 import { buildServiceContext } from "./service-context"
@@ -212,6 +213,7 @@ async function tryCreateBooking(
     }
 
     if (res.created) {
+      await markBooked(conversation.id) // исключить из дожима
       await notifySalon(
         conversation,
         settings,
