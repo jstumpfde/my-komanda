@@ -590,6 +590,61 @@ export const salesBotPresets = pgTable("sales_bot_presets", {
   index("sales_bot_presets_tenant_idx").on(t.tenantId),
 ])
 
+// Per-tenant настройки CRM/продаж. Заменяет хардкод стадий из
+// lib/crm/deal-stages.ts: тип воронки + редактируемые стадии. funnelType:
+// 'booking' (продажи времени) | 'b2b' (классическая сделка). stages — массив
+// CrmStage {id,label,color,probability,order}; null = дефолт по funnelType.
+// leadSources/automations — задел под фазу 2 (источники лидов, автоправила).
+export const salesSettings = pgTable("sales_settings", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  tenantId:    uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  funnelType:  text("funnel_type").default("booking").notNull(), // 'booking' | 'b2b'
+  stages:      jsonb("stages"),        // CrmStage[] — null = дефолт по funnelType
+  leadSources: jsonb("lead_sources"),  // string[] (фаза 2)
+  automations: jsonb("automations"),   // правила по стадиям (фаза 2)
+  slotStepMinutes: integer("slot_step_minutes").default(30),  // шаг сетки слотов записи
+  bookAheadDays:   integer("book_ahead_days").default(14),    // на сколько дней вперёд запись
+  createdAt:   timestamp("created_at").defaultNow(),
+  updatedAt:   timestamp("updated_at").defaultNow(),
+}, (t) => [
+  unique("sales_settings_tenant_uniq").on(t.tenantId),
+])
+
+// Задачи отдела продаж (per-tenant). Привязка к сделке опциональна.
+export const salesTasks = pgTable("sales_tasks", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  tenantId:     uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  title:        text("title").notNull(),
+  description:  text("description"),
+  priority:     text("priority").default("medium"),  // high / medium / low
+  dueDate:      date("due_date"),
+  done:         boolean("done").default(false),
+  dealId:       uuid("deal_id").references(() => salesDeals.id, { onDelete: "set null" }),
+  assigneeName: text("assignee_name"),
+  createdAt:    timestamp("created_at").defaultNow(),
+  updatedAt:    timestamp("updated_at").defaultNow(),
+}, (t) => [
+  index("sales_tasks_tenant_idx").on(t.tenantId),
+])
+
+// Каталог товаров/услуг отдела продаж (per-tenant). Отдельно от booking_services
+// (записываемые услуги салона) — это коммерческий прайс-лист для сделок.
+export const salesProducts = pgTable("sales_products", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  tenantId:    uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  name:        text("name").notNull(),
+  category:    text("category"),
+  description: text("description"),
+  price:       integer("price").default(0),   // копейки
+  unit:        text("unit").default("шт"),
+  vat:         integer("vat").default(20),     // процент
+  status:      text("status").default("active"), // active / archived
+  createdAt:   timestamp("created_at").defaultNow(),
+  updatedAt:   timestamp("updated_at").defaultNow(),
+}, (t) => [
+  index("sales_products_tenant_idx").on(t.tenantId),
+])
+
 // ─── Vacancies ────────────────────────────────────────────────────────────────
 
 export const vacancies = pgTable("vacancies", {

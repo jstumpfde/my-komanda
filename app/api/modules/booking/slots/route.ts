@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { bookings, bookingServices, bookingResources } from "@/lib/db/schema"
+import { bookings, bookingServices, bookingResources, salesSettings } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { DEFAULT_SCHEDULE, DEFAULT_BREAKS } from "@/lib/booking/constants"
 
@@ -61,6 +61,14 @@ export async function GET(req: NextRequest) {
     const dayStart = timeToMin(daySchedule.start)
     const dayEnd = timeToMin(daySchedule.end)
 
+    // Шаг сетки слотов из настроек CRM тенанта (по умолчанию 30 мин).
+    const [crmSettings] = await db
+      .select({ slotStepMinutes: salesSettings.slotStepMinutes })
+      .from(salesSettings)
+      .where(eq(salesSettings.tenantId, user.companyId))
+      .limit(1)
+    const slotStep = crmSettings?.slotStepMinutes ?? 30
+
     // Существующие записи на дату
     const conditions = [
       eq(bookings.tenantId, user.companyId),
@@ -88,7 +96,7 @@ export async function GET(req: NextRequest) {
 
     // Генерируем слоты
     const slots: { time: string; available: boolean }[] = []
-    for (let t = dayStart; t + duration <= dayEnd; t += 30) {
+    for (let t = dayStart; t + duration <= dayEnd; t += slotStep) {
       const slotEnd = t + duration
       const conflict = busyRanges.some((r) => t < r.end && slotEnd > r.start)
       slots.push({ time: minToTime(t), available: !conflict })

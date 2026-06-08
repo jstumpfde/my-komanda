@@ -81,6 +81,52 @@ export async function createBookingFromExtraction(params: {
   const endTime = addMinutes(startTime, duration)
   const date = extraction.date
 
+  // ── Идемпотентность / занятость слота (работает БЕЗ мастера тоже) ──
+  // Конфликт по мастеру (ниже) срабатывает только когда назначен resourceId.
+  // Но в большинстве диалогов мастер не указан — без этой проверки повторное
+  // подтверждение того же слота создавало бы дубль брони. Ищем не-отменённую
+  // бронь на ту же услугу/дату/время.
+  const sameSlot = await db
+    .select({
+      id: bookings.id,
+      clientName: bookings.clientName,
+      contactId: bookings.contactId,
+      status: bookings.status,
+    })
+    .from(bookings)
+    .where(
+      and(
+        eq(bookings.tenantId, tenantId),
+        eq(bookings.serviceId, svc.id),
+        eq(bookings.date, date),
+        eq(bookings.startTime, startTime),
+      ),
+    )
+  const wantName = (clientName ?? "").trim().toLowerCase()
+  const sameClient = (b: { clientName: string | null; contactId: string | null }): boolean => {
+    if (contactId && b.contactId) return b.contactId === contactId
+    const bn = (b.clientName ?? "").trim().toLowerCase()
+    if (wantName && bn) return bn.includes(wantName) || wantName.includes(bn)
+    // нет идентификаторов для сопоставления — считаем тем же клиентом (анти-спам)
+    return true
+  }
+  const active = sameSlot.filter((b) => b.status !== "cancelled")
+  if (active.length) {
+    if (active.some(sameClient)) {
+      // Тот же клиент повторно подтверждает уже существующую бронь — не дублируем.
+      // confirmationText НЕ возвращаем: обычный ответ бота сам скажет «у вас уже есть запись».
+      return { created: false, reason: "already_booked" }
+    }
+    // Слот занят другим клиентом — предлагаем другое время.
+    return {
+      created: false,
+      reason: "slot_taken",
+      confirmationText:
+        params.slotTakenMessage ||
+        "Ой, это время только что заняли. Давайте подберём другое удобное время?",
+    }
+  }
+
   // ── Проверка конфликта по времени (если назначен мастер) ──
   if (resourceId) {
     const dayBookings = await db

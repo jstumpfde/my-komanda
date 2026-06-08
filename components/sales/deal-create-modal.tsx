@@ -7,19 +7,26 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Handshake } from "lucide-react"
-import { DEAL_STAGES, DEAL_SOURCES } from "@/lib/crm/deal-stages"
+import { DEAL_STAGES, DEAL_SOURCES, type CrmStage } from "@/lib/crm/deal-stages"
 
 interface DealCreateModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSubmit: (data: Record<string, unknown>) => void
+  /** Стадии воронки тенанта (из настроек CRM). Fallback — дефолтный B2B-набор. */
+  stages?: CrmStage[]
 }
 
-export function DealCreateModal({ open, onOpenChange, onSubmit }: DealCreateModalProps) {
+export function DealCreateModal({ open, onOpenChange, onSubmit, stages }: DealCreateModalProps) {
+  // Только не-терминальные стадии (создаём сделку не в «выиграно/проиграно»).
+  const stageOptions = (stages && stages.length ? stages : DEAL_STAGES)
+    .filter((s) => s.probability > 0 && s.probability < 100)
+  const defaultStage = stageOptions[0]?.id ?? ""
+
   const [form, setForm] = useState({
     title: "",
     amount: "",
-    stage: "new",
+    stage: "",
     source: "",
     expectedCloseDate: "",
   })
@@ -29,11 +36,11 @@ export function DealCreateModal({ open, onOpenChange, onSubmit }: DealCreateModa
     onSubmit({
       title: form.title.trim(),
       amount: form.amount ? Number(form.amount.replace(/\s/g, "")) : undefined,
-      stage: form.stage,
+      stage: form.stage || defaultStage,
       source: form.source || undefined,
       expectedCloseDate: form.expectedCloseDate || undefined,
     })
-    setForm({ title: "", amount: "", stage: "new", source: "", expectedCloseDate: "" })
+    setForm({ title: "", amount: "", stage: "", source: "", expectedCloseDate: "" })
   }
 
   return (
@@ -65,10 +72,10 @@ export function DealCreateModal({ open, onOpenChange, onSubmit }: DealCreateModa
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Этап</Label>
-              <Select value={form.stage} onValueChange={(v) => setForm((p) => ({ ...p, stage: v }))}>
+              <Select value={form.stage || defaultStage} onValueChange={(v) => setForm((p) => ({ ...p, stage: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {DEAL_STAGES.filter((s) => s.id !== "won" && s.id !== "lost").map((s) => (
+                  {stageOptions.map((s) => (
                     <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
                   ))}
                 </SelectContent>

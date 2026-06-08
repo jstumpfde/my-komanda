@@ -16,7 +16,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
-import { DEAL_STAGES, DEAL_PRIORITIES } from "@/lib/crm/deal-stages"
+import { DEAL_PRIORITIES, getDefaultStages, type CrmStage } from "@/lib/crm/deal-stages"
 import { DealCreateModal } from "@/components/sales/deal-create-modal"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -110,6 +110,8 @@ export default function DealsPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [dragDealId, setDragDealId] = useState<string | null>(null)
   const [dragOverStage, setDragOverStage] = useState<string | null>(null)
+  // Стадии воронки — из настроек CRM тенанта (fallback — дефолт B2B до загрузки).
+  const [stages, setStages] = useState<CrmStage[]>(() => getDefaultStages("b2b"))
 
   useEffect(() => {
     setLoading(true)
@@ -121,6 +123,21 @@ export default function DealsPage() {
       .catch(() => setDeals([]))
       .finally(() => setLoading(false))
   }, [])
+
+  // Загрузить стадии воронки из настроек CRM.
+  useEffect(() => {
+    fetch("/api/modules/sales/settings")
+      .then((r) => r.json())
+      .then((j) => {
+        const d = j?.data ?? j
+        if (Array.isArray(d?.stages) && d.stages.length) setStages(d.stages as CrmStage[])
+      })
+      .catch(() => {})
+  }, [])
+
+  // Терминальные стадии (выиграно/проиграно) — по вероятности: 100 = won, 0 = lost.
+  const wonIds = new Set(stages.filter((s) => s.probability >= 100).map((s) => s.id))
+  const lostIds = new Set(stages.filter((s) => s.probability <= 0).map((s) => s.id))
 
   // фильтрация
   const filtered = deals.filter((d) => {
@@ -134,20 +151,20 @@ export default function DealsPage() {
 
   // группировка по stage
   const grouped: Record<string, DealItem[]> = {}
-  for (const s of DEAL_STAGES) grouped[s.id] = []
+  for (const s of stages) grouped[s.id] = []
   for (const d of filtered) {
-    const key = d.stage || "new"
+    const key = d.stage || stages[0]?.id
     if (grouped[key]) grouped[key].push(d)
   }
 
   // summary
   const totalDeals = deals.length
   const activeAmount = deals
-    .filter((d) => d.stage !== "won" && d.stage !== "lost")
+    .filter((d) => !wonIds.has(d.stage) && !lostIds.has(d.stage))
     .reduce((s, d) => s + (d.amount || 0), 0)
-  const wonDeals = deals.filter((d) => d.stage === "won")
+  const wonDeals = deals.filter((d) => wonIds.has(d.stage))
   const wonAmount = wonDeals.reduce((s, d) => s + (d.amount || 0), 0)
-  const lostCount = deals.filter((d) => d.stage === "lost").length
+  const lostCount = deals.filter((d) => lostIds.has(d.stage)).length
   const conversion = wonDeals.length + lostCount > 0
     ? Math.round((wonDeals.length / (wonDeals.length + lostCount)) * 100)
     : 0
@@ -172,7 +189,7 @@ export default function DealsPage() {
     const dealId = e.dataTransfer.getData("text/plain")
     if (!dealId) return
 
-    const stageInfo = DEAL_STAGES.find((s) => s.id === stageId)
+    const stageInfo = stages.find((s) => s.id === stageId)
     // Оптимистичное обновление UI
     setDeals((prev) =>
       prev.map((d) =>
@@ -181,7 +198,7 @@ export default function DealsPage() {
               ...d,
               stage: stageId,
               probability: stageInfo?.probability ?? d.probability,
-              closedAt: stageId === "won" || stageId === "lost" ? new Date().toISOString() : d.closedAt,
+              closedAt: wonIds.has(stageId) || lostIds.has(stageId) ? new Date().toISOString() : d.closedAt,
             }
           : d,
       ),
@@ -192,7 +209,10 @@ export default function DealsPage() {
     fetch(`/api/modules/sales/deals/${dealId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ stage: stageId }),
+      body: JSON.stringify({
+        stage: stageId,
+        closedAt: wonIds.has(stageId) || lostIds.has(stageId) ? new Date().toISOString() : null,
+      }),
     }).catch(() => toast.error("Не удалось сохранить смену стадии"))
   }
 
@@ -204,7 +224,7 @@ export default function DealsPage() {
       body: JSON.stringify({
         title: data.title,
         amount,
-        stage: data.stage || "new",
+        stage: data.stage || stages[0]?.id,
         source: data.source || null,
         expectedCloseDate: data.expectedCloseDate || null,
       }),
@@ -321,7 +341,7 @@ export default function DealsPage() {
               </div>
             )}
             <div className={`flex gap-3 overflow-x-auto pb-4 ${loading ? "hidden" : ""}`}>
-              {DEAL_STAGES.map((stage) => {
+              {stages.map((stage) => {
                 const cards = grouped[stage.id] || []
                 const colAmount = cards.reduce((s, d) => s + (d.amount || 0), 0)
                 const isOver = dragOverStage === stage.id
@@ -410,7 +430,7 @@ export default function DealsPage() {
         </main>
       </SidebarInset>
 
-      <DealCreateModal open={modalOpen} onOpenChange={setModalOpen} onSubmit={handleCreate} />
+      <DealCreateModal open={modalOpen} onOpenChange={setModalOpen} onSubmit={handleCreate} stages={stages} />
     </SidebarProvider>
   )
 }

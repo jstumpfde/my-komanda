@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
@@ -27,29 +27,44 @@ import {
   Calendar, Trash2, Save, Clock,
 } from "lucide-react"
 import { toast } from "sonner"
-import { DEAL_STAGES, DEAL_PRIORITIES, DEAL_SOURCES, type DealStageId } from "@/lib/crm/deal-stages"
+import { DEAL_PRIORITIES, DEAL_SOURCES, getDefaultStages, type CrmStage } from "@/lib/crm/deal-stages"
 import { cn } from "@/lib/utils"
+import { Loader2, MessageSquare, Unlink } from "lucide-react"
 
-// ─── Mock ─────────────────────────────────────────────────────────────────────
+// ─── Тип сделки (форма ответа GET /api/modules/sales/deals/[id]) ───────────────
 
-const MOCK_DEALS: Record<string, {
-  id: string; title: string; amount: number | null; currency: string
-  stage: string; priority: string; probability: number | null
-  companyId: string | null; companyName: string | null
-  contactId: string | null; contactName: string | null
-  assignedToId: string | null; assignedToName: string | null
-  description: string | null; source: string | null
-  expectedCloseDate: string | null; closedAt: string | null
-  createdAt: string; updatedAt: string
-}> = {
-  "1": { id: "1", title: "Поставка серверов для Ромашка", amount: 250000000, currency: "RUB", stage: "new", priority: "high", probability: 10, companyId: "1", companyName: 'ООО "Ромашка"', contactId: "1", contactName: "Иван Петров", assignedToId: null, assignedToName: "Алексей Иванов", description: "Поставка 10 серверов Dell PowerEdge для нового дата-центра клиента.", source: "Сайт", expectedCloseDate: "2026-05-15", closedAt: null, createdAt: "2026-04-01T10:00:00Z", updatedAt: "2026-04-10T14:30:00Z" },
-  "2": { id: "2", title: "Внедрение CRM Альфа Групп", amount: 500000000, currency: "RUB", stage: "qualifying", priority: "high", probability: 20, companyId: "2", companyName: 'ЗАО "Альфа Групп"', contactId: "4", contactName: "Елена Волкова", assignedToId: null, assignedToName: "Мария Петрова", description: null, source: "Реферал", expectedCloseDate: "2026-06-01", closedAt: null, createdAt: "2026-03-20T09:00:00Z", updatedAt: "2026-04-05T11:00:00Z" },
-  "3": { id: "3", title: "Обучение сотрудников ТехноПлюс", amount: 80000000, currency: "RUB", stage: "proposal", priority: "medium", probability: 40, companyId: "4", companyName: 'ООО "ТехноПлюс"', contactId: "7", contactName: "Ольга Смирнова", assignedToId: null, assignedToName: null, description: "Программа обучения 50 сотрудников по работе с новой ERP.", source: "Звонок", expectedCloseDate: "2026-05-20", closedAt: null, createdAt: "2026-03-15T08:00:00Z", updatedAt: "2026-04-03T16:00:00Z" },
-  "4": { id: "4", title: "Аутсорс поддержки ИП Петров", amount: 35000000, currency: "RUB", stage: "negotiation", priority: "low", probability: 60, companyId: "3", companyName: "ИП Петров", contactId: "6", contactName: "Сергей Петров", assignedToId: null, assignedToName: "Дмитрий Козлов", description: null, source: "Email", expectedCloseDate: "2026-04-30", closedAt: null, createdAt: "2026-03-10T12:00:00Z", updatedAt: "2026-04-08T10:00:00Z" },
-  "5": { id: "5", title: "Лицензии 1С для СтройМастер", amount: 120000000, currency: "RUB", stage: "won", priority: "medium", probability: 100, companyId: "5", companyName: 'ООО "СтройМастер"', contactId: null, contactName: null, assignedToId: null, assignedToName: "Алексей Иванов", description: "50 лицензий 1С:Предприятие 8.3 ПРОФ.", source: "Выставка", expectedCloseDate: "2026-04-10", closedAt: "2026-04-10T18:00:00Z", createdAt: "2026-02-20T09:00:00Z", updatedAt: "2026-04-10T18:00:00Z" },
-  "6": { id: "6", title: "Консалтинг ИП Петров", amount: 15000000, currency: "RUB", stage: "lost", priority: "low", probability: 0, companyId: "3", companyName: "ИП Петров", contactId: "6", contactName: "Сергей Петров", assignedToId: null, assignedToName: "Сергей Новиков", description: null, source: "Звонок", expectedCloseDate: "2026-03-15", closedAt: "2026-03-20T15:00:00Z", createdAt: "2026-02-01T10:00:00Z", updatedAt: "2026-03-20T15:00:00Z" },
-  "7": { id: "7", title: "Интеграция API Альфа Групп", amount: 320000000, currency: "RUB", stage: "new", priority: "medium", probability: 10, companyId: "2", companyName: 'ЗАО "Альфа Групп"', contactId: "5", contactName: "Дмитрий Новиков", assignedToId: null, assignedToName: null, description: null, source: "Реферал", expectedCloseDate: "2026-07-01", closedAt: null, createdAt: "2026-04-10T11:00:00Z", updatedAt: "2026-04-10T11:00:00Z" },
-  "8": { id: "8", title: "Настройка телефонии ГК Вектор", amount: 45000000, currency: "RUB", stage: "qualifying", priority: "medium", probability: 20, companyId: null, companyName: "ГК Вектор", contactId: null, contactName: null, assignedToId: null, assignedToName: "Мария Петрова", description: null, source: "Звонок", expectedCloseDate: "2026-05-30", closedAt: null, createdAt: "2026-04-05T14:00:00Z", updatedAt: "2026-04-05T14:00:00Z" },
+interface Deal {
+  id: string
+  title: string
+  amount: number | null
+  currency: string
+  stage: string
+  priority: string
+  probability: number | null
+  companyId: string | null
+  contactId: string | null
+  assignedToId: string | null
+  description: string | null
+  source: string | null
+  expectedCloseDate: string | null
+  closedAt: string | null
+  createdAt: string
+  updatedAt: string
+  companyName: string | null
+  contactFirstName: string | null
+  contactLastName: string | null
+  assignedToName: string | null
+}
+
+interface ConvLite {
+  id: string
+  channel: string
+  externalUserName: string | null
+  externalUserId: string
+  status: string
+  dealId: string | null
+  contactId: string | null
+  lastMessageAt: string | null
 }
 
 function formatAmount(amount: number | null) {
@@ -73,9 +88,72 @@ export default function DealDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
 
-  const initial = MOCK_DEALS[id]
+  const [deal, setDeal] = useState<Deal | null>(null)
+  const [stages, setStages] = useState<CrmStage[]>(() => getDefaultStages("b2b"))
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
 
-  const [deal, setDeal] = useState(initial || null)
+  // Загрузка сделки
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    fetch(`/api/modules/sales/deals/${id}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((j) => { if (alive) setDeal((j?.data ?? j) as Deal) })
+      .catch(() => { if (alive) setDeal(null) })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [id])
+
+  // Загрузка стадий воронки тенанта
+  useEffect(() => {
+    fetch("/api/modules/sales/settings")
+      .then((r) => r.json())
+      .then((j) => { const d = j?.data ?? j; if (Array.isArray(d?.stages) && d.stages.length) setStages(d.stages as CrmStage[]) })
+      .catch(() => {})
+  }, [])
+
+  // Диалоги клиента (для привязки и автоматизаций send_message/start_followup)
+  const [conversations, setConversations] = useState<ConvLite[]>([])
+  const refreshConversations = () => {
+    fetch("/api/modules/sales/conversations")
+      .then((r) => r.json())
+      .then((j) => { const d = j?.data ?? j; setConversations((d.conversations ?? []) as ConvLite[]) })
+      .catch(() => {})
+  }
+  useEffect(() => { refreshConversations() }, [])
+
+  const linkConversation = async (convId: string, dealLink: string | null) => {
+    try {
+      const res = await fetch("/api/modules/sales/conversations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: convId, dealId: dealLink }),
+      })
+      if (!res.ok) throw new Error()
+      refreshConversations()
+      toast.success(dealLink ? "Диалог привязан" : "Диалог отвязан")
+    } catch {
+      toast.error("Не удалось обновить привязку")
+    }
+  }
+
+  const wonIds = new Set(stages.filter((s) => s.probability >= 100).map((s) => s.id))
+  const lostIds = new Set(stages.filter((s) => s.probability <= 0).map((s) => s.id))
+
+  if (loading) {
+    return (
+      <SidebarProvider defaultOpen={true}>
+        <DashboardSidebar />
+        <SidebarInset>
+          <DashboardHeader />
+          <main className="flex-1 flex items-center justify-center text-muted-foreground">
+            <Loader2 className="w-5 h-5 animate-spin mr-2" /> Загрузка сделки…
+          </main>
+        </SidebarInset>
+      </SidebarProvider>
+    )
+  }
 
   if (!deal) {
     return (
@@ -97,28 +175,59 @@ export default function DealDetailPage() {
     )
   }
 
-  const update = (patch: Partial<typeof deal>) => setDeal((prev) => prev ? { ...prev, ...patch } : prev)
+  const contactName = [deal.contactFirstName, deal.contactLastName].filter(Boolean).join(" ") || null
+
+  const update = (patch: Partial<Deal>) => setDeal((prev) => prev ? { ...prev, ...patch } : prev)
 
   const handleStageClick = (stageId: string) => {
-    const stageInfo = DEAL_STAGES.find((s) => s.id === stageId)
+    const stageInfo = stages.find((s) => s.id === stageId)
     update({
       stage: stageId,
       probability: stageInfo?.probability ?? deal.probability,
-      closedAt: stageId === "won" || stageId === "lost" ? new Date().toISOString() : deal.closedAt,
+      closedAt: wonIds.has(stageId) || lostIds.has(stageId) ? new Date().toISOString() : null,
     })
-    toast.success(`Этап: ${stageInfo?.label}`)
   }
 
-  const handleSave = () => {
-    toast.success("Сделка сохранена")
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/modules/sales/deals/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: deal.title,
+          amount: deal.amount,
+          currency: deal.currency,
+          stage: deal.stage,
+          priority: deal.priority,
+          probability: deal.probability,
+          source: deal.source,
+          description: deal.description,
+          expectedCloseDate: deal.expectedCloseDate,
+          closedAt: deal.closedAt,
+        }),
+      })
+      if (!res.ok) { const d = await res.json().catch(() => ({})) as { error?: string }; throw new Error(d.error) }
+      toast.success("Сделка сохранена")
+    } catch (e) {
+      toast.error(e instanceof Error && e.message ? e.message : "Не удалось сохранить")
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleDelete = () => {
-    toast.success("Сделка удалена")
-    router.push("/sales/deals")
+  const handleDelete = async () => {
+    try {
+      const res = await fetch(`/api/modules/sales/deals/${id}`, { method: "DELETE" })
+      if (!res.ok) throw new Error()
+      toast.success("Сделка удалена")
+      router.push("/sales/deals")
+    } catch {
+      toast.error("Не удалось удалить")
+    }
   }
 
-  const currentStageIdx = DEAL_STAGES.findIndex((s) => s.id === deal.stage)
+  const currentStageIdx = stages.findIndex((s) => s.id === deal.stage)
 
   return (
     <SidebarProvider defaultOpen={true}>
@@ -155,8 +264,8 @@ export default function DealDetailPage() {
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
-                <Button size="sm" className="gap-1.5" onClick={handleSave}>
-                  <Save className="w-4 h-4" />
+                <Button size="sm" className="gap-1.5" onClick={handleSave} disabled={saving}>
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   Сохранить
                 </Button>
               </div>
@@ -165,9 +274,9 @@ export default function DealDetailPage() {
             {/* Stage progress bar */}
             <div className="mb-6">
               <div className="flex gap-1">
-                {DEAL_STAGES.map((stage, idx) => {
+                {stages.map((stage, idx) => {
                   const isActive = deal.stage === stage.id
-                  const isPast = idx < currentStageIdx && deal.stage !== "lost"
+                  const isPast = idx < currentStageIdx && !lostIds.has(deal.stage)
                   return (
                     <button
                       key={stage.id}
@@ -310,8 +419,8 @@ export default function DealDetailPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0">
-                    {deal.contactName ? (
-                      <p className="text-sm font-medium">{deal.contactName}</p>
+                    {contactName ? (
+                      <p className="text-sm font-medium">{contactName}</p>
                     ) : (
                       <p className="text-sm text-muted-foreground">Не привязан</p>
                     )}
@@ -331,6 +440,52 @@ export default function DealDetailPage() {
                     ) : (
                       <p className="text-sm text-muted-foreground">Не назначен</p>
                     )}
+                  </CardContent>
+                </Card>
+
+                {/* Диалог клиента */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <MessageSquare className="w-4 h-4" />
+                      Диалог клиента
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    {(() => {
+                      const linked = conversations.find((c) => c.dealId === id)
+                      if (linked) {
+                        return (
+                          <div className="space-y-2">
+                            <div>
+                              <p className="text-sm font-medium text-foreground">{linked.externalUserName || linked.externalUserId}</p>
+                              <p className="text-xs text-muted-foreground capitalize">{linked.channel}{linked.status === "paused_for_human" ? " · на менеджере" : ""}</p>
+                            </div>
+                            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => linkConversation(linked.id, null)}>
+                              <Unlink className="w-3.5 h-3.5" /> Отвязать
+                            </Button>
+                            <p className="text-[11px] text-muted-foreground">Автоматизации «написать клиенту» и «дожим» используют этот диалог.</p>
+                          </div>
+                        )
+                      }
+                      const linkable = conversations.filter((c) => !c.dealId && (!deal.contactId || !c.contactId || c.contactId === deal.contactId))
+                      if (linkable.length === 0) {
+                        return <p className="text-sm text-muted-foreground">Нет свободных диалогов для привязки.</p>
+                      }
+                      return (
+                        <div className="space-y-2">
+                          <p className="text-xs text-muted-foreground">Привяжите диалог бота — чтобы автоматизации могли писать клиенту.</p>
+                          <Select onValueChange={(v) => linkConversation(v, id)}>
+                            <SelectTrigger><SelectValue placeholder="Выбрать диалог" /></SelectTrigger>
+                            <SelectContent>
+                              {linkable.map((c) => (
+                                <SelectItem key={c.id} value={c.id}>{(c.externalUserName || c.externalUserId)} · {c.channel}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )
+                    })()}
                   </CardContent>
                 </Card>
 
@@ -365,7 +520,7 @@ export default function DealDetailPage() {
                       <span className="text-sm text-muted-foreground">Сумма</span>
                       <span className="text-lg font-bold">{formatAmount(deal.amount)}</span>
                     </div>
-                    {deal.stage !== "won" && deal.stage !== "lost" && deal.probability != null && (
+                    {!wonIds.has(deal.stage) && !lostIds.has(deal.stage) && deal.probability != null && (
                       <div className="flex items-center justify-between mt-1">
                         <span className="text-xs text-muted-foreground">Взвешенная</span>
                         <span className="text-sm font-medium text-muted-foreground">

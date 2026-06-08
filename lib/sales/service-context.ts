@@ -6,7 +6,7 @@
  */
 
 import { db } from "@/lib/db"
-import { bookingServices, bookingResources, bookings } from "@/lib/db/schema"
+import { bookingServices, bookingResources, bookings, salesSettings } from "@/lib/db/schema"
 import { eq, and, gte, lte } from "drizzle-orm"
 import { DEFAULT_SCHEDULE, DEFAULT_BREAKS, DAY_LABELS } from "@/lib/booking/constants"
 
@@ -84,7 +84,14 @@ export async function buildServiceContext(
   tenantId: string,
   opts?: { daysAhead?: number },
 ): Promise<SalesServiceContext> {
-  const daysAhead = opts?.daysAhead ?? 3
+  // Настройки CRM тенанта: шаг сетки слотов и горизонт записи.
+  const [settings] = await db
+    .select({ slotStepMinutes: salesSettings.slotStepMinutes, bookAheadDays: salesSettings.bookAheadDays })
+    .from(salesSettings)
+    .where(eq(salesSettings.tenantId, tenantId))
+    .limit(1)
+  const slotStep = settings?.slotStepMinutes ?? 30
+  const daysAhead = opts?.daysAhead ?? settings?.bookAheadDays ?? 3
 
   // ── 1. Загрузить активные услуги ─────────────────────────────────────────
   const services = await db
@@ -188,7 +195,7 @@ export async function buildServiceContext(
       const busy = [...(bookingsByDateResource[busyKey] ?? [])]
       for (const br of breaks) busy.push({ start: timeToMin(br.start), end: timeToMin(br.end) })
 
-      for (let t = dayStart; t + baseDuration <= dayEnd; t += 30) {
+      for (let t = dayStart; t + baseDuration <= dayEnd; t += slotStep) {
         if (isToday && t <= nowMin + 30) continue // сегодня — только будущее время
         const slotEnd = t + baseDuration
         const conflict = busy.some((r) => t < r.end && slotEnd > r.start)
