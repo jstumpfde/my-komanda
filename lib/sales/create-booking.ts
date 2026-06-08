@@ -40,6 +40,7 @@ export async function createBookingFromExtraction(params: {
   contactId?: string | null
   clientName?: string | null
   autoConfirm: boolean
+  slotTakenMessage?: string | null
 }): Promise<CreateBookingResult> {
   const { tenantId, extraction, contactId, clientName, autoConfirm } = params
 
@@ -100,6 +101,7 @@ export async function createBookingFromExtraction(params: {
         created: false,
         reason: "slot_taken",
         confirmationText:
+          params.slotTakenMessage ||
           "Ой, это время только что заняли. Давайте подберём другое удобное время?",
       }
     }

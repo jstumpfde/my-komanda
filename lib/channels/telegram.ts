@@ -26,6 +26,20 @@ export const telegramAdapter: ChannelAdapter = {
   type: "telegram",
   supportsButtons: true,
 
+  async sendTyping(creds: ChannelCredentials, to: string): Promise<void> {
+    const token = creds.botToken?.trim()
+    if (!token || !to?.trim()) return
+    try {
+      await fetch(`${TELEGRAM_API}/bot${token}/sendChatAction`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: to, action: "typing" }),
+      })
+    } catch {
+      // индикатор «печатает…» не критичен — молча игнорируем
+    }
+  },
+
   async send(creds: ChannelCredentials, message: OutboundMessage): Promise<SendResult> {
     const token = creds.botToken?.trim()
     if (!token) return { ok: false, skipped: true, reason: "not_configured" }

@@ -85,6 +85,65 @@ export interface SalesChatbotSettings {
   dailyMessageLimit?: number
   /** Порог уверенности AI — ниже него → эскалация (0-1). */
   confidenceThreshold?: number
+
+  // ---------------------------------------------------------------------------
+  // Новые поля (группа расширения)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Ночной режим: диапазон часов, в который бот переключается в особый режим.
+   * instant_ack — мгновенно шлёт ackMessage и не ждёт AI-ответа.
+   * full_reply  — AI отвечает как обычно, но без задержки (бот «дежурит»).
+   */
+  nightMode?: {
+    enabled?: boolean
+    /** Час начала ночи (0-23). */
+    startHour?: number
+    /** Час конца ночи (0-23). */
+    endHour?: number
+    mode?: "instant_ack" | "full_reply"
+    /** Текст авто-ответа при instant_ack. */
+    ackMessage?: string
+  }
+
+  /**
+   * Человечная задержка ответа: бот выбирает случайное значение из диапазона.
+   * Отдельно от responseTiming.delaySeconds (который фиксированный).
+   */
+  responseDelay?: {
+    minSeconds?: number
+    maxSeconds?: number
+  }
+
+  /** Индикатор «печатает…» перед отправкой ответа. */
+  typing?: {
+    enabled?: boolean
+    /** Сколько секунд показывать индикатор (имитация). */
+    durationSeconds?: number
+  }
+
+  /** Что видит клиент, если выбранный слот успели занять до подтверждения. */
+  slotTaken?: {
+    message?: string
+  }
+
+  /** Настройки уведомлений администратора/владельца о событиях бота. */
+  notifications?: {
+    /** Каналы уведомлений. */
+    channels?: Array<"telegram" | "email">
+    /** Кому слать (роли). */
+    recipients?: Array<"master" | "owner" | "admin">
+    telegramChatId?: string | null
+    email?: string | null
+  }
+
+  /**
+   * Целевая метрика успеха диалога.
+   * booked — клиент записан.
+   * showed  — клиент пришёл на визит.
+   * paid    — клиент оплатил услугу.
+   */
+  successMetric?: "booked" | "showed" | "paid"
 }
 
 // ---------------------------------------------------------------------------
@@ -153,6 +212,49 @@ export const DEFAULT_SALES_CHATBOT_SETTINGS = {
   dailyMessageLimit: 10,
   /** Ниже 0.7 — AI не уверен, эскалируем. */
   confidenceThreshold: 0.7,
+
+  // ---------------------------------------------------------------------------
+  // Дефолты новых полей (группа расширения)
+  // ---------------------------------------------------------------------------
+
+  nightMode: {
+    /** Ночной режим включён по умолчанию. */
+    enabled: true,
+    /** Начало ночи — 22:00. */
+    startHour: 22,
+    /** Конец ночи — 09:00. */
+    endHour: 9,
+    /** Мгновенный авто-ответ без AI. */
+    mode: "instant_ack" as "instant_ack" | "full_reply",
+    ackMessage:
+      "Здравствуйте! Сейчас нерабочее время, но я уже могу записать вас — подскажите услугу и удобное время.",
+  },
+  responseDelay: {
+    /** Минимальная задержка ответа — 2 сек. */
+    minSeconds: 2,
+    /** Максимальная задержка ответа — 8 сек. */
+    maxSeconds: 8,
+  },
+  typing: {
+    /** Показывать индикатор «печатает…» перед ответом. */
+    enabled: true,
+    /** Имитируем 3 секунды набора. */
+    durationSeconds: 3,
+  },
+  slotTaken: {
+    message:
+      "К сожалению, это время только что заняли. Давайте подберём другое — какое вам удобно?",
+  },
+  notifications: {
+    /** По умолчанию — только Telegram. */
+    channels: ["telegram"] as Array<"telegram" | "email">,
+    /** Уведомляем владельца. */
+    recipients: ["owner"] as Array<"master" | "owner" | "admin">,
+    telegramChatId: null,
+    email: null,
+  },
+  /** Целевая метрика: считаем успехом запись. */
+  successMetric: "booked" as "booked" | "showed" | "paid",
 } as const satisfies {
   timePicking: { mode: TimePickingMode }
   booking: { autoConfirm: boolean }
@@ -162,6 +264,23 @@ export const DEFAULT_SALES_CHATBOT_SETTINGS = {
   responseTiming: Required<SalesResponseTiming>
   dailyMessageLimit: number
   confidenceThreshold: number
+  nightMode: {
+    enabled: boolean
+    startHour: number
+    endHour: number
+    mode: "instant_ack" | "full_reply"
+    ackMessage: string
+  }
+  responseDelay: { minSeconds: number; maxSeconds: number }
+  typing: { enabled: boolean; durationSeconds: number }
+  slotTaken: { message: string }
+  notifications: {
+    channels: Array<"telegram" | "email">
+    recipients: Array<"master" | "owner" | "admin">
+    telegramChatId: null
+    email: null
+  }
+  successMetric: "booked" | "showed" | "paid"
 }
 
 // ---------------------------------------------------------------------------
@@ -184,6 +303,23 @@ export function resolveSalesChatbotSettings(partial?: SalesChatbotSettings | nul
   responseTiming: Required<SalesResponseTiming>
   dailyMessageLimit: number
   confidenceThreshold: number
+  nightMode: {
+    enabled: boolean
+    startHour: number
+    endHour: number
+    mode: "instant_ack" | "full_reply"
+    ackMessage: string
+  }
+  responseDelay: { minSeconds: number; maxSeconds: number }
+  typing: { enabled: boolean; durationSeconds: number }
+  slotTaken: { message: string }
+  notifications: {
+    channels: Array<"telegram" | "email">
+    recipients: Array<"master" | "owner" | "admin">
+    telegramChatId: string | null
+    email: string | null
+  }
+  successMetric: "booked" | "showed" | "paid"
 } {
   const d = DEFAULT_SALES_CHATBOT_SETTINGS
   const p = partial ?? {}
@@ -231,5 +367,49 @@ export function resolveSalesChatbotSettings(partial?: SalesChatbotSettings | nul
     },
     dailyMessageLimit: p.dailyMessageLimit ?? d.dailyMessageLimit,
     confidenceThreshold: p.confidenceThreshold ?? d.confidenceThreshold,
+
+    // -------------------------------------------------------------------------
+    // Новые секции (группа расширения)
+    // -------------------------------------------------------------------------
+
+    nightMode: {
+      enabled: p.nightMode?.enabled ?? d.nightMode.enabled,
+      startHour: p.nightMode?.startHour ?? d.nightMode.startHour,
+      endHour: p.nightMode?.endHour ?? d.nightMode.endHour,
+      mode: p.nightMode?.mode ?? d.nightMode.mode,
+      ackMessage: p.nightMode?.ackMessage ?? d.nightMode.ackMessage,
+    },
+    responseDelay: {
+      minSeconds: p.responseDelay?.minSeconds ?? d.responseDelay.minSeconds,
+      maxSeconds: p.responseDelay?.maxSeconds ?? d.responseDelay.maxSeconds,
+    },
+    typing: {
+      enabled: p.typing?.enabled ?? d.typing.enabled,
+      durationSeconds: p.typing?.durationSeconds ?? d.typing.durationSeconds,
+    },
+    slotTaken: {
+      message: p.slotTaken?.message ?? d.slotTaken.message,
+    },
+    notifications: {
+      // Массивы: заменяем целиком если переданы непустые, иначе дефолт
+      channels:
+        Array.isArray(p.notifications?.channels) && p.notifications.channels.length > 0
+          ? p.notifications.channels
+          : [...d.notifications.channels],
+      recipients:
+        Array.isArray(p.notifications?.recipients) && p.notifications.recipients.length > 0
+          ? p.notifications.recipients
+          : [...d.notifications.recipients],
+      // null — допустимое значение (не настроено), поэтому проверяем через hasOwnProperty
+      telegramChatId:
+        p.notifications !== undefined && "telegramChatId" in p.notifications
+          ? (p.notifications.telegramChatId ?? null)
+          : d.notifications.telegramChatId,
+      email:
+        p.notifications !== undefined && "email" in p.notifications
+          ? (p.notifications.email ?? null)
+          : d.notifications.email,
+    },
+    successMetric: p.successMetric ?? d.successMetric,
   }
 }

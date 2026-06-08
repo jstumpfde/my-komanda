@@ -84,4 +84,7 @@ export interface ChannelAdapter {
   // Разобрать входящий webhook-апдейт в нормализованные InboundMessage.
   // Возвращает [] если апдейт без сообщения (служебные события).
   parseInbound(payload: unknown): InboundMessage[]
+  // Опционально: показать индикатор «печатает…» (Telegram sendChatAction).
+  // Каналы без поддержки молча игнорируют (метода нет).
+  sendTyping?(creds: ChannelCredentials, to: string): Promise<void>
 }

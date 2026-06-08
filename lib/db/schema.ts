@@ -547,6 +547,20 @@ export const salesBotConfigs = pgTable("sales_bot_configs", {
   unique("sales_bot_configs_tenant_uniq").on(t.tenantId),
 ])
 
+// Именованные пресеты настроек sales-чатбота (HR сохраняет/применяет наборы).
+// settings(jsonb) — тот же формат SalesChatbotSettings, что и в sales_bot_configs.
+export const salesBotPresets = pgTable("sales_bot_presets", {
+  id:        uuid("id").primaryKey().defaultRandom(),
+  tenantId:  uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  name:      text("name").notNull(),
+  settings:  jsonb("settings").notNull(),
+  isDefault: boolean("is_default").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => [
+  index("sales_bot_presets_tenant_idx").on(t.tenantId),
+])
+
 // ─── Vacancies ────────────────────────────────────────────────────────────────
 
 export const vacancies = pgTable("vacancies", {

@@ -192,3 +192,26 @@ export async function pauseForHuman(conversationId: string): Promise<void> {
     .set({ status: "paused_for_human", updatedAt: new Date() })
     .where(eq(salesConversations.id, conversationId))
 }
+
+// Показать клиенту индикатор «печатает…» (если канал поддерживает).
+export async function sendTypingIndicator(conversation: Conversation): Promise<void> {
+  const account = await getChannelAccountById(conversation.channelAccountId)
+  if (!account) return
+  const adapter = getChannelAdapter(conversation.channel as ChannelType)
+  if (!adapter?.sendTyping) return
+  await adapter.sendTyping(toCredentials(account), conversation.externalUserId)
+}
+
+// Отправить сообщение на ПРОИЗВОЛЬНЫЙ чат через тот же канал/бот диалога
+// (для уведомлений салону: мастеру/владельцу в их Telegram-чат).
+export async function sendViaConversationChannel(
+  conversation: Conversation,
+  to: string,
+  text: string,
+): Promise<SendResult> {
+  const account = await getChannelAccountById(conversation.channelAccountId)
+  if (!account) return { ok: false, skipped: true, reason: "no_account" }
+  const adapter = getChannelAdapter(conversation.channel as ChannelType)
+  if (!adapter) return { ok: false, skipped: true, reason: "no_adapter" }
+  return adapter.send(toCredentials(account), { to, text, parseMode: "plain" })
+}

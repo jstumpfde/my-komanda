@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Select,
   SelectContent,
@@ -28,6 +29,10 @@ import {
   Settings2,
   FlaskConical,
   Save,
+  Star,
+  Trash2,
+  BookmarkPlus,
+  Check,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { SalesChatbotSettings, TimePickingMode } from "@/lib/ai/sales-chatbot-settings"
@@ -41,24 +46,7 @@ interface ChatbotConfig {
   botName: string
   greeting: string
   systemPrompt: string
-  settings: {
-    timePicking: { mode: TimePickingMode }
-    booking: { autoConfirm: boolean }
-    followUp: {
-      enabled: boolean
-      firstTouchMinutes: number
-      secondTouchHours: number
-      maxTouches: number
-    }
-    escalation: { onExplicitRequest: boolean }
-    responseTiming: {
-      delaySeconds: number
-      enableShortMessages: boolean
-      shortToMainDelaySeconds: number
-    }
-    dailyMessageLimit: number
-    confidenceThreshold: number
-  }
+  settings: SalesChatbotSettings
 }
 
 interface ChatMessage {
@@ -70,6 +58,13 @@ interface ChatMessage {
   confidence?: number
   escalationReason?: string
   isLoading?: boolean
+}
+
+interface Preset {
+  id: string
+  name: string
+  isDefault: boolean
+  settings: SalesChatbotSettings
 }
 
 // ---------------------------------------------------------------------------
@@ -155,11 +150,161 @@ export default function SalesChatbotPage() {
   const [enableShortMessages, setEnableShortMessages] = useState(false)
   const [shortToMainDelaySeconds, setShortToMainDelaySeconds] = useState(8)
 
+  // --- Ночной режим ---
+  const [nightModeEnabled, setNightModeEnabled] = useState(true)
+  const [nightModeStartHour, setNightModeStartHour] = useState(22)
+  const [nightModeEndHour, setNightModeEndHour] = useState(9)
+  const [nightModeMode, setNightModeMode] = useState<"instant_ack" | "full_reply">("instant_ack")
+  const [nightModeAckMessage, setNightModeAckMessage] = useState(
+    "Здравствуйте! Сейчас нерабочее время, но я уже могу записать вас — подскажите услугу и удобное время."
+  )
+
+  // --- Задержка ответа (диапазон) ---
+  const [responseDelayMin, setResponseDelayMin] = useState(2)
+  const [responseDelayMax, setResponseDelayMax] = useState(8)
+
+  // --- Индикатор «печатает…» ---
+  const [typingEnabled, setTypingEnabled] = useState(true)
+  const [typingDurationSeconds, setTypingDurationSeconds] = useState(3)
+
+  // --- Слот занят ---
+  const [slotTakenMessage, setSlotTakenMessage] = useState(
+    "К сожалению, это время только что заняли. Давайте подберём другое — какое вам удобно?"
+  )
+
+  // --- Уведомления ---
+  const [notifChannelTelegram, setNotifChannelTelegram] = useState(true)
+  const [notifChannelEmail, setNotifChannelEmail] = useState(false)
+  const [notifRecipientMaster, setNotifRecipientMaster] = useState(false)
+  const [notifRecipientOwner, setNotifRecipientOwner] = useState(true)
+  const [notifRecipientAdmin, setNotifRecipientAdmin] = useState(false)
+  const [notifTelegramChatId, setNotifTelegramChatId] = useState("")
+  const [notifEmail, setNotifEmail] = useState("")
+
+  // --- Метрика успеха ---
+  const [successMetric, setSuccessMetric] = useState<"booked" | "showed" | "paid">("booked")
+
+  // --- Пресеты ---
+  const [presets, setPresets] = useState<Preset[]>([])
+  const [presetsLoading, setPresetsLoading] = useState(false)
+  const [presetsSaving, setPresetsSaving] = useState(false)
+  const [newPresetName, setNewPresetName] = useState("")
+
   // --- Состояние песочницы ---
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [inputText, setInputText] = useState("")
   const [sandboxLoading, setSandboxLoading] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  // ---------------------------------------------------------------------------
+  // Хелпер: собрать текущий объект settings из всех полей формы
+  // ---------------------------------------------------------------------------
+  const buildSettings = useCallback((): SalesChatbotSettings => {
+    const channels: Array<"telegram" | "email"> = []
+    if (notifChannelTelegram) channels.push("telegram")
+    if (notifChannelEmail) channels.push("email")
+
+    const recipients: Array<"master" | "owner" | "admin"> = []
+    if (notifRecipientMaster) recipients.push("master")
+    if (notifRecipientOwner) recipients.push("owner")
+    if (notifRecipientAdmin) recipients.push("admin")
+
+    return {
+      timePicking: { mode: timePickingMode },
+      booking: { autoConfirm },
+      followUp: { enabled: followUpEnabled, firstTouchMinutes, secondTouchHours, maxTouches },
+      escalation: { onExplicitRequest: escalationOnRequest },
+      responseTiming: { delaySeconds, enableShortMessages, shortToMainDelaySeconds },
+      nightMode: {
+        enabled: nightModeEnabled,
+        startHour: nightModeStartHour,
+        endHour: nightModeEndHour,
+        mode: nightModeMode,
+        ackMessage: nightModeAckMessage,
+      },
+      responseDelay: {
+        minSeconds: responseDelayMin,
+        maxSeconds: responseDelayMax,
+      },
+      typing: {
+        enabled: typingEnabled,
+        durationSeconds: typingDurationSeconds,
+      },
+      slotTaken: {
+        message: slotTakenMessage,
+      },
+      notifications: {
+        channels,
+        recipients,
+        telegramChatId: notifTelegramChatId || null,
+        email: notifEmail || null,
+      },
+      successMetric,
+    }
+  }, [
+    timePickingMode, autoConfirm,
+    followUpEnabled, firstTouchMinutes, secondTouchHours, maxTouches,
+    escalationOnRequest, delaySeconds, enableShortMessages, shortToMainDelaySeconds,
+    nightModeEnabled, nightModeStartHour, nightModeEndHour, nightModeMode, nightModeAckMessage,
+    responseDelayMin, responseDelayMax,
+    typingEnabled, typingDurationSeconds,
+    slotTakenMessage,
+    notifChannelTelegram, notifChannelEmail,
+    notifRecipientMaster, notifRecipientOwner, notifRecipientAdmin,
+    notifTelegramChatId, notifEmail,
+    successMetric,
+  ])
+
+  // ---------------------------------------------------------------------------
+  // Хелпер: применить объект settings к полям формы
+  // ---------------------------------------------------------------------------
+  const applySettings = useCallback((s: SalesChatbotSettings) => {
+    if (!s) return
+    setTimePickingMode(s.timePicking?.mode ?? "hybrid")
+    setAutoConfirm(s.booking?.autoConfirm ?? false)
+    setFollowUpEnabled(s.followUp?.enabled ?? true)
+    setFirstTouchMinutes(s.followUp?.firstTouchMinutes ?? 90)
+    setSecondTouchHours(s.followUp?.secondTouchHours ?? 24)
+    setMaxTouches(s.followUp?.maxTouches ?? 3)
+    setEscalationOnRequest(s.escalation?.onExplicitRequest ?? true)
+    setDelaySeconds(s.responseTiming?.delaySeconds ?? 10)
+    setEnableShortMessages(s.responseTiming?.enableShortMessages ?? false)
+    setShortToMainDelaySeconds(s.responseTiming?.shortToMainDelaySeconds ?? 8)
+
+    setNightModeEnabled(s.nightMode?.enabled ?? true)
+    setNightModeStartHour(s.nightMode?.startHour ?? 22)
+    setNightModeEndHour(s.nightMode?.endHour ?? 9)
+    setNightModeMode(s.nightMode?.mode ?? "instant_ack")
+    setNightModeAckMessage(
+      s.nightMode?.ackMessage ??
+      "Здравствуйте! Сейчас нерабочее время, но я уже могу записать вас — подскажите услугу и удобное время."
+    )
+
+    setResponseDelayMin(s.responseDelay?.minSeconds ?? 2)
+    setResponseDelayMax(s.responseDelay?.maxSeconds ?? 8)
+
+    setTypingEnabled(s.typing?.enabled ?? true)
+    setTypingDurationSeconds(s.typing?.durationSeconds ?? 3)
+
+    setSlotTakenMessage(
+      s.slotTaken?.message ??
+      "К сожалению, это время только что заняли. Давайте подберём другое — какое вам удобно?"
+    )
+
+    const ch = s.notifications?.channels ?? ["telegram"]
+    setNotifChannelTelegram(ch.includes("telegram"))
+    setNotifChannelEmail(ch.includes("email"))
+
+    const rec = s.notifications?.recipients ?? ["owner"]
+    setNotifRecipientMaster(rec.includes("master"))
+    setNotifRecipientOwner(rec.includes("owner"))
+    setNotifRecipientAdmin(rec.includes("admin"))
+
+    setNotifTelegramChatId(s.notifications?.telegramChatId ?? "")
+    setNotifEmail(s.notifications?.email ?? "")
+
+    setSuccessMetric(s.successMetric ?? "booked")
+  }, [])
 
   // --- Загрузка конфига ---
   useEffect(() => {
@@ -172,22 +317,28 @@ export default function SalesChatbotPage() {
         setBotName(cfg.botName ?? "")
         setGreeting(cfg.greeting ?? "")
         setSystemPrompt(cfg.systemPrompt ?? "")
-        const s = cfg.settings
-        if (s) {
-          setTimePickingMode(s.timePicking?.mode ?? "hybrid")
-          setAutoConfirm(s.booking?.autoConfirm ?? false)
-          setFollowUpEnabled(s.followUp?.enabled ?? true)
-          setFirstTouchMinutes(s.followUp?.firstTouchMinutes ?? 90)
-          setSecondTouchHours(s.followUp?.secondTouchHours ?? 24)
-          setMaxTouches(s.followUp?.maxTouches ?? 3)
-          setEscalationOnRequest(s.escalation?.onExplicitRequest ?? true)
-          setDelaySeconds(s.responseTiming?.delaySeconds ?? 10)
-          setEnableShortMessages(s.responseTiming?.enableShortMessages ?? false)
-          setShortToMainDelaySeconds(s.responseTiming?.shortToMainDelaySeconds ?? 8)
+        if (cfg.settings) {
+          applySettings(cfg.settings)
         }
       })
       .catch(() => toast.error("Не удалось загрузить настройки"))
       .finally(() => setLoading(false))
+  }, [applySettings])
+
+  // --- Загрузка пресетов ---
+  useEffect(() => {
+    setPresetsLoading(true)
+    fetch("/api/modules/sales/chatbot/presets")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data?.data)) {
+          setPresets(data.data)
+        } else if (Array.isArray(data)) {
+          setPresets(data)
+        }
+      })
+      .catch(() => {/* пресеты опциональны — молчим */})
+      .finally(() => setPresetsLoading(false))
   }, [])
 
   // --- Прокрутка чата вниз ---
@@ -199,13 +350,7 @@ export default function SalesChatbotPage() {
   const handleSave = useCallback(async () => {
     setSaving(true)
     try {
-      const settings: SalesChatbotSettings = {
-        timePicking: { mode: timePickingMode },
-        booking: { autoConfirm },
-        followUp: { enabled: followUpEnabled, firstTouchMinutes, secondTouchHours, maxTouches },
-        escalation: { onExplicitRequest: escalationOnRequest },
-        responseTiming: { delaySeconds, enableShortMessages, shortToMainDelaySeconds },
-      }
+      const settings = buildSettings()
       const res = await fetch("/api/modules/sales/chatbot/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -218,12 +363,83 @@ export default function SalesChatbotPage() {
     } finally {
       setSaving(false)
     }
-  }, [
-    isEnabled, botName, greeting, systemPrompt,
-    timePickingMode, autoConfirm,
-    followUpEnabled, firstTouchMinutes, secondTouchHours, maxTouches,
-    escalationOnRequest, delaySeconds, enableShortMessages, shortToMainDelaySeconds,
-  ])
+  }, [isEnabled, botName, greeting, systemPrompt, buildSettings])
+
+  // --- Применить пресет ---
+  const handleApplyPreset = useCallback((preset: Preset) => {
+    applySettings(preset.settings)
+    toast.success(`Пресет «${preset.name}» применён — нажмите «Сохранить» для фиксации`)
+  }, [applySettings])
+
+  // --- Пресет по умолчанию ---
+  const handleSetDefaultPreset = useCallback(async (preset: Preset) => {
+    try {
+      const res = await fetch("/api/modules/sales/chatbot/presets", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: preset.id, isDefault: true }),
+      })
+      if (!res.ok) throw new Error()
+      setPresets((prev) =>
+        prev.map((p) => ({ ...p, isDefault: p.id === preset.id }))
+      )
+      toast.success(`Пресет «${preset.name}» — теперь по умолчанию`)
+    } catch {
+      toast.error("Не удалось обновить пресет")
+    }
+  }, [])
+
+  // --- Удалить пресет ---
+  const handleDeletePreset = useCallback(async (preset: Preset) => {
+    try {
+      const res = await fetch("/api/modules/sales/chatbot/presets", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: preset.id }),
+      })
+      if (!res.ok) throw new Error()
+      setPresets((prev) => prev.filter((p) => p.id !== preset.id))
+      toast.success(`Пресет «${preset.name}» удалён`)
+    } catch {
+      toast.error("Не удалось удалить пресет")
+    }
+  }, [])
+
+  // --- Сохранить текущие настройки как пресет ---
+  const handleSavePreset = useCallback(async () => {
+    const name = newPresetName.trim()
+    if (!name) {
+      toast.error("Введите название пресета")
+      return
+    }
+    setPresetsSaving(true)
+    try {
+      const settings = buildSettings()
+      const res = await fetch("/api/modules/sales/chatbot/presets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, settings }),
+      })
+      if (!res.ok) throw new Error()
+      const data = await res.json()
+      const created: Preset = data?.data ?? data
+      if (created?.id) {
+        setPresets((prev) => [...prev, created])
+      } else {
+        // Перезагрузить список если сервер не вернул объект
+        const listRes = await fetch("/api/modules/sales/chatbot/presets")
+        const listData = await listRes.json()
+        if (Array.isArray(listData?.data)) setPresets(listData.data)
+        else if (Array.isArray(listData)) setPresets(listData)
+      }
+      setNewPresetName("")
+      toast.success(`Пресет «${name}» сохранён`)
+    } catch {
+      toast.error("Не удалось сохранить пресет")
+    } finally {
+      setPresetsSaving(false)
+    }
+  }, [newPresetName, buildSettings])
 
   // --- Отправка сообщения в песочнице ---
   const handleSandboxSend = useCallback(async () => {
@@ -242,13 +458,7 @@ export default function SalesChatbotPage() {
         .filter((m) => !m.isLoading)
         .map((m) => ({ role: m.role, content: m.content }))
 
-      const settings: SalesChatbotSettings = {
-        timePicking: { mode: timePickingMode },
-        booking: { autoConfirm },
-        followUp: { enabled: followUpEnabled, firstTouchMinutes, secondTouchHours, maxTouches },
-        escalation: { onExplicitRequest: escalationOnRequest },
-        responseTiming: { delaySeconds, enableShortMessages, shortToMainDelaySeconds },
-      }
+      const settings = buildSettings()
 
       const res = await fetch("/api/modules/sales/chatbot/sandbox", {
         method: "POST",
@@ -297,10 +507,7 @@ export default function SalesChatbotPage() {
     }
   }, [
     inputText, sandboxLoading, messages,
-    botName, greeting, systemPrompt,
-    timePickingMode, autoConfirm,
-    followUpEnabled, firstTouchMinutes, secondTouchHours, maxTouches,
-    escalationOnRequest, delaySeconds, enableShortMessages, shortToMainDelaySeconds,
+    botName, greeting, systemPrompt, buildSettings,
   ])
 
   // ---------------------------------------------------------------------------
@@ -354,6 +561,112 @@ export default function SalesChatbotPage() {
                   </div>
                 ) : (
                   <div className="space-y-5 max-w-2xl">
+
+                    {/* ============================================================
+                        ПРЕСЕТЫ НАСТРОЕК
+                    ============================================================ */}
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <Star className="w-4 h-4 text-primary" />
+                          Пресеты настроек
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {presetsLoading ? (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Загрузка пресетов…
+                          </div>
+                        ) : presets.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">
+                            Нет сохранённых пресетов. Настройте параметры ниже и сохраните как пресет.
+                          </p>
+                        ) : (
+                          <div className="space-y-2">
+                            {presets.map((preset) => (
+                              <div
+                                key={preset.id}
+                                className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2.5 bg-muted/20"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="text-sm font-medium truncate">{preset.name}</span>
+                                  {preset.isDefault && (
+                                    <Badge variant="secondary" className="text-[10px] h-4 px-1.5 shrink-0">
+                                      по умолчанию
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0 ml-3">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-xs gap-1"
+                                    onClick={() => handleApplyPreset(preset)}
+                                  >
+                                    <Check className="w-3 h-3" />
+                                    Применить
+                                  </Button>
+                                  {!preset.isDefault && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                                      onClick={() => handleSetDefaultPreset(preset)}
+                                    >
+                                      <Star className="w-3 h-3" />
+                                      По умолч.
+                                    </Button>
+                                  )}
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                                    onClick={() => handleDeletePreset(preset)}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <Separator />
+
+                        {/* Сохранить текущие настройки как новый пресет */}
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">Сохранить текущие настройки как пресет</Label>
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder="Название пресета, например: Ночной режим, Выходные"
+                              value={newPresetName}
+                              onChange={(e) => setNewPresetName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") handleSavePreset()
+                              }}
+                              className="flex-1"
+                            />
+                            <Button
+                              variant="outline"
+                              onClick={handleSavePreset}
+                              disabled={presetsSaving || !newPresetName.trim()}
+                              className="gap-2 shrink-0"
+                            >
+                              {presetsSaving ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <BookmarkPlus className="w-4 h-4" />
+                              )}
+                              Сохранить
+                            </Button>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Сохраняет все текущие настройки формы (ниже) без обращения к серверу конфига
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
 
                     {/* Основные параметры */}
                     <Card>
@@ -617,6 +930,331 @@ export default function SalesChatbotPage() {
                               </div>
                             </div>
                           )}
+                        </div>
+
+                        <Separator />
+
+                        {/* responseDelay: диапазон */}
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-medium">Задержка ответа (диапазон, сек)</Label>
+                          <p className="text-xs text-muted-foreground">
+                            Бот выбирает случайное значение из диапазона — выглядит живее фиксированной задержки
+                          </p>
+                          <div className="flex items-center gap-3">
+                            <div className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">От</Label>
+                              <Input
+                                type="number"
+                                min={1}
+                                max={300}
+                                value={responseDelayMin}
+                                onChange={(e) => setResponseDelayMin(Number(e.target.value))}
+                                className="w-24 h-8 text-sm"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">До</Label>
+                              <Input
+                                type="number"
+                                min={1}
+                                max={300}
+                                value={responseDelayMax}
+                                onChange={(e) => setResponseDelayMax(Number(e.target.value))}
+                                className="w-24 h-8 text-sm"
+                              />
+                            </div>
+                            <span className="text-xs text-muted-foreground self-end pb-1.5">сек</span>
+                          </div>
+                        </div>
+
+                        <Separator />
+
+                        {/* typing */}
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <Label className="text-sm font-medium">Показывать «печатает…»</Label>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                Индикатор набора текста перед отправкой ответа
+                              </p>
+                            </div>
+                            <Switch
+                              checked={typingEnabled}
+                              onCheckedChange={setTypingEnabled}
+                            />
+                          </div>
+
+                          {typingEnabled && (
+                            <div className="space-y-1 pt-1">
+                              <Label className="text-xs text-muted-foreground">
+                                Длительность индикатора (сек)
+                              </Label>
+                              <div className="flex items-center gap-3">
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  max={30}
+                                  value={typingDurationSeconds}
+                                  onChange={(e) => setTypingDurationSeconds(Number(e.target.value))}
+                                  className="w-24 h-8 text-sm"
+                                />
+                                <span className="text-xs text-muted-foreground">1–30 сек</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Ночной режим */}
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Ночной режим</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <Label className="text-sm font-medium">Включён</Label>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              В указанные часы бот переходит в особый режим работы
+                            </p>
+                          </div>
+                          <Switch
+                            checked={nightModeEnabled}
+                            onCheckedChange={setNightModeEnabled}
+                          />
+                        </div>
+
+                        {nightModeEnabled && (
+                          <>
+                            <Separator />
+
+                            {/* Часы */}
+                            <div className="space-y-1.5">
+                              <Label className="text-sm">Диапазон часов</Label>
+                              <div className="flex items-center gap-3">
+                                <div className="space-y-1">
+                                  <Label className="text-xs text-muted-foreground">С (час, 0–23)</Label>
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    max={23}
+                                    value={nightModeStartHour}
+                                    onChange={(e) => setNightModeStartHour(Number(e.target.value))}
+                                    className="w-20 h-8 text-sm"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs text-muted-foreground">До (час, 0–23)</Label>
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    max={23}
+                                    value={nightModeEndHour}
+                                    onChange={(e) => setNightModeEndHour(Number(e.target.value))}
+                                    className="w-20 h-8 text-sm"
+                                  />
+                                </div>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                Например: с 22 до 9 — ночь с 22:00 до 09:00
+                              </p>
+                            </div>
+
+                            <Separator />
+
+                            {/* Режим */}
+                            <div className="space-y-1.5">
+                              <Label className="text-sm">Режим</Label>
+                              <Select
+                                value={nightModeMode}
+                                onValueChange={(v) => setNightModeMode(v as "instant_ack" | "full_reply")}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="instant_ack">
+                                    Мгновенное авто-сообщение — шлёт ackMessage, не ждёт AI
+                                  </SelectItem>
+                                  <SelectItem value="full_reply">
+                                    Полный ответ — AI отвечает как обычно (бот «дежурит»)
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            {nightModeMode === "instant_ack" && (
+                              <div className="space-y-1.5">
+                                <Label className="text-sm">Текст авто-ответа</Label>
+                                <Textarea
+                                  placeholder="Текст, который бот пришлёт клиенту в нерабочее время"
+                                  value={nightModeAckMessage}
+                                  onChange={(e) => setNightModeAckMessage(e.target.value)}
+                                  rows={3}
+                                />
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {/* Слот занят */}
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Слот занят</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-1.5">
+                          <Label className="text-sm">Сообщение клиенту, если слот занят</Label>
+                          <Textarea
+                            placeholder="Текст, если выбранное время успели занять до подтверждения"
+                            value={slotTakenMessage}
+                            onChange={(e) => setSlotTakenMessage(e.target.value)}
+                            rows={3}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Отправляется автоматически, когда выбранный слот был занят другим клиентом
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Уведомления */}
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Уведомления</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-5">
+
+                        {/* Каналы */}
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">Каналы уведомлений</Label>
+                          <div className="flex items-center gap-5">
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                id="notifTelegram"
+                                checked={notifChannelTelegram}
+                                onCheckedChange={(v) => setNotifChannelTelegram(Boolean(v))}
+                              />
+                              <Label htmlFor="notifTelegram" className="text-sm font-normal cursor-pointer">
+                                Telegram
+                              </Label>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                id="notifEmail"
+                                checked={notifChannelEmail}
+                                onCheckedChange={(v) => setNotifChannelEmail(Boolean(v))}
+                              />
+                              <Label htmlFor="notifEmail" className="text-sm font-normal cursor-pointer">
+                                Email
+                              </Label>
+                            </div>
+                          </div>
+                        </div>
+
+                        <Separator />
+
+                        {/* Получатели */}
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">Получатели</Label>
+                          <div className="flex items-center gap-5">
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                id="recMaster"
+                                checked={notifRecipientMaster}
+                                onCheckedChange={(v) => setNotifRecipientMaster(Boolean(v))}
+                              />
+                              <Label htmlFor="recMaster" className="text-sm font-normal cursor-pointer">
+                                Мастер
+                              </Label>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                id="recOwner"
+                                checked={notifRecipientOwner}
+                                onCheckedChange={(v) => setNotifRecipientOwner(Boolean(v))}
+                              />
+                              <Label htmlFor="recOwner" className="text-sm font-normal cursor-pointer">
+                                Владелец
+                              </Label>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                id="recAdmin"
+                                checked={notifRecipientAdmin}
+                                onCheckedChange={(v) => setNotifRecipientAdmin(Boolean(v))}
+                              />
+                              <Label htmlFor="recAdmin" className="text-sm font-normal cursor-pointer">
+                                Админ
+                              </Label>
+                            </div>
+                          </div>
+                        </div>
+
+                        <Separator />
+
+                        {/* Контакты */}
+                        {notifChannelTelegram && (
+                          <div className="space-y-1.5">
+                            <Label htmlFor="telegramChatId" className="text-sm">
+                              Telegram Chat ID
+                            </Label>
+                            <Input
+                              id="telegramChatId"
+                              placeholder="-100xxxxxxxxx или @username"
+                              value={notifTelegramChatId}
+                              onChange={(e) => setNotifTelegramChatId(e.target.value)}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Числовой ID чата или @username канала/группы
+                            </p>
+                          </div>
+                        )}
+
+                        {notifChannelEmail && (
+                          <div className="space-y-1.5">
+                            <Label htmlFor="notifEmailAddr" className="text-sm">
+                              Email для уведомлений
+                            </Label>
+                            <Input
+                              id="notifEmailAddr"
+                              type="email"
+                              placeholder="admin@salon.ru"
+                              value={notifEmail}
+                              onChange={(e) => setNotifEmail(e.target.value)}
+                            />
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {/* Метрика успеха */}
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Метрика успеха</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-1.5">
+                          <Label className="text-sm">Когда считать диалог успешным</Label>
+                          <Select
+                            value={successMetric}
+                            onValueChange={(v) => setSuccessMetric(v as "booked" | "showed" | "paid")}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="booked">Записался — клиент оставил заявку</SelectItem>
+                              <SelectItem value="showed">Дошёл — клиент пришёл на визит</SelectItem>
+                              <SelectItem value="paid">Оплатил — клиент совершил оплату</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            Влияет на аналитику конверсии диалогов
+                          </p>
                         </div>
                       </CardContent>
                     </Card>
