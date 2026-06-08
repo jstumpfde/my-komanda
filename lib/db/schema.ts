@@ -154,6 +154,12 @@ export interface CompanyHiringDefaults {
   // Применяется как soft-дефолт — per-vacancy customLabel/customColor перекрывает.
   stageLabels?: Record<string, string>
   stageColors?: Record<string, string>
+  // Маппинг воронки → Авито: действие при входе кандидата в стадию.
+  // Интеграция в разработке — конфиг сохраняется сейчас, применится после подключения.
+  stageAvitoActions?: Record<string, string>
+  // Маппинг воронки → SuperJob: действие при входе кандидата в стадию.
+  // Интеграция в разработке — конфиг сохраняется сейчас, применится после подключения.
+  stageSjActions?: Record<string, string>
   // Настройки доступа ролей (HR → Настройки → Роли и доступ). Хранятся
   // на уровне компании (общие, не per-user), чтобы шарились между всеми.
   rolePermissions?: {
