@@ -4,14 +4,16 @@
 import type { ChannelAdapter, ChannelType } from "./types"
 import { telegramAdapter } from "./telegram"
 import { emailAdapter } from "./email"
+import { avitoAdapter } from "./avito"
 
 const ADAPTERS: Partial<Record<ChannelType, ChannelAdapter>> = {
   telegram: telegramAdapter,
   email: emailAdapter,
-  // widget / whatsapp / max / messenger — добавим адаптерами позже (решение «все каналы»).
-  // TODO (авито фаза 2): зарегистрировать avitoAdapter здесь когда будет реализован send.
-  // import { avitoAdapter } from "./avito"
-  // messenger: avitoAdapter,
+  // Авито Messenger API — фаза 2: реальный send + parseInbound реализованы.
+  // Guard внутри адаптера: без accessToken в ChannelCredentials → not_configured.
+  // Токен получают через getAvitoToken(companyId) из lib/channels/avito.ts.
+  messenger: avitoAdapter,
+  // widget / whatsapp / max — добавим адаптерами позже.
 }
 
 export function getChannelAdapter(channel: ChannelType): ChannelAdapter | null {

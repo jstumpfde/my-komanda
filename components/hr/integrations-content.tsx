@@ -11,6 +11,7 @@ import {
   Plus, ChevronDown,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth"
+import { AvitoIntegrationCard } from "@/components/hr/avito-integration-card"
 
 interface HHStatus {
   connected: boolean
@@ -299,6 +300,9 @@ export function IntegrationsContent() {
           </div>
         )}
       </Card>
+
+      {/* Авито */}
+      <AvitoIntegrationCard />
 
       {/* Hint */}
       <p className="text-sm text-muted-foreground px-1">

@@ -1,24 +1,27 @@
 // Адаптер Авито Messenger API под интерфейс lib/channels/types.ts.
 //
-// СТАТУС: Скелет-заглушка (фаза 1). Реальных сетевых вызовов НЕ делает.
-//
 // Guard: адаптер возвращает { ok: false, skipped: true, reason: "not_configured" }
-// пока не выполнены ВСЕ условия:
-//   1. env AVITO_CLIENT_ID + AVITO_CLIENT_SECRET заданы (ключи тенанта или платформы)
-//   2. avitoEnabled=true в конфиге компании (companies.hiring_defaults_json)
-//   3. В ChannelCredentials передан accessToken (достаётся из avito_integrations)
+// если в ChannelCredentials нет accessToken.
 //
-// ─── Фаза 2 (TODO) ───────────────────────────────────────────────────────────
-//  - OAuth client_credentials flow: получение access_token через
-//    POST https://api.avito.ru/token (docs: developers.avito.ru/api/messenger)
-//  - OAuth authorization_code (партнёрский флоу): регистрация приложения у Авито,
-//    кнопка «Подключить Авито» в HR → Настройки → Интеграции.
-//  - Webhook-роут для приёма входящих: POST /api/webhooks/avito
-//    (регистрируется через POST https://api.avito.ru/messenger/v1/webhooks).
-//  - Реальный send: POST https://api.avito.ru/messenger/v1/accounts/{user_id}/chats/{chat_id}/messages
-//  - Реальный parseInbound: разбор Avito webhook update (тип message / read / typing).
-//  - sendTyping: POST .../chats/{chat_id}/typing (если поддерживается).
+// Для получения accessToken используйте getAvitoToken(companyId):
+//   - читает кэш из avito_integrations.access_token + token_expires_at
+//   - если истёк — запрашивает новый через refreshAvitoToken (client_credentials)
+//   - сохраняет в БД и возвращает свежий токен
+//
+// ─── Формат message.to ────────────────────────────────────────────────────────
+// "{userId}:{chatId}" — числовой userId аккаунта Авито + chatId чата.
+// userId берётся из avito_integrations.user_id.
+//
+// ─── TODO (следующий шаг) ────────────────────────────────────────────────────
+// - Партнёрский authorization_code-флоу (кнопка «Войти через Авито»):
+//   требует регистрации приложения у Авито и redirect URL.
+//   Текущий путь: HR вводит client_id/secret вручную (client_credentials).
+// - sendTyping: уточнить поддержку в Авито Messenger API.
+// - Webhook-регистрация: POST /messenger/v1/webhooks (URL нашего эндпоинта).
 
+import { db } from "@/lib/db"
+import { avitoIntegrations } from "@/lib/db/schema"
+import { eq } from "drizzle-orm"
 import { sanitizeOutbound } from "./policy"
 import type {
   ChannelAdapter,
@@ -33,27 +36,132 @@ import type {
 const AVITO_API_BASE =
   process.env.AVITO_API_BASE || "https://api.avito.ru"
 
-/**
- * Проверяет, что адаптер настроен достаточно для реальных вызовов.
- * Требования:
- *  - AVITO_CLIENT_ID и AVITO_CLIENT_SECRET в env (ключи OAuth-приложения)
- *  - accessToken в ChannelCredentials (токен тенанта, достаётся из avito_integrations)
- */
-function isConfigured(creds: ChannelCredentials): boolean {
-  const hasEnvKeys =
-    Boolean(process.env.AVITO_CLIENT_ID?.trim()) &&
-    Boolean(process.env.AVITO_CLIENT_SECRET?.trim())
-  const hasToken = Boolean(creds.accessToken?.trim())
-  return hasEnvKeys && hasToken
+// Запас по времени перед истечением токена (обновляем заранее).
+const TOKEN_REFRESH_MARGIN_MS = 5 * 60 * 1000 // 5 минут
+
+// ─── Интерфейс ответа Авито /token ───────────────────────────────────────────
+
+interface AvitoTokenResponse {
+  access_token: string
+  token_type:   string
+  expires_in:   number // секунд
 }
 
+// ─── Тип структуры Авито webhook-апдейта ────────────────────────────────────
+// Документация: https://developers.avito.ru/api/messenger#webhook
+
+interface AvitoWebhookUpdate {
+  payload?: {
+    value?: {
+      user_id?:   number
+      chat_id?:   string
+      author_id?: number
+      content?: {
+        text?: string
+      }
+      created?: number // unix timestamp
+    }
+  }
+  type?: string // "message" | "read" | "typing" | etc.
+}
+
+// ─── OAuth: получить/обновить токен через client_credentials ─────────────────
+
+/**
+ * Запрашивает новый access_token у Авито API.
+ * Используется getAvitoToken при истечении кэша.
+ *
+ * @throws Error если Авито вернул не-200 или невалидный JSON.
+ */
+export async function refreshAvitoToken(
+  clientId: string,
+  clientSecret: string,
+): Promise<AvitoTokenResponse> {
+  const res = await fetch(`${AVITO_API_BASE}/token`, {
+    method:  "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type:    "client_credentials",
+      client_id:     clientId,
+      client_secret: clientSecret,
+    }),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => "")
+    throw new Error(
+      `[avito] token refresh failed: HTTP ${res.status} — ${text.slice(0, 200)}`,
+    )
+  }
+  return res.json() as Promise<AvitoTokenResponse>
+}
+
+/**
+ * Возвращает действующий access_token для компании.
+ * Читает кэш из avito_integrations; если токен истёк или отсутствует —
+ * получает новый через client_credentials и сохраняет в БД.
+ *
+ * Возвращает null если интеграция не настроена (нет client_id/secret)
+ * или выключена (isEnabled=false / isActive=false).
+ */
+export async function getAvitoToken(companyId: string): Promise<string | null> {
+  const [row] = await db
+    .select({
+      clientId:       avitoIntegrations.clientId,
+      clientSecret:   avitoIntegrations.clientSecret,
+      accessToken:    avitoIntegrations.accessToken,
+      tokenExpiresAt: avitoIntegrations.tokenExpiresAt,
+      isEnabled:      avitoIntegrations.isEnabled,
+      isActive:       avitoIntegrations.isActive,
+    })
+    .from(avitoIntegrations)
+    .where(eq(avitoIntegrations.companyId, companyId))
+    .limit(1)
+
+  if (!row) return null
+  if (!row.isEnabled || !row.isActive) return null
+  if (!row.clientId?.trim() || !row.clientSecret?.trim()) return null
+
+  // Проверяем кэш
+  const now = Date.now()
+  if (
+    row.accessToken?.trim() &&
+    row.tokenExpiresAt &&
+    row.tokenExpiresAt.getTime() - now > TOKEN_REFRESH_MARGIN_MS
+  ) {
+    return row.accessToken
+  }
+
+  // Кэш устарел или отсутствует — запрашиваем новый
+  try {
+    const resp = await refreshAvitoToken(row.clientId, row.clientSecret)
+    const expiresAt = new Date(now + resp.expires_in * 1000)
+
+    await db
+      .update(avitoIntegrations)
+      .set({
+        accessToken:    resp.access_token,
+        tokenExpiresAt: expiresAt,
+        updatedAt:      new Date(),
+      })
+      .where(eq(avitoIntegrations.companyId, companyId))
+
+    return resp.access_token
+  } catch (err) {
+    console.error("[channel:avito] token refresh error:", err)
+    // Не падаем — возвращаем null, адаптер уйдёт в not_configured
+    return null
+  }
+}
+
+// ─── Адаптер ─────────────────────────────────────────────────────────────────
+
 export const avitoAdapter: ChannelAdapter = {
-  type: "messenger", // ChannelType — используем "messenger" как тип Авито Messenger API
-  supportsButtons: false, // TODO: уточнить, поддерживает ли Авито кнопки в Messenger API
+  type: "messenger",
+  supportsButtons: false, // TODO: уточнить поддержку кнопок в Авито Messenger API
 
   async send(creds: ChannelCredentials, message: OutboundMessage): Promise<SendResult> {
-    // Guard: без конфигурации — no-op, не делать сетевых вызовов.
-    if (!isConfigured(creds)) {
+    // Guard: нужен accessToken в creds
+    if (!creds.accessToken?.trim()) {
       return { ok: false, skipped: true, reason: "not_configured" }
     }
 
@@ -64,7 +172,7 @@ export const avitoAdapter: ChannelAdapter = {
       return { ok: false, skipped: true, reason: "empty_message" }
     }
 
-    // Прогоняем текст через политику канала Авито.
+    // ОБЯЗАТЕЛЬНО: прогоняем текст через политику канала Авито
     const sanitized = sanitizeOutbound("avito", message.text)
     if (sanitized.blocked) {
       console.warn(
@@ -72,10 +180,10 @@ export const avitoAdapter: ChannelAdapter = {
         sanitized.reasons,
       )
       return {
-        ok: false,
+        ok:      false,
         skipped: true,
-        reason: "blocked_by_policy",
-        error: sanitized.reasons.join("; "),
+        reason:  "blocked_by_policy",
+        error:   sanitized.reasons.join("; "),
       }
     }
     if (sanitized.reasons.length > 0) {
@@ -85,84 +193,74 @@ export const avitoAdapter: ChannelAdapter = {
       )
     }
 
-    // TODO (фаза 2): реальный вызов Авито Messenger API.
-    // Формат: POST {AVITO_API_BASE}/messenger/v1/accounts/{userId}/chats/{chatId}/messages
-    // Тело: { message: { text: sanitized.text } }
-    // Authorization: Bearer {creds.accessToken}
-    // Документация: https://developers.avito.ru/api/messenger#operation/sendMessage
-    //
-    // Пример заготовки (раскомментировать в фазе 2):
-    //
-    // const [userId, chatId] = message.to.split(":")
-    // const res = await fetch(
-    //   `${AVITO_API_BASE}/messenger/v1/accounts/${userId}/chats/${chatId}/messages`,
-    //   {
-    //     method: "POST",
-    //     headers: {
-    //       "Content-Type": "application/json",
-    //       Authorization: `Bearer ${creds.accessToken}`,
-    //     },
-    //     body: JSON.stringify({ message: { text: sanitized.text } }),
-    //   },
-    // )
-    // if (!res.ok) {
-    //   const errText = await res.text().catch(() => "")
-    //   console.warn(`[channel:avito] send failed status=${res.status} body=${errText.slice(0, 200)}`)
-    //   return { ok: false, error: errText || `status_${res.status}` }
-    // }
-    // const data = await res.json().catch(() => null)
-    // return { ok: true, externalMessageId: data?.id?.toString() }
+    // Формат message.to = "{userId}:{chatId}"
+    const colonIdx = message.to.indexOf(":")
+    if (colonIdx === -1) {
+      return { ok: false, skipped: true, reason: "invalid_recipient_format" }
+    }
+    const userId = message.to.slice(0, colonIdx)
+    const chatId = message.to.slice(colonIdx + 1)
 
-    // Фаза 1: возвращаем заглушку
-    console.warn("[channel:avito] send: реальный вызов API не реализован (фаза 2)")
-    return { ok: false, skipped: true, reason: "not_implemented" }
+    if (!userId || !chatId) {
+      return { ok: false, skipped: true, reason: "invalid_recipient_format" }
+    }
+
+    // Реальный вызов Авито Messenger API
+    // POST /messenger/v1/accounts/{userId}/chats/{chatId}/messages
+    // Документация: https://developers.avito.ru/api/messenger#operation/sendMessage
+    const url =
+      `${AVITO_API_BASE}/messenger/v1/accounts/${userId}/chats/${chatId}/messages`
+
+    const res = await fetch(url, {
+      method:  "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization:  `Bearer ${creds.accessToken}`,
+      },
+      body: JSON.stringify({ message: { text: sanitized.text } }),
+    })
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "")
+      console.warn(
+        `[channel:avito] send failed status=${res.status} body=${errText.slice(0, 200)}`,
+      )
+      return { ok: false, error: errText || `status_${res.status}` }
+    }
+
+    const data = await res.json().catch(() => null) as { id?: string | number } | null
+    return {
+      ok:                true,
+      externalMessageId: data?.id?.toString(),
+    }
   },
 
-  parseInbound(_payload: unknown): InboundMessage[] {
-    // TODO (фаза 2): разбор Avito webhook update.
-    // Структура webhook описана на https://developers.avito.ru/api/messenger#webhook
-    // Поля: type ("message" | "read" | "typing"), user_id, chat_id, content.text и т.п.
-    //
-    // Пример заготовки:
-    //
-    // const update = _payload as AvitoWebhookUpdate
-    // if (update?.payload?.value?.content?.text) {
-    //   return [{
-    //     channel: "messenger",
-    //     toAccount: String(update.payload.value.user_id ?? ""),
-    //     from: String(update.payload.value.chat_id ?? ""),
-    //     fromName: update.payload.value.author_id?.toString(),
-    //     text: update.payload.value.content.text,
-    //     raw: _payload,
-    //   }]
-    // }
-    return []
+  parseInbound(payload: unknown): InboundMessage[] {
+    // Разбор Авито webhook update.
+    // Структура описана на https://developers.avito.ru/api/messenger#webhook
+    // Принимаем только тип "message" (не read/typing/etc.)
+    const update = payload as AvitoWebhookUpdate
+
+    if (update?.type !== "message") return []
+
+    const val = update?.payload?.value
+    if (!val?.content?.text?.trim()) return []
+
+    return [
+      {
+        channel:   "messenger",
+        toAccount: String(val.user_id ?? ""),
+        from:      String(val.chat_id ?? ""),
+        fromName:  val.author_id?.toString(),
+        text:      val.content.text,
+        raw:       payload,
+      },
+    ]
   },
 
   async sendTyping(_creds: ChannelCredentials, _to: string): Promise<void> {
-    // TODO (фаза 2): POST {AVITO_API_BASE}/messenger/v1/accounts/{userId}/chats/{chatId}/typing
-    // Пока молча игнорируем — не критично.
+    // TODO: уточнить поддержку typing-индикатора в Авито Messenger API.
+    // POST {AVITO_API_BASE}/messenger/v1/accounts/{userId}/chats/{chatId}/typing
+    // Пока молча игнорируем.
   },
 }
-
-// ─── Вспомогательная функция: получить access_token через client_credentials ──
-//
-// TODO (фаза 2): реализовать и кэшировать токен (expires_in ~ 24ч по docs Авито).
-// Хранить token + expires_at в avito_integrations, обновлять при истечении.
-//
-// export async function refreshAvitoToken(
-//   clientId: string,
-//   clientSecret: string,
-// ): Promise<{ access_token: string; expires_in: number }> {
-//   const res = await fetch(`${AVITO_API_BASE}/token`, {
-//     method: "POST",
-//     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-//     body: new URLSearchParams({
-//       grant_type: "client_credentials",
-//       client_id: clientId,
-//       client_secret: clientSecret,
-//     }),
-//   })
-//   if (!res.ok) throw new Error(`[avito] token refresh failed: ${res.status}`)
-//   return res.json()
-// }
