@@ -224,7 +224,15 @@ export function DashboardSidebar() {
       typeof window !== 'undefined' && window.location.hostname === 'new.company24.pro'
     )
   }, [role, isAdminOrManager])
-  const hrLite = !isAdminOrManager && !stagingFullAccess
+  // PROD-пилот: компаниям из NEXT_PUBLIC_PILOT_COMPANY_IDS открываем полное
+  // HR-меню (как на стейджинге) — для догфудинга на проде. Остальные клиенты — lite.
+  const pilotCompanyIds = (process.env.NEXT_PUBLIC_PILOT_COMPANY_IDS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const pilotCompanyFull =
+    !isAdminOrManager && !!user?.companyId && pilotCompanyIds.includes(user.companyId)
+  const hrLite = !isAdminOrManager && !stagingFullAccess && !pilotCompanyFull
 
   // Пересчёт модулей при изменении роли (когда useSession догружает данные)
   useEffect(() => {
