@@ -477,6 +477,96 @@ export const salesDeals = pgTable("sales_deals", {
   updatedAt:         timestamp("updated_at").defaultNow(),
 })
 
+// ─── Sales: Каналы коммуникации (мультиканальный слой) ──────────────────────────
+// Решение 07.06.2026: каналы = ВСЕ через адаптеры (lib/channels/*), первый — Telegram.
+// Транспорт-абстракция (адаптеры) живёт в коде; здесь — per-tenant реквизиты,
+// диалоги с лидами и история сообщений.
+
+// Реквизиты доступа к каналу для конкретного тенанта (свой Telegram-бот салона,
+// email-аккаунт и т.п.). Один тенант может иметь несколько аккаунтов разных каналов.
+export const salesChannelAccounts = pgTable("sales_channel_accounts", {
+  id:                uuid("id").primaryKey().defaultRandom(),
+  tenantId:          uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  channel:           text("channel").notNull(),       // telegram|email|widget|whatsapp|max|messenger
+  title:             text("title"),                   // отображаемое имя аккаунта для салона
+  isActive:          boolean("is_active").default(true),
+  botToken:          text("bot_token"),               // telegram: токен бота (секрет)
+  fromAddress:       text("from_address"),            // email: адрес отправителя
+  externalAccountId: text("external_account_id"),     // username бота / номер / страница
+  webhookSecret:     text("webhook_secret"),          // секрет для верификации входящих
+  config:            jsonb("config"),                 // произвольная конфигурация провайдера
+  createdAt:         timestamp("created_at").defaultNow(),
+  updatedAt:         timestamp("updated_at").defaultNow(),
+}, (t) => [
+  index("sales_channel_accounts_tenant_idx").on(t.tenantId, t.channel),
+])
+
+// Диалог (тред) с лидом в конкретном канале. Один тред на (аккаунт канала + клиент).
+export const salesConversations = pgTable("sales_conversations", {
+  id:               uuid("id").primaryKey().defaultRandom(),
+  tenantId:         uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  channel:          text("channel").notNull(),
+  channelAccountId: uuid("channel_account_id").references(() => salesChannelAccounts.id, { onDelete: "cascade" }).notNull(),
+  externalUserId:   text("external_user_id").notNull(),   // chat_id / email клиента в канале
+  externalUserName: text("external_user_name"),           // имя/username из канала
+  contactId:        uuid("contact_id").references(() => salesContacts.id, { onDelete: "set null" }),
+  dealId:           uuid("deal_id").references(() => salesDeals.id, { onDelete: "set null" }),
+  status:           text("status").default("active").notNull(), // active|paused_for_human|closed
+  lastMessageAt:    timestamp("last_message_at"),
+  createdAt:        timestamp("created_at").defaultNow(),
+  updatedAt:        timestamp("updated_at").defaultNow(),
+}, (t) => [
+  unique("sales_conversations_uniq_user").on(t.channelAccountId, t.externalUserId),
+  index("sales_conversations_tenant_idx").on(t.tenantId),
+])
+
+// Отдельное сообщение в диалоге (вход/исход, кто автор, текст/нажатие кнопки).
+export const salesMessages = pgTable("sales_messages", {
+  id:                uuid("id").primaryKey().defaultRandom(),
+  tenantId:          uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  conversationId:    uuid("conversation_id").references(() => salesConversations.id, { onDelete: "cascade" }).notNull(),
+  direction:         text("direction").notNull(),        // inbound|outbound
+  role:              text("role").notNull(),             // client|bot|manager
+  text:              text("text").notNull().default(""),
+  callbackData:      text("callback_data"),              // value нажатой кнопки
+  externalMessageId: text("external_message_id"),
+  raw:               jsonb("raw"),                       // сырой апдейт провайдера (аудит/отладка)
+  createdAt:         timestamp("created_at").defaultNow(),
+}, (t) => [
+  index("sales_messages_conversation_idx").on(t.conversationId, t.createdAt),
+])
+
+// Конфигурация sales-чатбота на уровне салона (тенанта). Аналог полей
+// vacancy.aiChatbot* в HR. settings(jsonb) хранит SalesChatbotSettings:
+// подбор времени (3.2) / дожим (5.1) / эскалация (6.1) / тайминги — с дефолтами.
+export const salesBotConfigs = pgTable("sales_bot_configs", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  tenantId:     uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  isEnabled:    boolean("is_enabled").default(true),
+  botName:      text("bot_name"),        // имя ассистента (вопрос 1.2)
+  greeting:     text("greeting"),        // приветствие (вопрос 1.1)
+  systemPrompt: text("system_prompt"),   // доп. инструкции к промпту (как vacancy.aiChatbotPrompt)
+  settings:     jsonb("settings"),       // SalesChatbotSettings (lib/ai/sales-chatbot-settings.ts)
+  createdAt:    timestamp("created_at").defaultNow(),
+  updatedAt:    timestamp("updated_at").defaultNow(),
+}, (t) => [
+  unique("sales_bot_configs_tenant_uniq").on(t.tenantId),
+])
+
+// Именованные пресеты настроек sales-чатбота (HR сохраняет/применяет наборы).
+// settings(jsonb) — тот же формат SalesChatbotSettings, что и в sales_bot_configs.
+export const salesBotPresets = pgTable("sales_bot_presets", {
+  id:        uuid("id").primaryKey().defaultRandom(),
+  tenantId:  uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  name:      text("name").notNull(),
+  settings:  jsonb("settings").notNull(),
+  isDefault: boolean("is_default").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => [
+  index("sales_bot_presets_tenant_idx").on(t.tenantId),
+])
+
 // ─── Vacancies ────────────────────────────────────────────────────────────────
 
 export const vacancies = pgTable("vacancies", {

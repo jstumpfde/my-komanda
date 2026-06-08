@@ -82,19 +82,6 @@ function CountUpAmount({ value }: { value: number | null }) {
   return <>{new Intl.NumberFormat("ru-RU").format(d / 100)} ₽</>
 }
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-
-const MOCK_DEALS: DealItem[] = [
-  { id: "1", title: "Поставка серверов для Ромашка", amount: 250000000, currency: "RUB", stage: "new", priority: "high", probability: 10, companyId: "1", contactId: "1", assignedToId: null, description: null, source: "Сайт", expectedCloseDate: "2026-05-15", closedAt: null, createdAt: "2026-04-01", companyName: 'ООО "Ромашка"', contactFirstName: "Иван", contactLastName: "Петров", assignedToName: "Алексей Иванов", assignedToAvatar: null },
-  { id: "2", title: "Внедрение CRM Альфа Групп", amount: 500000000, currency: "RUB", stage: "qualifying", priority: "high", probability: 20, companyId: "2", contactId: "4", assignedToId: null, description: null, source: "Реферал", expectedCloseDate: "2026-06-01", closedAt: null, createdAt: "2026-03-20", companyName: 'ЗАО "Альфа Групп"', contactFirstName: "Елена", contactLastName: "Волкова", assignedToName: "Мария Петрова", assignedToAvatar: null },
-  { id: "3", title: "Обучение сотрудников ТехноПлюс", amount: 80000000, currency: "RUB", stage: "proposal", priority: "medium", probability: 40, companyId: "4", contactId: "7", assignedToId: null, description: null, source: "Звонок", expectedCloseDate: "2026-05-20", closedAt: null, createdAt: "2026-03-15", companyName: 'ООО "ТехноПлюс"', contactFirstName: "Ольга", contactLastName: "Смирнова", assignedToName: null, assignedToAvatar: null },
-  { id: "4", title: "Аутсорс поддержки ИП Петров", amount: 35000000, currency: "RUB", stage: "negotiation", priority: "low", probability: 60, companyId: "3", contactId: "6", assignedToId: null, description: null, source: "Email", expectedCloseDate: "2026-04-30", closedAt: null, createdAt: "2026-03-10", companyName: "ИП Петров", contactFirstName: "Сергей", contactLastName: "Петров", assignedToName: "Дмитрий Козлов", assignedToAvatar: null },
-  { id: "5", title: "Лицензии 1С для СтройМастер", amount: 120000000, currency: "RUB", stage: "won", priority: "medium", probability: 100, companyId: "5", contactId: null, assignedToId: null, description: null, source: "Выставка", expectedCloseDate: "2026-04-10", closedAt: "2026-04-10", createdAt: "2026-02-20", companyName: 'ООО "СтройМастер"', contactFirstName: null, contactLastName: null, assignedToName: "Алексей Иванов", assignedToAvatar: null },
-  { id: "6", title: "Консалтинг ИП Петров", amount: 15000000, currency: "RUB", stage: "lost", priority: "low", probability: 0, companyId: "3", contactId: "6", assignedToId: null, description: null, source: "Звонок", expectedCloseDate: "2026-03-15", closedAt: "2026-03-20", createdAt: "2026-02-01", companyName: "ИП Петров", contactFirstName: "Сергей", contactLastName: "Петров", assignedToName: "Сергей Новиков", assignedToAvatar: null },
-  { id: "7", title: "Интеграция API Альфа Групп", amount: 320000000, currency: "RUB", stage: "new", priority: "medium", probability: 10, companyId: "2", contactId: "5", assignedToId: null, description: null, source: "Реферал", expectedCloseDate: "2026-07-01", closedAt: null, createdAt: "2026-04-10", companyName: 'ЗАО "Альфа Групп"', contactFirstName: "Дмитрий", contactLastName: "Новиков", assignedToName: null, assignedToAvatar: null },
-  { id: "8", title: "Настройка телефонии ГК Вектор", amount: 45000000, currency: "RUB", stage: "qualifying", priority: "medium", probability: 20, companyId: null, contactId: null, assignedToId: null, description: null, source: "Звонок", expectedCloseDate: "2026-05-30", closedAt: null, createdAt: "2026-04-05", companyName: "ГК Вектор", contactFirstName: null, contactLastName: null, assignedToName: "Мария Петрова", assignedToAvatar: null },
-]
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatAmount(amount: number | null, currency?: string) {
@@ -116,12 +103,24 @@ const PRIORITY_BORDER: Record<string, string> = {
 
 export default function DealsPage() {
   const router = useRouter()
-  const [deals, setDeals] = useState<DealItem[]>(MOCK_DEALS)
+  const [deals, setDeals] = useState<DealItem[]>([])
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [filterPriority, setFilterPriority] = useState("all")
   const [modalOpen, setModalOpen] = useState(false)
   const [dragDealId, setDragDealId] = useState<string | null>(null)
   const [dragOverStage, setDragOverStage] = useState<string | null>(null)
+
+  useEffect(() => {
+    setLoading(true)
+    fetch("/api/modules/sales/deals")
+      .then((r) => r.json())
+      .then((data) => {
+        setDeals(data.deals ?? [])
+      })
+      .catch(() => setDeals([]))
+      .finally(() => setLoading(false))
+  }, [])
 
   // фильтрация
   const filtered = deals.filter((d) => {
@@ -174,6 +173,7 @@ export default function DealsPage() {
     if (!dealId) return
 
     const stageInfo = DEAL_STAGES.find((s) => s.id === stageId)
+    // Оптимистичное обновление UI
     setDeals((prev) =>
       prev.map((d) =>
         d.id === dealId
@@ -188,36 +188,38 @@ export default function DealsPage() {
     )
     setDragDealId(null)
     toast.success(`Сделка перемещена → ${stageInfo?.label}`)
+    // Персистим смену стадии в API
+    fetch(`/api/modules/sales/deals/${dealId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stage: stageId }),
+    }).catch(() => toast.error("Не удалось сохранить смену стадии"))
   }
 
   const handleCreate = (data: Record<string, unknown>) => {
-    const stageInfo = DEAL_STAGES.find((s) => s.id === ((data.stage as string) || "new"))
-    const newDeal: DealItem = {
-      id: String(Date.now()),
-      title: data.title as string,
-      amount: data.amount ? Number(data.amount) * 100 : null,
-      currency: "RUB",
-      stage: (data.stage as string) || "new",
-      priority: "medium",
-      probability: stageInfo?.probability ?? 10,
-      companyId: null,
-      contactId: null,
-      assignedToId: null,
-      description: null,
-      source: (data.source as string) || null,
-      expectedCloseDate: (data.expectedCloseDate as string) || null,
-      closedAt: null,
-      createdAt: new Date().toISOString(),
-      companyName: null,
-      contactFirstName: null,
-      contactLastName: null,
-      assignedToName: null,
-      assignedToAvatar: null,
-    }
-    setDeals((prev) => [newDeal, ...prev])
-    setModalOpen(false)
-    toast.success("Сделка создана")
-    router.push(`/sales/deals/${newDeal.id}`)
+    const amount = data.amount ? Number(data.amount) * 100 : null
+    fetch("/api/modules/sales/deals", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: data.title,
+        amount,
+        stage: data.stage || "new",
+        source: data.source || null,
+        expectedCloseDate: data.expectedCloseDate || null,
+      }),
+    })
+      .then((r) => r.json())
+      .then((created) => {
+        setModalOpen(false)
+        toast.success("Сделка создана")
+        // Рефрешим список и переходим на страницу сделки
+        fetch("/api/modules/sales/deals")
+          .then((r) => r.json())
+          .then((data) => setDeals(data.deals ?? []))
+        if (created?.id) router.push(`/sales/deals/${created.id}`)
+      })
+      .catch(() => toast.error("Не удалось создать сделку"))
   }
 
   const summaryCards = [
@@ -308,7 +310,17 @@ export default function DealsPage() {
             </div>
 
             {/* ═══ Kanban Board ═══ */}
-            <div className="flex gap-3 overflow-x-auto pb-4">
+            {loading && (
+              <div className="flex items-center justify-center py-20 text-muted-foreground text-sm">
+                Загрузка сделок…
+              </div>
+            )}
+            {!loading && deals.length === 0 && (
+              <div className="flex items-center justify-center py-20 text-muted-foreground text-sm">
+                Пока нет данных. Создайте первую сделку.
+              </div>
+            )}
+            <div className={`flex gap-3 overflow-x-auto pb-4 ${loading ? "hidden" : ""}`}>
               {DEAL_STAGES.map((stage) => {
                 const cards = grouped[stage.id] || []
                 const colAmount = cards.reduce((s, d) => s + (d.amount || 0), 0)
