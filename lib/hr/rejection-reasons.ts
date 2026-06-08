@@ -47,12 +47,12 @@ export const AUTO_REASON_LABELS: Record<string, string> = {
   trashed:                       "Перемещён в корзину",
 }
 
-// Нормализуем причину к ключу: stop_factor:city → "stop_factor", иначе как есть.
+// Нормализуем причину к ключу — часть до первого ":" (детали после двоеточия,
+// напр. stop_factor:city или duplicate_of_rejected:<bug>, в отчёте схлопываем
+// в общую категорию).
 export function autoReasonKey(raw: string | null | undefined): string {
   if (!raw) return "unknown"
-  const prefix = raw.split(":")[0]
-  if (prefix === "stop_factor" || prefix === "stop_word") return prefix
-  return raw
+  return raw.split(":")[0] || "unknown"
 }
 
 export function autoReasonLabel(key: string): string {
