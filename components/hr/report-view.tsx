@@ -28,7 +28,7 @@ export const PERIOD_OPTIONS: { id: Period; label: string }[] = [
 // ─── Типы ───────────────────────────────────────────────────────────────────
 
 export interface FunnelStage { slug: string; label: string; count: number; isTerminal: boolean }
-export interface VacancyRow { vacancyId: string; vacancyTitle: string; total: number; hired: number; rejected: number; selfRejected: number; interview: number }
+export interface VacancyRow { vacancyId: string; vacancyTitle: string; publishedDaysAgo: number | null; total: number; hired: number; rejected: number; selfRejected: number; anketa: number; decision: number; interview: number }
 export interface RejectionCategory { id: string; label: string; count: number }
 export interface RejectionInitiator { id: string; label: string; count: number }
 export interface ContactChannel { id: string; label: string; count: number }
@@ -159,6 +159,13 @@ function FunnelBlock({ stages, loading, tv }: { stages: FunnelStage[]; loading: 
 
 // ─── Таблица по вакансиям ───────────────────────────────────────────────────────
 
+function publishedLabel(days: number | null): string {
+  if (days == null) return "—"
+  if (days === 0) return "сегодня"
+  if (days === 1) return "вчера"
+  return `${days} дн.`
+}
+
 function VacancyTable({ rows, loading, tv }: { rows: VacancyRow[]; loading: boolean; tv?: boolean }) {
   if (loading) return <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-10 bg-muted/30 rounded-lg animate-pulse" />)}</div>
   if (rows.length === 0) return <EmptyState text="Нет вакансий с кандидатами" />
@@ -173,19 +180,25 @@ function VacancyTable({ rows, loading, tv }: { rows: VacancyRow[]; loading: bool
         <thead>
           <tr className="border-b">
             <th className={`${th} pr-4`}>Вакансия</th>
+            <th className={`${thR} px-3`}>Опубл.</th>
             <th className={`${thR} px-3`}>Откликов</th>
-            <th className={`${thR} px-3`}>На интервью</th>
+            <th className={`${thR} px-3`}>Анкет</th>
+            <th className={`${thR} px-3`}>Собес.</th>
+            <th className={`${thR} px-3`}>Решение</th>
             <th className={`${thR} px-3`}>Нанято</th>
             <th className={`${thR} px-3`}>Отказов</th>
-            <th className={`${thR} pl-3`}>Сам отказался</th>
+            <th className={`${thR} pl-3`}>Сам отказ.</th>
           </tr>
         </thead>
         <tbody>
           {rows.map(r => (
             <tr key={r.vacancyId} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
               <td className={`py-2.5 pr-4 font-medium truncate ${tv ? "max-w-[420px]" : "max-w-[280px]"}`}>{r.vacancyTitle}</td>
-              <td className="py-2.5 px-3 text-right tabular-nums">{r.total}</td>
+              <td className="py-2.5 px-3 text-right tabular-nums text-muted-foreground whitespace-nowrap">{publishedLabel(r.publishedDaysAgo)}</td>
+              <td className="py-2.5 px-3 text-right tabular-nums font-medium">{r.total}</td>
+              <td className="py-2.5 px-3 text-right tabular-nums">{r.anketa}</td>
               <td className="py-2.5 px-3 text-right tabular-nums">{r.interview}</td>
+              <td className="py-2.5 px-3 text-right tabular-nums text-violet-600">{r.decision}</td>
               <td className="py-2.5 px-3 text-right tabular-nums text-emerald-600 font-medium">{r.hired}</td>
               <td className="py-2.5 px-3 text-right tabular-nums text-rose-500">{r.rejected}</td>
               <td className="py-2.5 pl-3 text-right tabular-nums text-amber-600">{r.selfRejected}</td>

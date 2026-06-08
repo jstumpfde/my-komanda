@@ -118,12 +118,15 @@ export async function buildReport(companyId: string, opts: BuildReportOptions = 
 
     // 3. По вакансиям: откликов / нанято / интервью / отказов — за период
     db.select({
-      vacancyId: vacancies.id,
+      vacancyId:    vacancies.id,
       vacancyTitle: vacancies.title,
+      createdAt:    vacancies.createdAt,
       total:        count(),
       hired:        sql<number>`count(*) filter (where ${candidates.stage} = 'hired')`.mapWith(Number),
       rejected:     sql<number>`count(*) filter (where ${candidates.stage} = 'rejected')`.mapWith(Number),
       selfRejected: sql<number>`count(*) filter (where ${candidates.rejectionInitiator} = 'candidate')`.mapWith(Number),
+      anketa:       sql<number>`count(*) filter (where ${candidates.stage} in ('anketa_filled','anketa'))`.mapWith(Number),
+      decision:     sql<number>`count(*) filter (where ${candidates.stage} in ('decision','final_decision'))`.mapWith(Number),
       interview:    sql<number>`count(*) filter (where ${candidates.stage} in ('scheduled','interview','interviewed'))`.mapWith(Number),
     })
       .from(candidates)
@@ -135,7 +138,7 @@ export async function buildReport(companyId: string, opts: BuildReportOptions = 
         ...vacancyFilter,
         ...candidateDateFilters,
       ))
-      .groupBy(vacancies.id, vacancies.title),
+      .groupBy(vacancies.id, vacancies.title, vacancies.createdAt),
 
     // 4. Собеседования — за период
     db.select({
@@ -329,13 +332,17 @@ export async function buildReport(companyId: string, opts: BuildReportOptions = 
   }))
 
   // ─── По вакансиям ─────────────────────────────────────────────────
+  const nowMs = Date.now()
   const vacancyTable = vacancyRows.map(r => ({
     vacancyId: r.vacancyId,
     vacancyTitle: r.vacancyTitle,
+    publishedDaysAgo: r.createdAt ? Math.max(0, Math.floor((nowMs - new Date(r.createdAt).getTime()) / 86_400_000)) : null,
     total: Number(r.total),
     hired: Number(r.hired),
     rejected: Number(r.rejected),
     selfRejected: Number(r.selfRejected),
+    anketa: Number(r.anketa),
+    decision: Number(r.decision),
     interview: Number(r.interview),
   }))
 
