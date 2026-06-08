@@ -18,7 +18,10 @@ import { and, eq, inArray, count, sql } from "drizzle-orm"
 import { getValidToken } from "@/lib/hh-helpers"
 import { importHhResponsesForVacancy } from "@/lib/hh/import-responses"
 import { checkCronAuth } from "@/lib/cron/auth"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { processHhQueue } from "@/lib/hh/process-queue"
+
+const CRON_NAME = "hh-import-burst"
 
 const PROCESS_LIMIT_PER_RUN = 50
 const HH_IMPORT_LOCK_KEY = 7470001
@@ -147,6 +150,7 @@ export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
 
+  const run = await startCronRun(CRON_NAME).catch(() => null)
   const body = await req.json().catch(() => ({})) as { iterations?: number; delayMs?: number }
   const iterations = Math.min(Math.max(Number(body.iterations) || 10, 1), 50)
   const delayMs    = Math.min(Math.max(Number(body.delayMs) || 1000, 0), 30_000)
@@ -182,8 +186,7 @@ export async function POST(req: NextRequest) {
     if (i < iterations - 1) await sleep(delayMs)
   }
 
-  return NextResponse.json({
-    ok: true,
+  const metadata = {
     iterationsRequested: iterations,
     iterationsRun:       perIteration.length,
     busyHits,
@@ -191,8 +194,13 @@ export async function POST(req: NextRequest) {
     totalProcessed,
     totalDeferred,
     totalSkipped,
+    errorsCount: allErrors.length,
+  }
+  if (run) await finishCronRun(run.id, "ok", metadata)
+  return NextResponse.json({
+    ok: true,
+    ...metadata,
     perIteration,
     errors: allErrors.slice(0, 20),
-    errorsCount: allErrors.length,
   })
 }
