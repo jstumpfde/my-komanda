@@ -9,6 +9,9 @@ const ADAPTERS: Partial<Record<ChannelType, ChannelAdapter>> = {
   telegram: telegramAdapter,
   email: emailAdapter,
   // widget / whatsapp / max / messenger — добавим адаптерами позже (решение «все каналы»).
+  // TODO (авито фаза 2): зарегистрировать avitoAdapter здесь когда будет реализован send.
+  // import { avitoAdapter } from "./avito"
+  // messenger: avitoAdapter,
 }
 
 export function getChannelAdapter(channel: ChannelType): ChannelAdapter | null {
