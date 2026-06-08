@@ -3051,3 +3051,16 @@ export const compareSets = pgTable("compare_sets", {
   createdBy:    uuid("created_by"),
   createdAt:    timestamp("created_at", { withTimezone: true }).defaultNow(),
 })
+
+// Публичная ссылка на «Отчёт по найму» (без логина, только чтение).
+// Один активный токен на компанию (перегенерация отзывает старый). Срока жизни
+// нет — дашборд может висеть на ТВ. Период/вакансия передаются query-параметрами
+// в самой ссылке, поэтому один токен обслуживает любой срез.
+export const reportShares = pgTable("report_shares", {
+  id:        uuid("id").primaryKey().defaultRandom(),
+  token:     text("token").notNull().unique(),
+  companyId: uuid("company_id").notNull(),
+  createdBy: uuid("created_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+})
