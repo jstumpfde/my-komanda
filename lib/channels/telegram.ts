@@ -10,7 +10,9 @@ import type {
   SendResult,
 } from "./types"
 
-const TELEGRAM_API = "https://api.telegram.org"
+// База Telegram API. На серверах, где Telegram заблокирован напрямую (RU),
+// задаём TELEGRAM_API_BASE на не-RU прокси (рижский Caddy :8081 → api.telegram.org).
+const TELEGRAM_API = process.env.TELEGRAM_API_BASE || "https://api.telegram.org"
 
 function buildReplyMarkup(message: OutboundMessage) {
   if (!message.buttons?.length) return undefined
