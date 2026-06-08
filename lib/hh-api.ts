@@ -108,6 +108,11 @@ export interface HHVacancyItem {
   status?: { id: string }
   counters?: { responses: number }
   alternate_url?: string
+  // Детальный объект /vacancies/{id} отдаёт ещё archived/type — авторитетный
+  // признак архива (в отличие от /vacancies/active, который для части
+  // работодателей возвращает пустой список).
+  archived?: boolean
+  type?: { id: string; name: string }
 }
 
 export interface HHVacanciesResponse {

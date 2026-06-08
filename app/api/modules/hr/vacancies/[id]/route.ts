@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { logActivity } from "@/lib/activity-log"
+import { isClosedVacancy } from "@/lib/vacancies/lifecycle"
 
 export async function GET(
   _req: NextRequest,
@@ -80,7 +81,12 @@ export async function PUT(
     if (body.category !== undefined) updates.category = body.category
     if (body.salary_min !== undefined) updates.salaryMin = body.salary_min
     if (body.salary_max !== undefined) updates.salaryMax = body.salary_max
-    if (body.status !== undefined) updates.status = body.status
+    if (body.status !== undefined) {
+      updates.status = body.status
+      // Фиксируем дату нашего закрытия: при переходе в архив/закрыто — ставим
+      // closedAt; при возврате в работу (active/paused) — снимаем.
+      updates.closedAt = isClosedVacancy(body.status) ? new Date() : null
+    }
     if (body.description_json !== undefined) {
       updates.descriptionJson = body.description_json
       // Расписание (schedule_*) теперь редактируется отдельно — через

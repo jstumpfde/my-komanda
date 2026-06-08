@@ -75,6 +75,11 @@ export interface ApiCandidate {
   testStatus?: "submitted" | "in_progress" | "opened" | "sent" | "failed" | null
   // «Активен сейчас» — активность (демо/тест) за последние 30 минут.
   isActive?: boolean
+  // Захват причины отказа (заполняется при stage="rejected").
+  rejectionReasonCategory?: string | null
+  rejectionInitiator?: string | null
+  rejectionComment?: string | null
+  rejectionAt?: string | null
 }
 
 // ─── useCandidates ────────────────────────────────────────────────────────────

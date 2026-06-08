@@ -7,6 +7,14 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -14,11 +22,36 @@ import {
   ArrowLeft, Mail, Phone, MapPin, Briefcase, Star,
   UserPlus, Archive, XCircle, Loader2, Save, CheckCircle2, Clock,
   ExternalLink, Video as VideoIcon, Mic, Image as ImageIcon, Download,
+  PhoneCall,
 } from "lucide-react"
 import Link from "next/link"
 import { getStageLabel, getStageColorClasses } from "@/lib/stages"
+import {
+  REJECTION_INITIATORS,
+  REJECTION_REASONS,
+  rejectionReasonLabel,
+  rejectionInitiatorLabel,
+} from "@/lib/hr/rejection-reasons"
+import {
+  CONTACT_CHANNELS,
+  CONTACT_OUTCOMES,
+  contactChannelLabel,
+  contactOutcomeLabel,
+  type ContactChannel,
+  type ContactOutcome,
+} from "@/lib/hr/contacts"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
+
+interface CandidateContact {
+  id: string
+  channel: ContactChannel
+  outcome: ContactOutcome
+  reasonCategory: string | null
+  comment: string | null
+  createdAt: string
+  createdByName: string | null
+}
 
 interface MediaAnswer {
   url: string
@@ -58,6 +91,10 @@ interface Candidate {
   createdAt: string
   updatedAt: string
   vacancyTitle: string
+  rejectionReasonCategory: string | null
+  rejectionInitiator: string | null
+  rejectionComment: string | null
+  rejectionAt: string | null
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -178,6 +215,22 @@ export default function CandidateDetailPage() {
   const [savingNote, setSavingNote] = useState(false)
   const [stageChanging, setStageChanging] = useState(false)
 
+  // Диалог причины отказа
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
+  const [rejectInitiator, setRejectInitiator] = useState("company")
+  const [rejectReason, setRejectReason] = useState("")
+  const [rejectComment, setRejectComment] = useState("")
+
+  // Лог контактов
+  const [contacts, setContacts] = useState<CandidateContact[]>([])
+  const [contactsLoading, setContactsLoading] = useState(false)
+  const [contactDialogOpen, setContactDialogOpen] = useState(false)
+  const [contactChannel, setContactChannel] = useState<ContactChannel>("call")
+  const [contactOutcome, setContactOutcome] = useState<ContactOutcome>("pending")
+  const [contactReason, setContactReason] = useState("")
+  const [contactComment, setContactComment] = useState("")
+  const [savingContact, setSavingContact] = useState(false)
+
   const loadCandidate = useCallback(async () => {
     try {
       const res = await fetch(`/api/modules/hr/candidates/${id}`)
@@ -189,7 +242,44 @@ export default function CandidateDetailPage() {
     } finally { setLoading(false) }
   }, [id])
 
+  const loadContacts = useCallback(async () => {
+    setContactsLoading(true)
+    try {
+      const res = await fetch(`/api/modules/hr/candidates/${id}/contacts`)
+      if (!res.ok) throw new Error()
+      const data = await res.json()
+      setContacts(data.contacts ?? [])
+    } catch {
+      // не критично — просто не показываем список
+    } finally { setContactsLoading(false) }
+  }, [id])
+
+  const submitContact = async () => {
+    setSavingContact(true)
+    try {
+      const body: Record<string, unknown> = { channel: contactChannel, outcome: contactOutcome }
+      if (contactOutcome === "no_fit" && contactReason) body.reasonCategory = contactReason
+      if (contactComment.trim()) body.comment = contactComment.trim()
+      const res = await fetch(`/api/modules/hr/candidates/${id}/contacts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error()
+      toast.success("Контакт записан")
+      setContactDialogOpen(false)
+      setContactChannel("call")
+      setContactOutcome("pending")
+      setContactReason("")
+      setContactComment("")
+      await loadContacts()
+    } catch {
+      toast.error("Не удалось сохранить контакт")
+    } finally { setSavingContact(false) }
+  }
+
   useEffect(() => { loadCandidate() }, [loadCandidate])
+  useEffect(() => { loadContacts() }, [loadContacts])
 
   // Load notes from localStorage
   useEffect(() => {
@@ -211,6 +301,36 @@ export default function CandidateDetailPage() {
       const updated = await res.json()
       setCandidate(prev => prev ? { ...prev, stage: updated.stage } : prev)
       toast.success(`Этап изменён: ${getStageLabel(stage)}`)
+    } catch { toast.error("Ошибка смены этапа") }
+    finally { setStageChanging(false) }
+  }
+
+  const submitReject = async () => {
+    if (!candidate) return
+    setStageChanging(true)
+    try {
+      const res = await fetch(`/api/modules/hr/candidates/${id}/stage`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          stage: "rejected",
+          rejectionReasonCategory: rejectReason || null,
+          rejectionInitiator: rejectInitiator || null,
+          rejectionComment: rejectComment.trim() || null,
+        }),
+      })
+      if (!res.ok) throw new Error()
+      const updated = await res.json()
+      setCandidate(prev => prev ? {
+        ...prev,
+        stage: updated.stage,
+        rejectionReasonCategory: rejectReason || null,
+        rejectionInitiator: rejectInitiator || null,
+        rejectionComment: rejectComment.trim() || null,
+        rejectionAt: updated.rejectionAt ?? null,
+      } : prev)
+      setRejectDialogOpen(false)
+      toast.success("Кандидат отклонён")
     } catch { toast.error("Ошибка смены этапа") }
     finally { setStageChanging(false) }
   }
@@ -289,6 +409,20 @@ export default function CandidateDetailPage() {
               </Link>
               <Badge variant="outline" className={cn("text-xs border-0", stageCfg.cls)}>{stageCfg.label}</Badge>
             </div>
+            {candidate.stage === "rejected" && candidate.rejectionReasonCategory && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="text-destructive font-medium">Отказ:</span>
+                <span>{rejectionReasonLabel(candidate.rejectionReasonCategory)}</span>
+                <span className="text-muted-foreground/50">·</span>
+                <span>{rejectionInitiatorLabel(candidate.rejectionInitiator)}</span>
+                {candidate.rejectionComment && (
+                  <>
+                    <span className="text-muted-foreground/50">·</span>
+                    <span className="italic">{candidate.rejectionComment}</span>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {/* AI Score */}
@@ -311,9 +445,21 @@ export default function CandidateDetailPage() {
               <Archive className="w-3.5 h-3.5" />В резерв
             </Button>
             <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-destructive hover:text-destructive" onClick={() => {
-              if (confirm("Отказать кандидату?")) changeStage("rejected")
+              setRejectInitiator("company")
+              setRejectReason("")
+              setRejectComment("")
+              setRejectDialogOpen(true)
             }} disabled={stageChanging}>
               <XCircle className="w-3.5 h-3.5" />Отказать
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => {
+              setContactChannel("call")
+              setContactOutcome("pending")
+              setContactReason("")
+              setContactComment("")
+              setContactDialogOpen(true)
+            }}>
+              <PhoneCall className="w-3.5 h-3.5" />Записать звонок
             </Button>
             <Select value={candidate.stage} onValueChange={(v) => changeStage(v)}>
               <SelectTrigger className="h-8 w-full sm:w-[160px] text-xs bg-[var(--input-bg)]"><SelectValue placeholder="Сменить этап" /></SelectTrigger>
@@ -325,6 +471,63 @@ export default function CandidateDetailPage() {
             </Select>
           </div>
         </div>
+      </Card>
+
+      {/* ═══ Лог контактов ═══ */}
+      <Card className="rounded-xl border border-border p-5 mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold flex items-center gap-1.5">
+            <PhoneCall className="w-4 h-4 text-muted-foreground" />
+            Контакты / созвоны
+          </h3>
+          <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={() => {
+            setContactChannel("call")
+            setContactOutcome("pending")
+            setContactReason("")
+            setContactComment("")
+            setContactDialogOpen(true)
+          }}>
+            <PhoneCall className="w-3 h-3" />Записать
+          </Button>
+        </div>
+        {contactsLoading ? (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />Загрузка...
+          </div>
+        ) : contacts.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Контактов пока нет</p>
+        ) : (
+          <div className="divide-y divide-border">
+            {contacts.map((c) => (
+              <div key={c.id} className="py-2.5 flex flex-wrap items-start gap-x-3 gap-y-1 text-sm">
+                <span className="text-muted-foreground text-xs shrink-0">
+                  {new Date(c.createdAt).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                </span>
+                <span className="font-medium text-xs">{contactChannelLabel(c.channel)}</span>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-[10px] px-1.5 py-0 border-0",
+                    c.outcome === "fit" && "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
+                    c.outcome === "no_fit" && "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+                    c.outcome === "pending" && "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {contactOutcomeLabel(c.outcome)}
+                </Badge>
+                {c.reasonCategory && (
+                  <span className="text-xs text-muted-foreground">{c.reasonCategory}</span>
+                )}
+                {c.comment && (
+                  <span className="text-xs text-foreground italic flex-1">{c.comment}</span>
+                )}
+                {c.createdByName && (
+                  <span className="text-[10px] text-muted-foreground/60 shrink-0">{c.createdByName}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
 
       {/* ═══ Табы ═══ */}
@@ -528,6 +731,150 @@ export default function CandidateDetailPage() {
           </Card>
         </div>
       )}
+
+      {/* ═══ Диалог записи контакта ═══ */}
+      <Dialog open={contactDialogOpen} onOpenChange={setContactDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Записать контакт</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="contact-channel">Канал</Label>
+              <Select value={contactChannel} onValueChange={(v) => setContactChannel(v as ContactChannel)}>
+                <SelectTrigger id="contact-channel" className="w-full">
+                  <SelectValue placeholder="Выберите канал" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CONTACT_CHANNELS.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Исход</Label>
+              <div className="flex gap-2 flex-wrap">
+                {CONTACT_OUTCOMES.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => { setContactOutcome(item.id as ContactOutcome); if (item.id !== "no_fit") setContactReason("") }}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-sm border transition-colors",
+                      contactOutcome === item.id
+                        ? item.id === "fit"
+                          ? "bg-emerald-100 border-emerald-400 text-emerald-800 dark:bg-emerald-900/30 dark:border-emerald-600 dark:text-emerald-300"
+                          : item.id === "no_fit"
+                          ? "bg-red-100 border-red-400 text-red-800 dark:bg-red-900/30 dark:border-red-600 dark:text-red-300"
+                          : "bg-muted border-border text-foreground"
+                        : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                    )}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {contactOutcome === "no_fit" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="contact-reason">Причина</Label>
+                <Select value={contactReason} onValueChange={setContactReason}>
+                  <SelectTrigger id="contact-reason" className="w-full">
+                    <SelectValue placeholder="Выберите причину" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {REJECTION_REASONS.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label htmlFor="contact-comment">Комментарий <span className="text-muted-foreground font-normal">(необязательно)</span></Label>
+              <Textarea
+                id="contact-comment"
+                value={contactComment}
+                onChange={(e) => setContactComment(e.target.value)}
+                placeholder="Итоги разговора..."
+                rows={3}
+                className="resize-none text-sm"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setContactDialogOpen(false)} disabled={savingContact}>
+              Отмена
+            </Button>
+            <Button onClick={submitContact} disabled={savingContact}>
+              {savingContact ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+              Сохранить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══ Диалог причины отказа ═══ */}
+      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Причина отказа</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="reject-initiator">Кто отказался</Label>
+              <Select value={rejectInitiator} onValueChange={setRejectInitiator}>
+                <SelectTrigger id="reject-initiator" className="w-full">
+                  <SelectValue placeholder="Выберите инициатора" />
+                </SelectTrigger>
+                <SelectContent>
+                  {REJECTION_INITIATORS.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="reject-reason">Причина</Label>
+              <Select value={rejectReason} onValueChange={setRejectReason}>
+                <SelectTrigger id="reject-reason" className="w-full">
+                  <SelectValue placeholder="Выберите причину" />
+                </SelectTrigger>
+                <SelectContent>
+                  {REJECTION_REASONS.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="reject-comment">Комментарий <span className="text-muted-foreground font-normal">(необязательно)</span></Label>
+              <Textarea
+                id="reject-comment"
+                value={rejectComment}
+                onChange={e => setRejectComment(e.target.value)}
+                placeholder="Дополнительные детали..."
+                rows={3}
+                className="resize-none text-sm"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectDialogOpen(false)} disabled={stageChanging}>
+              Отмена
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={submitReject}
+              disabled={stageChanging}
+            >
+              {stageChanging ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+              Отказать
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

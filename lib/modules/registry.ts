@@ -10,6 +10,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
     menuItems: [
       // Найм
       { label: 'Дашборд',          href: '/hr/dashboard',         icon: 'LayoutDashboard' },
+      { label: 'Отчёт по найму',   href: '/hr/report',            icon: 'BarChart3' },
       { label: 'Вакансии',         href: '/hr/vacancies',         icon: 'Briefcase' },
       { label: 'Библиотека',       href: '/hr/library',           icon: 'Library' },
       { label: 'Кандидаты',        href: '/hr/candidates',        icon: 'UserCheck' },

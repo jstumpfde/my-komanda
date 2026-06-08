@@ -4,12 +4,17 @@
 
 import { notFound } from "next/navigation"
 import { auth } from "@/auth"
-import { isPlatformRole, type UserRole } from "@/lib/auth"
+import { isPlatformRole, type UserRole } from "@/lib/roles"
+import { isPlatformAdminEmail } from "@/lib/platform/auth"
 
 export default async function Layout({ children }: { children: React.ReactNode }) {
   const session = await auth()
   const role = session?.user?.role as UserRole | undefined
-  if (!role || !isPlatformRole(role)) {
+  const email = session?.user?.email
+  // Доступ: платформенная роль ИЛИ платформенный email (PLATFORM_ADMIN_EMAILS).
+  // Email-вариант нужен владельцу с legacy-ролью client (jstumpf.de@gmail.com).
+  const allowed = (role && isPlatformRole(role)) || isPlatformAdminEmail(email)
+  if (!allowed) {
     notFound()
   }
   return <>{children}</>

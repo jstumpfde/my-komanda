@@ -674,6 +674,14 @@ export const vacancies = pgTable("vacancies", {
   hhVacancyId: text("hh_vacancy_id"),
   hhUrl: text("hh_url"),
   hhSyncedAt: timestamp("hh_synced_at"),
+  // Состояние публикации на hh (обновляется синком hh-vacancy-sync):
+  // hhArchived = вакансии нет в /vacancies/active (ушла в архив hh ~через 30 дн).
+  // hhExpiresAt — срок публикации, если hh его отдаёт (часто null).
+  hhArchived:  boolean("hh_archived"),
+  hhExpiresAt: timestamp("hh_expires_at", { withTimezone: true }),
+  // Дата, когда МЫ закрыли вакансию (status → archived/closed). Может отличаться
+  // от hhArchived: на hh уже архив, а у нас ещё ведём кандидатов.
+  closedAt:    timestamp("closed_at", { withTimezone: true }),
   aiProcessSettings: jsonb("ai_process_settings").default({}),
   aiScoringEnabled: boolean("ai_scoring_enabled").notNull().default(false),
   // P0-22: editable стоп-слова на уровне вакансии.
@@ -1271,6 +1279,12 @@ export const candidates = pgTable("candidates", {
   // использовать generic rejectMessage вакансии. Нужен для факторных текстов
   // стоп-факторов, которые иначе потерялись бы при отложенном отказе.
   pendingRejectionMessage: text("pending_rejection_message"),
+  // Структурированная причина отказа (захват на карточке, разбивка в отчёте найма).
+  // Таксономия — lib/hr/rejection-reasons.ts. initiator: 'company'|'candidate'.
+  rejectionReasonCategory: text("rejection_reason_category"),
+  rejectionInitiator:      text("rejection_initiator"),
+  rejectionComment:        text("rejection_comment"),
+  rejectionAt:             timestamp("rejection_at", { withTimezone: true }),
   // v5: AI-классификатор ответов в hh-чате может выставить паузу автоматизации
   // (например, при rejection или wants_personal_contact).
   automationPaused: boolean("automation_paused").notNull().default(false),
@@ -1310,6 +1324,25 @@ export const candidates = pgTable("candidates", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })
+
+// Контакты с кандидатом (звонки/видео/встречи) с исходом — захват на карточке,
+// счётчики в отчёте найма. channel/outcome — lib/hr/contacts.ts; reasonCategory
+// (для outcome=no_fit) — lib/hr/rejection-reasons.ts.
+export const candidateContacts = pgTable("candidate_contacts", {
+  id:             uuid("id").primaryKey().defaultRandom(),
+  tenantId:       uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  candidateId:    uuid("candidate_id").references(() => candidates.id, { onDelete: "cascade" }).notNull(),
+  vacancyId:      uuid("vacancy_id"),                         // денорм. для группировки в отчёте
+  channel:        text("channel").default("call"),            // call|video|meeting|message
+  outcome:        text("outcome").default("pending"),         // fit|no_fit|pending
+  reasonCategory: text("reason_category"),                    // при no_fit — из rejection-reasons
+  comment:        text("comment"),
+  createdById:    uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt:      timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (t) => [
+  index("candidate_contacts_candidate_idx").on(t.candidateId),
+  index("candidate_contacts_tenant_idx").on(t.tenantId),
+])
 
 // ─── Adaptation ───────────────────────────────────────────────────────────────
 
@@ -3025,4 +3058,17 @@ export const compareSets = pgTable("compare_sets", {
   candidateIds: jsonb("candidate_ids").notNull(),
   createdBy:    uuid("created_by"),
   createdAt:    timestamp("created_at", { withTimezone: true }).defaultNow(),
+})
+
+// Публичная ссылка на «Отчёт по найму» (без логина, только чтение).
+// Один активный токен на компанию (перегенерация отзывает старый). Срока жизни
+// нет — дашборд может висеть на ТВ. Период/вакансия передаются query-параметрами
+// в самой ссылке, поэтому один токен обслуживает любой срез.
+export const reportShares = pgTable("report_shares", {
+  id:        uuid("id").primaryKey().defaultRandom(),
+  token:     text("token").notNull().unique(),
+  companyId: uuid("company_id").notNull(),
+  createdBy: uuid("created_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
 })

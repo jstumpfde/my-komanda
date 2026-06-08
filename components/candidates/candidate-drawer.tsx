@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { RubricShadowSection } from "@/components/candidates/rubric-shadow-section"
 import {
@@ -49,13 +50,36 @@ import {
   Pencil,
   Maximize2,
   Minimize2,
+  PhoneCall,
 } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import {
+  CONTACT_CHANNELS,
+  CONTACT_OUTCOMES,
+  contactChannelLabel,
+  contactOutcomeLabel,
+  type ContactChannel,
+  type ContactOutcome,
+} from "@/lib/hr/contacts"
 import { cn } from "@/lib/utils"
 import {
   getStageLabel,
   getStageColorClasses,
   type VacancyPipelineV2,
 } from "@/lib/stages"
+import {
+  REJECTION_INITIATORS,
+  REJECTION_REASONS,
+  rejectionReasonLabel,
+  rejectionInitiatorLabel,
+} from "@/lib/hr/rejection-reasons"
+import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import type { ApiCandidate } from "@/hooks/use-candidates"
 import type { Lesson, Block } from "@/lib/course-types"
@@ -63,6 +87,18 @@ import { AnswersTab } from "./answers-tab"
 import { TestTab } from "./test-tab"
 import { HhResumeInfo } from "./hh-resume-info"
 import { AiMatchCardV2 } from "./ai-match-card-v2"
+
+// ─── Contact log type ────────────────────────────────────────────────────────
+
+interface CandidateContact {
+  id: string
+  channel: ContactChannel
+  outcome: ContactOutcome
+  reasonCategory: string | null
+  comment: string | null
+  createdAt: string
+  createdByName: string | null
+}
 
 // ─── Note type ────────────────────────────────────────────────────────────────
 
@@ -556,6 +592,9 @@ export function CandidateDrawer({
   const [restoreTargetStage, setRestoreTargetStage] = useState<string | null>(null)
   const [confirmInterviewOpen, setConfirmInterviewOpen] = useState(false)
   const [confirmRejectOpen, setConfirmRejectOpen] = useState(false)
+  const [rejectInitiator, setRejectInitiator] = useState("company")
+  const [rejectReason, setRejectReason] = useState("")
+  const [rejectComment, setRejectComment] = useState("")
   // Инлайн-редактирование имени (например, для анонимных «Новый кандидат»).
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState("")
@@ -579,6 +618,16 @@ export function CandidateDrawer({
   const [noteText, setNoteText] = useState("")
   const [savingNote, setSavingNote] = useState(false)
   const [scoringAi, setScoringAi] = useState(false)
+
+  // Лог контактов
+  const [contacts, setContacts] = useState<CandidateContact[]>([])
+  const [contactsLoading, setContactsLoading] = useState(false)
+  const [contactDialogOpen, setContactDialogOpen] = useState(false)
+  const [contactChannel, setContactChannel] = useState<ContactChannel>("call")
+  const [contactOutcome, setContactOutcome] = useState<ContactOutcome>("pending")
+  const [contactReason, setContactReason] = useState("")
+  const [contactComment, setContactComment] = useState("")
+  const [savingContact, setSavingContact] = useState(false)
   const [activeTab, setActiveTab] = useState("contacts")
   const [hhMessages, setHhMessages] = useState<HhMessage[]>([])
   const [hhLoading, setHhLoading] = useState(false)
@@ -606,18 +655,61 @@ export function CandidateDrawer({
     }
   }, [])
 
+  const loadContacts = useCallback(async (id: string) => {
+    setContactsLoading(true)
+    try {
+      const res = await fetch(`/api/modules/hr/candidates/${id}/contacts`)
+      if (!res.ok) throw new Error()
+      const data = await res.json() as { contacts: CandidateContact[] }
+      setContacts(data.contacts ?? [])
+    } catch {
+      // не критично
+    } finally {
+      setContactsLoading(false)
+    }
+  }, [])
+
+  const submitContact = async () => {
+    if (!candidateId) return
+    setSavingContact(true)
+    try {
+      const body: Record<string, unknown> = { channel: contactChannel, outcome: contactOutcome }
+      if (contactOutcome === "no_fit" && contactReason) body.reasonCategory = contactReason
+      if (contactComment.trim()) body.comment = contactComment.trim()
+      const res = await fetch(`/api/modules/hr/candidates/${candidateId}/contacts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error()
+      toast.success("Контакт записан")
+      setContactDialogOpen(false)
+      setContactChannel("call")
+      setContactOutcome("pending")
+      setContactReason("")
+      setContactComment("")
+      await loadContacts(candidateId)
+    } catch {
+      toast.error("Не удалось сохранить контакт")
+    } finally {
+      setSavingContact(false)
+    }
+  }
+
   useEffect(() => {
     if (open && candidateId) {
       setCandidate(null)
       setNotes([])
+      setContacts([])
       setHhMessages([])
       setHhError(null)
       setHhDraft("")
       hhFetchRef.current = null
       setActiveTab("contacts")
       fetchCandidate(candidateId)
+      loadContacts(candidateId)
     }
-  }, [open, candidateId, fetchCandidate])
+  }, [open, candidateId, fetchCandidate, loadContacts])
 
   // ── Reload hh messages on demand (после отправки своего сообщения) ────────
   const reloadHhMessages = useCallback(async (hhResponseId: string) => {
@@ -779,6 +871,45 @@ export function CandidateDrawer({
     if (!candidate || candidate.stage !== "rejected" || restoring) return
     setRestoreTargetStage(computeRestoreTargetStage())
     setConfirmRestoreOpen(true)
+  }
+
+  const openRejectDialog = () => {
+    setRejectInitiator("company")
+    setRejectReason("")
+    setRejectComment("")
+    setConfirmRejectOpen(true)
+  }
+
+  const submitReject = async () => {
+    if (!candidate || changingStage) return
+    setChangingStage("rejected")
+    try {
+      const res = await fetch(`/api/modules/hr/candidates/${candidate.id}/stage`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          stage: "rejected",
+          rejectionReasonCategory: rejectReason || null,
+          rejectionInitiator: rejectInitiator || null,
+          rejectionComment: rejectComment.trim() || null,
+        }),
+      })
+      if (!res.ok) throw new Error()
+      setCandidate((prev) => prev ? {
+        ...prev,
+        stage: "rejected",
+        rejectionReasonCategory: rejectReason || null,
+        rejectionInitiator: rejectInitiator || null,
+        rejectionComment: rejectComment.trim() || null,
+      } : prev)
+      onStageChange?.(candidate.id, "rejected")
+      setConfirmRejectOpen(false)
+      toast.success(`${candidate.name} — отказ`)
+    } catch {
+      toast.error("Не удалось изменить стадию")
+    } finally {
+      setChangingStage(null)
+    }
   }
 
   const handleRestore = async () => {
@@ -1037,6 +1168,7 @@ export function CandidateDrawer({
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
             <TabsList className="flex flex-wrap justify-start gap-1 mx-3 mt-3 shrink-0 h-auto">
               <TabsTrigger value="contacts" className="text-[10px] px-1 py-1.5">Контакты</TabsTrigger>
+              <TabsTrigger value="calls" className="text-[10px] px-1 py-1.5">Созвоны</TabsTrigger>
               <TabsTrigger value="answers" className="text-[10px] px-1 py-1.5">Ответы</TabsTrigger>
               <TabsTrigger value="test" className="text-[10px] px-1 py-1.5">Тест</TabsTrigger>
               <TabsTrigger value="chat" className="text-[10px] px-1 py-1.5">Чат hh</TabsTrigger>
@@ -1144,6 +1276,25 @@ export function CandidateDrawer({
                     <p className="text-sm text-destructive font-medium text-center">
                       Кандидат получил отказ
                     </p>
+                    {(candidate.rejectionReasonCategory || candidate.rejectionInitiator) && (
+                      <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-muted-foreground px-1">
+                        {candidate.rejectionInitiator && (
+                          <span>{rejectionInitiatorLabel(candidate.rejectionInitiator)}</span>
+                        )}
+                        {candidate.rejectionReasonCategory && (
+                          <>
+                            <span className="text-muted-foreground/40">·</span>
+                            <span>{rejectionReasonLabel(candidate.rejectionReasonCategory)}</span>
+                          </>
+                        )}
+                        {candidate.rejectionComment && (
+                          <>
+                            <span className="text-muted-foreground/40">·</span>
+                            <span className="italic">{candidate.rejectionComment}</span>
+                          </>
+                        )}
+                      </div>
+                    )}
                     <Button
                       size="sm"
                       variant="outline"
@@ -1203,6 +1354,65 @@ export function CandidateDrawer({
                     </Button>
                   </div>
                 </section>
+              </TabsContent>
+
+              {/* ── Созвоны ──────────────────────────────────────── */}
+              <TabsContent value="calls" className="px-6 py-4 pb-28 space-y-4 mt-0">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                    <PhoneCall className="w-3.5 h-3.5" />
+                    Лог контактов
+                  </h3>
+                  <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={() => {
+                    setContactChannel("call")
+                    setContactOutcome("pending")
+                    setContactReason("")
+                    setContactComment("")
+                    setContactDialogOpen(true)
+                  }}>
+                    <PhoneCall className="w-3 h-3" />Записать
+                  </Button>
+                </div>
+                {contactsLoading ? (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />Загрузка...
+                  </div>
+                ) : contacts.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">Контактов пока нет</p>
+                ) : (
+                  <div className="divide-y divide-border">
+                    {contacts.map((c) => (
+                      <div key={c.id} className="py-2.5 space-y-1">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="text-xs text-muted-foreground shrink-0">
+                            {new Date(c.createdAt).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                          <span className="text-xs font-medium">{contactChannelLabel(c.channel)}</span>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-[10px] px-1.5 py-0 border-0",
+                              c.outcome === "fit" && "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
+                              c.outcome === "no_fit" && "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+                              c.outcome === "pending" && "bg-muted text-muted-foreground",
+                            )}
+                          >
+                            {contactOutcomeLabel(c.outcome)}
+                          </Badge>
+                          {c.reasonCategory && (
+                            <span className="text-xs text-muted-foreground">{c.reasonCategory}</span>
+                          )}
+                          {c.createdByName && (
+                            <span className="text-[10px] text-muted-foreground/60 ml-auto">{c.createdByName}</span>
+                          )}
+                        </div>
+                        {c.comment && (
+                          <p className="text-xs text-foreground italic pl-0.5">{c.comment}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </TabsContent>
 
               {/* ── Ответы ───────────────────────────────────────── */}
@@ -1545,7 +1755,7 @@ export function CandidateDrawer({
               variant="outline"
               className="h-10 flex-1 gap-2 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
               disabled={!!changingStage}
-              onClick={() => setConfirmRejectOpen(true)}
+              onClick={openRejectDialog}
             >
               {changingStage === "rejected" ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
               Отказать
@@ -1625,22 +1835,144 @@ export function CandidateDrawer({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Подтверждение отказа */}
+      {/* Диалог записи контакта */}
+      <Dialog open={contactDialogOpen} onOpenChange={setContactDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Записать контакт</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="drawer-contact-channel">Канал</Label>
+              <Select value={contactChannel} onValueChange={(v) => setContactChannel(v as ContactChannel)}>
+                <SelectTrigger id="drawer-contact-channel" className="w-full">
+                  <SelectValue placeholder="Выберите канал" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CONTACT_CHANNELS.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Исход</Label>
+              <div className="flex gap-2 flex-wrap">
+                {CONTACT_OUTCOMES.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => { setContactOutcome(item.id as ContactOutcome); if (item.id !== "no_fit") setContactReason("") }}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-sm border transition-colors",
+                      contactOutcome === item.id
+                        ? item.id === "fit"
+                          ? "bg-emerald-100 border-emerald-400 text-emerald-800 dark:bg-emerald-900/30 dark:border-emerald-600 dark:text-emerald-300"
+                          : item.id === "no_fit"
+                          ? "bg-red-100 border-red-400 text-red-800 dark:bg-red-900/30 dark:border-red-600 dark:text-red-300"
+                          : "bg-muted border-border text-foreground"
+                        : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                    )}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {contactOutcome === "no_fit" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="drawer-contact-reason">Причина</Label>
+                <Select value={contactReason} onValueChange={setContactReason}>
+                  <SelectTrigger id="drawer-contact-reason" className="w-full">
+                    <SelectValue placeholder="Выберите причину" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {REJECTION_REASONS.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label htmlFor="drawer-contact-comment">Комментарий <span className="text-muted-foreground font-normal">(необязательно)</span></Label>
+              <Textarea
+                id="drawer-contact-comment"
+                value={contactComment}
+                onChange={(e) => setContactComment(e.target.value)}
+                placeholder="Итоги разговора..."
+                rows={3}
+                className="resize-none text-sm"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setContactDialogOpen(false)} disabled={savingContact}>
+              Отмена
+            </Button>
+            <Button onClick={() => void submitContact()} disabled={savingContact}>
+              {savingContact ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+              Сохранить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Диалог причины отказа */}
       <AlertDialog open={confirmRejectOpen} onOpenChange={setConfirmRejectOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
-            <AlertDialogTitle>Отказать кандидату?</AlertDialogTitle>
+            <AlertDialogTitle>Причина отказа</AlertDialogTitle>
             <AlertDialogDescription>
-              {candidate?.name ? <><b>{candidate.name}</b> будет переведён</> : "Кандидат будет переведён"} на стадию «Отказ», автоматическая обработка остановится.
-              {" "}Если в воронке для стадии «Отказ» настроено действие hh.ru «Отказать» — кандидату уйдёт отказ в hh с текстом из настроек вакансии.
+              {candidate?.name ? <><b>{candidate.name}</b> будет переведён</> : "Кандидат будет переведён"} на стадию «Отказ».
+              {" "}Укажите причину для отчёта по найму.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="drawer-reject-initiator">Кто отказался</Label>
+              <Select value={rejectInitiator} onValueChange={setRejectInitiator}>
+                <SelectTrigger id="drawer-reject-initiator" className="w-full">
+                  <SelectValue placeholder="Выберите инициатора" />
+                </SelectTrigger>
+                <SelectContent>
+                  {REJECTION_INITIATORS.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="drawer-reject-reason">Причина</Label>
+              <Select value={rejectReason} onValueChange={setRejectReason}>
+                <SelectTrigger id="drawer-reject-reason" className="w-full">
+                  <SelectValue placeholder="Выберите причину" />
+                </SelectTrigger>
+                <SelectContent>
+                  {REJECTION_REASONS.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="drawer-reject-comment">Комментарий <span className="text-muted-foreground font-normal">(необязательно)</span></Label>
+              <Textarea
+                id="drawer-reject-comment"
+                value={rejectComment}
+                onChange={(e) => setRejectComment(e.target.value)}
+                placeholder="Дополнительные детали..."
+                rows={3}
+                className="resize-none text-sm"
+              />
+            </div>
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={!!changingStage}>Отмена</AlertDialogCancel>
             <AlertDialogAction
               disabled={!!changingStage}
               className="bg-destructive hover:bg-destructive/90"
-              onClick={(e) => { e.preventDefault(); setConfirmRejectOpen(false); void handleStageChange("rejected") }}
+              onClick={(e) => { e.preventDefault(); void submitReject() }}
             >
               {changingStage === "rejected" ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : null}
               Отказать

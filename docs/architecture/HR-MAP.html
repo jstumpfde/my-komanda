@@ -102,7 +102,7 @@
     <div class="dot">🗺️</div>
     <div>
       <h1>Карта раздела HR</h1>
-      <div class="sub">Company24 · все 67 страниц со статусами · потоки и взаимосвязи · из кода develop (7eb2c3f0) · всё на проде · 05.06.2026</div>
+      <div class="sub">Company24 · все 67 страниц со статусами · потоки и взаимосвязи · из кода develop (a624a54e) · всё на проде · 08.06.2026</div>
     </div>
   </header>
 
@@ -119,6 +119,18 @@
     <span class="chip"><span class="pill p-stub">⚪ Заглушка</span> 0 API / «Скоро» / редирект / PoC</span>
   </div>
   <div class="note" style="margin-top:8px">Статус определён автоматически по коду: число обращений к API, наличие маркеров «Скоро»/mock/TODO, дата последнего коммита. «Свежая» = коммит 04–05.06.2026.</div>
+
+  <div class="callout" style="border-left-color:var(--violet);background:var(--violet-l);color:#5b21b6;">
+    <b>Обновление 08.06.2026 (выкачено на прод, develop a624a54e):</b>
+    <ul style="margin:6px 0 0;padding-left:18px;">
+      <li><b>B9 решён</b> → единый настраиваемый <b>редактор стадий + пресеты</b> (вкл/выкл, порядок, действие по стадии hh/Авито/SuperJob, «сохранить как шаблон»). Не «археология статусов», а продуктовая фича. Всё в <code>hiring_defaults_json</code>.</li>
+      <li><b>Avito — новый канал</b> рядом с hh.ru (фаза 2: OAuth, send, webhook, UI «Подключить») — <b>выключен</b> по умолчанию. Источник на вакансии <code>channelSources: hh|avito</code> (миграция 0191). Канал общий для HR и Продаж.</li>
+      <li><b>Журнал присутствия</b> · <code>/admin/platform → Присутствие</code> — кто сейчас на сайте (демо/анкеты), гейт безопасности деплоя.</li>
+      <li><b>Модуль Продаж (CRM)</b> — отдельный модуль-сиблинг (модульный монолит): воронка/сделки/настройки CRM/бот записи. Переиспользует движок (бот/скоринг/дожим, каналы).</li>
+      <li><b>Нэнси-iOS</b> — TTS в основной динамик (громко), микрофон освобождается на время ответа.</li>
+      <li><b>Миграции прода:</b> 0187 (avito) · 0188 sales_settings · 0189 sales_tasks · 0190 sales_products · 0191 channel_sources — применены.</li>
+    </ul>
+  </div>
 
   <div class="basepick">
     <b>Открывать страницы на:</b>
@@ -322,7 +334,9 @@ flowchart TB
 flowchart TB
   CO["🏢 companies<br/><small>+ hiringDefaults</small>"]:::co --> VAC["📋 vacancies"]:::vac
   CO --> HH["🔗 hhIntegrations · OAuth"]:::hh
+  CO --> AV["🟠 avito_integrations · выкл."]:::hh
   CO --> TG["📨 Telegram-канал"]:::side
+  VAC -->|channelSources| CHN["📡 Каналы: hh · avito"]:::hh
   VAC --> CAND["👤 candidates"]:::cand
   VAC -->|pipeline / stageHhActions| ST["Стадии воронки · 16"]:::st
   CAND --> ST
@@ -354,7 +368,7 @@ flowchart TB
       <ul>
         <li><b>Аварийное отключение AI</b> · kill-switch на компанию</li>
         <li><b>Выбор компании в анкете</b> · мультибренд <span style="color:#6d28d9">(сессия)</span></li>
-        <li><b>Воронка → действия в hh.ru</b> <span style="color:#6d28d9">(сессия)</span></li>
+        <li><b>Редактор стадий + пресеты</b> · вкл/выкл, порядок, действие hh/Авито/SuperJob, «сохранить как шаблон» <span style="color:#6d28d9">(B9 решён, 08.06)</span></li>
         <li><b>Расписание интервью</b> · слоты, напоминания</li>
         <li><b>Хранение данных · Корзина</b> · ФЗ-152, сроки</li>
         <li><b>Webhooks · Bitrix24</b> · стоп-факторы по умолчанию</li>
@@ -365,7 +379,7 @@ flowchart TB
       <ul>
         <li><b>Кандидаты</b> · канбан/воронка/список</li>
         <li><b>Вакансия (анкета)</b> · бренд, AI-профиль <span style="color:#6d28d9">(сессия)</span></li>
-        <li><b>Воронка</b> · стадии + действие в hh <span style="color:#6d28d9">(сессия)</span></li>
+        <li><b>Воронка</b> · стадии + действие hh/Авито · источник <code>channelSources</code> (hh|avito)</li>
         <li><b>Демо · Тест · Исходящий подбор</b></li>
         <li><b>Настройки</b> · AI чат-бот (+песочница), followup, стоп-факторы</li>
       </ul>
@@ -379,6 +393,7 @@ flowchart TB
       <tr><th>Крон</th><th>Что делает</th><th>Outward?</th><th>Статус</th></tr>
       <tr><td class="r">hh-import</td><td class="note">Импорт откликов → стоп-факторы → AI-скоринг → приглашение/отказ</td><td class="note">да</td><td><span class="pill p-ok">прод</span></td></tr>
       <tr><td class="r">follow-up</td><td class="note">Дожим: касания в hh-чат</td><td class="note">да</td><td><span class="pill p-ok">прод</span></td></tr>
+      <tr><td class="r">sales-follow-up</td><td class="note">Дожим лидов Продаж (Telegram и др.) — кто не записался</td><td class="note">да</td><td><span class="pill p-dev">ждёт прод-crontab</span></td></tr>
       <tr><td class="r">ai-chatbot-watcher</td><td class="note">Аудит 50 последних ответов AI (раз в час)</td><td class="note">нет</td><td><span class="pill p-ok">прод</span></td></tr>
       <tr><td class="r">interview-reminders</td><td class="note">Напоминания HR за 24ч/2ч до интервью (C6)</td><td class="note">нет</td><td><span class="pill p-dev">ждёт прод-crontab</span></td></tr>
       <tr><td class="r">trash-cleanup</td><td class="note">Удаление вакансий из корзины старше срока</td><td class="note">нет</td><td><span class="pill p-ok">прод</span></td></tr>
@@ -393,15 +408,15 @@ flowchart TB
       <ul>
         <li><b>Свип заголовков</b> под дизайн-эталон</li>
         <li><b>assessment</b>-действие hh в маппинге воронки</li>
-        <li><b>Переименование стадий разом</b> (company-level)</li>
+        <li><s>Переименование стадий разом</s> ✅ сделано — в редакторе стадий</li>
         <li><b>Заглушки в меню</b> — спрятать «Скоро» из навигации, чтобы не путали (settings/templates, sources, schedule)</li>
       </ul>
     </div>
     <div class="panel">
       <h3>⚠️ Архитектурные узлы</h3>
       <ul>
-        <li><b>B9 — две системы статусов:</b> 16 канонических + ~8 legacy-слагов в БД</li>
-        <li><b>Funnel Builder (~20 блоков) vs Pipeline (16 стадий)</b> — две оси, dual-write, нет единого источника правды</li>
+        <li><b>B9 — ✅ решён (08.06):</b> вместо «археологии статусов» — единый настраиваемый редактор стадий + пресеты (one source в <code>hiring_defaults_json</code>).</li>
+        <li><b>Funnel Builder (~20 блоков) vs Pipeline (16 стадий)</b> — две оси, dual-write; редактор стадий унифицировал стадийную ось, но связка блоки↔стадии ещё остаётся</li>
         <li><b>«Длинный хвост» ~21 страница</b> (онбординг-каналы, предиктив, маркетплейс, reskilling) — добивать / прятать / удалять</li>
       </ul>
     </div>
@@ -410,7 +425,7 @@ flowchart TB
   <div class="foot">
     Сгенерировано анализом ветки <code>develop</code>: все 67 файлов <code>app/(modules)/hr/**/page.tsx</code> просканированы на обращения к API,
     маркеры заглушек и дату последнего коммита; подсистемы разобраны 6 параллельными исследователями.
-    Статусы — эвристика по коду на 05.06.2026; «Рабочая» ≠ «без багов», означает «тянет реальные данные».
+    Статусы — эвристика по коду; каталог страниц — на 05.06.2026, актуализация платформенных изменений (B9-редактор стадий, Avito-канал, журнал присутствия, модуль Продаж) — 08.06.2026, всё на проде (a624a54e). «Рабочая» ≠ «без багов», означает «тянет реальные данные».
     Файл самодостаточный — открывается в браузере, печатается в PDF.
   </div>
 
