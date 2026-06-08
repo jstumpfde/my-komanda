@@ -2332,6 +2332,32 @@ export const hhResponses = pgTable("hh_responses", {
 // Legacy alias — old code references hhTokens
 export const hhTokens = hhIntegrations
 
+// ─── Авито-интеграция (скелет, фаза 1 — миграция 0187) ───────────────────────
+//
+// Feature-flag: is_enabled=false по умолчанию; HR включает в Настройки → Интеграции.
+// Реальный OAuth-флоу и send/receive реализуются в фазе 2 (lib/channels/avito.ts).
+// Подробности: docs/AVITO-INTEGRATION-PLAN.md
+export const avitoIntegrations = pgTable("avito_integrations", {
+  id:             uuid("id").primaryKey().defaultRandom(),
+  companyId:      uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }).unique(),
+  // Числовой user_id пользователя Авито (нужен для путей Messenger API).
+  userId:         text("user_id"),
+  // OAuth ключи компании (client_credentials path).
+  clientId:       text("client_id"),
+  clientSecret:   text("client_secret"),
+  // Кэшированный access_token (обновляется адаптером).
+  accessToken:    text("access_token"),
+  tokenExpiresAt: timestamp("token_expires_at"),
+  connectedBy:    uuid("connected_by").references(() => users.id),
+  lastSyncedAt:   timestamp("last_synced_at"),
+  // Feature-flag: выключено по умолчанию.
+  isEnabled:      boolean("is_enabled").notNull().default(false),
+  // Системный статус: false если токен отозван / интеграция сломана.
+  isActive:       boolean("is_active").notNull().default(true),
+  createdAt:      timestamp("created_at").defaultNow(),
+  updatedAt:      timestamp("updated_at").defaultNow(),
+})
+
 // ─── Исходящий подбор (hh outbound sourcing), Фаза 1 — миграция 0159 ─────────
 // Поток: критерии → hh GET /resumes → сохранить найденные сниппеты →
 // AI-скоринг по сниппетам → HR отмечает лучших → приглашение через negotiations
