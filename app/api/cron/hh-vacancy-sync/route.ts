@@ -1,8 +1,9 @@
 // GET/POST /api/cron/hh-vacancy-sync — обновляет состояние публикации вакансий на hh.
 //
-// Сигнал «в архиве hh»: вакансии нет в /employers/{id}/vacancies/active.
-// Для каждой компании с привязанными вакансиями берём активный список и
-// проставляем vacancies.hh_archived = (вакансии нет в активных) + hh_synced_at.
+// Сигнал «в архиве hh» берём из ДЕТАЛЬНОГО объекта /vacancies/{id} (поле archived).
+// /employers/{id}/vacancies/active для части работодателей возвращает пустой список
+// (требует manager_id/иной скоуп) — поэтому НЕ используем его, чтобы не пометить
+// архивом всё подряд. Деталь по каждой вакансии — авторитетна.
 // Точную дату истечения hh работодателю не отдаёт — поэтому только архив-флаг.
 //
 // Защищён X-Cron-Secret. Расписание на сервере (раз в сутки достаточно):
@@ -13,12 +14,12 @@ import { and, eq, isNull, isNotNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancies } from "@/lib/db/schema"
 import { getValidToken } from "@/lib/hh-helpers"
-import { getEmployerVacancies } from "@/lib/hh-api"
+import { getVacancy } from "@/lib/hh-api"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 
 const CRON_NAME = "hh-vacancy-sync"
-const MAX_PAGES = 20
+const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 
 async function handle(req: NextRequest) {
   const auth = checkCronAuth(req)
@@ -40,24 +41,6 @@ async function handle(req: NextRequest) {
     for (const { companyId } of companyRows) {
       const token = await getValidToken(companyId).catch(() => null)
       if (!token) { errors.push(`no_token:${companyId}`); continue }
-      const employerId = token.integration.employerId
-      if (!employerId) { errors.push(`no_employer:${companyId}`); continue }
-
-      // Собираем все активные hh-id (постранично).
-      const activeIds = new Set<string>()
-      try {
-        let page = 0
-        let pages = 1
-        while (page < pages && page < MAX_PAGES) {
-          const resp = await getEmployerVacancies(token.accessToken, employerId, page)
-          for (const it of resp.items ?? []) activeIds.add(String(it.id))
-          pages = resp.pages ?? 1
-          page += 1
-        }
-      } catch (err) {
-        errors.push(`fetch:${companyId}:${err instanceof Error ? err.message : String(err)}`)
-        continue
-      }
 
       // Наши привязанные вакансии компании.
       const linked = await db
@@ -69,16 +52,34 @@ async function handle(req: NextRequest) {
           isNull(vacancies.deletedAt),
         ))
 
-      const now = new Date()
+      let touched = false
       for (const v of linked) {
-        const archived = !activeIds.has(String(v.hhVacancyId))
-        await db
-          .update(vacancies)
-          .set({ hhArchived: archived, hhSyncedAt: now })
-          .where(eq(vacancies.id, v.id))
-        vacanciesUpdated += 1
+        try {
+          const detail = await getVacancy(token.accessToken, String(v.hhVacancyId))
+          // archived есть только в детальном объекте; если поле не пришло —
+          // не трогаем флаг (консервативно, чтобы не выставить ложный архив).
+          if (typeof detail.archived !== "boolean") { errors.push(`no_archived_field:${v.hhVacancyId}`); continue }
+          await db
+            .update(vacancies)
+            .set({ hhArchived: detail.archived, hhSyncedAt: new Date() })
+            .where(eq(vacancies.id, v.id))
+          vacanciesUpdated += 1
+          touched = true
+        } catch (err) {
+          // 404 = вакансия удалена/скрыта на hh → считаем архивной; прочие
+          // ошибки (сеть/429/5xx) — пропускаем, флаг не меняем.
+          const msg = err instanceof Error ? err.message : String(err)
+          if (/\b404\b/.test(msg)) {
+            await db.update(vacancies).set({ hhArchived: true, hhSyncedAt: new Date() }).where(eq(vacancies.id, v.id))
+            vacanciesUpdated += 1
+            touched = true
+          } else {
+            errors.push(`fetch:${v.hhVacancyId}:${msg}`)
+          }
+        }
+        await sleep(250) // вежливо к hh rate-limit
       }
-      companiesProcessed += 1
+      if (touched) companiesProcessed += 1
     }
 
     const metadata = { companiesProcessed, vacanciesUpdated, errorsCount: errors.length }

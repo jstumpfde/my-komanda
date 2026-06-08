@@ -284,9 +284,9 @@ function StatusCell({ row }: { row: VacancyRow }) {
   }
 
   return (
-    <div className="flex flex-col items-start gap-0.5">
-      <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${mainCls}`}>{mainText}</span>
-      {hhText && <span className={`text-[11px] whitespace-nowrap ${hhCls}`}>{hhText}</span>}
+    <div className="flex items-center gap-2 whitespace-nowrap">
+      <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${mainCls}`}>{mainText}</span>
+      {hhText && <span className={`text-[11px] ${hhCls}`}>{hhText}</span>}
     </div>
   )
 }
