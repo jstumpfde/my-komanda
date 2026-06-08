@@ -28,7 +28,7 @@ export const PERIOD_OPTIONS: { id: Period; label: string }[] = [
 // ─── Типы ───────────────────────────────────────────────────────────────────
 
 export interface FunnelStage { slug: string; label: string; count: number; isTerminal: boolean }
-export interface VacancyRow { vacancyId: string; vacancyTitle: string; total: number; hired: number; rejected: number; interview: number }
+export interface VacancyRow { vacancyId: string; vacancyTitle: string; total: number; hired: number; rejected: number; selfRejected: number; interview: number }
 export interface RejectionCategory { id: string; label: string; count: number }
 export interface RejectionInitiator { id: string; label: string; count: number }
 export interface ContactChannel { id: string; label: string; count: number }
@@ -51,7 +51,7 @@ export interface ReportData {
   funnel: FunnelStage[]
   vacancyTable: VacancyRow[]
   interviews: { total: number; conducted: number; noShow: number; online: number; offline: number }
-  rejections: { byCategory: RejectionCategory[]; byInitiator: RejectionInitiator[] }
+  rejections: { byCategory: RejectionCategory[]; byInitiator: RejectionInitiator[]; automatic: RejectionCategory[] }
   contacts: { total: number; byChannel: ContactChannel[]; byOutcome: ContactOutcome[]; noFitByReason: ContactReason[] }
 }
 
@@ -176,17 +176,19 @@ function VacancyTable({ rows, loading, tv }: { rows: VacancyRow[]; loading: bool
             <th className={`${thR} px-3`}>Откликов</th>
             <th className={`${thR} px-3`}>На интервью</th>
             <th className={`${thR} px-3`}>Нанято</th>
-            <th className={`${thR} pl-3`}>Отказов</th>
+            <th className={`${thR} px-3`}>Отказов</th>
+            <th className={`${thR} pl-3`}>Сам отказался</th>
           </tr>
         </thead>
         <tbody>
           {rows.map(r => (
             <tr key={r.vacancyId} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-              <td className={`py-2.5 pr-4 font-medium truncate ${tv ? "max-w-[320px]" : "max-w-[200px]"}`}>{r.vacancyTitle}</td>
+              <td className={`py-2.5 pr-4 font-medium truncate ${tv ? "max-w-[420px]" : "max-w-[280px]"}`}>{r.vacancyTitle}</td>
               <td className="py-2.5 px-3 text-right tabular-nums">{r.total}</td>
               <td className="py-2.5 px-3 text-right tabular-nums">{r.interview}</td>
               <td className="py-2.5 px-3 text-right tabular-nums text-emerald-600 font-medium">{r.hired}</td>
-              <td className="py-2.5 pl-3 text-right tabular-nums text-rose-500">{r.rejected}</td>
+              <td className="py-2.5 px-3 text-right tabular-nums text-rose-500">{r.rejected}</td>
+              <td className="py-2.5 pl-3 text-right tabular-nums text-amber-600">{r.selfRejected}</td>
             </tr>
           ))}
         </tbody>
@@ -229,15 +231,38 @@ function RejectionsBlock({ rejections, loading, tv }: { rejections: ReportData["
 
   const hasCategories = rejections.byCategory.length > 0
   const hasInitiators = rejections.byInitiator.some(i => i.count > 0)
-  if (!hasCategories && !hasInitiators) {
-    return <EmptyState text="Данных об отказах нет. Причины фиксируются при переводе кандидата в статус «Отказ»." />
+  const hasAuto = (rejections.automatic?.length ?? 0) > 0
+  if (!hasCategories && !hasInitiators && !hasAuto) {
+    return <EmptyState text="Данных об отказах нет. Причины фиксируются автоматически (AI, стоп-факторы) и вручную при переводе кандидата в «Отказ»." />
   }
   const maxCat = Math.max(1, ...rejections.byCategory.map(r => r.count))
+  const maxAuto = Math.max(1, ...(rejections.automatic ?? []).map(r => r.count))
   const lbl = tv ? "text-sm" : "text-xs"
   const t = tv ? "text-base" : "text-sm"
 
   return (
-    <div className="space-y-6">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-6">
+      {hasAuto && (
+        <div>
+          <p className={`${lbl} font-semibold text-muted-foreground uppercase tracking-wide mb-3`}>
+            Автоматически (AI, стоп-факторы, дедуп)
+          </p>
+          <div className="space-y-2">
+            {rejections.automatic.map(r => (
+              <div key={r.id}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className={lbl}>{r.label}</span>
+                  <span className={`${lbl} font-semibold`}>{r.count}</span>
+                </div>
+                <div className={`${tv ? "h-6" : "h-5"} bg-muted/30 rounded-full overflow-hidden`}>
+                  <div className="h-full rounded-full transition-all" style={{ width: `${Math.round((r.count / maxAuto) * 100)}%`, backgroundColor: COLORS.slate }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {hasCategories && (
         <div>
           <p className={`${lbl} font-semibold text-muted-foreground uppercase tracking-wide mb-3`}>Почему не подошли</p>
@@ -423,26 +448,26 @@ export function ReportView({
         <KpiCard icon={XCircle}      label="Отказов"            value={kpi?.totalRejected ?? "—"}      bg="bg-rose-500"    tv={tv} />
       </div>
 
-      {/* Воронка + таблица */}
+      {/* По вакансиям — на всю ширину, первым блоком */}
+      <SectionCard title="По вакансиям" tv={tv}>
+        <VacancyTable rows={data?.vacancyTable ?? []} loading={loading} tv={tv} />
+      </SectionCard>
+
+      {/* Воронка + собеседования (узкие списки — в две колонки) */}
       <div className={`grid grid-cols-1 lg:grid-cols-2 ${tv ? "gap-6" : "gap-5"}`}>
         <SectionCard title="Воронка по этапам" tv={tv}>
           <p className={`${tv ? "text-sm" : "text-xs"} text-muted-foreground mb-3`}>Текущее состояние всех кандидатов</p>
           <FunnelBlock stages={data?.funnel ?? []} loading={loading} tv={tv} />
         </SectionCard>
-        <SectionCard title="По вакансиям" tv={tv}>
-          <VacancyTable rows={data?.vacancyTable ?? []} loading={loading} tv={tv} />
-        </SectionCard>
-      </div>
-
-      {/* Собеседования + причины отказа */}
-      <div className={`grid grid-cols-1 lg:grid-cols-2 ${tv ? "gap-6" : "gap-5"}`}>
         <SectionCard title="Собеседования" tv={tv}>
           <InterviewsBlock data={data?.interviews ?? null} loading={loading} tv={tv} />
         </SectionCard>
-        <SectionCard title="Причины отказа" tv={tv}>
-          <RejectionsBlock rejections={data?.rejections ?? null} loading={loading} tv={tv} />
-        </SectionCard>
       </div>
+
+      {/* Причины отказа — на всю ширину (авто + ручные + инициатор) */}
+      <SectionCard title="Причины отказа" tv={tv}>
+        <RejectionsBlock rejections={data?.rejections ?? null} loading={loading} tv={tv} />
+      </SectionCard>
 
       {/* Созвоны */}
       <SectionCard title="Созвоны и контакты" tv={tv}>

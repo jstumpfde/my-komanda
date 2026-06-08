@@ -6,7 +6,7 @@ import { eq, and, count, isNull, inArray, sql, gte, lte } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancies, candidates, calendarEvents, candidateContacts } from "@/lib/db/schema"
 import { ACTIVE_VACANCY_STATUSES } from "@/lib/vacancies/filters"
-import { REJECTION_REASONS, REJECTION_INITIATORS } from "@/lib/hr/rejection-reasons"
+import { REJECTION_REASONS, REJECTION_INITIATORS, autoReasonKey, autoReasonLabel } from "@/lib/hr/rejection-reasons"
 import { PLATFORM_STAGES, ALL_STAGE_SLUGS } from "@/lib/stages"
 import { CONTACT_CHANNELS, CONTACT_OUTCOMES } from "@/lib/hr/contacts"
 
@@ -88,6 +88,7 @@ export async function buildReport(companyId: string, opts: BuildReportOptions = 
     contactStats,
     contactsByOutcome,
     contactsNoFitReasons,
+    autoReasonRows,
     vacancyOptionRows,
   ] = await Promise.all([
     // 1. Активные вакансии — текущее состояние (за всё время)
@@ -119,10 +120,11 @@ export async function buildReport(companyId: string, opts: BuildReportOptions = 
     db.select({
       vacancyId: vacancies.id,
       vacancyTitle: vacancies.title,
-      total:     count(),
-      hired:     sql<number>`count(*) filter (where ${candidates.stage} = 'hired')`.mapWith(Number),
-      rejected:  sql<number>`count(*) filter (where ${candidates.stage} = 'rejected')`.mapWith(Number),
-      interview: sql<number>`count(*) filter (where ${candidates.stage} in ('scheduled','interview','interviewed'))`.mapWith(Number),
+      total:        count(),
+      hired:        sql<number>`count(*) filter (where ${candidates.stage} = 'hired')`.mapWith(Number),
+      rejected:     sql<number>`count(*) filter (where ${candidates.stage} = 'rejected')`.mapWith(Number),
+      selfRejected: sql<number>`count(*) filter (where ${candidates.rejectionInitiator} = 'candidate')`.mapWith(Number),
+      interview:    sql<number>`count(*) filter (where ${candidates.stage} in ('scheduled','interview','interviewed'))`.mapWith(Number),
     })
       .from(candidates)
       .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
@@ -224,7 +226,26 @@ export async function buildReport(companyId: string, opts: BuildReportOptions = 
       ))
       .groupBy(candidateContacts.reasonCategory),
 
-    // 10. Список вакансий для дропдауна (все живые вакансии компании)
+    // 10. Автоматические причины отказа/остановки (auto_processing_stopped_reason) —
+    // за период. Это системные причины (AI, стоп-факторы, дедуп), которых нет в
+    // ручной таксономии — тянем в отчёт, чтобы он был полнее без ручного ввода.
+    db.select({
+      reason: candidates.autoProcessingStoppedReason,
+      cnt: count(),
+    })
+      .from(candidates)
+      .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
+      .where(and(
+        eq(vacancies.companyId, companyId),
+        isNull(vacancies.deletedAt),
+        isNull(candidates.deletedAt),
+        sql`${candidates.autoProcessingStoppedReason} is not null`,
+        ...vacancyFilter,
+        ...candidateDateFilters,
+      ))
+      .groupBy(candidates.autoProcessingStoppedReason),
+
+    // 11. Список вакансий для дропдауна (все живые вакансии компании)
     db.select({
       id:    vacancies.id,
       title: vacancies.title,
@@ -314,8 +335,19 @@ export async function buildReport(companyId: string, opts: BuildReportOptions = 
     total: Number(r.total),
     hired: Number(r.hired),
     rejected: Number(r.rejected),
+    selfRejected: Number(r.selfRejected),
     interview: Number(r.interview),
   }))
+
+  // ─── Автоматические причины отказа ─────────────────────────────────
+  const autoReasonMap: Record<string, number> = {}
+  for (const row of autoReasonRows) {
+    const key = autoReasonKey(row.reason)
+    autoReasonMap[key] = (autoReasonMap[key] ?? 0) + Number(row.cnt)
+  }
+  const automaticReasons = Object.entries(autoReasonMap)
+    .map(([id, cnt]) => ({ id, label: autoReasonLabel(id), count: cnt }))
+    .sort((a, b) => b.count - a.count)
 
   const totalRejected = vacancyTable.reduce((s, r) => s + r.rejected, 0)
   const totalHired    = vacancyTable.reduce((s, r) => s + r.hired, 0)
@@ -386,6 +418,7 @@ export async function buildReport(companyId: string, opts: BuildReportOptions = 
     rejections: {
       byCategory:  rejectionCategories,
       byInitiator: rejectionInitiators,
+      automatic:   automaticReasons,
     },
     contacts: {
       total: totalContacts,

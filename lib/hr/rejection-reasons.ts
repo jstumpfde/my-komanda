@@ -32,3 +32,32 @@ export function rejectionInitiatorLabel(id: string | null | undefined): string {
   if (!id) return "—"
   return REJECTION_INITIATORS.find((r) => r.id === id)?.label ?? id
 }
+
+// ─── Автоматические причины (auto_processing_stopped_reason) ──────────────────
+// Проставляются системой автоматически (AI-скоринг, стоп-факторы, антиспам,
+// дедуп). Тянем их в отчёт, чтобы он был полнее без ручного ввода HR.
+export const AUTO_REASON_LABELS: Record<string, string> = {
+  manual_rejection:              "Ручной отказ",
+  below_threshold_manual_review: "Низкий скор — на ручную проверку",
+  ai_min_score_below_threshold:  "AI: скор ниже порога",
+  ai_rejection:                  "AI-отказ",
+  duplicate_of_rejected:         "Дубль ранее отклонённого",
+  stop_word_regex:               "Стоп-слово (фильтр)",
+  unstable_pattern_in_chat:      "Подозрительное поведение в чате",
+  trashed:                       "Перемещён в корзину",
+}
+
+// Нормализуем причину к ключу: stop_factor:city → "stop_factor", иначе как есть.
+export function autoReasonKey(raw: string | null | undefined): string {
+  if (!raw) return "unknown"
+  const prefix = raw.split(":")[0]
+  if (prefix === "stop_factor" || prefix === "stop_word") return prefix
+  return raw
+}
+
+export function autoReasonLabel(key: string): string {
+  if (key === "unknown") return "Не указана"
+  if (key === "stop_factor") return "Стоп-фактор"
+  if (key === "stop_word") return "Стоп-слово"
+  return AUTO_REASON_LABELS[key] ?? key
+}
