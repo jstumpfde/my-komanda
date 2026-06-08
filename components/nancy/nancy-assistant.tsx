@@ -30,9 +30,17 @@ import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import {
   ensureMic, releaseMic, listenOnce, micSupported as micIsSupported,
-  playThroughSharedContext, micSessionActive, stopSharedPlayback,
+  stopSharedPlayback,
   type ListenHandle,
 } from "@/lib/voice/record-pcm"
+
+// Мобильное устройство — для iOS-аудио: на телефоне микрофон во время ответа
+// освобождаем, иначе iOS играет TTS в ушной динамик (тихо) и рвёт сессию записи.
+function isMobileDevice(): boolean {
+  if (typeof navigator === "undefined") return false
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+    || (typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches)
+}
 import { useAuth } from "@/lib/auth"
 
 // ─── Типы ──────────────────────────────────────────────────────────────────
@@ -144,13 +152,9 @@ async function speakText(
     })
     if (res.ok && res.status !== 204) {
       const data = await res.arrayBuffer()
-      // В режиме разговора (общий аудио-контекст активен) играем TTS через него —
-      // на iOS Safari new Audio() во время записи рвёт аудио-сессию, и после
-      // первого ответа микрофон перестаёт слушать. Один контекст держит цикл.
-      if (micSessionActive()) {
-        const played = await playThroughSharedContext(data, () => onEnd?.())
-        if (played) return
-      }
+      // Всегда через HTMLAudio (media-маршрут → ОСНОВНОЙ динамик, громко).
+      // На мобиле микрофон освобождается ДО вызова (см. speakAndContinue в
+      // компоненте), чтобы iOS не уводил звук в ушной динамик и не рвал сессию.
       const blob = new Blob([data], { type: "audio/mpeg" })
       const url  = URL.createObjectURL(blob)
       const audio = new Audio(url)
@@ -429,18 +433,26 @@ export function NancyAssistant() {
       if (data.actions?.length) handleActions(data.actions)
 
       setSpeaking(true)
+      const mobile = isMobileDevice()
+      // На мобиле в режиме разговора освобождаем микрофон перед ответом:
+      // iOS тогда играет TTS в основной динамик (громко), а не в ушной, и не
+      // рвёт сессию. startListening() ниже заново откроет микрофон (через
+      // listenOnce→ensureMic); если iOS попросит жест — пользователь тапнет 📞.
+      if (mobile && convModeRef.current) releaseMic()
       void speakText(reply, () => {
         setSpeaking(false)
         if (convModeRef.current && !thinkingRef.current) {
-          setTimeout(() => startListening(), 600)
+          setTimeout(() => startListening(), mobile ? 350 : 600)
         }
       }, currentAudioRef)
     } catch {
       const errText = "Нет связи. Попробуй ещё раз."
       setMessages((prev) => [...prev, { id: `err-${Date.now()}`, role: "nancy", text: errText }])
+      const mobile = isMobileDevice()
+      if (mobile && convModeRef.current) releaseMic()
       void speakText(errText, () => {
         setSpeaking(false)
-        if (convModeRef.current && !thinkingRef.current) setTimeout(() => startListening(), 600)
+        if (convModeRef.current && !thinkingRef.current) setTimeout(() => startListening(), mobile ? 350 : 600)
       }, currentAudioRef)
     } finally {
       setThinking(false)
