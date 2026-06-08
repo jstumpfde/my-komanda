@@ -6,6 +6,7 @@ import { eq, and, count, isNull, inArray, sql, gte, lte } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancies, candidates, calendarEvents, candidateContacts } from "@/lib/db/schema"
 import { ACTIVE_VACANCY_STATUSES } from "@/lib/vacancies/filters"
+import { getVacancyLifecycle } from "@/lib/vacancies/lifecycle"
 import { REJECTION_REASONS, REJECTION_INITIATORS, autoReasonKey, autoReasonLabel } from "@/lib/hr/rejection-reasons"
 import { PLATFORM_STAGES, ALL_STAGE_SLUGS } from "@/lib/stages"
 import { CONTACT_CHANNELS, CONTACT_OUTCOMES } from "@/lib/hr/contacts"
@@ -148,6 +149,10 @@ export async function buildReport(companyId: string, opts: BuildReportOptions = 
       vacancyId:    vacancies.id,
       vacancyTitle: vacancies.title,
       createdAt:    vacancies.createdAt,
+      status:       vacancies.status,
+      closedAt:     vacancies.closedAt,
+      hhArchived:   vacancies.hhArchived,
+      hhExpiresAt:  vacancies.hhExpiresAt,
       total:        count(),
       hired:        sql<number>`count(*) filter (where ${candidates.stage} = 'hired')`.mapWith(Number),
       rejected:     sql<number>`count(*) filter (where ${candidates.stage} = 'rejected')`.mapWith(Number),
@@ -165,7 +170,7 @@ export async function buildReport(companyId: string, opts: BuildReportOptions = 
         ...vacancyFilter,
         ...candidateDateFilters,
       ))
-      .groupBy(vacancies.id, vacancies.title, vacancies.createdAt),
+      .groupBy(vacancies.id, vacancies.title, vacancies.createdAt, vacancies.status, vacancies.closedAt, vacancies.hhArchived, vacancies.hhExpiresAt),
 
     // 4. Собеседования — за период
     db.select({
@@ -364,6 +369,10 @@ export async function buildReport(companyId: string, opts: BuildReportOptions = 
     vacancyId: r.vacancyId,
     vacancyTitle: r.vacancyTitle,
     publishedDaysAgo: r.createdAt ? Math.max(0, Math.floor((nowMs - new Date(r.createdAt).getTime()) / 86_400_000)) : null,
+    lifecycle: getVacancyLifecycle(r.status),          // active | paused | closed
+    closedAt: r.closedAt ? new Date(r.closedAt).toISOString() : null,
+    hhArchived: r.hhArchived ?? null,
+    hhExpiresAt: r.hhExpiresAt ? new Date(r.hhExpiresAt).toISOString() : null,
     total: Number(r.total),
     hired: Number(r.hired),
     rejected: Number(r.rejected),

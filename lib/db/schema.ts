@@ -674,6 +674,14 @@ export const vacancies = pgTable("vacancies", {
   hhVacancyId: text("hh_vacancy_id"),
   hhUrl: text("hh_url"),
   hhSyncedAt: timestamp("hh_synced_at"),
+  // Состояние публикации на hh (обновляется синком hh-vacancy-sync):
+  // hhArchived = вакансии нет в /vacancies/active (ушла в архив hh ~через 30 дн).
+  // hhExpiresAt — срок публикации, если hh его отдаёт (часто null).
+  hhArchived:  boolean("hh_archived"),
+  hhExpiresAt: timestamp("hh_expires_at", { withTimezone: true }),
+  // Дата, когда МЫ закрыли вакансию (status → archived/closed). Может отличаться
+  // от hhArchived: на hh уже архив, а у нас ещё ведём кандидатов.
+  closedAt:    timestamp("closed_at", { withTimezone: true }),
   aiProcessSettings: jsonb("ai_process_settings").default({}),
   aiScoringEnabled: boolean("ai_scoring_enabled").notNull().default(false),
   // P0-22: editable стоп-слова на уровне вакансии.

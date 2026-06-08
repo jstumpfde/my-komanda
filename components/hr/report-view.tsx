@@ -45,7 +45,13 @@ function fmtDate(iso: string | null): string {
 // ─── Типы ───────────────────────────────────────────────────────────────────
 
 export interface FunnelStage { slug: string; label: string; count: number; isTerminal: boolean }
-export interface VacancyRow { vacancyId: string; vacancyTitle: string; publishedDaysAgo: number | null; total: number; hired: number; rejected: number; selfRejected: number; anketa: number; decision: number; interview: number }
+export interface VacancyRow {
+  vacancyId: string; vacancyTitle: string; publishedDaysAgo: number | null
+  lifecycle: "active" | "paused" | "closed"
+  closedAt: string | null; hhArchived: boolean | null; hhExpiresAt: string | null
+  total: number; hired: number; rejected: number; selfRejected: number
+  anketa: number; decision: number; interview: number
+}
 export interface RejectionCategory { id: string; label: string; count: number }
 export interface RejectionInitiator { id: string; label: string; count: number }
 export interface ContactChannel { id: string; label: string; count: number }
@@ -243,6 +249,48 @@ function publishedLabel(days: number | null): string {
   return `${days} дн.`
 }
 
+function shortDate(iso: string | null): string {
+  if (!iso) return ""
+  return new Date(iso).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })
+}
+
+function daysUntil(iso: string): number {
+  return Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000)
+}
+
+// Умная ячейка статуса: наш жизненный цикл + состояние публикации на hh.
+function StatusCell({ row }: { row: VacancyRow }) {
+  // Основной бейдж — наш статус.
+  let mainText = "Активна"
+  let mainCls = "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
+  if (row.lifecycle === "closed") {
+    mainText = row.closedAt ? `Закрыта ${shortDate(row.closedAt)}` : "Закрыта"
+    mainCls = "bg-muted text-muted-foreground"
+  } else if (row.lifecycle === "paused") {
+    mainText = "Приостановлена"
+    mainCls = "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+  }
+
+  // hh-подстрока — показываем только значимое (архив или срок).
+  let hhText: string | null = null
+  let hhCls = "text-muted-foreground"
+  if (row.hhArchived === true) {
+    hhText = "hh: в архиве"
+    hhCls = "text-amber-600"
+  } else if (row.hhExpiresAt) {
+    const d = daysUntil(row.hhExpiresAt)
+    hhText = d > 0 ? `hh: ещё ${d} дн.` : "hh: истекла"
+    hhCls = d > 0 ? "text-muted-foreground" : "text-amber-600"
+  }
+
+  return (
+    <div className="flex flex-col items-start gap-0.5">
+      <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${mainCls}`}>{mainText}</span>
+      {hhText && <span className={`text-[11px] whitespace-nowrap ${hhCls}`}>{hhText}</span>}
+    </div>
+  )
+}
+
 function VacancyTable({ rows, loading, tv }: { rows: VacancyRow[]; loading: boolean; tv?: boolean }) {
   if (loading) return <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-10 bg-muted/30 rounded-lg animate-pulse" />)}</div>
   if (rows.length === 0) return <EmptyState text="Нет вакансий с кандидатами" />
@@ -257,6 +305,7 @@ function VacancyTable({ rows, loading, tv }: { rows: VacancyRow[]; loading: bool
         <thead>
           <tr className="border-b">
             <th className={`${th} pr-4`}>Вакансия</th>
+            <th className={`${th} px-3`}>Статус</th>
             <th className={`${thR} px-3`}>Опубл.</th>
             <th className={`${thR} px-3`}>Откликов</th>
             <th className={`${thR} px-3`}>Анкет</th>
@@ -271,6 +320,7 @@ function VacancyTable({ rows, loading, tv }: { rows: VacancyRow[]; loading: bool
           {rows.map(r => (
             <tr key={r.vacancyId} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
               <td className={`py-2.5 pr-4 font-medium truncate ${tv ? "max-w-[420px]" : "max-w-[280px]"}`}>{r.vacancyTitle}</td>
+              <td className="py-2.5 px-3"><StatusCell row={r} /></td>
               <td className="py-2.5 px-3 text-right tabular-nums text-muted-foreground whitespace-nowrap">{publishedLabel(r.publishedDaysAgo)}</td>
               <td className="py-2.5 px-3 text-right tabular-nums font-medium">{r.total}</td>
               <td className="py-2.5 px-3 text-right tabular-nums">{r.anketa}</td>
