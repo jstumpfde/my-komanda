@@ -56,6 +56,17 @@ function formatDateReadable(d: Date): string {
   return `${dayLabel} ${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`
 }
 
+/** Относительная метка дня: "Сегодня (Пн 8 июня)" / "Завтра (Вт 9 июня)" / "Ср 10 июня" */
+function relativeDayLabel(d: Date): string {
+  const t = new Date()
+  t.setHours(0, 0, 0, 0)
+  const diff = Math.round((d.getTime() - t.getTime()) / 86_400_000)
+  const base = formatDateReadable(d)
+  if (diff === 0) return `Сегодня (${base})`
+  if (diff === 1) return `Завтра (${base})`
+  return base
+}
+
 /** Конвертировать копейки в рубли с символом ₽ */
 function formatPrice(kopecks: number): string {
   return `${Math.round(kopecks / 100)}₽`
@@ -147,18 +158,23 @@ export async function buildServiceContext(
     })
   }
 
-  // Собрать свободные слоты: до 2 слотов на каждого мастера, max daysAhead дней
-  interface SlotInfo { dateLabel: string; time: string; resourceName?: string }
-  const freeSlots: SlotInfo[] = []
-  let daysFound = 0
+  // Свободные слоты: union по всем мастерам, разброс времени, несколько дней.
+  void daysAhead
+  const nowMin = (() => { const n = new Date(); return n.getHours() * 60 + n.getMinutes() })()
+  const todayStr = formatDate(today)
+  interface DaySlots { label: string; times: string[] }
+  const daySlotsList: DaySlots[] = []
+  const MAX_DAYS = 4
+  const MAX_PER_DAY = 5
 
   for (const d of checkDates) {
-    if (daysFound >= daysAhead) break
+    if (daySlotsList.length >= MAX_DAYS) break
     const dateStr = formatDate(d)
     const dayKey = DAY_KEYS[d.getDay()]
-    let foundInDay = false
+    const isToday = dateStr === todayStr
 
-    // Перебираем мастеров (если мастеров нет — один проход с DEFAULT_SCHEDULE)
+    // Союз свободных стартов по всем мастерам (или дефолт-расписание).
+    const freeSet = new Set<number>()
     const resourceList = resources.length > 0 ? resources : [null]
     for (const resource of resourceList) {
       const schedule = (resource?.schedule as typeof DEFAULT_SCHEDULE) ?? DEFAULT_SCHEDULE
@@ -168,33 +184,25 @@ export async function buildServiceContext(
 
       const dayStart = timeToMin(daySchedule.start)
       const dayEnd = timeToMin(daySchedule.end)
-
-      // Собрать занятые диапазоны: брони + перерывы
       const busyKey = `${dateStr}::${resource?.id ?? "__any__"}`
       const busy = [...(bookingsByDateResource[busyKey] ?? [])]
-      for (const br of breaks) {
-        busy.push({ start: timeToMin(br.start), end: timeToMin(br.end) })
-      }
+      for (const br of breaks) busy.push({ start: timeToMin(br.start), end: timeToMin(br.end) })
 
-      // Найти первые 2 свободных слота
-      let slotsForResource = 0
       for (let t = dayStart; t + baseDuration <= dayEnd; t += 30) {
+        if (isToday && t <= nowMin + 30) continue // сегодня — только будущее время
         const slotEnd = t + baseDuration
         const conflict = busy.some((r) => t < r.end && slotEnd > r.start)
-        if (!conflict) {
-          freeSlots.push({
-            dateLabel: formatDateReadable(d),
-            time: minToTime(t),
-            resourceName: resource?.type === "specialist" ? resource.name : undefined,
-          })
-          slotsForResource++
-          foundInDay = true
-          if (slotsForResource >= 2) break
-        }
+        if (!conflict) freeSet.add(t)
       }
     }
 
-    if (foundInDay) daysFound++
+    if (freeSet.size === 0) continue
+    // Разброс: равномерно выбрать до MAX_PER_DAY времён за день.
+    const sorted = [...freeSet].sort((a, b) => a - b)
+    const step = Math.max(1, Math.floor(sorted.length / MAX_PER_DAY))
+    const picked: number[] = []
+    for (let i = 0; i < sorted.length && picked.length < MAX_PER_DAY; i += step) picked.push(sorted[i])
+    daySlotsList.push({ label: relativeDayLabel(d), times: picked.map(minToTime) })
   }
 
   // ── 4. Собрать contextText ─────────────────────────────────────────────────
@@ -215,18 +223,9 @@ export async function buildServiceContext(
 
   // Слоты
   let slotsText = ""
-  if (freeSlots.length > 0) {
-    // Группируем по дате для компактности
-    const byDate: Record<string, string[]> = {}
-    for (const slot of freeSlots) {
-      if (!byDate[slot.dateLabel]) byDate[slot.dateLabel] = []
-      const who = slot.resourceName ? ` (${slot.resourceName})` : ""
-      byDate[slot.dateLabel].push(`${slot.time}${who}`)
-    }
-    const dateEntries = Object.entries(byDate)
-      .map(([date, times]) => `${date}: ${times.join(", ")}`)
-      .join("; ")
-    slotsText = `\nБлижайшее свободное время: ${dateEntries}.`
+  if (daySlotsList.length > 0) {
+    const entries = daySlotsList.map((ds) => `${ds.label}: ${ds.times.join(", ")}`).join("; ")
+    slotsText = `\nСвободное время для записи: ${entries}.`
   } else {
     slotsText = "\nСвободных слотов на ближайшие дни не найдено — уточните у администратора."
   }
