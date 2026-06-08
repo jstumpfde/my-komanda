@@ -296,7 +296,7 @@ function VacancyTable({ rows, loading, tv }: { rows: VacancyRow[]; loading: bool
   if (rows.length === 0) return <EmptyState text="Нет вакансий с кандидатами" />
 
   const th = `text-left py-2 font-medium text-muted-foreground ${tv ? "text-sm" : "text-xs"}`
-  const thR = `text-right py-2 font-medium text-muted-foreground ${tv ? "text-sm" : "text-xs"}`
+  const thR = `text-center py-2 font-medium text-muted-foreground ${tv ? "text-sm" : "text-xs"}`
   const td = tv ? "text-base" : "text-sm"
 
   return (
@@ -321,14 +321,14 @@ function VacancyTable({ rows, loading, tv }: { rows: VacancyRow[]; loading: bool
             <tr key={r.vacancyId} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
               <td className={`py-2.5 pr-4 font-medium truncate ${tv ? "max-w-[420px]" : "max-w-[280px]"}`}>{r.vacancyTitle}</td>
               <td className="py-2.5 px-3"><StatusCell row={r} /></td>
-              <td className="py-2.5 px-3 text-right tabular-nums text-muted-foreground whitespace-nowrap">{publishedLabel(r.publishedDaysAgo)}</td>
-              <td className="py-2.5 px-3 text-right tabular-nums font-medium">{r.total}</td>
-              <td className="py-2.5 px-3 text-right tabular-nums">{r.anketa}</td>
-              <td className="py-2.5 px-3 text-right tabular-nums">{r.interview}</td>
-              <td className="py-2.5 px-3 text-right tabular-nums text-violet-600">{r.decision}</td>
-              <td className="py-2.5 px-3 text-right tabular-nums text-emerald-600 font-medium">{r.hired}</td>
-              <td className="py-2.5 px-3 text-right tabular-nums text-rose-500">{r.rejected}</td>
-              <td className="py-2.5 pl-3 text-right tabular-nums text-amber-600">{r.selfRejected}</td>
+              <td className="py-2.5 px-3 text-center tabular-nums text-muted-foreground whitespace-nowrap">{publishedLabel(r.publishedDaysAgo)}</td>
+              <td className="py-2.5 px-3 text-center tabular-nums font-medium">{r.total}</td>
+              <td className="py-2.5 px-3 text-center tabular-nums">{r.anketa}</td>
+              <td className="py-2.5 px-3 text-center tabular-nums">{r.interview}</td>
+              <td className="py-2.5 px-3 text-center tabular-nums text-violet-600">{r.decision}</td>
+              <td className="py-2.5 px-3 text-center tabular-nums text-emerald-600 font-medium">{r.hired}</td>
+              <td className="py-2.5 px-3 text-center tabular-nums text-rose-500">{r.rejected}</td>
+              <td className="py-2.5 pl-3 text-center tabular-nums text-amber-600">{r.selfRejected}</td>
             </tr>
           ))}
         </tbody>
