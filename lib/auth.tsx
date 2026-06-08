@@ -8,36 +8,20 @@ import { signOut as nextAuthSignOut } from "next-auth/react"
 // Платформа (скрыты от клиента): platform_admin, platform_manager
 // Клиент: director, hr_lead, hr_manager, department_head, observer
 
-export type UserRole =
-  | "platform_admin"
-  | "platform_manager"
-  | "admin"          // legacy супер-админ (admin@test.ru) — есть в БД
-  | "director"
-  | "client"         // legacy роль владельца компании — есть в БД (наравне с director)
-  | "hr_lead"
-  | "hr_manager"
-  | "department_head"
-  | "observer"
-  | "tester_hr"
-  | "employee"
+// Роли и роль-хелперы вынесены в серверно-безопасный lib/roles.ts (без "use client").
+// Здесь импортируем для локального использования и реэкспортируем — чтобы все
+// существующие импорты `from "@/lib/auth"` (тип и хелперы) продолжали работать.
+import {
+  type UserRole,
+  PLATFORM_ROLES,
+  CLIENT_ROLES,
+  COMPANY_OWNER_ROLES,
+  isPlatformRole,
+  isCompanyOwner,
+} from "@/lib/roles"
 
-export const PLATFORM_ROLES: UserRole[] = ["platform_admin", "platform_manager", "admin"]
-export const CLIENT_ROLES: UserRole[] = ["director", "client", "hr_lead", "hr_manager", "department_head", "observer", "tester_hr"]
-
-// Владелец компании / уровень директора — полный доступ к компанийским
-// настройкам (Тариф, Команда, Интеграции, Роли, Юр.документы, Брендинг).
-// Включает legacy-роли client/admin, которые реально есть в БД (в т.ч. главный
-// аккаунт jstumpf.de@gmail.com = client). НЕ заменять на ["platform_admin","director"]
-// — иначе владельцы с ролью client/admin теряют доступ.
-export const COMPANY_OWNER_ROLES: UserRole[] = ["platform_admin", "admin", "director", "client"]
-
-export function isPlatformRole(role: UserRole): boolean {
-  return PLATFORM_ROLES.includes(role)
-}
-
-export function isCompanyOwner(role: UserRole): boolean {
-  return COMPANY_OWNER_ROLES.includes(role)
-}
+export type { UserRole }
+export { PLATFORM_ROLES, CLIENT_ROLES, COMPANY_OWNER_ROLES, isPlatformRole, isCompanyOwner }
 
 export interface User {
   id: string

@@ -1271,6 +1271,12 @@ export const candidates = pgTable("candidates", {
   // использовать generic rejectMessage вакансии. Нужен для факторных текстов
   // стоп-факторов, которые иначе потерялись бы при отложенном отказе.
   pendingRejectionMessage: text("pending_rejection_message"),
+  // Структурированная причина отказа (захват на карточке, разбивка в отчёте найма).
+  // Таксономия — lib/hr/rejection-reasons.ts. initiator: 'company'|'candidate'.
+  rejectionReasonCategory: text("rejection_reason_category"),
+  rejectionInitiator:      text("rejection_initiator"),
+  rejectionComment:        text("rejection_comment"),
+  rejectionAt:             timestamp("rejection_at", { withTimezone: true }),
   // v5: AI-классификатор ответов в hh-чате может выставить паузу автоматизации
   // (например, при rejection или wants_personal_contact).
   automationPaused: boolean("automation_paused").notNull().default(false),
@@ -1310,6 +1316,25 @@ export const candidates = pgTable("candidates", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })
+
+// Контакты с кандидатом (звонки/видео/встречи) с исходом — захват на карточке,
+// счётчики в отчёте найма. channel/outcome — lib/hr/contacts.ts; reasonCategory
+// (для outcome=no_fit) — lib/hr/rejection-reasons.ts.
+export const candidateContacts = pgTable("candidate_contacts", {
+  id:             uuid("id").primaryKey().defaultRandom(),
+  tenantId:       uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  candidateId:    uuid("candidate_id").references(() => candidates.id, { onDelete: "cascade" }).notNull(),
+  vacancyId:      uuid("vacancy_id"),                         // денорм. для группировки в отчёте
+  channel:        text("channel").default("call"),            // call|video|meeting|message
+  outcome:        text("outcome").default("pending"),         // fit|no_fit|pending
+  reasonCategory: text("reason_category"),                    // при no_fit — из rejection-reasons
+  comment:        text("comment"),
+  createdById:    uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt:      timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (t) => [
+  index("candidate_contacts_candidate_idx").on(t.candidateId),
+  index("candidate_contacts_tenant_idx").on(t.tenantId),
+])
 
 // ─── Adaptation ───────────────────────────────────────────────────────────────
 

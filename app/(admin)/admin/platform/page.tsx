@@ -111,19 +111,17 @@ export default async function PlatformAdminPage() {
     })
     .from(yuliaConversations)
 
-  // Среднее число сообщений в завершённых диалогах.
-  const [avgRow] = await db
-    .select({
-      avg: sql<number>`coalesce(avg(c), 0)`.mapWith(Number),
-    })
-    .from(
-      db.select({ c: count() })
-        .from(yuliaMessages)
-        .innerJoin(yuliaConversations, eq(yuliaConversations.id, yuliaMessages.conversationId))
-        .where(eq(yuliaConversations.status, "completed"))
-        .groupBy(yuliaConversations.id)
-        .as("per_conv"),
-    )
+  // Среднее число сообщений в завершённых диалогах. Считаем в JS — надёжнее
+  // вложенного подзапроса avg(c), который падал с errorMissingColumn.
+  const perConvCounts = await db
+    .select({ c: count() })
+    .from(yuliaMessages)
+    .innerJoin(yuliaConversations, eq(yuliaConversations.id, yuliaMessages.conversationId))
+    .where(eq(yuliaConversations.status, "completed"))
+    .groupBy(yuliaConversations.id)
+  const avgMessagesValue = perConvCounts.length
+    ? perConvCounts.reduce((s, r) => s + Number(r.c), 0) / perConvCounts.length
+    : 0
 
   const yuliaConvs = await db
     .select({
@@ -194,7 +192,7 @@ export default async function PlatformAdminPage() {
           active:    yuliaTotals?.active    ?? 0,
           completed: yuliaTotals?.completed ?? 0,
           abandoned: yuliaTotals?.abandoned ?? 0,
-          avgMessages: Math.round((avgRow?.avg ?? 0) * 10) / 10,
+          avgMessages: Math.round(avgMessagesValue * 10) / 10,
         },
         systemPrompt: YULIA_SYSTEM_PROMPT,
         conversations: yuliaConvs.map(c => ({

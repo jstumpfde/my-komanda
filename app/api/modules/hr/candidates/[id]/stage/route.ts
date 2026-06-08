@@ -34,7 +34,12 @@ export async function PUT(
     const user = await requireCompany()
     const { id } = await params
 
-    const body = await req.json() as { stage?: unknown }
+    const body = await req.json() as {
+      stage?: unknown
+      rejectionReasonCategory?: string | null
+      rejectionInitiator?: string | null
+      rejectionComment?: string | null
+    }
     const stage = body.stage as Stage | undefined
 
     if (!stage || !(VALID_STAGES as readonly string[]).includes(stage)) {
@@ -69,6 +74,11 @@ export async function PUT(
               autoProcessingStopped: true,
               autoProcessingStoppedReason: "manual_rejection",
               autoProcessingStoppedAt: new Date(),
+              // Структурированная причина отказа (для отчёта найма).
+              rejectionReasonCategory: body.rejectionReasonCategory ?? null,
+              rejectionInitiator: body.rejectionInitiator ?? null,
+              rejectionComment: body.rejectionComment ?? null,
+              rejectionAt: new Date(),
             }
           : {}),
       })
