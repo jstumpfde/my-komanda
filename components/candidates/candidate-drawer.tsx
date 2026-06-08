@@ -1035,7 +1035,7 @@ export function CandidateDrawer({
           </ScrollArea>
         ) : candidate && derived ? (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-            <TabsList className="grid grid-cols-4 mx-3 mt-3 shrink-0 h-auto">
+            <TabsList className="flex flex-wrap justify-start gap-1 mx-3 mt-3 shrink-0 h-auto">
               <TabsTrigger value="contacts" className="text-[10px] px-1 py-1.5">Контакты</TabsTrigger>
               <TabsTrigger value="answers" className="text-[10px] px-1 py-1.5">Ответы</TabsTrigger>
               <TabsTrigger value="test" className="text-[10px] px-1 py-1.5">Тест</TabsTrigger>

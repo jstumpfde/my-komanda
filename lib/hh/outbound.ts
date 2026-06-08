@@ -292,21 +292,40 @@ export async function checkResumeDatabaseAccess(companyId: string): Promise<{
 }
 
 // ─── Приглашение откликнуться (negotiations) ────────────────────────────────
-// КОНСЕРВАТИВНАЯ реализация по §4 ТЗ. Поток:
-//   1. Запросить применимые вакансии работодателя к резюме:
-//      GET /resumes/{resume_id}/negotiations_history ИЛИ
-//      GET /vacancies/{vacancy_id}/... — формат «arguments / resulting_employer_state»
-//      у hh неточен в офлайне.
-//   2. Создать приглашение POST /negotiations с vacancy_id + resume_id + message.
+// Реализация двухшагового потока по официальной доке hh:
+//   https://github.com/hhru/api/blob/master/docs/employer_negotiations.md
+//   (операция invite-applicant-to-vacancy в OpenAPI)
 //
-// TODO(ВЕРИФИЦИРОВАТЬ ПЕРЕД БОЕВЫМ ВКЛЮЧЕНИЕМ): сверить точный путь и тело
-// employer-приглашения с docs/employer_negotiations.md. Ниже — наиболее
-// вероятная форма (POST /negotiations с form-подобным JSON). Пара
-// «вакансия+резюме» = одно приглашение.
+// Шаг 1. GET /vacancies/{vacancy_id}/negotiations/applicable_for_resume/{resume_id}
+//   Возвращает список вакансий, применимых к данному резюме, и для каждой —
+//   `arguments` (обязательные параметры приглашения) и `resulting_employer_state`.
+//
+// Шаг 2. POST /negotiations
+//   Content-Type: application/json
+//   Body: { vacancy_id, resume_id, message, ...arguments }
+//   где `arguments` берётся из ответа шага 1 для нужной вакансии.
+//
+// Если шаг 1 вернул ошибку или вакансия не найдена в списке применимых —
+// сообщаем HR точную причину. Авто-массовой рассылки нет: каждый вызов —
+// одно конкретное резюме, ручной выбор HR.
+//
+// Предохранители сохранены: проверка доступа (checkResumeDatabaseAccess) и
+// квоты выполняются на стороне route.ts ДО вызова этой функции.
 export interface InviteResult {
   resumeId: string
   ok: boolean
   error?: string
+}
+
+interface ApplicableVacancy {
+  vacancy?: { id?: string }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  arguments?: Record<string, any>
+  resulting_employer_state?: string
+}
+
+interface ApplicableForResumeResponse {
+  items?: ApplicableVacancy[]
 }
 
 export async function inviteResumeToVacancy(
@@ -314,16 +333,25 @@ export async function inviteResumeToVacancy(
   params: { hhVacancyId: string; resumeId: string; message: string },
 ): Promise<InviteResult> {
   try {
-    // TODO: сверить с docs/employer_negotiations.md — реальный эндпоинт и поля.
-    // По доке hh employer-приглашение создаётся POST /negotiations с указанием
-    // vacancy_id, resume_id и message. Часть аккаунтов требует предварительного
-    // запроса «применимых вакансий» (resulting_employer_state) — этот шаг мы
-    // НЕ выполняем вслепую, чтобы не угадывать формат: если hh вернёт ошибку
-    // «требуется выбор вакансии», роут покажет её HR.
+    // Шаг 1. Получаем применимые вакансии + arguments для данного резюме.
+    // Ошибка на этом шаге (403 = нет доступа к базе резюме, 404 = резюме
+    // не найдено) пробрасывается в catch → HR видит причину.
+    const applicableRes = await hhGet<ApplicableForResumeResponse>(
+      companyId,
+      `/vacancies/${encodeURIComponent(params.hhVacancyId)}/negotiations/applicable_for_resume/${encodeURIComponent(params.resumeId)}`,
+    )
+    // Ищем нашу вакансию в списке применимых.
+    const match = (applicableRes.items ?? []).find(
+      (item) => item.vacancy?.id === params.hhVacancyId,
+    )
+    // Шаг 2. Создаём приглашение. Если вакансия не в списке — продолжаем без
+    // `arguments` (минимальный набор полей); hh вернёт ошибку с деталями.
+    const extraArgs = match?.arguments ?? {}
     await hhPost<unknown>(companyId, `/negotiations`, {
       vacancy_id: params.hhVacancyId,
       resume_id: params.resumeId,
       message: params.message,
+      ...extraArgs,
     })
     return { resumeId: params.resumeId, ok: true }
   } catch (err) {

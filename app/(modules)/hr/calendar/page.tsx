@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   addWeeks,
   subWeeks,
@@ -72,9 +73,29 @@ const FILTER_OPTIONS: { value: FilterMode; label: string }[] = [
   { value: "mine", label: "Мой" },
 ]
 
-export default function CalendarPage() {
-  const [viewMode, setViewMode] = useState<ViewMode>("week")
-  const [filter, setFilter] = useState<FilterMode>("all")
+const VALID_VIEW_MODES: ViewMode[] = ["week", "day", "month"]
+const VALID_FILTER_MODES: FilterMode[] = ["all", "mine", "hr"]
+
+function CalendarContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const v = searchParams?.get("view") as ViewMode | null
+    return v && VALID_VIEW_MODES.includes(v) ? v : "week"
+  })
+  const [filter, setFilter] = useState<FilterMode>(() => {
+    const f = searchParams?.get("filter") as FilterMode | null
+    return f && VALID_FILTER_MODES.includes(f) ? f : "all"
+  })
+
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search)
+    let changed = false
+    if (sp.get("view") !== viewMode) { sp.set("view", viewMode); changed = true }
+    if (sp.get("filter") !== filter) { sp.set("filter", filter); changed = true }
+    if (changed) router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode, filter])
   const [currentDate, setCurrentDate] = useState(new Date())
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [rooms, setRooms] = useState<Room[]>([])
@@ -683,5 +704,13 @@ export default function CalendarPage() {
         </main>
       </SidebarInset>
     </SidebarProvider>
+  )
+}
+
+export default function CalendarPage() {
+  return (
+    <Suspense fallback={null}>
+      <CalendarContent />
+    </Suspense>
   )
 }
