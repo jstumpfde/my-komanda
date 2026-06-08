@@ -224,19 +224,30 @@ export function DashboardSidebar() {
       typeof window !== 'undefined' && window.location.hostname === 'new.company24.pro'
     )
   }, [role, isAdminOrManager])
-  const hrLite = !isAdminOrManager && !stagingFullAccess
+  // PROD-пилот: компаниям из NEXT_PUBLIC_PILOT_COMPANY_IDS открываем полное
+  // HR-меню (как на стейджинге) — для догфудинга на проде. Остальные клиенты — lite.
+  const pilotCompanyIds = (process.env.NEXT_PUBLIC_PILOT_COMPANY_IDS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const pilotCompanyFull =
+    !isAdminOrManager && !!user?.companyId && pilotCompanyIds.includes(user.companyId)
+  const hrLite = !isAdminOrManager && !stagingFullAccess && !pilotCompanyFull
 
   // Пересчёт модулей при изменении роли (когда useSession догружает данные)
   useEffect(() => {
     const base = (vis.modules ?? ['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'logistics', 'booking', 'dialer', 'qc', 'b2b']) as ModuleId[]
-    const newModules = (stagingFullAccess && !base.includes('knowledge' as ModuleId)
-      ? [...base, 'knowledge' as ModuleId]
-      : base)
+    const newModules: ModuleId[] = [...base]
+    const add = (m: ModuleId) => { if (!newModules.includes(m)) newModules.push(m) }
+    // Стейджинг: клиентам открываем Базу знаний + Продажи для тестов.
+    if (stagingFullAccess) { add('knowledge' as ModuleId); add('sales' as ModuleId) }
+    // PROD-пилот (по NEXT_PUBLIC_PILOT_COMPANY_IDS): открываем Продажи указанным компаниям.
+    if (pilotCompanyFull) add('sales' as ModuleId)
     setActiveModules(prev => {
       if (prev.length === newModules.length && prev.every((m, i) => m === newModules[i])) return prev
       return newModules
     })
-  }, [vis.modules, stagingFullAccess])
+  }, [vis.modules, stagingFullAccess, pilotCompanyFull])
 
   // ── Sidebar visibility customization ──
   const { visibility: sidebarVis, setVisibility: setSidebarVis, isModuleVisible, isItemVisible, resetToDefault: resetSidebarVis } = useSidebarVisibility()
