@@ -29,6 +29,7 @@ const INTERVIEW_DAYS = [
   { id: "thu", label: "Чт" },
   { id: "fri", label: "Пт" },
   { id: "sat", label: "Сб" },
+  { id: "sun", label: "Вс" },
 ]
 
 const DURATION_OPTIONS = [
@@ -72,6 +73,11 @@ export function InterviewSection({
   // ── Способы интервью (нормализованный массив из модели) ──
   const [methodConfigs, setMethodConfigs] = useState<MethodConfig[]>(() =>
     getInterviewMethodConfigs(schedule)
+  )
+
+  // ── Способ интервью по умолчанию ──
+  const [defaultMethod, setDefaultMethod] = useState<string>(
+    schedule.defaultInterviewMethod ?? ""
   )
 
   // ── Адрес офиса ──
@@ -191,6 +197,8 @@ export function InterviewSection({
           // напоминания
           remind24h,
           remind2h,
+          // способ интервью по умолчанию
+          defaultInterviewMethod: defaultMethod,
         },
       })
       setSaved(true)
@@ -283,6 +291,32 @@ export function InterviewSection({
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Способ по умолчанию */}
+                {cfg.enabled && (
+                  <button
+                    type="button"
+                    onClick={() => setDefaultMethod(method)}
+                    className={cn(
+                      "flex items-center gap-1.5 text-xs whitespace-nowrap transition-colors",
+                      defaultMethod === method
+                        ? "text-primary font-medium"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <span className={cn(
+                      "size-3.5 rounded-full border-2 flex items-center justify-center shrink-0",
+                      defaultMethod === method
+                        ? "border-primary bg-primary"
+                        : "border-muted-foreground/50"
+                    )}>
+                      {defaultMethod === method && (
+                        <span className="size-1.5 rounded-full bg-white" />
+                      )}
+                    </span>
+                    По умолчанию
+                  </button>
+                )}
               </div>
             )
           })}

@@ -114,6 +114,8 @@ export interface CompanyHiringDefaults {
       duration: number  // минуты
       buffer:   number  // минуты между встречами
     }>
+    // Slug способа интервью, выбранного по умолчанию (additive).
+    defaultInterviewMethod?: string
   }
   stopFactorsDefaults?:      VacancyStopFactors
   // Мастер-тумблер: применять stopFactorsDefaults живьём ко ВСЕМ вакансиям
