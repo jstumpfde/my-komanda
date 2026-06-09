@@ -6,6 +6,7 @@ import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { trySyncStageToHh } from "@/lib/hh/sync-stage"
 import { sendWebhook } from "@/lib/webhooks"
 import { sendToBitrix } from "@/lib/bitrix"
+import { scheduleInterviewInvite } from "@/lib/messaging/schedule-invite"
 
 const VALID_STAGES = [
   "new", "primary_contact", "demo", "demo_opened", "decision",
@@ -102,6 +103,15 @@ export async function PUT(
       trySyncStageToHh(id, stage).catch((err) => {
         console.warn(`[stage-route] hh sync failed for ${id} (${stage}):`, err)
       })
+    }
+
+    // #3.1: авто-отправка ссылки /schedule/[token] кандидату при входе в стадию
+    // интервью. Триггерим только на ПЕРЕХОД в 'interview' (не при повторном
+    // сохранении той же стадии) — scheduleInterviewInvite сам идемпотентен
+    // (дедуп pending|sent schedule_invite). Канал — hh-чат через cron follow-up.
+    if (stage === "interview" && row.previousStage !== "interview") {
+      void scheduleInterviewInvite({ candidateId: id, vacancyId: updated.vacancyId })
+        .catch((err) => console.warn(`[stage-route] schedule invite failed for ${id}:`, err))
     }
 
     // Webhooks (hiring_defaults.webhooks): отправляем событие смены этапа во

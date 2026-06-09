@@ -287,7 +287,9 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
   }
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    // distance: 8 — Safari-фикс: при distance: 5 микро-drift пальца/тачпада
+    // активирует сенсор раньше click → Sheet не открывается по шестерёнке.
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
@@ -783,6 +785,9 @@ function SortableBlockCard({ block, saving, onToggle, onOpenSettings }: Sortable
         className="h-8 w-8"
         aria-label="Настройки блока"
         onClick={onOpenSettings}
+        // Safari-фикс: stopPropagation на pointerdown не даёт document-listener
+        // PointerSensor (dnd-kit) перехватить событие и заглушить последующий click.
+        onPointerDown={(e) => e.stopPropagation()}
       >
         <Settings2 className="h-4 w-4" />
       </Button>

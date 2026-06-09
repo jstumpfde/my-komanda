@@ -95,6 +95,12 @@ export interface CompanyHiringDefaults {
     interviewTo?:      string
     interviewDays?:    string[]
     maxPerDay?:        string
+    // Шаг сетки слотов записи (мин): 15/20/30/40/45/50/60. Дефолт 30.
+    slotStep?:         number
+    // Обеденный перерыв — в это окно слоты не предлагаются.
+    lunchEnabled?:     boolean
+    lunchFrom?:        string  // "13:00"
+    lunchTo?:          string  // "14:00"
     remind24h?:        boolean
     remind2h?:         boolean
     timezone?:         string
@@ -108,6 +114,8 @@ export interface CompanyHiringDefaults {
       duration: number  // минуты
       buffer:   number  // минуты между встречами
     }>
+    // Slug способа интервью, выбранного по умолчанию (additive).
+    defaultInterviewMethod?: string
   }
   stopFactorsDefaults?:      VacancyStopFactors
   // Мастер-тумблер: применять stopFactorsDefaults живьём ко ВСЕМ вакансиям

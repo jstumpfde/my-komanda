@@ -209,9 +209,14 @@ async function processOneTouch(
   // пропускаем, отмена — своя (ниже): тест сдан / открыт (для not_opened) /
   // отказ-найм. Рабочее окно соблюдаем.
   const isTestFollowup = msg.branch === "test_not_opened" || msg.branch === "test_opened_not_submitted"
+  // branch='schedule_invite' (#3.1) — приглашение записаться на интервью со
+  // ссылкой {{schedule_link}}. Явное действие (кандидат дошёл до стадии
+  // interview): пропускаем стоп-триггеры и rate-limit, рабочее окно соблюдаем.
+  const isScheduleInvite = msg.branch === "schedule_invite"
   const isOneOffPostAnketa =
     msg.branch === "anketa_confirmation" || msg.branch === "anketa_auto_reply"
     || isChainStep || isOffHoursFirst || isTestAfterMessage || isTestInvite || isTestReminder || isTestFollowup
+    || isScheduleInvite
   if (!isOneOffPostAnketa) {
     // Стоп-триггеры (вакансия закрыта / демо пройдено / отказ /
     // автоматизация остановлена) — только для обычной цепочки дожима.
@@ -364,7 +369,10 @@ async function processOneTouch(
 
   // #15 phase 5/6: если у вакансии включён AI-чат-бот — он сам ведёт диалог,
   // дожимные касания не нужны. Cancel оставшиеся pending, не отправляем.
-  if (vacancy.aiChatbotEnabled === true) {
+  // Исключение (#3.1): schedule_invite — транзакционное приглашение записаться
+  // на интервью (HR перевёл кандидата в стадию interview). Его шлём даже при
+  // активном чат-боте, иначе кандидат не получит ссылку на выбор времени.
+  if (vacancy.aiChatbotEnabled === true && !isScheduleInvite) {
     await db.update(followUpMessages).set({
       status: "cancelled",
       errorMessage: "ai_chatbot_active",
@@ -427,14 +435,16 @@ async function processOneTouch(
     .limit(1)
   const { firstName } = await getCandidateFirstName(msg.candidateId)
   const tokenForUrl = cand?.shortId ?? cand?.token ?? msg.candidateId
-  const demoUrl = `https://company24.pro/demo/${tokenForUrl}`
-  const testUrl = `https://company24.pro/test/${tokenForUrl}`
+  const demoUrl      = `https://company24.pro/demo/${tokenForUrl}`
+  const testUrl      = `https://company24.pro/test/${tokenForUrl}`
+  const scheduleUrl  = `https://company24.pro/schedule/${tokenForUrl}`
   const finalText = renderTemplate(msg.messageText, {
-    name:      firstName,
-    vacancy:   vacancy.title || "",
-    company:   "Company24",
-    demo_link: demoUrl,
-    test_link: testUrl,
+    name:          firstName,
+    vacancy:       vacancy.title || "",
+    company:       "Company24",
+    demo_link:     demoUrl,
+    test_link:     testUrl,
+    schedule_link: scheduleUrl,
   })
 
   // Реально отправляем в hh → выдержать per-company задержку перед следующей

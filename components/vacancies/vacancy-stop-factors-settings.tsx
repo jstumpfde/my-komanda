@@ -45,7 +45,6 @@ export function VacancyStopFactorsSettings({ vacancyId, initial, onSaved }: Prop
   // не мучить пользователя нормализацией пробелов на каждом keystroke.
   const [cityCsv, setCityCsv] = useState("")
   const [citizenshipCsv, setCitizenshipCsv] = useState("")
-  const [docsCsv, setDocsCsv] = useState("")
 
   // Refs для PlaceholderBadges — каждый стоп-фактор имеет свою textarea
   // под текст отказа.
@@ -53,7 +52,6 @@ export function VacancyStopFactorsSettings({ vacancyId, initial, onSaved }: Prop
   const refFormat = useRef<HTMLTextAreaElement | null>(null)
   const refAge = useRef<HTMLTextAreaElement | null>(null)
   const refExp = useRef<HTMLTextAreaElement | null>(null)
-  const refDocs = useRef<HTMLTextAreaElement | null>(null)
   const refCit = useRef<HTMLTextAreaElement | null>(null)
   const refSalary = useRef<HTMLTextAreaElement | null>(null)
 
@@ -75,7 +73,6 @@ export function VacancyStopFactorsSettings({ vacancyId, initial, onSaved }: Prop
   useEffect(() => {
     setCityCsv((factors.city?.allowedCities ?? []).join(", "))
     setCitizenshipCsv((factors.citizenship?.allowed ?? []).join(", "))
-    setDocsCsv((factors.documents?.required ?? []).join(", "))
   }, [factors])
 
   const set = <K extends keyof VacancyStopFactors>(key: K, value: VacancyStopFactors[K]) => {
@@ -94,9 +91,7 @@ export function VacancyStopFactorsSettings({ vacancyId, initial, onSaved }: Prop
         citizenship: factors.citizenship
           ? { ...factors.citizenship, allowed: csvToList(citizenshipCsv) }
           : undefined,
-        documents: factors.documents
-          ? { ...factors.documents, required: csvToList(docsCsv) }
-          : undefined,
+        documents: { enabled: false },
       }
       const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/stop-factors`, {
         method: "PUT",
@@ -248,28 +243,6 @@ export function VacancyStopFactorsSettings({ vacancyId, initial, onSaved }: Prop
               refEl={refExp}
               value={factors.experience?.rejectionText ?? ""}
               onChange={(v) => set("experience", { ...(factors.experience ?? { enabled: true }), rejectionText: v })}
-            />
-          </div>
-        </FactorRow>
-
-        {/* Документы */}
-        <FactorRow
-          title="Обязательные документы"
-          help="Через запятую, напр.: мед.книжка, права B"
-          enabled={factors.documents?.enabled ?? false}
-          onToggle={(v) => toggleEnabled("documents", v)}
-        >
-          <div className="space-y-2">
-            <Input
-              value={docsCsv}
-              onChange={(e) => setDocsCsv(e.target.value)}
-              placeholder="мед.книжка, права B"
-              className="h-8 text-sm bg-[var(--input-bg)]"
-            />
-            <RejectionText
-              refEl={refDocs}
-              value={factors.documents?.rejectionText ?? ""}
-              onChange={(v) => set("documents", { ...(factors.documents ?? { enabled: true }), rejectionText: v })}
             />
           </div>
         </FactorRow>

@@ -29,6 +29,7 @@ const INTERVIEW_DAYS = [
   { id: "thu", label: "Чт" },
   { id: "fri", label: "Пт" },
   { id: "sat", label: "Сб" },
+  { id: "sun", label: "Вс" },
 ]
 
 const DURATION_OPTIONS = [
@@ -47,6 +48,17 @@ const BUFFER_OPTIONS = [
   { value: 30, label: "30 мин" },
 ]
 
+// Шаг сетки слотов для записи (готовые варианты, без ручного ввода).
+const SLOT_STEP_OPTIONS = [
+  { value: 15, label: "15 мин" },
+  { value: 20, label: "20 мин" },
+  { value: 30, label: "30 мин" },
+  { value: 40, label: "40 мин" },
+  { value: 45, label: "45 мин" },
+  { value: 50, label: "50 мин" },
+  { value: 60, label: "60 мин" },
+]
+
 // ─── Компонент ──────────────────────────────────────────────────────────────
 
 export function InterviewSection({
@@ -61,6 +73,11 @@ export function InterviewSection({
   // ── Способы интервью (нормализованный массив из модели) ──
   const [methodConfigs, setMethodConfigs] = useState<MethodConfig[]>(() =>
     getInterviewMethodConfigs(schedule)
+  )
+
+  // ── Способ интервью по умолчанию ──
+  const [defaultMethod, setDefaultMethod] = useState<string>(
+    schedule.defaultInterviewMethod ?? ""
   )
 
   // ── Адрес офиса ──
@@ -90,6 +107,14 @@ export function InterviewSection({
         : ["mon", "tue", "wed", "thu", "fri"]
     )
   )
+
+  // ── Шаг сетки слотов ──
+  const [slotStep, setSlotStep] = useState<number>(schedule.slotStep ?? 30)
+
+  // ── Обеденный перерыв ──
+  const [lunchEnabled, setLunchEnabled] = useState<boolean>(schedule.lunchEnabled ?? false)
+  const [lunchFrom, setLunchFrom] = useState<string>(schedule.lunchFrom ?? "13:00")
+  const [lunchTo, setLunchTo] = useState<string>(schedule.lunchTo ?? "14:00")
 
   // ── Напоминания ──
   const [remind24h, setRemind24h] = useState<boolean>(schedule.remind24h ?? true)
@@ -164,9 +189,16 @@ export function InterviewSection({
           interviewTo,
           interviewDays: Array.from(interviewDays),
           maxPerDay: maxPerDay || "8",
+          // шаг сетки + обеденный перерыв
+          slotStep,
+          lunchEnabled,
+          lunchFrom,
+          lunchTo,
           // напоминания
           remind24h,
           remind2h,
+          // способ интервью по умолчанию
+          defaultInterviewMethod: defaultMethod,
         },
       })
       setSaved(true)
@@ -259,6 +291,32 @@ export function InterviewSection({
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Способ по умолчанию */}
+                {cfg.enabled && (
+                  <button
+                    type="button"
+                    onClick={() => setDefaultMethod(method)}
+                    className={cn(
+                      "flex items-center gap-1.5 text-xs whitespace-nowrap transition-colors",
+                      defaultMethod === method
+                        ? "text-primary font-medium"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <span className={cn(
+                      "size-3.5 rounded-full border-2 flex items-center justify-center shrink-0",
+                      defaultMethod === method
+                        ? "border-primary bg-primary"
+                        : "border-muted-foreground/50"
+                    )}>
+                      {defaultMethod === method && (
+                        <span className="size-1.5 rounded-full bg-white" />
+                      )}
+                    </span>
+                    По умолчанию
+                  </button>
+                )}
               </div>
             )
           })}
@@ -344,31 +402,21 @@ export function InterviewSection({
           <div className="flex items-center gap-3 flex-wrap">
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">С</Label>
-              <Select value={interviewFrom} onValueChange={setInterviewFrom}>
-                <SelectTrigger className="w-28 h-9 text-sm bg-[var(--input-bg)]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from({ length: 24 }, (_, i) => {
-                    const h = `${String(i).padStart(2, "0")}:00`
-                    return <SelectItem key={h} value={h}>{h}</SelectItem>
-                  })}
-                </SelectContent>
-              </Select>
+              <Input
+                type="time"
+                value={interviewFrom}
+                onChange={e => setInterviewFrom(e.target.value)}
+                className="w-28 h-9 text-sm bg-[var(--input-bg)]"
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">До</Label>
-              <Select value={interviewTo} onValueChange={setInterviewTo}>
-                <SelectTrigger className="w-28 h-9 text-sm bg-[var(--input-bg)]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from({ length: 24 }, (_, i) => {
-                    const h = `${String(i).padStart(2, "0")}:00`
-                    return <SelectItem key={h} value={h}>{h}</SelectItem>
-                  })}
-                </SelectContent>
-              </Select>
+              <Input
+                type="time"
+                value={interviewTo}
+                onChange={e => setInterviewTo(e.target.value)}
+                className="w-28 h-9 text-sm bg-[var(--input-bg)]"
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Макс. в день</Label>
@@ -378,6 +426,42 @@ export function InterviewSection({
                 className="w-20 h-9 text-sm bg-[var(--input-bg)]"
               />
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Шаг записи</Label>
+              <Select value={String(slotStep)} onValueChange={v => setSlotStep(parseInt(v, 10))}>
+                <SelectTrigger className="w-28 h-9 text-sm bg-[var(--input-bg)]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SLOT_STEP_OPTIONS.map(o => (
+                    <SelectItem key={o.value} value={String(o.value)}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Обеденный перерыв */}
+          <div className="rounded-lg border p-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">Обеденный перерыв</p>
+                <p className="text-xs text-muted-foreground">В это время слоты не предлагаются</p>
+              </div>
+              <Switch checked={lunchEnabled} onCheckedChange={setLunchEnabled} />
+            </div>
+            {lunchEnabled && (
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">С</Label>
+                  <Input type="time" value={lunchFrom} onChange={e => setLunchFrom(e.target.value)} className="w-28 h-9 text-sm bg-[var(--input-bg)]" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">До</Label>
+                  <Input type="time" value={lunchTo} onChange={e => setLunchTo(e.target.value)} className="w-28 h-9 text-sm bg-[var(--input-bg)]" />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="space-y-1.5">
