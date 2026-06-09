@@ -4,7 +4,7 @@
 
 import { eq, and, count, isNull, inArray, sql, gte, lte } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { vacancies, candidates, calendarEvents, candidateContacts } from "@/lib/db/schema"
+import { vacancies, candidates, calendarEvents, candidateContacts, testSubmissions } from "@/lib/db/schema"
 import { ACTIVE_VACANCY_STATUSES } from "@/lib/vacancies/filters"
 import { getVacancyLifecycle } from "@/lib/vacancies/lifecycle"
 import { REJECTION_REASONS, REJECTION_INITIATORS, autoReasonKey, autoReasonLabel } from "@/lib/hr/rejection-reasons"
@@ -118,6 +118,7 @@ export async function buildReport(companyId: string, opts: BuildReportOptions = 
     contactsNoFitReasons,
     autoReasonRows,
     vacancyOptionRows,
+    testSubRows,
   ] = await Promise.all([
     // 1. Активные вакансии — текущее состояние (за всё время)
     db.select({ value: count() })
@@ -160,9 +161,10 @@ export async function buildReport(companyId: string, opts: BuildReportOptions = 
       rejected:     sql<number>`count(*) filter (where ${candidates.stage} = 'rejected' and ${candidates.rejectionInitiator} is distinct from 'candidate')`.mapWith(Number),
       // «Сам отказ» = кандидат сам отказался.
       selfRejected: sql<number>`count(*) filter (where ${candidates.stage} = 'rejected' and ${candidates.rejectionInitiator} = 'candidate')`.mapWith(Number),
-      // «Анкет» = демо + тест: кандидаты на стадиях демо и тестового задания
-      // (anketa_filled оставляем в наборе — это часть того же «анкетного» этапа).
-      anketa:       sql<number>`count(*) filter (where ${candidates.stage} in ('demo_opened','demo','anketa_filled','anketa','test_task_sent','test_task_done','test_passed','test_failed'))`.mapWith(Number),
+      // «Анкет» = демо + тест по ФАКТУ завершённости (не по текущей стадии):
+      // demoCompleted = демо пройдено (demo_progress_json.completedAt). Тест
+      // считаем отдельным запросом по test_submissions и складываем в JS.
+      demoCompleted: sql<number>`count(*) filter (where ${candidates.demoProgressJson} ->> 'completedAt' is not null)`.mapWith(Number),
       decision:     sql<number>`count(*) filter (where ${candidates.stage} in ('decision','final_decision'))`.mapWith(Number),
       interview:    sql<number>`count(*) filter (where ${candidates.stage} in ('scheduled','interview','interviewed'))`.mapWith(Number),
     })
@@ -296,6 +298,24 @@ export async function buildReport(companyId: string, opts: BuildReportOptions = 
         isNull(vacancies.deletedAt),
       ))
       .orderBy(vacancies.title),
+
+    // 12. Сданные тесты по вакансиям (для «Анкет» = демо + тест). Считаем
+    // уникальных кандидатов с записью в test_submissions, за период.
+    db.select({
+      vacancyId: vacancies.id,
+      cnt: sql<number>`count(distinct ${testSubmissions.candidateId})`.mapWith(Number),
+    })
+      .from(testSubmissions)
+      .innerJoin(candidates, eq(candidates.id, testSubmissions.candidateId))
+      .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
+      .where(and(
+        eq(vacancies.companyId, companyId),
+        isNull(vacancies.deletedAt),
+        isNull(candidates.deletedAt),
+        ...vacancyFilter,
+        ...candidateDateFilters,
+      ))
+      .groupBy(vacancies.id),
   ])
 
   // ─── Воронка ──────────────────────────────────────────────────────
@@ -369,6 +389,9 @@ export async function buildReport(companyId: string, opts: BuildReportOptions = 
   }))
 
   // ─── По вакансиям ─────────────────────────────────────────────────
+  const testSubByVac: Record<string, number> = {}
+  for (const row of testSubRows) testSubByVac[row.vacancyId] = Number(row.cnt)
+
   const nowMs = Date.now()
   const vacancyTable = vacancyRows.map(r => ({
     vacancyId: r.vacancyId,
@@ -382,7 +405,8 @@ export async function buildReport(companyId: string, opts: BuildReportOptions = 
     hired: Number(r.hired),
     rejected: Number(r.rejected),
     selfRejected: Number(r.selfRejected),
-    anketa: Number(r.anketa),
+    // «Анкет» = демо пройдено + тест сдан.
+    anketa: Number(r.demoCompleted) + (testSubByVac[r.vacancyId] ?? 0),
     decision: Number(r.decision),
     interview: Number(r.interview),
   }))
