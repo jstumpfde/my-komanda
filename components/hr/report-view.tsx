@@ -284,7 +284,7 @@ function StatusCell({ row }: { row: VacancyRow }) {
   }
 
   return (
-    <div className="flex flex-col items-start gap-1 whitespace-nowrap leading-tight">
+    <div className="flex flex-col items-center gap-1 whitespace-nowrap leading-tight">
       <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${mainCls}`}>{mainText}</span>
       {hhText && <span className={`text-[11px] ${hhCls}`}>{hhText}</span>}
     </div>
@@ -305,7 +305,7 @@ function VacancyTable({ rows, loading, tv }: { rows: VacancyRow[]; loading: bool
         <thead>
           <tr className="border-b">
             <th className={`${th} pr-4`}>Вакансия</th>
-            <th className={`${th} px-3`}>Статус</th>
+            <th className={`${thR} px-3`}>Статус</th>
             <th className={`${thR} px-3`}>Опубл.</th>
             <th className={`${thR} px-3`}>Откликов</th>
             <th className={`${thR} px-3`}>Анкет</th>
