@@ -300,10 +300,10 @@ function VacancyTable({ rows, loading, tv, interactive }: { rows: VacancyRow[]; 
   const td = tv ? "text-base" : "text-sm"
 
   // Колонка → стадии для фильтра в списке кандидатов (?stage=). null = все.
+  // Демо/Тест НЕ кликабельны: это метрики завершённости (факт прохождения),
+  // а не текущая стадия — клик по стадии показал бы другое число.
   const STAGE: Record<string, string | null> = {
     "Откликов": null,
-    "Демо": "demo_opened",
-    "Тест": "test_task_sent,test_task_done,test_passed,test_failed",
     "Собес.": "scheduled,interview,interviewed",
     "Решение": "decision,final_decision",
     "Нанято": "hired",
@@ -314,9 +314,9 @@ function VacancyTable({ rows, loading, tv, interactive }: { rows: VacancyRow[]; 
     const st = STAGE[label]
     return `/hr/vacancies/${vacancyId}?tab=candidates${st ? `&stage=${st}` : ""}`
   }
-  // Ячейка-число: ссылка (если interactive и значение > 0), иначе обычный текст.
+  // Ячейка-число: ссылка (если interactive, колонка кликабельна и значение > 0).
   const num = (r: VacancyRow, label: string, value: number, cls: string) =>
-    interactive && value > 0
+    interactive && value > 0 && (label in STAGE)
       ? <a href={hrefFor(r.vacancyId, label)} className={`${cls} hover:underline cursor-pointer`}>{value}</a>
       : <span className={cls}>{value}</span>
 
