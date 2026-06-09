@@ -102,7 +102,7 @@
     <div class="dot">🗺️</div>
     <div>
       <h1>Карта раздела HR</h1>
-      <div class="sub">Company24 · все 67 страниц со статусами · потоки и взаимосвязи · из кода develop (a624a54e) · всё на проде · 08.06.2026</div>
+      <div class="sub">Company24 · все 68 страниц со статусами · потоки и взаимосвязи · из кода main (e438cf95) · всё на проде · 09.06.2026</div>
     </div>
   </header>
 
@@ -119,6 +119,22 @@
     <span class="chip"><span class="pill p-stub">⚪ Заглушка</span> 0 API / «Скоро» / редирект / PoC</span>
   </div>
   <div class="note" style="margin-top:8px">Статус определён автоматически по коду: число обращений к API, наличие маркеров «Скоро»/mock/TODO, дата последнего коммита. «Свежая» = коммит 04–05.06.2026.</div>
+
+  <div class="callout" style="border-left-color:var(--violet);background:var(--violet-l);color:#5b21b6;">
+    <b>Обновление 09.06.2026 (выкачено на прод, main e438cf95):</b>
+    <ul style="margin:6px 0 0;padding-left:18px;">
+      <li><b>Отчёт по найму</b> · <code>/hr/report</code> — сводная аналитика: KPI, воронка, таблица «По вакансиям» (Статус, Опубл., Демо, Тест, Собес., Решение, Нанято, Не подходит, Канд. отказался), причины отказа (авто+ручные), созвоны. Фильтры (пресеты периода + календарь-диапазон + вакансия). <b>Кликабельные числа</b> → список кандидатов вакансии с фильтром стадии.</li>
+      <li><b>Публичная ссылка отчёта</b> · <code>/report/[token]</code> — без логина, только чтение; <b>TV-режим</b> (<code>?tv=1</code>, крупно, авто-обновление). Таблица <code>report_shares</code>. Кнопка «Поделиться» (создать/отозвать).</li>
+      <li><b>Данные с hh — точь-в-точь.</b> hh-колонки (Откликов/Собес/Нанят/Не подходит/Канд.отказался) тянутся из <b>счётчиков воронки hh</b> (<code>vacancies.hh_funnel_json</code>), а не из неполного items-эндпоинта. Демо/Тест — с платформы (завершённость демо / <code>test_submissions</code>).</li>
+      <li><b>Статус вакансии</b>: «Остановлена» (было «Приостановлена»), бейдж + <code>hh: в архиве</code>. Поля <code>hh_archived/hh_expires_at/closed_at</code>. Архив hh — по детали <code>/vacancies/{id}.archived</code>.</li>
+      <li><b>Захват на карточке кандидата</b>: причина отказа (кто/почему) + созвоны (подошёл/не подошёл) — таблица <code>candidate_contacts</code>.</li>
+      <li><b>Fix</b> <code>/admin/platform</code>: RSC-роли (<code>lib/roles.ts</code>) + доступ по email; <code>/forgot-password</code>·<code>/reset-password</code> в whitelist middleware.</li>
+      <li><b>Мобильная версия</b> отчёта (таблица → карточки) + отзывчивые отступы.</li>
+      <li><b>Крон</b> <code>/api/cron/hh-vacancy-sync</code> (раз в сутки 05:30 МСК) — обновляет hh-архив + hh-счётчики воронки.</li>
+      <li><b>Миграции прода:</b> 0192 (rejection) · 0193 (candidate_contacts) · 0194 (report_shares) · 0195 (vacancy hh-lifecycle) · 0196 (hh_funnel_json) — применены.</li>
+      <li><b>Открыто (обсуждается):</b> двусторонний синк воронки hh ↔ портал (hh API поддерживает обе стороны; нужен маппинг стадий, защита от петли, правило конфликта).</li>
+    </ul>
+  </div>
 
   <div class="callout" style="border-left-color:var(--violet);background:var(--violet-l);color:#5b21b6;">
     <b>Обновление 08.06.2026 (выкачено на прод, develop a624a54e):</b>
@@ -147,6 +163,7 @@
   <table class="cat">
     <tr><th style="width:22%">Маршрут</th><th style="width:13%">Статус</th><th>Что это</th><th style="width:11%">Изменён</th></tr>
     <tr><td class="r">/hr/dashboard</td><td><span class="pill p-new">🆕 Рабочая</span></td><td class="note">Дашборд найма: KPI, воронка, AI-инсайты (виджет календаря — «скоро»)</td><td class="d">04.06</td></tr>
+    <tr><td class="r">/hr/report</td><td><span class="pill p-new">🆕 Рабочая</span></td><td class="note">Отчёт по найму: KPI + таблица по вакансиям (данные с hh — счётчики воронки), Демо/Тест, причины отказа, созвоны. Кликабельно. Публичная ссылка + TV-режим (/report/[token])</td><td class="d">09.06</td></tr>
     <tr><td class="r">/hr/vacancies</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Список вакансий: Активные / Архив / Корзина</td><td class="d">01.06</td></tr>
     <tr><td class="r">/hr/vacancies/[id]</td><td><span class="pill p-new">🆕 Рабочая</span></td><td class="note">Карточка вакансии — 7 вкладок (ядро, 4250 строк): кандидаты, аналитика, анкета, воронка, демо, тест, настройки</td><td class="d">05.06</td></tr>
     <tr><td class="r">/hr/vacancies/create/wizard</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Мастер создания вакансии (пошаговый)</td><td class="d">02.04</td></tr>
