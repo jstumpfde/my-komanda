@@ -528,22 +528,19 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
         salaryExpectation: salaryAmount,
       }
 
-      // Слой 1: company-wide (мастер-тумблер).
-      // Применяется НЕЗАВИСИМО от per-vacancy block toggle, но только если
-      // stopFactorsApplyToAll===true (дефолт: false — предохранитель) И набор непустой.
-      // Off-hours soft mode НЕ блокирует company-layer — это глобальное правило компании.
-      if (candidateId && companyStopFactorsApplyToAll && companyStopFactors && Object.keys(companyStopFactors).length > 0) {
-        stopFactorMatch = matchStopFactors(candidateStopData, companyStopFactors)
-      }
-
-      // Слой 2: per-vacancy (как было).
-      // Off-hours soft mode: не применяем стоп-факторы ночью (никаких авто-отказов).
-      // Funnel-флаг stopFactorsEnabled: только явный false выключает блок
-      // (undefined/отсутствует = включено — обратная совместимость).
-      if (!stopFactorMatch && candidateId && localVac && !offHoursSoftMode && isBlockEnabled(localVac, "stop_factors_resume", aiSettings.stopFactorsEnabled !== false)) {
-        const factors = (localVac as { stopFactorsJson?: VacancyStopFactors | null }).stopFactorsJson
-        if (factors && Object.keys(factors).length > 0) {
-          stopFactorMatch = matchStopFactors(candidateStopData, factors)
+      // Эффективный набор стоп-факторов: компанейские дефолты — база,
+      // per-vacancy переопределяет по-фактору (вакансия главнее).
+      // Spread корректен: каждый ключ верхнего уровня = целый фактор-объект,
+      // поэтому { enabled: false } у вакансии полностью перекроет компанейский.
+      // Off-hours soft mode и funnel-флаг применяются к единому набору.
+      if (candidateId && localVac && !offHoursSoftMode && isBlockEnabled(localVac, "stop_factors_resume", aiSettings.stopFactorsEnabled !== false)) {
+        const vacancyFactors = (localVac as { stopFactorsJson?: VacancyStopFactors | null }).stopFactorsJson
+        const effective: VacancyStopFactors = {
+          ...(companyStopFactorsApplyToAll && companyStopFactors ? companyStopFactors : {}),
+          ...(vacancyFactors ?? {}),
+        }
+        if (Object.keys(effective).length > 0) {
+          stopFactorMatch = matchStopFactors(candidateStopData, effective)
         }
       }
 
