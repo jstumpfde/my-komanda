@@ -4,6 +4,9 @@ import { db } from "@/lib/db"
 import { knowledgeArticles, demoTemplates, users } from "@/lib/db/schema"
 
 import { checkCronAuth } from "@/lib/cron/auth"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
+
+const CRON_NAME = "knowledge-review"
 
 // POST /api/cron/knowledge-review — Protected by X-Cron-Secret header.
 // Cron endpoint that flags knowledge materials needing review.
@@ -32,6 +35,7 @@ export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
 
+  const run = await startCronRun(CRON_NAME).catch(() => null)
   const now = new Date()
   const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
   const items: ReviewItem[] = []
@@ -171,6 +175,7 @@ export async function POST(req: NextRequest) {
       console.log(`[cron/knowledge-review] flagged ${items.length} items`, items.slice(0, 10))
     }
 
+    if (run) await finishCronRun(run.id, "ok", { count: items.length })
     return NextResponse.json({
       ok: true,
       count: items.length,
@@ -178,6 +183,7 @@ export async function POST(req: NextRequest) {
       checkedAt: now.toISOString(),
     })
   } catch (err) {
+    if (run) await finishCronRun(run.id, "error", null, err instanceof Error ? err.message : String(err))
     console.error("[cron/knowledge-review]", err)
     return NextResponse.json({ error: "Internal error" }, { status: 500 })
   }
