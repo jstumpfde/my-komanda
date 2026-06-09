@@ -131,6 +131,24 @@ export async function getVacancy(accessToken: string, vacancyId: string): Promis
   return hhFetch(`/vacancies/${vacancyId}`, accessToken)
 }
 
+// Счётчики воронки hh по вакансии (collections.counters.total) — ТОЧНЫЕ числа
+// из интерфейса hh. В отличие от /negotiations/{state} items (отдаёт неполно:
+// скрытые/анонимные резюме), counters совпадают с UD hh.
+export async function getNegotiationCounters(
+  accessToken: string,
+  vacancyId: string,
+): Promise<Record<string, number>> {
+  const d = await hhFetch<{ collections?: Array<{ id: string; counters?: { total?: number } }> }>(
+    `/negotiations?vacancy_id=${vacancyId}`,
+    accessToken,
+  )
+  const out: Record<string, number> = {}
+  for (const c of d.collections ?? []) {
+    if (c?.id) out[c.id] = c.counters?.total ?? 0
+  }
+  return out
+}
+
 export interface HHNegotiationItem {
   id: string
   state: { id: string; name: string }

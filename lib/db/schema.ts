@@ -682,6 +682,12 @@ export const vacancies = pgTable("vacancies", {
   // Дата, когда МЫ закрыли вакансию (status → archived/closed). Может отличаться
   // от hhArchived: на hh уже архив, а у нас ещё ведём кандидатов.
   closedAt:    timestamp("closed_at", { withTimezone: true }),
+  // Счётчики воронки hh (из /negotiations collections) — точные числа из
+  // интерфейса hh: { response, phone_interview, assessment, interview, offer,
+  // hired, discard_by_employer, discard_by_applicant, ... }. Обновляет крон
+  // hh-vacancy-sync. Отчёт показывает их в hh-колонках (точь-в-точь как hh),
+  // т.к. items-эндпоинт отдаёт неполно (скрытые резюме).
+  hhFunnelJson: jsonb("hh_funnel_json"),
   aiProcessSettings: jsonb("ai_process_settings").default({}),
   aiScoringEnabled: boolean("ai_scoring_enabled").notNull().default(false),
   // P0-22: editable стоп-слова на уровне вакансии.
