@@ -290,6 +290,44 @@ Cron авто-удаления — /api/cron/trash-cleanup (раз в сутки
 ```
 (00:00 UTC = 03:00 МСК; логируется в cron_runs.)
 
+## Отчёт по найму (/hr/report)
+
+Сводная аналитика по вакансиям компании. Агрегация — lib/hr/build-report.ts
+(используют и приватный, и публичный API), визуал — components/hr/report-view.tsx
+(общий компонент для приватной и публичной страниц).
+
+- **Фильтры:** период (today/yesterday/this_week/last_week/this_month/last_month/all
+  + кастомный диапазон from/to с календаря) и дропдаун вакансии. «Период: …» и кнопка
+  «Поделиться» — в шапке справа.
+- **Таблица «По вакансиям»:** Статус (наш цикл + hh-архив + дата закрытия), Опубл.
+  (дней от created_at), Анкет (anketa_filled), Собес., Решение (decision), Нанято,
+  Отказов, Сам отказ. (rejectionInitiator=candidate).
+- **Причины отказа:** автоматические (auto_processing_stopped_reason → русские ярлыки
+  в lib/hr/rejection-reasons.ts) + ручная таксономия + инициатор.
+- **Захват на карточке:** причина отказа (candidates.rejection_*) и созвоны
+  (таблица candidate_contacts, lib/hr/contacts.ts).
+
+### Публичная ссылка (share)
+Таблица report_shares (один активный токен на компанию). API:
+- GET/POST/DELETE /api/modules/hr/report/share (создание/отзыв — requireDirector)
+- GET /api/public/report/[token] — чтение без логина (период/вакансия в query)
+- Страница /report/[token] (в PUBLIC_PREFIXES middleware). ?tv=1 — TV-режим
+  (крупно, авто-обновление раз в минуту, без панели фильтров).
+
+### Статус вакансии: hh-архив vs наше закрытие
+vacancies: hh_archived, hh_expires_at, closed_at (миграция 0195).
+- closed_at пишется в PUT /api/modules/hr/vacancies/[id] при переводе в архив.
+- hh_archived обновляет крон /api/cron/hh-vacancy-sync: archived берём из ДЕТАЛИ
+  /vacancies/{id} (НЕ из /vacancies/active — он у части работодателей пуст и
+  пометил бы всё архивом). 404 от hh = вакансия удалена → архив. hh точную дату
+  истечения работодателю не отдаёт. Расписание (раз в сутки, 05:30 МСК):
+```
+30 2 * * * curl -s -X POST -H "X-Cron-Secret: $CRON_SECRET" \
+  https://company24.pro/api/cron/hh-vacancy-sync >> /var/log/hh-vacancy-sync.log 2>&1
+```
+
+Таблицы: report_shares, candidate_contacts. Миграции 0192–0195.
+
 ## Deployment Commands
 
 Стандартный деплой (после мерджа feature-ветки в develop):

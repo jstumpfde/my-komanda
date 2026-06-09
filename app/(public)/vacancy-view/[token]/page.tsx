@@ -15,7 +15,7 @@ interface PageData { needPassword: boolean; companyName: string; companyLogo?: s
 
 type PageState = "loading" | "password" | "dashboard" | "error"
 
-const STATUS_LABELS: Record<string, string> = { draft: "Черновик", active: "Активна", paused: "Приостановлена", closed_success: "Закрыта (найден)", closed_cancelled: "Закрыта" }
+const STATUS_LABELS: Record<string, string> = { draft: "Черновик", active: "Активна", paused: "Остановлена", closed_success: "Закрыта (найден)", closed_cancelled: "Закрыта" }
 const STAGE_COLORS: Record<string, string> = { new: "bg-blue-500", demo: "bg-purple-500", decision: "bg-amber-500", interview: "bg-indigo-500", final_decision: "bg-cyan-500", hired: "bg-emerald-500", rejected: "bg-red-500" }
 
 export default function VacancyViewPage({ params }: { params: Promise<{ token: string }> }) {

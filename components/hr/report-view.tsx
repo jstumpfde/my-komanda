@@ -267,7 +267,7 @@ function StatusCell({ row }: { row: VacancyRow }) {
     mainText = row.closedAt ? `Закрыта ${shortDate(row.closedAt)}` : "Закрыта"
     mainCls = "bg-muted text-muted-foreground"
   } else if (row.lifecycle === "paused") {
-    mainText = "Приостановлена"
+    mainText = "Остановлена"
     mainCls = "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
   }
 
@@ -284,7 +284,7 @@ function StatusCell({ row }: { row: VacancyRow }) {
   }
 
   return (
-    <div className="flex items-center gap-2 whitespace-nowrap">
+    <div className="flex flex-col items-center gap-1 whitespace-nowrap leading-tight">
       <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${mainCls}`}>{mainText}</span>
       {hhText && <span className={`text-[11px] ${hhCls}`}>{hhText}</span>}
     </div>
@@ -305,7 +305,7 @@ function VacancyTable({ rows, loading, tv }: { rows: VacancyRow[]; loading: bool
         <thead>
           <tr className="border-b">
             <th className={`${th} pr-4`}>Вакансия</th>
-            <th className={`${th} px-3`}>Статус</th>
+            <th className={`${thR} px-3`}>Статус</th>
             <th className={`${thR} px-3`}>Опубл.</th>
             <th className={`${thR} px-3`}>Откликов</th>
             <th className={`${thR} px-3`}>Анкет</th>
