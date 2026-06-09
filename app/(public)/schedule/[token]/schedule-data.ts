@@ -12,6 +12,7 @@ export type { SchedulePageData, MethodConfig, SlotDay }
 
 // ─── Константы / дефолты ──────────────────────────────────────────────────────
 
+const DEFAULT_TZ     = "Europe/Moscow"
 const DEFAULT_DAYS   = ["mon","tue","wed","thu","fri"]
 const DEFAULT_FROM   = "09:00"
 const DEFAULT_TO     = "18:00"
@@ -33,7 +34,53 @@ export const METHOD_LABELS: Record<string, string> = {
   phone:"Телефон", zoom:"Zoom", telemost:"Яндекс Телемост", meet:"Google Meet", office:"Офис"
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── TZ-хелперы (Intl, без сторонних пакетов) ────────────────────────────────
+
+function getLocalParts(utcDate: Date, tz: string) {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit",  minute: "2-digit", second: "2-digit",
+    hour12: false,
+  })
+  const parts = fmt.formatToParts(utcDate)
+  const get = (t: string) => parseInt(parts.find(p => p.type === t)?.value ?? "0", 10)
+  return {
+    year:   get("year"),
+    month:  get("month"),
+    day:    get("day"),
+    hour:   get("hour"),
+    minute: get("minute"),
+    second: get("second"),
+  }
+}
+
+function localDateToYMD(utcDate: Date, tz: string): string {
+  const { year, month, day } = getLocalParts(utcDate, tz)
+  return `${year}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`
+}
+
+function localDayOfWeek(utcDate: Date, tz: string): number {
+  const { year, month, day } = getLocalParts(utcDate, tz)
+  return new Date(Date.UTC(year, month - 1, day)).getDay()
+}
+
+function formatDayLabelTz(utcDate: Date, tz: string): string {
+  const { month, day } = getLocalParts(utcDate, tz)
+  const jsDay = localDayOfWeek(utcDate, tz)
+  const wd  = DAY_LABELS_RU[jsDay] ?? ""
+  const mon = MONTH_SHORT_RU[month - 1] ?? ""
+  return `${wd}, ${day} ${mon}`
+}
+
+function utcToLocalDateTime(utcDate: Date, tz: string): { ymd: string; hhmm: string } {
+  const { year, month, day, hour, minute } = getLocalParts(utcDate, tz)
+  const ymd  = `${year}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`
+  const hhmm = `${String(hour).padStart(2,"0")}:${String(minute).padStart(2,"0")}`
+  return { ymd, hhmm }
+}
+
+// ─── Остальные helpers ────────────────────────────────────────────────────────
 
 function timeToMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(":").map(Number)
@@ -44,16 +91,6 @@ function minutesToTime(mins: number): string {
   const h = Math.floor(mins / 60)
   const m = mins % 60
   return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`
-}
-
-function formatDayLabel(date: Date): string {
-  const wd  = DAY_LABELS_RU[date.getDay()] ?? ""
-  const mon = MONTH_SHORT_RU[date.getMonth()] ?? ""
-  return `${wd}, ${date.getDate()} ${mon}`
-}
-
-function dateToYMD(d: Date): string {
-  return d.toISOString().slice(0,10)
 }
 
 function generateDaySlots(cfg: {
@@ -102,14 +139,16 @@ export async function fetchScheduleData(
     // 2. Вакансия + компания
     const [row] = await db
       .select({
-        vacancyTitle:     vacancies.title,
-        companyId:        vacancies.companyId,
-        companyName:      companies.name,
-        companyBrandName: companies.brandName,
-        companyLogo:      companies.logoUrl,
-        brandPrimary:     companies.brandPrimaryColor,
-        brandBg:          companies.brandBgColor,
-        hiringDefaults:   companies.hiringDefaultsJson,
+        vacancyTitle:         vacancies.title,
+        companyId:            vacancies.companyId,
+        companyName:          companies.name,
+        companyBrandName:     companies.brandName,
+        companyLogo:          companies.logoUrl,
+        brandPrimary:         companies.brandPrimaryColor,
+        brandBg:              companies.brandBgColor,
+        hiringDefaults:       companies.hiringDefaultsJson,
+        // #3.4 Fallback адреса: companies.office_address
+        companyOfficeAddress: companies.officeAddress,
       })
       .from(vacancies)
       .innerJoin(companies, eq(vacancies.companyId, companies.id))
@@ -129,7 +168,7 @@ export async function fetchScheduleData(
     const toMins    = timeToMinutes(sched.interviewTo   ?? DEFAULT_TO)
     const step      = sched.slotStep ?? DEFAULT_STEP
     const maxPerDay = Number(sched.maxPerDay ?? DEFAULT_MAX) || DEFAULT_MAX
-    const timezone  = sched.timezone ?? "Europe/Moscow"
+    const timezone  = sched.timezone ?? DEFAULT_TZ
 
     const lunchEnabled = sched.lunchEnabled ?? false
     const lunchFrom = lunchEnabled ? timeToMinutes(sched.lunchFrom ?? "13:00") : 0
@@ -166,10 +205,10 @@ export async function fetchScheduleData(
       ?? enabledMethods[0]?.duration
       ?? 60
 
-    // 5. Занятые слоты компании на 14 дней
+    // 5. Занятые слоты компании на 16 дней (с запасом на TZ-оффсет)
     const now   = new Date()
     const limit = new Date(now)
-    limit.setDate(limit.getDate() + 14)
+    limit.setDate(limit.getDate() + 16)
 
     const bookedEvents = await db
       .select({ startAt: calendarEvents.startAt })
@@ -181,27 +220,26 @@ export async function fetchScheduleData(
         lte(calendarEvents.startAt, limit),
       ))
 
+    // Ключи в локальной TZ компании — "YYYY-MM-DD T HH:MM"
     type BookedByDay = Record<string, number>
     const bookedCountByDay: BookedByDay = {}
     const bookedSlotSet = new Set<string>()
 
     for (const evt of bookedEvents) {
-      const d = dateToYMD(evt.startAt)
-      bookedCountByDay[d] = (bookedCountByDay[d] ?? 0) + 1
-      const hhmm = evt.startAt.toISOString().slice(11, 16)
-      bookedSlotSet.add(`${d}T${hhmm}`)
+      const { ymd, hhmm } = utcToLocalDateTime(evt.startAt, timezone)
+      bookedCountByDay[ymd] = (bookedCountByDay[ymd] ?? 0) + 1
+      bookedSlotSet.add(`${ymd}T${hhmm}`)
     }
 
-    // 6. Генерируем слоты на 14 дней вперёд
+    // 6. Генерируем слоты на 14 рабочих дней в TZ компании
     const days: SlotDay[] = []
-    const checkDate = new Date(now)
-    checkDate.setDate(checkDate.getDate() + 1)
-    checkDate.setHours(0, 0, 0, 0)
+    // Начинаем с «завтра» в TZ компании
+    const checkDate = new Date(now.getTime() + 24 * 60 * 60 * 1000)
 
     for (let i = 0; i < 21 && days.length < 14; i++) {
-      const jsDay = checkDate.getDay()
+      const jsDay = localDayOfWeek(checkDate, timezone)
       if (enabledJsDays.has(jsDay)) {
-        const ymd = dateToYMD(checkDate)
+        const ymd = localDateToYMD(checkDate, timezone)
         const dayBooked = bookedCountByDay[ymd] ?? 0
 
         if (dayBooked < maxPerDay) {
@@ -214,17 +252,20 @@ export async function fetchScheduleData(
           const available = freeSlots.slice(0, remaining)
 
           if (available.length > 0) {
-            days.push({ date: ymd, label: formatDayLabel(checkDate), slots: available })
+            days.push({ date: ymd, label: formatDayLabelTz(checkDate, timezone), slots: available })
           }
         }
       }
-      checkDate.setDate(checkDate.getDate() + 1)
+      checkDate.setTime(checkDate.getTime() + 24 * 60 * 60 * 1000)
     }
 
     // 7. Имя кандидата
     const nameParts = (candidate.name ?? "").trim().split(/\s+/)
     // Российский порядок: Фамилия Имя Отчество — берём индекс 1 (Имя)
     const firstName = nameParts[1] ?? nameParts[0] ?? ""
+
+    // #3.4 Fallback адреса офиса
+    const officeAddress = sched.officeAddress ?? row.companyOfficeAddress ?? null
 
     const data: SchedulePageData = {
       candidateName:      candidate.name ?? "",
@@ -235,7 +276,7 @@ export async function fetchScheduleData(
       brandPrimaryColor:  row.brandPrimary ?? "#3b82f6",
       brandBgColor:       row.brandBg      ?? "#f0f4ff",
       timezone,
-      officeAddress:      sched.officeAddress ?? null,
+      officeAddress,
       methods:            enabledMethods,
       defaultMethod,
       days,

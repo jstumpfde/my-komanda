@@ -133,9 +133,11 @@ function injectHeaderBreaks(text: string): string {
   // («о компании говорить рано» НЕ заголовок, а «О компании:» — да).
   // Вставляем \n\n ДО и ПОСЛЕ заголовка с двоеточием — чтобы он стал
   // отдельным блоком (isHeaderBlock его подхватит).
+  // Примечание: используем capture-группу вместо lookbehind (?<=) —
+  // lookbehind не поддерживается Safari < 16.4.
   const escaped = INLINE_HEADER_MARKERS.map(m => m.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")
-  const re = new RegExp(`(?<=[.!?]\\s|\\n)(${escaped})\\s*([:—])\\s*`, "g")
-  return text.replace(re, "\n\n$1$2\n\n")
+  const re = new RegExp(`([.!?]\\s|\\n)(${escaped})\\s*([:—])\\s*`, "g")
+  return text.replace(re, "$1\n\n$2$3\n\n")
 }
 
 export function formatDescription(text: string): Section[] {
@@ -244,16 +246,28 @@ function splitFallback(text: string): string[] {
   const byNewline = text.split(/\n+/).map(s => s.trim()).filter(Boolean)
   if (byNewline.length >= 3) return byNewline
 
-  const sentences = text
-    .replace(/\s+/g, " ")
-    .split(/(?<=[.!?])\s+(?=[A-ZА-ЯЁ«"])/g)
-    .map(s => s.trim())
-    .filter(Boolean)
-  if (sentences.length <= 1) return [text.trim()]
+  // Разбиваем на предложения по паттерну «.!? пробел Заглавная».
+  // Вместо lookbehind (?<=) — захватываем завершающий пунктуационный символ
+  // в capture-группу и возвращаем его обратно при склейке через matchAll.
+  // Это совместимо с Safari < 16.4, где (?<=) кидает SyntaxError.
+  const normalized2 = text.replace(/\s+/g, " ")
+  const sentenceRe = /([.!?])\s+(?=[A-ZА-ЯЁ«"])/g
+  const sentences: string[] = []
+  let lastIdx = 0
+  let m: RegExpExecArray | null
+  // eslint-disable-next-line no-cond-assign
+  while ((m = sentenceRe.exec(normalized2)) !== null) {
+    // m.index — позиция начала совпадения (символ .!?)
+    // включаем пунктуацию в текущее предложение
+    sentences.push(normalized2.slice(lastIdx, m.index + 1).trim())
+    lastIdx = m.index + m[0].length
+  }
+  sentences.push(normalized2.slice(lastIdx).trim())
+  if (filteredSentences.length <= 1) return [text.trim()]
 
   const chunks: string[] = []
   let buf: string[] = []
-  for (const s of sentences) {
+  for (const s of filteredSentences) {
     buf.push(s)
     if (buf.length >= 3 || buf.join(" ").length > 280) {
       chunks.push(buf.join(" "))

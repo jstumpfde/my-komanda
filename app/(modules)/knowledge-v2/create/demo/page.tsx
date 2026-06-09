@@ -82,7 +82,9 @@ function contentToHtml(content: string): string {
   const inlineFormat = (raw: string): string => {
     let s = escapeHtml(raw)
     s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    s = s.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, "<em>$1</em>")
+    // Заменяем одиночные *text* на <em>text</em>. Lookbehind/lookahead убраны —
+    // на этом этапе ** уже обработаны строкой выше и в строке нет двойных звёздочек.
+    s = s.replace(/\*([^*]+)\*/g, "<em>$1</em>")
     return s
   }
 

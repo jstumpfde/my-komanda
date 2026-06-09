@@ -3,18 +3,20 @@
 // Публичный роут (без сессии), токен = candidates.token.
 
 import { NextRequest } from "next/server"
-import { eq, and, gte, lte, sql, isNull } from "drizzle-orm"
+import { eq, and, gte, lte, gt, sql, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, companies, calendarEvents, users } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { isShortId } from "@/lib/short-id"
 import type { CompanyHiringDefaults } from "@/lib/db/schema"
 import type { SchedulePageData, MethodConfig, SlotDay } from "@/lib/schedule-interview-types"
+import { sendToCompanyChannel } from "@/lib/telegram/send-to-company"
 
 export type { SchedulePageData, MethodConfig, SlotDay }
 
 // ─── Константы / дефолты ──────────────────────────────────────────────────────
 
+const DEFAULT_TZ     = "Europe/Moscow"
 const DEFAULT_DAYS   = ["mon","tue","wed","thu","fri"]
 const DEFAULT_FROM   = "09:00"
 const DEFAULT_TO     = "18:00"
@@ -25,18 +27,104 @@ const DAY_LABELS_RU  = ["Вс","Пн","Вт","Ср","Чт","Пт","Сб"]
 const MONTH_SHORT_RU = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"]
 
 const DEFAULT_METHODS: MethodConfig[] = [
-  { method:"phone",   label:"Телефон",       enabled:true,  duration:30, buffer:10 },
-  { method:"zoom",    label:"Zoom",          enabled:false, duration:60, buffer:10 },
-  { method:"telemost",label:"Яндекс Телемост",enabled:true, duration:60, buffer:10 },
-  { method:"meet",    label:"Google Meet",   enabled:false, duration:60, buffer:10 },
-  { method:"office",  label:"Офис",          enabled:true,  duration:60, buffer:15 },
+  { method:"phone",   label:"Телефон",        enabled:true,  duration:30, buffer:10 },
+  { method:"zoom",    label:"Zoom",           enabled:false, duration:60, buffer:10 },
+  { method:"telemost",label:"Яндекс Телемост",enabled:true,  duration:60, buffer:10 },
+  { method:"meet",    label:"Google Meet",    enabled:false, duration:60, buffer:10 },
+  { method:"office",  label:"Офис",           enabled:true,  duration:60, buffer:15 },
 ]
 
 const METHOD_LABELS: Record<string, string> = {
   phone:"Телефон", zoom:"Zoom", telemost:"Яндекс Телемост", meet:"Google Meet", office:"Офис"
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── TZ-хелперы (Intl, без сторонних пакетов) ────────────────────────────────
+
+/**
+ * Возвращает локальные части даты (год, месяц, день, часы, минуты, секунды)
+ * в заданной таймзоне. Использует Intl.DateTimeFormat — нет зависимостей.
+ */
+function getLocalParts(utcDate: Date, tz: string) {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit",  minute: "2-digit", second: "2-digit",
+    hour12: false,
+  })
+  const parts = fmt.formatToParts(utcDate)
+  const get = (t: string) => parseInt(parts.find(p => p.type === t)?.value ?? "0", 10)
+  return {
+    year:   get("year"),
+    month:  get("month"),   // 1-based
+    day:    get("day"),
+    hour:   get("hour"),
+    minute: get("minute"),
+    second: get("second"),
+  }
+}
+
+/**
+ * YYYY-MM-DD в локальной таймзоне (без конвертации через UTC-midnight-gotcha).
+ */
+function localDateToYMD(utcDate: Date, tz: string): string {
+  const { year, month, day } = getLocalParts(utcDate, tz)
+  return `${year}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`
+}
+
+/**
+ * JS-день недели (0=Вс) в локальной таймзоне.
+ */
+function localDayOfWeek(utcDate: Date, tz: string): number {
+  // Intl не отдаёт weekday напрямую как число — получаем через Date
+  // пересобранный в локальное полночь UTC.
+  const { year, month, day } = getLocalParts(utcDate, tz)
+  return new Date(Date.UTC(year, month - 1, day)).getDay()
+}
+
+/**
+ * Лейбл дня ("Пн, 9 июн") на основе локальных частей даты.
+ */
+function formatDayLabelTz(utcDate: Date, tz: string): string {
+  const { month, day } = getLocalParts(utcDate, tz)
+  const jsDay = localDayOfWeek(utcDate, tz)
+  const wd  = DAY_LABELS_RU[jsDay] ?? ""
+  const mon = MONTH_SHORT_RU[month - 1] ?? ""
+  return `${wd}, ${day} ${mon}`
+}
+
+/**
+ * Создаёт UTC-Date, соответствующий локальному YYYY-MM-DD HH:MM:00 в заданной TZ.
+ * Используется для записи startAt / endAt в БД и для сравнения с занятыми слотами.
+ */
+function localDateTimeToUtc(ymd: string, hhmm: string, tz: string): Date {
+  // Способ: создаём строку "YYYY-MM-DDTHH:MM:00" и интерпретируем в TZ через Intl.
+  // Для надёжности используем бинарный поиск оффсета (обходит DST-неоднозначность).
+  const [year, month, day]   = ymd.split("-").map(Number)
+  const [hour, minute]       = hhmm.split(":").map(Number)
+  // Стартовая точка: предполагаем UTC, потом корректируем.
+  const guess = new Date(Date.UTC(year!, month! - 1, day!, hour!, minute!, 0))
+  // Получаем локальные части этой UTC-точки и считаем сдвиг.
+  const local = getLocalParts(guess, tz)
+  const diffMin =
+    (local.hour - hour!) * 60 + (local.minute - minute!) +
+    ((local.day !== day! || local.month !== month! || local.year !== year!) ?
+      (local.year > year! || (local.year === year! && local.month > month!) ||
+       (local.year === year! && local.month === month! && local.day > day!) ? 1440 : -1440)
+      : 0)
+  return new Date(guess.getTime() - diffMin * 60_000)
+}
+
+/**
+ * Возвращает "YYYY-MM-DD" и "HH:MM" локальные значения UTC-даты в TZ.
+ */
+function utcToLocalDateTime(utcDate: Date, tz: string): { ymd: string; hhmm: string } {
+  const { year, month, day, hour, minute } = getLocalParts(utcDate, tz)
+  const ymd  = `${year}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`
+  const hhmm = `${String(hour).padStart(2,"0")}:${String(minute).padStart(2,"0")}`
+  return { ymd, hhmm }
+}
+
+// ─── Остальные helpers ────────────────────────────────────────────────────────
 
 function timeToMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(":").map(Number)
@@ -47,16 +135,6 @@ function minutesToTime(mins: number): string {
   const h = Math.floor(mins / 60)
   const m = mins % 60
   return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`
-}
-
-function formatDayLabel(date: Date): string {
-  const wd  = DAY_LABELS_RU[date.getDay()]
-  const mon = MONTH_SHORT_RU[date.getMonth()]
-  return `${wd}, ${date.getDate()} ${mon}`
-}
-
-function dateToYMD(d: Date): string {
-  return d.toISOString().slice(0,10)
 }
 
 // Генерирует слоты для одного дня по настройкам
@@ -110,14 +188,16 @@ export async function GET(
     // 2. Вакансия + компания
     const [row] = await db
       .select({
-        vacancyTitle:      vacancies.title,
-        companyId:         vacancies.companyId,
-        companyName:       companies.name,
-        companyBrandName:  companies.brandName,
-        companyLogo:       companies.logoUrl,
-        brandPrimary:      companies.brandPrimaryColor,
-        brandBg:           companies.brandBgColor,
-        hiringDefaults:    companies.hiringDefaultsJson,
+        vacancyTitle:         vacancies.title,
+        companyId:            vacancies.companyId,
+        companyName:          companies.name,
+        companyBrandName:     companies.brandName,
+        companyLogo:          companies.logoUrl,
+        brandPrimary:         companies.brandPrimaryColor,
+        brandBg:              companies.brandBgColor,
+        hiringDefaults:       companies.hiringDefaultsJson,
+        // #3.4 Fallback адреса: companies.office_address
+        companyOfficeAddress: companies.officeAddress,
       })
       .from(vacancies)
       .innerJoin(companies, eq(vacancies.companyId, companies.id))
@@ -172,10 +252,12 @@ export async function GET(
       ?? enabledMethods[0]?.duration
       ?? 60
 
-    // 5. Уже занятые слоты этой компании (tye='interview', ближайшие 14 дней)
+    // 5. Уже занятые слоты этой компании (type='interview', ближайшие 16 дней)
+    // Берём UTC-границы с запасом (+16 д), чтобы не срезать последний день в
+    // любой TZ (максимальный оффсет UTC+14).
     const now   = new Date()
     const limit = new Date(now)
-    limit.setDate(limit.getDate() + 14)
+    limit.setDate(limit.getDate() + 16)
 
     const bookedEvents = await db
       .select({
@@ -190,29 +272,29 @@ export async function GET(
         lte(calendarEvents.startAt, limit),
       ))
 
-    // Множество занятых "YYYY-MM-DD HH:MM" по UTC (упрощение — без TZ кандидата)
+    // Занятые слоты: ключ "YYYY-MM-DD T HH:MM" в локальной TZ компании.
     type BookedByDay = Record<string, number>
     const bookedCountByDay: BookedByDay = {}
     const bookedSlotSet   = new Set<string>()
 
     for (const evt of bookedEvents) {
-      const d = dateToYMD(evt.startAt)
-      bookedCountByDay[d] = (bookedCountByDay[d] ?? 0) + 1
-      const hhmm = evt.startAt.toISOString().slice(11, 16)
-      bookedSlotSet.add(`${d}T${hhmm}`)
+      const { ymd, hhmm } = utcToLocalDateTime(evt.startAt, timezone)
+      bookedCountByDay[ymd] = (bookedCountByDay[ymd] ?? 0) + 1
+      bookedSlotSet.add(`${ymd}T${hhmm}`)
     }
 
-    // 6. Генерируем слоты на 14 дней
+    // 6. Генерируем слоты на 14 рабочих дней в TZ компании.
+    // checkDate продвигаем как UTC-midnight-эквивалент локального дня:
+    // каждый шаг — +24ч (DST-безопасно для серверных расчётов),
+    // день недели и лейбл определяем через localDayOfWeek/formatDayLabelTz.
     const days: SlotDay[] = []
-    const checkDate = new Date(now)
-    // Начинаем со следующего дня, а не с сегодня
-    checkDate.setDate(checkDate.getDate() + 1)
-    checkDate.setHours(0, 0, 0, 0)
+    // «Завтра» в TZ компании: начинаем с now + 24h и определяем локальный день.
+    const checkDate = new Date(now.getTime() + 24 * 60 * 60 * 1000)
 
-    for (let i = 0; i < 14 && days.length < 14; i++) {
-      const jsDay = checkDate.getDay()
+    for (let i = 0; i < 21 && days.length < 14; i++) {
+      const jsDay = localDayOfWeek(checkDate, timezone)
       if (enabledJsDays.has(jsDay)) {
-        const ymd = dateToYMD(checkDate)
+        const ymd = localDateToYMD(checkDate, timezone)
         const dayBooked = bookedCountByDay[ymd] ?? 0
 
         if (dayBooked < maxPerDay) {
@@ -221,7 +303,7 @@ export async function GET(
             duration: defaultDuration,
           })
 
-          // Исключаем уже занятые конкретные слоты
+          // Исключаем уже занятые конкретные слоты (ключи в локальной TZ)
           const freeSlots = rawSlots.filter(t => !bookedSlotSet.has(`${ymd}T${t}`))
 
           // Применяем maxPerDay как лимит на свободные слоты в этот день
@@ -231,17 +313,20 @@ export async function GET(
           if (available.length > 0) {
             days.push({
               date:  ymd,
-              label: formatDayLabel(checkDate),
+              label: formatDayLabelTz(checkDate, timezone),
               slots: available,
             })
           }
         }
       }
-      checkDate.setDate(checkDate.getDate() + 1)
+      checkDate.setTime(checkDate.getTime() + 24 * 60 * 60 * 1000)
     }
 
     // 7. Собираем ответ
     const firstName = (candidate.name ?? "").split(" ")[1] ?? (candidate.name ?? "").split(" ")[0] ?? ""
+
+    // #3.4 Fallback адреса: сначала из настроек расписания, потом из профиля компании.
+    const officeAddress = sched.officeAddress ?? row.companyOfficeAddress ?? null
 
     const data: SchedulePageData = {
       candidateName:     candidate.name ?? "",
@@ -252,7 +337,7 @@ export async function GET(
       brandPrimaryColor: row.brandPrimary ?? "#3b82f6",
       brandBgColor:      row.brandBg      ?? "#f0f4ff",
       timezone,
-      officeAddress:     sched.officeAddress ?? null,
+      officeAddress,
       methods:           enabledMethods,
       defaultMethod,
       days,
@@ -309,9 +394,12 @@ export async function POST(
     // 2. Вакансия + компания + первый user компании (для createdBy)
     const [row] = await db
       .select({
-        vacancyTitle:   vacancies.title,
-        companyId:      vacancies.companyId,
-        hiringDefaults: companies.hiringDefaultsJson,
+        vacancyTitle:         vacancies.title,
+        vacancyId:            vacancies.id,
+        companyId:            vacancies.companyId,
+        hiringDefaults:       companies.hiringDefaultsJson,
+        // #3.4 Fallback адреса из профиля компании
+        companyOfficeAddress: companies.officeAddress,
       })
       .from(vacancies)
       .innerJoin(companies, eq(vacancies.companyId, companies.id))
@@ -332,20 +420,24 @@ export async function POST(
 
     if (!companyUser) return apiError("Компания не настроена", 404)
 
-    // 3. Определяем продолжительность из настроек
-    const sched = (row.hiringDefaults as CompanyHiringDefaults)?.schedule ?? {}
+    // 3. Разбираем настройки расписания
+    const sched   = (row.hiringDefaults as CompanyHiringDefaults)?.schedule ?? {}
+    const timezone = sched.timezone ?? DEFAULT_TZ
+
+    // Длительность метода
     let duration = 60
     if (sched.interviewMethodConfigs) {
       const mc = sched.interviewMethodConfigs.find(c => c.method === body.method)
       if (mc) duration = mc.duration
     }
 
-    // 4. Строим startAt / endAt
-    const startAt = new Date(`${body.date}T${body.time}:00`)
+    // 4. Строим startAt / endAt.
+    // body.date + body.time — локальное время в TZ компании; конвертируем в UTC.
+    const startAt = localDateTimeToUtc(body.date, body.time, timezone)
     const endAt   = new Date(startAt.getTime() + duration * 60_000)
 
-    // 5. Идемпотентность: проверяем, не забронирован ли уже этот слот этим кандидатом
-    const [existing] = await db
+    // 5. Идемпотентность по этому же слоту (candidate + startAt).
+    const [existingSlot] = await db
       .select({ id: calendarEvents.id })
       .from(calendarEvents)
       .where(and(
@@ -356,17 +448,33 @@ export async function POST(
       ))
       .limit(1)
 
-    if (existing) {
-      return apiSuccess({ alreadyBooked: true, eventId: existing.id })
+    if (existingSlot) {
+      return apiSuccess({ alreadyBooked: true, eventId: existingSlot.id })
     }
 
-    // 6. Создаём событие
-    const methodLabel = METHOD_LABELS[body.method] ?? body.method
-    const interviewFormat = ["office"].includes(body.method) ? "Офис" : "Онлайн"
-    const location =
-      body.method === "office" && sched.officeAddress
-        ? sched.officeAddress
-        : null
+    // #3.3 Перенос: если у кандидата уже есть будущий interview-event — отменяем его.
+    // Идемпотентно: не трогаем прошедшие события и только что созданный (выше проверено).
+    const nowForCancel = new Date()
+    await db
+      .update(calendarEvents)
+      .set({ status: "cancelled" })
+      .where(and(
+        eq(calendarEvents.companyId,   row.companyId),
+        eq(calendarEvents.candidateId, candidate.id),
+        eq(calendarEvents.type,        "interview"),
+        eq(calendarEvents.status,      "confirmed"),
+        gt(calendarEvents.startAt,     nowForCancel),
+      ))
+
+    // 6. Создаём новое событие
+    const methodLabel    = METHOD_LABELS[body.method] ?? body.method
+    const interviewFormat = body.method === "office" ? "Офис" : "Онлайн"
+
+    // #3.4 Fallback адреса: сначала из настроек расписания, потом из профиля компании.
+    // Для онлайн-методов адрес не нужен (там нужна ссылка на конфу, которую HR ставит вручную).
+    const location = body.method === "office"
+      ? (sched.officeAddress ?? row.companyOfficeAddress ?? null)
+      : null
 
     const [event] = await db
       .insert(calendarEvents)
@@ -389,7 +497,7 @@ export async function POST(
       })
       .returning({ id: calendarEvents.id })
 
-    // 7. Переводим кандидата в стадию scheduled (если ещё не там)
+    // 7. Переводим кандидата в стадию scheduled (только если ещё не дальше по воронке)
     await db
       .update(candidates)
       .set({ stage: "scheduled", updatedAt: new Date() })
@@ -397,6 +505,19 @@ export async function POST(
         eq(candidates.id, candidate.id),
         sql`${candidates.stage} NOT IN ('scheduled','interview','interviewed','final_decision','offer','hired','rejected')`,
       ))
+
+    // 8. #3.2 Уведомление HR в Telegram при брони
+    const localStart = utcToLocalDateTime(startAt, timezone)
+    const tzLabel    = timezone === "Europe/Moscow" ? "МСК" : timezone
+    void sendToCompanyChannel(
+      row.companyId,
+      `📅 <b>Новая запись на интервью</b>\n` +
+      `👤 Кандидат: ${candidate.name ?? "—"}\n` +
+      `💼 Вакансия: ${row.vacancyTitle}\n` +
+      `🕐 Дата и время: ${localStart.ymd} ${localStart.hhmm} (${tzLabel})\n` +
+      `📍 Способ: ${methodLabel}` +
+      (location ? `\n🏢 Адрес: ${location}` : ""),
+    ).catch(() => {})
 
     return apiSuccess({ booked: true, eventId: event.id }, 201)
   } catch (err) {
