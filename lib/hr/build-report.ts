@@ -157,7 +157,9 @@ export async function buildReport(companyId: string, opts: BuildReportOptions = 
       hired:        sql<number>`count(*) filter (where ${candidates.stage} = 'hired')`.mapWith(Number),
       rejected:     sql<number>`count(*) filter (where ${candidates.stage} = 'rejected')`.mapWith(Number),
       selfRejected: sql<number>`count(*) filter (where ${candidates.rejectionInitiator} = 'candidate')`.mapWith(Number),
-      anketa:       sql<number>`count(*) filter (where ${candidates.stage} in ('anketa_filled','anketa'))`.mapWith(Number),
+      // «Анкет» = демо + тест: кандидаты на стадиях демо и тестового задания
+      // (anketa_filled оставляем в наборе — это часть того же «анкетного» этапа).
+      anketa:       sql<number>`count(*) filter (where ${candidates.stage} in ('demo_opened','demo','anketa_filled','anketa','test_task_sent','test_task_done','test_passed','test_failed'))`.mapWith(Number),
       decision:     sql<number>`count(*) filter (where ${candidates.stage} in ('decision','final_decision'))`.mapWith(Number),
       interview:    sql<number>`count(*) filter (where ${candidates.stage} in ('scheduled','interview','interviewed'))`.mapWith(Number),
     })
