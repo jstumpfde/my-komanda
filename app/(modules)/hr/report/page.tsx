@@ -79,7 +79,7 @@ function ShareButton({ period, vacancyId, from, to }: {
           Поделиться
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-[380px] p-4">
+      <PopoverContent align="end" className="w-[min(92vw,380px)] p-4">
         <div className="flex items-center gap-2 mb-1">
           <Share2 className="w-4 h-4 text-violet-500" />
           <span className="font-semibold text-sm">Публичная ссылка</span>
@@ -209,7 +209,7 @@ function ReportContent() {
       <SidebarInset>
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
-          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+          <div className="py-4 px-3 sm:py-6 sm:px-8 lg:px-14">
             <ReportView
               data={data}
               loading={loading}

@@ -93,7 +93,7 @@ export default function PublicReportPage() {
   return (
     <div className="min-h-screen bg-background">
       <div
-        className={tv ? "mx-auto max-w-[1600px] px-10 py-10" : "mx-auto max-w-[1280px] px-6 py-8"}
+        className={tv ? "mx-auto max-w-[1600px] px-4 py-6 sm:px-10 sm:py-10" : "mx-auto max-w-[1280px] px-3 py-5 sm:px-6 sm:py-8"}
       >
         <ReportView
           data={data}

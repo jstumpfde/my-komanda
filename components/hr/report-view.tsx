@@ -299,41 +299,76 @@ function VacancyTable({ rows, loading, tv }: { rows: VacancyRow[]; loading: bool
   const thR = `text-center py-2 font-medium text-muted-foreground ${tv ? "text-sm" : "text-xs"}`
   const td = tv ? "text-base" : "text-sm"
 
+  // Метрики строки — единый источник для таблицы (десктоп) и карточек (мобайл).
+  const metrics = (r: VacancyRow) => [
+    { label: "Откликов", value: r.total, cls: "font-medium" },
+    { label: "Анкет",    value: r.anketa, cls: "" },
+    { label: "Собес.",   value: r.interview, cls: "" },
+    { label: "Решение",  value: r.decision, cls: "text-violet-600" },
+    { label: "Нанято",   value: r.hired, cls: "text-emerald-600 font-medium" },
+    { label: "Отказов",  value: r.rejected, cls: "text-rose-500" },
+    { label: "Сам отказ.", value: r.selfRejected, cls: "text-amber-600" },
+  ]
+
   return (
-    <div className="overflow-x-auto">
-      <table className={`w-full ${td}`}>
-        <thead>
-          <tr className="border-b">
-            <th className={`${th} pr-4`}>Вакансия</th>
-            <th className={`${thR} px-3`}>Статус</th>
-            <th className={`${thR} px-3`}>Опубл.</th>
-            <th className={`${thR} px-3`}>Откликов</th>
-            <th className={`${thR} px-3`}>Анкет</th>
-            <th className={`${thR} px-3`}>Собес.</th>
-            <th className={`${thR} px-3`}>Решение</th>
-            <th className={`${thR} px-3`}>Нанято</th>
-            <th className={`${thR} px-3`}>Отказов</th>
-            <th className={`${thR} pl-3`}>Сам отказ.</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(r => (
-            <tr key={r.vacancyId} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-              <td className={`py-2.5 pr-4 font-medium truncate ${tv ? "max-w-[420px]" : "max-w-[280px]"}`}>{r.vacancyTitle}</td>
-              <td className="py-2.5 px-3"><StatusCell row={r} /></td>
-              <td className="py-2.5 px-3 text-center tabular-nums text-muted-foreground whitespace-nowrap">{publishedLabel(r.publishedDaysAgo)}</td>
-              <td className="py-2.5 px-3 text-center tabular-nums font-medium">{r.total}</td>
-              <td className="py-2.5 px-3 text-center tabular-nums">{r.anketa}</td>
-              <td className="py-2.5 px-3 text-center tabular-nums">{r.interview}</td>
-              <td className="py-2.5 px-3 text-center tabular-nums text-violet-600">{r.decision}</td>
-              <td className="py-2.5 px-3 text-center tabular-nums text-emerald-600 font-medium">{r.hired}</td>
-              <td className="py-2.5 px-3 text-center tabular-nums text-rose-500">{r.rejected}</td>
-              <td className="py-2.5 pl-3 text-center tabular-nums text-amber-600">{r.selfRejected}</td>
+    <>
+      {/* Десктоп: таблица */}
+      <div className="hidden md:block overflow-x-auto">
+        <table className={`w-full ${td}`}>
+          <thead>
+            <tr className="border-b">
+              <th className={`${th} pr-4`}>Вакансия</th>
+              <th className={`${thR} px-3`}>Статус</th>
+              <th className={`${thR} px-3`}>Опубл.</th>
+              <th className={`${thR} px-3`}>Откликов</th>
+              <th className={`${thR} px-3`}>Анкет</th>
+              <th className={`${thR} px-3`}>Собес.</th>
+              <th className={`${thR} px-3`}>Решение</th>
+              <th className={`${thR} px-3`}>Нанято</th>
+              <th className={`${thR} px-3`}>Отказов</th>
+              <th className={`${thR} pl-3`}>Сам отказ.</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.vacancyId} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                <td className={`py-2.5 pr-4 font-medium truncate ${tv ? "max-w-[420px]" : "max-w-[280px]"}`}>{r.vacancyTitle}</td>
+                <td className="py-2.5 px-3"><StatusCell row={r} /></td>
+                <td className="py-2.5 px-3 text-center tabular-nums text-muted-foreground whitespace-nowrap">{publishedLabel(r.publishedDaysAgo)}</td>
+                <td className="py-2.5 px-3 text-center tabular-nums font-medium">{r.total}</td>
+                <td className="py-2.5 px-3 text-center tabular-nums">{r.anketa}</td>
+                <td className="py-2.5 px-3 text-center tabular-nums">{r.interview}</td>
+                <td className="py-2.5 px-3 text-center tabular-nums text-violet-600">{r.decision}</td>
+                <td className="py-2.5 px-3 text-center tabular-nums text-emerald-600 font-medium">{r.hired}</td>
+                <td className="py-2.5 px-3 text-center tabular-nums text-rose-500">{r.rejected}</td>
+                <td className="py-2.5 pl-3 text-center tabular-nums text-amber-600">{r.selfRejected}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Мобайл: карточки по вакансии */}
+      <div className="md:hidden space-y-3">
+        {rows.map(r => (
+          <div key={r.vacancyId} className="rounded-xl border p-3">
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <span className="font-medium text-sm leading-snug">{r.vacancyTitle}</span>
+              <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">{publishedLabel(r.publishedDaysAgo)}</span>
+            </div>
+            <div className="mb-3"><StatusCell row={r} /></div>
+            <div className="grid grid-cols-3 gap-2">
+              {metrics(r).map(m => (
+                <div key={m.label} className="rounded-lg bg-muted/30 px-2 py-1.5 text-center">
+                  <div className="text-[10px] text-muted-foreground leading-none mb-1">{m.label}</div>
+                  <div className={`text-base tabular-nums ${m.cls}`}>{m.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
   )
 }
 

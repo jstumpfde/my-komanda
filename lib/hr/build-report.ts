@@ -155,8 +155,11 @@ export async function buildReport(companyId: string, opts: BuildReportOptions = 
       hhExpiresAt:  vacancies.hhExpiresAt,
       total:        count(),
       hired:        sql<number>`count(*) filter (where ${candidates.stage} = 'hired')`.mapWith(Number),
-      rejected:     sql<number>`count(*) filter (where ${candidates.stage} = 'rejected')`.mapWith(Number),
-      selfRejected: sql<number>`count(*) filter (where ${candidates.rejectionInitiator} = 'candidate')`.mapWith(Number),
+      // «Отказов» = «Мы отказали» — все отказы, КРОМЕ инициированных кандидатом
+      // (включая авто-отказы AI/стоп-факторов = это тоже наш отказ).
+      rejected:     sql<number>`count(*) filter (where ${candidates.stage} = 'rejected' and ${candidates.rejectionInitiator} is distinct from 'candidate')`.mapWith(Number),
+      // «Сам отказ» = кандидат сам отказался.
+      selfRejected: sql<number>`count(*) filter (where ${candidates.stage} = 'rejected' and ${candidates.rejectionInitiator} = 'candidate')`.mapWith(Number),
       // «Анкет» = демо + тест: кандидаты на стадиях демо и тестового задания
       // (anketa_filled оставляем в наборе — это часть того же «анкетного» этапа).
       anketa:       sql<number>`count(*) filter (where ${candidates.stage} in ('demo_opened','demo','anketa_filled','anketa','test_task_sent','test_task_done','test_passed','test_failed'))`.mapWith(Number),
