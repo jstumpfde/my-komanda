@@ -24,6 +24,8 @@ const PUBLIC_PREFIXES = [
   "/login",
   "/dev-login",
   "/register",
+  "/forgot-password",   // страница запроса сброса пароля (без логина)
+  "/reset-password",    // страница установки нового пароля по токену из письма
   "/landing",
   "/vacancy/",
   "/candidate/",
