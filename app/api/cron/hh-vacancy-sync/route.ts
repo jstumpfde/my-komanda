@@ -14,7 +14,7 @@ import { and, eq, isNull, isNotNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancies } from "@/lib/db/schema"
 import { getValidToken } from "@/lib/hh-helpers"
-import { getVacancy } from "@/lib/hh-api"
+import { getVacancy, getNegotiationCounters } from "@/lib/hh-api"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 
@@ -59,9 +59,11 @@ async function handle(req: NextRequest) {
           // archived есть только в детальном объекте; если поле не пришло —
           // не трогаем флаг (консервативно, чтобы не выставить ложный архив).
           if (typeof detail.archived !== "boolean") { errors.push(`no_archived_field:${v.hhVacancyId}`); continue }
+          // Счётчики воронки hh (точные числа из UI hh) — для отчёта.
+          const counters = await getNegotiationCounters(token.accessToken, String(v.hhVacancyId)).catch(() => null)
           await db
             .update(vacancies)
-            .set({ hhArchived: detail.archived, hhSyncedAt: new Date() })
+            .set({ hhArchived: detail.archived, hhSyncedAt: new Date(), ...(counters ? { hhFunnelJson: counters } : {}) })
             .where(eq(vacancies.id, v.id))
           vacanciesUpdated += 1
           touched = true

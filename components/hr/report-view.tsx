@@ -50,7 +50,7 @@ export interface VacancyRow {
   lifecycle: "active" | "paused" | "closed"
   closedAt: string | null; hhArchived: boolean | null; hhExpiresAt: string | null
   total: number; hired: number; rejected: number; selfRejected: number
-  anketa: number; decision: number; interview: number
+  demo: number; test: number; decision: number; interview: number
 }
 export interface RejectionCategory { id: string; label: string; count: number }
 export interface RejectionInitiator { id: string; label: string; count: number }
@@ -302,7 +302,8 @@ function VacancyTable({ rows, loading, tv }: { rows: VacancyRow[]; loading: bool
   // Метрики строки — единый источник для таблицы (десктоп) и карточек (мобайл).
   const metrics = (r: VacancyRow) => [
     { label: "Откликов", value: r.total, cls: "font-medium" },
-    { label: "Анкет",    value: r.anketa, cls: "" },
+    { label: "Демо",     value: r.demo, cls: "" },
+    { label: "Тест",     value: r.test, cls: "" },
     { label: "Собес.",   value: r.interview, cls: "" },
     { label: "Решение",  value: r.decision, cls: "text-violet-600" },
     { label: "Нанято",   value: r.hired, cls: "text-emerald-600 font-medium" },
@@ -321,7 +322,8 @@ function VacancyTable({ rows, loading, tv }: { rows: VacancyRow[]; loading: bool
               <th className={`${thR} px-3`}>Статус</th>
               <th className={`${thR} px-3`}>Опубл.</th>
               <th className={`${thR} px-3`}>Откликов</th>
-              <th className={`${thR} px-3`}>Анкет</th>
+              <th className={`${thR} px-3`}>Демо</th>
+              <th className={`${thR} px-3`}>Тест</th>
               <th className={`${thR} px-3`}>Собес.</th>
               <th className={`${thR} px-3`}>Решение</th>
               <th className={`${thR} px-3`}>Нанято</th>
@@ -336,7 +338,8 @@ function VacancyTable({ rows, loading, tv }: { rows: VacancyRow[]; loading: bool
                 <td className="py-2.5 px-3"><StatusCell row={r} /></td>
                 <td className="py-2.5 px-3 text-center tabular-nums text-muted-foreground whitespace-nowrap">{publishedLabel(r.publishedDaysAgo)}</td>
                 <td className="py-2.5 px-3 text-center tabular-nums font-medium">{r.total}</td>
-                <td className="py-2.5 px-3 text-center tabular-nums">{r.anketa}</td>
+                <td className="py-2.5 px-3 text-center tabular-nums">{r.demo}</td>
+                <td className="py-2.5 px-3 text-center tabular-nums">{r.test}</td>
                 <td className="py-2.5 px-3 text-center tabular-nums">{r.interview}</td>
                 <td className="py-2.5 px-3 text-center tabular-nums text-violet-600">{r.decision}</td>
                 <td className="py-2.5 px-3 text-center tabular-nums text-emerald-600 font-medium">{r.hired}</td>

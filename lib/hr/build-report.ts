@@ -153,18 +153,17 @@ export async function buildReport(companyId: string, opts: BuildReportOptions = 
       closedAt:     vacancies.closedAt,
       hhArchived:   vacancies.hhArchived,
       hhExpiresAt:  vacancies.hhExpiresAt,
+      hhFunnel:     vacancies.hhFunnelJson,
+      // Платформенные подсчёты (fallback для вакансий без hh-счётчиков).
       total:        count(),
       hired:        sql<number>`count(*) filter (where ${candidates.stage} = 'hired')`.mapWith(Number),
-      // «Отказов» = «Мы отказали» — все отказы, КРОМЕ инициированных кандидатом
-      // (включая авто-отказы AI/стоп-факторов = это тоже наш отказ).
       rejected:     sql<number>`count(*) filter (where ${candidates.stage} = 'rejected' and ${candidates.rejectionInitiator} is distinct from 'candidate')`.mapWith(Number),
-      // «Сам отказ» = кандидат сам отказался.
       selfRejected: sql<number>`count(*) filter (where ${candidates.stage} = 'rejected' and ${candidates.rejectionInitiator} = 'candidate')`.mapWith(Number),
-      // «Анкет» = УНИКАЛЬНЫЕ кандидаты, прошедшие демо ИЛИ сдавшие тест
-      // (по факту завершённости, без двойного счёта тех, кто сделал и то, и то).
-      anketa: sql<number>`count(*) filter (where ${candidates.demoProgressJson} ->> 'completedAt' is not null or exists (select 1 from test_submissions ts where ts.candidate_id = ${candidates.id}))`.mapWith(Number),
-      decision:     sql<number>`count(*) filter (where ${candidates.stage} in ('decision','final_decision'))`.mapWith(Number),
       interview:    sql<number>`count(*) filter (where ${candidates.stage} in ('scheduled','interview','interviewed'))`.mapWith(Number),
+      decision:     sql<number>`count(*) filter (where ${candidates.stage} in ('decision','final_decision'))`.mapWith(Number),
+      // Демо и Тест — отдельные платформенные показатели (по факту завершённости).
+      demoCompleted: sql<number>`count(*) filter (where ${candidates.demoProgressJson} ->> 'completedAt' is not null)`.mapWith(Number),
+      testDone:      sql<number>`count(*) filter (where exists (select 1 from test_submissions ts where ts.candidate_id = ${candidates.id}))`.mapWith(Number),
     })
       .from(candidates)
       .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
@@ -175,7 +174,7 @@ export async function buildReport(companyId: string, opts: BuildReportOptions = 
         ...vacancyFilter,
         ...candidateDateFilters,
       ))
-      .groupBy(vacancies.id, vacancies.title, vacancies.createdAt, vacancies.status, vacancies.closedAt, vacancies.hhArchived, vacancies.hhExpiresAt),
+      .groupBy(vacancies.id, vacancies.title, vacancies.createdAt, vacancies.status, vacancies.closedAt, vacancies.hhArchived, vacancies.hhExpiresAt, vacancies.hhFunnelJson),
 
     // 4. Собеседования — за период
     db.select({
@@ -304,8 +303,6 @@ export async function buildReport(companyId: string, opts: BuildReportOptions = 
     if (row.stage) stageTotals[row.stage] = Number(row.cnt)
   }
 
-  const totalCandidates = vacancyRows.reduce((s, r) => s + Number(r.total), 0)
-
   const LEGACY_EXTRA = ["demo", "interviewed", "final_decision", "offer", "wants_contact", "talent_pool"]
   const funnelStages = [
     ...ALL_STAGE_SLUGS.map(slug => ({
@@ -370,23 +367,30 @@ export async function buildReport(companyId: string, opts: BuildReportOptions = 
 
   // ─── По вакансиям ─────────────────────────────────────────────────
   const nowMs = Date.now()
-  const vacancyTable = vacancyRows.map(r => ({
-    vacancyId: r.vacancyId,
-    vacancyTitle: r.vacancyTitle,
-    publishedDaysAgo: r.createdAt ? Math.max(0, Math.floor((nowMs - new Date(r.createdAt).getTime()) / 86_400_000)) : null,
-    lifecycle: getVacancyLifecycle(r.status),          // active | paused | closed
-    closedAt: r.closedAt ? new Date(r.closedAt).toISOString() : null,
-    hhArchived: r.hhArchived ?? null,
-    hhExpiresAt: r.hhExpiresAt ? new Date(r.hhExpiresAt).toISOString() : null,
-    total: Number(r.total),
-    hired: Number(r.hired),
-    rejected: Number(r.rejected),
-    selfRejected: Number(r.selfRejected),
-    // «Анкет» = уникальные кандидаты (демо пройдено ИЛИ тест сдан).
-    anketa: Number(r.anketa),
-    decision: Number(r.decision),
-    interview: Number(r.interview),
-  }))
+  const vacancyTable = vacancyRows.map(r => {
+    // hh-счётчики (точные числа из hh UI), если синканы. Иначе платформенные.
+    const hh = (r.hhFunnel && typeof r.hhFunnel === "object") ? r.hhFunnel as Record<string, number> : null
+    const hhSum = hh ? Object.values(hh).reduce((s, v) => s + (Number(v) || 0), 0) : 0
+    return {
+      vacancyId: r.vacancyId,
+      vacancyTitle: r.vacancyTitle,
+      publishedDaysAgo: r.createdAt ? Math.max(0, Math.floor((nowMs - new Date(r.createdAt).getTime()) / 86_400_000)) : null,
+      lifecycle: getVacancyLifecycle(r.status),          // active | paused | closed
+      closedAt: r.closedAt ? new Date(r.closedAt).toISOString() : null,
+      hhArchived: r.hhArchived ?? null,
+      hhExpiresAt: r.hhExpiresAt ? new Date(r.hhExpiresAt).toISOString() : null,
+      // hh-колонки: из счётчиков hh (точь-в-точь как hh), иначе платформенные.
+      total:        hh ? hhSum : Number(r.total),
+      interview:    hh ? Number(hh.interview ?? 0) : Number(r.interview),
+      hired:        hh ? Number(hh.hired ?? 0) : Number(r.hired),
+      rejected:     hh ? Number(hh.discard_by_employer ?? 0) : Number(r.rejected),
+      selfRejected: hh ? Number(hh.discard_by_applicant ?? 0) : Number(r.selfRejected),
+      // Демо и Тест — всегда с платформы (по факту завершённости).
+      demo: Number(r.demoCompleted),
+      test: Number(r.testDone),
+      decision: Number(r.decision),
+    }
+  })
 
   // ─── Автоматические причины отказа ─────────────────────────────────
   const autoReasonMap: Record<string, number> = {}
@@ -398,6 +402,7 @@ export async function buildReport(companyId: string, opts: BuildReportOptions = 
     .map(([id, cnt]) => ({ id, label: autoReasonLabel(id), count: cnt }))
     .sort((a, b) => b.count - a.count)
 
+  const totalCandidates = vacancyTable.reduce((s, r) => s + r.total, 0)
   const totalRejected = vacancyTable.reduce((s, r) => s + r.rejected, 0)
   const totalHired    = vacancyTable.reduce((s, r) => s + r.hired, 0)
 
@@ -451,7 +456,9 @@ export async function buildReport(companyId: string, opts: BuildReportOptions = 
     kpi: {
       activeVacancies:    Number(activeVacanciesRow?.value ?? 0),
       totalCandidates,
-      interviewScheduled: interviewTotal,
+      // «Назначено интервью» = сумма Собес по вакансиям (hh-счётчики), чтобы
+      // совпадало с таблицей. Календарные собеседования — в блоке «Собеседования».
+      interviewScheduled: vacancyTable.reduce((s, r) => s + r.interview, 0),
       interviewConducted,
       totalRejected,
       totalHired,
