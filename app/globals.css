@@ -184,6 +184,14 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Safari-фикс конструктора воронки: при горизонтальном overflow страницы
+     живой Safari привязывает position:fixed; right:0 (SheetContent) к правому
+     краю ДОКУМЕНТА, а не окна — боковая панель уезжает за экран (видно только
+     затемнение). Запрещаем горизонтальную прокрутку страницы. overflow-x:clip
+     (НЕ hidden) не создаёт scroll-контейнер и не ломает sticky-шапки. */
+  html, body {
+    overflow-x: clip;
+  }
 }
 
 /* Динамический фон инпутов — читает --input напрямую, работает в dark/warm */
