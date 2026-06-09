@@ -306,8 +306,8 @@ function VacancyTable({ rows, loading, tv }: { rows: VacancyRow[]; loading: bool
     { label: "Собес.",   value: r.interview, cls: "" },
     { label: "Решение",  value: r.decision, cls: "text-violet-600" },
     { label: "Нанято",   value: r.hired, cls: "text-emerald-600 font-medium" },
-    { label: "Отказов",  value: r.rejected, cls: "text-rose-500" },
-    { label: "Сам отказ.", value: r.selfRejected, cls: "text-amber-600" },
+    { label: "Не подходит", value: r.rejected, cls: "text-rose-500" },
+    { label: "Канд. отказался", value: r.selfRejected, cls: "text-amber-600" },
   ]
 
   return (
@@ -325,8 +325,8 @@ function VacancyTable({ rows, loading, tv }: { rows: VacancyRow[]; loading: bool
               <th className={`${thR} px-3`}>Собес.</th>
               <th className={`${thR} px-3`}>Решение</th>
               <th className={`${thR} px-3`}>Нанято</th>
-              <th className={`${thR} px-3`}>Отказов</th>
-              <th className={`${thR} pl-3`}>Сам отказ.</th>
+              <th className={`${thR} px-3`}>Не подходит</th>
+              <th className={`${thR} pl-3`}>Канд. отказался</th>
             </tr>
           </thead>
           <tbody>
