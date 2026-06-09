@@ -88,16 +88,31 @@ const COLORS = {
 
 // ─── Карточки/обёртки ─────────────────────────────────────────────────────────
 
-function KpiCard({ icon: Icon, label, value, bg, tv }: {
-  icon: React.ElementType; label: string; value: number | string; bg: string; tv?: boolean
+// Цвета KPI-плашек. На мобиле — мягкий тон (компактно, не «кричит»),
+// с sm+ — насыщенная цветная плашка как раньше. Классы литеральные:
+// Tailwind не видит динамическую интерполяцию, поэтому держим строки целиком.
+const KPI_COLORS: Record<string, string> = {
+  emerald: "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 sm:bg-emerald-500 sm:text-white dark:sm:bg-emerald-500 dark:sm:text-white",
+  blue:    "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 sm:bg-blue-500 sm:text-white dark:sm:bg-blue-500 dark:sm:text-white",
+  violet:  "bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 sm:bg-violet-500 sm:text-white dark:sm:bg-violet-500 dark:sm:text-white",
+  indigo:  "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 sm:bg-indigo-500 sm:text-white dark:sm:bg-indigo-500 dark:sm:text-white",
+  rose:    "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 sm:bg-rose-500 sm:text-white dark:sm:bg-rose-500 dark:sm:text-white",
+}
+
+function KpiCard({ icon: Icon, label, shortLabel, value, color, tv }: {
+  icon: React.ElementType; label: string; shortLabel?: string; value: number | string; color: string; tv?: boolean
 }) {
   return (
-    <div className={`rounded-xl shadow-sm hover:shadow-md transition-shadow ${tv ? "p-6" : "p-4"} text-white ${bg}`}>
-      <div className="flex items-center gap-1.5 mb-2">
-        <Icon className={`${tv ? "w-6 h-6" : "w-4 h-4"} text-white`} />
-        <span className={`${tv ? "text-lg" : "text-sm"} font-semibold text-white`}>{label}</span>
+    <div className={`rounded-xl shadow-sm hover:shadow-md transition-shadow ${tv ? "p-6" : "p-3 sm:p-4"} ${KPI_COLORS[color] ?? ""}`}>
+      <div className={`flex items-center gap-1.5 ${tv ? "mb-2" : "mb-1 sm:mb-2"}`}>
+        <Icon className={tv ? "w-6 h-6" : "w-4 h-4 shrink-0"} />
+        <span className={`font-semibold leading-tight ${tv ? "text-lg" : "text-xs sm:text-sm"}`}>
+          {shortLabel
+            ? (<><span className="sm:hidden">{shortLabel}</span><span className="hidden sm:inline">{label}</span></>)
+            : label}
+        </span>
       </div>
-      <p className={`${tv ? "text-6xl" : "text-3xl"} font-bold text-white`}>{value}</p>
+      <p className={`font-bold tabular-nums ${tv ? "text-6xl" : "text-2xl sm:text-3xl"}`}>{value}</p>
     </div>
   )
 }
@@ -308,7 +323,7 @@ function VacancyTable({ rows, loading, tv, interactive }: { rows: VacancyRow[]; 
     "Решение": "decision,final_decision",
     "Нанято": "hired",
     "Не подходит": "rejected",
-    "Канд. отказался": "rejected",
+    "Отказался": "rejected",
   }
   const hrefFor = (vacancyId: string, label: string) => {
     const st = STAGE[label]
@@ -329,7 +344,7 @@ function VacancyTable({ rows, loading, tv, interactive }: { rows: VacancyRow[]; 
     { label: "Решение",  value: r.decision, cls: "text-violet-600" },
     { label: "Нанято",   value: r.hired, cls: "text-emerald-600 font-medium" },
     { label: "Не подходит", value: r.rejected, cls: "text-rose-500" },
-    { label: "Канд. отказался", value: r.selfRejected, cls: "text-amber-600" },
+    { label: "Отказался", value: r.selfRejected, cls: "text-amber-600" },
   ]
 
   return (
@@ -349,7 +364,7 @@ function VacancyTable({ rows, loading, tv, interactive }: { rows: VacancyRow[]; 
               <th className={`${thR} px-3`}>Решение</th>
               <th className={`${thR} px-3`}>Нанято</th>
               <th className={`${thR} px-3`}>Не подходит</th>
-              <th className={`${thR} pl-3`}>Канд. отказался</th>
+              <th className={`${thR} pl-3`}>Отказался</th>
             </tr>
           </thead>
           <tbody>
@@ -365,32 +380,66 @@ function VacancyTable({ rows, loading, tv, interactive }: { rows: VacancyRow[]; 
                 <td className="py-2.5 px-3 text-center tabular-nums">{num(r, "Решение", r.decision, "text-violet-600")}</td>
                 <td className="py-2.5 px-3 text-center tabular-nums">{num(r, "Нанято", r.hired, "text-emerald-600 font-medium")}</td>
                 <td className="py-2.5 px-3 text-center tabular-nums">{num(r, "Не подходит", r.rejected, "text-rose-500")}</td>
-                <td className="py-2.5 pl-3 text-center tabular-nums">{num(r, "Канд. отказался", r.selfRejected, "text-amber-600")}</td>
+                <td className="py-2.5 pl-3 text-center tabular-nums">{num(r, "Отказался", r.selfRejected, "text-amber-600")}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      {/* Мобайл: карточки по вакансии */}
-      <div className="md:hidden space-y-3">
-        {rows.map(r => (
-          <div key={r.vacancyId} className="rounded-xl border p-3">
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <span className="font-medium text-sm leading-snug">{r.vacancyTitle}</span>
-              <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">{publishedLabel(r.publishedDaysAgo)}</span>
-            </div>
-            <div className="mb-3"><StatusCell row={r} /></div>
-            <div className="grid grid-cols-3 gap-2">
-              {metrics(r).map(m => (
-                <div key={m.label} className="rounded-lg bg-muted/30 px-2 py-1.5 text-center">
-                  <div className="text-[10px] text-muted-foreground leading-none mb-1">{m.label}</div>
-                  <div className={`text-base tabular-nums`}>{num(r, m.label, m.value, m.cls)}</div>
+      {/* Мобайл: компактная таблица-обзор (влезает в экран) + детали ниже */}
+      <div className="md:hidden">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b text-muted-foreground">
+              <th className="text-left font-medium pb-2 pr-1">Вакансия</th>
+              <th className="text-center font-medium pb-2 px-1">Откл.</th>
+              <th className="text-center font-medium pb-2 px-1">Собес.</th>
+              <th className="text-center font-medium pb-2 px-1">Реш.</th>
+              <th className="text-center font-medium pb-2 pl-1">Нанято</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.vacancyId} className="border-b last:border-0">
+                <td className="py-2 pr-1 max-w-0 w-full">
+                  <span className="block truncate font-medium">{r.vacancyTitle}</span>
+                </td>
+                <td className="py-2 px-1 text-center tabular-nums font-medium whitespace-nowrap">{num(r, "Откликов", r.total, "")}</td>
+                <td className="py-2 px-1 text-center tabular-nums whitespace-nowrap">{num(r, "Собес.", r.interview, "")}</td>
+                <td className="py-2 px-1 text-center tabular-nums whitespace-nowrap">{num(r, "Решение", r.decision, "text-violet-600")}</td>
+                <td className="py-2 pl-1 text-center tabular-nums whitespace-nowrap">{num(r, "Нанято", r.hired, "text-emerald-600 font-medium")}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {/* Подробно по каждой вакансии — свёрнуто, разворачивается по клику */}
+        <details className="mt-3 group">
+          <summary className="flex items-center gap-1 text-xs text-muted-foreground cursor-pointer select-none py-1.5 list-none [&::-webkit-details-marker]:hidden">
+            <span className="transition-transform group-open:rotate-90">▸</span>
+            Подробно по вакансиям
+          </summary>
+          <div className="space-y-3 mt-2">
+            {rows.map(r => (
+              <div key={r.vacancyId} className="rounded-xl border p-3">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <span className="font-medium text-sm leading-snug">{r.vacancyTitle}</span>
+                  <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">{publishedLabel(r.publishedDaysAgo)}</span>
                 </div>
-              ))}
-            </div>
+                <div className="mb-3"><StatusCell row={r} /></div>
+                <div className="grid grid-cols-3 gap-2">
+                  {metrics(r).map(m => (
+                    <div key={m.label} className="rounded-lg bg-muted/30 px-2 py-1.5 text-center">
+                      <div className="text-[10px] text-muted-foreground leading-none mb-1">{m.label}</div>
+                      <div className="text-base tabular-nums">{num(r, m.label, m.value, m.cls)}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
+        </details>
       </div>
     </>
   )
@@ -669,12 +718,12 @@ export function ReportView({
       )}
 
       {/* KPI */}
-      <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 ${tv ? "gap-4" : "gap-3"}`}>
-        <KpiCard icon={Briefcase}    label="Активных вакансий"  value={kpi?.activeVacancies ?? "—"}    bg="bg-emerald-500" tv={tv} />
-        <KpiCard icon={Users}        label="Откликов всего"     value={kpi?.totalCandidates ?? "—"}    bg="bg-blue-500"    tv={tv} />
-        <KpiCard icon={CalendarDays} label="Назначено интервью" value={kpi?.interviewScheduled ?? "—"} bg="bg-violet-500"  tv={tv} />
-        <KpiCard icon={CheckCircle2} label="Проведено интервью" value={kpi?.interviewConducted ?? "—"} bg="bg-indigo-500"  tv={tv} />
-        <KpiCard icon={XCircle}      label="Отказов"            value={kpi?.totalRejected ?? "—"}      bg="bg-rose-500"    tv={tv} />
+      <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 ${tv ? "gap-4" : "gap-2 sm:gap-3"}`}>
+        <KpiCard icon={Briefcase}    label="Активных вакансий"  shortLabel="Активных"  value={kpi?.activeVacancies ?? "—"}    color="emerald" tv={tv} />
+        <KpiCard icon={Users}        label="Откликов всего"     shortLabel="Откликов"  value={kpi?.totalCandidates ?? "—"}    color="blue"    tv={tv} />
+        <KpiCard icon={CalendarDays} label="Назначено интервью" shortLabel="Назначено" value={kpi?.interviewScheduled ?? "—"} color="violet"  tv={tv} />
+        <KpiCard icon={CheckCircle2} label="Проведено интервью" shortLabel="Проведено" value={kpi?.interviewConducted ?? "—"} color="indigo"  tv={tv} />
+        <KpiCard icon={XCircle}      label="Отказов"            value={kpi?.totalRejected ?? "—"}      color="rose"    tv={tv} />
       </div>
 
       {/* По вакансиям — на всю ширину, первым блоком */}
