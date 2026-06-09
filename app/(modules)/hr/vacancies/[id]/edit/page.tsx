@@ -29,7 +29,7 @@ const STATUSES = [
   { value: "draft", label: "Черновик" },
   { value: "active", label: "Активна" },
   { value: "published", label: "Опубликована" },
-  { value: "paused", label: "Приостановлена" },
+  { value: "paused", label: "Остановлена" },
   { value: "closed", label: "Закрыта" },
 ] as const
 

@@ -267,7 +267,7 @@ function StatusCell({ row }: { row: VacancyRow }) {
     mainText = row.closedAt ? `Закрыта ${shortDate(row.closedAt)}` : "Закрыта"
     mainCls = "bg-muted text-muted-foreground"
   } else if (row.lifecycle === "paused") {
-    mainText = "Приостановлена"
+    mainText = "Остановлена"
     mainCls = "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
   }
 
