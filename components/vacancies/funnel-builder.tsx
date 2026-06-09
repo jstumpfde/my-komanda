@@ -506,7 +506,14 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
                       block={block}
                       saving={saving}
                       onToggle={() => handleToggleBlock(block.type)}
-                      onOpenSettings={() => setOpenBlockType(block.type)}
+                      // Safari-фикс: синхронное открытие Radix-Sheet прямо в
+                      // обработчике реального клика → overlay мигает и Sheet
+                      // мгновенно закрывается (pointer-жест трактуется
+                      // dismissable-layer'ом Radix как клик снаружи). Программный
+                      // .click() без pointer-последовательности работает —
+                      // отсюда и диагноз. Откладываем open на следующий макротаск,
+                      // когда жест уже завершён. Chrome не задет.
+                      onOpenSettings={() => setTimeout(() => setOpenBlockType(block.type), 0)}
                     />
                   ))}
                 </div>
@@ -785,9 +792,6 @@ function SortableBlockCard({ block, saving, onToggle, onOpenSettings }: Sortable
         className="h-8 w-8"
         aria-label="Настройки блока"
         onClick={onOpenSettings}
-        // Safari-фикс: stopPropagation на pointerdown не даёт document-listener
-        // PointerSensor (dnd-kit) перехватить событие и заглушить последующий click.
-        onPointerDown={(e) => e.stopPropagation()}
       >
         <Settings2 className="h-4 w-4" />
       </Button>
