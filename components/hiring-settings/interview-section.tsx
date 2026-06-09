@@ -58,13 +58,6 @@ const SLOT_STEP_OPTIONS = [
   { value: 60, label: "60 мин" },
 ]
 
-// Часы для селектов времени (00:00..23:30 с шагом 30 мин) — для обеда.
-const HALF_HOURS = Array.from({ length: 48 }, (_, i) => {
-  const h = String(Math.floor(i / 2)).padStart(2, "0")
-  const m = i % 2 === 0 ? "00" : "30"
-  return `${h}:${m}`
-})
-
 // ─── Компонент ──────────────────────────────────────────────────────────────
 
 export function InterviewSection({
@@ -375,31 +368,21 @@ export function InterviewSection({
           <div className="flex items-center gap-3 flex-wrap">
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">С</Label>
-              <Select value={interviewFrom} onValueChange={setInterviewFrom}>
-                <SelectTrigger className="w-28 h-9 text-sm bg-[var(--input-bg)]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from({ length: 24 }, (_, i) => {
-                    const h = `${String(i).padStart(2, "0")}:00`
-                    return <SelectItem key={h} value={h}>{h}</SelectItem>
-                  })}
-                </SelectContent>
-              </Select>
+              <Input
+                type="time"
+                value={interviewFrom}
+                onChange={e => setInterviewFrom(e.target.value)}
+                className="w-28 h-9 text-sm bg-[var(--input-bg)]"
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">До</Label>
-              <Select value={interviewTo} onValueChange={setInterviewTo}>
-                <SelectTrigger className="w-28 h-9 text-sm bg-[var(--input-bg)]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from({ length: 24 }, (_, i) => {
-                    const h = `${String(i).padStart(2, "0")}:00`
-                    return <SelectItem key={h} value={h}>{h}</SelectItem>
-                  })}
-                </SelectContent>
-              </Select>
+              <Input
+                type="time"
+                value={interviewTo}
+                onChange={e => setInterviewTo(e.target.value)}
+                className="w-28 h-9 text-sm bg-[var(--input-bg)]"
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Макс. в день</Label>
@@ -437,17 +420,11 @@ export function InterviewSection({
               <div className="flex items-center gap-3 flex-wrap">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">С</Label>
-                  <Select value={lunchFrom} onValueChange={setLunchFrom}>
-                    <SelectTrigger className="w-28 h-9 text-sm bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
-                    <SelectContent>{HALF_HOURS.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <Input type="time" value={lunchFrom} onChange={e => setLunchFrom(e.target.value)} className="w-28 h-9 text-sm bg-[var(--input-bg)]" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">До</Label>
-                  <Select value={lunchTo} onValueChange={setLunchTo}>
-                    <SelectTrigger className="w-28 h-9 text-sm bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
-                    <SelectContent>{HALF_HOURS.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <Input type="time" value={lunchTo} onChange={e => setLunchTo(e.target.value)} className="w-28 h-9 text-sm bg-[var(--input-bg)]" />
                 </div>
               </div>
             )}

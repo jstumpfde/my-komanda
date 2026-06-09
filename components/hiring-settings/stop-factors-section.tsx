@@ -24,6 +24,7 @@ export function StopFactorsSection({ defaults, onPatch }: {
     sf?.city?.allowedCities ? sf.city.allowedCities.join(", ") : ""
   )
   const [sfFormat, setSfFormat] = useState<boolean>(!!sf?.format?.enabled)
+  const [sfFormatValues, setSfFormatValues] = useState<string[]>(sf?.format?.allowedFormats ?? [])
   const [sfAge, setSfAge] = useState<boolean>(!!sf?.age?.enabled)
   const [sfAgeMin, setSfAgeMin] = useState<string>(
     sf?.age?.minAge != null ? String(sf.age.minAge) : ""
@@ -36,6 +37,9 @@ export function StopFactorsSection({ defaults, onPatch }: {
     sf?.experience?.minYears != null ? String(sf.experience.minYears) : ""
   )
   const [sfDocs, setSfDocs] = useState<boolean>(!!sf?.documents?.enabled)
+  const [sfDocsValue, setSfDocsValue] = useState<string>(
+    sf?.documents?.required ? sf.documents.required.join(", ") : ""
+  )
   const [sfCitizenship, setSfCitizenship] = useState<boolean>(!!sf?.citizenship?.enabled)
   const [sfCitizenshipValue, setSfCitizenshipValue] = useState<string>(
     sf?.citizenship?.allowed ? sf.citizenship.allowed.join(", ") : ""
@@ -59,14 +63,18 @@ export function StopFactorsSection({ defaults, onPatch }: {
       city: sfCity
         ? { enabled: true, allowedCities: sfCityValue ? sfCityValue.split(",").map(c => c.trim()).filter(Boolean) : [] }
         : { enabled: false },
-      format: { enabled: sfFormat },
+      format: sfFormat
+        ? { enabled: true, allowedFormats: sfFormatValues as Array<"office" | "hybrid" | "remote"> }
+        : { enabled: false },
       age: sfAge
         ? { enabled: true, minAge: Number(sfAgeMin) || undefined, maxAge: Number(sfAgeMax) || undefined }
         : { enabled: false },
       experience: sfExperience
         ? { enabled: true, minYears: Number(sfExpValue) || undefined }
         : { enabled: false },
-      documents: { enabled: sfDocs },
+      documents: sfDocs
+        ? { enabled: true, required: sfDocsValue ? sfDocsValue.split(",").map(d => d.trim()).filter(Boolean) : [] }
+        : { enabled: false },
       citizenship: sfCitizenship
         ? { enabled: true, allowed: sfCitizenshipValue ? sfCitizenshipValue.split(",").map(c => c.trim()).filter(Boolean) : [] }
         : { enabled: false },
@@ -179,14 +187,42 @@ export function StopFactorsSection({ defaults, onPatch }: {
                 </div>
 
                 {/* Формат работы */}
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                  <div className="flex items-center gap-3 flex-1">
+                <div className="rounded-lg border p-4">
+                  <div className="flex items-center gap-3">
                     <Switch checked={sfFormat} onCheckedChange={setSfFormat} />
                     <div>
                       <p className="text-sm font-medium">Формат работы</p>
-                      <p className="text-xs text-muted-foreground">офис / гибрид / удалёнка</p>
+                      <p className="text-xs text-muted-foreground">подходящие форматы — остальные отсекаются</p>
                     </div>
                   </div>
+                  {sfFormat && (
+                    <div className="flex gap-2 mt-3 ml-[52px] flex-wrap">
+                      {[
+                        { id: "office", label: "Офис" },
+                        { id: "hybrid", label: "Гибрид" },
+                        { id: "remote", label: "Удалёнка" },
+                      ].map(f => {
+                        const active = sfFormatValues.includes(f.id)
+                        return (
+                          <button
+                            key={f.id}
+                            type="button"
+                            onClick={() => setSfFormatValues(prev =>
+                              prev.includes(f.id) ? prev.filter(x => x !== f.id) : [...prev, f.id]
+                            )}
+                            className={cn(
+                              "rounded-full px-3 py-1 text-sm font-medium transition-colors border",
+                              active
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-background text-muted-foreground border-border hover:border-primary/50"
+                            )}
+                          >
+                            {f.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* Возраст */}
@@ -238,9 +274,18 @@ export function StopFactorsSection({ defaults, onPatch }: {
                 <div className="flex items-center justify-between rounded-lg border p-4">
                   <div className="flex items-center gap-3 flex-1">
                     <Switch checked={sfDocs} onCheckedChange={setSfDocs} />
-                    <div>
+                    <div className="flex-1">
                       <p className="text-sm font-medium">Обязательные документы</p>
-                      <p className="text-xs text-muted-foreground">вод.права, мед.книжка</p>
+                      {sfDocs ? (
+                        <Input
+                          value={sfDocsValue}
+                          onChange={e => setSfDocsValue(e.target.value)}
+                          placeholder="Например: вод. права, мед. книжка (через запятую)"
+                          className="mt-2 h-8 text-sm bg-[var(--input-bg)] max-w-md"
+                        />
+                      ) : (
+                        <p className="text-xs text-muted-foreground">вод.права, мед.книжка</p>
+                      )}
                     </div>
                   </div>
                 </div>
