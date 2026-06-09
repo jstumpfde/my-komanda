@@ -18,13 +18,8 @@ export function StopFactorsSection({ defaults, onPatch }: {
 }) {
   const sf = defaults.stopFactorsDefaults
 
-  // ── Стоп-факторы (плоские состояния) ──
-  const [sfCity, setSfCity] = useState<boolean>(!!sf?.city?.enabled)
-  const [sfCityValue, setSfCityValue] = useState<string>(
-    sf?.city?.allowedCities ? sf.city.allowedCities.join(", ") : ""
-  )
-  const [sfFormat, setSfFormat] = useState<boolean>(!!sf?.format?.enabled)
-  const [sfFormatValues, setSfFormatValues] = useState<string[]>(sf?.format?.allowedFormats ?? [])
+  // ── Стоп-факторы (компанейский уровень — только базовые: Возраст, Гражданство).
+  // Детальные (город/формат/опыт/документы/зарплата) задаются на каждой вакансии.
   const [sfAge, setSfAge] = useState<boolean>(!!sf?.age?.enabled)
   const [sfAgeMin, setSfAgeMin] = useState<string>(
     sf?.age?.minAge != null ? String(sf.age.minAge) : ""
@@ -32,21 +27,9 @@ export function StopFactorsSection({ defaults, onPatch }: {
   const [sfAgeMax, setSfAgeMax] = useState<string>(
     sf?.age?.maxAge != null ? String(sf.age.maxAge) : ""
   )
-  const [sfExperience, setSfExperience] = useState<boolean>(!!sf?.experience?.enabled)
-  const [sfExpValue, setSfExpValue] = useState<string>(
-    sf?.experience?.minYears != null ? String(sf.experience.minYears) : ""
-  )
-  const [sfDocs, setSfDocs] = useState<boolean>(!!sf?.documents?.enabled)
-  const [sfDocsValue, setSfDocsValue] = useState<string>(
-    sf?.documents?.required ? sf.documents.required.join(", ") : ""
-  )
   const [sfCitizenship, setSfCitizenship] = useState<boolean>(!!sf?.citizenship?.enabled)
   const [sfCitizenshipValue, setSfCitizenshipValue] = useState<string>(
     sf?.citizenship?.allowed ? sf.citizenship.allowed.join(", ") : ""
-  )
-  const [sfSalary, setSfSalary] = useState<boolean>(!!sf?.salaryExpectation?.enabled)
-  const [sfSalaryValue, setSfSalaryValue] = useState<string>(
-    sf?.salaryExpectation?.maxAmount != null ? String(sf.salaryExpectation.maxAmount) : ""
   )
 
   // Мастер-тумблер живого применения ко всем вакансиям
@@ -59,28 +42,20 @@ export function StopFactorsSection({ defaults, onPatch }: {
 
   const handleSave = async () => {
     setSaving(true)
+    // Компанейский уровень: только Возраст + Гражданство. Остальные факторы
+    // на компании отключены (детально задаются на каждой вакансии).
     const stopFactorsDefaults: VacancyStopFactors = {
-      city: sfCity
-        ? { enabled: true, allowedCities: sfCityValue ? sfCityValue.split(",").map(c => c.trim()).filter(Boolean) : [] }
-        : { enabled: false },
-      format: sfFormat
-        ? { enabled: true, allowedFormats: sfFormatValues as Array<"office" | "hybrid" | "remote"> }
-        : { enabled: false },
       age: sfAge
         ? { enabled: true, minAge: Number(sfAgeMin) || undefined, maxAge: Number(sfAgeMax) || undefined }
-        : { enabled: false },
-      experience: sfExperience
-        ? { enabled: true, minYears: Number(sfExpValue) || undefined }
-        : { enabled: false },
-      documents: sfDocs
-        ? { enabled: true, required: sfDocsValue ? sfDocsValue.split(",").map(d => d.trim()).filter(Boolean) : [] }
         : { enabled: false },
       citizenship: sfCitizenship
         ? { enabled: true, allowed: sfCitizenshipValue ? sfCitizenshipValue.split(",").map(c => c.trim()).filter(Boolean) : [] }
         : { enabled: false },
-      salaryExpectation: sfSalary
-        ? { enabled: true, maxAmount: Number(sfSalaryValue) || undefined }
-        : { enabled: false },
+      city: { enabled: false },
+      format: { enabled: false },
+      experience: { enabled: false },
+      documents: { enabled: false },
+      salaryExpectation: { enabled: false },
     }
     try {
       await onPatch({
@@ -168,63 +143,6 @@ export function StopFactorsSection({ defaults, onPatch }: {
               </CardHeader>
               <CardContent className="space-y-2">
 
-                {/* Город */}
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                  <div className="flex items-center gap-3 flex-1">
-                    <Switch checked={sfCity} onCheckedChange={setSfCity} />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">Город / релокация</p>
-                      {sfCity && (
-                        <Input
-                          value={sfCityValue}
-                          onChange={e => setSfCityValue(e.target.value)}
-                          placeholder="Например: Москва"
-                          className="mt-2 h-8 text-sm bg-[var(--input-bg)] max-w-xs"
-                        />
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Формат работы */}
-                <div className="rounded-lg border p-4">
-                  <div className="flex items-center gap-3">
-                    <Switch checked={sfFormat} onCheckedChange={setSfFormat} />
-                    <div>
-                      <p className="text-sm font-medium">Формат работы</p>
-                      <p className="text-xs text-muted-foreground">подходящие форматы — остальные отсекаются</p>
-                    </div>
-                  </div>
-                  {sfFormat && (
-                    <div className="flex gap-2 mt-3 ml-[52px] flex-wrap">
-                      {[
-                        { id: "office", label: "Офис" },
-                        { id: "hybrid", label: "Гибрид" },
-                        { id: "remote", label: "Удалёнка" },
-                      ].map(f => {
-                        const active = sfFormatValues.includes(f.id)
-                        return (
-                          <button
-                            key={f.id}
-                            type="button"
-                            onClick={() => setSfFormatValues(prev =>
-                              prev.includes(f.id) ? prev.filter(x => x !== f.id) : [...prev, f.id]
-                            )}
-                            className={cn(
-                              "rounded-full px-3 py-1 text-sm font-medium transition-colors border",
-                              active
-                                ? "bg-primary text-primary-foreground border-primary"
-                                : "bg-background text-muted-foreground border-border hover:border-primary/50"
-                            )}
-                          >
-                            {f.label}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-
                 {/* Возраст */}
                 <div className="flex items-center justify-between rounded-lg border p-4">
                   <div className="flex items-center gap-3 flex-1">
@@ -252,44 +170,6 @@ export function StopFactorsSection({ defaults, onPatch }: {
                   </div>
                 </div>
 
-                {/* Опыт */}
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                  <div className="flex items-center gap-3 flex-1">
-                    <Switch checked={sfExperience} onCheckedChange={setSfExperience} />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">Минимальный опыт</p>
-                      {sfExperience && (
-                        <Input
-                          value={sfExpValue}
-                          onChange={e => setSfExpValue(e.target.value.replace(/\D/g, ""))}
-                          placeholder="лет"
-                          className="mt-2 w-20 h-8 text-sm bg-[var(--input-bg)]"
-                        />
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Документы */}
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                  <div className="flex items-center gap-3 flex-1">
-                    <Switch checked={sfDocs} onCheckedChange={setSfDocs} />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">Обязательные документы</p>
-                      {sfDocs ? (
-                        <Input
-                          value={sfDocsValue}
-                          onChange={e => setSfDocsValue(e.target.value)}
-                          placeholder="Например: вод. права, мед. книжка (через запятую)"
-                          className="mt-2 h-8 text-sm bg-[var(--input-bg)] max-w-md"
-                        />
-                      ) : (
-                        <p className="text-xs text-muted-foreground">вод.права, мед.книжка</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
                 {/* Гражданство */}
                 <div className="flex items-center justify-between rounded-lg border p-4">
                   <div className="flex items-center gap-3 flex-1">
@@ -302,24 +182,6 @@ export function StopFactorsSection({ defaults, onPatch }: {
                           onChange={e => setSfCitizenshipValue(e.target.value)}
                           placeholder="Например: РФ"
                           className="mt-2 h-8 text-sm bg-[var(--input-bg)] max-w-xs"
-                        />
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Макс зарплата */}
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                  <div className="flex items-center gap-3 flex-1">
-                    <Switch checked={sfSalary} onCheckedChange={setSfSalary} />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">Макс. зарплатные ожидания</p>
-                      {sfSalary && (
-                        <Input
-                          value={sfSalaryValue}
-                          onChange={e => setSfSalaryValue(e.target.value.replace(/\D/g, ""))}
-                          placeholder="руб."
-                          className="mt-2 w-32 h-8 text-sm bg-[var(--input-bg)]"
                         />
                       )}
                     </div>
