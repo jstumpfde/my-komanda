@@ -481,7 +481,10 @@ export default function VacancyPage() {
     router.replace(`${window.location.pathname}${qs ? "?" + qs : ""}`, { scroll: false })
   }, [router])
 
-  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: DEFAULT_FUNNEL_STATUSES.slice(), hideRejected: false, hideNoSalary: false, activeNow: false, demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
+  // Стадия из URL (?stage=slug,slug) — для перехода из отчёта по клику на число.
+  const stageFromUrl = searchParams?.get("stage")
+  const initialFunnelStatuses = stageFromUrl ? stageFromUrl.split(",").filter(Boolean) : DEFAULT_FUNNEL_STATUSES.slice()
+  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: initialFunnelStatuses, hideRejected: false, hideNoSalary: false, activeNow: false, demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
   const [trashOpen, setTrashOpen] = useState(false) // Корзина кандидатов (Sheet)
 
   // Маппинг русских лейблов фильтра прогресса демо → API-идентификаторы.

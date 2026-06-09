@@ -291,13 +291,34 @@ function StatusCell({ row }: { row: VacancyRow }) {
   )
 }
 
-function VacancyTable({ rows, loading, tv }: { rows: VacancyRow[]; loading: boolean; tv?: boolean }) {
+function VacancyTable({ rows, loading, tv, interactive }: { rows: VacancyRow[]; loading: boolean; tv?: boolean; interactive?: boolean }) {
   if (loading) return <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-10 bg-muted/30 rounded-lg animate-pulse" />)}</div>
   if (rows.length === 0) return <EmptyState text="Нет вакансий с кандидатами" />
 
   const th = `text-left py-2 font-medium text-muted-foreground ${tv ? "text-sm" : "text-xs"}`
   const thR = `text-center py-2 font-medium text-muted-foreground ${tv ? "text-sm" : "text-xs"}`
   const td = tv ? "text-base" : "text-sm"
+
+  // Колонка → стадии для фильтра в списке кандидатов (?stage=). null = все.
+  // Демо/Тест НЕ кликабельны: это метрики завершённости (факт прохождения),
+  // а не текущая стадия — клик по стадии показал бы другое число.
+  const STAGE: Record<string, string | null> = {
+    "Откликов": null,
+    "Собес.": "scheduled,interview,interviewed",
+    "Решение": "decision,final_decision",
+    "Нанято": "hired",
+    "Не подходит": "rejected",
+    "Канд. отказался": "rejected",
+  }
+  const hrefFor = (vacancyId: string, label: string) => {
+    const st = STAGE[label]
+    return `/hr/vacancies/${vacancyId}?tab=candidates${st ? `&stage=${st}` : ""}`
+  }
+  // Ячейка-число: ссылка (если interactive, колонка кликабельна и значение > 0).
+  const num = (r: VacancyRow, label: string, value: number, cls: string) =>
+    interactive && value > 0 && (label in STAGE)
+      ? <a href={hrefFor(r.vacancyId, label)} className={`${cls} hover:underline cursor-pointer`}>{value}</a>
+      : <span className={cls}>{value}</span>
 
   // Метрики строки — единый источник для таблицы (десктоп) и карточек (мобайл).
   const metrics = (r: VacancyRow) => [
@@ -337,14 +358,14 @@ function VacancyTable({ rows, loading, tv }: { rows: VacancyRow[]; loading: bool
                 <td className={`py-2.5 pr-4 font-medium truncate ${tv ? "max-w-[420px]" : "max-w-[280px]"}`}>{r.vacancyTitle}</td>
                 <td className="py-2.5 px-3"><StatusCell row={r} /></td>
                 <td className="py-2.5 px-3 text-center tabular-nums text-muted-foreground whitespace-nowrap">{publishedLabel(r.publishedDaysAgo)}</td>
-                <td className="py-2.5 px-3 text-center tabular-nums font-medium">{r.total}</td>
-                <td className="py-2.5 px-3 text-center tabular-nums">{r.demo}</td>
-                <td className="py-2.5 px-3 text-center tabular-nums">{r.test}</td>
-                <td className="py-2.5 px-3 text-center tabular-nums">{r.interview}</td>
-                <td className="py-2.5 px-3 text-center tabular-nums text-violet-600">{r.decision}</td>
-                <td className="py-2.5 px-3 text-center tabular-nums text-emerald-600 font-medium">{r.hired}</td>
-                <td className="py-2.5 px-3 text-center tabular-nums text-rose-500">{r.rejected}</td>
-                <td className="py-2.5 pl-3 text-center tabular-nums text-amber-600">{r.selfRejected}</td>
+                <td className="py-2.5 px-3 text-center tabular-nums">{num(r, "Откликов", r.total, "font-medium")}</td>
+                <td className="py-2.5 px-3 text-center tabular-nums">{num(r, "Демо", r.demo, "")}</td>
+                <td className="py-2.5 px-3 text-center tabular-nums">{num(r, "Тест", r.test, "")}</td>
+                <td className="py-2.5 px-3 text-center tabular-nums">{num(r, "Собес.", r.interview, "")}</td>
+                <td className="py-2.5 px-3 text-center tabular-nums">{num(r, "Решение", r.decision, "text-violet-600")}</td>
+                <td className="py-2.5 px-3 text-center tabular-nums">{num(r, "Нанято", r.hired, "text-emerald-600 font-medium")}</td>
+                <td className="py-2.5 px-3 text-center tabular-nums">{num(r, "Не подходит", r.rejected, "text-rose-500")}</td>
+                <td className="py-2.5 pl-3 text-center tabular-nums">{num(r, "Канд. отказался", r.selfRejected, "text-amber-600")}</td>
               </tr>
             ))}
           </tbody>
@@ -364,7 +385,7 @@ function VacancyTable({ rows, loading, tv }: { rows: VacancyRow[]; loading: bool
               {metrics(r).map(m => (
                 <div key={m.label} className="rounded-lg bg-muted/30 px-2 py-1.5 text-center">
                   <div className="text-[10px] text-muted-foreground leading-none mb-1">{m.label}</div>
-                  <div className={`text-base tabular-nums ${m.cls}`}>{m.value}</div>
+                  <div className={`text-base tabular-nums`}>{num(r, m.label, m.value, m.cls)}</div>
                 </div>
               ))}
             </div>
@@ -658,7 +679,7 @@ export function ReportView({
 
       {/* По вакансиям — на всю ширину, первым блоком */}
       <SectionCard title="По вакансиям" tv={tv}>
-        <VacancyTable rows={data?.vacancyTable ?? []} loading={loading} tv={tv} />
+        <VacancyTable rows={data?.vacancyTable ?? []} loading={loading} tv={tv} interactive={variant === "app"} />
       </SectionCard>
 
       {/* Воронка + собеседования (узкие списки — в две колонки) */}
