@@ -224,7 +224,7 @@ export async function POST(
     const { id } = await params
 
     const [existing] = await db
-      .select({ id: vacancies.id, descriptionJson: vacancies.descriptionJson })
+      .select({ id: vacancies.id, descriptionJson: vacancies.descriptionJson, status: vacancies.status })
       .from(vacancies)
       .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
       .limit(1)
@@ -358,6 +358,10 @@ export async function POST(
       .returning()
 
     // ─── Sync hh_vacancies (upsert) so UI считает вакансию подключённой ────
+    // Для черновиков (status=draft) НЕ проставляем localVacancyId:
+    // черновик ещё не готов, HR подключит источник сам когда вакансия будет готова.
+    // Для уже опубликованных/активных вакансий — связываем как раньше.
+    const isDraft = existing.status === "draft"
     const hhValues = {
       companyId:       user.companyId,
       hhVacancyId,
@@ -368,7 +372,7 @@ export async function POST(
       salaryCurrency:  mappedData.salaryCurrency || null,
       status:          "active",
       url:             hhUrl,
-      localVacancyId:  id,
+      localVacancyId:  isDraft ? null : id,
       rawData:         mappedData as unknown as Record<string, unknown>,
       syncedAt:        now,
     }

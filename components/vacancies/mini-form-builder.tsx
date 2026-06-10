@@ -53,6 +53,7 @@ import {
   User,
   Phone,
   ClipboardList,
+  Loader2,
 } from "lucide-react"
 import { toast } from "sonner"
 import { useVacancySectionRegister } from "./vacancy-settings-context"
@@ -287,7 +288,6 @@ export function MiniFormBuilder({ vacancyId, descriptionJson }: MiniFormBuilderP
     watchedValues: fields,
     save: saveFields,
   })
-  void saving
 
   return (
     <>
@@ -379,6 +379,15 @@ export function MiniFormBuilder({ vacancyId, descriptionJson }: MiniFormBuilderP
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            <Button
+              size="sm"
+              className="h-8 text-xs gap-1.5"
+              onClick={() => { void saveFields() }}
+              disabled={saving}
+            >
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+              Сохранить
+            </Button>
           </div>
         </CardContent>
       </Card>
