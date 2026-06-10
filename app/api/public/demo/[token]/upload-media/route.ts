@@ -6,6 +6,7 @@ import { db } from "@/lib/db"
 import { candidates } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { isShortId } from "@/lib/short-id"
+import { publicDir } from "@/lib/uploads-path"
 
 export const runtime = "nodejs"
 export const maxDuration = 60

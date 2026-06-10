@@ -96,7 +96,6 @@ export default function TrainingSessionPage() {
   const [sending, setSending] = useState(false)
   const [evaluating, setEvaluating] = useState(false)
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null)
-  const [apiKey, setApiKey] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // ── Voice mode state ────────────────────────────────────────────────────
@@ -143,10 +142,7 @@ export default function TrainingSessionPage() {
     void (async () => {
       setLoading(true)
       try {
-        const [chatRes, keyRes] = await Promise.all([
-          fetch(`/api/modules/knowledge/training/${id}/chat`),
-          fetch("/api/ai/key"),
-        ])
+        const chatRes = await fetch(`/api/modules/knowledge/training/${id}/chat`)
 
         if (!chatRes.ok) {
           toast.error("Сценарий не найден")
@@ -156,11 +152,6 @@ export default function TrainingSessionPage() {
         const chatData = (await chatRes.json()) as { scenario: Scenario; session: Session | null }
         setScenario(chatData.scenario)
         setSession(chatData.session)
-
-        if (keyRes.ok) {
-          const keyData = (await keyRes.json()) as { key?: string }
-          setApiKey(keyData.key ?? null)
-        }
       } catch {
         toast.error("Ошибка загрузки")
       } finally {
@@ -204,21 +195,16 @@ export default function TrainingSessionPage() {
   // ─── Claude call (browser) ────────────────────────────────────────────────
 
   async function callClaudeReply(userText: string): Promise<string | null> {
-    if (!apiKey || !scenario || !session) return null
+    if (!scenario || !session) return null
 
     // Build messages history as alternating user/assistant
     const history = session.messages.map((m) => ({ role: m.role, content: m.content }))
     const payloadMessages = [...history, { role: "user", content: userText }]
 
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch("/api/ai/messages", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: CLAUDE_MODEL,
           max_tokens: 512,
@@ -241,7 +227,7 @@ export default function TrainingSessionPage() {
   // ─── Claude evaluation call ───────────────────────────────────────────────
 
   async function callClaudeEvaluation(): Promise<Evaluation | null> {
-    if (!apiKey || !scenario || !session) return null
+    if (!scenario || !session) return null
 
     const transcript = session.messages
       .map((m) => `${m.role === "user" ? "Сотрудник" : "AI-персонаж"}: ${m.content}`)
@@ -256,14 +242,9 @@ export default function TrainingSessionPage() {
       `{"score": 0-100, "criteria": [{"key": "...", "label": "...", "pass": true|false, "note": "..."}], "recommendations": ["...", "..."]}`
 
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch("/api/ai/messages", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: CLAUDE_MODEL,
           max_tokens: 1024,
@@ -397,10 +378,6 @@ export default function TrainingSessionPage() {
   async function handleSend() {
     const text = input.trim()
     if (!text || !scenario || !session || sending) return
-    if (!apiKey) {
-      toast.error("AI недоступен — нет API ключа")
-      return
-    }
 
     setInput("")
     setSending(true)
@@ -472,10 +449,6 @@ export default function TrainingSessionPage() {
   async function handleEvaluate(overrideSession?: Session) {
     const s = overrideSession ?? session
     if (!s || !scenario || evaluating) return
-    if (!apiKey) {
-      toast.error("AI недоступен — нет API ключа")
-      return
-    }
     const userTurns = s.messages.filter((m) => m.role === "user").length
     if (userTurns < MIN_TURNS_FOR_EVAL) {
       toast.error(`Нужно минимум ${MIN_TURNS_FOR_EVAL} реплик для оценки`)
@@ -589,13 +562,10 @@ export default function TrainingSessionPage() {
                         ))}
                       </ul>
                     </div>
-                    <Button size="lg" onClick={handleStart} disabled={sending || !apiKey} className="gap-2">
+                    <Button size="lg" onClick={handleStart} disabled={sending} className="gap-2">
                       {sending ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
                       Начать тренировку
                     </Button>
-                    {!apiKey && (
-                      <p className="text-xs text-destructive">API ключ Claude не настроен</p>
-                    )}
                   </div>
                 ) : (
                   <>
@@ -762,7 +732,7 @@ export default function TrainingSessionPage() {
                               type="button"
                               variant={isListening ? "destructive" : "outline"}
                               onClick={isListening ? stopListening : startListening}
-                              disabled={sending || evaluating || isSpeaking || !apiKey}
+                              disabled={sending || evaluating || isSpeaking}
                               className="flex-1 gap-2"
                             >
                               {isListening ? (
@@ -784,12 +754,12 @@ export default function TrainingSessionPage() {
                                 value={input}
                                 onChange={(e) => setInput(e.target.value)}
                                 onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-                                disabled={sending || evaluating || !apiKey}
+                                disabled={sending || evaluating}
                                 className="flex-1"
                               />
                               <Button
                                 onClick={handleSend}
-                                disabled={!input.trim() || sending || evaluating || !apiKey}
+                                disabled={!input.trim() || sending || evaluating}
                               >
                                 {sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
                               </Button>

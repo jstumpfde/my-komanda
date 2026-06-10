@@ -29,7 +29,7 @@ Next.js 16.1.6 (App Router), TypeScript, Tailwind, shadcn/ui, pnpm, PostgreSQL 1
 
 ## Инфраструктура
 - Прод: 5.42.125.91, /var/www/my-komanda, PM2 my-komanda:3000
-- БД: postgresql://mykomanda:Comp2024!@localhost:5432/mykomanda
+- БД: postgresql://mykomanda:<пароль в .env на сервере>@localhost:5432/mykomanda
 - Ветки: develop (разработка) → merge в main → деплой с main. main = прод-ветка.
 - GitHub: github.com/jstumpfde/my-komanda
 - AI прокси: CLAUDE_PROXY_URL=https://claude-proxy.jstumpf-de.workers.dev
@@ -259,7 +259,7 @@ Per-vacancy стоп-факторы в vacancy.stopFactorsJson:
 
 ## Environment Variables
 
-- DATABASE_URL — postgresql://mykomanda:Comp2024!@localhost:5432/mykomanda
+- DATABASE_URL — postgresql://mykomanda:<пароль в .env на сервере>@localhost:5432/mykomanda
 - NEXTAUTH_SECRET — secret for next-auth sessions
 - ANTHROPIC_API_KEY — для AI чат-бота, скоринга, watcher
 - CLAUDE_PROXY_URL — https://claude-proxy.jstumpf-de.workers.dev
