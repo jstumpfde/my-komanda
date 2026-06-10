@@ -20,6 +20,11 @@ export interface ResumeScreenInput {
     skills?: string[] | null
     educationLevel?: string | null
     workFormat?: string | null
+    // Доп. поля hh (миграция 0200)
+    languages?: string[] | null
+    relocationReady?: boolean | null
+    professionalRoles?: string[] | null
+    citizenshipNames?: string[] | null
   }
   vacancy: {
     title: string
@@ -105,7 +110,11 @@ export async function screenResume(input: ResumeScreenInput): Promise<ResumeScre
 - Ключевые навыки (hh): ${r.keySkills?.join(", ") || "—"}
 - Навыки: ${r.skills?.join(", ") || "—"}
 - Образование: ${r.educationLevel || "—"}
-- Формат работы: ${r.workFormat || "—"}`
+- Формат работы: ${r.workFormat || "—"}
+- Языки: ${r.languages?.join(", ") || "—"}
+- Готовность к переезду: ${r.relocationReady === true ? "да" : r.relocationReady === false ? "нет" : "—"}
+- Профессиональные роли: ${r.professionalRoles?.join(", ") || "—"}
+- Гражданство: ${r.citizenshipNames?.join(", ") || "—"}`
 
   const systemPrompt = `${SYSTEM_PROMPT_BASE}
 

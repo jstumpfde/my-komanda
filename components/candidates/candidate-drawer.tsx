@@ -51,6 +51,9 @@ import {
   Maximize2,
   Minimize2,
   PhoneCall,
+  Car,
+  Globe2,
+  Languages,
 } from "lucide-react"
 import {
   Dialog,
@@ -1291,6 +1294,40 @@ export function CandidateDrawer({
                           {candidate.skills.map((skill) => (
                             <Badge key={skill} variant="secondary" className="text-xs font-normal">{skill}</Badge>
                           ))}
+                        </div>
+                      )}
+                      {/* Языки */}
+                      {candidate.languages && candidate.languages.length > 0 && (
+                        <div className="flex items-start gap-2 text-sm text-muted-foreground mt-1">
+                          <Languages className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                          <span>{candidate.languages.join(", ")}</span>
+                        </div>
+                      )}
+                      {/* Профессиональные роли */}
+                      {candidate.professionalRoles && candidate.professionalRoles.length > 0 && (
+                        <div className="flex items-start gap-2 text-sm text-muted-foreground mt-1">
+                          <Briefcase className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                          <span>Профроли: {candidate.professionalRoles.join(", ")}</span>
+                        </div>
+                      )}
+                      {/* Гражданство */}
+                      {candidate.citizenshipNames && candidate.citizenshipNames.length > 0 && (
+                        <div className="flex items-start gap-2 text-sm text-muted-foreground mt-1">
+                          <Globe2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                          <span>Гражданство: {candidate.citizenshipNames.join(", ")}</span>
+                        </div>
+                      )}
+                      {/* Права и автомобиль */}
+                      {(candidate.driverLicenses && candidate.driverLicenses.length > 0 || candidate.hasVehicle) && (
+                        <div className="flex items-start gap-2 text-sm text-muted-foreground mt-1">
+                          <Car className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                          <span>
+                            {candidate.driverLicenses && candidate.driverLicenses.length > 0
+                              ? `Права: ${candidate.driverLicenses.join(", ")}`
+                              : ""}
+                            {candidate.driverLicenses && candidate.driverLicenses.length > 0 && candidate.hasVehicle ? " · " : ""}
+                            {candidate.hasVehicle ? "есть автомобиль" : ""}
+                          </span>
                         </div>
                       )}
                     </section>

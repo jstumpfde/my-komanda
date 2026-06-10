@@ -477,6 +477,12 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             salaryMin:          candidates.salaryMin,
             salaryMax:          candidates.salaryMax,
             photoUrl:           candidates.photoUrl,
+            // Доп. поля hh (миграция 0200)
+            driverLicenses:    candidates.driverLicenses,
+            hasVehicle:        candidates.hasVehicle,
+            citizenshipNames:  candidates.citizenshipNames,
+            workTicketNames:   candidates.workTicketNames,
+            professionalRoles: candidates.professionalRoles,
           }).from(candidates).where(eq(candidates.id, candidateId)).limit(1)
 
           if (exFull && exFull.anketaAnswers === null) {
@@ -561,14 +567,19 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             const anketa = (descJson?.anketa as Record<string, unknown> | undefined) ?? {}
             const result = await screenResume({
               resume: {
-                name:            resp.candidateName,
-                city:            candidateCity ?? null,
-                salaryMin:       candidateSalary,
-                experienceYears: (extracted.experienceYears as number | undefined) ?? null,
-                keySkills:       (extracted.keySkills as string[] | undefined) ?? null,
-                skills:          (extracted.skills as string[] | undefined) ?? null,
-                educationLevel:  (extracted.educationLevel as string | undefined) ?? null,
-                workFormat:      (extracted.workFormat as string | undefined) ?? null,
+                name:             resp.candidateName,
+                city:             candidateCity ?? null,
+                salaryMin:        candidateSalary,
+                experienceYears:  (extracted.experienceYears as number | undefined) ?? null,
+                keySkills:        (extracted.keySkills as string[] | undefined) ?? null,
+                skills:           (extracted.skills as string[] | undefined) ?? null,
+                educationLevel:   (extracted.educationLevel as string | undefined) ?? null,
+                workFormat:       (extracted.workFormat as string | undefined) ?? null,
+                // Доп. поля hh (миграция 0200)
+                languages:        (extracted.languages as string[] | undefined) ?? null,
+                relocationReady:  extracted.relocationReady ?? null,
+                professionalRoles:(extracted.professionalRoles as string[] | undefined) ?? null,
+                citizenshipNames: (extracted.citizenshipNames as string[] | undefined) ?? null,
               },
               vacancy: {
                 title:                localVac.title,
