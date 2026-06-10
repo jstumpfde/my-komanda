@@ -20,6 +20,7 @@ export type VacancyTabKey =
   | "messages"
   | "funnel"
   | "funnel-builder"
+  | "spec"
   | "followup"
   | "aichatbot"
   | "ai"

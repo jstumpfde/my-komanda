@@ -16,13 +16,13 @@
  * | requirementsJson.deal_breakers          | dealBreakers                       | v2                                        |
  * | requirementsJson.scoring_weights        | scoringWeights                     | v2; дефолт DEFAULT_SCORING_WEIGHTS        |
  * | requirementsJson.ideal_profile          | idealProfile                       | v2, приоритет над anketa.aiIdealProfile   |
- * | aiProcessSettings.minScoreUpper         | thresholds.upperThreshold          | резюме; дефолт 75                         |
- * | aiProcessSettings.minScoreLower         | thresholds.lowerThreshold          | резюме; fallback minScore; дефолт 40      |
- * | aiProcessSettings.midRangeAction        | thresholds.midRangeAction          | резюме; дефолт direct_demo                |
- * | aiProcessSettings.autoRejectEnabled     | thresholds.autoRejectEnabled       |                                           |
- * | aiProcessSettings.rejectionDelayMinutes | thresholds.rejectionDelayMinutes   | дефолт 300                                |
- * | descriptionJson.anketa.upperThreshold   | thresholds.upperThreshold          | анкета (PostDemoSettings); НЕ перезаписыв.|
- * | descriptionJson.anketa.lowerThreshold   | thresholds.lowerThreshold          | СПОРНО: анкета = 50 vs резюме = 40        |
+ * | aiProcessSettings.minScoreUpper         | resumeThresholds.upperThreshold    | резюме; дефолт 75                         |
+ * | aiProcessSettings.minScoreLower         | resumeThresholds.lowerThreshold    | резюме; fallback minScore; дефолт 40      |
+ * | aiProcessSettings.midRangeAction        | resumeThresholds.midRangeAction    | резюме; дефолт direct_demo                |
+ * | aiProcessSettings.autoRejectEnabled     | resumeThresholds.autoRejectEnabled |                                           |
+ * | aiProcessSettings.rejectionDelayMinutes | resumeThresholds.rejectionDelayMinutes | дефолт 300                            |
+ * | demos.postDemoSettings.upperThreshold   | anketaThresholds.upperThreshold    | анкета (kind='demo'); дефолт 75           |
+ * | demos.postDemoSettings.lowerThreshold   | anketaThresholds.lowerThreshold    | анкета; дефолт 50                         |
  * | stopFactorsJson                         | stopFactors                        | прямой маппинг                            |
  * | descriptionJson.anketa.aiIdealProfile   | idealProfile (fallback)            | если requirementsJson.ideal_profile пуст  |
  * | descriptionJson.anketa.aiRequiredHardSkills | portraitRequiredSkills         | «Портрет кандидата» v1                    |
@@ -32,16 +32,17 @@
  * | outboundSoftCriteria                    | outboundSoftCriteria               | передаётся явно (из outbound_searches)    |
  *
  * СПОРНЫЕ РЕШЕНИЯ:
- * 1. Пороги анкеты (lowerThreshold=50) vs пороги резюме (lowerThreshold=40).
- *    Решение: берём пороги из aiProcessSettings (резюме-контекст). Пороги анкеты
- *    хранятся отдельно в descriptionJson.anketa.{upper,lower}Threshold, но в Spec
- *    они НЕ заполняют thresholds — это отдельная секция для будущего разделения.
- *    Пока Spec имеет ОДНУ пару порогов: из aiProcessSettings.
- *    TODO: добавить resumeThresholds и anketaThresholds в v2 Spec.
+ * 1. [ЗАКРЫТО, Этап 2] Пороги анкеты vs пороги резюме: в Spec ДВЕ пары —
+ *    resumeThresholds (из aiProcessSettings, 75/40) и anketaThresholds
+ *    (из demos.postDemoSettings kind='demo', 75/50). Пороги анкеты живут
+ *    в таблице demos (НЕ в descriptionJson.anketa, как предполагалось ранее) —
+ *    поэтому передаются в LegacyVacancyInput отдельным полем postDemoSettings
+ *    (API-роут делает запрос к demos сам).
  * 2. Идеальный профиль: если заполнены оба (v2 requirementsJson.ideal_profile и
  *    v1 anketa.aiIdealProfile) — берём requirementsJson (более структурированный).
  * 3. portaitRequiredSkills vs mustHave: НЕ объединяем автоматически, храним оба.
  *    При активации нового скоринга потребителю нужно выбрать источник вручную.
+ *    Разовый перенос v1→v2 — кнопкой в UI spec-editor (Этап 2, п.3).
  */
 
 import type { CandidateSpec } from "./types"
@@ -68,6 +69,13 @@ export interface LegacyVacancyInput {
    * Если не нужен — просто не передавайте.
    */
   outboundSoftCriteria?: string | null
+  /**
+   * Этап 2: настройки AI-скрининга анкеты из demos.post_demo_settings
+   * (запись kind='demo', последняя по updated_at). Передаётся снаружи —
+   * требует отдельного запроса к таблице demos, API-роут делает его сам.
+   * Нас интересуют только upperThreshold/lowerThreshold.
+   */
+  postDemoSettings?: { upperThreshold?: number; lowerThreshold?: number } | null
 }
 
 // ─── Утилиты ────────────────────────────────────────────────────────────────
@@ -166,23 +174,28 @@ export function buildSpecFromLegacy(vacancy: LegacyVacancyInput): CandidateSpec 
   if (stops.citizenship)       stopFactors.citizenship       = { ...stops.citizenship }
   if (stops.salaryExpectation) stopFactors.salaryExpectation = { ...stops.salaryExpectation }
 
-  // ── (c) Пороги и маршрутизация ────────────────────────────────────────────
-  // Берём ТОЛЬКО из aiProcessSettings (пороги резюме).
-  // Пороги анкеты (anketa.upperThreshold/lowerThreshold из PostDemoSettings) —
-  // намеренно НЕ записываются в thresholds. Они хранятся в descriptionJson.anketa
-  // и пока остаются legacy-only (см. СПОРНЫЕ РЕШЕНИЯ выше).
+  // ── (c) Пороги и маршрутизация (Этап 2: две пары) ─────────────────────────
+  // Пороги резюме — из aiProcessSettings (legacy v1: minScore → lower).
   const upper      = num(ai.minScoreUpper, 75)
   const lower      = num(ai.minScoreLower ?? (ai as Record<string, unknown>).minScore, 40)
   const midRange   = validMidRange(ai.midRangeAction ?? (ai as Record<string, unknown>).belowThresholdAction)
   const autoReject = bool(ai.autoRejectEnabled, false)
   const rejDelay   = num(ai.rejectionDelayMinutes, 300)
 
-  const thresholds: CandidateSpec["thresholds"] = {
+  const resumeThresholds: CandidateSpec["resumeThresholds"] = {
     upperThreshold:       Math.max(0, Math.min(100, upper)),
     lowerThreshold:       Math.max(0, Math.min(100, lower)),
     midRangeAction:       midRange,
     autoRejectEnabled:    autoReject,
     rejectionDelayMinutes: Math.max(0, rejDelay),
+  }
+
+  // Пороги анкеты — из demos.postDemoSettings (передаётся снаружи). Дефолты 75/50
+  // (как в UI PostDemoSettings, components/vacancies/post-demo-settings.tsx).
+  const pds = vacancy.postDemoSettings ?? {}
+  const anketaThresholds: CandidateSpec["anketaThresholds"] = {
+    upperThreshold: Math.max(0, Math.min(100, num(pds.upperThreshold, 75))),
+    lowerThreshold: Math.max(0, Math.min(100, num(pds.lowerThreshold, 50))),
   }
 
   // ── (d) Профиль / текстовые описания ─────────────────────────────────────
@@ -207,8 +220,9 @@ export function buildSpecFromLegacy(vacancy: LegacyVacancyInput): CandidateSpec 
     customCriteria,
     // (b) стоп-факторы
     stopFactors,
-    // (c) пороги
-    thresholds,
+    // (c) пороги (Этап 2: две пары)
+    resumeThresholds,
+    anketaThresholds,
     // (d) профиль
     idealProfile,
     portraitRequiredSkills,
