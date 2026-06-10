@@ -199,6 +199,13 @@ export interface CompanyHiringDefaults {
   // Настраивает только директор; остальные HR видят read-only.
   // Ключи соответствуют CardDisplaySettings из components/dashboard/card-settings.tsx.
   candidateColumns?: Record<string, boolean>
+  // F2: список Telegram-каналов/чатов компании для постинга вакансий.
+  // Хранится в hiring_defaults_json — не требует отдельной таблицы.
+  telegramChannels?: Array<{
+    id: string        // uuid v4 на клиенте
+    name: string      // «Наш канал разработчиков»
+    username: string  // @devjobs или https://t.me/devjobs
+  }>
 }
 
 // ── CompanyLegalContact (drizzle/0177) ──
