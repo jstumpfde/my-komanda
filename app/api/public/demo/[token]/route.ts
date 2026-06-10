@@ -128,6 +128,33 @@ export async function GET(
 
     // Ф5: текст-обёртка анкеты — vacancies.description_json.anketaIntro
     const dj = (vacancy.descriptionJson as Record<string, unknown> | null) ?? {}
+
+    // F4: конфиг видео-интервью — vacancies.description_json.videoIntro.
+    // Передаём только questions (для безопасности, минимальный объём).
+    const videoIntroRaw = (dj.videoIntro && typeof dj.videoIntro === "object")
+      ? dj.videoIntro as Record<string, unknown>
+      : null
+    const videoIntroQuestions: { text: string; maxDurationSeconds: number }[] = []
+    if (videoIntroRaw && Array.isArray(videoIntroRaw.questions)) {
+      for (const q of videoIntroRaw.questions) {
+        if (q && typeof q === "object") {
+          const o = q as Record<string, unknown>
+          const text = typeof o.text === "string" ? o.text.trim() : ""
+          const maxDurationSeconds = typeof o.maxDurationSeconds === "number" ? o.maxDurationSeconds : 60
+          if (text) videoIntroQuestions.push({ text, maxDurationSeconds })
+        }
+      }
+    }
+    const videoIntro = videoIntroRaw
+      ? {
+          required:           typeof videoIntroRaw.required === "boolean" ? videoIntroRaw.required : false,
+          instruction:        typeof videoIntroRaw.instruction === "string" ? videoIntroRaw.instruction : "",
+          maxDurationSeconds: typeof videoIntroRaw.maxDurationSeconds === "number" ? videoIntroRaw.maxDurationSeconds : 60,
+          minDurationSeconds: typeof videoIntroRaw.minDurationSeconds === "number" ? videoIntroRaw.minDurationSeconds : 15,
+          thankYouText:       typeof videoIntroRaw.thankYouText === "string" ? videoIntroRaw.thankYouText : "",
+          questions:          videoIntroQuestions,
+        }
+      : null
     const introRaw = (dj.anketaIntro && typeof dj.anketaIntro === "object")
       ? dj.anketaIntro as Record<string, unknown>
       : null
@@ -177,6 +204,7 @@ export async function GET(
       anketaIntro,
       finalScreens,
       prefill,
+      videoIntro,
     })
   } catch (err) {
     if (err instanceof Response) return err

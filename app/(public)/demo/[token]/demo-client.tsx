@@ -137,6 +137,16 @@ interface DemoData {
     afterAnketa: { title: string; subtitle: string }
   } | null
   prefill?: { first_name: string | null; last_name: string | null; city: string | null }
+  // F4: конфиг видео-интервью из vacancies.description_json.videoIntro.
+  // null — блок не настроен (старое поведение).
+  videoIntro?: {
+    required:           boolean
+    instruction:        string
+    maxDurationSeconds: number
+    minDurationSeconds: number
+    thankYouText:       string
+    questions:          { text: string; maxDurationSeconds: number }[]
+  } | null
 }
 
 // Дефолты должны совпадать с DEFAULT_AFTER_VIDEO/DEFAULT_AFTER_ANKETA из
@@ -824,10 +834,19 @@ export default function DemoPage() {
         if (missing) return
       }
 
-      // Валидация обязательных media-блоков урока
+      // Валидация обязательных media-блоков урока.
+      // F4: если режим видео-интервью — проверяем все sub-ключи вопросов.
+      const viQuestions = data?.videoIntro?.questions ?? []
       const mediaBlocks = currentFlat.blocks.filter((b) => b.type === "media")
       for (const mb of mediaBlocks) {
-        if (mb.mediaRequired && !mediaUploaded[mb.id]) return
+        if (!mb.mediaRequired) continue
+        if (viQuestions.length > 0) {
+          // Видео-интервью: обязательны ответы на ВСЕ вопросы (согласовано с hasRequiredUnanswered)
+          const missingVi = viQuestions.some((_: unknown, qi: number) => !mediaUploaded[`${mb.id}_vi_${qi}`])
+          if (missingVi) return
+        } else {
+          if (!mediaUploaded[mb.id]) return
+        }
       }
 
       // Собираем batch — все блоки урока, которые прошли через handleNext.
@@ -849,7 +868,19 @@ export default function DemoPage() {
             batch.push({ blockId: b.id, answer: taskAnswers[b.id] || {}, status: "completed", timeSpent })
           }
         } else if (b.type === "media") {
-          if (mediaUploaded[b.id]) {
+          if (viQuestions.length > 0) {
+            // F4: видео-интервью — сохраняем каждый ответ как отдельную запись в batch.
+            // Ключи вида "<blockId>_vi_<idx>" прозрачны для answer/route.ts.
+            let anyAnswered = false
+            for (let qi = 0; qi < viQuestions.length; qi++) {
+              const subKey = `${b.id}_vi_${qi}`
+              if (mediaUploaded[subKey]) {
+                batch.push({ blockId: subKey, answer: mediaUploaded[subKey], status: "completed", timeSpent })
+                anyAnswered = true
+              }
+            }
+            if (anyAnswered) nowViewed.add(b.id)
+          } else if (mediaUploaded[b.id]) {
             // Передаём фактический MediaAnswer ({url, mediaType: "video", ...}), а
             // не маркер {viewed: true}. Иначе сервер перезапишет ответ в
             // anketa_answers и hasVideoVizitka рассчитается как false.
@@ -1271,6 +1302,9 @@ export default function DemoPage() {
 
   if (!currentFlat) return null
 
+  // F4: вопросы видео-интервью из конфига вакансии
+  const viQuestions = data.videoIntro?.questions ?? []
+
   // Валидация: хоть один task-блок урока с незаполненным обязательным вопросом
   // или обязательный media-блок без загруженного файла
   const hasRequiredUnanswered = currentFlat.blocks.some((b) => {
@@ -1279,6 +1313,10 @@ export default function DemoPage() {
       return b.questions.some((q) => q.required && !a[q.id]?.trim())
     }
     if (b.type === "media" && b.mediaRequired) {
+      if (viQuestions.length > 0) {
+        // Видео-интервью: обязательны ответы на ВСЕ вопросы
+        return viQuestions.some((_, qi) => !mediaUploaded[`${b.id}_vi_${qi}`])
+      }
       return !mediaUploaded[b.id]
     }
     return false
@@ -1365,7 +1403,32 @@ export default function DemoPage() {
                 {block.type === "stories" && (
                   <StoriesPlayer cards={block.storiesCards ?? []} />
                 )}
-                {block.type === "media" && (
+                {block.type === "media" && viQuestions.length > 0 && (
+                  // F4: режим видео-интервью — вопросы по одному с прогрессом
+                  <VideoInterviewBlock
+                    questions={viQuestions}
+                    blockId={block.id}
+                    token={token}
+                    brandColor={brandColor}
+                    isRequired={block.mediaRequired !== false}
+                    previewMode={isPreviewMode}
+                    uploadedAnswers={mediaUploaded}
+                    onUploaded={(subKey, ans) =>
+                      setMediaUploaded((prev) => ({ ...prev, [subKey]: ans }))
+                    }
+                    onUploadingChange={(subKey, uploading) =>
+                      setMediaUploading((prev) => {
+                        if (!!prev[subKey] === uploading) return prev
+                        const next = { ...prev }
+                        if (uploading) next[subKey] = true
+                        else delete next[subKey]
+                        return next
+                      })
+                    }
+                  />
+                )}
+                {block.type === "media" && viQuestions.length === 0 && (
+                  // Старый режим — одна визитка
                   <MediaBlock
                     block={block}
                     token={token}
@@ -1495,6 +1558,156 @@ function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60)
   const s = Math.floor(seconds % 60)
   return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`
+}
+
+// ─── F4: Video Interview Block ───────────────────────────────────────────────
+// Пошаговый режим для «Видео-интервью» — кандидат отвечает на каждый вопрос
+// по очереди. Каждый ответ хранится в mediaUploaded под ключом
+// "<blockId>_vi_<idx>" (субключи прозрачны для существующей логики сохранения).
+
+function VideoInterviewBlock({
+  questions,
+  blockId,
+  token,
+  brandColor,
+  isRequired,
+  previewMode,
+  uploadedAnswers,
+  onUploaded,
+  onUploadingChange,
+}: {
+  questions:        { text: string; maxDurationSeconds: number }[]
+  blockId:          string
+  token:            string
+  brandColor:       string
+  isRequired:       boolean
+  previewMode?:     boolean
+  uploadedAnswers:  Record<string, MediaAnswer>
+  onUploaded:       (subKey: string, ans: MediaAnswer) => void
+  onUploadingChange?: (subKey: string, uploading: boolean) => void
+}) {
+  // Определяем текущий активный шаг: первый вопрос без ответа.
+  // После ответа на все — остаёмся на последнем (кандидат видит «все записаны»).
+  const answeredCount = questions.filter((_, i) => !!uploadedAnswers[`${blockId}_vi_${i}`]).length
+  const [activeStep, setActiveStep] = useState<number>(() => {
+    const firstUnanswered = questions.findIndex((_, i) => !uploadedAnswers[`${blockId}_vi_${i}`])
+    return firstUnanswered === -1 ? questions.length - 1 : firstUnanswered
+  })
+
+  // Когда ответ записан, двигаемся к следующему вопросу автоматически
+  const handleQuestionUploaded = (idx: number, ans: MediaAnswer) => {
+    const subKey = `${blockId}_vi_${idx}`
+    onUploaded(subKey, ans)
+    // Переходим к следующему вопросу если он есть
+    if (idx < questions.length - 1) {
+      setActiveStep(idx + 1)
+    }
+  }
+
+  const allAnswered = answeredCount === questions.length
+
+  return (
+    <div className="space-y-4">
+      {/* Прогресс вопросов */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium text-gray-700">
+          Вопрос {Math.min(activeStep + 1, questions.length)} из {questions.length}
+        </p>
+        {allAnswered && (
+          <span className="text-xs text-emerald-600 font-medium">
+            Все ответы записаны ✓
+          </span>
+        )}
+      </div>
+
+      {/* Шаги-индикаторы */}
+      <div className="flex gap-1.5">
+        {questions.map((_, i) => {
+          const answered = !!uploadedAnswers[`${blockId}_vi_${i}`]
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setActiveStep(i)}
+              className={`flex-1 h-1.5 rounded-full transition-colors ${
+                answered
+                  ? "bg-emerald-500"
+                  : i === activeStep
+                  ? "bg-blue-500"
+                  : "bg-gray-200"
+              }`}
+              title={`Вопрос ${i + 1}`}
+            />
+          )
+        })}
+      </div>
+
+      {/* Активный вопрос */}
+      {questions.map((q, i) => {
+        if (i !== activeStep) return null
+        const subKey = `${blockId}_vi_${i}`
+        const existing = uploadedAnswers[subKey]
+        // Создаём фиктивный Block для MediaBlock с параметрами вопроса
+        const fakeBlock: Block = {
+          id: subKey,
+          type: "media",
+          content: "",
+          imageUrl: "", imageLayout: "full", imageCaption: "", imageTitleTop: "",
+          videoUrl: "", videoTitleTop: "", videoCaption: "",
+          audioUrl: "", audioTitle: "", audioTitleTop: "", audioCaption: "",
+          fileUrl: "", fileName: "", fileTitleTop: "", fileCaption: "",
+          infoStyle: "info",
+          buttonText: "", buttonUrl: "", buttonVariant: "primary",
+          taskTitle: "", taskDescription: "", questions: [],
+          mediaAllowVideo: true,
+          mediaAllowAudio: false,
+          mediaAllowPhoto: false,
+          mediaMaxDuration: q.maxDurationSeconds,
+          mediaRequired: isRequired,
+          mediaInstruction: q.text,
+        }
+        return (
+          <div key={subKey} className="space-y-2">
+            <p className="text-sm font-semibold text-gray-800 leading-snug">{q.text}</p>
+            <MediaBlock
+              block={fakeBlock}
+              token={token}
+              brandColor={brandColor}
+              existing={existing}
+              previewMode={previewMode}
+              skipped={false}
+              onUploaded={(ans) => handleQuestionUploaded(i, ans)}
+              onUploadingChange={(uploading) => onUploadingChange?.(subKey, uploading)}
+            />
+          </div>
+        )
+      })}
+
+      {/* Кнопки навигации между вопросами */}
+      {questions.length > 1 && (
+        <div className="flex gap-2 pt-1">
+          {activeStep > 0 && (
+            <button
+              type="button"
+              onClick={() => setActiveStep(s => Math.max(0, s - 1))}
+              className="text-xs text-gray-500 hover:text-gray-700 underline underline-offset-2"
+            >
+              ← Предыдущий вопрос
+            </button>
+          )}
+          {activeStep < questions.length - 1 && !!uploadedAnswers[`${blockId}_vi_${activeStep}`] && (
+            <button
+              type="button"
+              onClick={() => setActiveStep(s => Math.min(questions.length - 1, s + 1))}
+              className="text-xs text-blue-600 hover:text-blue-800 underline underline-offset-2"
+            >
+              Следующий вопрос →
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 type MediaBlockMode = "idle" | "recording" | "preview" | "uploading" | "done" | "error"

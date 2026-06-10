@@ -419,6 +419,14 @@ function pickFirstMediaType(media: MediaAnswer | MediaAnswer[]): MediaAnswer["me
 // это просмотр контента, не ответ. Их в табе «Ответы» показывать не нужно.
 const ANSWERABLE_BLOCK_TYPES = new Set<string>(["task", "media"])
 
+// F4: видео-интервью — субключи вида "<blockId>_vi_<idx>".
+const VIDEO_INTERVIEW_SUB_RE = /^(.+)_vi_(\d+)$/
+function parseVideoInterviewKey(blockId: string): { baseId: string; idx: number } | null {
+  const m = VIDEO_INTERVIEW_SUB_RE.exec(blockId)
+  if (!m) return null
+  return { baseId: m[1], idx: parseInt(m[2], 10) }
+}
+
 // Сессия 7a: технические идентификаторы вопросов (q-1778750542831,
 // q-..-0t, q-..-ky) HR-у в карточке не нужны. Если ничего человеческого
 // нет — показываем нейтральный fallback вместо ID.
@@ -442,6 +450,42 @@ function isViewMarkerOnly(answer: unknown): boolean {
     (k) => k !== "viewed" && k !== "viewedAt" && k !== "timeSpent"
   )
   return meaningfulKeys.length === 0
+}
+
+// F4: карточка одного видео-ответа на вопрос интервью.
+// Отображается в сгруппированной секции «Видео-интервью».
+function VideoInterviewEntryCard({ entry, label }: { entry: AnketaEntry; label: string }) {
+  const e = entry as { blockId?: string; answer?: unknown; answeredAt?: string }
+  const ans = e.answer
+  const media = coerceMedia(ans)
+  const answeredLabel = formatAnsweredAt(e.answeredAt)
+  const directDuration = !Array.isArray(media) && ans && typeof ans === "object"
+    ? (ans as { duration?: number }).duration
+    : undefined
+
+  return (
+    <div className="p-3 rounded-lg border border-border/60 bg-muted/40 space-y-2 min-w-0">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start gap-1.5 min-w-0">
+          <VideoIcon className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
+          <span className="text-xs font-medium text-foreground break-words min-w-0">{label}</span>
+        </div>
+        {answeredLabel && (
+          <span className="text-[10px] text-muted-foreground shrink-0">{answeredLabel}</span>
+        )}
+      </div>
+      {media ? (
+        <div className="space-y-1">
+          <MediaList media={media} />
+          {directDuration ? (
+            <p className="text-[10px] text-muted-foreground">{formatDuration(directDuration)}</p>
+          ) : null}
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground/60 italic">нет ответа</p>
+      )}
+    </div>
+  )
 }
 
 function EntryCard({ entry, blockMap }: { entry: AnketaEntry; blockMap: Map<string, BlockMapEntry> }) {
@@ -635,6 +679,11 @@ export function AnswersTab({ answers, demoLessons, candidateId }: AnswersTabProp
     if ("question" in e && typeof (e as { question?: unknown }).question === "string") return true
     const blockId = "blockId" in e ? (e as { blockId?: string }).blockId : ""
     if (!blockId || blockId === "__complete__") return false
+    // F4: видео-интервью субключи (_vi_N) — это медиа-ответы, всегда показываем
+    if (parseVideoInterviewKey(blockId)) {
+      if (isViewMarkerOnly((e as { answer?: unknown }).answer)) return false
+      return true
+    }
     const mapped = blockMap.get(blockId)
     // Если блок известен и он не отвечательный (info/text/video/image/file/button) — пропускаем
     if (mapped?.block?.type && !ANSWERABLE_BLOCK_TYPES.has(mapped.block.type)) return false
@@ -645,6 +694,22 @@ export function AnswersTab({ answers, demoLessons, candidateId }: AnswersTabProp
 
   // Раздел «Предквалификация» (Сессия 9). Реальные ответы и AI-вердикт.
   const prequalSection = <PrequalificationSection candidateId={candidateId} />
+
+  // F4: выделяем группы видео-интервью (записи _vi_N с одним базовым blockId),
+  // чтобы показать их под общим заголовком «Видео-интервью».
+  const viGroups = new Map<string, AnketaEntry[]>()
+  const regularEntries: AnketaEntry[] = []
+  for (const e of visible) {
+    const blockId = "blockId" in (e as object) ? (e as { blockId?: string }).blockId ?? "" : ""
+    const viKey = parseVideoInterviewKey(blockId)
+    if (viKey) {
+      const group = viGroups.get(viKey.baseId) ?? []
+      group.push(e)
+      viGroups.set(viKey.baseId, group)
+    } else {
+      regularEntries.push(e)
+    }
+  }
 
   if (visible.length === 0) {
     return (
@@ -663,16 +728,45 @@ export function AnswersTab({ answers, demoLessons, candidateId }: AnswersTabProp
   return (
     <div className="space-y-4 min-w-0">
       {prequalSection}
-      <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Финальная анкета
-        </p>
-        <div className="space-y-3">
-          {visible.map((entry, i) => (
-            <EntryCard key={i} entry={entry} blockMap={blockMap} />
-          ))}
+
+      {/* F4: секция «Видео-интервью» — сгруппированные ответы _vi_N */}
+      {viGroups.size > 0 && Array.from(viGroups.entries()).map(([baseId, viEntries]) => (
+        <div key={`vi-${baseId}`} className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Видео-интервью
+          </p>
+          <div className="space-y-3">
+            {viEntries
+              .slice()
+              .sort((a, b) => {
+                const ai = parseVideoInterviewKey((a as { blockId?: string }).blockId ?? "")?.idx ?? 0
+                const bi = parseVideoInterviewKey((b as { blockId?: string }).blockId ?? "")?.idx ?? 0
+                return ai - bi
+              })
+              .map((entry, i) => {
+                const blockId = (entry as { blockId?: string }).blockId ?? ""
+                const viKey = parseVideoInterviewKey(blockId)
+                const label = viKey !== null ? `Вопрос ${viKey.idx + 1}` : `Ответ ${i + 1}`
+                return (
+                  <VideoInterviewEntryCard key={blockId} entry={entry} label={label} />
+                )
+              })}
+          </div>
         </div>
-      </div>
+      ))}
+
+      {regularEntries.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Финальная анкета
+          </p>
+          <div className="space-y-3">
+            {regularEntries.map((entry, i) => (
+              <EntryCard key={i} entry={entry} blockMap={blockMap} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
