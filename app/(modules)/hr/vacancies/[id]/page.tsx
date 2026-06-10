@@ -22,6 +22,7 @@ import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/componen
 import type { CandidateSortMode } from "@/lib/candidate-sort"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
 import { CandidateTrashSheet } from "@/components/candidates/candidate-trash-sheet"
+import { RediscoverySheet } from "@/components/candidates/rediscovery-sheet"
 import { RubricRankPanel } from "@/components/candidates/rubric-rank-panel"
 import { BulkActionsBar, type BulkAction } from "@/components/dashboard/bulk-actions-bar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -488,6 +489,7 @@ export default function VacancyPage() {
   const initialFunnelStatuses = stageFromUrl ? stageFromUrl.split(",").filter(Boolean) : DEFAULT_FUNNEL_STATUSES.slice()
   const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: initialFunnelStatuses, hideRejected: false, hideNoSalary: false, activeNow: false, demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
   const [trashOpen, setTrashOpen] = useState(false) // Корзина кандидатов (Sheet)
+  const [rediscoveryOpen, setRediscoveryOpen] = useState(false) // Поиск в базе (Sheet)
 
   // Маппинг русских лейблов фильтра прогресса демо → API-идентификаторы.
   // UI: candidate-filters.tsx:70 ["Не начал", "В процессе", "Завершил (≥85%)",
@@ -2410,6 +2412,10 @@ export default function VacancyPage() {
                           <Trash2 className="w-3.5 h-3.5 mr-2" />
                           Корзина
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setRediscoveryOpen(true)}>
+                          <Users className="w-3.5 h-3.5 mr-2" />
+                          Поискать в базе
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                     <ViewSettings
@@ -3944,6 +3950,14 @@ export default function VacancyPage() {
         open={trashOpen}
         onOpenChange={setTrashOpen}
         onChanged={() => { (useListPaginated ? paginated.refetch() : refetchCandidates()) }}
+      />
+
+      {/* F1 Rediscovery — поиск кандидатов из базы компании. */}
+      <RediscoverySheet
+        vacancyId={id}
+        open={rediscoveryOpen}
+        onOpenChange={setRediscoveryOpen}
+        onAdded={() => { useListPaginated ? paginated.refetch() : refetchCandidates() }}
       />
 
       {/* Bulk actions floating bar — visible only when кандидаты выделены
