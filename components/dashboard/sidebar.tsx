@@ -258,6 +258,10 @@ export function DashboardSidebar() {
   // показываем всё (как раньше, по роли). Гейтим только если API вернул
   // непустой список — тогда пересекаем с ролевым списком.
   useEffect(() => {
+    // OPT-IN: фильтр меню по лицензии включается только NEXT_PUBLIC_MODULE_GATING=true
+    // (синхронно с middleware MODULE_GATING_ENABLED). Пока реестр модулей неполный —
+    // ВЫКЛ по умолчанию, чтобы не прятать «База знаний»/«Обучение» у текущих клиентов.
+    if (process.env.NEXT_PUBLIC_MODULE_GATING !== "true") return
     // Платформенные администраторы видят все модули всегда
     if (isAdminOrManager) return
 

@@ -119,11 +119,12 @@ export default auth(async (req) => {
   }
 
   // ── Проверка доступа к модулям ──────────────────────────────────────────────
-  // Аварийный выключатель: DEV_SKIP_MODULE_CHECK=true полностью отключает гейтинг.
-  // Grandfather-правило: если у компании НЕТ НИ ОДНОЙ записи в tenant_modules →
-  // считаем «старый клиент», даём полный доступ (fail-open для ИП Штумпф/Орлинка).
-  // Реальное ограничение только если у компании есть записи И нужного модуля нет.
-  if (process.env.DEV_SKIP_MODULE_CHECK !== "true") {
+  // OPT-IN: гейтинг ВЫКЛЮЧЕН по умолчанию, включается только MODULE_GATING_ENABLED=true.
+  // Причина: реестр `modules` пока неполный (нет knowledge/learning/tasks и т.д.),
+  // а hasAnyModule-fallback + частичный реестр спрятали бы реальные пункты меню у
+  // существующих клиентов. Включаем ТОЛЬКО после полной настройки модулей+тарифов.
+  // Grandfather-правило (когда включён): нет записей в tenant_modules → полный доступ.
+  if (process.env.MODULE_GATING_ENABLED === "true") {
     if (session.user.companyId && !pathname.startsWith("/upgrade")) {
       for (const { prefix, slugs, moduleParam } of MODULE_PATH_MAP) {
         if (pathname.startsWith(prefix)) {
