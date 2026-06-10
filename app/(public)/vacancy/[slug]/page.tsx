@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
+import { serverSanitizeHtml } from "@/lib/server-sanitize-html"
 import {
   MapPin, Banknote, CheckCircle2, ArrowRight, Briefcase,
   Building2, Loader2, Globe,
@@ -393,7 +394,7 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
             {hasHtmlDescription && (
               <article
                 className="prose prose-base max-w-none prose-headings:font-semibold prose-headings:mt-6 prose-headings:mb-3 prose-p:leading-relaxed prose-li:my-1"
-                dangerouslySetInnerHTML={{ __html: rawDescription }}
+                dangerouslySetInnerHTML={{ __html: serverSanitizeHtml(rawDescription) }}
               />
             )}
           </section>

@@ -7,6 +7,7 @@ import { candidates } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { isShortId } from "@/lib/short-id"
 import { publicDir } from "@/lib/uploads-path"
+import { checkRateLimit } from "@/lib/rate-limit"
 
 export const runtime = "nodejs"
 export const maxDuration = 60
@@ -53,6 +54,13 @@ export async function POST(
 ) {
   try {
     const { token } = await params
+
+    // Rate-limit: 20 загрузок в час по связке token+IP против исчерпания диска
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown"
+    const rlKey = `upload-media:${token}:${ip}`
+    if (!checkRateLimit(rlKey, 20, 60 * 60 * 1000)) {
+      return apiError("Слишком много загрузок, попробуйте позже", 429)
+    }
 
     const form = await req.formData()
     const file = form.get("file")

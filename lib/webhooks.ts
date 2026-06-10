@@ -1,8 +1,13 @@
+import { assertPublicUrl } from "@/lib/ssrf-guard"
+
 /**
  * Send a webhook notification. Fire-and-forget.
  */
 export async function sendWebhook(url: string, event: string, data: Record<string, unknown>) {
   try {
+    // SSRF-защита: запрещаем запросы к внутренним адресам
+    await assertPublicUrl(url)
+
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 5000)
 

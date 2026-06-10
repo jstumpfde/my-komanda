@@ -8,6 +8,7 @@ import { users } from "@/lib/db/schema"
 import type { UserRole } from "@/lib/auth"
 import { VKProvider } from "@/lib/auth/vk-provider"
 import { isPlatformAdminEmail } from "@/lib/platform/auth"
+import { checkPasswordAttempts } from "@/lib/rate-limit"
 
 // Expose a stable ref so the JWT callback can read the DB
 // (needed when updateSession() is called after onboarding saves companyId)
@@ -101,11 +102,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Пароль", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         const login = (credentials?.email as string | undefined)?.trim()
         const password = credentials?.password as string | undefined
 
         if (!login || !password) return null
+
+        // Лимит: 5 попыток за 15 мин по связке email+IP
+        const ip = (req as Record<string, unknown> | undefined)?.headers
+          ? String((req as { headers?: Record<string, string> }).headers?.["x-forwarded-for"] ?? "unknown").split(",")[0].trim()
+          : "unknown"
+        const rlKey = `login:${login.toLowerCase()}:${ip}`
+        if (!checkPasswordAttempts(rlKey)) return null
 
         const [user] = await db
           .select()

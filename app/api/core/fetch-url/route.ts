@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server"
 import { requireAuth, apiError, apiSuccess } from "@/lib/api-helpers"
+import { assertPublicUrl } from "@/lib/ssrf-guard"
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,6 +19,13 @@ export async function POST(req: NextRequest) {
     }
     if (!["http:", "https:"].includes(parsed.protocol)) {
       return apiError("Поддерживаются только HTTP/HTTPS ссылки", 400)
+    }
+
+    // SSRF-защита: запрещаем запросы к внутренним адресам
+    try {
+      await assertPublicUrl(url)
+    } catch (e) {
+      return apiError(e instanceof Error ? e.message : "Запрещённый URL", 400)
     }
 
     const controller = new AbortController()

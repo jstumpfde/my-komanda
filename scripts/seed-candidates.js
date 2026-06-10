@@ -1,6 +1,6 @@
 const postgres = require('postgres');
 const crypto = require('crypto');
-const db = postgres('postgresql://mykomanda:mykomanda2026@localhost:5432/mykomanda', { max: 1 });
+const db = postgres(process.env.DATABASE_URL || (() => { throw new Error('DATABASE_URL не задан') })(), { max: 1 });
 
 const VACANCY_ID = '3232a0bb-6213-4e25-a1d8-a5d8ae2f544d';
 
