@@ -55,12 +55,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (status === "authenticated") {
-      // platform_admin / platform_manager → /hr/overview (демо-дашборд с seed).
-      // Клиентские роли (director, hr_lead, hr_manager, head, observer, ...) →
-      // /hr/vacancies напрямую, минуя промежуточный /hr/overview.
-      const role = session?.user?.role
-      const isAdminOrManager = role === "platform_admin" || role === "platform_manager"
-      router.replace(isAdminOrManager ? "/hr/overview" : "/hr/vacancies")
+      // Все роли → /hr/vacancies (дашборд)
+      router.replace("/hr/vacancies")
     }
   }, [status, session, router])
 

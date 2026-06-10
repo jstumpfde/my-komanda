@@ -19,11 +19,7 @@ import { db } from "@/lib/db"
 import { companies } from "@/lib/db/schema"
 import type { NancyVoiceSettings } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
-
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-  baseURL: process.env.CLAUDE_PROXY_URL ?? undefined,
-})
+import { getClaudeApiUrls } from "@/lib/claude-proxy"
 
 export interface NancyAction {
   type: "fill_outbound" | "search_outbound" | "navigate"
@@ -152,13 +148,37 @@ export async function POST(req: Request) {
     { role: "user" as const, content: message },
   ]
 
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return apiError("AI не настроен", 500)
+  }
+
+  // Перебираем proxy с fallback'ом (CLAUDE_PROXY_URLS → CLAUDE_PROXY_URL →
+  // api.anthropic.com). Один сломанный worker (403/5xx) не должен валить Нэнси.
   try {
-    const resp = await client.messages.create({
-      model:      "claude-haiku-4-5-20251001",
-      max_tokens: 512,
-      system:     systemFull,
-      messages,
-    })
+    let resp: Anthropic.Message | null = null
+    let lastErr: unknown = null
+    for (const baseURL of getClaudeApiUrls()) {
+      try {
+        const client = new Anthropic({ baseURL })
+        resp = await client.messages.create({
+          model:      "claude-haiku-4-5-20251001",
+          max_tokens: 512,
+          system:     systemFull,
+          messages,
+        })
+        break
+      } catch (err) {
+        lastErr = err
+        const status = (err as { status?: number })?.status
+        // 4xx (кроме 403 — сломанный worker/allowlist) — это наша ошибка
+        // запроса, перебор proxy не поможет; пробрасываем сразу.
+        if (typeof status === "number" && status >= 400 && status < 500 && status !== 403) {
+          throw err
+        }
+        // 403 / 5xx / сетевая ошибка — пробуем следующий proxy.
+      }
+    }
+    if (!resp) throw lastErr ?? new Error("Все Claude proxy недоступны")
 
     const full = (resp.content[0] as { type: string; text?: string }).text ?? ""
 

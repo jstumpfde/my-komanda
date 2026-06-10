@@ -218,6 +218,14 @@ export interface CompanyLegalContact {
 // Standalone-расписание компании (/settings/schedule). Отдельное от can-send-now
 // (vacancies.schedule_*), календаря и hiring-settings — см. memory
 // schedule-three-systems-keep-separate. Просто хранит своё значение.
+// Расписание одного дня для календаря HR.
+export interface CalendarDaySchedule {
+  enabled: boolean
+  start: string   // "09:00"
+  end:   string   // "18:00"
+  slot:  string   // слот в минутах: "15"|"30"|"60"|...
+}
+
 export interface CompanyWorkSchedule {
   schedule?: { enabled: boolean; from: string; to: string }[] // 7 строк, Пн..Вс
   timezone?: string
@@ -228,6 +236,9 @@ export interface CompanyWorkSchedule {
     id: string; employee: string; type: string
     dateFrom: string; dateTo: string; status: string; comment: string
   }[]
+  // Настройки рабочего расписания календаря HR (/hr/calendar → шестерёнка).
+  // БЕЗ миграции — jsonb принимает любые поля.
+  calendarWeekSchedule?: Record<string, CalendarDaySchedule> // ключ = день недели (0–6)
 }
 
 // ── NancyVoiceSettings (drizzle/0182) ──
@@ -3085,4 +3096,24 @@ export const reportShares = pgTable("report_shares", {
   createdBy: uuid("created_by"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
+})
+
+// ─── R4 Candidate Spec (новый контур, миграция 0197) ─────────────────────────
+// Единый источник «кого ищем» для вакансии. СПЯЩИЙ КОД — не подключён к
+// рантайму скоринга/чат-бота. Активация — через флаг useNewCore per-вакансия.
+//
+// spec: CandidateSpec (lib/core/spec/types.ts) — jsonb-документ с четырьмя
+//   секциями: criteria (must/nice/dealbreaker, веса, кастомные оси),
+//   stopFactors, thresholds (единые пороги), profile (идеальный профиль).
+// updated_by: FK на users.id — кто последний изменил Spec (nullable).
+//
+// PK = vacancy_id (один Spec на вакансию). При удалении вакансии →
+// CASCADE (строка spec удаляется автоматически).
+export const vacancySpecs = pgTable("vacancy_specs", {
+  vacancyId: uuid("vacancy_id")
+    .primaryKey()
+    .references(() => vacancies.id, { onDelete: "cascade" }),
+  spec:      jsonb("spec").notNull().default({}),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
 })

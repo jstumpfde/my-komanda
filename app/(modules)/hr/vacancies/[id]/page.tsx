@@ -834,9 +834,13 @@ export default function VacancyPage() {
   // general → page (стартовая вкладка с брендингом), automation → ai.
   const SETTINGS_SECTION_IDS = ["page", "sources", "messages", "funnel", "funnel-builder", "followup", "aichatbot", "ai", "integrations"] as const
   type SettingsSectionId = typeof SETTINGS_SECTION_IDS[number]
+  // Скрытые legacy-секции: при прямой ссылке (?section=funnel|messages|followup|aichatbot)
+  // перенаправляем на funnel-builder — их контент теперь живёт внутри Конструктора воронки.
+  const LEGACY_SECTIONS_REDIRECT_TO_FUNNEL_BUILDER = ["funnel", "messages", "followup", "aichatbot"] as const
   const initialSettingsSection: SettingsSectionId =
     rawUrlSection === "general" ? "page" :
     rawUrlSection === "automation" ? "ai" :
+    rawUrlSection && (LEGACY_SECTIONS_REDIRECT_TO_FUNNEL_BUILDER as readonly string[]).includes(rawUrlSection) ? "funnel-builder" :
     rawUrlSection && (SETTINGS_SECTION_IDS as readonly string[]).includes(rawUrlSection)
       ? (rawUrlSection as SettingsSectionId)
       : "page"
@@ -3231,20 +3235,6 @@ export default function VacancyPage() {
                           <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
                           <Button size="sm" className="h-8 text-xs shrink-0" disabled>Подключить</Button>
                         </div>
-                      <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#0066CC" }}>SJ</div>
-                        <div className="flex-1 min-w-0"><p className="text-sm font-medium flex items-center gap-2">SuperJob <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span></p><p className="text-[11px] text-muted-foreground">Импорт откликов с SuperJob</p></div>
-                        <span className="text-xs text-muted-foreground shrink-0">0 кликов · 0 кандидатов</span>
-                        <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
-                        <Button size="sm" className="h-8 text-xs shrink-0" disabled>Подключить</Button>
-                      </div>
-                      <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#FF0000" }}>Я</div>
-                        <div className="flex-1 min-w-0"><p className="text-sm font-medium flex items-center gap-2">Яндекс.Работа <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span></p><p className="text-[11px] text-muted-foreground">Импорт откликов с Яндекс.Работа</p></div>
-                        <span className="text-xs text-muted-foreground shrink-0">0 кликов · 0 кандидатов</span>
-                        <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
-                        <Button size="sm" className="h-8 text-xs shrink-0" disabled>Подключить</Button>
-                      </div>
                       </>)}
                     </div>
                   </div>
@@ -3944,13 +3934,16 @@ export default function VacancyPage() {
         onChanged={() => { (useListPaginated ? paginated.refetch() : refetchCandidates()) }}
       />
 
-      {/* Bulk actions floating bar — visible only when кандидаты выделены.
+      {/* Bulk actions floating bar — visible only when кандидаты выделены
+          И активен таб «Кандидаты». На других табах (Аналитика, Контент,
+          Вакансия, Настройки) бар скрывается, т.к. там нет списка и
+          выделение кандидатов не имеет смысла.
           allRejected включает режим bulk-restore: если ВСЕ выделенные
           сейчас в 'rejected', вместо «Отказать/Пригласить/...» показываем
           только «Вернуть в воронку». Считаем по уже подгруженным карточкам
           (paginated.candidates + filtered.columns) — оба варианта режима
           списка кладут кандидата в один из этих источников. */}
-      <BulkActionsBar
+      {activeTab === "candidates" && <BulkActionsBar
         count={selectedCandidateIds.size}
         stages={columns.map((c) => ({ id: c.id, title: c.title }))}
         allRejected={(() => {
@@ -3968,7 +3961,7 @@ export default function VacancyPage() {
         canDelete={canDeleteCandidates}
         onClear={() => setSelectedCandidateIds(new Set())}
         onAction={handleBulkAction}
-      />
+      />}
 
       {/* Окно «Отправить тест»: текст приглашения (предзаполнен), можно
           отредактировать — правка сохраняется как шаблон вакансии. */}

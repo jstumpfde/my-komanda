@@ -126,6 +126,7 @@ type Mapped = {
   city: string
   skills: string[]
   specialization: string
+  category: string
 }
 
 function parseHhHtml(html: string): Mapped {
@@ -159,6 +160,28 @@ function parseHhHtml(html: string): Mapped {
     const s = $(el).text().trim()
     if (s) qaSkills.push(s)
   })
+
+  // ─── Professional roles / category ─────────────────────────────────────
+  // hh.ru отображает профроль в нескольких возможных местах:
+  // 1. [data-qa="vacancy-professional-roles-text"] — основной блок
+  // 2. [data-qa="vacancy-serp__vacancy_professional-role"] — листинг (на странице вакансии есть)
+  // 3. Хлебные крошки — предпоследний элемент перед названием вакансии
+  let qaCategory = $('[data-qa="vacancy-professional-roles-text"]').first().text().trim()
+  if (!qaCategory) {
+    qaCategory = $('[data-qa="vacancy-serp__vacancy_professional-role"]').first().text().trim()
+  }
+  if (!qaCategory) {
+    // Попытка извлечь из хлебных крошек: последний перед заголовком
+    const crumbs: string[] = []
+    $('[data-qa="breadcrumbs"] a, .bloko-breadcrumb a').each((_, el) => {
+      const t = $(el).text().trim()
+      if (t) crumbs.push(t)
+    })
+    if (crumbs.length >= 2) {
+      // Хлебные крошки: Главная → ... → Профобласть → Название вакансии
+      qaCategory = crumbs[crumbs.length - 1]
+    }
+  }
 
   // ─── Title: data-qa → <title> fallback ─────────────────────────────────
   let title = qaTitle
@@ -210,6 +233,7 @@ function parseHhHtml(html: string): Mapped {
     city,
     skills: qaSkills,
     specialization: "",
+    category: qaCategory,
   }
 }
 
@@ -224,7 +248,7 @@ export async function POST(
     const { id } = await params
 
     const [existing] = await db
-      .select({ id: vacancies.id, descriptionJson: vacancies.descriptionJson })
+      .select({ id: vacancies.id, descriptionJson: vacancies.descriptionJson, status: vacancies.status })
       .from(vacancies)
       .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
       .limit(1)
@@ -329,6 +353,7 @@ export async function POST(
       ...(anketaRequiredExperience ? { requiredExperience: anketaRequiredExperience } : {}),
       ...(anketaSchedule ? { schedule: anketaSchedule } : {}),
       ...(anketaWorkFormats.length ? { workFormats: anketaWorkFormats } : {}),
+      ...(mappedData.category ? { vacancyCategory: mappedData.category } : {}),
     }
 
     const now = new Date()
@@ -347,6 +372,7 @@ export async function POST(
     if (mappedData.salaryTo !== null) updates.salaryMax = mappedData.salaryTo
     if (anketaRequiredExperience) updates.requiredExperience = anketaRequiredExperience
     if (anketaSchedule) updates.schedule = anketaSchedule
+    if (mappedData.category) updates.category = mappedData.category
     if (anketaEmployment.length) updates.employment = anketaEmployment[0]
 
     console.log("[hh-import] DB updates:", JSON.stringify(updates, null, 2))
@@ -358,6 +384,10 @@ export async function POST(
       .returning()
 
     // ─── Sync hh_vacancies (upsert) so UI считает вакансию подключённой ────
+    // Для черновиков (status=draft) НЕ проставляем localVacancyId:
+    // черновик ещё не готов, HR подключит источник сам когда вакансия будет готова.
+    // Для уже опубликованных/активных вакансий — связываем как раньше.
+    const isDraft = existing.status === "draft"
     const hhValues = {
       companyId:       user.companyId,
       hhVacancyId,
@@ -368,7 +398,7 @@ export async function POST(
       salaryCurrency:  mappedData.salaryCurrency || null,
       status:          "active",
       url:             hhUrl,
-      localVacancyId:  id,
+      localVacancyId:  isDraft ? null : id,
       rawData:         mappedData as unknown as Record<string, unknown>,
       syncedAt:        now,
     }
