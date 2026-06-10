@@ -73,6 +73,10 @@ interface Interview {
 
 const today2 = new Date()
 
+// Событие календаря type='interview' → форма Interview для этой страницы.
+// candidate берём из title (HR его и заполняет), vacancy — по vacancyId через
+// мапу названий. Статус: cancelled→Отменено, прошедшее→Пройдено, tentative→Ожидает,
+// иначе Подтверждено. Тип/формат — из структурных полей, дефолты для старых событий.
 interface CalEvent {
   id: string; title: string; startAt: string; endAt: string; status: string | null
   vacancyId: string | null; candidateId: string | null; interviewer: string | null; interviewType: string | null; interviewFormat: string | null
@@ -262,6 +266,10 @@ function InterviewsPageContent() {
     } catch { toast.error("Не удалось создать интервью") } finally { setCreating(false) }
   }
 
+  // Меняет интервью локально + персистит в календарь (PATCH): перенос времени/даты
+  // пишет startAt/endAt, смена статуса маппится на статус события календаря
+  // (confirmed/tentative/cancelled). Тонкие статусы (Пройдено/Не явился) — в
+  // interview_status, статус события — ближайший (для конфликтов/напоминаний C6).
   const updateInterview = (id: string, patch: Partial<Interview>, msg: string) => {
     const current = interviews.find(iv => iv.id === id)
     setInterviews(prev => prev.map(iv => iv.id === id ? { ...iv, ...patch } : iv))
