@@ -3,9 +3,7 @@ import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import { db } from "@/lib/db"
 import { plans, planModules, modules, companies } from "@/lib/db/schema"
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
-import { DashboardHeader } from "@/components/dashboard/header"
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { AdminPageLayout } from "@/components/admin/admin-page-layout"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
@@ -58,12 +56,8 @@ export default async function AdminPlansPage() {
   const planList = [...planMap.values()]
 
   return (
-    <SidebarProvider defaultOpen={true}>
-      <DashboardSidebar />
-      <SidebarInset>
-        <DashboardHeader />
-        <main className="flex-1 overflow-auto bg-background">
-          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+    <AdminPageLayout>
+      <div className="py-6 px-8">
             <div className="mb-6">
               <div className="flex items-center gap-2 pt-3 pb-2">
                 <Package className="h-5 w-5 text-violet-600" />
@@ -144,9 +138,7 @@ export default async function AdminPlansPage() {
                 </tbody>
               </DataTable>
             </TableCard>
-          </div>
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+      </div>
+    </AdminPageLayout>
   )
 }

@@ -1,9 +1,7 @@
 "use client"
 
 import { useState, useEffect, use } from "react"
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
-import { DashboardHeader } from "@/components/dashboard/header"
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { AdminPageLayout } from "@/components/admin/admin-page-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -122,25 +120,17 @@ export default function IntegratorDetailPage({ params }: { params: Promise<{ id:
 
   if (loading) {
     return (
-      <SidebarProvider defaultOpen={true}>
-        <DashboardSidebar />
-        <SidebarInset>
-          <DashboardHeader />
-          <main className="flex-1 flex items-center justify-center">
-            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-          </main>
-        </SidebarInset>
-      </SidebarProvider>
+      <AdminPageLayout>
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+        </div>
+      </AdminPageLayout>
     )
   }
 
   return (
-    <SidebarProvider defaultOpen={true}>
-      <DashboardSidebar />
-      <SidebarInset>
-        <DashboardHeader />
-        <main className="flex-1 overflow-auto bg-background">
-          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+    <AdminPageLayout>
+          <div className="py-6 px-8">
             {/* Заголовок */}
             <div className="flex items-center gap-3 mb-6">
               <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => router.push("/admin/integrators")}>
@@ -313,8 +303,6 @@ export default function IntegratorDetailPage({ params }: { params: Promise<{ id:
               </div>
             )}
           </div>
-        </main>
-      </SidebarInset>
 
       {/* Sheet новой выплаты */}
       <Sheet open={payoutSheetOpen} onOpenChange={setPayoutSheetOpen}>
@@ -355,6 +343,6 @@ export default function IntegratorDetailPage({ params }: { params: Promise<{ id:
           </div>
         </SheetContent>
       </Sheet>
-    </SidebarProvider>
+    </AdminPageLayout>
   )
 }

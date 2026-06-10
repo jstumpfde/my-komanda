@@ -3,9 +3,7 @@
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
-import { DashboardHeader } from "@/components/dashboard/header"
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { AdminPageLayout } from "@/components/admin/admin-page-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -389,15 +387,11 @@ export default function AdminClientPage() {
 
   if (loading) {
     return (
-      <SidebarProvider defaultOpen={true}>
-        <DashboardSidebar />
-        <SidebarInset>
-          <DashboardHeader />
-          <div className="flex items-center justify-center h-64">
-            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-          </div>
-        </SidebarInset>
-      </SidebarProvider>
+      <AdminPageLayout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </div>
+      </AdminPageLayout>
     )
   }
 
@@ -408,12 +402,8 @@ export default function AdminClientPage() {
   const canDelete = company?.subscriptionStatus !== "active"
 
   return (
-    <SidebarProvider defaultOpen={true}>
-      <DashboardSidebar />
-      <SidebarInset>
-        <DashboardHeader />
-        <main className="flex-1 overflow-auto bg-background">
-          <div className="py-6 space-y-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+    <AdminPageLayout>
+          <div className="py-6 space-y-6" className="px-8">
 
             {/* Шапка */}
             <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -903,8 +893,6 @@ export default function AdminClientPage() {
             </Tabs>
 
           </div>
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+    </AdminPageLayout>
   )
 }

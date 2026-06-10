@@ -1,9 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
-import { DashboardHeader } from "@/components/dashboard/header"
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { AdminPageLayout } from "@/components/admin/admin-page-layout"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -93,12 +91,8 @@ export default function AdminIntegratorsPage() {
   }
 
   return (
-    <SidebarProvider defaultOpen={true}>
-      <DashboardSidebar />
-      <SidebarInset>
-        <DashboardHeader />
-        <main className="flex-1 overflow-auto bg-background">
-          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+    <AdminPageLayout>
+      <div className="py-6 px-8">
             <div className="flex items-center justify-between mb-6">
               <div>
                 <div className="flex items-center gap-2 pt-3 pb-2">
@@ -178,9 +172,7 @@ export default function AdminIntegratorsPage() {
                 </DataTable>
               </TableCard>
             )}
-          </div>
-        </main>
-      </SidebarInset>
+      </div>
 
       {/* Sheet добавления */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
@@ -213,6 +205,6 @@ export default function AdminIntegratorsPage() {
           </div>
         </SheetContent>
       </Sheet>
-    </SidebarProvider>
+    </AdminPageLayout>
   )
 }
