@@ -40,6 +40,7 @@ function parseArgs(argv: string[]): {
   vacancyId?: string
   vacancyTitle?: string
   transferFromPortrait: boolean
+  rerunLegacy: boolean
   limit: number
   help: boolean
 } {
@@ -47,6 +48,7 @@ function parseArgs(argv: string[]): {
   let vacancyId: string | undefined
   let vacancyTitle: string | undefined
   let transferFromPortrait = false
+  let rerunLegacy = false
   let limit = 30
   let help = false
 
@@ -54,6 +56,7 @@ function parseArgs(argv: string[]): {
     const a = args[i]
     if (a === "--help" || a === "-h") { help = true; continue }
     if (a === "--transfer-from-portrait") { transferFromPortrait = true; continue }
+    if (a === "--rerun-legacy") { rerunLegacy = true; continue }
     if (a === "--vacancy-id" && args[i + 1]) { vacancyId = args[++i]; continue }
     if (a === "--vacancy-title" && args[i + 1]) { vacancyTitle = args[++i]; continue }
     if (a === "--limit" && args[i + 1]) {
@@ -63,7 +66,7 @@ function parseArgs(argv: string[]): {
     }
   }
 
-  return { vacancyId, vacancyTitle, transferFromPortrait, limit, help }
+  return { vacancyId, vacancyTitle, transferFromPortrait, rerunLegacy, limit, help }
 }
 
 function printHelp() {
@@ -79,6 +82,9 @@ spec-shadow-score — теневая оценка кандидатов по Spec
   --vacancy-title <подстрока>  Поиск вакансии (case-insensitive, первое совпадение)
   --transfer-from-portrait     Если Spec пуст — перенести из Портрета кандидата
                                 (сохраняет в vacancy_specs, спящий контур)
+  --rerun-legacy               Честное A/B: пересчитать и legacy-оценку сейчас
+                                (тем же screenResume с legacy-критериями), сравнение
+                                идёт с пересчитанной, а не с сохранённой в БД
   --limit N                    Кол-во кандидатов для оценки (default 30, max 200)
   --help                       Эта справка
 
@@ -267,7 +273,9 @@ async function screenResumeWithRetry(
 interface CandidateResult {
   candidateId:   string
   name:          string
-  legacyScore:   number        // боевой resume_score
+  storedLegacyScore?: number       // сохранённый в БД resume_score
+  freshLegacyScore?:  number | null // legacy-оценка, пересчитанная сейчас (--rerun-legacy)
+  legacyScore:   number        // используемая в сравнении legacy-оценка (fresh при --rerun-legacy)
   specScore:     number | null // теневой (null = не удалось)
   delta:         number | null // specScore - legacyScore
   legacyUpper:   number
@@ -494,6 +502,23 @@ async function main() {
     }
   }
 
+  // ── Legacy-вход для --rerun-legacy: ровно как process-queue ───────────────
+  // (lib/hh/process-queue.ts: критерии из vacancies.description_json.anketa)
+  const descJson = (vacancy.descriptionJson ?? {}) as Record<string, unknown>
+  const legacyAnketa = (descJson.anketa as Record<string, unknown> | undefined) ?? {}
+  const legacyVacancyInput: ResumeScreenInput["vacancy"] = {
+    title:                vacancy.title,
+    city:                 vacancy.city,
+    aiIdealProfile:       (legacyAnketa.aiIdealProfile as string | undefined) ?? null,
+    aiRequiredHardSkills: (legacyAnketa.aiRequiredHardSkills as string[] | undefined) ?? null,
+    aiStopFactors:        (legacyAnketa.aiStopFactors as string[] | undefined) ?? null,
+    screeningQuestions:   (legacyAnketa.screeningQuestions as string[] | undefined) ?? null,
+    aiWeights:            (legacyAnketa.aiWeights as Record<string, string> | undefined) ?? null,
+  }
+  if (opts.rerunLegacy) {
+    console.log(`\n  --rerun-legacy: legacy-оценка пересчитывается сейчас (сравнение fresh-vs-fresh)`)
+  }
+
   // ── Теневой скоринг: конкурентность 2 ────────────────────────────────────
   console.log(`\n  Запуск теневого скоринга (конкурентность 2, retry 1)…`)
 
@@ -544,7 +569,20 @@ async function main() {
         console.warn(`  ✗ ${r.candidateName} (${r.candidateId.slice(0, 8)}): ${errorMsg}`)
       }
 
-      const legacyScore  = r.resumeScore!
+      // --rerun-legacy: пересчитать legacy-оценку на тех же данных сейчас.
+      // Изолирует эффект критериев от дрейфа данных/настроек со времени боевой оценки.
+      let freshLegacyScore: number | null = null
+      if (opts.rerunLegacy) {
+        try {
+          const lr = await screenResumeWithRetry({ resume: resumeObj, vacancy: legacyVacancyInput })
+          if (lr) freshLegacyScore = lr.score
+        } catch (err) {
+          console.warn(`  ✗ legacy-rerun ${r.candidateName}: ${err instanceof Error ? err.message : err}`)
+        }
+      }
+
+      const storedLegacyScore = r.resumeScore!
+      const legacyScore = opts.rerunLegacy && freshLegacyScore !== null ? freshLegacyScore : storedLegacyScore
       const delta        = specScore !== null ? specScore - legacyScore : null
       const legacyZone   = getZone(legacyScore, legacyUpper || specUpper, legacyLower || specLower)
       const specZone     = specScore !== null ? getZone(specScore, specUpper, specLower) : null
@@ -571,6 +609,8 @@ async function main() {
       const cr: CandidateResult = {
         candidateId: r.candidateId,
         name:        r.candidateName,
+        storedLegacyScore,
+        freshLegacyScore,
         legacyScore,
         specScore,
         delta,
@@ -590,7 +630,7 @@ async function main() {
       const dStr = delta !== null ? (delta >= 0 ? `+${delta}` : `${delta}`) : "N/A"
       const zStr = specZone ? `${zoneEmoji(legacyZone)}→${zoneEmoji(specZone)}` : `${zoneEmoji(legacyZone)}→?`
       console.log(`  [${String(results.length + batch.indexOf(r) + 1).padStart(3)}/${uniqueRows.length}] ` +
-        `${trunc(r.candidateName, 22)} | legacy=${String(legacyScore).padStart(3)} spec=${specScore !== null ? String(specScore).padStart(3) : " N/A"} ` +
+        `${trunc(r.candidateName, 22)} | legacy=${String(legacyScore).padStart(3)}${opts.rerunLegacy ? `(БД:${storedLegacyScore})` : ""} spec=${specScore !== null ? String(specScore).padStart(3) : " N/A"} ` +
         `Δ=${dStr.padStart(4)} ${zStr}${zoneChanged ? " ⚡" : ""}`)
 
       return cr
