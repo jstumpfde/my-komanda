@@ -253,26 +253,52 @@ export function DashboardSidebar() {
   const { visibility: sidebarVis, setVisibility: setSidebarVis, isModuleVisible, isItemVisible, resetToDefault: resetSidebarVis } = useSidebarVisibility()
   const [customizeOpen, setCustomizeOpen] = useState(false)
 
-  // Filtered modules: active AND visible
-  const visibleModules = activeModules.filter((id) => isModuleVisible(id))
-  /*
+  // ── Лицензированные модули из /api/tenant/modules ──
+  // Логика grandfather: платформенным админам и при пустом/ошибочном ответе —
+  // показываем всё (как раньше, по роли). Гейтим только если API вернул
+  // непустой список — тогда пересекаем с ролевым списком.
   useEffect(() => {
+    // Платформенные администраторы видят все модули всегда
+    if (isAdminOrManager) return
+
     fetch('/api/tenant/modules')
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : null)
       .then((json: unknown) => {
-        const rows = (json as { data?: { slug: string; isActive: boolean }[] }).data
+        if (!json) return // ошибка → grandfather (не скрываем)
+
+        const rows: { slug: string; isActive: boolean }[] =
+          (json as { data?: { slug: string; isActive: boolean }[] }).data
           ?? (json as { slug: string; isActive: boolean }[])
-        const ids = Array.from(new Set(
+          ?? []
+
+        // Grandfather: если у компании нет ни одной записи → не ограничиваем
+        if (!Array.isArray(rows) || rows.length === 0) return
+
+        // Есть записи — вычисляем лицензированные moduleId
+        const licensedIds = Array.from(new Set(
           rows
             .filter(m => m.isActive)
             .map(m => SLUG_TO_MODULE_ID[m.slug])
             .filter((id): id is ModuleId => !!id)
         ))
-        if (ids.length > 0) setActiveModules([...ids, ...(['knowledge', 'learning', 'sales'] as ModuleId[]).filter(k => !ids.includes(k))])
+
+        // Grandfather: если нет ни одного активного модуля (все деактивированы) → не ограничиваем
+        if (licensedIds.length === 0) return
+
+        // Пересечение: ролевой список ∩ лицензированный список
+        setActiveModules(prev => {
+          const filtered = prev.filter(id => licensedIds.includes(id))
+          // Если пересечение пустое → grandfather (возвращаем всё)
+          if (filtered.length === 0) return prev
+          if (filtered.length === prev.length && filtered.every((m, i) => m === prev[i])) return prev
+          return filtered
+        })
       })
-      .catch(() => {})
-  }, [])
-  */
+      .catch(() => {}) // ошибка сети → grandfather (не скрываем)
+  }, [isAdminOrManager])
+
+  // Filtered modules: active AND visible
+  const visibleModules = activeModules.filter((id) => isModuleVisible(id))
 
   // ── Hydration-safe mounted flag ──
   const [mounted, setMounted] = useState(false)
@@ -718,8 +744,8 @@ export function DashboardSidebar() {
                               return (
                                 <SidebarMenuItem key={item.href}>
                                   <SidebarMenuButton
+                                    asChild
                                     isActive={isActive}
-                                    onClick={() => router.push(item.href)}
                                     className={cn(
                                       "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-9 pl-4",
                                       item.legacy
@@ -727,13 +753,15 @@ export function DashboardSidebar() {
                                         : "text-sidebar-foreground/90"
                                     )}
                                   >
-                                    <ItemIcon className="size-4" />
-                                    <span className="flex-1 text-sm">{item.label}</span>
-                                    {itemBadge !== null && (
-                                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-400">
-                                        {itemBadge}
-                                      </span>
-                                    )}
+                                    <Link href={item.href}>
+                                      <ItemIcon className="size-4" />
+                                      <span className="flex-1 text-sm select-none">{item.label}</span>
+                                      {itemBadge !== null && (
+                                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-400">
+                                          {itemBadge}
+                                        </span>
+                                      )}
+                                    </Link>
                                   </SidebarMenuButton>
                                 </SidebarMenuItem>
                               )
@@ -792,8 +820,8 @@ export function DashboardSidebar() {
                                 return (
                                   <SidebarMenuItem key={item.href}>
                                     <SidebarMenuButton
+                                      asChild
                                       isActive={isActive}
-                                      onClick={() => router.push(item.href)}
                                       className={cn(
                                         "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-9 pl-6",
                                         item.legacy
@@ -801,13 +829,15 @@ export function DashboardSidebar() {
                                           : "text-sidebar-foreground/90"
                                       )}
                                     >
-                                      <ItemIcon className="size-4" />
-                                      <span className="flex-1 text-sm">{item.label}</span>
-                                      {itemBadge !== null && (
-                                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-400">
-                                          {itemBadge}
-                                        </span>
-                                      )}
+                                      <Link href={item.href}>
+                                        <ItemIcon className="size-4" />
+                                        <span className="flex-1 text-sm select-none">{item.label}</span>
+                                        {itemBadge !== null && (
+                                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-400">
+                                            {itemBadge}
+                                          </span>
+                                        )}
+                                      </Link>
                                     </SidebarMenuButton>
                                   </SidebarMenuItem>
                                 )

@@ -1,6 +1,9 @@
 import { auth } from "@/auth"
 import { NextResponse } from "next/server"
-import {HR_MODULE_SLUGS} from "@/lib/modules/access"
+import { HR_MODULE_SLUGS, hasAnyModule } from "@/lib/modules/access"
+import { db } from "@/lib/db"
+import { tenantModules } from "@/lib/db/schema"
+import { eq } from "drizzle-orm"
 
 // Хосты платформы — НЕ поддомены компаний.
 const PLATFORM_HOSTS = new Set(["company24.pro", "www.company24.pro", "new.company24.pro", "localhost"])
@@ -116,25 +119,42 @@ export default auth(async (req) => {
   }
 
   // ── Проверка доступа к модулям ──────────────────────────────────────────────
-  // TODO: включить обратно когда настроим биллинг
-  // Временно все модули доступны — блок ниже отключён
-  /*
+  // Аварийный выключатель: DEV_SKIP_MODULE_CHECK=true полностью отключает гейтинг.
+  // Grandfather-правило: если у компании НЕТ НИ ОДНОЙ записи в tenant_modules →
+  // считаем «старый клиент», даём полный доступ (fail-open для ИП Штумпф/Орлинка).
+  // Реальное ограничение только если у компании есть записи И нужного модуля нет.
   if (process.env.DEV_SKIP_MODULE_CHECK !== "true") {
     if (session.user.companyId && !pathname.startsWith("/upgrade")) {
       for (const { prefix, slugs, moduleParam } of MODULE_PATH_MAP) {
         if (pathname.startsWith(prefix)) {
-          const hasAccess = await hasAnyModule(session.user.companyId, slugs)
-          if (!hasAccess) {
-            return Response.redirect(
-              new URL(`/upgrade?module=${moduleParam}`, req.url)
-            )
+          try {
+            // Grandfather: проверяем есть ли вообще хоть одна запись у компании
+            const [anyRecord] = await db
+              .select({ id: tenantModules.id })
+              .from(tenantModules)
+              .where(eq(tenantModules.tenantId, session.user.companyId))
+              .limit(1)
+
+            if (!anyRecord) {
+              // Старый клиент без tenant_modules — полный доступ, не трогаем
+              break
+            }
+
+            // У компании есть записи — проверяем конкретный модуль
+            const hasAccess = await hasAnyModule(session.user.companyId, slugs)
+            if (!hasAccess) {
+              return Response.redirect(
+                new URL(`/upgrade?module=${moduleParam}`, req.url)
+              )
+            }
+          } catch {
+            // При ошибке БД — fail-open, пропускаем (не ломаем прод)
           }
           break
         }
       }
     }
   }
-  */
 })
 
 export const config = {
