@@ -56,6 +56,7 @@ const PUBLIC_PREFIXES = [
   "/ask/",
   "/uploads/",
   "/careers",            // публичная карьерная страница компании (поддомен)
+  "/jobs/",              // карьерная страница компании по слагу: /jobs/{companySlug}
 ]
 
 function isPublic(pathname: string): boolean {
