@@ -23,7 +23,8 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { usePathname } from "next/navigation"
 import {
   Mic, MicOff, X, Send, Loader2, Volume2,
-  Maximize2, Minimize2, BookmarkPlus, Check, PhoneCall,
+  Maximize2, Minimize2, BookmarkPlus, Check, PhoneCall, Trash2,
+  ThumbsUp, ThumbsDown,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -43,6 +44,37 @@ function isMobileDevice(): boolean {
 }
 import { useAuth } from "@/lib/auth"
 
+// ─── Константы персистентности ──────────────────────────────────────────────
+
+const HISTORY_MAX_MESSAGES = 50
+const HISTORY_DEBOUNCE_MS  = 500
+
+function historyKey(userId?: string, companyId?: string): string {
+  return `nancy_chat_history_${userId ?? "anon"}_${companyId ?? "0"}`
+}
+
+function loadHistory(key: string): Message[] {
+  if (typeof window === "undefined") return []
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as Message[]
+    if (!Array.isArray(parsed)) return []
+    // Берём последние N сообщений
+    return parsed.slice(-HISTORY_MAX_MESSAGES)
+  } catch {
+    return []
+  }
+}
+
+function saveHistory(key: string, messages: Message[]) {
+  if (typeof window === "undefined") return
+  try {
+    const trimmed = messages.slice(-HISTORY_MAX_MESSAGES)
+    localStorage.setItem(key, JSON.stringify(trimmed))
+  } catch { /* quota exceeded — игнорируем */ }
+}
+
 // ─── Типы ──────────────────────────────────────────────────────────────────
 
 interface Message {
@@ -51,6 +83,7 @@ interface Message {
   text: string
   cited?: Array<{ id: string; name: string; type: "demo" | "article" }>
   saved?: boolean
+  feedback?: "up" | "down"
 }
 
 interface NancyAction {
@@ -129,12 +162,17 @@ function pageLabel(pathname: string): string {
 function getBestRussianVoice(): SpeechSynthesisVoice | null {
   if (typeof window === "undefined") return null
   const voices = window.speechSynthesis.getVoices()
-  const priorities = ["Milena", "Irina", "Alena", "Anna", "ru-RU", "ru"]
-  for (const p of priorities) {
-    const v = voices.find((v) => v.lang.startsWith("ru") && (v.name.includes(p) || v.lang === p))
+  const ruVoices = voices.filter((v) => v.lang.startsWith("ru"))
+  if (ruVoices.length === 0) return null
+
+  // Предпочитаем нероботические голоса: Google, Microsoft Natural, Yuri, Milena
+  const naturalKeywords = ["Google", "Natural", "Yuri", "Milena", "Irina", "Alena"]
+  for (const kw of naturalKeywords) {
+    const v = ruVoices.find((v) => v.name.includes(kw))
     if (v) return v
   }
-  return voices.find((v) => v.lang.startsWith("ru")) ?? null
+  // Любой русский голос
+  return ruVoices[0] ?? null
 }
 
 async function speakText(
@@ -177,8 +215,8 @@ async function speakText(
       .replace(/`([^`]+)`/g, "$1")
     const utt = new SpeechSynthesisUtterance(clean)
     utt.lang  = "ru-RU"
-    utt.rate  = 1.05
-    utt.pitch = 1.1
+    utt.rate  = 0.97
+    utt.pitch = 1.0
     if (window.speechSynthesis.getVoices().length === 0) {
       await new Promise<void>((r) => {
         window.speechSynthesis.onvoiceschanged = () => r()
@@ -201,7 +239,10 @@ async function speakText(
 export function NancyAssistant() {
   const pathname = usePathname()
   const mod      = detectModule(pathname)
-  const { role } = useAuth()
+  const { role, user } = useAuth()
+
+  // ── Ключ localStorage для истории этого пользователя ──
+  const storageKey = historyKey(user.id || undefined, user.companyId ?? undefined)
 
   // ── Конфиг ассистента (загружается при монтировании) ──
   const [config, setConfig] = useState<NancyConfig | null>(null)
@@ -221,6 +262,10 @@ export function NancyAssistant() {
   const [expanded, setExpanded] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [input,    setInput]    = useState("")
+  // Флаг: история уже восстановлена из localStorage
+  const historyRestoredRef = useRef(false)
+  // Debounce-таймер для записи истории
+  const saveDebounceRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [listening,    setListening]    = useState(false)
   const [thinking,     setThinking]     = useState(false)
   const [speaking,     setSpeaking]     = useState(false)
@@ -242,12 +287,35 @@ export function NancyAssistant() {
     setMicSupported(micIsSupported())
   }, [])
 
+  // ── Восстановление истории из localStorage при монтировании ──
+  useEffect(() => {
+    if (historyRestoredRef.current) return
+    historyRestoredRef.current = true
+    const saved = loadHistory(storageKey)
+    if (saved.length > 0) {
+      setMessages(saved)
+    }
+  }, [storageKey])
+
+  // ── Сохранение истории в localStorage (debounce) ──
+  useEffect(() => {
+    // Не сохраняем пустую историю или историю только из приветствия
+    if (messages.length === 0) return
+    if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current)
+    saveDebounceRef.current = setTimeout(() => {
+      saveHistory(storageKey, messages)
+    }, HISTORY_DEBOUNCE_MS)
+    return () => {
+      if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current)
+    }
+  }, [messages, storageKey])
+
   // ── Автоскролл ──
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
-  // ── При смене модуля — обновить приветствие (если уже открыто) ──
+  // ── При смене модуля — обновить только сообщение приветствия, не стирать историю ──
   const prevModRef = useRef<ModuleCtx>(mod)
   useEffect(() => {
     if (prevModRef.current === mod) return
@@ -258,16 +326,58 @@ export function NancyAssistant() {
     )
   }, [mod, config])
 
-  // ── Открытие: добавить приветствие ──
+  // ── Открытие: добавить приветствие только если нет истории ──
   useEffect(() => {
     if (!open) return
-    if (messages.length > 0) return
+    // Если уже есть сообщения (восстановлены из localStorage) — не добавляем приветствие
+    if (messages.length > 0) {
+      setTimeout(() => inputRef.current?.focus(), 100)
+      return
+    }
     const greeting = config?.greeting?.trim() || WELCOME[mod]
     setMessages([{ id: "welcome", role: "nancy", text: greeting }])
     setSpeaking(true)
     void speakText(greeting, () => setSpeaking(false))
     setTimeout(() => inputRef.current?.focus(), 100)
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Очистить историю диалога ──
+  const clearHistory = useCallback(() => {
+    if (typeof window !== "undefined") {
+      try { localStorage.removeItem(storageKey) } catch { /* ignore */ }
+    }
+    const greeting = config?.greeting?.trim() || WELCOME[mod]
+    setMessages([{ id: "welcome", role: "nancy", text: greeting }])
+  }, [storageKey, config, mod])
+
+  // ── Фидбек 👍/👎 ──
+  const sendFeedback = useCallback(async (msg: Message, rating: "up" | "down") => {
+    // Оптимистично обновляем UI
+    setMessages((prev) => prev.map((m) => m.id === msg.id ? { ...m, feedback: rating } : m))
+    // Отправляем в фоне, не ждём, молча игнорируем ошибки
+    try {
+      await fetch("/api/modules/hr/nancy/feedback", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          messageId: msg.id,
+          rating,
+          question: (() => {
+            // Ищем предыдущее user-сообщение
+            const msgs = messages
+            const idx = msgs.findIndex((m) => m.id === msg.id)
+            for (let i = idx - 1; i >= 0; i--) {
+              if (msgs[i].role === "user") return msgs[i].text
+            }
+            return ""
+          })(),
+          answer: msg.text,
+          module: mod,
+          page:   pageLabel(pathname),
+        }),
+      })
+    } catch { /* игнорируем */ }
+  }, [messages, mod, pathname])
 
   // ── Сохранить ответ в базу знаний ──
   const saveToKnowledge = useCallback(async (msg: Message) => {
@@ -611,6 +721,14 @@ export function NancyAssistant() {
           </button>
         )}
         <button
+          onClick={clearHistory}
+          className="text-white/70 hover:text-white transition-colors"
+          aria-label="Очистить диалог"
+          title="Очистить диалог"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+        <button
           onClick={() => setExpanded((v) => !v)}
           className="text-white/70 hover:text-white transition-colors"
           aria-label={expanded ? "Свернуть" : "На весь экран"}
@@ -672,26 +790,60 @@ export function NancyAssistant() {
               )}
             </div>
 
-            {/* Сохранить в базу знаний */}
+            {/* Сохранить в базу знаний + фидбек */}
             {m.role === "nancy" && m.id !== "welcome" && !m.id.startsWith("err-") && (
-              <button
-                type="button"
-                onClick={() => void saveToKnowledge(m)}
-                disabled={!!savingId || m.saved}
-                className={cn(
-                  "mt-1 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-lg transition-colors",
-                  m.saved
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : "text-muted-foreground hover:text-foreground",
-                  !!savingId && savingId !== m.id && "opacity-40 pointer-events-none",
-                )}
-              >
-                {savingId === m.id
-                  ? <><Loader2 className="w-3 h-3 animate-spin" /> Сохраняю...</>
-                  : m.saved
-                    ? <><Check className="w-3 h-3" /> Сохранено</>
-                    : <><BookmarkPlus className="w-3 h-3" /> В базу знаний</>}
-              </button>
+              <div className="mt-1 flex items-center gap-1 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => void saveToKnowledge(m)}
+                  disabled={!!savingId || m.saved}
+                  className={cn(
+                    "inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-lg transition-colors",
+                    m.saved
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-muted-foreground hover:text-foreground",
+                    !!savingId && savingId !== m.id && "opacity-40 pointer-events-none",
+                  )}
+                >
+                  {savingId === m.id
+                    ? <><Loader2 className="w-3 h-3 animate-spin" /> Сохраняю...</>
+                    : m.saved
+                      ? <><Check className="w-3 h-3" /> Сохранено</>
+                      : <><BookmarkPlus className="w-3 h-3" /> В базу знаний</>}
+                </button>
+                {/* Разделитель */}
+                <span className="text-muted-foreground/40 text-xs">·</span>
+                {/* 👍 */}
+                <button
+                  type="button"
+                  onClick={() => void sendFeedback(m, "up")}
+                  title="Полезно"
+                  aria-label="Полезно"
+                  className={cn(
+                    "inline-flex items-center justify-center w-6 h-6 rounded-md transition-colors",
+                    m.feedback === "up"
+                      ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30"
+                      : "text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20",
+                  )}
+                >
+                  <ThumbsUp className="w-3 h-3" />
+                </button>
+                {/* 👎 */}
+                <button
+                  type="button"
+                  onClick={() => void sendFeedback(m, "down")}
+                  title="Не помогло"
+                  aria-label="Не помогло"
+                  className={cn(
+                    "inline-flex items-center justify-center w-6 h-6 rounded-md transition-colors",
+                    m.feedback === "down"
+                      ? "text-rose-600 bg-rose-50 dark:bg-rose-900/30"
+                      : "text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20",
+                  )}
+                >
+                  <ThumbsDown className="w-3 h-3" />
+                </button>
+              </div>
             )}
           </div>
         ))}
