@@ -20,6 +20,7 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { checkCronAuth } from "@/lib/cron/auth"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { db } from "@/lib/db"
 import { avitoIntegrations } from "@/lib/db/schema"
 import { eq, and } from "drizzle-orm"
@@ -28,6 +29,7 @@ import { avitoAdapter } from "@/lib/channels/avito"
 import { scanAvitoIncomingMessages, type AvitoInboundMessage } from "@/lib/avito/scan-incoming"
 
 const AVITO_API_BASE = process.env.AVITO_API_BASE || "https://api.avito.ru"
+const CRON_NAME = "avito-incoming-messages"
 
 // Сколько минут назад смотреть непрочитанные чаты.
 const LOOKBACK_MINUTES = 20
@@ -36,6 +38,7 @@ export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
 
+  const run = await startCronRun(CRON_NAME).catch(() => null)
   try {
     // Берём все активные Авито-интеграции.
     const integrations = await db
@@ -142,9 +145,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (run) await finishCronRun(run.id, "ok", { integrations: totalResult.integrations, processed: totalResult.processed, newCandidates: totalResult.newCandidates, errors: totalResult.errors.length })
     return NextResponse.json({ ok: true, ...totalResult })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
+    if (run) await finishCronRun(run.id, "error", null, msg)
     console.error("[cron/avito-incoming-messages]", msg)
     return NextResponse.json({ ok: false, error: msg }, { status: 500 })
   }

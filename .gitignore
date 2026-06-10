@@ -38,6 +38,10 @@ public/uploads
 .playwright-cli/
 .playwright-mcp/
 
+# npm lock file (проект использует pnpm, package-lock.json появляется только
+# в облачных средах без pnpm и не должен трекаться)
+package-lock.json
+
 # Ad-hoc screenshots/markdown from debugging sessions in repo root
 /*.png
 /recon-followup-*.md

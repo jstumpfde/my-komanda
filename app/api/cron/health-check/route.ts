@@ -10,6 +10,9 @@ import { db } from "@/lib/db"
 import { cronRuns } from "@/lib/db/schema"
 import { and, desc, eq, sql } from "drizzle-orm"
 import { checkCronAuth } from "@/lib/cron/auth"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
+
+const CRON_NAME = "health-check"
 
 interface CronSpec {
   name: string
@@ -41,7 +44,14 @@ interface CronStatus {
 export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
-  return runHealthCheck()
+  const run = await startCronRun(CRON_NAME).catch(() => null)
+  const result = await runHealthCheck()
+  if (run) {
+    const body = await result.clone().json().catch(() => null) as { ok?: boolean; problems?: unknown[] } | null
+    const status = body?.ok === false ? "error" : "ok"
+    await finishCronRun(run.id, status, { problems: body?.problems?.length ?? 0 })
+  }
+  return result
 }
 
 // GET-вариант — чтобы UptimeRobot мог дёрнуть без секрета (только статус,

@@ -13,12 +13,24 @@ import { db } from "@/lib/db"
 import { hhResponses, candidates, vacancies } from "@/lib/db/schema"
 import { and, eq, inArray, or } from "drizzle-orm"
 import { checkCronAuth } from "@/lib/cron/auth"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
+
+const CRON_NAME = "hh-cleanup-stuck"
 
 export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
-  const result = await runCleanup()
-  return NextResponse.json({ ok: true, ...result })
+  const run = await startCronRun(CRON_NAME).catch(() => null)
+  try {
+    const result = await runCleanup()
+    if (run) await finishCronRun(run.id, "ok", result)
+    return NextResponse.json({ ok: true, ...result })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (run) await finishCronRun(run.id, "error", null, msg)
+    console.error("[cron/hh-cleanup-stuck]", err)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
 }
 
 // Экспортируется для использования из /api/cron/hh-import — там не нужно
