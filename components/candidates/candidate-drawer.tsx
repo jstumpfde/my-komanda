@@ -638,6 +638,13 @@ export function CandidateDrawer({
   const hhListRef = useRef<HTMLDivElement | null>(null)
   const tabScrollRef = useRef<HTMLDivElement | null>(null)
 
+  // F7: Telegram-канал — состояние
+  const [tgInviteLink,   setTgInviteLink]   = useState<string | null>(null)
+  const [tgInviteLoading, setTgInviteLoading] = useState(false)
+  const [tgDraft,        setTgDraft]        = useState("")
+  const [tgSending,      setTgSending]      = useState(false)
+  const [tgMessages,     setTgMessages]     = useState<import("@/lib/db/schema").TgMessage[]>([])
+
   const fetchCandidate = useCallback(async (id: string) => {
     setLoadingCandidate(true)
     try {
@@ -648,6 +655,8 @@ export function CandidateDrawer({
       // Инициализация notes из тех же данных — без отдельного round-trip.
       const dp = data.demoProgressJson as { notes?: CandidateNote[] } | null
       setNotes(Array.isArray(dp?.notes) ? dp.notes : [])
+      // F7: инициализация TG-истории
+      setTgMessages(Array.isArray(data.tgMessages) ? data.tgMessages : [])
     } catch {
       toast.error("Не удалось загрузить данные кандидата")
     } finally {
@@ -706,10 +715,54 @@ export function CandidateDrawer({
       setHhDraft("")
       hhFetchRef.current = null
       setActiveTab("contacts")
+      setTgInviteLink(null)
+      setTgDraft("")
+      setTgMessages([])
       fetchCandidate(candidateId)
       loadContacts(candidateId)
     }
   }, [open, candidateId, fetchCandidate, loadContacts])
+
+  // F7: Telegram — получить / сгенерировать ссылку-приглашение
+  const loadTgInvite = useCallback(async () => {
+    if (!candidateId) return
+    setTgInviteLoading(true)
+    try {
+      const res = await fetch(`/api/modules/hr/candidates/${candidateId}/telegram-invite`, {
+        method: "POST",
+      })
+      const data = await res.json() as { deepLink?: string; error?: string }
+      if (!res.ok) { toast.error(data.error || "Ошибка генерации ссылки"); return }
+      setTgInviteLink(data.deepLink ?? null)
+    } catch {
+      toast.error("Не удалось получить ссылку Telegram")
+    } finally {
+      setTgInviteLoading(false)
+    }
+  }, [candidateId])
+
+  // F7: Telegram — отправить сообщение HR → кандидат
+  const sendTgMessage = useCallback(async () => {
+    if (!candidateId || !tgDraft.trim()) return
+    setTgSending(true)
+    try {
+      const res = await fetch(`/api/modules/hr/candidates/${candidateId}/telegram-send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: tgDraft.trim() }),
+      })
+      const data = await res.json() as { sent?: boolean; error?: string }
+      if (!res.ok) { toast.error(data.error || "Ошибка отправки"); return }
+      setTgDraft("")
+      // Добавить в локальную историю не дожидаясь перезагрузки
+      setTgMessages(prev => [...prev, { role: "hr", text: tgDraft.trim(), sentAt: new Date().toISOString() }])
+      toast.success("Сообщение отправлено")
+    } catch {
+      toast.error("Не удалось отправить сообщение")
+    } finally {
+      setTgSending(false)
+    }
+  }, [candidateId, tgDraft])
 
   // ── Reload hh messages on demand (после отправки своего сообщения) ────────
   const reloadHhMessages = useCallback(async (hhResponseId: string) => {
@@ -1665,9 +1718,11 @@ export function CandidateDrawer({
                 <RubricShadowSection candidateId={candidate.id} />
               </TabsContent>
 
-              {/* ── Другие каналы ────────────────────────────────── */}
+              {/* ── Каналы ───────────────────────────────────────── */}
               <TabsContent value="channels" className="px-6 py-4 pb-28 mt-0 space-y-3">
-                <div className="rounded-lg border border-border/60 p-3 space-y-2">
+
+                {/* Telegram */}
+                <div className="rounded-lg border border-border/60 p-3 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-full bg-sky-500/10 flex items-center justify-center text-sky-500">
@@ -1675,14 +1730,123 @@ export function CandidateDrawer({
                       </div>
                       <div>
                         <p className="text-sm font-medium text-foreground">Telegram</p>
-                        <p className="text-[11px] text-muted-foreground">Личное общение</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {candidate?.telegramOptOut
+                            ? "Отписался (/stop)"
+                            : candidate?.telegramChatId
+                              ? `Подключён${candidate.telegramUsername ? ` · @${candidate.telegramUsername}` : ""}`
+                              : "Не подключён"
+                          }
+                        </p>
                       </div>
                     </div>
-                    <span className="text-[10px] text-muted-foreground/60 px-2 py-0.5 rounded-full bg-muted/40">скоро</span>
+                    {candidate?.telegramOptOut ? (
+                      <span className="text-[10px] text-amber-600 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200">отписался</span>
+                    ) : candidate?.telegramChatId ? (
+                      <span className="text-[10px] text-emerald-700 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200">связан</span>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground/60 px-2 py-0.5 rounded-full bg-muted/40">не связан</span>
+                    )}
                   </div>
-                  <p className="text-xs text-muted-foreground italic">Когда кандидат напишет нам в Telegram — переписка появится здесь</p>
+
+                  {/* Ссылка-приглашение */}
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] text-muted-foreground">
+                      Кандидат начинает диалог сам — по ссылке-приглашению. Отправьте её в hh-чате.
+                    </p>
+                    {tgInviteLink ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          readOnly
+                          value={tgInviteLink}
+                          className="flex-1 text-xs font-mono bg-muted/50 border border-border rounded px-2 py-1.5 truncate"
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-xs shrink-0"
+                          onClick={() => {
+                            navigator.clipboard.writeText(tgInviteLink)
+                            toast.success("Ссылка скопирована")
+                          }}
+                        >
+                          Скопировать
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs gap-1.5"
+                        onClick={loadTgInvite}
+                        disabled={tgInviteLoading}
+                      >
+                        {tgInviteLoading
+                          ? <Loader2 className="w-3 h-3 animate-spin" />
+                          : <Send className="w-3 h-3" />
+                        }
+                        Получить ссылку-приглашение
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* История сообщений + поле отправки — только если кандидат связан */}
+                  {candidate?.telegramChatId && !candidate.telegramOptOut && (
+                    <>
+                      {tgMessages.length > 0 && (
+                        <div className="space-y-1.5 max-h-56 overflow-y-auto">
+                          {tgMessages.map((m, i) => (
+                            <div
+                              key={i}
+                              className={cn(
+                                "text-xs rounded-lg px-2.5 py-1.5 max-w-[85%]",
+                                m.role === "hr"
+                                  ? "ml-auto bg-primary text-primary-foreground"
+                                  : "mr-auto bg-muted text-foreground",
+                              )}
+                            >
+                              <p>{m.text}</p>
+                              <p className={cn("text-[10px] mt-0.5 opacity-70", m.role === "hr" ? "text-right" : "")}>
+                                {formatDateTime(m.sentAt)}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex gap-2 pt-1">
+                        <Textarea
+                          value={tgDraft}
+                          onChange={e => setTgDraft(e.target.value)}
+                          placeholder="Написать в Telegram…"
+                          className="min-h-[60px] text-sm resize-none"
+                          onKeyDown={e => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault()
+                              sendTgMessage()
+                            }
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          className="self-end shrink-0"
+                          onClick={sendTgMessage}
+                          disabled={tgSending || !tgDraft.trim()}
+                        >
+                          {tgSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                        </Button>
+                      </div>
+                    </>
+                  )}
+
+                  {candidate?.telegramOptOut && (
+                    <p className="text-xs text-amber-600 bg-amber-50 rounded px-2 py-1.5">
+                      Кандидат отправил /stop — отписался от бота. Отправка сообщений недоступна.
+                    </p>
+                  )}
                 </div>
 
+                {/* WhatsApp — скоро */}
                 <div className="rounded-lg border border-border/60 p-3 space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -1699,6 +1863,7 @@ export function CandidateDrawer({
                   <p className="text-xs text-muted-foreground italic">WhatsApp Business API — для коротких уточнений и приглашений</p>
                 </div>
 
+                {/* Email — скоро */}
                 <div className="rounded-lg border border-border/60 p-3 space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">

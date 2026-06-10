@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/lib/auth"
 import { AvitoIntegrationCard } from "@/components/hr/avito-integration-card"
+import { CandidateTelegramBotCard } from "@/components/hr/candidate-telegram-bot-card"
 
 interface HHStatus {
   connected: boolean
@@ -303,6 +304,9 @@ export function IntegrationsContent() {
 
       {/* Авито */}
       <AvitoIntegrationCard />
+
+      {/* F7: Telegram-бот для кандидатов */}
+      <CandidateTelegramBotCard />
 
       {/* Hint */}
       <p className="text-sm text-muted-foreground px-1">
