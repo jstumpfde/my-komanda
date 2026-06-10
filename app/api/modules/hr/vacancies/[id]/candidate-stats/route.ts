@@ -39,7 +39,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const userCompanyId = (session.user as { companyId?: string }).companyId
   const userId = (session.user as { id?: string }).id
   const isPlatform = userRole === "platform_admin" || userRole === "platform_manager"
-  if (!isPlatform && userCompanyId && userCompanyId !== vac.companyId) {
+  if (!isPlatform && (!userCompanyId || userCompanyId !== vac.companyId)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 })
   }
 

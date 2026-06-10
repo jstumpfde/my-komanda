@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { companies } from "@/lib/db/schema"
-import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { requireCompany, requireDirector, apiError, apiSuccess } from "@/lib/api-helpers"
 
 // Группа 34, задача 3: per-company настройки Telegram-канала HR.
 // GET — текущее значение (token маскируется в ответе).
@@ -44,7 +44,7 @@ export async function GET() {
 
 export async function PUT(req: NextRequest) {
   try {
-    const user = await requireCompany()
+    const user = await requireDirector()
     const body = await req.json().catch(() => ({})) as PutBody
 
     const updates: Record<string, unknown> = { updatedAt: new Date() }

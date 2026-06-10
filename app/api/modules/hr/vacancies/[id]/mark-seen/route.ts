@@ -32,7 +32,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
   const userRole = (session.user as { role?: string }).role
   const userCompanyId = (session.user as { companyId?: string }).companyId
   const isPlatform = userRole === "platform_admin" || userRole === "platform_manager"
-  if (!isPlatform && userCompanyId && userCompanyId !== vac.companyId) {
+  if (!isPlatform && (!userCompanyId || userCompanyId !== vac.companyId)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 })
   }
 

@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { companies } from "@/lib/db/schema"
-import { requireCompany } from "@/lib/api-helpers"
+import { requireCompany, requireDirector } from "@/lib/api-helpers"
 
 export async function GET() {
   try {
@@ -24,7 +24,7 @@ export async function GET() {
 
 export async function PUT(req: NextRequest) {
   try {
-    const user = await requireCompany()
+    const user = await requireDirector()
     const body = await req.json().catch(() => ({})) as { killed?: unknown }
     if (typeof body.killed !== "boolean") {
       return NextResponse.json({ error: "killed must be boolean" }, { status: 400 })

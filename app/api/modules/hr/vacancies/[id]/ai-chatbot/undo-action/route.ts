@@ -48,15 +48,21 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       return NextResponse.json({ error: "not_undoable" }, { status: 400 })
     }
 
-    // Откатываем состояние кандидата.
-    const [cand] = await db
+    // Откатываем состояние кандидата — читаем через JOIN с vacancies, чтобы
+    // убедиться, что кандидат принадлежит той же компании (tenant-изоляция).
+    const candRows = await db
       .select({
         id:    candidates.id,
         stage: candidates.stage,
       })
       .from(candidates)
-      .where(eq(candidates.id, msg.candidate_id))
+      .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
+      .where(and(
+        eq(candidates.id, msg.candidate_id),
+        eq(vacancies.companyId, user.companyId),
+      ))
       .limit(1)
+    const cand = candRows[0]
     if (!cand) return NextResponse.json({ error: "candidate_not_found" }, { status: 404 })
 
     if (reason === "security_abuse_auto_reject") {

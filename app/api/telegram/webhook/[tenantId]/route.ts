@@ -219,13 +219,14 @@ export async function POST(
 ) {
   const { tenantId } = await params
 
-  // Optional secret verification
+  // Секрет обязателен: если env не задан или заголовок не совпал — 403.
   const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET
-  if (expectedSecret) {
-    const header = req.headers.get("x-telegram-bot-api-secret-token")
-    if (header !== expectedSecret) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    }
+  if (!expectedSecret) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+  const header = req.headers.get("x-telegram-bot-api-secret-token")
+  if (header !== expectedSecret) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
   // Load bot token for this tenant

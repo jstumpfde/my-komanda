@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server"
+import { requireCompany } from "@/lib/api-helpers"
 
 export async function GET() {
+  try {
+    await requireCompany()
+  } catch (e) {
+    if (e instanceof Response) return e
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 })
+  }
+
   const clientId = process.env.HH_CLIENT_ID
   const redirectUri = process.env.HH_REDIRECT_URI
 

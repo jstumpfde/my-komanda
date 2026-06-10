@@ -47,10 +47,16 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     if (result.candidates.length === 0) return apiError("No candidates", 404)
 
     // Город + дата рождения — только в HR-роуте (в публичную ссылку не отдаём).
+    // Скоупим только кандидатов этой вакансии + компании (tenant-изоляция).
     const info = await db
       .select({ id: candidates.id, city: candidates.city, birthDate: candidates.birthDate })
       .from(candidates)
-      .where(inArray(candidates.id, ids))
+      .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
+      .where(and(
+        inArray(candidates.id, ids),
+        eq(vacancies.id, vacancyId),
+        eq(vacancies.companyId, user.companyId),
+      ))
     const infoById = new Map(info.map((r) => [r.id, r]))
     const candidatesWithInfo = result.candidates.map((c) => ({
       ...c,

@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { companies } from "@/lib/db/schema"
-import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { requireCompany, requireDirector, apiError, apiSuccess } from "@/lib/api-helpers"
 
 // Per-company «Корзина — срок хранения»: через сколько дней вакансия из корзины
 // (deleted_at IS NOT NULL) удаляется навсегда cron'ом /api/cron/trash-cleanup.
@@ -30,7 +30,7 @@ export async function GET() {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const user = await requireCompany()
+    const user = await requireDirector()
     const body = await req.json().catch(() => ({})) as { retentionDays?: unknown }
 
     const raw = body.retentionDays

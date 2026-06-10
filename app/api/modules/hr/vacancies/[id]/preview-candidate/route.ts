@@ -1,18 +1,21 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/auth"
 import { db } from "@/lib/db"
 import { candidates, vacancies } from "@/lib/db/schema"
 import { and, eq } from "drizzle-orm"
+import { requireCompany } from "@/lib/api-helpers"
 
 export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const session = await auth()
-    if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 })
+    const user = await requireCompany()
 
     const { id: vacancyId } = await ctx.params
 
-    // Проверяем что вакансия существует
-    const [vac] = await db.select({ id: vacancies.id }).from(vacancies).where(eq(vacancies.id, vacancyId)).limit(1)
+    // Проверяем что вакансия существует и принадлежит компании пользователя
+    const [vac] = await db
+      .select({ id: vacancies.id })
+      .from(vacancies)
+      .where(and(eq(vacancies.id, vacancyId), eq(vacancies.companyId, user.companyId)))
+      .limit(1)
     if (!vac) return NextResponse.json({ error: "vacancy not found" }, { status: 404 })
 
     // Ищем существующего превью-кандидата для этой вакансии

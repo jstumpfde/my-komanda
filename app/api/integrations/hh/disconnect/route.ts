@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server"
-import { requireCompany } from "@/lib/api-helpers"
+import { requireDirector } from "@/lib/api-helpers"
 import { db } from "@/lib/db"
 import { hhTokens } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 
 export async function POST() {
   try {
-    const user = await requireCompany()
+    const user = await requireDirector()
 
     await db.delete(hhTokens).where(eq(hhTokens.companyId, user.companyId))
 

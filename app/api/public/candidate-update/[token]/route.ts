@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { eq } from "drizzle-orm"
+import { and, eq, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, companies } from "@/lib/db/schema"
 import { checkRateLimit } from "@/lib/rate-limit"
@@ -30,7 +30,7 @@ export async function GET(
     const [vacancy] = await db
       .select({ title: vacancies.title, companyId: vacancies.companyId })
       .from(vacancies)
-      .where(eq(vacancies.id, candidate.vacancyId))
+      .where(and(eq(vacancies.id, candidate.vacancyId), isNull(vacancies.deletedAt)))
       .limit(1)
 
     const [company] = vacancy
@@ -73,12 +73,18 @@ export async function POST(
     const { token } = await params
     const body = (await req.json()) as { email?: string; phone?: string; city?: string; experience?: string; name?: string }
 
-    const [candidate] = await db
+    // Ищем кандидата с проверкой, что вакансия не удалена (isNull deletedAt).
+    const rows = await db
       .select({ id: candidates.id, name: candidates.name })
       .from(candidates)
+      .innerJoin(vacancies, and(
+        eq(candidates.vacancyId, vacancies.id),
+        isNull(vacancies.deletedAt),
+      ))
       .where(eq(candidates.token, token))
       .limit(1)
 
+    const candidate = rows[0]
     if (!candidate) {
       return NextResponse.json({ error: "Не найдено" }, { status: 404 })
     }
