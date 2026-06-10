@@ -135,10 +135,10 @@ jobs:
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Add server to known_hosts
-        run: ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+        run: ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
 
       # ------------------------------------------------------------------
       # 10. Копируем артефакт и скрипт приёмки на сервер
@@ -146,19 +146,19 @@ jobs:
       - name: SCP artifact
         run: |
           scp artifact.tar.gz \
-            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/deploy-artifact.tar.gz"
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/tmp/deploy-artifact.tar.gz"
 
       - name: SCP receive script
         run: |
           scp scripts/deploy/receive-artifact.sh \
-            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/receive-artifact.sh"
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/tmp/receive-artifact.sh"
 
       # ------------------------------------------------------------------
       # 11. Запускаем приёмку на сервере
       # ------------------------------------------------------------------
       - name: Run receive-artifact on server
         run: |
-          ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+          ssh "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
             bash /tmp/receive-artifact.sh \
               /tmp/deploy-artifact.tar.gz \
               "${{ steps.params.outputs.app_dir }}" \
