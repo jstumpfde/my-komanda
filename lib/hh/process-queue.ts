@@ -18,6 +18,8 @@ import { DEFAULT_FOLLOWUP_NOT_OPENED } from "@/lib/followup/default-messages"
 import { isFollowUpPreset } from "@/lib/followup/presets"
 import { canSendNow } from "@/lib/schedule/can-send-now"
 import { screenResume } from "@/lib/ai-screen-resume"
+import { getSpec } from "@/lib/core/spec/store"
+import { buildSpecResumeInput, isSpecScoringEnabled } from "@/lib/core/spec/resume-input"
 import { trySyncRejectToHh } from "@/lib/hh/sync-stage"
 import { scheduleRejection, rejectionDelayMinutes } from "@/lib/rejection/execute"
 import { startPrequalification } from "@/lib/prequalification/start"
@@ -565,8 +567,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
           if (scoreRow && scoreRow.resumeScore == null) {
             const descJson = localVac.descriptionJson as Record<string, unknown> | null
             const anketa = (descJson?.anketa as Record<string, unknown> | undefined) ?? {}
-            const result = await screenResume({
-              resume: {
+            const resumeForScreen = {
                 name:             resp.candidateName,
                 city:             candidateCity ?? null,
                 salaryMin:        candidateSalary,
@@ -580,7 +581,27 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                 relocationReady:  extracted.relocationReady ?? null,
                 professionalRoles:(extracted.professionalRoles as string[] | undefined) ?? null,
                 citizenshipNames: (extracted.citizenshipNames as string[] | undefined) ?? null,
-              },
+            }
+
+            // R4 этап 2: для вакансий из SPEC_SCORING_VACANCY_IDS (полигон)
+            // критерии берутся из Spec («Кого ищем»), не из legacy-портрета.
+            // Честное A/B 11.06: совпадение зон 93%, медиана |Δ|=0.
+            // При пустом/недоступном Spec — тихий fallback на legacy.
+            let screenInput: Parameters<typeof screenResume>[0] | null = null
+            if (isSpecScoringEnabled(localVac.id)) {
+              try {
+                const spec = await getSpec(localVac.id)
+                if (spec && (spec.mustHave.length > 0 || spec.portraitRequiredSkills.length > 0)) {
+                  screenInput = buildSpecResumeInput(resumeForScreen, { title: localVac.title, city: localVac.city }, spec)
+                  console.log(`[spec-scoring] vacancy=${localVac.id} candidate=${candidateId} — скоринг по Spec`)
+                }
+              } catch (specErr) {
+                console.warn(`[spec-scoring] vacancy=${localVac.id} — ошибка чтения Spec, fallback на legacy:`, specErr)
+              }
+            }
+
+            const result = await screenResume(screenInput ?? {
+              resume: resumeForScreen,
               vacancy: {
                 title:                localVac.title,
                 city:                 localVac.city,
