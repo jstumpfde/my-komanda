@@ -39,9 +39,9 @@ export const salaryBenchmarks: Record<string, SalaryBenchmark> = {
     yoyGrowth: 16,
     responseRate: {
       withSalary: 100, withoutSalary: 52,
-      belowMarket: "Ниже рынка — отклики в основном от junior. Ожидайте слабый поток.",
+      belowMarket: "Ниже рынка — отклики в основном от junior. Рекомендуем пересмотреть вилку.",
       inMarket: "В рынке — хороший баланс количества и качества откликов.",
-      aboveMarket: "Выше рынка — сильные кандидаты откликаются быстро, закроете за 2-3 недели.",
+      aboveMarket: "Выше рынка — повышает привлекательность вакансии для сильных кандидатов.",
     },
     experienceImpact: {
       "1-3": { responseRate: "Высокий (много откликов)", quality: "Средне-низкое", note: "43% вакансий рынка открыты для 1-3 лет. Много кандидатов, но потребуется жёсткий скрининг." },
@@ -55,9 +55,9 @@ export const salaryBenchmarks: Record<string, SalaryBenchmark> = {
     yoyGrowth: 10,
     responseRate: {
       withSalary: 100, withoutSalary: 55,
-      belowMarket: "Ниже рынка. Менеджеры по продажам — самая массовая профессия (646 тыс. вакансий в 2025), конкуренция за кадры высокая.",
+      belowMarket: "Ниже рынка. Менеджеры по продажам — массовая профессия с высокой конкуренцией за кадры. Рекомендуем пересмотреть вилку.",
       inMarket: "В рынке. Стабильный поток откликов.",
-      aboveMarket: "Выше рынка. Быстрое закрытие позиции.",
+      aboveMarket: "Выше рынка. Повышает привлекательность вакансии.",
     },
     experienceImpact: {
       "1-3": { responseRate: "Очень высокий", quality: "Низкое-среднее", note: "Массовый сегмент. Нужен AI-скрининг для фильтрации." },
@@ -89,7 +89,7 @@ export const salaryBenchmarks: Record<string, SalaryBenchmark> = {
       withSalary: 100, withoutSalary: 40,
       belowMarket: "Критично ниже рынка. IT-кандидаты очень чувствительны к зарплате.",
       inMarket: "В рынке.",
-      aboveMarket: "Выше рынка. Быстрое закрытие.",
+      aboveMarket: "Выше рынка. Повышает привлекательность вакансии.",
     },
     experienceImpact: {
       "1-3": { responseRate: "Средний", quality: "Среднее", note: "Junior-вакансий стало меньше на 30-50% за год." },
@@ -324,6 +324,10 @@ export const salaryBenchmarks: Record<string, SalaryBenchmark> = {
 }
 
 // ── Общая рыночная статистика ───────────────────────────────────────────────
+// ВНИМАНИЕ: данные marketStats (overallMedianGrowth, resumeGrowth,
+// juniorVacancyDecline, positionStats и др.) — справочные оценки на основе
+// публичных отчётов, НЕ верифицированы в реальном времени и НЕ должны
+// выводиться в UI как факты. Используются только для контекста в AI-промпте.
 
 export interface PositionStats {
   vacancies2025: number

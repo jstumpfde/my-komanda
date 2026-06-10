@@ -12,7 +12,7 @@ import {
   Loader2, RefreshCw, Bot, X, Plus, TrendingUp, Lightbulb,
 } from "lucide-react"
 import { mergeSkills, hasSkill } from "@/lib/skills/normalize"
-import { formatSalary, marketStats } from "@/lib/salary-benchmarks"
+import { formatSalary } from "@/lib/salary-benchmarks"
 import { scoreVacancyTitle } from "@/lib/vacancy-title-scorer"
 import { analyzeMotivation } from "@/lib/motivation-analyzer"
 
@@ -36,7 +36,6 @@ interface SalaryAnalysis {
   impactNote: string | null
   widthWarning: string | null
   responseNote: string | null
-  withoutSalaryLoss: number
 }
 
 interface Suggestions {
@@ -90,11 +89,11 @@ const AI_SCREENING_FIELDS = new Set(["responsibilities", "requirements", "skills
 const SECTION_TIPS: Record<string, { icon: string; text: string }> = {
   title: {
     icon: "✏️",
-    text: "Хорошее название — конкретное и без шаблонных слов вроде «динамичный» или «перспективный». Укажите специализацию и уровень: «Frontend-разработчик (React, middle)» — лучше чем «Разработчик». Короткие названия набирают на 15–20% больше откликов.",
+    text: "Хорошее название — конкретное и без шаблонных слов вроде «динамичный» или «перспективный». Укажите специализацию и уровень: «Frontend-разработчик (React, middle)» — лучше чем «Разработчик».",
   },
   salary: {
     icon: "💰",
-    text: "Вакансии с указанной вилкой зарплат получают в 2–3 раза больше откликов. Если указываете «до», оставляйте реалистичный максимум — завышенный потолок снижает конверсию из отклика в оффер. Укажите периодичность выплат и тип занятости.",
+    text: "Вакансии с указанной вилкой зарплат получают значительно больше откликов. Если указываете «до», оставляйте реалистичный максимум — завышенный потолок снижает конверсию из отклика в оффер. Укажите периодичность выплат и тип занятости.",
   },
   responsibilities: {
     icon: "📋",
@@ -110,7 +109,7 @@ const SECTION_TIPS: Record<string, { icon: string; text: string }> = {
   },
   stopFactors: {
     icon: "🚫",
-    text: "Стоп-факторы — автоматический фильтр на входе. Активируйте только те, что действительно критичны: каждый включённый стоп-фактор сокращает поток на 10–30%. Гражданство и документы — самые распространённые ограничения.",
+    text: "Стоп-факторы — автоматический фильтр на входе. Активируйте только те, что действительно критичны: каждый лишний стоп-фактор заметно сужает поток. Гражданство и документы — самые распространённые ограничения.",
   },
   conditions: {
     icon: "🏢",
@@ -123,11 +122,12 @@ const SECTION_TIPS: Record<string, { icon: string; text: string }> = {
 }
 
 // ── Experience insight data ─────────────────────────────────────────────────
+// Только качественные советы — без выдуманных процентов.
 
-const EXPERIENCE_INSIGHTS: Record<string, { label: string; volumePercent: number; qualityPercent: number; tip: string }> = {
-  "1-3": { label: "1-3 года", volumePercent: 85, qualityPercent: 35, tip: "Много откликов, но качество ниже. Подходит для junior/middle позиций" },
-  "3-5": { label: "3-5 лет", volumePercent: 55, qualityPercent: 65, tip: "Оптимальный баланс количества и качества откликов" },
-  "5+": { label: "5+ лет", volumePercent: 25, qualityPercent: 90, tip: "Мало откликов, но высокое качество. Для senior/lead позиций" },
+const EXPERIENCE_INSIGHTS: Record<string, { label: string; tip: string }> = {
+  "1-3": { label: "1-3 года", tip: "Широкий пул кандидатов, но потребуется более тщательный скрининг. Подходит для junior/middle позиций." },
+  "3-5": { label: "3-5 лет", tip: "Оптимальный баланс: достаточно кандидатов с реальным опытом. Рекомендуемый диапазон для большинства ролей." },
+  "5+": { label: "5+ лет", tip: "Узкий пул кандидатов, но более высокий уровень. Для senior/lead позиций — рассмотрите активный поиск и хедхантинг." },
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -415,9 +415,6 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
           <SalaryAnalysisCard analysis={result.salaryAnalysis} />
         )}
 
-        {/* 6. Рынок Q1 2025→2026 */}
-        <MarketContextCard />
-
         {/* 6b. Лучшее время публикации — по откликам компании */}
         <BestPublishTimeCard vacancyId={vacancyId} city={(vacancyData.positionCity as string) || (vacancyData.companyCity as string) || ""} />
 
@@ -614,9 +611,12 @@ function SalaryAnalysisCard({ analysis }: { analysis: SalaryAnalysis }) {
       {analysis.impactNote && (
         <p className="text-xs text-muted-foreground leading-relaxed">📈 {analysis.impactNote}</p>
       )}
-      {analysis.currentAssessment === "не указана" && analysis.withoutSalaryLoss > 0 && (
-        <p className="text-xs text-red-600 dark:text-red-400 leading-relaxed">Без зарплаты теряется до {analysis.withoutSalaryLoss}% откликов</p>
+      {analysis.currentAssessment === "не указана" && (
+        <p className="text-xs text-red-600 dark:text-red-400 leading-relaxed">Вакансии без указанной зарплаты получают значительно меньше откликов</p>
       )}
+      <p className="text-[10px] text-muted-foreground leading-relaxed border-t pt-2 mt-1">
+        Справочные данные: hh.ru, DreamJob, Forbes, ГородРабот, CNews — {analysis.period}. Не являются гарантией результата.
+      </p>
     </div>
   )
 }
@@ -631,7 +631,7 @@ function FormatCard({ workFormats }: { workFormats: string[] }) {
   const hasHybrid = workFormats.some(f => /гибрид/i.test(f))
 
   const tips: { emoji: string; text: string }[] = []
-  if (hasRemote) tips.push({ emoji: "✅", text: "Удалёнка: пул кандидатов в 3-5 раз шире. 88к+ вакансий Q1 2026 (+18% за год)" })
+  if (hasRemote) tips.push({ emoji: "✅", text: "Удалёнка: пул кандидатов шире — нет географических ограничений" })
   if (hasOffice && !hasRemote) tips.push({ emoji: "📍", text: "Офис сужает пул, но повышает контроль. Премия к зарплате +10-20%" })
   if (hasHybrid) tips.push({ emoji: "🔄", text: "Гибрид — компромисс: +30% к пулу vs офис" })
 
@@ -665,31 +665,8 @@ function ExperienceInsightCard({ level, currentLevel }: { level: string; current
       <div className="flex items-center gap-1.5">
         <Sparkles className="w-3.5 h-3.5 text-primary" />
         <span className="text-xs font-medium">Опыт: {insight.label}{currentLevel === level ? " (текущий)" : ""}</span>
-        <AIEstimateBadge />
       </div>
       <p className="text-xs text-muted-foreground leading-relaxed">{insight.tip}</p>
-      <div className="space-y-1">
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] text-muted-foreground w-20 shrink-0">Откликов</span>
-          <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-            <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${insight.volumePercent}%` }} />
-          </div>
-          <span className="text-[10px] text-muted-foreground w-8 text-right">{insight.volumePercent}%</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] text-muted-foreground w-20 shrink-0">Качество</span>
-          <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-            <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${insight.qualityPercent}%` }} />
-          </div>
-          <span className="text-[10px] text-muted-foreground w-8 text-right">{insight.qualityPercent}%</span>
-        </div>
-      </div>
-      {level === "1-3" && (
-        <p className="text-sm text-foreground leading-relaxed">43% вакансий рынка открыты для 1-3 лет. Junior-вакансий стало на <span className="font-semibold text-red-600 dark:text-red-400">~{marketStats.juniorVacancyDecline}%</span> меньше за год.</p>
-      )}
-      {level === "3-5" && (
-        <p className="text-sm text-muted-foreground leading-relaxed">Рекомендуемый диапазон — оптимальный баланс количества и качества откликов.</p>
-      )}
     </div>
   )
 }
@@ -929,22 +906,7 @@ function MotivationAnalysisCard({ salaryMin, salaryMax, bonuses, payFrequency, c
   )
 }
 
-// ── Market Context Card ─────────────────────────────────────────────────────
-
-function MarketContextCard() {
-  return (
-    <div className="rounded-lg border p-3 space-y-2">
-      <div className="flex items-center gap-1.5">
-        <p className="text-sm font-semibold">📊 Рынок {marketStats.period}</p>
-        <AIEstimateBadge />
-      </div>
-      <p className="text-sm text-foreground leading-relaxed">
-        Зарплаты <span className="font-semibold text-emerald-600 dark:text-emerald-400">+{marketStats.overallMedianGrowth}%</span>, резюме <span className="font-semibold text-emerald-600 dark:text-emerald-400">+{marketStats.resumeGrowth}%</span>, конкуренция растёт. Junior <span className="font-semibold text-red-600 dark:text-red-400">−{marketStats.juniorVacancyDecline}%</span>.
-      </p>
-      <p className="text-xs text-muted-foreground">{marketStats.source}</p>
-    </div>
-  )
-}
+// MarketContextCard удалён: содержал незаверенные рыночные цифры без источника.
 
 // ── Best Publish Time Card ──────────────────────────────────────────────────
 // Лучшее время публикации по откликам компании (GET /best-publish-time).
@@ -1021,7 +983,7 @@ function CompanyDescriptionCard({ description }: { description: string }) {
           ⚠️ Описание компании не заполнено.
         </p>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Вакансии с описанием компании получают <span className="font-semibold text-emerald-600 dark:text-emerald-400">на 30% больше откликов</span>.
+          Описание компании помогает привлечь мотивированных кандидатов.
         </p>
         <a
           href="/settings/company"
