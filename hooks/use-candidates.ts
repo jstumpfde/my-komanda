@@ -31,6 +31,12 @@ export interface ApiCandidate {
   industry?: string | null
   relocationReady?: boolean | null
   businessTripsReady?: boolean | null
+  // Доп. поля hh (миграция 0200)
+  driverLicenses?: string[] | null
+  hasVehicle?: boolean | null
+  citizenshipNames?: string[] | null
+  workTicketNames?: string[] | null
+  professionalRoles?: string[] | null
   photoUrl?: string | null
   token: string
   demoProgressJson: unknown

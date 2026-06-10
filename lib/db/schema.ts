@@ -1270,6 +1270,13 @@ export const candidates = pgTable("candidates", {
   industry: text("industry"),
   relocationReady: boolean("relocation_ready"),
   businessTripsReady: boolean("business_trips_ready"),
+  // Доп. поля из hh.ru (миграция 0200): категории прав, автомобиль, гражданство,
+  // разрешение на работу, желаемые профроли. Сохраняются при импорте/синке.
+  driverLicenses:    text("driver_licenses").array().default([]),
+  hasVehicle:        boolean("has_vehicle"),
+  citizenshipNames:  text("citizenship_names").array().default([]),
+  workTicketNames:   text("work_ticket_names").array().default([]),
+  professionalRoles: text("professional_roles").array().default([]),
   // URL фото из hh-резюме (medium ≈ 240×240). Кешируется в БД при импорте,
   // чтобы фронт не запрашивал hh API на каждый рендер карточки кандидата.
   photoUrl: text("photo_url"),

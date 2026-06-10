@@ -21,6 +21,12 @@ export interface ExtractedHhFields {
   relocationReady?:    boolean | null
   businessTripsReady?: boolean | null
   photoUrl?:           string | null
+  // Доп. поля hh (миграция 0200)
+  driverLicenses?:    string[]         // категории прав: ["A","B","C",...]
+  hasVehicle?:        boolean | null
+  citizenshipNames?:  string[]         // ["Россия","Беларусь",...]
+  workTicketNames?:   string[]         // разрешение на работу
+  professionalRoles?: string[]         // желаемые профроли/профобласти
   // legacy
   experience?:         string | null   // напр. "5 лет"
 }
@@ -47,6 +53,12 @@ type RawResume = {
   schedules?: Array<{ id?: unknown }> | unknown
   employments?: Array<{ id?: unknown }> | unknown
   business_trip?: unknown
+  // Доп. поля hh (миграция 0200)
+  driver_license_types?: Array<{ id?: unknown }> | unknown
+  has_vehicle?: unknown
+  citizenship?: Array<{ name?: unknown }> | unknown
+  work_ticket?: Array<{ name?: unknown }> | unknown
+  professional_roles?: Array<{ name?: unknown }> | unknown
   photo?: {
     small?:  unknown
     medium?: unknown
@@ -210,6 +222,39 @@ export function extractHhResumeFields(raw: unknown): ExtractedHhFields {
   out.relocationReady = mapRelocation(r)
   out.businessTripsReady = mapBusinessTrips(r)
 
+  // driver_license_types + has_vehicle
+  if (Array.isArray(r.driver_license_types)) {
+    const cats = (r.driver_license_types as Array<{ id?: unknown }>)
+      .map(d => d?.id)
+      .filter((s): s is string => typeof s === "string" && s.length > 0)
+    if (cats.length > 0) out.driverLicenses = cats
+  }
+  if (typeof r.has_vehicle === "boolean") out.hasVehicle = r.has_vehicle
+
+  // citizenship
+  if (Array.isArray(r.citizenship)) {
+    const names = (r.citizenship as Array<{ name?: unknown }>)
+      .map(c => c?.name)
+      .filter((s): s is string => typeof s === "string" && s.length > 0)
+    if (names.length > 0) out.citizenshipNames = names
+  }
+
+  // work_ticket
+  if (Array.isArray(r.work_ticket)) {
+    const names = (r.work_ticket as Array<{ name?: unknown }>)
+      .map(w => w?.name)
+      .filter((s): s is string => typeof s === "string" && s.length > 0)
+    if (names.length > 0) out.workTicketNames = names
+  }
+
+  // professional_roles (желаемые профроли/профобласти)
+  if (Array.isArray(r.professional_roles)) {
+    const names = (r.professional_roles as Array<{ name?: unknown }>)
+      .map(p => p?.name)
+      .filter((s): s is string => typeof s === "string" && s.length > 0)
+    if (names.length > 0) out.professionalRoles = names
+  }
+
   // photo: hh отдаёт несколько размеров {small,medium,big,100,240,500}.
   // Для UI кандидата лучше «среднего» размера: medium → 240 → big → 100 → small.
   // Если ни один не строка — null (нет фото).
@@ -250,5 +295,11 @@ export function toCandidateColumns(fields: ExtractedHhFields): Record<string, un
   if (typeof fields.relocationReady === "boolean") cols.relocationReady = fields.relocationReady
   if (typeof fields.businessTripsReady === "boolean") cols.businessTripsReady = fields.businessTripsReady
   if (typeof fields.photoUrl === "string" && fields.photoUrl.length > 0) cols.photoUrl = fields.photoUrl
+  // Доп. поля hh (миграция 0200)
+  if (Array.isArray(fields.driverLicenses) && fields.driverLicenses.length > 0) cols.driverLicenses = fields.driverLicenses
+  if (typeof fields.hasVehicle === "boolean") cols.hasVehicle = fields.hasVehicle
+  if (Array.isArray(fields.citizenshipNames) && fields.citizenshipNames.length > 0) cols.citizenshipNames = fields.citizenshipNames
+  if (Array.isArray(fields.workTicketNames) && fields.workTicketNames.length > 0) cols.workTicketNames = fields.workTicketNames
+  if (Array.isArray(fields.professionalRoles) && fields.professionalRoles.length > 0) cols.professionalRoles = fields.professionalRoles
   return cols
 }
