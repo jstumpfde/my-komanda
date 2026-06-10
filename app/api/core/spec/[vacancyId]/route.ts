@@ -13,9 +13,9 @@
  */
 
 import { NextRequest } from "next/server"
-import { and, eq } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { vacancies } from "@/lib/db/schema"
+import { demos, vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { CandidateSpecSchema, type SpecApiResponse } from "@/lib/core/spec/types"
 import { buildSpecFromLegacy, type LegacyVacancyInput } from "@/lib/core/spec/from-legacy"
@@ -54,12 +54,22 @@ export async function GET(
       return apiSuccess<SpecApiResponse>({ spec: specFromStore, source: "spec" })
     }
 
+    // Этап 2: пороги анкеты живут в demos.post_demo_settings (kind='demo',
+    // последняя по updated_at — тот же выбор, что в post-demo-settings API).
+    const [demoRow] = await db
+      .select({ postDemoSettings: demos.postDemoSettings })
+      .from(demos)
+      .where(and(eq(demos.vacancyId, vacancyId), eq(demos.kind, "demo")))
+      .orderBy(sql`${demos.updatedAt} DESC`)
+      .limit(1)
+
     // Fallback: собираем из legacy-полей
     const legacyInput: LegacyVacancyInput = {
       requirementsJson:  row.requirementsJson as LegacyVacancyInput["requirementsJson"],
       aiProcessSettings: row.aiProcessSettings as LegacyVacancyInput["aiProcessSettings"],
       stopFactorsJson:   row.stopFactorsJson as LegacyVacancyInput["stopFactorsJson"],
       descriptionJson:   row.descriptionJson as LegacyVacancyInput["descriptionJson"],
+      postDemoSettings:  (demoRow?.postDemoSettings ?? null) as LegacyVacancyInput["postDemoSettings"],
     }
 
     const spec = buildSpecFromLegacy(legacyInput)

@@ -39,7 +39,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, RefreshCw, Bot, Workflow, FilePlus, UserSearch, Trash2} from "lucide-react"
+import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, RefreshCw, Bot, Workflow, FilePlus, UserSearch, Trash2, Target} from "lucide-react"
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-factors-settings"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -76,6 +76,7 @@ import { FinalScreensSettings, type FinalScreensConfig } from "@/components/vaca
 import { RecoveryMessageSettings } from "@/components/vacancies/recovery-message-settings"
 import { FirstMessagesChainEditor } from "@/components/vacancies/first-messages-chain-editor"
 import { FunnelBuilder } from "@/components/vacancies/funnel-builder"
+import { SpecEditor } from "@/components/vacancies/spec-editor"
 import { FunnelTab } from "@/components/vacancies/funnel-tab"
 import { parsePipeline, type CompanyStageHhActions, type CompanyStagePalette } from "@/lib/stages"
 import { BrandingOverrideSwitch } from "@/components/vacancies/branding-override-switch"
@@ -833,7 +834,7 @@ export default function VacancyPage() {
   const rawUrlSection = rawUrlTab === "automation" ? "ai" : (searchParams?.get("section") ?? null)
   // Миграция старых section-значений на новые 6 табов.
   // general → page (стартовая вкладка с брендингом), automation → ai.
-  const SETTINGS_SECTION_IDS = ["page", "sources", "messages", "funnel", "funnel-builder", "followup", "aichatbot", "ai", "integrations"] as const
+  const SETTINGS_SECTION_IDS = ["page", "sources", "messages", "funnel", "funnel-builder", "spec", "followup", "aichatbot", "ai", "integrations"] as const
   type SettingsSectionId = typeof SETTINGS_SECTION_IDS[number]
   // Скрытые legacy-секции: при прямой ссылке (?section=funnel|messages|followup|aichatbot)
   // перенаправляем на funnel-builder — их контент теперь живёт внутри Конструктора воронки.
@@ -2870,6 +2871,8 @@ export default function VacancyPage() {
                   {([
                     { value: "page"           as const, label: "Брендинг",   icon: Globe },
                     { value: "funnel-builder" as const, label: "Воронка",     icon: Workflow },
+                    // R4 Candidate Spec (новый контур): единый экран «Кого ищем».
+                    { value: "spec"           as const, label: "Кого ищем",   icon: Target },
                     { value: "sources"        as const, label: "Источники",   icon: Link2 },
                     { value: "ai"             as const, label: "Расписание",  icon: Clock },
                     { value: "integrations"   as const, label: "Интеграции",  icon: Settings },
@@ -3389,6 +3392,11 @@ export default function VacancyPage() {
                 <div className="space-y-6 max-w-3xl">
                   <FunnelBuilder vacancyId={id} />
                 </div>
+                )}
+
+                {/* ───────── ТАБ «Кого ищем» (R4 Candidate Spec, новый контур) ───────── */}
+                {settingsSection === "spec" && (
+                  <SpecEditor vacancyId={id} />
                 )}
 
                 {/* ───────── ТАБ «Дожим» ───────── */}

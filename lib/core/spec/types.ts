@@ -51,17 +51,17 @@ export const MidRangeActionSchema = z.enum(["direct_demo", "prequalification", "
 export type MidRangeAction = z.infer<typeof MidRangeActionSchema>
 
 /**
- * ЕДИНЫЕ пороги и маршрутизация для резюме И анкеты.
+ * Этап 2 (T1 закрыт): ДВЕ пары порогов вместо одной.
  *
- * Решение trade-off: раньше пороги дублировались — 75/40 для резюме
- * (VacancyAiProcessSettings) и 75/50 для анкеты (PostDemoSettings).
- * Spec вводит ОДНУ шкалу. Оба движка читают её через buildSpecFromLegacy
- * (пока legacy; после перехода — напрямую).
- *
- * Дефолты: upper=75, lower=40 (исторически было «нижним» у резюме).
- * Для анкеты было lower=50 — это спорное место (см. MAPPING.md ниже).
+ * Решение координатора: пороги резюме и пороги анкеты — разные смыслы,
+ * объединение в одну шкалу меняло бы поведение анкеты при активации
+ * (резюме lower=40 vs анкета lower=50). Spec хранит обе пары раздельно:
+ *   - resumeThresholds — оценка резюме (legacy: aiProcessSettings, дефолты 75/40)
+ *   - anketaThresholds — оценка анкеты (legacy: demos.postDemoSettings, дефолты 75/50)
  */
-export const ThresholdsSchema = z.object({
+
+/** Пороги ОЦЕНКИ РЕЗЮМЕ + маршрутизация. Legacy-источник: vacancies.ai_process_settings. */
+export const ResumeThresholdsSchema = z.object({
   /** Верхний порог: score >= upper → invite */
   upperThreshold:    z.number().int().min(0).max(100).default(75),
   /** Нижний порог: score < lower → reject/keep_new */
@@ -79,7 +79,22 @@ export const ThresholdsSchema = z.object({
    */
   rejectionDelayMinutes: z.number().int().min(0).default(300),
 })
-export type Thresholds = z.infer<typeof ThresholdsSchema>
+export type ResumeThresholds = z.infer<typeof ResumeThresholdsSchema>
+
+/**
+ * Пороги ОЦЕНКИ АНКЕТЫ (после демо). Legacy-источник: demos.post_demo_settings
+ * (запись kind='demo', ключи upperThreshold/lowerThreshold; UI — PostDemoSettings,
+ * секция «thresholds» блока «AI-скрининг анкеты»).
+ * Маршрутизация анкеты (зелёный/жёлтый/красный экраны) остаётся в legacy —
+ * в Spec только сами пороги.
+ */
+export const AnketaThresholdsSchema = z.object({
+  /** Верхний порог: score >= upper → зелёный уровень (приглашение на встречу) */
+  upperThreshold: z.number().int().min(0).max(100).default(75),
+  /** Нижний порог: score < lower → красный уровень */
+  lowerThreshold: z.number().int().min(0).max(100).default(50),
+})
+export type AnketaThresholds = z.infer<typeof AnketaThresholdsSchema>
 
 // ─── Стоп-факторы ───────────────────────────────────────────────────────────
 
@@ -188,7 +203,8 @@ export const DEFAULT_SCORING_WEIGHTS: ScoringWeights = {
  * Четыре секции:
  *   (a) criteria   — оценочные критерии (v2-must/nice/dealbreaker + произвольные HR-оси)
  *   (b) stopFactors — жёсткий предварительный отсев (город/формат/возраст/…)
- *   (c) thresholds — ЕДИНЫЕ пороги и маршрутизация (одна шкала для резюме И анкеты)
+ *   (c) thresholds — ДВЕ пары порогов: resumeThresholds (резюме, 75/40 + маршрутизация)
+ *       и anketaThresholds (анкета, 75/50). Этап 2, решение T1.
  *   (d) profile     — идеальный профиль, текстовые описания для AI
  */
 export const CandidateSpecSchema = z.object({
@@ -226,8 +242,11 @@ export const CandidateSpecSchema = z.object({
    */
   stopFactors:   StopFactorsSchema.default({}),
 
-  // ── (c) Пороги и маршрутизация ────────────────────────────────────────────
-  thresholds:    ThresholdsSchema.default({}),
+  // ── (c) Пороги и маршрутизация (Этап 2: две пары) ────────────────────────
+  /** Пороги оценки резюме + маршрутизация mid-range. Дефолты 75/40. */
+  resumeThresholds: ResumeThresholdsSchema.default({}),
+  /** Пороги оценки анкеты (после демо). Дефолты 75/50. */
+  anketaThresholds: AnketaThresholdsSchema.default({}),
 
   // ── (d) Профиль / текстовые описания ─────────────────────────────────────
   /**
