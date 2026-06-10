@@ -218,6 +218,14 @@ export interface CompanyLegalContact {
 // Standalone-расписание компании (/settings/schedule). Отдельное от can-send-now
 // (vacancies.schedule_*), календаря и hiring-settings — см. memory
 // schedule-three-systems-keep-separate. Просто хранит своё значение.
+// Расписание одного дня для календаря HR.
+export interface CalendarDaySchedule {
+  enabled: boolean
+  start: string   // "09:00"
+  end:   string   // "18:00"
+  slot:  string   // слот в минутах: "15"|"30"|"60"|...
+}
+
 export interface CompanyWorkSchedule {
   schedule?: { enabled: boolean; from: string; to: string }[] // 7 строк, Пн..Вс
   timezone?: string
@@ -228,6 +236,9 @@ export interface CompanyWorkSchedule {
     id: string; employee: string; type: string
     dateFrom: string; dateTo: string; status: string; comment: string
   }[]
+  // Настройки рабочего расписания календаря HR (/hr/calendar → шестерёнка).
+  // БЕЗ миграции — jsonb принимает любые поля.
+  calendarWeekSchedule?: Record<string, CalendarDaySchedule> // ключ = день недели (0–6)
 }
 
 // ── NancyVoiceSettings (drizzle/0182) ──

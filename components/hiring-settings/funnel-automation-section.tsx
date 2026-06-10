@@ -29,8 +29,6 @@ import {
 } from "@/components/ui/alert-dialog"
 import {
   Save,
-  GitBranch,
-  Zap,
   Bell,
   Layers,
   ChevronUp,
@@ -51,57 +49,6 @@ import {
   type StageSlug,
   type StageColor,
 } from "@/lib/stages"
-
-// ─── Словарь сценариев воронки ──────────────────────────────────────────────
-const FUNNEL_SCENARIOS: Record<string, { label: string; description: string; stages: string[] }> = {
-  standard: {
-    label: "Стандартный",
-    description: "Специалисты и менеджеры — 7 этапов, 7–14 дней.",
-    stages: [
-      "Новый отклик",
-      "Скрининг",
-      "Демонстрация",
-      "Интервью с HR",
-      "Интервью с руководителем",
-      "Оффер",
-      "Выход на работу",
-    ],
-  },
-  fast: {
-    label: "Быстрый",
-    description: "Массовый найм, линейный персонал — 5 этапов, 3–5 дней.",
-    stages: ["Новый отклик", "Демонстрация", "Интервью", "Оффер", "Выход на работу"],
-  },
-  test_task: {
-    label: "С тестовым заданием",
-    description: "Технические роли — обязательно тестовое, 7 этапов, 10–21 день.",
-    stages: [
-      "Новый отклик",
-      "Скрининг",
-      "Тестовое задание",
-      "Интервью с HR",
-      "Интервью с руководителем",
-      "Оффер",
-      "Выход на работу",
-    ],
-  },
-  two_stage: {
-    label: "Двухэтапный",
-    description: "Когда нужно только демо + финал — минимальная воронка.",
-    stages: ["Новый отклик", "Демонстрация", "Финальное интервью", "Оффер", "Выход на работу"],
-  },
-  mass: {
-    label: "Массовый",
-    description: "Работники линии, курьеры, ритейл — групповой формат.",
-    stages: [
-      "Новый отклик",
-      "Демонстрация",
-      "Групповое интервью",
-      "Оффер",
-      "Выход на работу",
-    ],
-  },
-}
 
 // ─── Палитра цветов ───────────────────────────────────────────────────────────
 const COLOR_ORDER: StageColor[] = [
@@ -166,11 +113,6 @@ export function FunnelAutomationSection({
   defaults: CompanyHiringDefaults
   onPatch: (patch: Partial<CompanyHiringDefaults>) => Promise<void>
 }) {
-  // ── Сценарий воронки ──
-  const [selectedScenario, setSelectedScenario] = useState(
-    defaults.funnelScenario ?? "standard",
-  )
-
   // ── Единая таблица стадий ──
   const [stageHhActions, setStageHhActions] = useState<
     Record<string, "invitation" | "discard" | "assessment" | null>
@@ -213,15 +155,6 @@ export function FunnelAutomationSection({
 
   const [savingStages, setSavingStages] = useState(false)
 
-  // ── Автоматизация воронки ──
-  const [autoDemo, setAutoDemo] = useState(defaults.automation?.autoDemo ?? true)
-  const [autoInvite, setAutoInvite] = useState(defaults.automation?.autoInvite ?? false)
-  const [minScore, setMinScore] = useState(
-    defaults.automation?.minScore != null ? String(defaults.automation.minScore) : "70",
-  )
-  const [autoReject, setAutoReject] = useState(defaults.automation?.autoReject ?? false)
-  const [savingFunnel, setSavingFunnel] = useState(false)
-
   // ── Опросы обратной связи 30/60/90 ──
   const [feedbackEnabled, setFeedbackEnabled] = useState(
     defaults.feedbackSurveys?.enabled ?? false,
@@ -250,27 +183,6 @@ export function FunnelAutomationSection({
   const toggleStage = useCallback((slug: StageSlug, value: boolean) => {
     setEnabledStages(prev => ({ ...prev, [slug]: value }))
   }, [])
-
-  // ── Сохранение: Воронка + Автоматизация ──
-  const handleSaveFunnel = async () => {
-    setSavingFunnel(true)
-    try {
-      await onPatch({
-        funnelScenario: selectedScenario,
-        automation: {
-          autoDemo,
-          autoInvite,
-          minScore: Number(minScore) || undefined,
-          autoReject,
-        },
-      })
-      toast.success("Настройки воронки сохранены")
-    } catch {
-      toast.error("Ошибка сохранения")
-    } finally {
-      setSavingFunnel(false)
-    }
-  }
 
   // ── Сохранение: единая таблица стадий ──
   const handleSaveStages = async () => {
@@ -388,128 +300,6 @@ export function FunnelAutomationSection({
 
   return (
     <div className="space-y-5">
-      {/* ── Блок 1: Дефолтный сценарий воронки ── */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <GitBranch className="w-4 h-4" />
-            Дефолтный сценарий воронки
-          </CardTitle>
-          <CardDescription>
-            Новые вакансии будут использовать этот сценарий по умолчанию.
-            Выбирайте под тип роли: для линейного персонала — «Быстрый»,
-            для руководителей — «Стандартный» или «Двухэтапный».
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Select value={selectedScenario} onValueChange={setSelectedScenario}>
-            <SelectTrigger className="h-9 text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(FUNNEL_SCENARIOS).map(([key, s]) => (
-                <SelectItem key={key} value={key}>
-                  {s.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {/* Описание выбранного сценария */}
-          <p className="text-xs text-muted-foreground">
-            {FUNNEL_SCENARIOS[selectedScenario]?.description}
-          </p>
-
-          {/* Список этапов */}
-          <div className="space-y-0 rounded-lg border divide-y">
-            {FUNNEL_SCENARIOS[selectedScenario]?.stages.map((stage, idx) => (
-              <div key={idx} className="flex items-center gap-3 px-3 py-2">
-                <div className="flex items-center justify-center size-6 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
-                  {idx + 1}
-                </div>
-                <span className="text-sm">{stage}</span>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* ── Блок 2: Автоматизация ── */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Zap className="w-4 h-4" />
-            Автоматизация
-          </CardTitle>
-          <CardDescription>
-            Автоматические действия при движении кандидата по воронке.
-            Эти настройки применяются к новым вакансиям — в каждой вакансии
-            можно изменить отдельно.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <p className="text-sm font-medium">
-                Автоматически отправлять демонстрацию после отклика
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Сразу после получения отклика кандидату уходит ссылка на демо-курс
-              </p>
-            </div>
-            <Switch checked={autoDemo} onCheckedChange={setAutoDemo} />
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between py-2">
-              <div className="flex-1">
-                <p className="text-sm font-medium">
-                  Автоматически приглашать на интервью (скор &gt; N)
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  После прохождения демо — если AI-балл выше порога, кандидат
-                  автоматически двигается на этап интервью
-                </p>
-              </div>
-              <Switch checked={autoInvite} onCheckedChange={setAutoInvite} />
-            </div>
-            {autoInvite && (
-              <div className="flex items-center gap-2 ml-9">
-                <Label className="text-xs text-muted-foreground whitespace-nowrap">
-                  Мин. балл
-                </Label>
-                <Input
-                  value={minScore}
-                  onChange={(e) => setMinScore(e.target.value.replace(/\D/g, ""))}
-                  className="w-20 h-8 text-sm"
-                />
-                <span className="text-xs text-muted-foreground">из 100</span>
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <p className="text-sm font-medium">
-                Автоматически отклонять при срабатывании стоп-фактора
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Кандидату уходит вежливый отказ, стадия меняется на «Отказ»
-              </p>
-            </div>
-            <Switch checked={autoReject} onCheckedChange={setAutoReject} />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Кнопка сохранения для блоков 1+2 */}
-      <div className="flex justify-end">
-        <Button className="gap-2" onClick={handleSaveFunnel} disabled={savingFunnel}>
-          <Save className="size-4" />
-          {savingFunnel ? "Сохранение…" : "Сохранить воронку"}
-        </Button>
-      </div>
-
       {/* ── Блок 3: Единая таблица стадий ── */}
       <Card>
         <CardHeader className="pb-3">

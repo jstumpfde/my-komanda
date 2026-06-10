@@ -109,17 +109,66 @@ function CalendarContent() {
 
   // Calendar settings
   interface DaySchedule { enabled: boolean; start: string; end: string; slot: string }
-  const [weekSchedule, setWeekSchedule] = useState<Record<number, DaySchedule>>({
-    1: { enabled: true, start: "09:00", end: "18:00", slot: "60" },
-    2: { enabled: true, start: "09:00", end: "18:00", slot: "60" },
-    3: { enabled: true, start: "09:00", end: "18:00", slot: "60" },
-    4: { enabled: true, start: "09:00", end: "18:00", slot: "60" },
-    5: { enabled: true, start: "09:00", end: "18:00", slot: "60" },
+  const DEFAULT_WEEK_SCHEDULE: Record<number, DaySchedule> = {
+    1: { enabled: true,  start: "09:00", end: "18:00", slot: "60" },
+    2: { enabled: true,  start: "09:00", end: "18:00", slot: "60" },
+    3: { enabled: true,  start: "09:00", end: "18:00", slot: "60" },
+    4: { enabled: true,  start: "09:00", end: "18:00", slot: "60" },
+    5: { enabled: true,  start: "09:00", end: "18:00", slot: "60" },
     6: { enabled: false, start: "10:00", end: "16:00", slot: "60" },
     0: { enabled: false, start: "10:00", end: "16:00", slot: "60" },
-  })
+  }
+  const [weekSchedule, setWeekSchedule] = useState<Record<number, DaySchedule>>(DEFAULT_WEEK_SCHEDULE)
+  const [savingSchedule, setSavingSchedule] = useState(false)
   const updateDay = (day: number, patch: Partial<DaySchedule>) => {
     setWeekSchedule(prev => ({ ...prev, [day]: { ...prev[day], ...patch } }))
+  }
+
+  const loadCalendarSettings = useCallback(async () => {
+    try {
+      const res = await fetch("/api/modules/hr/calendar/settings")
+      if (res.ok) {
+        const data = await res.json() as { calendarWeekSchedule?: Record<string, DaySchedule> | null }
+        if (data.calendarWeekSchedule && typeof data.calendarWeekSchedule === "object") {
+          // Ключи хранятся как строки, преобразуем обратно в числа
+          const loaded: Record<number, DaySchedule> = { ...DEFAULT_WEEK_SCHEDULE }
+          for (const [k, v] of Object.entries(data.calendarWeekSchedule)) {
+            const day = parseInt(k, 10)
+            if (!isNaN(day) && v && typeof v === "object") {
+              loaded[day] = v as DaySchedule
+            }
+          }
+          setWeekSchedule(loaded)
+        }
+      }
+    } catch {
+      // Тихо — дефолт уже установлен
+    }
+  }, [])
+
+  const saveCalendarSettings = async () => {
+    setSavingSchedule(true)
+    try {
+      // Конвертируем ключи обратно в строки для хранения
+      const toSave: Record<string, DaySchedule> = {}
+      for (const [k, v] of Object.entries(weekSchedule)) {
+        toSave[String(k)] = v
+      }
+      const res = await fetch("/api/modules/hr/calendar/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ calendarWeekSchedule: toSave }),
+      })
+      if (res.ok) {
+        toast.success("Расписание сохранено")
+      } else {
+        toast.error("Не удалось сохранить расписание")
+      }
+    } catch {
+      toast.error("Ошибка сохранения")
+    } finally {
+      setSavingSchedule(false)
+    }
   }
   const [holidayCalendars, setHolidayCalendars] = useState<{ code: string; name: string; enabled: boolean }[]>([
     { code: "RU", name: "Российская Федерация", enabled: true },
@@ -273,6 +322,10 @@ function CalendarContent() {
   useEffect(() => {
     loadRooms()
   }, [loadRooms])
+
+  useEffect(() => {
+    loadCalendarSettings()
+  }, [loadCalendarSettings])
 
   const navigate = (dir: 1 | -1) => {
     if (viewMode === "week") {
@@ -490,6 +543,12 @@ function CalendarContent() {
                         </div>
                       )
                     })}
+                    <div className="flex justify-end mt-2">
+                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={saveCalendarSettings} disabled={savingSchedule}>
+                        <Check className="size-3" />
+                        {savingSchedule ? "Сохранение…" : "Сохранить расписание"}
+                      </Button>
+                    </div>
                     <Separator className="my-2" />
                     <div>
                       <Label className="text-sm font-medium">Праздничные календари</Label>

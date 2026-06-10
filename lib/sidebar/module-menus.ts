@@ -7,9 +7,8 @@ export type { MenuGroup }
 const MODULE_GROUP_DEFS: Partial<Record<ModuleId, { label: string; hrefs: string[]; legacy?: boolean }[]>> = {
   hr: [
     { label: 'Найм',       hrefs: ['/hr/dashboard', '/hr/vacancies', '/hr/library', '/hr/candidates', '/hr/talent-pool', '/hr/calendar', '/hr/interviews', '/hr/hiring-settings'] },
-    { label: 'Адаптация',  hrefs: ['/hr/assignments', '/hr/adaptation-analytics'] },
     { label: 'Оргструктура', hrefs: ['/hr/org-structure', '/hr/departments', '/hr/positions'] },
-    { label: 'В разработке', hrefs: ['/hr/onboarding', '/hr/employees', '/hr/courses', '/hr/development', '/hr/retention', '/hr/people-analytics'] },
+    { label: 'В разработке', hrefs: ['/hr/onboarding', '/hr/employees', '/hr/courses'] },
   ],
   marketing: [
     { label: 'Контент',    hrefs: ['/marketing/dashboard', '/marketing/content', '/marketing/landings'] },

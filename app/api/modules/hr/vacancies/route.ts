@@ -7,7 +7,6 @@ import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { CLOSED_VACANCY_STATUSES } from "@/lib/vacancies/lifecycle"
 import { logActivity } from "@/lib/activity-log"
 import { generateVacancyShortCode } from "@/lib/short-id"
-import { seedDefaultFunnelStages } from "@/lib/funnel/seed-default-stages"
 import {
   applyFunnelTemplate,
   DEFAULT_TEMPLATE_KEY,
@@ -268,12 +267,6 @@ export async function POST(req: NextRequest) {
     })
 
     console.log("[POST /api/modules/hr/vacancies] created:", vacancy.id, "short:", vacancy.shortCode)
-
-    // Legacy fallback: для компаний созданных до внедрения seed'а в
-    // /api/companies — досеяет недостающие 9 стадий идемпотентно
-    // (WHERE NOT EXISTS внутри helper'а). Для новых компаний 9 стадий
-    // уже стоят на момент создания.
-    await seedDefaultFunnelStages(user.companyId)
 
     logActivity({ companyId: user.companyId, userId: user.id!, action: "create", entityType: "vacancy", entityId: vacancy.id, entityTitle: vacancy.title, module: "hr", request: req })
     return apiSuccess(vacancy, 201)
