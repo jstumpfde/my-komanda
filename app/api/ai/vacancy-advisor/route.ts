@@ -8,7 +8,7 @@ import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import { requireAuth, apiError, apiSuccess } from "@/lib/api-helpers"
 import { AI_SAFETY_PROMPT, checkAiRateLimit, handleAiError } from "@/lib/ai-safety"
 import { checkRateLimit } from "@/lib/rate-limit"
-import { findBenchmark, adjustBenchmark, assessSalary, formatSalary, suggestTitles, marketStats, type SalaryBenchmark } from "@/lib/salary-benchmarks"
+import { findBenchmark, adjustBenchmark, assessSalary, formatSalary, suggestTitles, type SalaryBenchmark } from "@/lib/salary-benchmarks"
 
 // P0-28: ключевые поля анкеты, по которым считается inputHash. Любое
 // изменение из этого списка инвалидирует кеш AI-анализа. Не включаем
@@ -48,7 +48,6 @@ interface SalaryAnalysis {
   impactNote: string | null
   widthWarning: string | null
   responseNote: string | null
-  withoutSalaryLoss: number
 }
 
 interface Suggestions {
@@ -170,7 +169,7 @@ function staticAnalysis(body: Record<string, unknown>): AdvisorResponse {
   // с заполненным описанием всё равно помечалась «не заполнено».
   const companyDesc = ((d.companyDescription as string) || (body.companyDescription as string) || "")
   if (!companyDesc.trim()) {
-    sections.push({ id: "company", status: "warning", title: "О компании", message: "Заполните описание компании в блоке «О компании» или в Настройках → Компания. Вакансии с описанием получают на 30% больше откликов", priority: 7 })
+    sections.push({ id: "company", status: "warning", title: "О компании", message: "Заполните описание компании в блоке «О компании» или в Настройках → Компания. Описание помогает привлечь мотивированных кандидатов.", priority: 7 })
   } else {
     sections.push({ id: "company", status: "ok", title: "О компании", message: "Заполнено", priority: 10 })
     filled++
@@ -224,7 +223,6 @@ function buildStaticSalaryAnalysis(d: Record<string, unknown>): SalaryAnalysis |
   }
   const coeff = cityAdj * expCoeff
   const previousMedian = Math.round(benchmark.previous.median * coeff / 1000) * 1000
-  const withoutSalaryLoss = 100 - benchmark.responseRate.withoutSalary
 
   if (salaryFrom > 0 && salaryTo > 0) {
     const assessment = assessSalary(salaryFrom, salaryTo, adjusted, benchmark)
@@ -238,7 +236,6 @@ function buildStaticSalaryAnalysis(d: Record<string, unknown>): SalaryAnalysis |
       impactNote: assessment.impactNote,
       widthWarning: assessment.widthWarning,
       responseNote: assessment.responseNote,
-      withoutSalaryLoss,
     }
   }
 
@@ -249,10 +246,9 @@ function buildStaticSalaryAnalysis(d: Record<string, unknown>): SalaryAnalysis |
     period: benchmark.current.period,
     currentAssessment: "не указана",
     recommendedRange: { min: adjusted.min, max: adjusted.max },
-    impactNote: `Вакансии без зарплаты теряют до ${withoutSalaryLoss}% откликов. Рекомендуемая вилка: ${formatSalary(adjusted.min)}–${formatSalary(adjusted.max)}`,
+    impactNote: `Укажите зарплату — рекомендуемая вилка: ${formatSalary(adjusted.min)}–${formatSalary(adjusted.max)}`,
     widthWarning: null,
     responseNote: null,
-    withoutSalaryLoss,
   }
 }
 
@@ -523,15 +519,8 @@ function buildPrompt(d: Record<string, unknown>, body: Record<string, unknown>, 
     parts.push(`\n═══ СПРАВОЧНИК ЗАРПЛАТ (${benchmark.current.period}) ═══`)
     parts.push(`Медиана рынка: ${formatSalary(adjusted.median)} (рост +${benchmark.yoyGrowth}% за год, было ${formatSalary(benchmark.previous.median)} в ${benchmark.previous.period})`)
     parts.push(`Диапазон рынка: ${formatSalary(adjusted.min)} — ${formatSalary(adjusted.max)}`)
-    parts.push(`Без зарплаты теряется до ${100 - benchmark.responseRate.withoutSalary}% откликов`)
     if (city) parts.push(`(с учётом города ${city})`)
   }
-
-  parts.push(`\n═══ РЫНОК ТРУДА ${marketStats.period} ═══`)
-  parts.push(`Медианные зарплаты: +${marketStats.overallMedianGrowth}% за год`)
-  parts.push(`Резюме: +${marketStats.resumeGrowth}%, новых резюме: +${marketStats.newResumeGrowth}%`)
-  parts.push(`Junior-вакансий: −${marketStats.juniorVacancyDecline}%`)
-  parts.push(`Оптимальный опыт: ${marketStats.optimalExperience}`)
 
   if (focusedField) {
     parts.push(`\n═══ КОНТЕКСТ ═══`)
