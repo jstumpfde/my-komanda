@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
-import { DashboardHeader } from "@/components/dashboard/header"
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { AdminPageLayout } from "@/components/admin/admin-page-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -119,25 +117,17 @@ export default function AdminPlanEditPage() {
 
   if (loading) {
     return (
-      <SidebarProvider defaultOpen={true}>
-        <DashboardSidebar />
-        <SidebarInset>
-          <DashboardHeader />
-          <div className="flex items-center justify-center h-64">
-            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-          </div>
-        </SidebarInset>
-      </SidebarProvider>
+      <AdminPageLayout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </div>
+      </AdminPageLayout>
     )
   }
 
   return (
-    <SidebarProvider defaultOpen={true}>
-      <DashboardSidebar />
-      <SidebarInset>
-        <DashboardHeader />
-        <main className="flex-1 overflow-auto bg-background">
-          <div className="py-6 space-y-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+    <AdminPageLayout>
+          <div className="py-6 space-y-6 px-8">
             {/* Шапка */}
             <div className="flex items-center gap-3">
               <Button asChild variant="ghost" size="icon" className="h-8 w-8">
@@ -248,8 +238,6 @@ export default function AdminPlanEditPage() {
               {error && <p className="text-sm text-destructive">{error}</p>}
             </div>
           </div>
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+    </AdminPageLayout>
   )
 }

@@ -2,9 +2,7 @@
 
 import { Suspense, useState, useEffect, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
-import { DashboardHeader } from "@/components/dashboard/header"
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { AdminPageLayout } from "@/components/admin/admin-page-layout"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Shield, Building2, Users, FileText, Trash2 } from "lucide-react"
 import { CompaniesTab } from "@/components/admin/clients/companies-tab"
@@ -61,12 +59,8 @@ function AdminClientsInner() {
   }
 
   return (
-    <SidebarProvider defaultOpen={true}>
-      <DashboardSidebar />
-      <SidebarInset>
-        <DashboardHeader />
-        <main className="flex-1 overflow-auto bg-background">
-          <div className="py-6 px-6 lg:px-14">
+    <AdminPageLayout>
+      <div className="py-6 px-8">
 
             {/* Заголовок */}
             <div className="flex items-center gap-2 pt-3 pb-2">
@@ -92,10 +86,8 @@ function AdminClientsInner() {
             {view === "invoices" && <InvoicesTab />}
             {view === "trash" && <TrashTab onChanged={loadCounts} />}
 
-          </div>
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+      </div>
+    </AdminPageLayout>
   )
 }
 

@@ -156,6 +156,8 @@ interface Props {
   minableVacancies: MinableVacancy[]
   yulia: YuliaProps
   branding: BrandingProps
+  // defaultTab позволяет подстраницам /admin/platform/{section} открывать нужный таб сразу.
+  defaultTab?: string
 }
 
 const INDUSTRY_OPTIONS = [
@@ -191,20 +193,11 @@ export function PlatformAdminClient({
   minableVacancies,
   yulia,
   branding,
+  defaultTab = "companies",
 }: Props) {
   return (
-    <div className="container mx-auto p-6 max-w-7xl">
-      <div className="mb-6">
-        <div className="flex items-center gap-2 pt-3 pb-2">
-          <ShieldAlert className="h-5 w-5 text-violet-600" />
-          <h1 className="text-lg font-semibold">Platform Admin</h1>
-        </div>
-        <p className="text-sm text-muted-foreground mt-1">
-          Скрытый раздел. Действия затрагивают ВСЕ компании платформы.
-        </p>
-      </div>
-
-      <Tabs defaultValue="migrations">
+    <div className="p-6 max-w-7xl">
+      <Tabs defaultValue={defaultTab}>
         <TabsList>
           <TabsTrigger value="presence">Присутствие</TabsTrigger>
           <TabsTrigger value="migrations">Migrations</TabsTrigger>

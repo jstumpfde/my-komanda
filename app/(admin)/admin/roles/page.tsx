@@ -1,9 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
-import { DashboardHeader } from "@/components/dashboard/header"
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { AdminPageLayout } from "@/components/admin/admin-page-layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -279,13 +277,8 @@ export default function AdminRolesPage() {
   const clientRoles = data?.roles.filter(r => !r.isPlatform) ?? []
 
   return (
-    <SidebarProvider defaultOpen={true}>
-      <DashboardSidebar />
-      <SidebarInset>
-        <DashboardHeader />
-
-        <main className="flex-1 overflow-auto bg-background">
-          <div className="py-6 space-y-8" style={{ paddingLeft: 56, paddingRight: 56 }}>
+    <AdminPageLayout>
+      <div className="py-6 space-y-8 px-8">
 
             {/* Header */}
             <div>
@@ -344,9 +337,7 @@ export default function AdminRolesPage() {
                 </section>
               </>
             )}
-          </div>
-        </main>
-      </SidebarInset>
+      </div>
 
       {editingRole && (
         <MatrixDialog
@@ -357,6 +348,6 @@ export default function AdminRolesPage() {
           onSaved={handleSaved}
         />
       )}
-    </SidebarProvider>
+    </AdminPageLayout>
   )
 }

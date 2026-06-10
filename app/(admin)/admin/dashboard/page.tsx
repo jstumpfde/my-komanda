@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
-import { DashboardHeader } from "@/components/dashboard/header"
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { AdminPageLayout } from "@/components/admin/admin-page-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
@@ -126,12 +124,8 @@ export default function AdminDashboardPage() {
   }, [])
 
   return (
-    <SidebarProvider defaultOpen={true}>
-      <DashboardSidebar />
-      <SidebarInset>
-        <DashboardHeader />
-        <main className="flex-1 overflow-auto bg-background">
-          <div className="py-6 space-y-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+    <AdminPageLayout>
+      <div className="py-6 space-y-6 px-8">
 
             {/* Заголовок */}
             <div>
@@ -299,9 +293,7 @@ export default function AdminDashboardPage() {
                 </div>
               </>
             )}
-          </div>
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+      </div>
+    </AdminPageLayout>
   )
 }

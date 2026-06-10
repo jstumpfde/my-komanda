@@ -31,7 +31,8 @@ export const ADMIN_MENU: PlatformMenuItem[] = [
   { name: 'Дашборд',        href: '/admin/dashboard',    icon: 'LayoutDashboard' },
   { name: 'Клиенты',        href: '/admin/clients',      icon: 'Building2' },
   { name: 'Запросы',        href: '/admin/requests',     icon: 'Inbox' },
-  { name: 'Тарифы',         href: '/admin/tariffs',      icon: 'CreditCard' },
+  { name: 'Тарифы',         href: '/admin/plans',        icon: 'CreditCard' },
   { name: 'Роли и доступ',  href: '/admin/roles',        icon: 'ShieldCheck' },
   { name: 'Интеграторы',    href: '/admin/integrators',  icon: 'Handshake' },
+  { name: 'Платформа',      href: '/admin/platform',     icon: 'ShieldAlert' },
 ]
