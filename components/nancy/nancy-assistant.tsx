@@ -177,9 +177,8 @@ function pageLabel(pathname: string): string {
     return `Страница вакансии${id ? ` (id: ${id})` : ""}`
   }
   if (pathname.startsWith("/hr/vacancies"))   return "Список вакансий"
-  if (pathname.startsWith("/hr/calendar"))    return "Календарь"
   if (pathname.startsWith("/hr/candidates"))  return "Кандидаты"
-  if (pathname.startsWith("/hr/interviews"))  return "Интервью"
+  if (pathname.startsWith("/hr/interviews"))  return "Интервью и календарь"
   if (pathname.startsWith("/team"))           return "Команда"
   if (pathname.startsWith("/settings"))       return "Настройки"
   if (pathname.startsWith("/knowledge"))      return "База знаний"

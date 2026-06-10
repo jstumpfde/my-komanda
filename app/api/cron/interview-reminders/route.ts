@@ -123,7 +123,7 @@ async function run(): Promise<{ scanned: number; sent24h: number; sent2h: number
       severity:   "info",
       sourceType: "calendar_event",
       sourceId:   ev.id,
-      href:       "/hr/calendar",
+      href:       "/hr/interviews?tab=calendar",
     })
 
     // 2) Telegram-канал компании (если подключён — иначе тихо пропускается).

@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useMemo, useEffect, useCallback } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useMemo, useEffect, useCallback, Suspense, lazy } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -17,6 +17,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {Video, Building2, ExternalLink, ChevronLeft, ChevronRight, List, CalendarDays, CalendarRange, Clock, Settings, Plus, GripVertical, Pencil, Trash2, Save, X, Bell, BellOff, LayoutGrid} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+
+// Ленивая загрузка CalendarView — монтируется только при активном табе «Календарь»
+const CalendarView = lazy(() =>
+  import("@/components/calendar/calendar-view").then(m => ({ default: m.CalendarView }))
+)
 
 // ─── Типы ────────────────────────────────────────────────────
 
@@ -68,10 +73,6 @@ interface Interview {
 
 const today2 = new Date()
 
-// Событие календаря type='interview' → форма Interview для этой страницы.
-// candidate берём из title (HR его и заполняет), vacancy — по vacancyId через
-// мапу названий. Статус: cancelled→Отменено, прошедшее→Пройдено, tentative→Ожидает,
-// иначе Подтверждено. Тип/формат — из структурных полей, дефолты для старых событий.
 interface CalEvent {
   id: string; title: string; startAt: string; endAt: string; status: string | null
   vacancyId: string | null; candidateId: string | null; interviewer: string | null; interviewType: string | null; interviewFormat: string | null
@@ -87,7 +88,6 @@ function mapEventToInterview(ev: CalEvent, vacMap: Map<string, string>): Intervi
   const ALL_ST = ["Подтверждено", "Ожидает", "Пройдено", "Не явился", "Отменено"] as const
   let status: InterviewStatus
   if (ev.interviewStatus && (ALL_ST as readonly string[]).includes(ev.interviewStatus)) {
-    // Явно выставленный статус интервью (включая «Не явился») имеет приоритет.
     status = ev.interviewStatus as InterviewStatus
   } else if (ev.status === "cancelled") status = "Отменено"
   else if (end < now) status = "Пройдено"
@@ -154,14 +154,32 @@ function MiniCard({ iv, compact }: { iv: Interview; compact?: boolean }) {
   )
 }
 
-// ─── Компонент ──────────────────────────────────────────────
+// ─── Внутренний компонент (читает searchParams) ──────────────
 
-export default function InterviewsPage() {
+function InterviewsPageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // tab=interviews (по умолчанию) | tab=calendar
+  const [activeTab, setActiveTab] = useState<"interviews" | "calendar">(() => {
+    const t = searchParams?.get("tab")
+    return t === "calendar" ? "calendar" : "interviews"
+  })
+  // Синхронизируем таб в URL при изменении
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search)
+    if (activeTab === "calendar") {
+      sp.set("tab", "calendar")
+    } else {
+      sp.delete("tab")
+    }
+    router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
+
   const [view, setView] = useState<ViewMode>("list")
   const [interviews, setInterviews] = useState<Interview[]>([])
   const [vacOptions, setVacOptions] = useState<{ id: string; title: string }[]>([])
-  // Создание интервью прямо со страницы.
   const [createOpen, setCreateOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const [cName, setCName] = useState("")
@@ -181,16 +199,13 @@ export default function InterviewsPage() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [dragIdx, setDragIdx] = useState<number | null>(null)
 
-  // Drag-drop state for interviews
   const [dragIvId, setDragIvId] = useState<string | null>(null)
   const [dropTargetHour, setDropTargetHour] = useState<number | null>(null)
   const [dropTargetDay, setDropTargetDay] = useState<string | null>(null)
   const [dropTargetStatus, setDropTargetStatus] = useState<InterviewStatus | null>(null)
 
-  // Notify dialog
   const [notifyDialog, setNotifyDialog] = useState<{ message: string } | null>(null)
 
-  // Editing state
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState("")
   const [editEmoji, setEditEmoji] = useState("")
@@ -200,7 +215,6 @@ export default function InterviewsPage() {
 
   useEffect(() => { setStages(loadStages()) }, [])
 
-  // Реальные интервью из календаря (type='interview') + список вакансий.
   const loadInterviews = useCallback(async () => {
     try {
       const [evRes, vacRes] = await Promise.all([
@@ -248,11 +262,6 @@ export default function InterviewsPage() {
     } catch { toast.error("Не удалось создать интервью") } finally { setCreating(false) }
   }
 
-  // --- Interview drag helpers ---
-  // Меняет интервью локально + персистит в календарь (PATCH): перенос времени/даты
-  // пишет startAt/endAt, смена статуса маппится на статус события календаря
-  // (confirmed/tentative/cancelled). Тонкие статусы (Пройдено/Не явился) — только
-  // локально/производные, в календаре отдельно не хранятся.
   const updateInterview = (id: string, patch: Partial<Interview>, msg: string) => {
     const current = interviews.find(iv => iv.id === id)
     setInterviews(prev => prev.map(iv => iv.id === id ? { ...iv, ...patch } : iv))
@@ -268,8 +277,6 @@ export default function InterviewsPage() {
       body.startAt = start.toISOString(); body.endAt = end.toISOString()
     }
     if (patch.status !== undefined) {
-      // Полный статус интервью — в interview_status; статус события календаря
-      // маппим к ближайшему (для согласованности календаря/конфликтов/C6).
       body.interviewStatus = patch.status
       body.status = patch.status === "Отменено" || patch.status === "Не явился" ? "cancelled"
         : patch.status === "Ожидает" ? "tentative" : "confirmed"
@@ -284,7 +291,6 @@ export default function InterviewsPage() {
   const ivDragStart = (id: string) => setDragIvId(id)
   const ivDragEnd = () => { setDragIvId(null); setDropTargetHour(null); setDropTargetDay(null); setDropTargetStatus(null) }
 
-  // Day view: drop on hour
   const dayDropOnHour = (hour: number) => {
     if (dragIvId === null) return
     const iv = interviews.find(x => x.id === dragIvId)
@@ -296,7 +302,6 @@ export default function InterviewsPage() {
     ivDragEnd()
   }
 
-  // Calendar view: drop on date
   const calDropOnDay = (targetDate: Date) => {
     if (dragIvId === null) return
     const newDate = new Date(targetDate)
@@ -308,14 +313,12 @@ export default function InterviewsPage() {
     ivDragEnd()
   }
 
-  // Kanban view: drop on status
   const kanbanDropOnStatus = (status: InterviewStatus) => {
     if (dragIvId === null) return
     updateInterview(dragIvId, { status }, `Статус изменён на «${status}»`)
     ivDragEnd()
   }
 
-  // Week view: drop on day+hour
   const weekDropOnSlot = (day: Date, hour: number) => {
     if (dragIvId === null) return
     const iv = interviews.find(x => x.id === dragIvId)
@@ -342,7 +345,6 @@ export default function InterviewsPage() {
     return m
   }, [stages, interviews])
 
-  // Stage CRUD
   const startEdit = (stage: Stage) => {
     setEditingId(stage.id); setEditName(stage.name); setEditEmoji(stage.emoji); setEditColor(stage.color); setEditCondition(stage.condition); setAddMode(false)
   }
@@ -370,7 +372,6 @@ export default function InterviewsPage() {
     toast.error("Стадия удалена")
   }
 
-  // Drag reorder
   const handleDragStart = (idx: number) => setDragIdx(idx)
   const handleDragOver = (e: React.DragEvent, idx: number) => {
     e.preventDefault()
@@ -388,7 +389,6 @@ export default function InterviewsPage() {
     { mode: "day", icon: Clock, label: "День" },
   ]
 
-  // Calendar
   const calDate = new Date(calYear, calMonth, 1)
   const monthName = calDate.toLocaleDateString("ru-RU", { month: "long", year: "numeric" })
   const firstDay = (calDate.getDay() + 6) % 7
@@ -399,7 +399,6 @@ export default function InterviewsPage() {
   const dayInterviews = interviews.filter(iv => isSameDay(iv.date, viewDay)).sort((a, b) => a.time.localeCompare(b.time))
   const dayHours = Array.from({ length: 12 }, (_, i) => i + 9)
 
-  // Week view
   const weekStart = useMemo(() => {
     const d = new Date(today2); d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + weekOffset * 7); d.setHours(0, 0, 0, 0); return d
   }, [weekOffset])
@@ -417,293 +416,320 @@ export default function InterviewsPage() {
       <SidebarInset>
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
-          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
-            {/* Header — единый стиль платформы (как Календарь): иконка violet + Tabs + primary */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-5">
-              <div className="flex items-center gap-2">
-                <CalendarDays className="h-5 w-5 text-violet-600" />
-                <h1 className="text-lg font-semibold">Собеседования</h1>
+
+          {/* ═══ Верхний переключатель разделов ═══ */}
+          <div className="flex items-center justify-between px-4 sm:px-14 pt-5 pb-3 border-b">
+            <div className="flex items-center gap-2">
+              <CalendarDays className="h-5 w-5 text-violet-600" />
+              <h1 className="text-lg font-semibold">Интервью</h1>
+            </div>
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "interviews" | "calendar")}>
+              <TabsList>
+                <TabsTrigger value="interviews">Интервью</TabsTrigger>
+                <TabsTrigger value="calendar">Календарь</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+
+          {/* ═══ ТАБ: ИНТЕРВЬЮ ═══ */}
+          {activeTab === "interviews" && (
+            <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-5">
+                <div className="flex items-center gap-2 sm:hidden">
+                  {/* заголовок скрыт на больших экранах — уже в шапке выше */}
+                  <span className="text-base font-semibold text-muted-foreground">Собеседования</span>
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
+                  {/* View switcher — shadcn Tabs */}
+                  <Tabs value={view} onValueChange={(v) => setView(v as ViewMode)}>
+                    <TabsList>
+                      {views.map(v => (
+                        <TabsTrigger key={v.mode} value={v.mode} className="gap-1 text-xs">
+                          <v.icon className="w-3.5 h-3.5" /><span className="hidden sm:inline">{v.label}</span>
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </Tabs>
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setSettingsOpen(true)}>
+                    <Settings className="w-3.5 h-3.5" /><span className="hidden sm:inline">Настроить стадии</span>
+                  </Button>
+                  <Button size="sm" className="gap-1.5" onClick={openCreate}>
+                    <Plus className="w-3.5 h-3.5" /><span className="hidden sm:inline">Запланировать интервью</span>
+                  </Button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                {/* View switcher — shadcn Tabs */}
-                <Tabs value={view} onValueChange={(v) => setView(v as ViewMode)}>
-                  <TabsList>
-                    {views.map(v => (
-                      <TabsTrigger key={v.mode} value={v.mode} className="gap-1 text-xs">
-                        <v.icon className="w-3.5 h-3.5" /><span className="hidden sm:inline">{v.label}</span>
+
+              {/* Dynamic stage tabs */}
+              <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 mb-5">
+                <Tabs value={activeStage} onValueChange={setActiveStage}>
+                  <TabsList className="w-max sm:w-auto">
+                    {stages.map(s => (
+                      <TabsTrigger key={s.id} value={s.id} className="gap-1.5">
+                        <span>{s.emoji}</span> {s.name}
+                        <Badge className="ml-1 text-[10px] px-1.5 h-4 bg-primary/10 text-primary">{stageCounts[s.id] || 0}</Badge>
                       </TabsTrigger>
                     ))}
                   </TabsList>
                 </Tabs>
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setSettingsOpen(true)}>
-                  <Settings className="w-3.5 h-3.5" /><span className="hidden sm:inline">Настроить стадии</span>
-                </Button>
-                <Button size="sm" className="gap-1.5" onClick={openCreate}>
-                  <Plus className="w-3.5 h-3.5" /><span className="hidden sm:inline">Запланировать интервью</span>
-                </Button>
               </div>
-            </div>
 
-            {/* Dynamic stage tabs */}
-            <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 mb-5">
-              <Tabs value={activeStage} onValueChange={setActiveStage}>
-                <TabsList className="w-max sm:w-auto">
-                  {stages.map(s => (
-                    <TabsTrigger key={s.id} value={s.id} className="gap-1.5">
-                      <span>{s.emoji}</span> {s.name}
-                      <Badge className="ml-1 text-[10px] px-1.5 h-4 bg-primary/10 text-primary">{stageCounts[s.id] || 0}</Badge>
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
-            </div>
-
-            {/* ═══ LIST ════════════════════════════════════════ */}
-            {view === "list" && (
-              <div className="space-y-3">
-                {filtered.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">Нет интервью</p>}
-                {filtered.map(iv => (
-                  <Card key={iv.id}>
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-4">
-                        <div className="flex flex-col items-center justify-center min-w-[56px] bg-muted rounded-lg py-2 px-3">
-                          <span className="text-2xl font-bold leading-none">{iv.date.getDate()}</span>
-                          <span className="text-[10px] font-medium text-muted-foreground mt-0.5">{iv.date.toLocaleDateString("ru-RU", { month: "short" }).toUpperCase()}</span>
-                          <span className="text-xs font-semibold text-primary mt-1">{iv.time}</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
-                            <span className="font-semibold text-sm truncate">{iv.candidate}</span>
-                            <Badge variant="outline" className={cn("text-[10px]", STATUS_STYLES[iv.status])}>{iv.status}</Badge>
+              {/* ═══ LIST ════════════════════════════════════════ */}
+              {view === "list" && (
+                <div className="space-y-3">
+                  {filtered.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">Нет интервью</p>}
+                  {filtered.map(iv => (
+                    <Card key={iv.id}>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-4">
+                          <div className="flex flex-col items-center justify-center min-w-[56px] bg-muted rounded-lg py-2 px-3">
+                            <span className="text-2xl font-bold leading-none">{iv.date.getDate()}</span>
+                            <span className="text-[10px] font-medium text-muted-foreground mt-0.5">{iv.date.toLocaleDateString("ru-RU", { month: "short" }).toUpperCase()}</span>
+                            <span className="text-xs font-semibold text-primary mt-1">{iv.time}</span>
                           </div>
-                          <p className="text-xs text-muted-foreground truncate mb-1">{iv.vacancy}</p>
-                          <p className="text-xs text-muted-foreground">Интервьюер: <span className="text-foreground font-medium">{iv.interviewer}</span></p>
-                          <div className="flex flex-wrap gap-1.5 mt-2">
-                            <Badge variant="outline" className={cn("text-[10px]", iv.type === "Техническое" ? "border-blue-200 text-blue-700" : iv.type === "HR" ? "border-purple-200 text-purple-700" : "border-green-200 text-green-700")}>{iv.type}</Badge>
-                            <Badge variant="outline" className="text-[10px] gap-1">{iv.format === "Онлайн" ? <Video className="w-3 h-3" /> : <Building2 className="w-3 h-3" />}{iv.format}</Badge>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
+                              <span className="font-semibold text-sm truncate">{iv.candidate}</span>
+                              <Badge variant="outline" className={cn("text-[10px]", STATUS_STYLES[iv.status])}>{iv.status}</Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground truncate mb-1">{iv.vacancy}</p>
+                            <p className="text-xs text-muted-foreground">Интервьюер: <span className="text-foreground font-medium">{iv.interviewer}</span></p>
+                            <div className="flex flex-wrap gap-1.5 mt-2">
+                              <Badge variant="outline" className={cn("text-[10px]", iv.type === "Техническое" ? "border-blue-200 text-blue-700" : iv.type === "HR" ? "border-purple-200 text-purple-700" : "border-green-200 text-green-700")}>{iv.type}</Badge>
+                              <Badge variant="outline" className="text-[10px] gap-1">{iv.format === "Онлайн" ? <Video className="w-3 h-3" /> : <Building2 className="w-3 h-3" />}{iv.format}</Badge>
+                            </div>
                           </div>
+                          <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}><ExternalLink className="h-3.5 w-3.5" /> Открыть</Button>
                         </div>
-                        <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}><ExternalLink className="h-3.5 w-3.5" /> Открыть</Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-
-            {/* ═══ CALENDAR ════════════════════════════════════ */}
-            {view === "calendar" && (
-              <Card><CardContent className="p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { if (calMonth === 0) { setCalMonth(11); setCalYear(calYear - 1) } else setCalMonth(calMonth - 1) }}><ChevronLeft className="w-4 h-4" /></Button>
-                  <span className="text-sm font-semibold capitalize">{monthName}</span>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { if (calMonth === 11) { setCalMonth(0); setCalYear(calYear + 1) } else setCalMonth(calMonth + 1) }}><ChevronRight className="w-4 h-4" /></Button>
-                </div>
-                <div className="grid grid-cols-7 gap-px bg-border rounded-lg overflow-hidden">
-                  {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map(wd => (
-                    <div key={wd} className="bg-muted/50 text-center text-[10px] font-semibold text-muted-foreground py-2">{wd}</div>
+                      </CardContent>
+                    </Card>
                   ))}
-                  {calDays.map((day, i) => {
-                    if (!day) return <div key={i} className="bg-card min-h-[80px]" />
-                    const dayIvs = interviews.filter(iv => isSameDay(iv.date, day))
-                    const isT = isToday(day)
-                    const dayKey = day.toISOString().slice(0, 10)
-                    const isDropTarget = dropTargetDay === dayKey && dragIvId !== null
-                    return (
-                      <div
-                        key={i}
-                        className={cn("bg-card min-h-[80px] p-1 border-t transition-all", isT && "bg-primary/5", isDropTarget && "ring-2 ring-primary ring-inset bg-primary/5")}
-                        onDragOver={e => { e.preventDefault(); setDropTargetDay(dayKey) }}
-                        onDragLeave={() => { if (dropTargetDay === dayKey) setDropTargetDay(null) }}
-                        onDrop={e => { e.preventDefault(); calDropOnDay(day) }}
-                      >
-                        <span className={cn("text-xs font-medium", isT ? "text-primary font-bold" : "text-muted-foreground")}>{day.getDate()}</span>
-                        <div className="space-y-0.5 mt-0.5">
-                          {dayIvs.slice(0, 3).map(iv => (
-                            <div
-                              key={iv.id}
-                              draggable
-                              onDragStart={() => ivDragStart(iv.id)}
-                              onDragEnd={ivDragEnd}
-                              className={cn(dragIvId === iv.id && "opacity-40 scale-95")}
-                            >
-                              <MiniCard iv={iv} compact />
-                            </div>
-                          ))}
-                          {dayIvs.length > 3 && <p className="text-[9px] text-muted-foreground text-center">+{dayIvs.length - 3}</p>}
-                        </div>
-                      </div>
-                    )
-                  })}
                 </div>
-              </CardContent></Card>
-            )}
+              )}
 
-            {/* ═══ DAY ═════════════════════════════════════════ */}
-            {view === "day" && (
-              <Card><CardContent className="p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <Button variant="ghost" size="sm" className="gap-1" onClick={() => setDayOffset(dayOffset - 1)}><ChevronLeft className="w-4 h-4" /> Вчера</Button>
-                  <div className="text-center"><span className="text-sm font-semibold capitalize">{formatDayFull(viewDay)}</span>{dayOffset !== 0 && <Button variant="ghost" size="sm" className="ml-2 h-6 text-xs" onClick={() => setDayOffset(0)}>Сегодня</Button>}</div>
-                  <Button variant="ghost" size="sm" className="gap-1" onClick={() => setDayOffset(dayOffset + 1)}>Завтра <ChevronRight className="w-4 h-4" /></Button>
-                </div>
-                <div className="space-y-0">
-                  {dayHours.map(h => {
-                    const hourIvs = dayInterviews.filter(iv => parseInt(iv.time) === h)
-                    const isDropHere = dropTargetHour === h && dragIvId !== null
-                    return (
-                      <div
-                        key={h}
-                        className={cn("flex border-t min-h-[56px] transition-colors", isDropHere && "bg-primary/5")}
-                        onDragOver={e => { e.preventDefault(); setDropTargetHour(h) }}
-                        onDragLeave={() => { if (dropTargetHour === h) setDropTargetHour(null) }}
-                        onDrop={e => { e.preventDefault(); dayDropOnHour(h) }}
-                      >
-                        <div className="w-16 shrink-0 py-2 pr-3 text-right text-xs text-muted-foreground font-medium">{String(h).padStart(2, "0")}:00</div>
-                        <div className="flex-1 py-1 pl-2 space-y-1 relative">
-                          {isDropHere && <div className="absolute top-0 left-2 right-0 h-0.5 bg-primary rounded" />}
-                          {hourIvs.length === 0 && !isDropHere && <div className="h-10 rounded bg-muted/20" />}
-                          {hourIvs.map(iv => (
-                            <div
-                              key={iv.id}
-                              draggable
-                              onDragStart={() => ivDragStart(iv.id)}
-                              onDragEnd={ivDragEnd}
-                              className={cn("rounded-lg border p-2.5 flex items-center justify-between cursor-grab active:cursor-grabbing transition-opacity", STATUS_STYLES[iv.status], dragIvId === iv.id && "opacity-40 scale-95")}
-                            >
-                              <div><div className="flex items-center gap-2"><span className="text-sm font-semibold">{iv.candidate}</span><Badge variant="outline" className="text-[10px]">{iv.type}</Badge></div><p className="text-xs text-muted-foreground">{iv.vacancy} · {iv.time}–{iv.endTime} · {iv.format}</p></div>
-                              <Button variant="outline" size="sm" className="h-7 text-xs shrink-0" onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}>Открыть</Button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </CardContent></Card>
-            )}
-
-            {/* ═══ WEEK ═════════════════════════════════════════ */}
-            {view === "week" && (
-              <Card><CardContent className="p-2 sm:p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <Button variant="ghost" size="sm" className="gap-1" onClick={() => setWeekOffset(weekOffset - 1)}><ChevronLeft className="w-4 h-4" /><span className="hidden sm:inline">Прошлая</span></Button>
-                  <div className="text-center">
-                    <span className="text-sm font-semibold">{weekLabel}</span>
-                    {weekOffset !== 0 && <Button variant="ghost" size="sm" className="ml-2 h-6 text-xs" onClick={() => setWeekOffset(0)}>Сегодня</Button>}
+              {/* ═══ CALENDAR ════════════════════════════════════ */}
+              {view === "calendar" && (
+                <Card><CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { if (calMonth === 0) { setCalMonth(11); setCalYear(calYear - 1) } else setCalMonth(calMonth - 1) }}><ChevronLeft className="w-4 h-4" /></Button>
+                    <span className="text-sm font-semibold capitalize">{monthName}</span>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { if (calMonth === 11) { setCalMonth(0); setCalYear(calYear + 1) } else setCalMonth(calMonth + 1) }}><ChevronRight className="w-4 h-4" /></Button>
                   </div>
-                  <Button variant="ghost" size="sm" className="gap-1" onClick={() => setWeekOffset(weekOffset + 1)}><span className="hidden sm:inline">Следующая</span> <ChevronRight className="w-4 h-4" /></Button>
-                </div>
-                <div className="overflow-x-auto">
-                  <div className="min-w-[700px]">
-                    {/* Day headers */}
-                    <div className="grid grid-cols-[56px_repeat(7,1fr)] border-b">
-                      <div />
-                      {weekDays.map((wd, i) => {
-                        const isT = isToday(wd)
-                        return (
-                          <div key={i} className={cn("text-center py-2 text-xs font-semibold border-l", isT && "bg-primary/5")}>
-                            <span className={cn(isT ? "text-primary" : "text-muted-foreground")}>{weekDayNames[i]}</span>
-                            <span className={cn("ml-1", isT ? "text-primary font-bold" : "text-foreground")}>{wd.getDate()}</span>
+                  <div className="grid grid-cols-7 gap-px bg-border rounded-lg overflow-hidden">
+                    {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map(wd => (
+                      <div key={wd} className="bg-muted/50 text-center text-[10px] font-semibold text-muted-foreground py-2">{wd}</div>
+                    ))}
+                    {calDays.map((day, i) => {
+                      if (!day) return <div key={i} className="bg-card min-h-[80px]" />
+                      const dayIvs = interviews.filter(iv => isSameDay(iv.date, day))
+                      const isT = isToday(day)
+                      const dayKey = day.toISOString().slice(0, 10)
+                      const isDropTarget = dropTargetDay === dayKey && dragIvId !== null
+                      return (
+                        <div
+                          key={i}
+                          className={cn("bg-card min-h-[80px] p-1 border-t transition-all", isT && "bg-primary/5", isDropTarget && "ring-2 ring-primary ring-inset bg-primary/5")}
+                          onDragOver={e => { e.preventDefault(); setDropTargetDay(dayKey) }}
+                          onDragLeave={() => { if (dropTargetDay === dayKey) setDropTargetDay(null) }}
+                          onDrop={e => { e.preventDefault(); calDropOnDay(day) }}
+                        >
+                          <span className={cn("text-xs font-medium", isT ? "text-primary font-bold" : "text-muted-foreground")}>{day.getDate()}</span>
+                          <div className="space-y-0.5 mt-0.5">
+                            {dayIvs.slice(0, 3).map(iv => (
+                              <div
+                                key={iv.id}
+                                draggable
+                                onDragStart={() => ivDragStart(iv.id)}
+                                onDragEnd={ivDragEnd}
+                                className={cn(dragIvId === iv.id && "opacity-40 scale-95")}
+                              >
+                                <MiniCard iv={iv} compact />
+                              </div>
+                            ))}
+                            {dayIvs.length > 3 && <p className="text-[9px] text-muted-foreground text-center">+{dayIvs.length - 3}</p>}
                           </div>
-                        )
-                      })}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </CardContent></Card>
+              )}
+
+              {/* ═══ DAY ═════════════════════════════════════════ */}
+              {view === "day" && (
+                <Card><CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <Button variant="ghost" size="sm" className="gap-1" onClick={() => setDayOffset(dayOffset - 1)}><ChevronLeft className="w-4 h-4" /> Вчера</Button>
+                    <div className="text-center"><span className="text-sm font-semibold capitalize">{formatDayFull(viewDay)}</span>{dayOffset !== 0 && <Button variant="ghost" size="sm" className="ml-2 h-6 text-xs" onClick={() => setDayOffset(0)}>Сегодня</Button>}</div>
+                    <Button variant="ghost" size="sm" className="gap-1" onClick={() => setDayOffset(dayOffset + 1)}>Завтра <ChevronRight className="w-4 h-4" /></Button>
+                  </div>
+                  <div className="space-y-0">
+                    {dayHours.map(h => {
+                      const hourIvs = dayInterviews.filter(iv => parseInt(iv.time) === h)
+                      const isDropHere = dropTargetHour === h && dragIvId !== null
+                      return (
+                        <div
+                          key={h}
+                          className={cn("flex border-t min-h-[56px] transition-colors", isDropHere && "bg-primary/5")}
+                          onDragOver={e => { e.preventDefault(); setDropTargetHour(h) }}
+                          onDragLeave={() => { if (dropTargetHour === h) setDropTargetHour(null) }}
+                          onDrop={e => { e.preventDefault(); dayDropOnHour(h) }}
+                        >
+                          <div className="w-16 shrink-0 py-2 pr-3 text-right text-xs text-muted-foreground font-medium">{String(h).padStart(2, "0")}:00</div>
+                          <div className="flex-1 py-1 pl-2 space-y-1 relative">
+                            {isDropHere && <div className="absolute top-0 left-2 right-0 h-0.5 bg-primary rounded" />}
+                            {hourIvs.length === 0 && !isDropHere && <div className="h-10 rounded bg-muted/20" />}
+                            {hourIvs.map(iv => (
+                              <div
+                                key={iv.id}
+                                draggable
+                                onDragStart={() => ivDragStart(iv.id)}
+                                onDragEnd={ivDragEnd}
+                                className={cn("rounded-lg border p-2.5 flex items-center justify-between cursor-grab active:cursor-grabbing transition-opacity", STATUS_STYLES[iv.status], dragIvId === iv.id && "opacity-40 scale-95")}
+                              >
+                                <div><div className="flex items-center gap-2"><span className="text-sm font-semibold">{iv.candidate}</span><Badge variant="outline" className="text-[10px]">{iv.type}</Badge></div><p className="text-xs text-muted-foreground">{iv.vacancy} · {iv.time}–{iv.endTime} · {iv.format}</p></div>
+                                <Button variant="outline" size="sm" className="h-7 text-xs shrink-0" onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}>Открыть</Button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </CardContent></Card>
+              )}
+
+              {/* ═══ WEEK ═════════════════════════════════════════ */}
+              {view === "week" && (
+                <Card><CardContent className="p-2 sm:p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <Button variant="ghost" size="sm" className="gap-1" onClick={() => setWeekOffset(weekOffset - 1)}><ChevronLeft className="w-4 h-4" /><span className="hidden sm:inline">Прошлая</span></Button>
+                    <div className="text-center">
+                      <span className="text-sm font-semibold">{weekLabel}</span>
+                      {weekOffset !== 0 && <Button variant="ghost" size="sm" className="ml-2 h-6 text-xs" onClick={() => setWeekOffset(0)}>Сегодня</Button>}
                     </div>
-                    {/* Time grid */}
-                    {dayHours.map(h => (
-                      <div key={h} className="grid grid-cols-[56px_repeat(7,1fr)] border-b min-h-[52px]">
-                        <div className="text-right pr-2 py-1 text-[10px] text-muted-foreground font-medium">{String(h).padStart(2, "0")}:00</div>
-                        {weekDays.map((wd, di) => {
-                          const cellIvs = interviews.filter(iv => isSameDay(iv.date, wd) && parseInt(iv.time) === h)
-                          const cellKey = `${wd.toISOString().slice(0, 10)}-${h}`
-                          const isDropCell = dropTargetDay === cellKey && dragIvId !== null
+                    <Button variant="ghost" size="sm" className="gap-1" onClick={() => setWeekOffset(weekOffset + 1)}><span className="hidden sm:inline">Следующая</span> <ChevronRight className="w-4 h-4" /></Button>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[700px]">
+                      <div className="grid grid-cols-[56px_repeat(7,1fr)] border-b">
+                        <div />
+                        {weekDays.map((wd, i) => {
+                          const isT = isToday(wd)
                           return (
-                            <div
-                              key={di}
-                              className={cn("border-l p-0.5 transition-colors relative", isToday(wd) && "bg-primary/[0.02]", isDropCell && "bg-primary/10 ring-1 ring-inset ring-primary")}
-                              onDragOver={e => { e.preventDefault(); setDropTargetDay(cellKey) }}
-                              onDragLeave={() => { if (dropTargetDay === cellKey) setDropTargetDay(null) }}
-                              onDrop={e => { e.preventDefault(); weekDropOnSlot(wd, h) }}
-                            >
-                              {isDropCell && <div className="absolute top-0 left-0 right-0 h-0.5 bg-primary rounded" />}
-                              {cellIvs.map(iv => {
-                                const dur = iv.endTime ? Math.max(1, parseInt(iv.endTime) - parseInt(iv.time)) : 1
-                                return (
-                                  <div
-                                    key={iv.id}
-                                    draggable
-                                    onDragStart={() => ivDragStart(iv.id)}
-                                    onDragEnd={ivDragEnd}
-                                    className={cn("rounded px-1.5 py-1 text-white text-[10px] leading-tight cursor-grab active:cursor-grabbing mb-0.5 transition-opacity", dragIvId === iv.id && "opacity-40 scale-95")}
-                                    style={{ backgroundColor: TYPE_COLORS[iv.type], minHeight: `${dur * 20}px` }}
-                                    title={`${iv.candidate} · ${iv.type} · ${iv.format}`}
-                                    onClick={() => toast.info(`${iv.candidate} · ${iv.vacancy} · ${iv.time}–${iv.endTime}`)}
-                                  >
-                                    <span className="font-semibold block truncate">{iv.candidate}</span>
-                                    <span className="opacity-80 block truncate">{iv.type} · {iv.format}</span>
-                                  </div>
-                                )
-                              })}
+                            <div key={i} className={cn("text-center py-2 text-xs font-semibold border-l", isT && "bg-primary/5")}>
+                              <span className={cn(isT ? "text-primary" : "text-muted-foreground")}>{weekDayNames[i]}</span>
+                              <span className={cn("ml-1", isT ? "text-primary font-bold" : "text-foreground")}>{wd.getDate()}</span>
                             </div>
                           )
                         })}
                       </div>
+                      {dayHours.map(h => (
+                        <div key={h} className="grid grid-cols-[56px_repeat(7,1fr)] border-b min-h-[52px]">
+                          <div className="text-right pr-2 py-1 text-[10px] text-muted-foreground font-medium">{String(h).padStart(2, "0")}:00</div>
+                          {weekDays.map((wd, di) => {
+                            const cellIvs = interviews.filter(iv => isSameDay(iv.date, wd) && parseInt(iv.time) === h)
+                            const cellKey = `${wd.toISOString().slice(0, 10)}-${h}`
+                            const isDropCell = dropTargetDay === cellKey && dragIvId !== null
+                            return (
+                              <div
+                                key={di}
+                                className={cn("border-l p-0.5 transition-colors relative", isToday(wd) && "bg-primary/[0.02]", isDropCell && "bg-primary/10 ring-1 ring-inset ring-primary")}
+                                onDragOver={e => { e.preventDefault(); setDropTargetDay(cellKey) }}
+                                onDragLeave={() => { if (dropTargetDay === cellKey) setDropTargetDay(null) }}
+                                onDrop={e => { e.preventDefault(); weekDropOnSlot(wd, h) }}
+                              >
+                                {isDropCell && <div className="absolute top-0 left-0 right-0 h-0.5 bg-primary rounded" />}
+                                {cellIvs.map(iv => {
+                                  const dur = iv.endTime ? Math.max(1, parseInt(iv.endTime) - parseInt(iv.time)) : 1
+                                  return (
+                                    <div
+                                      key={iv.id}
+                                      draggable
+                                      onDragStart={() => ivDragStart(iv.id)}
+                                      onDragEnd={ivDragEnd}
+                                      className={cn("rounded px-1.5 py-1 text-white text-[10px] leading-tight cursor-grab active:cursor-grabbing mb-0.5 transition-opacity", dragIvId === iv.id && "opacity-40 scale-95")}
+                                      style={{ backgroundColor: TYPE_COLORS[iv.type], minHeight: `${dur * 20}px` }}
+                                      title={`${iv.candidate} · ${iv.type} · ${iv.format}`}
+                                      onClick={() => toast.info(`${iv.candidate} · ${iv.vacancy} · ${iv.time}–${iv.endTime}`)}
+                                    >
+                                      <span className="font-semibold block truncate">{iv.candidate}</span>
+                                      <span className="opacity-80 block truncate">{iv.type} · {iv.format}</span>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 mt-3 px-2">
+                    {(Object.entries(TYPE_COLORS) as [InterviewType, string][]).map(([t, c]) => (
+                      <div key={t} className="flex items-center gap-1.5">
+                        <div className="w-3 h-3 rounded" style={{ backgroundColor: c }} />
+                        <span className="text-[10px] text-muted-foreground">{t}</span>
+                      </div>
                     ))}
                   </div>
-                </div>
-                {/* Legend */}
-                <div className="flex items-center gap-4 mt-3 px-2">
-                  {(Object.entries(TYPE_COLORS) as [InterviewType, string][]).map(([t, c]) => (
-                    <div key={t} className="flex items-center gap-1.5">
-                      <div className="w-3 h-3 rounded" style={{ backgroundColor: c }} />
-                      <span className="text-[10px] text-muted-foreground">{t}</span>
-                    </div>
-                  ))}
-                </div>
-              </CardContent></Card>
-            )}
+                </CardContent></Card>
+              )}
 
-            {/* ═══ KANBAN ══════════════════════════════════════ */}
-            {view === "kanban" && (
-              <div className="overflow-x-auto pb-4 -mx-4 px-4 sm:mx-0 sm:px-0 snap-x snap-mandatory md:snap-none">
-                <div className="flex gap-4 min-w-min">
-                  {kanbanStatuses.map(status => {
-                    const colIvs = filtered.filter(iv => iv.status === status)
-                    const isDropCol = dropTargetStatus === status && dragIvId !== null
-                    return (
-                      <div
-                        key={status}
-                        className="w-[85vw] sm:w-72 shrink-0 snap-start"
-                        onDragOver={e => { e.preventDefault(); setDropTargetStatus(status) }}
-                        onDragLeave={() => { if (dropTargetStatus === status) setDropTargetStatus(null) }}
-                        onDrop={e => { e.preventDefault(); kanbanDropOnStatus(status) }}
-                      >
-                        <div className={cn("rounded-xl px-3.5 py-2.5 mb-3 flex items-center justify-between transition-all", STATUS_STYLES[status], isDropCol && "ring-2 ring-primary")}><span className="text-sm font-semibold">{status}</span><span className="text-xs font-bold opacity-70">{colIvs.length}</span></div>
-                        <div className={cn("space-y-2 min-h-[100px] rounded-lg p-1 transition-colors", isDropCol && "bg-primary/5")}>
-                          {colIvs.map(iv => (
-                            <Card
-                              key={iv.id}
-                              draggable
-                              onDragStart={() => ivDragStart(iv.id)}
-                              onDragEnd={ivDragEnd}
-                              className={cn("transition-all cursor-grab active:cursor-grabbing", dragIvId === iv.id && "opacity-40 scale-95")}
-                            >
-                              <CardContent className="p-3 space-y-1.5">
-                                <div className="flex items-center justify-between"><span className="text-sm font-semibold text-foreground">{iv.candidate}</span><span className="text-[10px] text-muted-foreground">{formatDateShort(iv.date)}</span></div>
-                                <p className="text-xs text-muted-foreground">{iv.vacancy}</p>
-                                <div className="flex items-center gap-1.5"><span className="text-xs font-medium">{iv.time}</span><Badge variant="outline" className="text-[10px]">{iv.type}</Badge><Badge variant="outline" className="text-[10px] gap-0.5">{iv.format === "Онлайн" ? <Video className="w-2.5 h-2.5" /> : <Building2 className="w-2.5 h-2.5" />}{iv.format}</Badge></div>
-                              </CardContent>
-                            </Card>
-                          ))}
-                          {colIvs.length === 0 && <div className="flex items-center justify-center h-20 rounded-lg border-2 border-dashed border-border/50 text-muted-foreground/40"><span className="text-xs">{isDropCol ? "Отпустите здесь" : "Пусто"}</span></div>}
+              {/* ═══ KANBAN ══════════════════════════════════════ */}
+              {view === "kanban" && (
+                <div className="overflow-x-auto pb-4 -mx-4 px-4 sm:mx-0 sm:px-0 snap-x snap-mandatory md:snap-none">
+                  <div className="flex gap-4 min-w-min">
+                    {kanbanStatuses.map(status => {
+                      const colIvs = filtered.filter(iv => iv.status === status)
+                      const isDropCol = dropTargetStatus === status && dragIvId !== null
+                      return (
+                        <div
+                          key={status}
+                          className="w-[85vw] sm:w-72 shrink-0 snap-start"
+                          onDragOver={e => { e.preventDefault(); setDropTargetStatus(status) }}
+                          onDragLeave={() => { if (dropTargetStatus === status) setDropTargetStatus(null) }}
+                          onDrop={e => { e.preventDefault(); kanbanDropOnStatus(status) }}
+                        >
+                          <div className={cn("rounded-xl px-3.5 py-2.5 mb-3 flex items-center justify-between transition-all", STATUS_STYLES[status], isDropCol && "ring-2 ring-primary")}><span className="text-sm font-semibold">{status}</span><span className="text-xs font-bold opacity-70">{colIvs.length}</span></div>
+                          <div className={cn("space-y-2 min-h-[100px] rounded-lg p-1 transition-colors", isDropCol && "bg-primary/5")}>
+                            {colIvs.map(iv => (
+                              <Card
+                                key={iv.id}
+                                draggable
+                                onDragStart={() => ivDragStart(iv.id)}
+                                onDragEnd={ivDragEnd}
+                                className={cn("transition-all cursor-grab active:cursor-grabbing", dragIvId === iv.id && "opacity-40 scale-95")}
+                              >
+                                <CardContent className="p-3 space-y-1.5">
+                                  <div className="flex items-center justify-between"><span className="text-sm font-semibold text-foreground">{iv.candidate}</span><span className="text-[10px] text-muted-foreground">{formatDateShort(iv.date)}</span></div>
+                                  <p className="text-xs text-muted-foreground">{iv.vacancy}</p>
+                                  <div className="flex items-center gap-1.5"><span className="text-xs font-medium">{iv.time}</span><Badge variant="outline" className="text-[10px]">{iv.type}</Badge><Badge variant="outline" className="text-[10px] gap-0.5">{iv.format === "Онлайн" ? <Video className="w-2.5 h-2.5" /> : <Building2 className="w-2.5 h-2.5" />}{iv.format}</Badge></div>
+                                </CardContent>
+                              </Card>
+                            ))}
+                            {colIvs.length === 0 && <div className="flex items-center justify-center h-20 rounded-lg border-2 border-dashed border-border/50 text-muted-foreground/40"><span className="text-xs">{isDropCol ? "Отпустите здесь" : "Пусто"}</span></div>}
+                          </div>
                         </div>
-                      </div>
-                    )
-                  })}
+                      )
+                    })}
+                  </div>
                 </div>
+              )}
+            </div>
+          )}
+
+          {/* ═══ ТАБ: КАЛЕНДАРЬ ═══ */}
+          {activeTab === "calendar" && (
+            <Suspense fallback={
+              <div className="flex items-center justify-center h-64 text-sm text-muted-foreground">
+                Загрузка календаря…
               </div>
-            )}
-          </div>
+            }>
+              <CalendarView />
+            </Suspense>
+          )}
+
         </main>
       </SidebarInset>
 
@@ -713,7 +739,6 @@ export default function InterviewsPage() {
           <SheetHeader><SheetTitle className="flex items-center gap-2"><Settings className="w-5 h-5" /> Настроить стадии</SheetTitle></SheetHeader>
 
           <div className="mt-6 space-y-4">
-            {/* Stage list */}
             <div className="space-y-1.5">
               {stages.map((stage, idx) => (
                 <div
@@ -738,7 +763,6 @@ export default function InterviewsPage() {
 
             <Button variant="outline" className="w-full gap-1.5 border-dashed" onClick={startAdd}><Plus className="w-4 h-4" /> Добавить стадию</Button>
 
-            {/* Edit/Add form */}
             {(editingId || addMode) && (
               <Card className="border-primary/20">
                 <CardContent className="p-4 space-y-3">
@@ -788,8 +812,7 @@ export default function InterviewsPage() {
         </SheetContent>
       </Sheet>
 
-      {/* ═══ Notify dialog ════════════════════════════════════ */}
-      {/* Создание интервью */}
+      {/* ═══ Создание интервью ════════════════════════════════ */}
       <Dialog open={createOpen} onOpenChange={o => { if (!creating) setCreateOpen(o) }}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Запланировать интервью</DialogTitle></DialogHeader>
@@ -856,6 +879,7 @@ export default function InterviewsPage() {
         </DialogContent>
       </Dialog>
 
+      {/* ═══ Notify dialog ════════════════════════════════════ */}
       <Dialog open={!!notifyDialog} onOpenChange={o => { if (!o) setNotifyDialog(null) }}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Встреча перенесена</DialogTitle></DialogHeader>
@@ -874,5 +898,13 @@ export default function InterviewsPage() {
         </DialogContent>
       </Dialog>
     </SidebarProvider>
+  )
+}
+
+export default function InterviewsPage() {
+  return (
+    <Suspense fallback={null}>
+      <InterviewsPageContent />
+    </Suspense>
   )
 }
