@@ -228,7 +228,7 @@ export function BulkActionsBar({ count, stages, onClear, onAction, allRejected =
                 disabled={!!busy}
               >
                 {busy === "set_stage" ? <Loader2 className="size-4 animate-spin" /> : <ArrowRight className="size-4" />}
-                <span className="hidden md:inline">В стейдж</span>
+                <span className="hidden md:inline">Сменить стадию</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="max-h-72 overflow-auto">

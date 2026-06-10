@@ -223,6 +223,9 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
     if (meta.required && block.enabled) return // required нельзя выключить
 
     const turningOn = !block.enabled
+    // closed-блок нельзя включить (уже включённые — продолжают работать).
+    // Решение 10.06: content_step закрыт для новых включений.
+    if (turningOn && meta.closed) return
 
     // Включение блока с incompatibleWith — спросить подтверждение.
     if (turningOn && meta.incompatibleWith.length > 0) {
@@ -735,6 +738,9 @@ function SortableBlockCard({ block, saving, onToggle, onOpenSettings }: Sortable
   // «В разработке»), но дизайн сообщает HR что это work-in-progress.
   const settingsEntry = BLOCK_SETTINGS_REGISTRY[block.type]
   const hasSettingsUi = settingsEntry?.component != null
+  // closed-блок: уже включённые продолжают работать, выключить можно,
+  // но снова включить нельзя (решение 10.06, см. BLOCK_META.closed).
+  const isClosed = Boolean(meta.closed) && !block.enabled
 
   return (
     <div
@@ -758,7 +764,12 @@ function SortableBlockCard({ block, saving, onToggle, onOpenSettings }: Sortable
           {meta.required && (
             <Badge variant="secondary" className="text-[10px]">обязательный</Badge>
           )}
-          {!hasSettingsUi && (
+          {isClosed && (
+            <Badge variant="outline" className="text-[10px] gap-1 border-slate-300 text-slate-500 bg-slate-50">
+              закрыт
+            </Badge>
+          )}
+          {!isClosed && !hasSettingsUi && (
             <Badge variant="outline" className="text-[10px] gap-1 border-amber-300 text-amber-700 bg-amber-50">
               <Clock3 className="h-3 w-3" />Скоро
             </Badge>
@@ -776,6 +787,17 @@ function SortableBlockCard({ block, saving, onToggle, onOpenSettings }: Sortable
               </span>
             </TooltipTrigger>
             <TooltipContent>Обязательный блок</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ) : isClosed ? (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex">
+                <Switch checked={false} disabled />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>Блок закрыт для новых включений</TooltipContent>
           </Tooltip>
         </TooltipProvider>
       ) : (
