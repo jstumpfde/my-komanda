@@ -3,7 +3,7 @@
 
 import { db } from "@/lib/db"
 import { hhIntegrations } from "@/lib/db/schema"
-import { eq } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 import { refreshAccessToken } from "@/lib/hh-api"
 
 export async function getValidToken(companyId: string): Promise<{ accessToken: string; integration: typeof hhIntegrations.$inferSelect } | null> {
@@ -24,23 +24,42 @@ export async function getValidToken(companyId: string): Promise<{ accessToken: s
     return { accessToken: integration.accessToken, integration }
   }
 
-  // Token expired — refresh
+  // Token expired — refresh.
+  // Рефреш сериализуем per-integration через advisory xact lock: hh ротирует
+  // refresh_token при первом использовании, и два параллельных крона
+  // (hh-import + follow-up) с одним refresh_token получали invalid_grant
+  // → ложная деактивация интеграции. Под локом перечитываем токен: если его
+  // уже обновил другой поток — просто отдаём свежий, без похода в hh.
   try {
-    const tokens = await refreshAccessToken(integration.refreshToken)
-    const newExpiresAt = new Date(Date.now() + tokens.expires_in * 1000)
+    return await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${integration.id}))`)
 
-    const [updated] = await db
-      .update(hhIntegrations)
-      .set({
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
-        tokenExpiresAt: newExpiresAt,
-        updatedAt: new Date(),
-      })
-      .where(eq(hhIntegrations.id, integration.id))
-      .returning()
+      const [fresh] = await tx
+        .select()
+        .from(hhIntegrations)
+        .where(eq(hhIntegrations.id, integration.id))
+        .limit(1)
+      if (!fresh || !fresh.isActive) return null
+      if (new Date(fresh.tokenExpiresAt).getTime() - bufferMs > Date.now()) {
+        return { accessToken: fresh.accessToken, integration: fresh }
+      }
 
-    return { accessToken: tokens.access_token, integration: updated }
+      const tokens = await refreshAccessToken(fresh.refreshToken)
+      const newExpiresAt = new Date(Date.now() + tokens.expires_in * 1000)
+
+      const [updated] = await tx
+        .update(hhIntegrations)
+        .set({
+          accessToken: tokens.access_token,
+          refreshToken: tokens.refresh_token,
+          tokenExpiresAt: newExpiresAt,
+          updatedAt: new Date(),
+        })
+        .where(eq(hhIntegrations.id, integration.id))
+        .returning()
+
+      return { accessToken: tokens.access_token, integration: updated }
+    })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error("[hh-helpers] Token refresh failed:", msg)
