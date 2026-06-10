@@ -64,6 +64,7 @@ import {
 } from "@/lib/vacancies/lifecycle"
 import { MiniFormBuilder } from "@/components/vacancies/mini-form-builder"
 import { UtmLinksSection } from "@/components/vacancies/utm-links-section"
+import { TelegramPosting } from "@/components/vacancies/telegram-posting"
 import { PostDemoSettings } from "@/components/vacancies/post-demo-settings"
 import { VacancyAiProcessSettings } from "@/components/vacancies/vacancy-ai-process-settings"
 import { VacancyRequirementsSettings } from "@/components/vacancies/vacancy-requirements-settings"
@@ -3248,6 +3249,9 @@ export default function VacancyPage() {
                       </>)}
                     </div>
                   </div>
+
+                  {/* Telegram-постинг */}
+                  <TelegramPosting vacancyId={id} />
 
                   {/* Источники и UTM-ссылки */}
                   <UtmLinksSection vacancyId={id} vacancySlug={id} />
