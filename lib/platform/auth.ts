@@ -8,6 +8,7 @@
 // (см. layout.tsx).
 
 import { NextRequest, NextResponse } from "next/server"
+import { requireAuth, apiError } from "@/lib/api-helpers"
 
 const HEADER = "x-platform-admin-key"
 
@@ -31,4 +32,15 @@ export function isPlatformAdminEmail(email: string | null | undefined): boolean 
   const raw = process.env.PLATFORM_ADMIN_EMAILS ?? ""
   const list = raw.split(",").map(s => s.trim().toLowerCase()).filter(Boolean)
   return list.includes(email.toLowerCase())
+}
+
+// Сессионный гард для платформенных данных (лиды, заявки на доступ и т.п.):
+// пускаем по платформенной роли ИЛИ по email из PLATFORM_ADMIN_EMAILS.
+// Бросает Response (401/403), как requireAuth/requireCompany.
+export async function requirePlatformOperator() {
+  const user = await requireAuth()
+  const role = user.role as string
+  if (role === "platform_admin" || role === "admin") return user
+  if (isPlatformAdminEmail(user.email)) return user
+  throw apiError("Forbidden", 403)
 }

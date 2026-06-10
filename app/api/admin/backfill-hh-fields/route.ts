@@ -61,8 +61,12 @@ async function fetchWithRetry(token: string, resumeId: string): Promise<Awaited<
 export async function POST(req: NextRequest) {
   const session = await auth()
   const userRole = session?.user?.role
-  const isAdmin = userRole === "platform_admin" || userRole === "admin" || userRole === "director"
-  if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  const isPlatformAdmin = userRole === "platform_admin" || userRole === "admin"
+  const isDirector = userRole === "director"
+  if (!isPlatformAdmin && !isDirector) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  // Директор работает только с кандидатами своей компании
+  const ownCompanyId = session?.user?.companyId ?? null
+  if (!isPlatformAdmin && !ownCompanyId) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   const body = await req.json().catch(() => ({})) as {
     vacancyId?: string
@@ -81,6 +85,12 @@ export async function POST(req: NextRequest) {
     isNull(candidates.birthDate),
   ]
   if (body.vacancyId) conditions.push(eq(candidates.vacancyId, body.vacancyId))
+  if (!isPlatformAdmin && ownCompanyId) {
+    conditions.push(inArray(
+      candidates.vacancyId,
+      db.select({ id: vacancies.id }).from(vacancies).where(eq(vacancies.companyId, ownCompanyId)),
+    ))
+  }
 
   const targets = await db
     .select({

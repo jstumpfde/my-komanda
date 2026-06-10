@@ -181,10 +181,11 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
     const stoppedRows = await db
       .select({ id: candidates.id })
       .from(candidates)
-      .where(eq(candidates.autoProcessingStopped, true))
-    for (const row of stoppedRows) {
-      if (linkedCandidateIds.includes(row.id)) stoppedCandidateIds.add(row.id)
-    }
+      .where(and(
+        inArray(candidates.id, linkedCandidateIds),
+        eq(candidates.autoProcessingStopped, true),
+      ))
+    for (const row of stoppedRows) stoppedCandidateIds.add(row.id)
   }
 
   const results: ProcessQueueResult["results"] = []

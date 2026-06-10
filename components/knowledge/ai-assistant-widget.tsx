@@ -626,20 +626,10 @@ export function AiAssistantWidget() {
       const context: string = searchData.context
       const materialsList: MaterialRef[] = Array.isArray(searchData.materialsList) ? searchData.materialsList : []
 
-      // 2. Fetch API key (auth-gated)
-      const keyRes = await fetch("/api/ai/key")
-      const keyData = await keyRes.json()
-      if (!keyRes.ok || !keyData.key) throw new Error(keyData.error || "API ключ недоступен")
-
-      // 3. Call Claude directly from browser (RU server is blocked by Anthropic)
-      const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
+      // 2. Call Claude via server proxy (ключ не покидает сервер)
+      const claudeRes = await fetch("/api/ai/messages", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": keyData.key,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: CLAUDE_MODEL,
           max_tokens: 2048,

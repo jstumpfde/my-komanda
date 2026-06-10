@@ -5,10 +5,10 @@ import { trainingScenarios, trainingSessions } from "@/lib/db/schema"
 import { apiError, apiSuccess, requireCompany } from "@/lib/api-helpers"
 import { awardPoints } from "@/lib/knowledge/achievements"
 
-// Сессия тренировки хранится на сервере. Клиент (страница) сам ходит в
-// Claude API (как Ненси, через /api/ai/key) и передаёт сюда пары реплик
-// для сохранения в истории. Когда сессия завершается — клиент передаёт
-// итоговую оценку (score + evaluation).
+// Сессия тренировки хранится на сервере. Клиент (страница) генерирует
+// реплики AI через серверный прокси /api/ai/messages и передаёт сюда пары
+// реплик для сохранения в истории. Когда сессия завершается — клиент
+// передаёт итоговую оценку (score + evaluation).
 //
 // GET  /api/modules/knowledge/training/[id]/chat        — активная сессия текущего пользователя (или null)
 // POST /api/modules/knowledge/training/[id]/chat

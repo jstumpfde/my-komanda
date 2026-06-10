@@ -54,10 +54,16 @@ export async function PATCH(
   if (status) updateData.status = status
   if (status === "paid") updateData.paidAt = new Date()
 
+  // Не-админ может менять только счета своей компании
+  if (!isAdmin && !user.companyId) return apiError("Forbidden", 403)
+  const whereCond = isAdmin
+    ? eq(invoices.id, id)
+    : and(eq(invoices.id, id), eq(invoices.companyId, user.companyId as string))
+
   const [updated] = await db
     .update(invoices)
     .set(updateData)
-    .where(eq(invoices.id, id))
+    .where(whereCond)
     .returning()
 
   if (!updated) return apiError("Счёт не найден", 404)
