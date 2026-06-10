@@ -21,6 +21,9 @@ import {
   actionUpdatePlatformTemplate,
   actionDeletePlatformTemplate,
   actionGetYuliaConversation,
+  actionUpdatePlatformBranding,
+  actionUpdatePlatformFavicon,
+  actionUpdatePublicSeoDefaults,
 } from "./actions"
 import {
   AlertTriangle, Bot, Loader2, ShieldAlert, LibraryBig, Plus, Pencil, Trash2,
@@ -125,6 +128,23 @@ interface CronRunItem {
   metadata: unknown
 }
 
+interface BrandingProps {
+  title:       string
+  description: string
+  ogImage:     string | null
+  favicon: {
+    light: string
+    dark:  string
+    svg:   string
+    apple: string
+  }
+  publicSeo: {
+    ogImage:               string | null
+    careersTitleSuffix:    string
+    vacancyTitleTemplate:  string
+  }
+}
+
 interface Props {
   cronRuns: CronRunItem[]
   migrations: MigrationItem[]
@@ -135,6 +155,7 @@ interface Props {
   templates: TemplateItem[]
   minableVacancies: MinableVacancy[]
   yulia: YuliaProps
+  branding: BrandingProps
 }
 
 const INDUSTRY_OPTIONS = [
@@ -169,6 +190,7 @@ export function PlatformAdminClient({
   templates,
   minableVacancies,
   yulia,
+  branding,
 }: Props) {
   return (
     <div className="container mx-auto p-6 max-w-7xl">
@@ -192,6 +214,7 @@ export function PlatformAdminClient({
           <TabsTrigger value="yulia">Yulia ({yulia.metrics.total})</TabsTrigger>
           <TabsTrigger value="cron">Cron</TabsTrigger>
           <TabsTrigger value="deadlines">Сроки</TabsTrigger>
+          <TabsTrigger value="branding">Брендинг и SEO</TabsTrigger>
           <TabsTrigger value="emergency" className="text-red-600">Emergency</TabsTrigger>
           <TabsTrigger value="logs">Logs</TabsTrigger>
         </TabsList>
@@ -219,6 +242,9 @@ export function PlatformAdminClient({
         </TabsContent>
         <TabsContent value="deadlines" className="mt-4">
           <DeadlinesTab />
+        </TabsContent>
+        <TabsContent value="branding" className="mt-4">
+          <BrandingTab data={branding} />
         </TabsContent>
         <TabsContent value="emergency" className="mt-4">
           <EmergencyTab />
@@ -1262,6 +1288,324 @@ function MetricCard({
     <div className="rounded-lg border p-3">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className={`text-2xl font-bold ${valueCls}`}>{value}</div>
+    </div>
+  )
+}
+
+// ─── Брендинг и SEO ───────────────────────────────────────────────────────────
+
+function BrandingTab({ data }: { data: BrandingProps }) {
+  // Секция 1: описание сайта
+  const [title, setTitle]           = useState(data.title)
+  const [description, setDescription] = useState(data.description)
+  const [ogImage, setOgImage]       = useState(data.ogImage ?? "")
+  const [brandingPending, startBrandingTransition] = useTransition()
+  const [brandingMsg, setBrandingMsg] = useState<string | null>(null)
+
+  // Секция 2: фавикон
+  const [faviconUrls, setFaviconUrls] = useState(data.favicon)
+  const [faviconUploading, setFaviconUploading] = useState<Record<string, boolean>>({})
+  const [faviconMsg, setFaviconMsg]   = useState<string | null>(null)
+  const [faviconPending, startFaviconTransition] = useTransition()
+
+  // Секция 3: SEO публичных страниц
+  const [seoOgImage, setSeoOgImage]                   = useState(data.publicSeo.ogImage ?? "")
+  const [careersSuffix, setCareersSuffix]             = useState(data.publicSeo.careersTitleSuffix)
+  const [vacancyTemplate, setVacancyTemplate]         = useState(data.publicSeo.vacancyTitleTemplate)
+  const [seoPending, startSeoTransition]               = useTransition()
+  const [seoMsg, setSeoMsg]                            = useState<string | null>(null)
+
+  // ─ Загрузка файла фавикона ──────────────────────────────────────────────────
+  async function uploadFaviconFile(slot: string, file: File) {
+    setFaviconUploading(prev => ({ ...prev, [slot]: true }))
+    setFaviconMsg(null)
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      fd.append("slot", slot)
+      const res = await fetch("/api/admin/platform/favicon", { method: "POST", body: fd })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? "Ошибка загрузки")
+      setFaviconUrls(prev => ({ ...prev, [slot]: json.url }))
+      setFaviconMsg(`Иконка «${slot}» загружена`)
+    } catch (e) {
+      setFaviconMsg(e instanceof Error ? e.message : String(e))
+    } finally {
+      setFaviconUploading(prev => ({ ...prev, [slot]: false }))
+    }
+  }
+
+  // ─ Сохранение фавикона в БД ─────────────────────────────────────────────────
+  function saveFavicon() {
+    startFaviconTransition(async () => {
+      try {
+        await actionUpdatePlatformFavicon(faviconUrls)
+        setFaviconMsg("Иконки сохранены")
+      } catch (e) {
+        setFaviconMsg(e instanceof Error ? e.message : String(e))
+      }
+    })
+  }
+
+  function resetFavicon() {
+    startFaviconTransition(async () => {
+      try {
+        await actionUpdatePlatformFavicon({ light: "", dark: "", svg: "", apple: "" })
+        setFaviconUrls({ light: "/icon-light-32x32.png", dark: "/icon-dark-32x32.png", svg: "/icon.svg", apple: "/apple-icon.png" })
+        setFaviconMsg("Иконки сброшены к дефолту")
+      } catch (e) {
+        setFaviconMsg(e instanceof Error ? e.message : String(e))
+      }
+    })
+  }
+
+  // ─ Сохранение описания ───────────────────────────────────────────────────────
+  function saveBranding() {
+    startBrandingTransition(async () => {
+      try {
+        await actionUpdatePlatformBranding({
+          title: title.trim(),
+          description: description.trim(),
+          ogImage: ogImage.trim() || null,
+        })
+        setBrandingMsg("Сохранено")
+      } catch (e) {
+        setBrandingMsg(e instanceof Error ? e.message : String(e))
+      }
+    })
+  }
+
+  // ─ Сохранение SEO-дефолтов ───────────────────────────────────────────────────
+  function saveSeo() {
+    startSeoTransition(async () => {
+      try {
+        await actionUpdatePublicSeoDefaults({
+          ogImage:              seoOgImage.trim() || null,
+          careersTitleSuffix:   careersSuffix.trim(),
+          vacancyTitleTemplate: vacancyTemplate.trim(),
+        })
+        setSeoMsg("Сохранено")
+      } catch (e) {
+        setSeoMsg(e instanceof Error ? e.message : String(e))
+      }
+    })
+  }
+
+  const FAVICON_SLOTS: { slot: "light" | "dark" | "svg" | "apple"; label: string; hint: string }[] = [
+    { slot: "light", label: "Светлая тема (32×32 PNG)",  hint: "PNG, ICO, SVG, макс 512 КБ" },
+    { slot: "dark",  label: "Тёмная тема (32×32 PNG)",   hint: "PNG, ICO, SVG, макс 512 КБ" },
+    { slot: "svg",   label: "SVG иконка",                hint: "SVG, макс 512 КБ" },
+    { slot: "apple", label: "Apple Touch Icon (PNG)",     hint: "PNG, макс 512 КБ" },
+  ]
+
+  return (
+    <div className="space-y-6">
+
+      {/* ── Секция: Иконка сайта ─────────────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Иконка сайта (фавикон)</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Загрузите иконки для разных режимов. После загрузки нажмите «Сохранить».
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {FAVICON_SLOTS.map(({ slot, label, hint }) => (
+              <div key={slot} className="space-y-2 rounded-lg border p-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">{label}</Label>
+                  {faviconUrls[slot] && (
+                    <img
+                      src={faviconUrls[slot]}
+                      alt={slot}
+                      className="w-7 h-7 rounded object-contain border bg-muted"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }}
+                    />
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={faviconUrls[slot]}
+                    onChange={e => setFaviconUrls(prev => ({ ...prev, [slot]: e.target.value }))}
+                    placeholder="/uploads/platform/favicon-light.png"
+                    className="text-xs"
+                  />
+                  <label className="cursor-pointer">
+                    <input
+                      type="file"
+                      accept=".png,.svg,.ico,image/png,image/svg+xml,image/x-icon"
+                      className="hidden"
+                      disabled={faviconUploading[slot]}
+                      onChange={async e => {
+                        const file = e.target.files?.[0]
+                        if (file) await uploadFaviconFile(slot, file)
+                        e.target.value = ""
+                      }}
+                    />
+                    <Button size="sm" variant="outline" asChild disabled={faviconUploading[slot]}>
+                      <span>
+                        {faviconUploading[slot]
+                          ? <Loader2 className="w-3 h-3 animate-spin" />
+                          : "Загрузить"}
+                      </span>
+                    </Button>
+                  </label>
+                </div>
+                <p className="text-[11px] text-muted-foreground">{hint}</p>
+              </div>
+            ))}
+          </div>
+
+          {faviconMsg && (
+            <p className={`text-sm ${faviconMsg.startsWith("Ошибка") || faviconMsg.includes("Ошибка") ? "text-destructive" : "text-green-600"}`}>
+              {faviconMsg}
+            </p>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <Button onClick={saveFavicon} disabled={faviconPending}>
+              {faviconPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Сохранить иконки
+            </Button>
+            <Button variant="outline" onClick={resetFavicon} disabled={faviconPending}>
+              Сбросить к дефолту
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Секция: Описание сайта ───────────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Описание сайта</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Title и description отображаются во вкладке браузера и в результатах поиска.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">Заголовок сайта (title)</Label>
+              <span className={`text-xs ${title.length > 60 ? "text-amber-600" : "text-muted-foreground"}`}>
+                {title.length}/60
+              </span>
+            </div>
+            <Input
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="Company24 — HR Рекрутинговая платформа"
+              maxLength={200}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">Описание (meta description)</Label>
+              <span className={`text-xs ${description.length > 160 ? "text-amber-600" : "text-muted-foreground"}`}>
+                {description.length}/160
+              </span>
+            </div>
+            <Textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Современная платформа для управления процессом найма"
+              rows={3}
+              maxLength={500}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">OG-картинка (URL)</Label>
+            <Input
+              value={ogImage}
+              onChange={e => setOgImage(e.target.value)}
+              placeholder="https://company24.pro/og-image.png"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Используется при шаринге в соцсетях. Оставьте пустым, чтобы не задавать OG-тег.
+            </p>
+          </div>
+
+          {/* Превью сниппета */}
+          <div className="rounded-lg border bg-muted/30 p-3 space-y-1">
+            <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Превью в поиске</p>
+            <p className="text-sm font-medium text-blue-600 truncate">{title || "Заголовок сайта"}</p>
+            <p className="text-xs text-green-700">https://company24.pro</p>
+            <p className="text-xs text-muted-foreground line-clamp-2">{description || "Описание сайта..."}</p>
+          </div>
+
+          {brandingMsg && (
+            <p className={`text-sm ${brandingMsg === "Сохранено" ? "text-green-600" : "text-destructive"}`}>
+              {brandingMsg}
+            </p>
+          )}
+
+          <Button onClick={saveBranding} disabled={brandingPending}>
+            {brandingPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            Сохранить описание
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* ── Секция: SEO публичных страниц ────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">SEO публичных страниц</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Настройки для карьерных страниц компаний и страниц вакансий.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Дефолтная OG-картинка (URL)</Label>
+            <Input
+              value={seoOgImage}
+              onChange={e => setSeoOgImage(e.target.value)}
+              placeholder="https://company24.pro/og-careers.png"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Используется на страницах компаний/вакансий, если у компании нет логотипа.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Суффикс заголовка карьерных страниц</Label>
+            <Input
+              value={careersSuffix}
+              onChange={e => setCareersSuffix(e.target.value)}
+              placeholder="— Вакансии"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Добавляется к названию компании: «ИП Штумпф {careersSuffix || "— Вакансии"}»
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Шаблон заголовка страницы вакансии</Label>
+            <Input
+              value={vacancyTemplate}
+              onChange={e => setVacancyTemplate(e.target.value)}
+              placeholder="{title} — {company}"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Плейсхолдеры: <code className="bg-muted px-1 rounded">{"{title}"}</code> — название вакансии,{" "}
+              <code className="bg-muted px-1 rounded">{"{company}"}</code> — название компании
+            </p>
+          </div>
+
+          {seoMsg && (
+            <p className={`text-sm ${seoMsg === "Сохранено" ? "text-green-600" : "text-destructive"}`}>
+              {seoMsg}
+            </p>
+          )}
+
+          <Button onClick={saveSeo} disabled={seoPending}>
+            {seoPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            Сохранить SEO-дефолты
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   )
 }

@@ -10,6 +10,7 @@ import {
   buildBaseUrl,
   buildJobPostingJsonLd,
 } from "../../careers/career-page-view"
+import { getPublicSeoDefaults } from "@/lib/platform/settings"
 
 export const dynamic = "force-dynamic"
 
@@ -90,6 +91,10 @@ export async function generateMetadata(
     `Вакансия «${v.title}» в компании ${companyDisplay}. Откликнитесь прямо сейчас.`
   const pageUrl = `${buildBaseUrl()}/vacancy/${v.slug}`
 
+  // OG-картинка: логотип компании → платформенный fallback → без картинки
+  const seoDefaults = await getPublicSeoDefaults().catch(() => null)
+  const ogImageUrl = v.companyLogo || seoDefaults?.ogImage || null
+
   return {
     title,
     description,
@@ -98,7 +103,7 @@ export async function generateMetadata(
       description,
       url: pageUrl,
       type: "website",
-      ...(v.companyLogo ? { images: [{ url: v.companyLogo, alt: companyDisplay }] } : {}),
+      ...(ogImageUrl ? { images: [{ url: ogImageUrl, alt: companyDisplay }] } : {}),
     },
     alternates: { canonical: pageUrl },
   }

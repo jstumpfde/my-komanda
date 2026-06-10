@@ -3,31 +3,67 @@ import { Inter } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { Providers } from '@/components/providers'
 import { Toaster } from '@/components/ui/sonner'
+import {
+  getPlatformTitle,
+  getPlatformDescription,
+  getPlatformOgImage,
+  getFaviconUrls,
+  PLATFORM_TITLE_DEFAULT,
+  PLATFORM_DESCRIPTION_DEFAULT,
+  FAVICON_URLS_DEFAULT,
+} from '@/lib/platform/settings'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin', 'cyrillic'], variable: '--font-inter' })
 
-export const metadata: Metadata = {
-  title: 'Company24 — HR Рекрутинговая платформа',
-  description: 'Современная платформа для управления процессом найма с AI-скорингом кандидатов',
-  generator: 'v0.app',
-  icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
+// generateMetadata в root layout поддерживается Next.js App Router.
+// try/catch гарантирует, что при любой ошибке БД layout не падает —
+// возвращаются хардкод-дефолты (те же значения, что были раньше).
+export async function generateMetadata(): Promise<Metadata> {
+  try {
+    const [title, description, ogImage, favicon] = await Promise.all([
+      getPlatformTitle(),
+      getPlatformDescription(),
+      getPlatformOgImage(),
+      getFaviconUrls(),
+    ])
+
+    return {
+      title,
+      description,
+      generator: 'v0.app',
+      ...(ogImage ? {
+        openGraph: {
+          title,
+          description,
+          images: [{ url: ogImage }],
+        },
+      } : {}),
+      icons: {
+        icon: [
+          { url: favicon.light, media: '(prefers-color-scheme: light)' },
+          { url: favicon.dark,  media: '(prefers-color-scheme: dark)' },
+          { url: favicon.svg,   type: 'image/svg+xml' },
+        ],
+        apple: favicon.apple,
       },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
+    }
+  } catch {
+    // Фолбэк при ошибке БД — статические дефолты
+    return {
+      title: PLATFORM_TITLE_DEFAULT,
+      description: PLATFORM_DESCRIPTION_DEFAULT,
+      generator: 'v0.app',
+      icons: {
+        icon: [
+          { url: FAVICON_URLS_DEFAULT.light, media: '(prefers-color-scheme: light)' },
+          { url: FAVICON_URLS_DEFAULT.dark,  media: '(prefers-color-scheme: dark)' },
+          { url: FAVICON_URLS_DEFAULT.svg,   type: 'image/svg+xml' },
+        ],
+        apple: FAVICON_URLS_DEFAULT.apple,
       },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
-    apple: '/apple-icon.png',
-  },
+    }
+  }
 }
 
 export default function RootLayout({

@@ -38,3 +38,107 @@ export async function getTrashRetentionDays(): Promise<number> {
     return TRASH_RETENTION_DEFAULT
   }
 }
+
+// ─── Брендинг и SEO платформы ─────────────────────────────────────────────────
+
+export const PLATFORM_TITLE_KEY = "platform_title"
+export const PLATFORM_DESCRIPTION_KEY = "platform_description"
+export const PLATFORM_OG_IMAGE_KEY = "platform_og_image"
+export const FAVICON_URLS_KEY = "favicon_urls"
+export const PUBLIC_SEO_DEFAULTS_KEY = "public_seo_defaults"
+
+// Дефолты = текущие хардкод-значения (чтобы при пустой БД всё работало)
+export const PLATFORM_TITLE_DEFAULT = "Company24 — HR Рекрутинговая платформа"
+export const PLATFORM_DESCRIPTION_DEFAULT =
+  "Современная платформа для управления процессом найма с AI-скорингом кандидатов"
+
+export interface FaviconUrls {
+  light: string   // /icon-light-32x32.png
+  dark:  string   // /icon-dark-32x32.png
+  svg:   string   // /icon.svg
+  apple: string   // /apple-icon.png
+}
+
+export const FAVICON_URLS_DEFAULT: FaviconUrls = {
+  light: "/icon-light-32x32.png",
+  dark:  "/icon-dark-32x32.png",
+  svg:   "/icon.svg",
+  apple: "/apple-icon.png",
+}
+
+export interface PublicSeoDefaults {
+  ogImage:               string | null
+  careersTitleSuffix:    string  // e.g. "— Вакансии"
+  vacancyTitleTemplate:  string  // e.g. "{title} — {company}"
+}
+
+export const PUBLIC_SEO_DEFAULTS_DEFAULT: PublicSeoDefaults = {
+  ogImage:              null,
+  careersTitleSuffix:   "— Вакансии",
+  vacancyTitleTemplate: "{title} — {company}",
+}
+
+/** Заголовок платформы. Никогда не падает, всегда возвращает строку. */
+export async function getPlatformTitle(): Promise<string> {
+  try {
+    const v = await getPlatformSetting<string>(PLATFORM_TITLE_KEY)
+    return (typeof v === "string" && v.trim()) ? v.trim() : PLATFORM_TITLE_DEFAULT
+  } catch {
+    return PLATFORM_TITLE_DEFAULT
+  }
+}
+
+/** Описание платформы. Никогда не падает. */
+export async function getPlatformDescription(): Promise<string> {
+  try {
+    const v = await getPlatformSetting<string>(PLATFORM_DESCRIPTION_KEY)
+    return (typeof v === "string" && v.trim()) ? v.trim() : PLATFORM_DESCRIPTION_DEFAULT
+  } catch {
+    return PLATFORM_DESCRIPTION_DEFAULT
+  }
+}
+
+/** OG-картинка платформы (URL или null). Никогда не падает. */
+export async function getPlatformOgImage(): Promise<string | null> {
+  try {
+    const v = await getPlatformSetting<string>(PLATFORM_OG_IMAGE_KEY)
+    return (typeof v === "string" && v.trim()) ? v.trim() : null
+  } catch {
+    return null
+  }
+}
+
+/** URLs иконок фавикона. Никогда не падает, фолбэк — дефолты. */
+export async function getFaviconUrls(): Promise<FaviconUrls> {
+  try {
+    const v = await getPlatformSetting<Partial<FaviconUrls>>(FAVICON_URLS_KEY)
+    if (!v || typeof v !== "object") return FAVICON_URLS_DEFAULT
+    return {
+      light: (v.light && typeof v.light === "string") ? v.light : FAVICON_URLS_DEFAULT.light,
+      dark:  (v.dark  && typeof v.dark  === "string") ? v.dark  : FAVICON_URLS_DEFAULT.dark,
+      svg:   (v.svg   && typeof v.svg   === "string") ? v.svg   : FAVICON_URLS_DEFAULT.svg,
+      apple: (v.apple && typeof v.apple === "string") ? v.apple : FAVICON_URLS_DEFAULT.apple,
+    }
+  } catch {
+    return FAVICON_URLS_DEFAULT
+  }
+}
+
+/** SEO-дефолты публичных страниц. Никогда не падает. */
+export async function getPublicSeoDefaults(): Promise<PublicSeoDefaults> {
+  try {
+    const v = await getPlatformSetting<Partial<PublicSeoDefaults>>(PUBLIC_SEO_DEFAULTS_KEY)
+    if (!v || typeof v !== "object") return PUBLIC_SEO_DEFAULTS_DEFAULT
+    return {
+      ogImage: typeof v.ogImage === "string" ? v.ogImage : PUBLIC_SEO_DEFAULTS_DEFAULT.ogImage,
+      careersTitleSuffix: (typeof v.careersTitleSuffix === "string" && v.careersTitleSuffix.trim())
+        ? v.careersTitleSuffix
+        : PUBLIC_SEO_DEFAULTS_DEFAULT.careersTitleSuffix,
+      vacancyTitleTemplate: (typeof v.vacancyTitleTemplate === "string" && v.vacancyTitleTemplate.trim())
+        ? v.vacancyTitleTemplate
+        : PUBLIC_SEO_DEFAULTS_DEFAULT.vacancyTitleTemplate,
+    }
+  } catch {
+    return PUBLIC_SEO_DEFAULTS_DEFAULT
+  }
+}
