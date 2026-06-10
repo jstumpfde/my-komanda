@@ -22,6 +22,7 @@ export type StageSlug =
   | "test_task_done"
   | "test_passed"
   | "test_failed"
+  | "internship"
   | "scheduled"
   | "interview"
   | "reference_check"
@@ -173,6 +174,16 @@ export const PLATFORM_STAGES: Record<StageSlug, StageDefinition> = {
     sortOrder: 7.6,
     description: "Тестовое задание отклонено по результатам проверки",
   },
+  internship: {
+    slug: "internship",
+    defaultLabel: "Стажировка",
+    defaultColor: "orange",
+    defaultHhAction: null,
+    isSystem: false,
+    isTerminal: false,
+    sortOrder: 7.8,           // между «Тест не пройден» и «Интервью наз.»
+    description: "Кандидат проходит оплачиваемую практику / мини-ГПХ перед оффером",
+  },
   scheduled: {
     slug: "scheduled",
     defaultLabel: "Интервью наз.",
@@ -269,17 +280,17 @@ export const TERMINAL_STAGE_SLUGS: StageSlug[] = ALL_STAGE_SLUGS.filter(
 export const IN_PROGRESS_STAGE_SLUGS: StageSlug[] = [
   "primary_contact", "demo_opened", "anketa_filled",
   "ai_screening", "test_task_sent", "test_task_done", "test_passed",
-  "scheduled", "interview", "reference_check", "decision",
+  "internship", "scheduled", "interview", "reference_check", "decision",
   "offer_sent",
 ]
 export const ANKETA_FILLED_STAGE_SLUGS: StageSlug[] = [
   "anketa_filled", "ai_screening", "test_task_sent", "test_task_done", "test_passed",
-  "scheduled", "interview", "reference_check", "decision",
+  "internship", "scheduled", "interview", "reference_check", "decision",
   "offer_sent", "hired",
 ]
 export const DEMO_OPENED_STAGE_SLUGS: StageSlug[] = [
   "demo_opened", "anketa_filled", "ai_screening", "test_task_sent",
-  "test_task_done", "test_passed", "scheduled", "interview", "reference_check",
+  "test_task_done", "test_passed", "internship", "scheduled", "interview", "reference_check",
   "decision", "offer_sent", "hired",
 ]
 

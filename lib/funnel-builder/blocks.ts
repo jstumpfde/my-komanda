@@ -436,6 +436,21 @@ export const FUNNEL_TEMPLATES: Record<string, FunnelTemplate> = {
       "thank_you_screen",
     ],
   },
+  internship: {
+    name:        "Стажировка",
+    description: "Найм через короткую оплачиваемую практику — для джуниорских и линейных позиций",
+    enabledBlocks: [
+      "ai_resume_score",
+      "first_message",
+      "demo",
+      "anketa",
+      "dozhim",
+      "test_task",
+      "interview",
+      "offer",
+      "thank_you_screen",
+    ],
+  },
 }
 
 // Применить шаблон к существующему набору блоков: оставляем тот же набор

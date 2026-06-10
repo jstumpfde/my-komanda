@@ -23,6 +23,29 @@ import { toast } from "sonner"
 
 type ResponseFormat = "text" | "file" | "both"
 type CheckMode = "auto" | "assisted" | "manual"
+// Формат практики: влияет только на дефолтный текст сообщения кандидату.
+// Хранится в postDemoSettings.testPracticeFormat (в том же jsonb).
+// "none" = обычное тестовое без оплаты (дефолт, существующее поведение).
+type PracticeFormat = "none" | "paid_task" | "mini_gph"
+
+const PRACTICE_FORMAT_LABELS: Record<PracticeFormat, string> = {
+  none:      "Обычное тестовое (без оплаты)",
+  paid_task: "Оплачиваемое тестовое задание",
+  mini_gph:  "Мини-ГПХ (практика 1–2 недели)",
+}
+
+// Дефолтные тексты сообщения после теста для форматов с оплатой.
+// «none» — не меняет дефолт afterMessage (пусто → HR заполнит сам).
+const PRACTICE_FORMAT_DEFAULT_MESSAGES: Record<Exclude<PracticeFormat, "none">, string> = {
+  paid_task:
+    "{{name}}, благодарим за выполнение тестового задания по вакансии «{{vacancy}}»! " +
+    "Мы рассмотрим вашу работу и свяжемся с вами. " +
+    "Условия оплаты за выполненное задание обсудим при приглашении.",
+  mini_gph:
+    "{{name}}, благодарим за интерес к вакансии «{{vacancy}}»! " +
+    "Следующий шаг — короткая оплачиваемая практика (1–2 недели) по договору ГПХ. " +
+    "Условия и детали обсудим при приглашении.",
+}
 
 interface Props {
   vacancyId: string
@@ -56,6 +79,8 @@ export function TestTaskSettings({ vacancyId, onSaved }: Props) {
   const [reminderItems, setReminderItems] = useState<{ day: number; text: string }[]>(
     DEFAULT_REMINDER_ITEMS.map((it) => ({ ...it })),
   )
+  // Формат практики (F5): хранится в postDemoSettings.testPracticeFormat.
+  const [practiceFormat, setPracticeFormat] = useState<PracticeFormat>("none")
   const [demoId, setDemoId] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -91,6 +116,9 @@ export function TestTaskSettings({ vacancyId, onSaved }: Props) {
             if (typeof pds.testPassingScore === "number") { setPassingScore(pds.testPassingScore); applied = true }
             if (typeof pds.testAfterMessage === "string") { setAfterMessage(pds.testAfterMessage); applied = true }
             if (typeof pds.testReminderEnabled === "boolean") { setReminderEnabled(pds.testReminderEnabled); applied = true }
+            if (pds.testPracticeFormat === "paid_task" || pds.testPracticeFormat === "mini_gph") {
+              setPracticeFormat(pds.testPracticeFormat); applied = true
+            }
             if (Array.isArray(pds.testReminderDays) && pds.testReminderDays.length > 0) {
               const msgs = Array.isArray(pds.testReminderMessages) ? pds.testReminderMessages : []
               setReminderItems(pds.testReminderDays.map((d: unknown, i: number) => ({
@@ -153,6 +181,8 @@ export function TestTaskSettings({ vacancyId, onSaved }: Props) {
           testReminderMessages: [...reminderItems].sort((a, b) => a.day - b.day).map((it) => it.text),
           // backward-compat: старый флаг держим в синхроне (manual = AI выкл).
           testAiCheck:          checkMode !== "manual",
+          // Формат практики (F5).
+          testPracticeFormat:   practiceFormat,
         } }),
       })
       if (!res.ok) throw new Error("Не удалось сохранить")
@@ -183,7 +213,42 @@ export function TestTaskSettings({ vacancyId, onSaved }: Props) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+
+        {/* ─── Формат практики (F5) ──────────────────────────── */}
         <div className="space-y-2">
+          <Label className="text-xs">Формат практики</Label>
+          <p className="text-xs text-muted-foreground">
+            Влияет на дефолтный текст сообщения кандидату. Выберите «без оплаты» для обычного тест-задания.
+          </p>
+          <div className="flex flex-col gap-2 pt-1">
+            {(["none", "paid_task", "mini_gph"] as PracticeFormat[]).map((fmt) => (
+              <label
+                key={fmt}
+                className="flex items-start gap-2.5 cursor-pointer group"
+              >
+                <input
+                  type="radio"
+                  name="practiceFormat"
+                  value={fmt}
+                  checked={practiceFormat === fmt}
+                  onChange={() => {
+                    setPracticeFormat(fmt)
+                    // Подставляем дефолтный текст сообщения если поле пустое
+                    if (fmt !== "none" && afterMessage.trim() === "") {
+                      setAfterMessage(PRACTICE_FORMAT_DEFAULT_MESSAGES[fmt])
+                    }
+                  }}
+                  className="mt-0.5 shrink-0 accent-primary"
+                />
+                <span className="text-sm leading-snug group-hover:text-primary transition-colors">
+                  {PRACTICE_FORMAT_LABELS[fmt]}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2 border-t pt-3">
           <Label className="text-xs">Текст задания для кандидата</Label>
           <Textarea
             value={taskText}
