@@ -1,0 +1,166 @@
+name: Deploy (off-box build)
+
+# Только ручной запуск — никакого автотриггера.
+# Принцип: GitHub Actions собирает артефакт, сервер только
+# распаковывает и делает атомарный своп .next → reload.
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Среда деплоя (staging = обкатка сначала!)'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - prod
+      ref:
+        description: 'Git ref (ветка/тег/SHA). prod → main, staging → develop'
+        required: false
+        default: ''
+
+jobs:
+  build-and-deploy:
+    name: Build → scp → swap → reload
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    environment: ${{ inputs.environment }}
+
+    steps:
+      # ------------------------------------------------------------------
+      # 1. Определяем целевую ветку
+      # ------------------------------------------------------------------
+      - name: Resolve ref
+        id: ref
+        run: |
+          INPUT_REF="${{ inputs.ref }}"
+          ENV="${{ inputs.environment }}"
+          if [ -n "$INPUT_REF" ]; then
+            echo "ref=$INPUT_REF" >> "$GITHUB_OUTPUT"
+          elif [ "$ENV" = "prod" ]; then
+            echo "ref=main" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=develop" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ------------------------------------------------------------------
+      # 2. Checkout
+      # ------------------------------------------------------------------
+      - name: Checkout ${{ steps.ref.outputs.ref }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.ref.outputs.ref }}
+
+      # ------------------------------------------------------------------
+      # 3. pnpm + Node
+      # ------------------------------------------------------------------
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '10.29.3'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      # ------------------------------------------------------------------
+      # 4. Install (все devDependencies нужны для сборки Next.js)
+      # ------------------------------------------------------------------
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      # ------------------------------------------------------------------
+      # 5. Build
+      # BUILD_ID создаётся Next.js автоматически в .next/BUILD_ID
+      # NEXT_TURBOPACK_EXPERIMENTAL_USE_SYSTEM_TLS_CERTS=1 нужен если CI
+      # выдаёт TLS-ошибки при загрузке Google Fonts (Vercel рекомендует).
+      # ------------------------------------------------------------------
+      - name: pnpm build
+        env:
+          # Отключаем телеметрию
+          NEXT_TELEMETRY_DISABLED: '1'
+          # Если Google Fonts падает из-за TLS в CI — раскомментировать:
+          # NEXT_TURBOPACK_EXPERIMENTAL_USE_SYSTEM_TLS_CERTS: '1'
+          # Заглушки для переменных, требуемых при build (не секреты):
+          NEXTAUTH_URL: 'https://company24.pro'
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: pnpm build
+
+      # ------------------------------------------------------------------
+      # 6. Проверяем, что BUILD_ID создан (быстрая защита)
+      # ------------------------------------------------------------------
+      - name: Verify BUILD_ID
+        run: |
+          if [ ! -f .next/BUILD_ID ]; then
+            echo "ERROR: .next/BUILD_ID не найден — сборка неполная"
+            exit 1
+          fi
+          echo "BUILD_ID: $(cat .next/BUILD_ID)"
+
+      # ------------------------------------------------------------------
+      # 7. Упаковываем артефакт
+      # Включаем: .next/, package.json, pnpm-lock.yaml
+      # НЕ включаем: public/ (там uploads — симлинк на сервере!)
+      # ------------------------------------------------------------------
+      - name: Pack artifact
+        run: |
+          tar -czf artifact.tar.gz \
+            .next/ \
+            package.json \
+            pnpm-lock.yaml
+
+      # ------------------------------------------------------------------
+      # 8. Определяем параметры сервера (prod vs staging)
+      # ------------------------------------------------------------------
+      - name: Set deploy params
+        id: params
+        run: |
+          if [ "${{ inputs.environment }}" = "prod" ]; then
+            echo "app_dir=/var/www/my-komanda"         >> "$GITHUB_OUTPUT"
+            echo "pm2_name=my-komanda"                 >> "$GITHUB_OUTPUT"
+            echo "health_url=https://company24.pro"    >> "$GITHUB_OUTPUT"
+          else
+            echo "app_dir=/var/www/my-komanda-new-staging" >> "$GITHUB_OUTPUT"
+            echo "pm2_name=my-komanda-new-staging"         >> "$GITHUB_OUTPUT"
+            echo "health_url=http://127.0.0.1:3001"        >> "$GITHUB_OUTPUT"
+          fi
+
+      # ------------------------------------------------------------------
+      # 9. SSH-агент
+      # ------------------------------------------------------------------
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Add server to known_hosts
+        run: ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      # ------------------------------------------------------------------
+      # 10. Копируем артефакт и скрипт приёмки на сервер
+      # ------------------------------------------------------------------
+      - name: SCP artifact
+        run: |
+          scp artifact.tar.gz \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/deploy-artifact.tar.gz"
+
+      - name: SCP receive script
+        run: |
+          scp scripts/deploy/receive-artifact.sh \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/receive-artifact.sh"
+
+      # ------------------------------------------------------------------
+      # 11. Запускаем приёмку на сервере
+      # ------------------------------------------------------------------
+      - name: Run receive-artifact on server
+        run: |
+          ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            bash /tmp/receive-artifact.sh \
+              /tmp/deploy-artifact.tar.gz \
+              "${{ steps.params.outputs.app_dir }}" \
+              "${{ steps.params.outputs.pm2_name }}" \
+              "${{ steps.params.outputs.health_url }}"
