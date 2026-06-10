@@ -409,6 +409,31 @@ ${AI_SAFETY_PROMPT}`,
       }
     }
 
+    // Пост-фильтр согласованности рекомендаций (задача 3).
+    // Если AI всё равно дал конфликтующие советы — чиним детерминированно.
+    {
+      const titleStr = ((vacancyData.vacancyTitle as string) || "").trim()
+      const titleLong = titleStr.length > 50
+
+      if (titleLong && Array.isArray(parsed.suggestions?.titles)) {
+        // Удаляем варианты, которые длиннее исходного (AI добавил отрасль/удалённость)
+        parsed.suggestions!.titles = parsed.suggestions!.titles.filter(
+          (t: string) => t.length < titleStr.length || t.length <= 50
+        )
+      }
+
+      // Если секция title говорит «длинное» — удаляем предложения добавить слова в название
+      const titleSection = Array.isArray(parsed.sections)
+        ? parsed.sections.find(s => s.id === "title")
+        : null
+      if (titleSection && /длинн/i.test(titleSection.message || "") && Array.isArray(parsed.suggestions?.titles)) {
+        // Оставляем только те варианты, которые КОРОЧЕ исходного
+        parsed.suggestions!.titles = parsed.suggestions!.titles.filter(
+          (t: string) => t.length < titleStr.length
+        )
+      }
+    }
+
     // Merge static salary analysis if AI didn't return one
     if (!parsed.salaryAnalysis && fallback.salaryAnalysis) {
       parsed.salaryAnalysis = fallback.salaryAnalysis
@@ -555,6 +580,11 @@ function buildPrompt(d: Record<string, unknown>, body: Record<string, unknown>, 
 - suggestions.duties — шаблон обязанностей (только если поле пустое или менее 3 пунктов)
 - suggestions.requirements — шаблон требований (только если поле пустое или менее 3 пунктов)
 - Рекомендации должны быть конкретными и практичными
+- ПРАВИЛО СОГЛАСОВАННОСТИ РЕКОМЕНДАЦИЙ: рекомендации не должны противоречить друг другу. Примеры:
+  * Если название длиннее 50 символов (длинное) — НЕ предлагай добавить в него отрасль/удалённость, предлагай УКОРОТИТЬ или ЗАМЕНИТЬ целиком.
+  * Если зарплата выше рынка — НЕ советуй её поднять.
+  * Если навыков 10+ — НЕ критикуй малое количество навыков.
+  * Всегда проверяй: нет ли конфликта между секцией title/message и suggestions.titles.
 - Все тексты на русском`)
 
   return parts.join("\n")

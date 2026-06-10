@@ -534,6 +534,21 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
   )
 }
 
+// ── AI Estimate Badge ───────────────────────────────────────────────────────
+// Метка «Оценка AI» для блоков, которые основаны на статичном справочнике
+// (захардкоженные данные), а не на реальных API-запросах.
+
+function AIEstimateBadge() {
+  return (
+    <span
+      title="Данные основаны на агрегированном справочнике (hh.ru, DreamJob, Forbes, ГородРабот — Q1 2026), а не на реальном API-запросе к hh в реальном времени"
+      className="inline-flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700/50 cursor-help select-none shrink-0"
+    >
+      Оценка AI
+    </span>
+  )
+}
+
 // ── Salary Analysis Card ────────────────────────────────────────────────────
 
 function SalaryAnalysisCard({ analysis }: { analysis: SalaryAnalysis }) {
@@ -557,6 +572,7 @@ function SalaryAnalysisCard({ analysis }: { analysis: SalaryAnalysis }) {
       <div className="flex items-center gap-1.5">
         <TrendingUp className="w-3.5 h-3.5 text-primary" />
         <span className="text-xs font-medium">Аналитика зарплат</span>
+        <AIEstimateBadge />
       </div>
       <div className="space-y-1.5">
         <div className="flex justify-between items-center">
@@ -649,6 +665,7 @@ function ExperienceInsightCard({ level, currentLevel }: { level: string; current
       <div className="flex items-center gap-1.5">
         <Sparkles className="w-3.5 h-3.5 text-primary" />
         <span className="text-xs font-medium">Опыт: {insight.label}{currentLevel === level ? " (текущий)" : ""}</span>
+        <AIEstimateBadge />
       </div>
       <p className="text-xs text-muted-foreground leading-relaxed">{insight.tip}</p>
       <div className="space-y-1">
@@ -917,7 +934,10 @@ function MotivationAnalysisCard({ salaryMin, salaryMax, bonuses, payFrequency, c
 function MarketContextCard() {
   return (
     <div className="rounded-lg border p-3 space-y-2">
-      <p className="text-sm font-semibold">📊 Рынок {marketStats.period}</p>
+      <div className="flex items-center gap-1.5">
+        <p className="text-sm font-semibold">📊 Рынок {marketStats.period}</p>
+        <AIEstimateBadge />
+      </div>
       <p className="text-sm text-foreground leading-relaxed">
         Зарплаты <span className="font-semibold text-emerald-600 dark:text-emerald-400">+{marketStats.overallMedianGrowth}%</span>, резюме <span className="font-semibold text-emerald-600 dark:text-emerald-400">+{marketStats.resumeGrowth}%</span>, конкуренция растёт. Junior <span className="font-semibold text-red-600 dark:text-red-400">−{marketStats.juniorVacancyDecline}%</span>.
       </p>
@@ -1016,7 +1036,8 @@ function CompanyDescriptionCard({ description }: { description: string }) {
   }
 
   // Описание заполнено — компактное подтверждение без повтора текста: само
-  // описание редактируется в блоке 4 формы рядом (#29 — убрали дубль контента).
+  // описание редактируется в блоке «О компании» формы рядом.
+  // AI-блок только оценивает/подсказывает — прямые «изменить» убраны.
   return (
     <div className="rounded-lg border p-3 space-y-2">
       <div className="flex items-center gap-1.5">
@@ -1026,25 +1047,25 @@ function CompanyDescriptionCard({ description }: { description: string }) {
         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
         <span className="text-xs text-emerald-700 dark:text-emerald-400">Описание заполнено — редактируется в блоке «О компании» формы</span>
       </div>
-      <a
-        href="/hr/hiring-settings"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-      >
-        Изменить в настройках компании →
-      </a>
     </div>
   )
 }
 
 // ── Suggestions Panel ───────────────────────────────────────────────────────
+// Две отдельные группы:
+//   1. «Навыки для hh» (skills) — без лимита, все навыки можно добавить
+//   2. «Кого ищем (оценка кандидата)» (stopFactors) — точечно: топ-5 с «Показать все»
+// Шаблоны обязанностей/требований — без изменений.
+
+const CANDIDATE_PROFILE_LIMIT = 5
 
 function SuggestionsPanel({ suggestions, onApply, vacancyData }: {
   suggestions: Suggestions
   onApply: (field: string, value: unknown) => void
   vacancyData: Record<string, unknown>
 }) {
+  const [showAllStopFactors, setShowAllStopFactors] = useState(false)
+
   const hasSkills = suggestions.skills.length > 0
   const hasStopFactors = suggestions.stopFactors.length > 0
   const hasDuties = !!suggestions.duties
@@ -1052,92 +1073,117 @@ function SuggestionsPanel({ suggestions, onApply, vacancyData }: {
 
   if (!hasSkills && !hasStopFactors && !hasDuties && !hasRequirements) return null
 
+  const visibleStopFactors = showAllStopFactors
+    ? suggestions.stopFactors
+    : suggestions.stopFactors.slice(0, CANDIDATE_PROFILE_LIMIT)
+  const hiddenCount = suggestions.stopFactors.length - CANDIDATE_PROFILE_LIMIT
+
   return (
     <div className="space-y-2 pt-1">
-      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Рекомендации AI</p>
-
-      {/* Skills */}
+      {/* ── Группа 1: Навыки для hh ── без лимита */}
       {hasSkills && (
-        <div className="rounded-lg border p-2.5 space-y-1.5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium">Рекомендуемые навыки</span>
-            <button
-              onClick={() => {
-                const current = (vacancyData.requiredSkills as string[]) || []
-                // mergeSkills дедупит по канону (регистр/пробелы/дефисы) — без дублей.
-                onApply("requiredSkills", mergeSkills(current, suggestions.skills))
-              }}
-              className="text-[10px] text-primary hover:underline flex items-center gap-0.5"
-            >
-              <Plus className="w-3 h-3" /> Добавить все
-            </button>
+        <>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Навыки для hh</p>
+          <div className="rounded-lg border p-2.5 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium">Рекомендуемые навыки</span>
+              <button
+                onClick={() => {
+                  const current = (vacancyData.requiredSkills as string[]) || []
+                  // mergeSkills дедупит по канону (регистр/пробелы/дефисы) — без дублей.
+                  onApply("requiredSkills", mergeSkills(current, suggestions.skills))
+                }}
+                className="text-[10px] text-primary hover:underline flex items-center gap-0.5"
+              >
+                <Plus className="w-3 h-3" /> Добавить все
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {suggestions.skills.map(skill => {
+                const alreadyHas = hasSkill((vacancyData.requiredSkills as string[]) || [], skill)
+                  || hasSkill((vacancyData.desiredSkills as string[]) || [], skill)
+                return (
+                  <button
+                    key={skill}
+                    disabled={alreadyHas}
+                    onClick={() => {
+                      const current = (vacancyData.requiredSkills as string[]) || []
+                      onApply("requiredSkills", mergeSkills(current, [skill]))
+                    }}
+                    className={cn(
+                      "text-[11px] px-1.5 py-0.5 rounded border transition-colors",
+                      alreadyHas
+                        ? "bg-muted text-muted-foreground border-border cursor-default line-through"
+                        : "bg-primary/5 text-primary border-primary/20 hover:bg-primary/10 cursor-pointer"
+                    )}
+                  >
+                    {skill}
+                  </button>
+                )
+              })}
+            </div>
           </div>
-          <div className="flex flex-wrap gap-1">
-            {suggestions.skills.map(skill => {
-              const alreadyHas = hasSkill((vacancyData.requiredSkills as string[]) || [], skill)
-                || hasSkill((vacancyData.desiredSkills as string[]) || [], skill)
-              return (
-                <button
-                  key={skill}
-                  disabled={alreadyHas}
-                  onClick={() => {
-                    const current = (vacancyData.requiredSkills as string[]) || []
-                    onApply("requiredSkills", mergeSkills(current, [skill]))
-                  }}
-                  className={cn(
-                    "text-[11px] px-1.5 py-0.5 rounded border transition-colors",
-                    alreadyHas
-                      ? "bg-muted text-muted-foreground border-border cursor-default line-through"
-                      : "bg-primary/5 text-primary border-primary/20 hover:bg-primary/10 cursor-pointer"
-                  )}
-                >
-                  {skill}
-                </button>
-              )
-            })}
-          </div>
-        </div>
+        </>
       )}
 
-      {/* Stop factors */}
+      {/* ── Группа 2: Кого ищем — точечно, топ-5 */}
       {hasStopFactors && (
-        <div className="rounded-lg border p-2.5 space-y-1.5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium">Неприемлемо</span>
-            <button
-              onClick={() => {
-                const current = (vacancyData.unacceptableSkills as string[]) || []
-                onApply("unacceptableSkills", mergeSkills(current, suggestions.stopFactors))
-              }}
-              className="text-[10px] text-primary hover:underline flex items-center gap-0.5"
-            >
-              <Plus className="w-3 h-3" /> Добавить все
-            </button>
+        <>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Кого ищем (оценка кандидата)</p>
+          <div className="rounded-lg border p-2.5 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium">Неприемлемо</span>
+              <button
+                onClick={() => {
+                  const current = (vacancyData.unacceptableSkills as string[]) || []
+                  onApply("unacceptableSkills", mergeSkills(current, suggestions.stopFactors))
+                }}
+                className="text-[10px] text-primary hover:underline flex items-center gap-0.5"
+              >
+                <Plus className="w-3 h-3" /> Добавить все
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {visibleStopFactors.map(factor => {
+                const alreadyHas = hasSkill((vacancyData.unacceptableSkills as string[]) || [], factor)
+                return (
+                  <button
+                    key={factor}
+                    disabled={alreadyHas}
+                    onClick={() => {
+                      const current = (vacancyData.unacceptableSkills as string[]) || []
+                      onApply("unacceptableSkills", mergeSkills(current, [factor]))
+                    }}
+                    className={cn(
+                      "text-[11px] px-1.5 py-0.5 rounded border transition-colors",
+                      alreadyHas
+                        ? "bg-muted text-muted-foreground border-border cursor-default line-through"
+                        : "bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-900/50 hover:bg-red-100 dark:hover:bg-red-900/30 cursor-pointer"
+                    )}
+                  >
+                    {factor}
+                  </button>
+                )
+              })}
+            </div>
+            {!showAllStopFactors && hiddenCount > 0 && (
+              <button
+                onClick={() => setShowAllStopFactors(true)}
+                className="text-[10px] text-muted-foreground hover:text-foreground underline decoration-dotted underline-offset-2 transition-colors"
+              >
+                Показать все ({suggestions.stopFactors.length})
+              </button>
+            )}
+            {showAllStopFactors && suggestions.stopFactors.length > CANDIDATE_PROFILE_LIMIT && (
+              <button
+                onClick={() => setShowAllStopFactors(false)}
+                className="text-[10px] text-muted-foreground hover:text-foreground underline decoration-dotted underline-offset-2 transition-colors"
+              >
+                Свернуть
+              </button>
+            )}
           </div>
-          <div className="flex flex-wrap gap-1">
-            {suggestions.stopFactors.map(factor => {
-              const alreadyHas = hasSkill((vacancyData.unacceptableSkills as string[]) || [], factor)
-              return (
-                <button
-                  key={factor}
-                  disabled={alreadyHas}
-                  onClick={() => {
-                    const current = (vacancyData.unacceptableSkills as string[]) || []
-                    onApply("unacceptableSkills", mergeSkills(current, [factor]))
-                  }}
-                  className={cn(
-                    "text-[11px] px-1.5 py-0.5 rounded border transition-colors",
-                    alreadyHas
-                      ? "bg-muted text-muted-foreground border-border cursor-default line-through"
-                      : "bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-900/50 hover:bg-red-100 dark:hover:bg-red-900/30 cursor-pointer"
-                  )}
-                >
-                  {factor}
-                </button>
-              )
-            })}
-          </div>
-        </div>
+        </>
       )}
 
       {/* Duties template */}
