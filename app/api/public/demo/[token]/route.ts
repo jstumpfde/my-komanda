@@ -47,7 +47,8 @@ export async function GET(
         vacancyId: candidates.vacancyId,
         anketaAnswers: candidates.anketaAnswers,
         demoProgressJson: candidates.demoProgressJson,
-        aiScore: candidates.aiScore,
+        // aiScore намеренно НЕ выбирается — внутренняя AI-оценка не должна
+        // уходить кандидату в публичный ответ (security, S-5).
         source: candidates.source,
         // F7: для deep-link на финальном экране
         telegramInviteToken: candidates.telegramInviteToken,
@@ -218,7 +219,8 @@ export async function GET(
       lessons: demo.lessonsJson,
       progress: candidate.demoProgressJson,
       answers: candidate.anketaAnswers,
-      aiScore: candidate.aiScore,
+      // aiScore намеренно НЕ включается в публичный ответ — внутренняя оценка
+      // не должна быть видна кандидату в DevTools (security S-5).
       postDemoSettings: demo.postDemoSettings ?? {},
       anketaIntro,
       finalScreens,
