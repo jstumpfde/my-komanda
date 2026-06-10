@@ -24,6 +24,7 @@
 import { and, asc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { hhResponses, candidates, followUpMessages, hhCandidates, vacancies } from "@/lib/db/schema"
+// channelSources — используется ниже для проверки что hh-канал включён на вакансии.
 import { getValidToken } from "@/lib/hh-helpers"
 import { classifyCandidateResponse } from "@/lib/ai/classify-candidate-response"
 import { processChatbotMessage } from "@/lib/ai/chatbot-processor"
@@ -419,6 +420,7 @@ export async function scanIncomingMessages(opts: {
         funnelConfigJson:     vacancies.funnelConfigJson,
         stopWordsJson:        vacancies.stopWordsJson,
         aiProcessSettings:    vacancies.aiProcessSettings,
+        channelSources:       vacancies.channelSources,
       })
       .from(candidates)
       .innerJoin(vacancies, eq(vacancies.id, candidates.vacancyId))
@@ -426,6 +428,21 @@ export async function scanIncomingMessages(opts: {
       .limit(1)
     const automation = (candVac?.descriptionJson as { automation?: Record<string, unknown> } | null)?.automation
     const callIntent = (automation?.["callIntent"] as VacancyCallIntent | undefined) ?? {}
+
+    // Проверка channelSources: hh-канал должен быть включён на вакансии.
+    // channelSources по умолчанию = ['hh'], так что для большинства вакансий
+    // это no-op. Актуально когда HR явно убрал hh из источников (например,
+    // вакансия переведена только на Авито).
+    {
+      const sources = Array.isArray(candVac?.channelSources) ? candVac.channelSources : ["hh"]
+      if (!sources.includes("hh")) {
+        console.info(`[scan-incoming] skip hhResponse=${resp.hhResponseId}: hh не в channelSources=${JSON.stringify(sources)}`)
+        await db.update(hhResponses).set({ lastCheckAt: new Date() })
+          .where(eq(hhResponses.id, resp.id))
+        result.scanned-- // не считаем как обработанный — просто пропуск
+        continue
+      }
+    }
 
     // Обрабатываем сообщения по порядку. Если уже сделали rejection —
     // дальнейшие AI-вызовы пропускаем.

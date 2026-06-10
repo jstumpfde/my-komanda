@@ -12,18 +12,21 @@
 // ⚠️ УТОЧНИТЬ по документации Авито:
 //   1. Точный заголовок/схему авторизации (HMAC-подпись или Bearer).
 //   2. Формат поля user_id в payload (числовой vs строковый).
-//   3. Поле для идентификации тенанта (по userId из интеграции).
 //
-// ─── Привязка к кандидату/лиду ───────────────────────────────────────────────
-// TODO: реализовать поиск тенанта по user_id из payload → avito_integrations.user_id.
-// Затем маршрутизировать входящее в pipeline аналогично hh/scan-incoming:
-//   - найти кандидата по chat_id (аналог hhResponseId)
-//   - классифицировать сообщение
-//   - запустить chatbot / стоп-слова / дожим
-// Сейчас: парсим, логируем, отвечаем 200 (Авито ждёт 200 иначе повторяет).
+// ─── Маршрутизация ───────────────────────────────────────────────────────────
+// По payload.toAccount/user_id → avito_integrations.user_id → компания.
+// По chat_id → найти/создать кандидата (surveyResponses.avitoChatId временно).
+// Далее — pipeline: стоп-слова → AI чат-бот → classifyCandidateResponse.
+// Полный алгоритм — lib/avito/scan-incoming.ts (аналогия с lib/hh/scan-incoming.ts).
+//
+// ─── Важно ───────────────────────────────────────────────────────────────────
+// Авито ждёт HTTP 200 в течение ~5 секунд. Если не ответить — повторит запрос.
+// Поэтому отвечаем 200 немедленно, а тяжёлую обработку запускаем асинхронно
+// (fire-and-forget через void, ошибки логируются внутри processAvitoInbound).
 
 import { NextRequest, NextResponse } from "next/server"
 import { avitoAdapter } from "@/lib/channels/avito"
+import { processAvitoInbound, type AvitoInboundMessage } from "@/lib/avito/scan-incoming"
 
 // Секрет для простой авторизации webhook-запросов от Авито.
 // Значение задаётся в env AVITO_WEBHOOK_SECRET.
@@ -58,36 +61,25 @@ export async function POST(req: NextRequest) {
   }
 
   // ─── Разбор сообщений через адаптер ────────────────────────────────────────
-  const messages = avitoAdapter.parseInbound(payload)
+  const messages = avitoAdapter.parseInbound(payload) as AvitoInboundMessage[]
 
   if (messages.length === 0) {
     // Служебный апдейт (read, typing и т.п.) — принимаем и игнорируем.
     return NextResponse.json({ ok: true, skipped: true })
   }
 
-  // ─── Маршрутизация входящих ─────────────────────────────────────────────────
-  // TODO: реализовать полную привязку к кандидату/лиду:
-  //   1. По messages[0].toAccount найти компанию через avito_integrations.user_id
-  //   2. По messages[0].from найти кандидата/лид (chat_id)
-  //   3. Передать в pipeline аналогично hh/scan-incoming
-  //
-  // Пример (раскомментировать после реализации pipeline):
-  //
-  // for (const msg of messages) {
-  //   await processAvitoInbound(msg)
-  // }
-  //
-  // Пока: логируем входящее для отладки.
-  console.info(
-    `[webhook:avito] получено ${messages.length} сообщений:`,
-    messages.map(m => ({
-      from: m.from,
-      toAccount: m.toAccount,
-      textPreview: m.text.slice(0, 80),
-    })),
+  // ─── Маршрутизация входящих ──────────────────────────────────────────────────
+  // Отвечаем 200 сразу, обработку запускаем асинхронно (fire-and-forget).
+  // Авито не ждёт результата обработки — только подтверждение получения.
+  const dummyResult = { processed: 0, newCandidates: 0, rejectedRegex: 0, rejectedAi: 0, wantsContact: 0, errors: [] as string[] }
+  void Promise.allSettled(
+    messages.map(msg =>
+      processAvitoInbound(msg, dummyResult).catch(err =>
+        console.error("[webhook:avito] processAvitoInbound error:", err instanceof Error ? err.message : err),
+      ),
+    ),
   )
 
   // Авито ждёт HTTP 200 в течение нескольких секунд.
-  // Если ответить 5xx или не ответить — Авито повторит запрос.
   return NextResponse.json({ ok: true, received: messages.length })
 }

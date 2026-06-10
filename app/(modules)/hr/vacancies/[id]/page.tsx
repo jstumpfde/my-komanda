@@ -1108,6 +1108,30 @@ export default function VacancyPage() {
     }
   }
 
+  // ─── Авито-интеграция (статус компании) ─────────────────────────────────────
+  const [avitoStatus, setAvitoStatus] = useState<{
+    configured: boolean
+    isEnabled?: boolean
+    isActive?:  boolean
+    userId?:    string | null
+    createdAt?: string | null
+    hasToken?:  boolean
+  } | null>(null)
+  useEffect(() => {
+    fetch("/api/integrations/avito")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setAvitoStatus(d as typeof avitoStatus) })
+      .catch(() => {})
+  }, [])
+
+  // Авито-канал включён на этой вакансии (channelSources contains 'avito').
+  const vacancyAvitoEnabled = Array.isArray(
+    (apiVacancy as { channelSources?: Array<"hh" | "avito"> } | undefined)?.channelSources,
+  ) && ((apiVacancy as { channelSources?: Array<"hh" | "avito"> }).channelSources ?? []).includes("avito")
+
+  // Авито полностью подключено на уровне компании.
+  const avitoCompanyConnected = avitoStatus?.configured && avitoStatus?.isEnabled && avitoStatus?.isActive
+
   const formatHhSyncDate = (iso: string | null): string => {
     if (!iso) return "—"
     const d = new Date(iso)
@@ -3237,15 +3261,49 @@ export default function VacancyPage() {
                             <Button size="sm" className="h-8 text-xs shrink-0" onClick={() => setHhImportDialogOpen(true)}>Привязать</Button>
                           </div>
                         )}
-                      {isPlatformAdmin && (<>
+                      {/* Авито Работа — карточка источника */}
+                      {avitoCompanyConnected ? (
+                        /* Авито подключено на уровне компании */
                         <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#00AAFF" }}>A</div>
-                          <div className="flex-1 min-w-0"><p className="text-sm font-medium flex items-center gap-2">Авито Работа <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span></p><p className="text-[11px] text-muted-foreground">Импорт откликов с Авито</p></div>
-                          <span className="text-xs text-muted-foreground shrink-0">0 кликов · 0 кандидатов</span>
-                          <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
-                          <Button size="sm" className="h-8 text-xs shrink-0" disabled>Подключить</Button>
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#00AAFF" }}>А</div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium">Авито Работа</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {vacancyAvitoEnabled
+                                ? "Принимаем отклики из Авито Мессенджера"
+                                : "Канал Авито отключён для этой вакансии"}
+                            </p>
+                          </div>
+                          {vacancyAvitoEnabled ? (
+                            <Badge variant="outline" className="text-xs h-6 bg-emerald-500/10 text-emerald-700 border-emerald-200 shrink-0">Активно</Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Отключено</Badge>
+                          )}
+                          <span className="text-xs text-muted-foreground shrink-0">0 кандидатов</span>
                         </div>
-                      </>)}
+                      ) : avitoStatus?.configured ? (
+                        /* Настроено, но выключено */
+                        <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#00AAFF" }}>А</div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium">Авито Работа</p>
+                            <p className="text-[11px] text-muted-foreground">Интеграция настроена, но выключена. Включите в Настройки → Интеграции.</p>
+                          </div>
+                          <Badge variant="outline" className="text-xs h-6 text-amber-700 border-amber-200 bg-amber-50 shrink-0">Выключено</Badge>
+                          <Button size="sm" variant="outline" className="h-8 text-xs shrink-0" onClick={() => window.open("/hr/settings?tab=integrations", "_blank")}>Включить</Button>
+                        </div>
+                      ) : (
+                        /* Не настроено — ведём в Интеграции */
+                        <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#00AAFF" }}>А</div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium">Авито Работа</p>
+                            <p className="text-[11px] text-muted-foreground">Подключите Авито Мессенджер в Настройки → Интеграции, чтобы получать отклики.</p>
+                          </div>
+                          <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
+                          <Button size="sm" className="h-8 text-xs shrink-0" onClick={() => window.open("/hr/settings?tab=integrations", "_blank")}>Подключить</Button>
+                        </div>
+                      )}
                     </div>
                   </div>
 
