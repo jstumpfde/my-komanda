@@ -22,6 +22,17 @@ import {
   recordEmergencyAction,
 } from "@/lib/platform/emergency-broadcast"
 import { normalizeFunnelConfig } from "@/lib/funnel-builder/blocks"
+import {
+  setPlatformSetting,
+  getFaviconUrls,
+  getPublicSeoDefaults,
+  PLATFORM_TITLE_KEY,
+  PLATFORM_DESCRIPTION_KEY,
+  PLATFORM_OG_IMAGE_KEY,
+  FAVICON_URLS_KEY,
+  FAVICON_URLS_DEFAULT,
+  PUBLIC_SEO_DEFAULTS_KEY,
+} from "@/lib/platform/settings"
 
 async function requireAdminEmail(): Promise<string> {
   const session = await auth()
@@ -160,6 +171,86 @@ export async function actionDeletePlatformTemplate(id: string) {
   if (!deleted) throw new Error("Шаблон не найден")
   revalidatePath("/admin/platform")
   return { ok: true }
+}
+
+// ─── Брендинг и SEO (Group Branding) ────────────────────────────────────────
+
+export async function actionUpdatePlatformBranding(input: {
+  title:       string
+  description: string
+  ogImage?:    string | null
+}) {
+  await requireAdminEmail()
+  const title = (input.title ?? "").trim()
+  if (!title) throw new Error("Заголовок не может быть пустым")
+  if (title.length > 200) throw new Error("Заголовок слишком длинный (макс 200)")
+  const description = (input.description ?? "").trim()
+  if (description.length > 500) throw new Error("Описание слишком длинное (макс 500)")
+  const ogImage = (input.ogImage ?? "").trim() || null
+
+  await setPlatformSetting(PLATFORM_TITLE_KEY, title)
+  await setPlatformSetting(PLATFORM_DESCRIPTION_KEY, description)
+  await setPlatformSetting(PLATFORM_OG_IMAGE_KEY, ogImage)
+
+  revalidatePath("/")
+  revalidatePath("/admin/platform")
+  return { ok: true }
+}
+
+export async function actionUpdatePlatformFavicon(input: {
+  light?: string | null
+  dark?:  string | null
+  svg?:   string | null
+  apple?: string | null
+}) {
+  await requireAdminEmail()
+  // Читаем текущие значения, чтобы не затирать незаданные поля
+  const current = await getFaviconUrls()
+
+  const updated = {
+    light: (typeof input.light === "string" && input.light.trim()) ? input.light.trim() : current.light,
+    dark:  (typeof input.dark  === "string" && input.dark.trim())  ? input.dark.trim()  : current.dark,
+    svg:   (typeof input.svg   === "string" && input.svg.trim())   ? input.svg.trim()   : current.svg,
+    apple: (typeof input.apple === "string" && input.apple.trim()) ? input.apple.trim() : current.apple,
+  }
+
+  // Сброс к дефолту: если все пустые строки переданы явно как ""
+  const allReset =
+    input.light === "" && input.dark === "" && input.svg === "" && input.apple === ""
+  if (allReset) {
+    await setPlatformSetting(FAVICON_URLS_KEY, FAVICON_URLS_DEFAULT)
+  } else {
+    await setPlatformSetting(FAVICON_URLS_KEY, updated)
+  }
+
+  revalidatePath("/")
+  revalidatePath("/admin/platform")
+  return { ok: true, urls: allReset ? FAVICON_URLS_DEFAULT : updated }
+}
+
+export async function actionUpdatePublicSeoDefaults(input: {
+  ogImage?:               string | null
+  careersTitleSuffix?:    string
+  vacancyTitleTemplate?:  string
+}) {
+  await requireAdminEmail()
+  const current = await getPublicSeoDefaults()
+
+  const updated = {
+    ogImage: input.ogImage !== undefined
+      ? ((input.ogImage ?? "").trim() || null)
+      : current.ogImage,
+    careersTitleSuffix: (typeof input.careersTitleSuffix === "string" && input.careersTitleSuffix.trim())
+      ? input.careersTitleSuffix.trim()
+      : current.careersTitleSuffix,
+    vacancyTitleTemplate: (typeof input.vacancyTitleTemplate === "string" && input.vacancyTitleTemplate.trim())
+      ? input.vacancyTitleTemplate.trim()
+      : current.vacancyTitleTemplate,
+  }
+
+  await setPlatformSetting(PUBLIC_SEO_DEFAULTS_KEY, updated)
+  revalidatePath("/admin/platform")
+  return { ok: true, defaults: updated }
 }
 
 // Группа 28: чтение полной истории сообщений конкретного диалога Юлии для

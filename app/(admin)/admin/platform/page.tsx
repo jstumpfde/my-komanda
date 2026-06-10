@@ -16,6 +16,17 @@ import {
 } from "@/lib/db/schema"
 import { YULIA_SYSTEM_PROMPT } from "@/lib/ai/yulia/prompts"
 import { listMigrationsWithStatus } from "@/lib/platform/settings-migrations"
+import {
+  getPlatformTitle,
+  getPlatformDescription,
+  getPlatformOgImage,
+  getFaviconUrls,
+  getPublicSeoDefaults,
+  PLATFORM_TITLE_DEFAULT,
+  PLATFORM_DESCRIPTION_DEFAULT,
+  FAVICON_URLS_DEFAULT,
+  PUBLIC_SEO_DEFAULTS_DEFAULT,
+} from "@/lib/platform/settings"
 import { PlatformAdminClient } from "./platform-admin-client"
 
 export const dynamic = "force-dynamic"
@@ -160,6 +171,16 @@ export default async function PlatformAdminPage() {
     .orderBy(desc(cronRuns.startedAt))
     .limit(50)
 
+  // Брендинг: загружаем параллельно с остальными данными, фолбэк при ошибке
+  const [brandingTitle, brandingDescription, brandingOgImage, brandingFavicon, brandingPublicSeo] =
+    await Promise.all([
+      getPlatformTitle().catch(() => PLATFORM_TITLE_DEFAULT),
+      getPlatformDescription().catch(() => PLATFORM_DESCRIPTION_DEFAULT),
+      getPlatformOgImage().catch(() => null),
+      getFaviconUrls().catch(() => FAVICON_URLS_DEFAULT),
+      getPublicSeoDefaults().catch(() => PUBLIC_SEO_DEFAULTS_DEFAULT),
+    ])
+
   return (
     <PlatformAdminClient
       cronRuns={cronRunsRows.map(r => ({
@@ -207,6 +228,13 @@ export default async function PlatformAdminPage() {
           companyName:        c.companyName,
           messageCount:       c.messageCount,
         })),
+      }}
+      branding={{
+        title:       brandingTitle,
+        description: brandingDescription,
+        ogImage:     brandingOgImage,
+        favicon:     brandingFavicon,
+        publicSeo:   brandingPublicSeo,
       }}
     />
   )

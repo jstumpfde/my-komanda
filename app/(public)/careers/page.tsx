@@ -11,6 +11,7 @@ import {
   loadCareerCompany,
   loadCareerVacancies,
 } from "./career-page-view"
+import { getPublicSeoDefaults } from "@/lib/platform/settings"
 
 export const dynamic = "force-dynamic"
 
@@ -28,7 +29,8 @@ export async function generateMetadata(
   const company = await loadCareerCompany(subdomain)
   if (!company) return { title: "Страница не найдена" }
 
-  return buildCareerMetadata(company, pageUrlFor(subdomain))
+  const seoDefaults = await getPublicSeoDefaults().catch(() => null)
+  return buildCareerMetadata(company, pageUrlFor(subdomain), seoDefaults?.ogImage)
 }
 
 export default async function CareersPage(

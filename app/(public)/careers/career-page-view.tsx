@@ -120,12 +120,16 @@ function formatSalary(min: number | null, max: number | null): string | null {
 export function buildCareerMetadata(
   company: Pick<CareerCompany, "name" | "brandName" | "brandSlogan" | "logoUrl">,
   pageUrl: string,
+  fallbackOgImage?: string | null,
 ): Metadata {
   const displayName = displayNameOf(company)
   const slogan = company.brandSlogan?.trim() || ""
   const description = slogan
     ? `${displayName} — ${slogan}. Открытые вакансии компании.`
     : `Открытые вакансии компании ${displayName}. Откликнитесь прямо сейчас.`
+
+  // OG-картинка: логотип компании → платформенный fallback → без картинки
+  const ogImageUrl = company.logoUrl || fallbackOgImage || null
 
   return {
     title: `Вакансии — ${displayName}`,
@@ -135,7 +139,7 @@ export function buildCareerMetadata(
       description,
       url: pageUrl,
       type: "website",
-      ...(company.logoUrl ? { images: [{ url: company.logoUrl, alt: displayName }] } : {}),
+      ...(ogImageUrl ? { images: [{ url: ogImageUrl, alt: displayName }] } : {}),
     },
     alternates: { canonical: pageUrl },
   }
