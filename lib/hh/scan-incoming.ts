@@ -136,30 +136,26 @@ async function sendFarewell(
   }
 }
 
-// Дописывает запись в stage_history кандидата. Делается одним
-// SELECT+UPDATE — гонок при последовательной обработке cron'ом нет.
+// Дописывает запись в stage_history кандидата атомарным jsonb-конкатом:
+// SELECT+UPDATE теряли запись при параллельной работе с pending-rejections /
+// follow-up (last-write-wins).
 async function appendStageHistory(
   candidateId: string,
   fromStage: string,
   toStage: string,
   reason: string,
 ): Promise<void> {
-  const [row] = await db
-    .select({ stageHistory: candidates.stageHistory })
-    .from(candidates)
-    .where(eq(candidates.id, candidateId))
-    .limit(1)
-  const history = (row?.stageHistory as StageHistoryEntry[] | null) ?? []
   const entry: StageHistoryEntry = {
     from:   fromStage,
     to:     toStage,
     at:     new Date().toISOString(),
     reason,
   }
-  await db
-    .update(candidates)
-    .set({ stageHistory: [...history, entry] })
-    .where(eq(candidates.id, candidateId))
+  await db.execute(sql`
+    UPDATE candidates
+    SET stage_history = COALESCE(stage_history, '[]'::jsonb) || ${JSON.stringify(entry)}::jsonb
+    WHERE id = ${candidateId}::uuid
+  `)
 }
 
 async function applyRejection(args: {
@@ -435,7 +431,12 @@ export async function scanIncomingMessages(opts: {
     // дальнейшие AI-вызовы пропускаем.
     let rejected = false
     let wantsContact = false
-    for (const msg of newMsgs) {
+    // Индекс сообщения, на котором упал AI-классификатор: его и всё после
+    // него НЕ помечаем прочитанными — повторим в следующий прогон. Иначе
+    // сбой Anthropic (429/503) навсегда терял сообщение кандидата
+    // («нет, спасибо» → кандидат продолжал получать дожимы).
+    let aiFailedIdx: number | null = null
+    for (const [msgIdx, msg] of newMsgs.entries()) {
       const text = extractText(msg).trim()
       if (!text) continue
       if (rejected || wantsContact) break
@@ -591,7 +592,8 @@ export async function scanIncomingMessages(opts: {
         })
       } catch (err) {
         result.errors.push(`ai:${resp.hhResponseId}:${err instanceof Error ? err.message : "?"}`)
-        continue
+        aiFailedIdx = msgIdx
+        break
       }
 
       // ТЗ-3 Ч.3: автоотказ применяется ТОЛЬКО при высокой уверенности AI
@@ -624,7 +626,13 @@ export async function scanIncomingMessages(opts: {
       }
     }
 
-    const lastId = newMsgs[newMsgs.length - 1].id ?? resp.lastSeenMessageId ?? null
+    // При сбое AI двигаем lastSeen только до последнего успешно
+    // обработанного сообщения; упавшее и последующие переобработаются.
+    const lastId = aiFailedIdx === null
+      ? (newMsgs[newMsgs.length - 1].id ?? resp.lastSeenMessageId ?? null)
+      : (aiFailedIdx > 0
+          ? (newMsgs[aiFailedIdx - 1].id ?? resp.lastSeenMessageId ?? null)
+          : (resp.lastSeenMessageId ?? null))
     await db.update(hhResponses).set({
       lastSeenMessageId: lastId,
       lastCheckAt: new Date(),

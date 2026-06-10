@@ -12,7 +12,7 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { and, eq, isNotNull, lte, sql } from "drizzle-orm"
-import { db } from "@/lib/db"
+import { db, pgClient } from "@/lib/db"
 import { candidates, vacancies } from "@/lib/db/schema"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
@@ -22,10 +22,35 @@ import { executeRejection } from "@/lib/rejection/execute"
 const CRON_NAME = "pending-rejections"
 const MAX_PER_RUN = 50
 
+// Защита от параллельных запусков: если предыдущий прогон завис (медленный
+// hh), новый видел те же строки до смены stage и кандидат мог получить отказ
+// дважды. Лок держим на ЗАРЕЗЕРВИРОВАННОМ соединении (pgClient.reserve) —
+// при пуле lock/unlock отдельными запросами могут попасть в разные
+// соединения, и lock зависнет навсегда. Ключ в диапазоне 747000x cron-локов.
+const PENDING_REJECTIONS_LOCK_KEY = 7470002
+
 async function handle(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
 
+  const lockConn = await pgClient.reserve()
+  let lockAcquired = false
+  try {
+    const lockRows = await lockConn`SELECT pg_try_advisory_lock(${PENDING_REJECTIONS_LOCK_KEY}) AS acquired`
+    lockAcquired = lockRows?.[0]?.acquired === true
+    if (!lockAcquired) {
+      return NextResponse.json({ ok: false, busy: true }, { status: 409 })
+    }
+    return await run_(req)
+  } finally {
+    if (lockAcquired) {
+      await lockConn`SELECT pg_advisory_unlock(${PENDING_REJECTIONS_LOCK_KEY})`.catch(() => {})
+    }
+    lockConn.release()
+  }
+}
+
+async function run_(_req: NextRequest) {
   const run = await startCronRun(CRON_NAME).catch(() => null)
   try {
     // Кандидаты с наступившим сроком отказа + поля расписания их вакансии.
