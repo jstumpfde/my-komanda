@@ -8,24 +8,49 @@ const MODULE_GROUP_DEFS: Partial<Record<ModuleId, { label: string; hrefs: string
   hr: [
     { label: 'Найм',       hrefs: ['/hr/dashboard', '/hr/vacancies', '/hr/library', '/hr/candidates', '/hr/talent-pool', '/hr/calendar', '/hr/interviews', '/hr/hiring-settings'] },
     { label: 'Оргструктура', hrefs: ['/hr/org-structure', '/hr/departments', '/hr/positions'] },
-    { label: 'В разработке', hrefs: ['/hr/onboarding', '/hr/employees', '/hr/courses'] },
+    { label: 'В разработке', hrefs: ['/hr/courses'] },
+    // Заглушки — скрыты из меню 10.06.2026, вернуть по мере реализации:
+    // /hr/onboarding — нет API, мокап роутера к под-страницам
+    // /hr/employees — нет page.tsx (только [id]/skills/page.tsx)
   ],
-  marketing: [
-    { label: 'Контент',    hrefs: ['/marketing/dashboard', '/marketing/content', '/marketing/landings'] },
-    { label: 'Продвижение', hrefs: ['/marketing/seo', '/marketing/campaigns', '/marketing/social', '/marketing/email'] },
-    { label: 'Аналитика',  hrefs: ['/marketing/reviews', '/marketing/analytics', '/marketing/budget'] },
-  ],
-  logistics: [
-    { label: 'Операции',      hrefs: ['/logistics/dashboard', '/logistics/requests', '/logistics/quotes'] },
-    { label: 'Исполнение',    hrefs: ['/logistics/shipments', '/logistics/carriers'] },
-    { label: 'Конфигурация',  hrefs: ['/logistics/settings'] },
-  ],
-  warehouse: [
-    { label: 'Склад',       hrefs: ['/warehouse/dashboard', '/warehouse/inventory', '/warehouse/warehouses'] },
-    { label: 'Заказы',      hrefs: ['/warehouse/orders', '/warehouse/shipments', '/warehouse/returns'] },
-    { label: 'Поставщики',  hrefs: ['/warehouse/suppliers', '/warehouse/purchases'] },
-    { label: 'Аналитика',   hrefs: ['/warehouse/analytics', '/warehouse/reports'] },
-  ],
+
+  // Заглушки — скрыты из меню 10.06.2026, вернуть по мере реализации:
+  // marketing: весь модуль — нет ни одного API-вызова, все данные из demo-data.ts
+  //   /marketing/dashboard, /marketing/content, /marketing/landings, /marketing/seo,
+  //   /marketing/campaigns, /marketing/social, /marketing/email, /marketing/reviews,
+  //   /marketing/analytics, /marketing/budget
+  marketing: [],
+
+  // logistics: весь модуль — нет ни одного API-вызова, только хардкод
+  //   /logistics/dashboard, /logistics/requests, /logistics/quotes,
+  //   /logistics/shipments, /logistics/carriers, /logistics/settings
+  logistics: [],
+
+  // warehouse: весь модуль — нет ни одного API-вызова, только хардкод
+  //   /warehouse/dashboard, /warehouse/inventory, /warehouse/warehouses,
+  //   /warehouse/orders, /warehouse/shipments, /warehouse/returns,
+  //   /warehouse/suppliers, /warehouse/purchases, /warehouse/analytics, /warehouse/reports
+  warehouse: [],
+
+  // tasks: весь модуль — нет ни одного API-вызова, только локальный state (kanban-мокап)
+  //   /tasks, /tasks/projects, /tasks/analytics
+  tasks: [],
+
+  // b2b: весь модуль — нет ни одного API-вызова
+  //   /b2b, /b2b/accounts, /b2b/tenders, /b2b/analytics, /b2b/settings
+  b2b: [],
+
+  // booking: весь модуль — нет ни одного API-вызова
+  //   /booking, /booking/services, /booking/resources, /booking/settings
+  booking: [],
+
+  // dialer: весь модуль — нет ни одного API-вызова
+  //   /dialer, /dialer/scripts, /dialer/history, /dialer/settings
+  dialer: [],
+
+  // qc: весь модуль — нет ни одного API-вызова
+  //   /qc, /qc/checklists, /qc/settings
+  qc: [],
 }
 
 export function getModuleMenuItems(activeModules: ModuleId[]) {
