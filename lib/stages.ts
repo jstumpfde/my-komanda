@@ -29,6 +29,7 @@ export type StageSlug =
   | "decision"
   | "offer_sent"
   | "hired"
+  | "started_work"
   | "rejected"
 
 export type HhAction = "invitation" | "discard" | "assessment" | null
@@ -240,9 +241,19 @@ export const PLATFORM_STAGES: Record<StageSlug, StageDefinition> = {
     defaultColor: "green",
     defaultHhAction: null,
     isSystem: false,
-    isTerminal: true,
+    isTerminal: false,
     sortOrder: 13,
     description: "Кандидат принят на работу",
+  },
+  started_work: {
+    slug: "started_work",
+    defaultLabel: "Выход на работу",
+    defaultColor: "emerald",
+    defaultHhAction: null,
+    isSystem: false,
+    isTerminal: true,
+    sortOrder: 14,
+    description: "Кандидат вышел на работу",
   },
   rejected: {
     slug: "rejected",
@@ -286,12 +297,12 @@ export const IN_PROGRESS_STAGE_SLUGS: StageSlug[] = [
 export const ANKETA_FILLED_STAGE_SLUGS: StageSlug[] = [
   "anketa_filled", "ai_screening", "test_task_sent", "test_task_done", "test_passed",
   "internship", "scheduled", "interview", "reference_check", "decision",
-  "offer_sent", "hired",
+  "offer_sent", "hired", "started_work",
 ]
 export const DEMO_OPENED_STAGE_SLUGS: StageSlug[] = [
   "demo_opened", "anketa_filled", "ai_screening", "test_task_sent",
   "test_task_done", "test_passed", "internship", "scheduled", "interview", "reference_check",
-  "decision", "offer_sent", "hired",
+  "decision", "offer_sent", "hired", "started_work",
 ]
 
 // ───────────────────────────────────────────────────────────────────
@@ -359,9 +370,10 @@ export const FUNNEL_PRESETS: Record<Exclude<FunnelPreset, "custom">, FunnelPrese
     label: "Стандартный",
     emoji: "📋",
     description: "Специалисты и менеджеры. 8 стадий, 7-14 дней.",
+    // Юрий 10.06.2026: Первичный контакт (hh «Пригласить») → Тест/Тестовое задание →
+    // Собеседование/Интервью → Предложение о работе (Оффер) → Выход на работу → + системные Новый и Отказ
     enabledStages: [
-      "new", "primary_contact", "demo_opened", "anketa_filled", "ai_screening",
-      "interview", "decision", "hired", "rejected",
+      "new", "primary_contact", "test_task_sent", "interview", "offer_sent", "started_work", "rejected",
     ],
   },
   deep: {

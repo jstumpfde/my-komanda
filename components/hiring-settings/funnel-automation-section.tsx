@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   Dialog,
   DialogContent,
@@ -45,7 +46,6 @@ import {
   ALL_STAGE_SLUGS,
   PLATFORM_STAGES,
   FUNNEL_PRESETS,
-  STAGE_COLOR_CLASSES,
   type StageSlug,
   type StageColor,
 } from "@/lib/stages"
@@ -128,9 +128,6 @@ export function FunnelAutomationSection({
   const [stageAvitoActions, setStageAvitoActions] = useState<Record<string, string>>(
     (defaults.stageAvitoActions as Record<string, string> | undefined) ?? {},
   )
-  const [stageSjActions, setStageSjActions] = useState<Record<string, string>>(
-    (defaults.stageSjActions as Record<string, string> | undefined) ?? {},
-  )
 
   // ── Новые поля: порядок и вкл/выкл ──
   const [stageOrder, setStageOrder] = useState<StageSlug[]>(() =>
@@ -193,7 +190,6 @@ export function FunnelAutomationSection({
         stageLabels,
         stageColors,
         stageAvitoActions,
-        stageSjActions,
         enabledStages: enabledStages as Record<string, boolean>,
         stageOrder,
       })
@@ -249,7 +245,6 @@ export function FunnelAutomationSection({
       (preset.stageHhActions ?? {}) as Record<string, "invitation" | "discard" | "assessment" | null>
     )
     setStageAvitoActions(preset.stageAvitoActions ?? {})
-    setStageSjActions(preset.stageSjActions ?? {})
     toast.success(`Шаблон «${preset.name}» применён — сохраните чтобы зафиксировать`)
   }
 
@@ -269,7 +264,6 @@ export function FunnelAutomationSection({
         stageColors,
         stageHhActions: stageHhActions as Record<string, string | null>,
         stageAvitoActions,
-        stageSjActions,
       }
       const updated = [...companyPresets, newPreset]
       await onPatch({ companyFunnelPresets: updated })
@@ -352,7 +346,7 @@ export function FunnelAutomationSection({
 
           {/* Таблица с горизонтальным скроллом на мобиле */}
           <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full min-w-[720px] text-sm">
+            <table className="w-full min-w-[580px] text-sm">
               <thead>
                 <tr className="border-b bg-muted/40">
                   <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[38px]">
@@ -377,10 +371,6 @@ export function FunnelAutomationSection({
                     <span>Авито</span>{" "}
                     <Badge variant="secondary" className="text-[10px] px-1 py-0 align-middle">скоро</Badge>
                   </th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground w-[140px]">
-                    <span>SuperJob</span>{" "}
-                    <Badge variant="secondary" className="text-[10px] px-1 py-0 align-middle">скоро</Badge>
-                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -395,7 +385,6 @@ export function FunnelAutomationSection({
                       ? stageHhActions[slug]
                       : def.defaultHhAction
                   const avitoVal = stageAvitoActions[slug] ?? "none"
-                  const sjVal = stageSjActions[slug] ?? "none"
 
                   return (
                     <tr
@@ -458,23 +447,37 @@ export function FunnelAutomationSection({
 
                       {/* Цвет */}
                       <td className="px-3 py-2">
-                        <div className="flex gap-0.5 flex-wrap">
-                          {COLOR_ORDER.map((c) => (
+                        <Popover>
+                          <PopoverTrigger asChild>
                             <button
-                              key={c}
                               type="button"
-                              onClick={() => setStageColors(prev => ({ ...prev, [slug]: c }))}
                               className={cn(
-                                "w-3 h-3 rounded-full transition-all",
-                                STAGE_DOT_CLASSES[c],
-                                color === c
-                                  ? "ring-1 ring-offset-1 ring-foreground"
-                                  : "opacity-40 hover:opacity-80",
+                                "w-5 h-5 rounded-full transition-all ring-1 ring-offset-1 ring-border hover:ring-foreground/40",
+                                STAGE_DOT_CLASSES[color],
                               )}
-                              aria-label={c}
+                              aria-label="Выбрать цвет"
                             />
-                          ))}
-                        </div>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-2" align="start">
+                            <div className="grid grid-cols-4 gap-1.5">
+                              {COLOR_ORDER.map((c) => (
+                                <button
+                                  key={c}
+                                  type="button"
+                                  onClick={() => setStageColors(prev => ({ ...prev, [slug]: c }))}
+                                  className={cn(
+                                    "w-5 h-5 rounded-full transition-all hover:scale-110",
+                                    STAGE_DOT_CLASSES[c],
+                                    color === c
+                                      ? "ring-2 ring-offset-1 ring-foreground"
+                                      : "opacity-70 hover:opacity-100",
+                                  )}
+                                  aria-label={c}
+                                />
+                              ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
                       </td>
 
                       {/* Название */}
@@ -534,24 +537,6 @@ export function FunnelAutomationSection({
                         </Select>
                       </td>
 
-                      {/* SuperJob */}
-                      <td className="px-3 py-2">
-                        <Select
-                          value={sjVal}
-                          onValueChange={(v) =>
-                            setStageSjActions((prev) => ({ ...prev, [slug]: v }))
-                          }
-                        >
-                          <SelectTrigger className="h-7 text-xs w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">Ничего</SelectItem>
-                            <SelectItem value="invitation">Пригласить</SelectItem>
-                            <SelectItem value="discard">Отказать</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </td>
                     </tr>
                   )
                 })}
@@ -565,7 +550,7 @@ export function FunnelAutomationSection({
               Выключенные стадии не показываются в воронке новых вакансий. Системные стадии («Новый», «Отказ») выключить нельзя.
             </p>
             <p className="text-[11px] text-muted-foreground">
-              Авито и SuperJob — интеграции в разработке; действия сохранятся и применятся после подключения. Сейчас работает hh.ru.
+              Авито — интеграция в разработке; действия сохранятся и применятся после подключения. Сейчас работает hh.ru.
             </p>
           </div>
 
@@ -703,7 +688,7 @@ export function FunnelAutomationSection({
             <DialogTitle>Сохранить шаблон воронки</DialogTitle>
             <DialogDescription>
               Текущие настройки стадий (включённые, порядок, цвета, названия,
-              действия hh/Авито/SuperJob) будут сохранены как шаблон компании.
+              действия hh/Авито) будут сохранены как шаблон компании.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 py-2">
