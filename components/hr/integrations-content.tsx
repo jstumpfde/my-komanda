@@ -13,6 +13,8 @@ import {
 import { useAuth } from "@/lib/auth"
 import { AvitoIntegrationCard } from "@/components/hr/avito-integration-card"
 import { CandidateTelegramBotCard } from "@/components/hr/candidate-telegram-bot-card"
+import { WebhooksBlock, BitrixBlock } from "@/components/hiring-settings/service-section"
+import type { CompanyHiringDefaults } from "@/lib/db/schema"
 
 interface HHStatus {
   connected: boolean
@@ -48,6 +50,8 @@ function formatDate(d: string | null | undefined): string {
   return new Date(d).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })
 }
 
+const HIRING_DEFAULTS_URL = "/api/modules/hr/company/hiring-defaults"
+
 export function IntegrationsContent() {
   const { hasAccess } = useAuth()
   const isPlatformAdmin = hasAccess(["platform_admin"])
@@ -59,6 +63,29 @@ export function IntegrationsContent() {
   const [diagnosing, setDiagnosing] = useState(false)
   const [diagnosticOpen, setDiagnosticOpen] = useState(false)
   const [addSourceOpen, setAddSourceOpen] = useState(false)
+
+  // Данные для Webhooks / Битрикс (уровень компании)
+  const [hiringDefaults, setHiringDefaults] = useState<CompanyHiringDefaults | null>(null)
+
+  useEffect(() => {
+    fetch(HIRING_DEFAULTS_URL)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { hiringDefaults?: CompanyHiringDefaults } | null) => {
+        if (d?.hiringDefaults) setHiringDefaults(d.hiringDefaults)
+      })
+      .catch(() => {})
+  }, [])
+
+  const onPatchDefaults = async (patch: Partial<CompanyHiringDefaults>) => {
+    const res = await fetch(HIRING_DEFAULTS_URL, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    })
+    if (!res.ok) throw new Error("save_failed")
+    const data = (await res.json()) as { hiringDefaults: CompanyHiringDefaults }
+    setHiringDefaults(prev => prev ? { ...prev, ...data.hiringDefaults } : data.hiringDefaults)
+  }
 
   useEffect(() => {
     fetch("/api/integrations/hh/status")
@@ -124,6 +151,13 @@ export function IntegrationsContent() {
 
   return (
     <div className="space-y-4 max-w-4xl">
+      {/* Пояснение */}
+      <p className="text-sm text-muted-foreground">
+        Интеграции уровня компании — применяются ко всем вакансиям по умолчанию.
+        Переопределить для конкретной вакансии можно в настройках вакансии.
+      </p>
+
+      {/* Площадки найма */}
       {/* hh.ru card */}
       <Card className="rounded-xl border border-border p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -312,6 +346,14 @@ export function IntegrationsContent() {
       <p className="text-sm text-muted-foreground px-1">
         Управление вакансиями и откликами происходит в карточке каждой вакансии. Здесь — только подключение площадок.
       </p>
+
+      {/* Исходящие интеграции: Webhooks и Битрикс24 */}
+      {hiringDefaults && (
+        <>
+          <WebhooksBlock defaults={hiringDefaults} onPatch={onPatchDefaults} />
+          <BitrixBlock defaults={hiringDefaults} onPatch={onPatchDefaults} />
+        </>
+      )}
 
       {/* Другие площадки — только платформенному администратору (I5).
           Обычные клиенты не видят «Скоро»-заглушки. */}
