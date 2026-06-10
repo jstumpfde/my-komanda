@@ -391,7 +391,8 @@ function InterviewsPageContent() {
 
   const views: { mode: ViewMode; icon: typeof List; label: string }[] = [
     { mode: "list", icon: List, label: "Список" },
-    { mode: "calendar", icon: CalendarDays, label: "Календарь" },
+    // «Месяц», не «Календарь» — чтобы не путать с верхним табом «Календарь» (полный календарь компании)
+    { mode: "calendar", icon: CalendarDays, label: "Месяц" },
     { mode: "week", icon: CalendarRange, label: "Неделя" },
     { mode: "kanban", icon: LayoutGrid, label: "Канбан" },
     { mode: "day", icon: Clock, label: "День" },
