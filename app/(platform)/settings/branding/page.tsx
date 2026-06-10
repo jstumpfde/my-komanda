@@ -184,7 +184,7 @@ export default function BrandingPage() {
         logo_url: logoPreview ?? "",
         brand_name: brandName,
         brand_slogan: brandSlogan,
-        website: website.trim(),
+        website: (() => { const v = website.trim(); return v && !/^https?:\/\//i.test(v) ? `https://${v}` : v })(),
         custom_theme: customTheme as Record<string, unknown>,
         brand_primary_color: brandColor,
       })
@@ -420,16 +420,19 @@ export default function BrandingPage() {
             <div className="space-y-1.5">
               <Label className="text-sm">Сайт компании</Label>
               <Input
-                type="url"
+                type="text"
                 value={website}
                 onChange={e => setWebsite(e.target.value)}
-                placeholder="https://company.ru"
+                onBlur={() => {
+                  // Авто-нормализация: если ввели домен без схемы — подставляем https://
+                  const v = website.trim()
+                  if (v && !/^https?:\/\//i.test(v)) setWebsite(`https://${v}`)
+                }}
+                placeholder="company.ru"
                 className="h-9 text-sm"
               />
               <p className="text-xs text-muted-foreground">
-                {website.trim() && !/^https?:\/\//i.test(website.trim())
-                  ? <span className="text-amber-500">Рекомендуется начинать с https://</span>
-                  : "Ссылка на сайт вашей компании"}
+                Ссылка на сайт вашей компании — <code>https://</code> добавим автоматически
               </p>
             </div>
             <div className="space-y-1.5">
