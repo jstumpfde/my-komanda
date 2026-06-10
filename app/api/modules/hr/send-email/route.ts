@@ -1,20 +1,37 @@
 import { NextRequest } from "next/server"
+import { and, eq } from "drizzle-orm"
+import { db } from "@/lib/db"
+import { candidates, vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 
 export async function POST(req: NextRequest) {
   try {
     const user = await requireCompany()
     const body = (await req.json()) as {
-      to: string
+      candidateId: string
       subject: string
       body: string
-      candidateId?: string
-      vacancyId?: string
     }
 
-    if (!body.to || !body.subject || !body.body) {
-      return apiError("to, subject и body обязательны", 400)
+    if (!body.candidateId || !body.subject || !body.body) {
+      return apiError("candidateId, subject и body обязательны", 400)
     }
+
+    // Получаем email кандидата из БД — не принимаем to из тела запроса
+    // (защита от open relay). Проверяем tenant-принадлежность через JOIN.
+    const rows = await db
+      .select({ email: candidates.email, name: candidates.name })
+      .from(candidates)
+      .innerJoin(vacancies, and(
+        eq(candidates.vacancyId, vacancies.id),
+        eq(vacancies.companyId, user.companyId),
+      ))
+      .where(eq(candidates.id, body.candidateId))
+      .limit(1)
+
+    const candidate = rows[0]
+    if (!candidate) return apiError("Кандидат не найден", 404)
+    if (!candidate.email?.trim()) return apiError("У кандидата нет email", 400)
 
     const smtpHost = process.env.SMTP_HOST
     const smtpPort = Number(process.env.SMTP_PORT || 587)
@@ -35,7 +52,7 @@ export async function POST(req: NextRequest) {
 
     await transporter.sendMail({
       from: smtpUser,
-      to: body.to,
+      to: candidate.email.trim(),
       subject: body.subject,
       html: body.body,
     })

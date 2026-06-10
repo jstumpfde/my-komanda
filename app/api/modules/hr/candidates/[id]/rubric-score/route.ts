@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
@@ -14,7 +14,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     const user = await requireCompany()
     const { id } = await params
 
-    const [cand] = await db
+    // Один запрос с JOIN — сразу проверяет tenant-принадлежность (companyId).
+    const rows = await db
       .select({
         id: candidates.id,
         vacancyId: candidates.vacancyId,
@@ -26,20 +27,20 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
         educationLevel: candidates.educationLevel,
         workFormat: candidates.workFormat,
         anketaAnswers: candidates.anketaAnswers,
+        descriptionJson: vacancies.descriptionJson,
       })
       .from(candidates)
+      .innerJoin(vacancies, and(
+        eq(candidates.vacancyId, vacancies.id),
+        eq(vacancies.companyId, user.companyId),
+      ))
       .where(eq(candidates.id, id))
       .limit(1)
 
-    if (!cand) return apiError("Кандидат не найден", 404)
+    const cand = rows[0]
+    if (!cand) return apiError("Не найдено", 404)
 
-    const [vac] = await db
-      .select({ descriptionJson: vacancies.descriptionJson, companyId: vacancies.companyId })
-      .from(vacancies)
-      .where(eq(vacancies.id, cand.vacancyId))
-      .limit(1)
-
-    if (!vac || vac.companyId !== user.companyId) return apiError("Не найдено", 404)
+    const vac = { descriptionJson: cand.descriptionJson }
 
     const anketa = (vac.descriptionJson as Record<string, unknown> | null)?.anketa as Record<string, unknown> | undefined
     const spec = buildSpecFromAnketa(anketa)

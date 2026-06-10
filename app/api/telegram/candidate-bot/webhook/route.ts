@@ -14,7 +14,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, companies } from "@/lib/db/schema"
+import { candidates, companies, vacancies } from "@/lib/db/schema"
 import type { TgMessage } from "@/lib/db/schema"
 import { tgSendMessage } from "@/lib/telegram/candidate-bot"
 import { sql } from "drizzle-orm"
@@ -118,7 +118,7 @@ async function handleStart(
   }
 
   // Найти кандидата по inviteToken в рамках этой компании
-  // (candidates → vacancies → company)
+  // (candidates → vacancies → companyId) — tenant-изоляция через JOIN.
   const [row] = await db
     .select({
       id:            candidates.id,
@@ -127,6 +127,10 @@ async function handleStart(
       telegramOptOut: candidates.telegramOptOut,
     })
     .from(candidates)
+    .innerJoin(vacancies, and(
+      eq(candidates.vacancyId, vacancies.id),
+      eq(vacancies.companyId, companyId),
+    ))
     .where(eq(candidates.telegramInviteToken, inviteToken))
     .limit(1)
 

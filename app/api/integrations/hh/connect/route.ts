@@ -1,16 +1,19 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/auth"
+import { requireDirector } from "@/lib/api-helpers"
 import { getAuthUrl } from "@/lib/hh-api"
 
 export async function GET() {
-  const session = await auth()
-  if (!session?.user?.companyId) {
+  let user: Awaited<ReturnType<typeof requireDirector>>
+  try {
+    user = await requireDirector()
+  } catch (e) {
+    if (e instanceof Response) return e
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   const state = Buffer.from(JSON.stringify({
-    companyId: session.user.companyId,
-    userId: session.user.id,
+    companyId: user.companyId,
+    userId: user.id,
   })).toString("base64url")
 
   const url = getAuthUrl(state)

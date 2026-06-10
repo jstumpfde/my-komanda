@@ -222,13 +222,13 @@ async function handleAsk(chatId: number, question: string) {
 // ─── Route handler ─────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  // Optional secret verification — Telegram sends it back in this header if
-  // you registered the webhook with a secret_token. Skip if not configured.
-  if (WEBHOOK_SECRET) {
-    const header = req.headers.get("x-telegram-bot-api-secret-token")
-    if (header !== WEBHOOK_SECRET) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    }
+  // Секрет обязателен: если env не задан или заголовок не совпал — 403.
+  if (!WEBHOOK_SECRET) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+  const header = req.headers.get("x-telegram-bot-api-secret-token")
+  if (header !== WEBHOOK_SECRET) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
   let update: TelegramUpdate

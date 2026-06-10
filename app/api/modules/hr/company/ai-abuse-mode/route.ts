@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { companies } from "@/lib/db/schema"
-import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { requireCompany, requireDirector, apiError, apiSuccess } from "@/lib/api-helpers"
 
 // Группа 36: per-company настройка строгости pre-filter к severe_abuse.
 // GET — текущее значение.
@@ -29,7 +29,7 @@ export async function GET() {
 
 export async function PUT(req: NextRequest) {
   try {
-    const user = await requireCompany()
+    const user = await requireDirector()
     const body = await req.json().catch(() => ({})) as { mode?: string }
     if (!body.mode || !(ALLOWED as readonly string[]).includes(body.mode)) {
       return apiError("Invalid mode (allowed: strict | lenient)", 400)

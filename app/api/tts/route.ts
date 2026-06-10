@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireCompany } from '@/lib/api-helpers'
 
 export async function POST(req: NextRequest) {
+  try {
+    await requireCompany()
+  } catch (e) {
+    if (e instanceof Response) return e
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  }
+
   const { text, voice, emotion, speed } = await req.json()
   if (!text) return NextResponse.json({ error: 'no text' }, { status: 400 })
 
