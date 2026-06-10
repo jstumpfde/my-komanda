@@ -87,12 +87,42 @@ interface Message {
 }
 
 interface NancyAction {
-  type: "fill_outbound" | "search_outbound" | "navigate"
+  type:
+    | "fill_outbound"
+    | "search_outbound"
+    | "navigate"
+    | "create_vacancy"
+    | "duplicate_vacancy"
+    | "set_vacancy_salary"
+    | "create_candidate"
+    | "schedule_interview"
+    | "show_candidates_above_threshold"
+    | "export_candidates"
+  // fill_outbound
   textClauses?: Array<{ text: string; field: string }>
   area?: string
   experience?: string
   softCriteria?: string
+  // navigate
   href?: string
+  // create_vacancy
+  title?: string
+  city?: string
+  salary_min?: number
+  salary_max?: number
+  // duplicate_vacancy / set_vacancy_salary / show_candidates_above_threshold / export_candidates
+  vacancyId?: string
+  // create_candidate
+  name?: string
+  email?: string
+  phone?: string
+  // schedule_interview
+  candidateId?: string
+  startAt?: string
+  endAt?: string
+  interviewer?: string
+  // show_candidates_above_threshold
+  threshold?: number
 }
 
 interface NancyConfig {
@@ -405,9 +435,16 @@ export function NancyAssistant() {
     setSavingId(null)
   }, [savingId])
 
+  // ── Вспомогательная функция: добавить сообщение Нэнси в чат ──
+  const addNancyMessage = useCallback((text: string) => {
+    setMessages((prev) => [...prev, { id: `a-${Date.now()}-${Math.random()}`, role: "nancy", text }])
+  }, [])
+
   // ── Обработка HR-действий ──
   const handleActions = useCallback((actions: NancyAction[]) => {
     for (const action of actions) {
+
+      // ── Существующие действия ──
       if (action.type === "fill_outbound") {
         window.dispatchEvent(new CustomEvent("nancy:fill-outbound", {
           detail: {
@@ -417,13 +454,217 @@ export function NancyAssistant() {
             softCriteria: action.softCriteria,
           },
         }))
+
       } else if (action.type === "search_outbound") {
         window.dispatchEvent(new CustomEvent("nancy:search-outbound"))
+
       } else if (action.type === "navigate" && action.href) {
         window.location.href = action.href
+
+      // ── Скилл 1: создать вакансию ──
+      } else if (action.type === "create_vacancy") {
+        if (!action.title) {
+          addNancyMessage("Не указано название вакансии. Скажи, как она называется?")
+          continue
+        }
+        const body: Record<string, unknown> = { title: action.title }
+        if (action.city)       body.city       = action.city
+        if (action.salary_min) body.salary_min  = action.salary_min
+        if (action.salary_max) body.salary_max  = action.salary_max
+
+        void (async () => {
+          try {
+            const res = await fetch("/api/modules/hr/vacancies", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            })
+            if (!res.ok) {
+              const err = (await res.json().catch(() => ({}))) as { error?: string }
+              addNancyMessage(`Не удалось создать вакансию: ${err.error ?? res.statusText}`)
+              return
+            }
+            const vac = (await res.json()) as { data?: { id?: string; title?: string } }
+            const id = vac.data?.id
+            const title = vac.data?.title ?? action.title
+            if (id) {
+              addNancyMessage(`Вакансия «${title}» создана. Открыть для редактирования?`)
+              // Сразу переходим на страницу вакансии
+              window.location.href = `/hr/vacancies/${id}`
+            } else {
+              addNancyMessage(`Вакансия «${title}» создана.`)
+            }
+          } catch {
+            addNancyMessage("Ошибка при создании вакансии. Попробуй ещё раз.")
+          }
+        })()
+
+      // ── Скилл 2: дублировать вакансию ──
+      } else if (action.type === "duplicate_vacancy") {
+        const vid = action.vacancyId
+        if (!vid) {
+          addNancyMessage("Открой страницу вакансии, которую нужно дублировать, — тогда смогу её скопировать.")
+          continue
+        }
+        void (async () => {
+          try {
+            const res = await fetch(`/api/modules/hr/vacancies/${vid}/duplicate`, {
+              method: "POST",
+            })
+            if (!res.ok) {
+              const err = (await res.json().catch(() => ({}))) as { error?: string }
+              addNancyMessage(`Не удалось дублировать вакансию: ${err.error ?? res.statusText}`)
+              return
+            }
+            const dup = (await res.json()) as { data?: { id?: string; title?: string } }
+            const dupId = dup.data?.id
+            const dupTitle = dup.data?.title
+            if (dupId) {
+              addNancyMessage(`Готово! Создана копия «${dupTitle ?? "вакансии"}». Открываю её.`)
+              window.location.href = `/hr/vacancies/${dupId}`
+            } else {
+              addNancyMessage(`Вакансия скопирована.`)
+            }
+          } catch {
+            addNancyMessage("Ошибка при дублировании вакансии. Попробуй ещё раз.")
+          }
+        })()
+
+      // ── Скилл 3: установить зарплату вакансии ──
+      } else if (action.type === "set_vacancy_salary") {
+        const vid = action.vacancyId
+        if (!vid) {
+          addNancyMessage("Открой страницу вакансии — тогда смогу обновить зарплату.")
+          continue
+        }
+        if (!action.salary_min && !action.salary_max) {
+          addNancyMessage("Укажи размер зарплаты (например, «80-120к» или «от 100к»).")
+          continue
+        }
+        const patch: Record<string, unknown> = {}
+        if (action.salary_min) patch.salary_min = action.salary_min
+        if (action.salary_max) patch.salary_max = action.salary_max
+
+        void (async () => {
+          try {
+            const res = await fetch(`/api/modules/hr/vacancies/${vid}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(patch),
+            })
+            if (!res.ok) {
+              const err = (await res.json().catch(() => ({}))) as { error?: string }
+              addNancyMessage(`Не удалось обновить зарплату: ${err.error ?? res.statusText}`)
+              return
+            }
+            const minStr = action.salary_min ? `${(action.salary_min / 1000).toFixed(0)}к` : null
+            const maxStr = action.salary_max ? `${(action.salary_max / 1000).toFixed(0)}к` : null
+            const range = minStr && maxStr ? `${minStr}–${maxStr}` : minStr ?? maxStr
+            addNancyMessage(`Зарплата обновлена: ${range} ₽.`)
+          } catch {
+            addNancyMessage("Ошибка при обновлении зарплаты. Попробуй ещё раз.")
+          }
+        })()
+
+      // ── Скилл 4: добавить кандидата вручную ──
+      } else if (action.type === "create_candidate") {
+        if (!action.vacancyId || !action.name) {
+          if (!action.name) {
+            addNancyMessage("Укажи имя кандидата.")
+          } else {
+            addNancyMessage("Укажи, на какую вакансию добавить кандидата.")
+          }
+          continue
+        }
+        const body: Record<string, unknown> = {
+          vacancyId: action.vacancyId,
+          name: action.name,
+          source: "manual",
+        }
+        if (action.email) body.email = action.email
+        if (action.phone) body.phone = action.phone
+
+        void (async () => {
+          try {
+            const res = await fetch("/api/modules/hr/candidates", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            })
+            if (!res.ok) {
+              const err = (await res.json().catch(() => ({}))) as { error?: string }
+              addNancyMessage(`Не удалось добавить кандидата: ${err.error ?? res.statusText}`)
+              return
+            }
+            addNancyMessage(`Кандидат «${action.name}» добавлен в вакансию.`)
+          } catch {
+            addNancyMessage("Ошибка при добавлении кандидата. Попробуй ещё раз.")
+          }
+        })()
+
+      // ── Скилл 5: запланировать интервью ──
+      } else if (action.type === "schedule_interview") {
+        if (!action.startAt || !action.endAt) {
+          addNancyMessage("Укажи дату и время интервью (например, «15 июня в 14:00, продолжительность 1 час»).")
+          continue
+        }
+        const body: Record<string, unknown> = {
+          title: action.title ?? "Интервью",
+          type: "interview",
+          startAt: action.startAt,
+          endAt: action.endAt,
+          scope: "hr",
+        }
+        if (action.candidateId) body.candidateId = action.candidateId
+        if (action.vacancyId)   body.vacancyId   = action.vacancyId
+        if (action.interviewer) body.interviewer  = action.interviewer
+
+        void (async () => {
+          try {
+            const res = await fetch("/api/modules/hr/calendar", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            })
+            if (!res.ok) {
+              const err = (await res.json().catch(() => ({}))) as { error?: string }
+              addNancyMessage(`Не удалось запланировать интервью: ${err.error ?? res.statusText}`)
+              return
+            }
+            const start = new Date(action.startAt).toLocaleString("ru-RU", {
+              day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
+            })
+            addNancyMessage(`Интервью запланировано на ${start}. Можешь посмотреть в календаре.`)
+          } catch {
+            addNancyMessage("Ошибка при создании интервью. Попробуй ещё раз.")
+          }
+        })()
+
+      // ── Скилл 6: показать кандидатов со скором выше N ──
+      } else if (action.type === "show_candidates_above_threshold") {
+        const vid = action.vacancyId
+        const threshold = action.threshold ?? 70
+        if (!vid) {
+          addNancyMessage("Открой страницу вакансии — тогда отфильтрую кандидатов по скору.")
+          continue
+        }
+        const href = `/hr/vacancies/${vid}?scoreMin=${threshold}`
+        addNancyMessage(`Показываю кандидатов со скором ≥ ${threshold}. Перехожу к списку.`)
+        window.location.href = href
+
+      // ── Скилл 7: экспортировать кандидатов в Excel ──
+      } else if (action.type === "export_candidates") {
+        const vid = action.vacancyId
+        if (!vid) {
+          addNancyMessage("Открой страницу вакансии — тогда смогу экспортировать кандидатов.")
+          continue
+        }
+        addNancyMessage("Готовлю файл Excel с кандидатами…")
+        // Открываем скачивание в новой вкладке (GET = скачать все поля)
+        window.open(`/api/modules/hr/vacancies/${vid}/export-candidates`, "_blank")
       }
     }
-  }, [])
+  }, [addNancyMessage])
 
   // ── Синхронизация thinkingRef ──
   useEffect(() => { thinkingRef.current = thinking }, [thinking])
