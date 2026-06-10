@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server"
 import { apiError, apiSuccess, requireCompany } from "@/lib/api-helpers"
+import { assertPublicUrl } from "@/lib/ssrf-guard"
 
 // POST /api/modules/knowledge/ai-courses/fetch-url
 //
@@ -243,6 +244,13 @@ export async function POST(req: NextRequest) {
     }
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       return apiError("Разрешены только http/https URL", 400)
+    }
+
+    // SSRF-защита: запрещаем запросы к внутренним адресам
+    try {
+      await assertPublicUrl(rawUrl)
+    } catch (e) {
+      return apiError(e instanceof Error ? e.message : "Запрещённый URL", 400)
     }
 
     const platform = detectPlatform(rawUrl)

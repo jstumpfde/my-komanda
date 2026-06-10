@@ -1,3 +1,5 @@
+import { assertPublicUrl } from "@/lib/ssrf-guard"
+
 /**
  * Send candidate data to Bitrix24 via incoming webhook.
  * Fire-and-forget.
@@ -10,6 +12,9 @@ export async function sendToBitrix(webhookUrl: string, candidateData: {
   aiScore?: number
 }) {
   try {
+    // SSRF-защита: запрещаем запросы к внутренним адресам
+    await assertPublicUrl(webhookUrl)
+
     const [firstName, ...lastParts] = candidateData.name.split(" ")
     const lastName = lastParts.join(" ")
 

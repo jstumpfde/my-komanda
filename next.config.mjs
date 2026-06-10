@@ -17,6 +17,48 @@ const nextConfig = {
     },
     proxyClientMaxBodySize: '200mb',
   },
+
+  async headers() {
+    // Базовые security-заголовки для всех маршрутов
+    const securityHeaders = [
+      {
+        key: "X-Content-Type-Options",
+        value: "nosniff",
+      },
+      {
+        key: "Referrer-Policy",
+        value: "strict-origin-when-cross-origin",
+      },
+      {
+        key: "Strict-Transport-Security",
+        value: "max-age=31536000; includeSubDomains",
+      },
+      {
+        key: "Permissions-Policy",
+        value: "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+      },
+    ]
+
+    return [
+      // Все маршруты — базовые заголовки без X-Frame-Options,
+      // чтобы не сломать embed-виджеты (talent-pool, career-page и др.)
+      {
+        source: "/(.*)",
+        headers: securityHeaders,
+      },
+      // Для внутренних и публичных страниц (не embed) — запрет framing
+      // Исключаем /embed/*, /careers, /jobs/*, /vacancy/* (iframe-able виджеты)
+      {
+        source: "/((?!embed|careers|jobs|vacancy).*)",
+        headers: [
+          {
+            key: "X-Frame-Options",
+            value: "SAMEORIGIN",
+          },
+        ],
+      },
+    ]
+  },
 }
 
 export default nextConfig

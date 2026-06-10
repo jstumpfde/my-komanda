@@ -161,17 +161,24 @@ ${salesSections.length > 0 ? "\nСПЕЦИФИКА ПРОДАЖ:\n" + salesSecti
     || (score > 80 && weaknessTexts.some(w => /критич|critical|серьёзн/i.test(w)))
     || (score < 20 && strengthTexts.some(s => /отличн|идеальн|perfect/i.test(s)))
 
+  // Prompt injection: при манипуляции принудительно cap score ≤ 55 и autoAction=review
+  const safeScore = manipulation ? Math.min(score, 55) : score
+  const rawAutoAction = (["invite", "review", "reject"].includes(String(parsed.autoAction))
+    ? String(parsed.autoAction)
+    : "review") as ScreeningResult["autoAction"]
+  const safeAutoAction: ScreeningResult["autoAction"] = manipulation
+    ? "review"
+    : rawAutoAction
+
   return {
-    score,
+    score: safeScore,
     verdict: (["подходит", "возможно", "не подходит"].includes(String(parsed.verdict))
       ? String(parsed.verdict)
       : "возможно") as ScreeningResult["verdict"],
     strengths: strengthTexts.slice(0, 5),
     weaknesses: weaknessTexts.slice(0, 5),
     recommendation: String(parsed.recommendation || ""),
-    autoAction: (["invite", "review", "reject"].includes(String(parsed.autoAction))
-      ? String(parsed.autoAction)
-      : "review") as ScreeningResult["autoAction"],
+    autoAction: safeAutoAction,
     confidenceLevel: confidence,
     manipulationDetected: manipulation,
     needsManualReview: needsManual,

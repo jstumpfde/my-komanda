@@ -1,10 +1,8 @@
+import { randomBytes } from "crypto"
+
 export function generateCandidateToken(): string {
-  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-  let token = ""
-  for (let i = 0; i < 12; i++) {
-    token += chars[Math.floor(Math.random() * chars.length)]
-  }
-  return token
+  // 9 байт → 12 символов base64url (совместимо с прежней длиной 12)
+  return randomBytes(9).toString("base64url")
 }
 
 export interface PublicCandidate {

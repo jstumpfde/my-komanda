@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
 import { requireCompany } from "@/lib/api-helpers"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
+import { checkRateLimit } from "@/lib/rate-limit"
 
 export const runtime = "nodejs"
 export const maxDuration = 300
@@ -17,6 +18,17 @@ export const maxDuration = 300
 const MAX_TOKENS_CAP = 16384
 const MAX_MESSAGES = 60
 const MAX_TOTAL_CHARS = 400_000
+
+// Разрешённые модели (opus не разрешён — слишком дорого для клиентских фич)
+const ALLOWED_MODELS = new Set([
+  "claude-haiku-4-20250307",
+  "claude-haiku-3-5-20241022",
+  "claude-3-haiku-20240307",
+  "claude-sonnet-4-20250514",
+  "claude-3-5-sonnet-20241022",
+  "claude-3-5-sonnet-20240620",
+  "claude-3-sonnet-20240229",
+])
 
 interface InMessage {
   role: "user" | "assistant"
@@ -60,8 +72,21 @@ export async function POST(req: NextRequest) {
   if (totalChars + (system?.length ?? 0) > MAX_TOTAL_CHARS) {
     return NextResponse.json({ error: "Слишком длинный запрос" }, { status: 400 })
   }
-  const model = typeof body?.model === "string" && body.model.startsWith("claude-")
-    ? body.model
+  // Rate-limit: 60 запросов в минуту на companyId
+  let companyId: string | undefined
+  try {
+    const session = await import("@/auth").then(m => m.auth())
+    companyId = (session?.user as { companyId?: string } | undefined)?.companyId ?? undefined
+  } catch { /* игнорируем — requireCompany выше уже проверил */ }
+  const rlKey = `ai-messages:${companyId ?? "unknown"}`
+  if (!checkRateLimit(rlKey, 60, 60_000)) {
+    return NextResponse.json({ error: "Слишком много запросов, подождите" }, { status: 429 })
+  }
+
+  // Только разрешённые модели (opus не допускается для клиентских фич)
+  const requestedModel = typeof body?.model === "string" ? body.model : ""
+  const model = ALLOWED_MODELS.has(requestedModel)
+    ? requestedModel
     : "claude-sonnet-4-20250514"
   const maxTokens = Math.min(Math.max(Number(body?.max_tokens) || 1024, 1), MAX_TOKENS_CAP)
 

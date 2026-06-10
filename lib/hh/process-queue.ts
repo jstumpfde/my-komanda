@@ -397,7 +397,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       let newCandShortId: string | null = null
 
       if (!candidateId && localVac) {
-        const newToken = Math.random().toString(36).slice(2) + Date.now().toString(36)
+        const newToken = (await import("crypto")).randomBytes(9).toString("base64url")
         candidateToken = newToken
         const newCand = await db.transaction(async (tx) => {
           const short = await generateCandidateShortId(tx, localVac.id)
