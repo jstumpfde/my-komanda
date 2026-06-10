@@ -137,6 +137,8 @@ interface DemoData {
     afterAnketa: { title: string; subtitle: string }
   } | null
   prefill?: { first_name: string | null; last_name: string | null; city: string | null }
+  // F7: deep-link для Telegram — только если у компании подключён бот.
+  candidateTelegramDeepLink?: string | null
   // F4: конфиг видео-интервью из vacancies.description_json.videoIntro.
   // null — блок не настроен (старое поведение).
   videoIntro?: {
@@ -1117,6 +1119,23 @@ export default function DemoPage() {
               <h1 className="text-2xl font-bold text-gray-900">{afterAnketaTitle}</h1>
               <p className="text-gray-600 whitespace-pre-line">{afterAnketaSubtitle}</p>
             </div>
+            {/* F7: кнопка «Продолжить в Telegram» — только если бот подключён */}
+            {data.candidateTelegramDeepLink && (
+              <div className="flex justify-center pt-2">
+                <a
+                  href={data.candidateTelegramDeepLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors"
+                  style={{ backgroundColor: "#2AABEE" }}
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4" aria-hidden="true">
+                    <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.941z"/>
+                  </svg>
+                  Продолжить общение в Telegram
+                </a>
+              </div>
+            )}
           </div>
         </div>
       )

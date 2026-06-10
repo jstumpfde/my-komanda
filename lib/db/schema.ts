@@ -357,6 +357,11 @@ export const companies = pgTable("companies", {
   telegramChatId:      text("telegram_chat_id"),
   // drizzle/0158 — для будущего Telegram-канала чат-бота (токен бота-кандидата)
   candidateBotToken:   text("candidate_bot_token"),
+  // drizzle/0198 — F7: Telegram-бот для переписки с кандидатами
+  // username без @, напр. "MyCompanyJobsBot"; заполняется автоматически из getMe
+  candidateBotUsername:       text("candidate_bot_username"),
+  // secret_token для защиты webhook (Telegram передаёт в X-Telegram-Bot-Api-Secret-Token)
+  candidateBotWebhookSecret:  text("candidate_bot_webhook_secret"),
   // Privacy policy (per-company, ФЗ-152) — null = используется дефолтный шаблон
   privacyPolicyHtml:        text("privacy_policy_html"),
   privacyPolicyUpdatedAt:   timestamp("privacy_policy_updated_at"),
@@ -1217,6 +1222,14 @@ export const DEFAULT_ANKETA_AUTO_REPLY_TEXT =
 
 export type FormFieldKey = "firstName" | "lastName" | "email" | "phone" | "telegram" | "birthDate" | "city"
 
+// ── TgMessage (drizzle/0198) ──
+// Одно сообщение в TG-переписке HR ↔ кандидат. Хранится в candidates.tg_messages[].
+export interface TgMessage {
+  role:    "hr" | "candidate"
+  text:    string
+  sentAt:  string  // ISO 8601
+}
+
 export const DEFAULT_FORM_FIELDS: Required<NonNullable<PostDemoSettings["formFields"]>> = {
   firstName: { enabled: true, required: true },
   lastName:  { enabled: true, required: true },
@@ -1349,6 +1362,13 @@ export const candidates = pgTable("candidates", {
   // drizzle/0158 — для будущего Telegram-канала чат-бота (связка с чатом кандидата)
   telegramChatId:   text("telegram_chat_id"),
   telegramUsername: text("telegram_username"),
+  // drizzle/0198 — F7: Telegram-бот для переписки с кандидатами
+  // Случайный UUID-токен для deep-link: t.me/<bot>?start=<token>
+  telegramInviteToken: text("telegram_invite_token"),
+  // Кандидат отписался командой /stop — больше не пишем
+  telegramOptOut:   boolean("telegram_opt_out").notNull().default(false),
+  // История сообщений TG-переписки: [{role:'hr'|'candidate', text, sentAt}]
+  tgMessages:       jsonb("tg_messages").$type<TgMessage[]>().notNull().default([]),
   // drizzle/0162 — мягкое удаление («Корзина»). NOT NULL = в корзине, скрыт из
   // списков/счётчиков; восстановление или удаление навсегда; авто-очистка по
   // companies.trash_retention_days.

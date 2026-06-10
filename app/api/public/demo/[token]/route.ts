@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { candidates, vacancies, demos, companies, hhResponses } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { isShortId } from "@/lib/short-id"
+import { buildCandidateDeepLink, generateInviteToken } from "@/lib/telegram/candidate-bot"
 
 // Достаём first/last/city из hh resume. У части записей raw_data — это сам
 // resume, у других обёрнут в { resume: ... }. Альтернативные ключи
@@ -48,6 +49,8 @@ export async function GET(
         demoProgressJson: candidates.demoProgressJson,
         aiScore: candidates.aiScore,
         source: candidates.source,
+        // F7: для deep-link на финальном экране
+        telegramInviteToken: candidates.telegramInviteToken,
       })
       .from(candidates)
       .where(isShortId(token) ? eq(candidates.shortId, token) : eq(candidates.token, token))
@@ -76,6 +79,8 @@ export async function GET(
         brandPrimaryColor: companies.brandPrimaryColor,
         brandBgColor: companies.brandBgColor,
         brandTextColor: companies.brandTextColor,
+        // F7: username бота для формирования deep-link на финальном экране
+        candidateBotUsername: companies.candidateBotUsername,
       })
       .from(vacancies)
       .innerJoin(companies, eq(vacancies.companyId, companies.id))
@@ -184,6 +189,20 @@ export async function GET(
         }
       : null
 
+    // F7: deep-link для кандидата в Telegram — только если у компании подключён бот.
+    // Если у кандидата ещё нет invite-токена — генерируем и сохраняем.
+    let candidateTelegramDeepLink: string | null = null
+    if (vacancy.candidateBotUsername && candidate.source !== "preview") {
+      let inviteToken = candidate.telegramInviteToken
+      if (!inviteToken) {
+        inviteToken = generateInviteToken()
+        await db.update(candidates)
+          .set({ telegramInviteToken: inviteToken, updatedAt: new Date() })
+          .where(eq(candidates.id, candidate.id))
+      }
+      candidateTelegramDeepLink = buildCandidateDeepLink(vacancy.candidateBotUsername, inviteToken)
+    }
+
     return apiSuccess({
       candidateName: candidate.name,
       vacancyTitle: vacancy.title,
@@ -205,6 +224,7 @@ export async function GET(
       finalScreens,
       prefill,
       videoIntro,
+      candidateTelegramDeepLink,
     })
   } catch (err) {
     if (err instanceof Response) return err

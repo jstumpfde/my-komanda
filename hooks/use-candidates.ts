@@ -80,6 +80,12 @@ export interface ApiCandidate {
   rejectionInitiator?: string | null
   rejectionComment?: string | null
   rejectionAt?: string | null
+  // F7: Telegram-бот для кандидатов
+  telegramChatId?: string | null
+  telegramUsername?: string | null
+  telegramOptOut?: boolean | null
+  telegramInviteToken?: string | null
+  tgMessages?: import("@/lib/db/schema").TgMessage[] | null
 }
 
 // ─── useCandidates ────────────────────────────────────────────────────────────
