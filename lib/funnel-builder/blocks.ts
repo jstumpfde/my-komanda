@@ -58,6 +58,11 @@ export interface FunnelBlockMeta {
   icon:             LucideIcon
   required:         boolean
   incompatibleWith: FunnelBlockType[]
+  /**
+   * closed: true — блок закрыт для новых включений (нельзя включить, если выключен).
+   * Уже включённые вакансии продолжают работать. Решение оформляется датой.
+   */
+  closed?: boolean
 }
 
 export const BLOCK_META: Record<FunnelBlockType, FunnelBlockMeta> = {
@@ -239,11 +244,14 @@ export const BLOCK_META: Record<FunnelBlockType, FunnelBlockMeta> = {
   },
   content_step: {
     type:             "content_step",
+    // Закрыт решением 10.06: шаг «Демо» возьмёт тип контента из библиотеки позже.
+    // Включённые вакансии продолжают работать; новые включить нельзя (closed: true).
     label:            "Контент-шаг (прототип)",
     description:      "Презентация / Демо / Тест / Тестовое задание — один блок (концепт)",
     icon:             ClipboardList,
     required:         false,
     incompatibleWith: [],
+    closed:           true,
   },
 }
 

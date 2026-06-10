@@ -2218,9 +2218,51 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
             ))}
           </div>
         </div>
+
+        {/* ── Дополнительные поля из hh-импорта (только если заполнены) ── */}
+        {((data as Record<string,unknown>).driverLicenseTypes as string[] | undefined)?.length ? (
+          <div className="space-y-1.5 pt-2 border-t">
+            <Label className="text-xs">Водительские права</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {((data as Record<string,unknown>).driverLicenseTypes as string[]).map(cat => (
+                <Badge key={cat} variant="secondary" className="text-xs">{cat}</Badge>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        {((data as Record<string,unknown>).department as string | undefined) ? (
+          <div className="space-y-1.5 pt-2 border-t">
+            <Label className="text-xs">Отдел</Label>
+            <p className="text-sm">{(data as Record<string,unknown>).department as string}</p>
+          </div>
+        ) : null}
+        {((data as Record<string,unknown>).workingDaysText as string | undefined) ? (
+          <div className="space-y-1.5 pt-2 border-t">
+            <Label className="text-xs">Рабочие дни</Label>
+            <p className="text-sm text-muted-foreground">{(data as Record<string,unknown>).workingDaysText as string}</p>
+          </div>
+        ) : null}
+        {((data as Record<string,unknown>).workingTimeText as string | undefined) ? (
+          <div className="space-y-1.5">
+            <Label className="text-xs">Рабочие часы</Label>
+            <p className="text-sm text-muted-foreground">{(data as Record<string,unknown>).workingTimeText as string}</p>
+          </div>
+        ) : null}
+        {((data as Record<string,unknown>).specialConditions as string[] | undefined)?.length ? (
+          <div className="space-y-1.5 pt-2 border-t">
+            <Label className="text-xs">Спецусловия</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {((data as Record<string,unknown>).specialConditions as string[]).map(c => (
+                <Badge key={c} variant="outline" className="text-xs text-emerald-700 border-emerald-300 bg-emerald-50">{c}</Badge>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </Section>
 
-      {/* ── Документы и файлы ── */}
+      {/* ── Документы и файлы ── скрыто по решению Юрия (не нужно в основном потоке анкеты) */}
+      {/* Код секции сохранён — при необходимости убрать обёртку <div className="hidden"> */}
+      <div className="hidden">
       <Section title={`Документы${attachments.length > 0 ? ` (${attachments.length})` : ""}`} number={8} filled={attachments.length > 0}>
         <input ref={attachInputRef} type="file" multiple accept=".pdf,.doc,.docx,.xlsx,.xls,.txt,.jpg,.jpeg,.png,.webp" className="hidden"
           onChange={e => { if (e.target.files?.length) handleAttachUpload(e.target.files); e.target.value = "" }} />
@@ -2286,6 +2328,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
         </button>
         <p className="text-[11px] text-muted-foreground">Внутренние документы — не видны кандидатам. До 20 МБ на файл.</p>
       </Section>
+      </div>{/* /hidden Документы */}
 
       {/* ── 9. AI-генерация ── */}
       <Section title="AI-генерация" number={9} filled={data.screeningQuestions.length > 0 || !!data.hhDescription}>

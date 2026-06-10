@@ -124,9 +124,17 @@ type Mapped = {
   employment: string
   schedule: string
   city: string
+  cityFull: string          // полный адрес/регион без обрезки по запятой
   skills: string[]
   specialization: string
   category: string
+  languages: { lang: string; level: string }[]  // языки из страницы вакансии
+  driverLicenseTypes: string[]                  // водительские права (категории)
+  department: string                            // отдел
+  workingDays: string                           // детализация рабочих дней (hh text)
+  workingTimeIntervals: string                  // детализация часов (hh text)
+  acceptHandicapped: boolean                    // спец.условие: инвалидность
+  acceptKids: boolean                           // спец.условие: несовершеннолетние
 }
 
 function parseHhHtml(html: string): Mapped {
@@ -160,6 +168,60 @@ function parseHhHtml(html: string): Mapped {
     const s = $(el).text().trim()
     if (s) qaSkills.push(s)
   })
+
+  // ─── Языки (languages) ─────────────────────────────────────────────────
+  // hh показывает языки в блоке data-qa="vacancy-view-language-*" или общем
+  // контейнере с заголовком «Знание языков». Пробуем несколько селекторов.
+  const qaLanguages: { lang: string; level: string }[] = []
+  $('[data-qa^="vacancy-view-language"]').each((_, el) => {
+    const text = $(el).text().trim()
+    if (!text) return
+    // Формат: «Английский — B2» или «Английский: B2»
+    const m = text.match(/^([^—:–]+)[—:–]\s*(.+)$/)
+    if (m) {
+      qaLanguages.push({ lang: m[1].trim(), level: m[2].trim() })
+    } else {
+      qaLanguages.push({ lang: text, level: "" })
+    }
+  })
+  // Дополнительный поиск: контейнер с заголовком «Знание языков»
+  if (qaLanguages.length === 0) {
+    $("*").filter((_, el) => $(el).children().length === 0 && /знание языков/i.test($(el).text())).each((_, labelEl) => {
+      $(labelEl).parent().find("*").filter((_, el) => $(el).children().length === 0).each((_, el) => {
+        const text = $(el).text().trim()
+        if (!text || /знание языков/i.test(text)) return
+        const m = text.match(/^([^—:–]+)[—:–]\s*(.+)$/)
+        if (m) qaLanguages.push({ lang: m[1].trim(), level: m[2].trim() })
+        else if (text.length < 60) qaLanguages.push({ lang: text, level: "" })
+      })
+    })
+  }
+
+  // ─── Водительские права ────────────────────────────────────────────────
+  // hh отображает категории прав в виде бэджей или текста «Водительские права: B»
+  const qaDrivingLicense: string[] = []
+  $('[data-qa*="driver-license"], [data-qa*="driving-license"]').each((_, el) => {
+    const t = $(el).text().trim()
+    if (t) qaDrivingLicense.push(t)
+  })
+  if (qaDrivingLicense.length === 0) {
+    // Fallback: ищем текст «Водительское удостоверение» / «Водительские права»
+    const bodyText = $("body").text()
+    const drMatch = bodyText.match(/[Вв]одительск(?:ое удостоверение|ие права)[:\s]+([A-Za-zА-Яа-я,\s]+?)(?:\n|\.|\d|$)/m)
+    if (drMatch) {
+      const cats = drMatch[1].split(/[,\s]+/).map(s => s.trim()).filter(s => /^[A-Za-z]$/.test(s))
+      qaDrivingLicense.push(...cats)
+    }
+  }
+
+  // ─── Отдел (department) ────────────────────────────────────────────────
+  const qaDepartment = $('[data-qa="vacancy-company-department"]').first().text().trim()
+    || $('[data-qa*="department"]').first().text().trim()
+
+  // ─── Спец. условия (accept_handicapped, accept_kids) ───────────────────
+  const bodyHtml = $("body").html() || ""
+  const qaAcceptHandicapped = /инвалид|ОВЗ|ограниченн[ыeё][мх]? возможност/i.test(bodyHtml)
+  const qaAcceptKids = /несовершеннолетн|до 18 лет/i.test(bodyHtml)
 
   // ─── Professional roles / category ─────────────────────────────────────
   // hh.ru отображает профроль в нескольких возможных местах:
@@ -231,9 +293,17 @@ function parseHhHtml(html: string): Mapped {
     employment,
     schedule,
     city,
+    cityFull: city,   // сохраняем полный адрес до extractCityName
     skills: qaSkills,
     specialization: "",
     category: qaCategory,
+    languages: qaLanguages,
+    driverLicenseTypes: qaDrivingLicense,
+    department: qaDepartment,
+    workingDays: qaScheduleDays,
+    workingTimeIntervals: qaWorkingHours,
+    acceptHandicapped: qaAcceptHandicapped,
+    acceptKids: qaAcceptKids,
   }
 }
 
@@ -337,13 +407,48 @@ export async function POST(
           ? ["Офис"]
           : []
 
+    // ─── Маппинг языков hh → aiLanguages (id+уровень) ──────────────────────
+    // hh показывает текстовые лейблы вида «Английский — B2». Конвертируем в hh-id
+    // (eng/deu/fra/…) и уровень (a1..c2/l1). Если язык не распознан — пропускаем.
+    const LANG_LABEL_TO_ID: Record<string, string> = {
+      "английский": "eng", "немецкий": "deu", "французский": "fra",
+      "испанский": "spa", "итальянский": "ita", "китайский": "zho",
+      "польский": "pol", "португальский": "por", "японский": "jpn",
+      "арабский": "ara", "корейский": "kor", "турецкий": "tur",
+      "нидерландский": "nld", "шведский": "swe", "финский": "fin",
+      "чешский": "ces", "венгерский": "hun", "румынский": "ron",
+    }
+    const LEVEL_LABEL_TO_ID: Record<string, string> = {
+      "a1": "a1", "a2": "a2", "b1": "b1", "b2": "b2", "c1": "c1", "c2": "c2",
+      "родной": "l1", "native": "l1",
+      "начальный": "a1", "элементарный": "a2", "средний": "b1",
+      "средне-продвинутый": "b2", "продвинутый": "c1", "в совершенстве": "c2",
+    }
+    const anketaLanguages = mappedData.languages
+      .map(({ lang, level }) => {
+        const langId = LANG_LABEL_TO_ID[lang.toLowerCase().trim()]
+        if (!langId) return null
+        const levelId = LEVEL_LABEL_TO_ID[level.toLowerCase().trim()] || ""
+        return { lang: langId, level: levelId }
+      })
+      .filter((l): l is { lang: string; level: string } => l !== null)
+
     // ─── Merge into existing descriptionJson.anketa ─────────────────────────
     const existingDescJson = (existing.descriptionJson as Record<string, unknown>) || {}
     const existingAnketa = (existingDescJson.anketa as Record<string, unknown>) || {}
+
+    // Специальные условия — строковый список для хранения в anketa
+    const specialConditions: string[] = []
+    if (mappedData.acceptHandicapped) specialConditions.push("Открыты для кандидатов с ОВЗ")
+    if (mappedData.acceptKids) specialConditions.push("Трудоустройство несовершеннолетних")
+
     const newAnketa: Record<string, unknown> = {
       ...existingAnketa,
       ...(mappedData.title ? { vacancyTitle: mappedData.title } : {}),
       ...(mappedData.city ? { positionCity: mappedData.city } : {}),
+      // Полный регион/адрес (без обрезки по запятой) — в новое поле positionCityFull
+      ...(mappedData.cityFull && mappedData.cityFull !== mappedData.city
+        ? { positionCityFull: mappedData.cityFull } : {}),
       ...(anketaResponsibilities ? { responsibilities: anketaResponsibilities } : {}),
       ...(anketaRequirements ? { requirements: anketaRequirements } : {}),
       ...(mappedData.skills.length ? { requiredSkills: mappedData.skills } : {}),
@@ -354,6 +459,13 @@ export async function POST(
       ...(anketaSchedule ? { schedule: anketaSchedule } : {}),
       ...(anketaWorkFormats.length ? { workFormats: anketaWorkFormats } : {}),
       ...(mappedData.category ? { vacancyCategory: mappedData.category } : {}),
+      // Новые поля из hh (10.06)
+      ...(anketaLanguages.length ? { aiLanguages: anketaLanguages } : {}),
+      ...(mappedData.driverLicenseTypes.length ? { driverLicenseTypes: mappedData.driverLicenseTypes } : {}),
+      ...(mappedData.department ? { department: mappedData.department } : {}),
+      ...(mappedData.workingDays ? { workingDaysText: mappedData.workingDays } : {}),
+      ...(mappedData.workingTimeIntervals ? { workingTimeText: mappedData.workingTimeIntervals } : {}),
+      ...(specialConditions.length ? { specialConditions } : {}),
     }
 
     const now = new Date()
