@@ -7,24 +7,28 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Slider } from "@/components/ui/slider"
-import { Loader2, Volume2, Bot } from "lucide-react"
+import { Loader2, Volume2, Bot, Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { UserRole } from "@/lib/auth"
 import { ROLE_LABELS } from "@/lib/auth"
 
+// Оптимальный пресет — alena + neutral + 1.0:
+// наиболее естественное звучание в Yandex SpeechKit
+const OPTIMAL_PRESET = { voice: "alena", emotion: "neutral", speed: 1.0 }
+
 const VOICES = [
-  { id: "alena",  label: "Алёна",   desc: "Тёплый женский голос" },
-  { id: "oksana", label: "Оксана",  desc: "Мягкий женский голос" },
-  { id: "jane",   label: "Джейн",   desc: "Нейтральный женский голос" },
-  { id: "filipp", label: "Филипп",  desc: "Мужской голос" },
-  { id: "ermil",  label: "Эрмил",   desc: "Спокойный мужской голос" },
-  { id: "zahar",  label: "Захар",   desc: "Насыщенный мужской голос" },
+  { id: "alena",  label: "Алёна",   desc: "Нейронный голос, самый живой", recommended: true },
+  { id: "jane",   label: "Джейн",   desc: "Нейтральный нейронный голос",  recommended: true },
+  { id: "oksana", label: "Оксана",  desc: "Мягкий женский голос",         recommended: false },
+  { id: "filipp", label: "Филипп",  desc: "Мужской голос",                recommended: false },
+  { id: "ermil",  label: "Эрмил",   desc: "Спокойный мужской голос",      recommended: false },
+  { id: "zahar",  label: "Захар",   desc: "Насыщенный мужской голос",     recommended: false },
 ]
 
 const EMOTIONS = [
-  { id: "good",    label: "Тёплая"     },
   { id: "neutral", label: "Нейтральная" },
-  { id: "evil",    label: "Строгая"    },
+  { id: "good",    label: "Тёплая"      },
+  { id: "evil",    label: "Строгая"     },
 ]
 
 const SPEEDS = [
@@ -61,9 +65,9 @@ const AVAILABLE_MODULES: { id: string; label: string }[] = [
 
 export default function VoiceSettingsPage() {
   // ── Голос ──
-  const [voice,      setVoice]      = useState("alena")
-  const [emotion,    setEmotion]    = useState("good")
-  const [speed,      setSpeed]      = useState(1.1)
+  const [voice,      setVoice]      = useState(OPTIMAL_PRESET.voice)
+  const [emotion,    setEmotion]    = useState(OPTIMAL_PRESET.emotion)
+  const [speed,      setSpeed]      = useState(OPTIMAL_PRESET.speed)
   const [ttsEnabled, setTtsEnabled] = useState(true)
   const [testing,    setTesting]    = useState(false)
   const [previewText, setPreviewText] = useState("")
@@ -316,7 +320,21 @@ export default function VoiceSettingsPage() {
           <>
             {/* Выбор голоса */}
             <div className="space-y-3">
-              <Label className="text-sm font-semibold">Голос</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-semibold">Голос</Label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVoice(OPTIMAL_PRESET.voice)
+                    setEmotion(OPTIMAL_PRESET.emotion)
+                    setSpeed(OPTIMAL_PRESET.speed)
+                  }}
+                  className="flex items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-50 dark:bg-violet-950/30 px-3 py-1.5 text-xs font-medium text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Подобрать оптимальный
+                </button>
+              </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {VOICES.map(v => (
                   <button
@@ -330,7 +348,14 @@ export default function VoiceSettingsPage() {
                         : "hover:border-muted-foreground/40"
                     )}
                   >
-                    <div className="font-medium text-sm">{v.label}</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium text-sm">{v.label}</span>
+                      {v.recommended && (
+                        <span className="rounded-full bg-violet-100 dark:bg-violet-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700 dark:text-violet-300 leading-none">
+                          рекомендуется
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xs text-muted-foreground mt-0.5">{v.desc}</div>
                   </button>
                 ))}

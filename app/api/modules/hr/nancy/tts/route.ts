@@ -12,6 +12,16 @@ import type { NancyVoiceSettings } from "@/lib/db/schema"
 
 const YANDEX_TTS_URL = "https://tts.api.cloud.yandex.net/speech/v1/tts:synthesize"
 
+// Оптимальный пресет по умолчанию:
+// - alena: нейронный флагманский голос Yandex, наиболее естественный и тёплый
+// - neutral: менее «операторский», чем good (good звучит слишком бодро/восклицательно)
+// - speed 1.0: нормальный темп — 1.1 ускоряет и добавляет механичности
+// - sampleRateHertz 48000: максимальное качество аудио (поддерживается API v1)
+const DEFAULT_VOICE   = "alena"
+const DEFAULT_EMOTION = "neutral"
+const DEFAULT_SPEED   = 1.0
+const DEFAULT_SAMPLE_RATE = 48000
+
 export async function POST(req: Request) {
   let user
   try {
@@ -47,13 +57,14 @@ export async function POST(req: Request) {
 
   try {
     const form = new URLSearchParams({
-      text:     text.slice(0, 5000),
-      voice:    v.voice   ?? "alena",
-      emotion:  v.emotion ?? "good",
-      lang:     "ru-RU",
-      format:   "mp3",
-      speed:    String(v.speed ?? 1.1),
-      folderId: process.env.YANDEX_FOLDER_ID ?? "",
+      text:             text.slice(0, 5000),
+      voice:            v.voice   ?? DEFAULT_VOICE,
+      emotion:          v.emotion ?? DEFAULT_EMOTION,
+      lang:             "ru-RU",
+      format:           "mp3",
+      speed:            String(v.speed ?? DEFAULT_SPEED),
+      sampleRateHertz:  String(DEFAULT_SAMPLE_RATE),
+      folderId:         process.env.YANDEX_FOLDER_ID ?? "",
     })
 
     const yttRes = await fetch(YANDEX_TTS_URL, {
