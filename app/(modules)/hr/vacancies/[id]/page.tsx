@@ -17,7 +17,6 @@ import { type CardDisplaySettings } from "@/components/dashboard/card-settings"
 import { ViewSettings } from "@/components/dashboard/view-settings"
 import { CandidateFilters, DEFAULT_FUNNEL_STATUSES, type FilterState } from "@/components/dashboard/candidate-filters"
 import { applyCandidateFilters } from "@/lib/candidate-filter"
-import { SortMenu } from "@/components/dashboard/sort-menu"
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import type { CandidateSortMode } from "@/lib/candidate-sort"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
@@ -2383,7 +2382,6 @@ export default function VacancyPage() {
                       // иначе секция «Города» не показывается.
                       candidates={useListPaginated ? (paginatedColumns?.[0]?.candidates ?? []) : columns.flatMap((c) => c.candidates)}
                     />
-                    {false && <SortMenu sortMode={sortMode} onSortChange={setSortMode} />}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs">

@@ -3086,3 +3086,37 @@ export const reportShares = pgTable("report_shares", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
 })
+
+// ─── AI Chatbot (журнал и квота) ─────────────────────────────────────────────
+// Таблицы созданы вручную (drizzle/0125, 0126, channel — 0158) и до пакета 3
+// аудита 10.06.2026 жили только в raw SQL. Определения добавлены ТОЛЬКО для
+// типизации/видимости в схеме — DDL не менялся, drizzle-kit generate не
+// использовать (см. CLAUDE.md: миграции — только ручные через psql).
+
+export const aiChatbotMessages = pgTable("ai_chatbot_messages", {
+  id:               uuid("id").primaryKey().defaultRandom(),
+  candidateId:      uuid("candidate_id").notNull().references(() => candidates.id, { onDelete: "cascade" }),
+  vacancyId:        uuid("vacancy_id").notNull().references(() => vacancies.id, { onDelete: "cascade" }),
+  incomingMessage:  text("incoming_message").notNull(),
+  intentCategory:   text("intent_category").notNull(),   // salary | schedule | location | requirements | call_request | demo_check_in | interview_scheduling | rejection_signal | other
+  intentConfidence: real("intent_confidence").notNull(), // 0.0..1.0
+  generatedReply:   text("generated_reply"),             // NULL если эскалация (не ответили автоматически)
+  sentAt:           timestamp("sent_at", { withTimezone: true }), // NULL если не дошло до отправки
+  escalatedToHr:    boolean("escalated_to_hr").notNull().default(false),
+  escalationReason: text("escalation_reason"),           // low_confidence | not_in_triggers | daily_limit | rejection_signal | stop_word | other
+  channel:          text("channel").notNull().default("hh"), // hh | telegram (drizzle/0158)
+  createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("idx_ai_chatbot_messages_candidate_date").on(t.candidateId, t.createdAt.desc()),
+  index("idx_ai_chatbot_messages_vacancy_date").on(t.vacancyId, t.createdAt.desc()),
+])
+
+// Глобальный rate-limit AI-вызовов чат-бота (per company per day).
+export const aiChatbotQuota = pgTable("ai_chatbot_quota", {
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  date:      date("date").notNull(),
+  count:     integer("count").notNull().default(0),
+}, (t) => [
+  primaryKey({ columns: [t.companyId, t.date] }),
+  index("idx_ai_chatbot_quota_date").on(t.date),
+])
