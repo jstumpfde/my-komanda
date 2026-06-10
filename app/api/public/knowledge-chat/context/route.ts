@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { companies } from "@/lib/db/schema"
 import { verifyToken } from "../auth/route"
 import { buildPublicChatContext } from "@/lib/knowledge/public-chat-context"
+import { checkRateLimit } from "@/lib/rate-limit"
 
 export async function POST(req: NextRequest) {
   let body: { token?: string }
@@ -23,6 +24,12 @@ export async function POST(req: NextRequest) {
   }
 
   const companyId = payload.companyId
+
+  // Rate-limit по companyId: не более 30 запросов/мин (как у соседнего /answer).
+  // Предотвращает неограниченное выкачивание базы знаний по токену (security P2).
+  if (!checkRateLimit(`public-ask-ctx:${companyId}`, 30, 60_000)) {
+    return NextResponse.json({ error: "Слишком много запросов, попробуйте через минуту" }, { status: 429 })
+  }
 
   const [companyRow] = await db
     .select({ id: companies.id, name: companies.name })

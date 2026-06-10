@@ -13,7 +13,10 @@ const nextConfig = {
   },
   experimental: {
     serverActions: {
-      bodySizeLimit: '200mb',
+      // Снижен с 200mb до 10mb (security P2 D-6, DoS-вектор).
+      // Все загрузки файлов идут через /api/upload/* (не Server Actions) —
+      // проверено грепом: formData/multipart только в app/api/upload/*.
+      bodySizeLimit: '10mb',
     },
     proxyClientMaxBodySize: '200mb',
   },

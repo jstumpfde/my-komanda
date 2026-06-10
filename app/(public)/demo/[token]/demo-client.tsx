@@ -126,7 +126,7 @@ interface DemoData {
     blocks?: { blockId: string; status: "completed" | "skipped"; timeSpent?: number; answeredAt?: string }[]
   } | null
   answers: { blockId: string; answer: any }[] | null
-  aiScore: number | null
+  // aiScore удалён — внутренняя оценка не передаётся кандидату (security S-5)
   postDemoSettings: PostDemoSettings
   // Ф5: текст-обёртка финальной анкеты, vacancies.description_json.anketaIntro.
   // Пустые поля или null → показываем дефолты.
