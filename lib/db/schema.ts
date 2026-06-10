@@ -3144,3 +3144,20 @@ export const vacancySpecs = pgTable("vacancy_specs", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
 })
+
+// ─── Nancy Feedback (миграция 0199) ──────────────────────────────────────────
+// Фидбек по ответам Нэнси — 👍/👎 с привязкой к вопросу, ответу, модулю.
+// Основа самообучения: накопленные 👎 анализируются для пополнения
+// customInstructions и базы знаний. Следующий шаг: дайджест частых
+// «не знаю» → дополнение базы → меньше 👎 по повторяющимся темам.
+export const nancyFeedback = pgTable("nancy_feedback", {
+  id:        uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  userId:    uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  rating:    text("rating").notNull(),          // 'up' | 'down'
+  question:  text("question").notNull(),
+  answer:    text("answer").notNull(),
+  module:    text("module"),                    // hr | knowledge | learning | sales | …
+  page:      text("page"),                      // /hr/vacancies, /hr/candidates, …
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+})
