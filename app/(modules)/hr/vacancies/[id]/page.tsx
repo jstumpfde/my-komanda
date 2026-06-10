@@ -699,7 +699,9 @@ export default function VacancyPage() {
       return { ...col, candidates: colCandidates, count: colCandidates.length }
     }))
   }, [apiCandidates])
-  const { prefs: userPrefs, loaded: userPrefsLoaded, setViewMode: persistViewMode, setColumns: persistColumns, setListSort: persistListSort } = useUserPreferences()
+  // B5: persistColumns намеренно убран — колонки per-company хранятся
+  // в hiring-defaults, не в user-preferences. setColumns из хука не вызываем.
+  const { prefs: userPrefs, loaded: userPrefsLoaded, setViewMode: persistViewMode, setListSort: persistListSort } = useUserPreferences()
   // viewMode объявлен выше (перед useCandidates) для условного отключения запроса.
   const [sortMode, setSortMode] = useState<CandidateSortMode>("date_desc")
   const [cardSettings, setCardSettingsLocal] = useState(defaultSettings)
