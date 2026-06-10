@@ -52,7 +52,7 @@ import type { Candidate } from "@/components/dashboard/candidate-card"
 import { VacancyStatusBadge } from "@/components/vacancies/vacancy-status-badge"
 import { HhAutoProcess } from "@/components/hh/hh-auto-process"
 import { AutomationSettings, type AutomationSectionId } from "@/components/vacancies/automation-settings"
-import { VacancyScheduleSettings } from "@/components/vacancies/vacancy-schedule-settings"
+import { ScheduleTab } from "@/components/vacancies/schedule-tab"
 import { PublishTab } from "@/components/vacancies/publish-tab"
 import { OutboundSourcingTab } from "@/components/vacancies/outbound-sourcing-tab"
 import { VacancyActionsMenuItems } from "@/components/vacancies/vacancy-actions-menu"
@@ -3525,11 +3525,7 @@ export default function VacancyPage() {
                 )}
 
                 {/* ───────── ТАБ «Расписание» (бывший «AI сценарии») ───────── */}
-                {settingsSection === "ai" && (
-                <div className="space-y-6 max-w-3xl">
-                  <VacancyScheduleSettings vacancyId={id} />
-                </div>
-                )}
+                {settingsSection === "ai" && <ScheduleTab vacancyId={id} />}
 
                 {/* ───────── ТАБ «Интеграции» ───────── */}
                 {settingsSection === "integrations" && (

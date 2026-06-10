@@ -14,10 +14,11 @@ export function ScheduleTab({ vacancyId }: ScheduleTabProps) {
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
-        <h2 className="text-lg font-semibold">Расписание</h2>
+        <h2 className="text-lg font-semibold">Расписание отправки сообщений</h2>
         <p className="text-sm text-muted-foreground">
-          Когда система может отправлять сообщения, звонить и переводить кандидатов.
-          Используется для авто-сообщений и цепочки дожима.
+          Когда автоматика может писать кандидатам по этой вакансии: автоответы на отклики,
+          первые сообщения, приглашения на тест, дожим. Не путать с календарём — там
+          назначаются встречи и собеседования.
         </p>
       </div>
       <VacancyScheduleSettings vacancyId={vacancyId} />

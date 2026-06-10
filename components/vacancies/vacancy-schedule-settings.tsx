@@ -168,13 +168,8 @@ export function VacancyScheduleSettings({ vacancyId }: Props) {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
-            <Clock className="w-4 h-4" /> Расписание отправки сообщений
+            <Clock className="w-4 h-4" /> Рабочие часы и дни
           </CardTitle>
-          <p className="text-xs text-muted-foreground mt-1">
-            Когда автоматика может писать кандидатам по этой вакансии: автоответы на
-            отклики, первые сообщения, приглашения на тест, дожим. Не путать с
-            календарём — там назначаются встречи и собеседования.
-          </p>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="flex items-center justify-between">
