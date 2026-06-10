@@ -1561,7 +1561,10 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
       </div>
 
       {/* ── 1. Компания ── */}
-      {showCompanySection ? (
+      {/* Секция «Компания» — только при включённой мультикомпании (company-level
+          showCompanySelector) или локальном флаге. Баннера-приглашения для
+          одиночных компаний нет: им режим агентства не нужен. */}
+      {(showCompanySection || brandSelectorEnabled) && (
         <Section title="Компания" number={1} filled={sectionFilled(1)} id="section-1">
           <CompanySelector
             mode={data.companyMode}
@@ -1572,11 +1575,6 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
             onContactChange={v => set("clientContactId", v)}
           />
         </Section>
-      ) : (
-        <p className="text-xs text-muted-foreground">
-          Нанимаете для клиента?{" "}
-          <a href="/hr/hiring-settings" className="text-primary hover:underline">Включите в настройках найма</a>
-        </p>
       )}
 
       {/* ── 2. Должность ── */}
