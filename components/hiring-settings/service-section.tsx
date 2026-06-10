@@ -46,8 +46,6 @@ export function ServiceSection({ defaults, onPatch }: {
   return (
     <div className="space-y-5">
       <DataRetentionBlock defaults={defaults} onPatch={onPatch} />
-      <WebhooksBlock defaults={defaults} onPatch={onPatch} />
-      <BitrixBlock defaults={defaults} onPatch={onPatch} />
       <MultiCompanyBlock defaults={defaults} onPatch={onPatch} />
       <AiKillSwitchBlock />
     </div>
@@ -117,7 +115,7 @@ function DataRetentionBlock({ defaults, onPatch }: {
 // 2. Webhooks
 // ─────────────────────────────────────────────────────────────────────────────
 
-function WebhooksBlock({ defaults, onPatch }: {
+export function WebhooksBlock({ defaults, onPatch }: {
   defaults: CompanyHiringDefaults
   onPatch: (patch: Partial<CompanyHiringDefaults>) => Promise<void>
 }) {
@@ -194,7 +192,7 @@ function WebhooksBlock({ defaults, onPatch }: {
 // 3. Битрикс24
 // ─────────────────────────────────────────────────────────────────────────────
 
-function BitrixBlock({ defaults, onPatch }: {
+export function BitrixBlock({ defaults, onPatch }: {
   defaults: CompanyHiringDefaults
   onPatch: (patch: Partial<CompanyHiringDefaults>) => Promise<void>
 }) {
