@@ -687,6 +687,66 @@ export default function BrandingPage() {
           </CardContent>
         </Card>
 
+        {/* ═══ Карьерная страница ═══ */}
+        {savedSubdomain && (
+          <Card>
+            <CardHeader className="pb-2 pt-4 px-5">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Globe className="w-4 h-4 text-violet-500" />
+                Карьерная страница
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-5 pb-4 pt-0 space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Публичный список всех открытых вакансий компании с SEO-разметкой.
+              </p>
+              {/* Главный адрес — поддомен */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <code className="font-mono text-sm bg-muted rounded px-2 py-1 text-foreground select-all">
+                  {savedSubdomain}.company24.pro
+                </code>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs gap-1.5 shrink-0"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`https://${savedSubdomain}.company24.pro`)
+                    toast.success("Ссылка скопирована")
+                  }}
+                >
+                  <Copy className="w-3 h-3" />Скопировать
+                </Button>
+                <a
+                  href={`https://${savedSubdomain}.company24.pro`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2"
+                >
+                  Открыть
+                </a>
+              </div>
+              {/* Запасной адрес — путь на основном домене */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <code className="font-mono text-sm bg-muted rounded px-2 py-1 text-foreground select-all">
+                  company24.pro/jobs/{savedSubdomain}
+                </code>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs gap-1.5 shrink-0"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`https://company24.pro/jobs/${savedSubdomain}`)
+                    toast.success("Ссылка скопирована")
+                  }}
+                >
+                  <Copy className="w-3 h-3" />Скопировать
+                </Button>
+                <span className="text-xs text-muted-foreground">запасной адрес</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* ═══ Кастомный домен ═══ */}
         <Card>
           <CardHeader className="pb-2 pt-4 px-5">
