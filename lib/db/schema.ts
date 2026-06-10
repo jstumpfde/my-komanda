@@ -3086,3 +3086,23 @@ export const reportShares = pgTable("report_shares", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
 })
+
+// ─── R4 Candidate Spec (новый контур, миграция 0197) ─────────────────────────
+// Единый источник «кого ищем» для вакансии. СПЯЩИЙ КОД — не подключён к
+// рантайму скоринга/чат-бота. Активация — через флаг useNewCore per-вакансия.
+//
+// spec: CandidateSpec (lib/core/spec/types.ts) — jsonb-документ с четырьмя
+//   секциями: criteria (must/nice/dealbreaker, веса, кастомные оси),
+//   stopFactors, thresholds (единые пороги), profile (идеальный профиль).
+// updated_by: FK на users.id — кто последний изменил Spec (nullable).
+//
+// PK = vacancy_id (один Spec на вакансию). При удалении вакансии →
+// CASCADE (строка spec удаляется автоматически).
+export const vacancySpecs = pgTable("vacancy_specs", {
+  vacancyId: uuid("vacancy_id")
+    .primaryKey()
+    .references(() => vacancies.id, { onDelete: "cascade" }),
+  spec:      jsonb("spec").notNull().default({}),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+})
