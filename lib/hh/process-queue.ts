@@ -181,10 +181,11 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
     const stoppedRows = await db
       .select({ id: candidates.id })
       .from(candidates)
-      .where(eq(candidates.autoProcessingStopped, true))
-    for (const row of stoppedRows) {
-      if (linkedCandidateIds.includes(row.id)) stoppedCandidateIds.add(row.id)
-    }
+      .where(and(
+        inArray(candidates.id, linkedCandidateIds),
+        eq(candidates.autoProcessingStopped, true),
+      ))
+    for (const row of stoppedRows) stoppedCandidateIds.add(row.id)
   }
 
   const results: ProcessQueueResult["results"] = []
@@ -968,7 +969,18 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
           if (msg.includes("already_applied")) {
             console.log("[PQ] already_applied — продолжаем", resp.candidateName)
           } else {
-            console.error("[PQ] hh changeState failed:", msg)
+            // Сообщение кандидату НЕ дошло (429/5xx от hh) — не переводим
+            // в invited, иначе пойдут дожимы без первого приглашения.
+            // Сохраняем привязку кандидата и оставляем status='response':
+            // следующий прогон крона повторит отправку.
+            console.error("[PQ] hh changeState failed, оставляем в очереди на ретрай:", msg)
+            if (candidateId) {
+              await db.update(hhResponses)
+                .set({ localCandidateId: candidateId })
+                .where(eq(hhResponses.id, resp.id))
+            }
+            results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "hh_send_failed_retry", error: msg.slice(0, 200) })
+            continue
           }
         }
       }

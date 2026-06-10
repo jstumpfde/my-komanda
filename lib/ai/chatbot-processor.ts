@@ -292,17 +292,22 @@ async function checkAndIncrementQuota(
 ): Promise<{ ok: boolean; current: number; limit: number }> {
   const limit = getQuotaLimit()
   const today = new Date().toISOString().slice(0, 10)
-  await db.execute(sql`
+  // Атомарный инкремент С УСЛОВИЕМ: при достигнутом лимите счётчик НЕ растёт
+  // (раньше каждое сверхлимитное сообщение инкрементило дальше, и проверка
+  // current <= limit была неатомарной — два шага INSERT и SELECT).
+  // RETURNING пустой = лимит исчерпан, инкремента не было.
+  const rows = (await db.execute(sql`
     INSERT INTO ai_chatbot_quota (company_id, date, count)
     VALUES (${companyId}::uuid, ${today}::date, 1)
-    ON CONFLICT (company_id, date) DO UPDATE SET count = ai_chatbot_quota.count + 1
-  `)
-  const rows = (await db.execute(sql`
-    SELECT count FROM ai_chatbot_quota
-    WHERE company_id = ${companyId}::uuid AND date = ${today}::date
+    ON CONFLICT (company_id, date) DO UPDATE
+      SET count = ai_chatbot_quota.count + 1
+      WHERE ai_chatbot_quota.count < ${limit}
+    RETURNING count
   `)) as unknown as Array<{ count: number }>
-  const current = Number(rows?.[0]?.count ?? 0)
-  return { ok: current <= limit, current, limit }
+  if (rows.length > 0) {
+    return { ok: true, current: Number(rows[0].count), limit }
+  }
+  return { ok: false, current: limit, limit }
 }
 
 async function dailyMessagesForCandidate(candidateId: string): Promise<number> {

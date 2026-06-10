@@ -454,21 +454,15 @@ interface ClaudeResult {
 
 const CLAUDE_MODEL = "claude-sonnet-4-20250514"
 
-async function callClaudeFromBrowser(
+async function callClaudeViaServer(
   text: string,
-  apiKey: string,
   params: PromptParams,
   signal?: AbortSignal,
 ): Promise<ClaudeResult> {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch("/api/ai/messages", {
     method: "POST",
     signal,
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model: CLAUDE_MODEL,
       max_tokens: 16384,
@@ -811,22 +805,13 @@ export default function CreateDemoPage() {
         return
       }
 
-      // ── Step 2: fetch API key, call Claude from the browser ──
+      // ── Step 2: call Claude via server proxy ──
       setSubmitStage("Разбиваем документ на уроки...")
-      const keyRes = await fetch("/api/ai/key", { signal })
-      const keyData = await keyRes.json()
-      if (!keyRes.ok || !keyData.key) {
-        toast.error(keyData.error || "API ключ недоступен")
-        setSubmitting(false)
-        setSubmitStage("")
-        return
-      }
 
       let claudeResult: ClaudeResult
       try {
-        claudeResult = await callClaudeFromBrowser(
+        claudeResult = await callClaudeViaServer(
           extractedText,
-          keyData.key,
           {
             length: docLength,
             tone: docTone,
@@ -949,20 +934,11 @@ export default function CreateDemoPage() {
     setSubmitting(true)
     try {
       setSubmitStage("Разбиваем текст на уроки...")
-      const keyRes = await fetch("/api/ai/key", { signal })
-      const keyData = await keyRes.json()
-      if (!keyRes.ok || !keyData.key) {
-        toast.error(keyData.error || "API ключ недоступен")
-        setSubmitting(false)
-        setSubmitStage("")
-        return
-      }
 
       let claudeResult: ClaudeResult
       try {
-        claudeResult = await callClaudeFromBrowser(
+        claudeResult = await callClaudeViaServer(
           text,
-          keyData.key,
           {
             length: docLength,
             tone: docTone,

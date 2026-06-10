@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { accessRequests } from "@/lib/db/schema"
-import { requireCompany } from "@/lib/api-helpers"
+import { requirePlatformOperator } from "@/lib/platform/auth"
 import {desc} from "drizzle-orm"
 
 export async function GET() {
+  // Платформенные лиды — только для платформенного админа
   try {
-    await requireCompany()
-  } catch {
+    await requirePlatformOperator()
+  } catch (e) {
+    if (e instanceof Response) return e
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

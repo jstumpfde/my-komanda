@@ -22,14 +22,6 @@ interface MaterialRef {
   type: "demo" | "article"
 }
 
-const SYSTEM_PROMPT =
-  "Ты — Ненси, AI-ассистент корпоративной базы знаний компании. " +
-  "Отвечай на вопросы ТОЛЬКО на основе предоставленных материалов. " +
-  "Если ответ есть — дай краткий ответ и укажи название материала в скобках. " +
-  "Если не найден — скажи что не нашёл. Отвечай на русском, кратко, 2-4 предложения."
-
-const CLAUDE_MODEL = "claude-sonnet-4-20250514"
-
 export default function PublicAskPage() {
   const params = useParams()
   const code = (params?.code as string) || ""
@@ -94,51 +86,19 @@ export default function PublicAskPage() {
     setLoading(true)
 
     try {
-      // 1. Context (also returns the API key for the browser-side Claude call)
-      const ctxRes = await fetch("/api/public/knowledge-chat/context", {
+      // Ответ генерирует сервер (ключ Claude браузеру не передаётся)
+      const res = await fetch("/api/public/knowledge-chat/answer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
+        body: JSON.stringify({ token, question }),
       })
-      const ctxData = await ctxRes.json()
-      if (!ctxRes.ok) throw new Error(ctxData.error || "Ошибка загрузки контекста")
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "AI API вернул ошибку")
 
-      const { context, materialsList, claudeKey } = ctxData as {
-        context: string
+      const { answer, materialsList } = data as {
+        answer: string
         materialsList: MaterialRef[]
-        claudeKey: string | null
       }
-
-      if (!claudeKey) throw new Error("AI временно недоступен")
-
-      // 2. Call Claude directly from the browser (bypasses RU-IP block)
-      const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": claudeKey,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
-        body: JSON.stringify({
-          model: CLAUDE_MODEL,
-          max_tokens: 1024,
-          system: SYSTEM_PROMPT,
-          messages: [
-            { role: "user", content: `Материалы компании:\n${context}\n\nВопрос: ${question}` },
-          ],
-        }),
-      })
-
-      if (!claudeRes.ok) {
-        const body = await claudeRes.text().catch(() => "")
-        console.error("[public-ask] Claude error", claudeRes.status, body)
-        throw new Error("AI API вернул ошибку")
-      }
-      const data = await claudeRes.json() as {
-        content?: { type: string; text?: string }[]
-      }
-      const answer = data.content?.find((c) => c.type === "text")?.text?.trim() ?? ""
       if (!answer) throw new Error("Пустой ответ")
 
       const lowered = answer.toLowerCase()
