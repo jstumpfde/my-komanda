@@ -63,6 +63,9 @@ const PUBLIC_PREFIXES = [
   // Webhook кандидатского TG-бота: запросы приходят от серверов Telegram (без
   // сессии), роут сам проверяет обязательный X-Telegram-Bot-Api-Secret-Token.
   "/api/telegram/candidate-bot/webhook",
+  // Webhook Авито: приходит от серверов Авито (без сессии), роут сам проверяет
+  // AVITO_WEBHOOK_SECRET. Без этого Авито-серверы получали бы 302 на /login.
+  "/api/webhooks/avito",
 ]
 
 function isPublic(pathname: string): boolean {

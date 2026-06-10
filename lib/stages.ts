@@ -241,7 +241,7 @@ export const PLATFORM_STAGES: Record<StageSlug, StageDefinition> = {
     defaultColor: "green",
     defaultHhAction: null,
     isSystem: false,
-    isTerminal: false,
+    isTerminal: true,
     sortOrder: 13,
     description: "Кандидат принят на работу",
   },
