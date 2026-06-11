@@ -763,17 +763,22 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
               {onNavButtonChange && (
                 <div className="shrink-0 border-t border-border px-2.5 py-2.5 space-y-2">
                   <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider text-center">Кнопка «Далее»</p>
-                  {/* Текст кнопки */}
-                  <Input
-                    value={localNavText}
-                    onChange={(e) => setLocalNavText(e.target.value)}
-                    onBlur={() => onNavButtonChange(navButtonColor ?? null, localNavText || null)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") e.currentTarget.blur()
-                    }}
-                    placeholder="Далее"
-                    className="h-7 text-xs px-2 text-center"
-                  />
+                  {/* ОДНА кнопка: текст редактируется прямо в ней (input, стилизованный
+                      под кнопку кандидата), цвет — палитрой ниже. Отдельного превью нет. */}
+                  <div className="relative">
+                    <Input
+                      value={localNavText}
+                      onChange={(e) => setLocalNavText(e.target.value)}
+                      onBlur={() => onNavButtonChange(navButtonColor ?? null, localNavText || null)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.currentTarget.blur()
+                      }}
+                      placeholder="Далее"
+                      className="h-9 text-sm font-medium text-center text-white placeholder:text-white/70 border-0 rounded-lg pr-7 focus-visible:ring-2 focus-visible:ring-offset-1"
+                      style={{ backgroundColor: navButtonColor || "var(--primary)" }}
+                    />
+                    <svg className="w-3.5 h-3.5 text-white absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                  </div>
                   {/* Цветовая палитра — центрированная */}
                   <div className="flex items-center justify-center gap-1.5">
                     <button
@@ -800,16 +805,6 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
                         />
                       )
                     })}
-                  </div>
-                  {/* Мини-превью кнопки */}
-                  <div className="flex justify-center">
-                    <span
-                      className="inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-medium text-white"
-                      style={{ backgroundColor: navButtonColor || "var(--primary)" }}
-                    >
-                      {localNavText || "Далее"}
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                    </span>
                   </div>
                   {/* Тумблер системной панели навигации */}
                   {onShowSystemNavChange && (
