@@ -63,3 +63,6 @@ test-results/
 # рабочие скриншоты/пробы (мусор)
 *.jpeg
 sheet-probe.json
+
+# Worktree-песочницы фоновых агентов — не коммитим
+.claude/worktrees/
