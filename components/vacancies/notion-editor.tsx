@@ -335,6 +335,14 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
 
   useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current) }, [])
 
+  // Закрытие предпросмотра по Esc
+  useEffect(() => {
+    if (!previewMode) return
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setPreviewMode(false) }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  }, [previewMode])
+
   // Expose imperative handle for parent toolbar
   useImperativeHandle(ref, () => ({
     save: saveNow,
@@ -476,7 +484,10 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
     const pct = ((previewIdx + 1) / demo.lessons.length) * 100
     return (
       <div className="max-w-5xl mx-auto py-6 px-6 sm:px-8">
-        <div className="flex items-center justify-end mb-4">
+        <div className="flex items-center justify-between mb-4">
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => setPreviewMode(false)}>
+            <X className="w-4 h-4" />Закрыть предпросмотр
+          </Button>
           <Badge variant="outline" className="text-[10px]">Предпросмотр</Badge>
         </div>
         <div className="flex items-center gap-3 mb-5">

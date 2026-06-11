@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import {ChevronLeft, ChevronRight, Loader2, FileText} from "lucide-react"
+import {ChevronLeft, ChevronRight, Loader2, FileText, X} from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Block, Lesson } from "@/lib/course-types"
 
@@ -148,6 +148,13 @@ export default function PreviewPage() {
       })
   }, [id])
 
+  // Закрытие по Esc (страница открыта в отдельной вкладке)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") window.close() }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  }, [])
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen gap-2 text-muted-foreground">
@@ -173,8 +180,8 @@ export default function PreviewPage() {
       {/* Header */}
       <div className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b border-border px-6 py-3">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
-          <Button variant="ghost" size="sm" className="gap-1.5 text-xs shrink-0" onClick={() => window.close()}>
-            <ChevronLeft className="w-3.5 h-3.5" />Закрыть
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs shrink-0" onClick={() => window.close()}>
+            <X className="w-4 h-4" />Закрыть предпросмотр
           </Button>
           <span className="text-sm font-medium truncate max-w-md text-center flex-1">{templateName}</span>
           <Badge variant="outline" className="text-[10px] shrink-0">Предпросмотр</Badge>

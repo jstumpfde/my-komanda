@@ -174,6 +174,14 @@ export function DemoCard({ demo, onBack, onUpdate }: DemoCardProps) {
   // Cleanup debounce on unmount
   useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current) }, [])
 
+  // Закрытие предпросмотра по Esc
+  useEffect(() => {
+    if (!previewMode) return
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setPreviewMode(false) }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  }, [previewMode])
+
   const updateLesson = (lessonId: string, patch: Partial<Lesson>) => {
     save(demoRef.current.lessons.map((l) => l.id === lessonId ? { ...l, ...patch } : l))
   }
@@ -290,8 +298,8 @@ export function DemoCard({ demo, onBack, onUpdate }: DemoCardProps) {
       <div className="max-w-2xl mx-auto">
         {/* Top bar */}
         <div className="flex items-center justify-between mb-3">
-          <Button variant="ghost" size="sm" onClick={() => setPreviewMode(false)} className="gap-1.5 text-xs">
-            <X className="w-3.5 h-3.5" />Закрыть превью
+          <Button variant="outline" size="sm" onClick={() => setPreviewMode(false)} className="gap-1.5 text-xs h-8">
+            <X className="w-4 h-4" />Закрыть предпросмотр
           </Button>
           <Badge variant="outline" className="text-[10px]">Предпросмотр для кандидата</Badge>
         </div>
