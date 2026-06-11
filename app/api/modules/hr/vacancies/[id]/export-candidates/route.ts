@@ -7,6 +7,7 @@ import { candidates, vacancies, demos, hhResponses } from "@/lib/db/schema"
 import { requireCompany, apiError } from "@/lib/api-helpers"
 import { deriveCandidateName } from "@/lib/candidate-name"
 import { logAudit, ipFromRequest } from "@/lib/audit/log"
+import { DEFAULT_TEST_INVITE_TEXT } from "@/lib/messaging/test-invite"
 
 // GET  /api/modules/hr/vacancies/[id]/export-candidates
 //   — выгружает ВСЕХ кандидатов вакансии со ВСЕМИ полями (обратная совместимость,
@@ -215,6 +216,7 @@ interface RowCtx {
   progress: string
   raw: HhRawData | null
   testLink: string
+  personalMessage: string
 }
 
 // Каталог колонок — единый источник правды для GET, POST и клиентского диалога.
@@ -252,6 +254,8 @@ const COLUMN_DEFS: Array<{
   { key: "telegramLinked",   header: "Telegram привязан",             width: 18, value: (c) => c.telegramChatId ? "да" : "нет" },
   // Персональная ссылка на тест
   { key: "testLink",         header: "Ссылка на тест",                width: 44, value: (_c, x) => x.testLink },
+  // Готовое персональное сообщение (имя + шаблон вакансии + ссылка) — копировать и отправить вручную
+  { key: "personalMessage",  header: "Персональное сообщение",        width: 70, value: (_c, x) => x.personalMessage },
 ]
 const ALL_FIELD_KEYS = COLUMN_DEFS.map(d => d.key)
 // Клиентский каталог полей — в lib/candidates-export-fields.ts (route-файлам
@@ -265,6 +269,18 @@ async function buildXlsx(
   fields: string[],
 ): Promise<{ response: Response; count: number }> {
   const rows = await db.select().from(candidates).where(where).orderBy(desc(candidates.createdAt))
+
+  // Шаблон приглашения на тест (для колонки «Персональное сообщение»): берём
+  // testInviteMessage из боевого теста вакансии, иначе — дефолт.
+  const [testDemoRow] = await db
+    .select({ postDemoSettings: demos.postDemoSettings })
+    .from(demos)
+    .where(and(eq(demos.vacancyId, vacancyId), eq(demos.kind, "test")))
+    .orderBy(desc(demos.updatedAt))
+    .limit(1)
+  const inviteTpl =
+    (testDemoRow?.postDemoSettings as { testInviteMessage?: string } | null)?.testInviteMessage?.trim()
+    || DEFAULT_TEST_INVITE_TEXT
 
   // Структура демо для расчёта прогресса по страницам (total = lessons + 2).
   let demoTotalPages = 0
@@ -351,6 +367,13 @@ async function buildXlsx(
     // token к этому моменту гарантированно заполнен (дозаполнили выше).
     const testSlug = c.shortId ?? c.token
     const testLink = testSlug ? `https://company24.pro/test/${testSlug}` : ""
+    // Готовое сообщение: имя кандидата + шаблон + ссылка (плейсхолдеры как в кроне).
+    const firstName = (deriveCandidateName(c.name, c.anketaAnswers, hh?.name ?? null) || "").split(/\s+/)[0] || ""
+    const personalMessage = inviteTpl
+      .replaceAll("{{name}}", firstName)
+      .replaceAll("{{vacancy}}", vacTitle || "")
+      .replaceAll("{{test_link}}", testLink)
+      .replaceAll("{{company}}", "")
     const ctx: RowCtx = {
       hhName: hh?.name ?? null,
       hhResumeUrl: hh?.resumeUrl ?? null,
@@ -359,6 +382,7 @@ async function buildXlsx(
       progress: progressOf(c.demoProgressJson),
       raw: hh?.raw ?? null,
       testLink,
+      personalMessage,
     }
     const rec: Record<string, string | number> = {}
     for (const col of cols) rec[col.header] = col.value(c, ctx)

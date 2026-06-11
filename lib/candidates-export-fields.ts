@@ -27,6 +27,8 @@ export const CANDIDATE_EXPORT_FIELDS: Array<{ key: string; label: string }> = [
   { key: "telegramLinked",   label: "Telegram привязан" },
   // Ссылка на тест
   { key: "testLink",         label: "Ссылка на тест" },
+  // Готовое персональное сообщение (имя + шаблон + ссылка) — копировать и отправить вручную
+  { key: "personalMessage",  label: "Персональное сообщение" },
 ]
 
 export const CANDIDATE_EXPORT_FIELD_KEYS = CANDIDATE_EXPORT_FIELDS.map(f => f.key)
