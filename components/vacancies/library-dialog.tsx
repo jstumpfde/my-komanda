@@ -11,7 +11,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import {BookOpen, Puzzle, Download, Clock, Plus, FolderOpen} from "lucide-react"
+import {BookOpen, Puzzle, Download, Clock, Plus, FolderOpen, FileText, ListChecks} from "lucide-react"
 import { toast } from "sonner"
 import type { Lesson } from "@/lib/course-types"
 import { createBlock } from "@/lib/course-types"
@@ -166,9 +166,27 @@ const MODULE_TEMPLATES: ModuleTemplate[] = [
   { emoji: "➡️", title: "Что дальше (финальный)", category: "О компании", variables: [], lesson: mkLesson("m7","➡️","Что дальше","Спасибо, что прошли демонстрацию! 🎉\n\nСледующие шаги:\n1. Мы проверим ваши ответы\n2. HR-менеджер свяжется с вами\n3. Пригласим на собеседование\n\nДо скорой встречи!") },
 ]
 
-const MODULE_CATEGORIES = ["Все", "О компании", "Доход", "Команда", "Задания", "Мои"]
-
 /* ═══ COMPONENT ═══ */
+
+// Сохранённый материал из библиотеки (demo_templates или questionnaire_templates).
+// lessons уже в формате Lesson[]: для анкет вызывающая сторона конвертирует
+// questions → один урок-задание через questionsToSections.
+export interface LibrarySavedItem {
+  id?: string
+  title: string
+  category?: string
+  lessons: Lesson[]
+}
+
+// Разделы библиотеки в диалоге-пикере (корзину не показываем).
+type DialogSection = "anketa" | "demo" | "test" | "block"
+
+const DIALOG_SECTIONS: { key: DialogSection; label: string; icon: typeof BookOpen }[] = [
+  { key: "anketa", label: "Анкеты", icon: FileText },
+  { key: "demo", label: "Демонстрации", icon: BookOpen },
+  { key: "test", label: "Тесты", icon: ListChecks },
+  { key: "block", label: "Блоки", icon: Puzzle },
+]
 
 interface LibraryDialogProps {
   open: boolean
@@ -176,17 +194,20 @@ interface LibraryDialogProps {
   currentLessons: Lesson[]
   onApplyTemplate: (lessons: Lesson[]) => void
   onInsertModule: (lesson: Lesson) => void
-  savedModules: Lesson[]
-  savedTemplates: { id?: string; title: string; category: string; lessons: Lesson[] }[]
+  // Сохранённые материалы пользователя, разложенные по разделам. Анкеты уже
+  // конвертированы в Lesson[] вызывающей стороной (notion-editor).
+  savedAnketas: LibrarySavedItem[]
+  savedDemos: LibrarySavedItem[]
+  savedTests: LibrarySavedItem[]
+  savedBlocks: LibrarySavedItem[]
 }
 
 export function LibraryDialog({
   open, onOpenChange, currentLessons,
   onApplyTemplate, onInsertModule,
-  savedModules, savedTemplates,
+  savedAnketas, savedDemos, savedTests, savedBlocks,
 }: LibraryDialogProps) {
-  const [tab, setTab] = useState<"templates" | "modules">("templates")
-  const [moduleFilter, setModuleFilter] = useState("Все")
+  const [section, setSection] = useState<DialogSection>("anketa")
   const [confirmAction, setConfirmAction] = useState<{ type: "replace" | "append"; lessons: Lesson[] } | null>(null)
 
   const handleUseTemplate = (lessons: Lesson[]) => {
@@ -214,18 +235,35 @@ export function LibraryDialog({
     toast.success("Уроки добавлены")
   }
 
+  // Встроенные блоки (модули) вставляются как один урок в конец.
   const handleInsertModule = (lesson: Lesson) => {
     const ts = Date.now()
     onInsertModule({ ...lesson, id: `${lesson.id}-${ts}`, blocks: lesson.blocks.map((b) => ({ ...b, id: `${b.id}-${ts}` })) })
     onOpenChange(false)
-    toast.success("Модуль вставлен")
+    toast.success("Блок вставлен")
   }
 
-  const filteredModules = moduleFilter === "Все"
-    ? MODULE_TEMPLATES
-    : moduleFilter === "Мои"
-      ? []
-      : MODULE_TEMPLATES.filter((m) => m.category === moduleFilter)
+  // Карточка сохранённого материала с кнопкой «Использовать».
+  const renderSavedItems = (items: LibrarySavedItem[], emptyHint: string) => (
+    items.length === 0 ? (
+      <p className="text-xs text-muted-foreground/60 py-4 text-center">{emptyHint}</p>
+    ) : (
+      <div className="space-y-2">
+        {items.map((t, i) => (
+          <Card key={t.id ?? i} className="">
+            <CardContent className="p-3 flex items-center gap-3">
+              <FolderOpen className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{t.title}</p>
+                <p className="text-[10px] text-muted-foreground">{t.lessons.length} уроков{t.category ? ` · ${t.category}` : ""}</p>
+              </div>
+              <Button size="sm" variant="outline" className="text-xs h-7 shrink-0" onClick={() => handleUseTemplate(t.lessons)}>Использовать</Button>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    )
+  )
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -251,19 +289,35 @@ export function LibraryDialog({
         )}
 
         <div className="flex flex-1 overflow-hidden">
-          {/* Left — tabs */}
+          {/* Left — section tabs */}
           <div className="w-48 border-r border-border flex flex-col bg-muted/30">
-            <button onClick={() => setTab("templates")} className={cn("flex items-center gap-2 px-4 py-3 text-sm font-medium text-left transition-colors", tab === "templates" ? "bg-background text-foreground border-r-2 border-primary" : "text-muted-foreground hover:text-foreground")}>
-              <BookOpen className="w-4 h-4" />Шаблоны
-            </button>
-            <button onClick={() => setTab("modules")} className={cn("flex items-center gap-2 px-4 py-3 text-sm font-medium text-left transition-colors", tab === "modules" ? "bg-background text-foreground border-r-2 border-primary" : "text-muted-foreground hover:text-foreground")}>
-              <Puzzle className="w-4 h-4" />Модули
-            </button>
+            {DIALOG_SECTIONS.map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => setSection(key)}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-3 text-sm font-medium text-left transition-colors",
+                  section === key ? "bg-background text-foreground border-r-2 border-primary" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Icon className="w-4 h-4" />{label}
+              </button>
+            ))}
           </div>
 
           {/* Right — content */}
           <div className="flex-1 overflow-y-auto p-6">
-            {tab === "templates" ? (
+            {section === "anketa" && (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-semibold mb-1">Анкеты</h3>
+                  <p className="text-xs text-muted-foreground">Набор вопросов — добавится как урок-задание в демонстрацию</p>
+                </div>
+                {renderSavedItems(savedAnketas, "Пока пусто. Создайте анкету в Библиотеке (HR → Библиотека → Анкеты).")}
+              </div>
+            )}
+
+            {section === "demo" && (
               <div className="space-y-6">
                 <div>
                   <h3 className="text-sm font-semibold mb-1">Готовые шаблоны демонстраций</h3>
@@ -294,42 +348,32 @@ export function LibraryDialog({
                   ))}
                 </div>
 
-                {/* Saved templates */}
                 <div>
-                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Мои сохранённые шаблоны</h4>
-                  {savedTemplates.length === 0 ? (
-                    <p className="text-xs text-muted-foreground/60 py-4 text-center">Пока пусто. Сохраните демонстрацию как шаблон через кнопку 💾 в редакторе.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {savedTemplates.map((t, i) => (
-                        <Card key={i} className="">
-                          <CardContent className="p-3 flex items-center gap-3">
-                            <FolderOpen className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-                            <div className="flex-1"><p className="text-sm font-medium">{t.title}</p><p className="text-[10px] text-muted-foreground">{t.lessons.length} уроков · {t.category}</p></div>
-                            <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => handleUseTemplate(t.lessons)}>Использовать</Button>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  )}
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Мои демонстрации</h4>
+                  {renderSavedItems(savedDemos, "Пока пусто. Сохраните демонстрацию как шаблон через кнопку 💾 в редакторе.")}
                 </div>
               </div>
-            ) : (
+            )}
+
+            {section === "test" && (
               <div className="space-y-4">
                 <div>
-                  <h3 className="text-sm font-semibold mb-1">Модули</h3>
-                  <p className="text-xs text-muted-foreground">Отдельные уроки — вставьте в любое место демонстрации</p>
+                  <h3 className="text-sm font-semibold mb-1">Тесты</h3>
+                  <p className="text-xs text-muted-foreground">Тестовые задания — используйте как есть или дополните</p>
                 </div>
+                {renderSavedItems(savedTests, "Пока пусто. Сохраните материал как тест через кнопку 💾 в редакторе.")}
+              </div>
+            )}
 
-                {/* Filter */}
-                <div className="flex gap-1.5 flex-wrap">
-                  {MODULE_CATEGORIES.map((cat) => (
-                    <Button key={cat} variant={moduleFilter === cat ? "default" : "outline"} size="sm" className="text-xs h-7" onClick={() => setModuleFilter(cat)}>{cat}</Button>
-                  ))}
+            {section === "block" && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-sm font-semibold mb-1">Блоки</h3>
+                  <p className="text-xs text-muted-foreground">Переиспользуемые блоки — вставьте в любое место демонстрации</p>
                 </div>
 
                 <div className="space-y-2">
-                  {filteredModules.map((mod, i) => (
+                  {MODULE_TEMPLATES.map((mod, i) => (
                     <Card key={i} className="">
                       <CardContent className="p-3 flex items-center gap-3">
                         <span className="text-2xl flex-shrink-0">{mod.emoji}</span>
@@ -352,24 +396,9 @@ export function LibraryDialog({
                   ))}
                 </div>
 
-                {/* Saved modules */}
                 <div>
-                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Мои модули</h4>
-                  {savedModules.length === 0 ? (
-                    <p className="text-xs text-muted-foreground/60 py-4 text-center">Пока пусто. Сохраните урок как модуль через ··· → 💾 Сохранить в библиотеку.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {savedModules.map((m, i) => (
-                        <Card key={i} className="">
-                          <CardContent className="p-3 flex items-center gap-3">
-                            <span className="text-xl">{m.emoji}</span>
-                            <div className="flex-1"><p className="text-sm font-medium">{m.title}</p></div>
-                            <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => handleInsertModule(m)}>Вставить</Button>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  )}
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Мои блоки</h4>
+                  {renderSavedItems(savedBlocks, "Пока пусто. Сохраните материал как блок через кнопку 💾 в редакторе.")}
                 </div>
               </div>
             )}

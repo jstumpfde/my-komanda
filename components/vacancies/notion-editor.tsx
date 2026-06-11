@@ -33,6 +33,8 @@ import {BLOCK_TYPE_META, createBlock} from "@/lib/course-types"
 import { StoriesPlayer } from "@/components/vacancies/stories-player"
 import { resolveOptionPoints } from "@/lib/score-test-objective"
 import { TEMPLATE_VARIABLES } from "@/lib/templates/demo-templates"
+import { getMaterialType } from "@/lib/demo-types"
+import { questionsToSections } from "@/lib/library/convert"
 import { LibraryDialog } from "./library-dialog"
 
 // ─── Variable highlighting ────────────────────────────────────────────────
@@ -145,6 +147,13 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
   const [saveDest, setSaveDest] = useState<"demo" | "block" | "test">("demo")
   // id — uuid записи в БД (undefined для шаблонов из старого localStorage-кэша)
   const [savedTemplates, setSavedTemplates] = useState<{ id?: string; title: string; category: string; lessons: Lesson[] }[]>([])
+  // Материалы библиотеки, разложенные по разделам для диалога-пикера.
+  // demo/test/block приходят из /api/demo-templates (разбивка по getMaterialType),
+  // анкеты — из /api/questionnaire-templates (конвертируются в Lesson[]).
+  const [libDemos, setLibDemos] = useState<{ id?: string; title: string; category: string; lessons: Lesson[] }[]>([])
+  const [libTests, setLibTests] = useState<{ id?: string; title: string; category: string; lessons: Lesson[] }[]>([])
+  const [libBlocks, setLibBlocks] = useState<{ id?: string; title: string; category: string; lessons: Lesson[] }[]>([])
+  const [libAnketas, setLibAnketas] = useState<{ id?: string; title: string; category: string; lessons: Lesson[] }[]>([])
   // #26: новая UX-модель диалога — radio "Новый" / "Заменить" + dropdown +
   // подтверждение перед заменой. Стейт описывает текущий выбор.
   const [saveMode, setSaveMode] = useState<"new" | "replace">("new")
@@ -165,44 +174,22 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
     } catch {}
 
     // Загружаем из API — источник правды
-    fetch("/api/demo-templates")
-      .then((r) => r.json())
-      .then((data) => {
-        const rows: Array<{ id: string; name: string; niche: string; length: string; sections: Lesson[]; tenantId: string | null; isSystem: boolean }> = Array.isArray(data) ? data : (data?.data ?? [])
-        // Фильтруем только tenant-шаблоны (не системные) и разделяем templates vs modules
-        const tenantRows = rows.filter((r) => !r.isSystem)
-        const templates = tenantRows
-          .filter((r) => r.length !== "module")
-          .map((r) => ({ id: r.id, title: r.name, category: r.niche || "Общее", lessons: Array.isArray(r.sections) ? r.sections : [] }))
-        const modules = tenantRows
-          .filter((r) => r.length === "module")
-          .map((r) => {
-            // Модуль = один урок; берём первый элемент sections или создаём заглушку
-            const lesson = Array.isArray(r.sections) && r.sections.length > 0
-              ? r.sections[0]
-              : { id: r.id, emoji: "", title: r.name, blocks: [] }
-            return { ...lesson, _dbId: r.id } as Lesson & { _dbId?: string }
-          })
-        setSavedTemplates(templates)
-        setSavedModules(modules)
-        // Обновляем localStorage-кэш
-        try {
-          localStorage.setItem("hireflow_demo_templates", JSON.stringify(templates))
-          localStorage.setItem("hireflow_demo_modules", JSON.stringify(modules))
-        } catch {}
-      })
-      .catch(() => {
-        // При ошибке сети остаётся localStorage-кэш, загруженный выше
-      })
+    loadLibrary()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Рефетч шаблонов и модулей из API (вызывается после POST/PATCH/DELETE)
-  const refetchTemplates = useCallback(async () => {
+  // Загрузка библиотеки из обоих API: demo_templates + questionnaire_templates.
+  // Раскладывает материалы по разделам (демо/тест/блок/анкета) для диалога-пикера
+  // и поддерживает legacy savedTemplates/savedModules.
+  const loadLibrary = useCallback(async () => {
     try {
       const r = await fetch("/api/demo-templates")
       const data = await r.json()
-      const rows: Array<{ id: string; name: string; niche: string; length: string; sections: Lesson[]; tenantId: string | null; isSystem: boolean }> = Array.isArray(data) ? data : (data?.data ?? [])
-      const tenantRows = rows.filter((r) => !r.isSystem)
+      const rows: Array<{ id: string; name: string; niche: string; length: string; sections: Lesson[]; deletedAt?: string | null; tenantId: string | null; isSystem: boolean }> = Array.isArray(data) ? data : (data?.data ?? [])
+      // Только активные tenant-материалы (без корзины и без системных).
+      const tenantRows = rows.filter((r) => !r.isSystem && !r.deletedAt)
+
+      // legacy: savedTemplates (всё кроме module) + savedModules (module).
       const templates = tenantRows
         .filter((r) => r.length !== "module")
         .map((r) => ({ id: r.id, title: r.name, category: r.niche || "Общее", lessons: Array.isArray(r.sections) ? r.sections : [] }))
@@ -216,14 +203,56 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
         })
       setSavedTemplates(templates)
       setSavedModules(modules)
+
+      // Новая раскладка по разделам диалога. Material type выводится из length;
+      // length==="module" вливаем в «Блоки» (исторические модули — те же блоки).
+      const demos: typeof libDemos = []
+      const tests: typeof libTests = []
+      const blocks: typeof libBlocks = []
+      for (const row of tenantRows) {
+        const item = { id: row.id, title: row.name, category: row.niche || "Общее", lessons: Array.isArray(row.sections) ? row.sections : [] }
+        if (row.length === "module") { blocks.push(item); continue }
+        const mt = getMaterialType(row.length)
+        if (mt === "test") tests.push(item)
+        else if (mt === "block") blocks.push(item)
+        else demos.push(item)
+      }
+      setLibDemos(demos)
+      setLibTests(tests)
+      setLibBlocks(blocks)
+
       try {
         localStorage.setItem("hireflow_demo_templates", JSON.stringify(templates))
         localStorage.setItem("hireflow_demo_modules", JSON.stringify(modules))
       } catch {}
     } catch {
-      // Не обрабатываем — пользователь увидит актуальные данные при следующем открытии
+      // При ошибке сети остаётся localStorage-кэш / предыдущее состояние
+    }
+
+    // Анкеты — отдельный источник. Конвертируем questions → урок-задание.
+    try {
+      const r = await fetch("/api/questionnaire-templates")
+      const data = await r.json()
+      const rows: Array<{ id: string; name: string; questions: import("@/lib/course-types").Question[]; deletedAt?: string | null; isSystem: boolean }> = Array.isArray(data) ? data : (data?.data ?? [])
+      const anketas = rows
+        .filter((r) => !r.isSystem && !r.deletedAt)
+        .map((r) => ({
+          id: r.id,
+          title: r.name,
+          category: "Анкета",
+          lessons: questionsToSections(Array.isArray(r.questions) ? r.questions : [], r.name),
+        }))
+      setLibAnketas(anketas)
+    } catch {
+      // анкеты недоступны — раздел будет пуст
     }
   }, [])
+
+  // Рефетч шаблонов и модулей из API (вызывается после POST/PATCH/DELETE).
+  // Делегирует loadLibrary — одна точка загрузки всех разделов.
+  const refetchTemplates = useCallback(async () => {
+    await loadLibrary()
+  }, [loadLibrary])
 
   const persistTemplates = useCallback((items: { id?: string; title: string; category: string; lessons: Lesson[] }[]) => {
     setSavedTemplates(items)
@@ -810,8 +839,10 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
         currentLessons={demo.lessons}
         onApplyTemplate={(lessons) => { save(lessons); if (lessons[0]) setActiveLessonId(lessons[0].id) }}
         onInsertModule={(lesson) => { save([...demo.lessons, lesson]); setActiveLessonId(lesson.id) }}
-        savedModules={savedModules}
-        savedTemplates={savedTemplates}
+        savedAnketas={libAnketas}
+        savedDemos={libDemos}
+        savedTests={libTests}
+        savedBlocks={libBlocks}
       />
 
       {/* #26: Save-to-library диалог. Два режима: «Сохранить как новый» /
