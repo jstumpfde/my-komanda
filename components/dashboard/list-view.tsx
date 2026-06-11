@@ -296,7 +296,15 @@ export function ListView({
   if (showSource) cols.push("48px")                     // Источник — фикс (значки "hh"/"av" короткие)
   if (showActions) cols.push("80px")                    // Действия — фикс
 
-  const gridStyle = { gridTemplateColumns: cols.join(" ") }
+  // Минимальная ширина таблицы = сумма минимумов колонок (px из фикс-ширин и
+  // из minmax(Npx, …)). Нужна, чтобы при узком экране сетка ПЕРЕПОЛНЯЛА контейнер
+  // и включался горизонтальный скролл (контейнер overflow-x-auto), а не обрезалась.
+  // На широком экране сетка тянется по fr (minWidth — только нижняя граница).
+  const minTableWidth = cols.reduce((sum, c) => {
+    const m = c.match(/minmax\(\s*(\d+)px/) ?? c.match(/^(\d+)px$/)
+    return sum + (m ? parseInt(m[1], 10) : 0)
+  }, 0) + 16 // запас на gap/паддинги
+  const gridStyle = { gridTemplateColumns: cols.join(" "), minWidth: `${minTableWidth}px` }
 
   // ─── Selection helpers ──────────────────────────────────────────────────
   const visibleIds = useMemo(() => allCandidates.map((c) => c.id), [allCandidates])
@@ -346,7 +354,7 @@ export function ListView({
   }
 
   return (
-    <div className="rounded-xl border border-border overflow-hidden bg-card">
+    <div className="rounded-xl border border-border overflow-x-auto bg-card">
       {/* Table Header */}
       <div
         className="grid gap-3 pl-1 pr-4 py-2.5 bg-muted/60 border-b border-border text-[13px] font-medium text-muted-foreground tracking-normal items-center"
