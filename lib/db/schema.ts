@@ -1201,6 +1201,10 @@ export interface PostDemoSettings {
   navButtonColor?: string
   // Текст кнопки «Далее» у кандидата. undefined/'' → «Далее».
   navButtonText?: string
+  // Системная нижняя панель «Назад/Завершить» у кандидата.
+  // true = показывать всегда; false = скрыть всегда;
+  // undefined (АВТО) = показывать только если уроков > 1.
+  showSystemNav?: boolean
 }
 
 export interface AnketaAutoReplySettings {

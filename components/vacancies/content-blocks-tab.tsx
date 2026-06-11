@@ -366,6 +366,8 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
             navButtonColor={typeof selectedBlock.postDemoSettings?.navButtonColor === "string" ? selectedBlock.postDemoSettings.navButtonColor : undefined}
             navButtonText={typeof selectedBlock.postDemoSettings?.navButtonText === "string" ? selectedBlock.postDemoSettings.navButtonText : undefined}
             onNavButtonChange={(color, text) => saveSettings(selectedBlock.id, { navButtonColor: color, navButtonText: text })}
+            showSystemNav={typeof selectedBlock.postDemoSettings?.showSystemNav === "boolean" ? selectedBlock.postDemoSettings.showSystemNav : undefined}
+            onShowSystemNavChange={(value) => saveSettings(selectedBlock.id, { showSystemNav: value })}
           />
         ) : (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">

@@ -92,6 +92,8 @@ interface NotionEditorProps {
   navButtonColor?: string
   navButtonText?: string
   onNavButtonChange?: (color: string | null, text: string | null) => void
+  showSystemNav?: boolean
+  onShowSystemNavChange?: (value: boolean) => void
 }
 
 const NAV_BUTTON_PRESET_COLORS = [
@@ -120,7 +122,7 @@ const SLASH_ITEMS = [
 
 // ─── Main component ────────────────────────────────────────────────────────
 
-export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(function NotionEditorInner({ demo, onBack, onUpdate, onSaveStatusChange, hideToolbar = false, showSidebar = true, vacancyId, onOpenLibrary, navButtonColor, navButtonText, onNavButtonChange }, ref) {
+export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(function NotionEditorInner({ demo, onBack, onUpdate, onSaveStatusChange, hideToolbar = false, showSidebar = true, vacancyId, onOpenLibrary, navButtonColor, navButtonText, onNavButtonChange, showSystemNav, onShowSystemNavChange }, ref) {
   const [activeLessonId, setActiveLessonId] = useState(demo.lessons[0]?.id || "")
   const [previewMode, setPreviewMode] = useState(false)
   const [previewIdx, setPreviewIdx] = useState(0)
@@ -494,24 +496,30 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
             ))}
           </div>
         </div>
-        <div className="flex items-center justify-between mt-5">
-          <Button variant="outline" disabled={previewIdx === 0} onClick={() => setPreviewIdx(previewIdx - 1)}>
-            <ChevronLeft className="w-4 h-4 mr-1" />Назад
-          </Button>
-          {previewIdx < demo.lessons.length - 1 ? (
-            <Button
-              onClick={() => setPreviewIdx(previewIdx + 1)}
-              style={navButtonColor ? { backgroundColor: navButtonColor, borderColor: navButtonColor } : undefined}
-            >
-              Далее<ChevronRight className="w-4 h-4 ml-1" />
-            </Button>
-          ) : (
-            <Button
-              onClick={() => setPreviewMode(false)}
-              style={navButtonColor ? { backgroundColor: navButtonColor, borderColor: navButtonColor } : undefined}
-            >Завершить ✓</Button>
-          )}
-        </div>
+        {(() => {
+          const showNav = showSystemNav === true || (showSystemNav === undefined && demo.lessons.length > 1)
+          if (!showNav) return null
+          return (
+            <div className="flex items-center justify-between mt-5">
+              <Button variant="outline" disabled={previewIdx === 0} onClick={() => setPreviewIdx(previewIdx - 1)}>
+                <ChevronLeft className="w-4 h-4 mr-1" />Назад
+              </Button>
+              {previewIdx < demo.lessons.length - 1 ? (
+                <Button
+                  onClick={() => setPreviewIdx(previewIdx + 1)}
+                  style={navButtonColor ? { backgroundColor: navButtonColor, borderColor: navButtonColor } : undefined}
+                >
+                  Далее<ChevronRight className="w-4 h-4 ml-1" />
+                </Button>
+              ) : (
+                <Button
+                  onClick={() => setPreviewMode(false)}
+                  style={navButtonColor ? { backgroundColor: navButtonColor, borderColor: navButtonColor } : undefined}
+                >Завершить ✓</Button>
+              )}
+            </div>
+          )
+        })()}
       </div>
     )
   }
@@ -803,6 +811,24 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                     </span>
                   </div>
+                  {/* Тумблер системной панели навигации */}
+                  {onShowSystemNavChange && (
+                    <div className="border-t border-border pt-2 space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <Label htmlFor="show-system-nav" className="text-[10px] font-medium text-muted-foreground cursor-pointer leading-tight">
+                          Системная кнопка внизу
+                        </Label>
+                        <Switch
+                          id="show-system-nav"
+                          checked={showSystemNav ?? demo.lessons.length > 1}
+                          onCheckedChange={onShowSystemNavChange}
+                        />
+                      </div>
+                      <p className="text-[9px] text-muted-foreground/70 leading-tight">
+                        Нижняя панель «Назад/Завершить». При одной странице обычно не нужна.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
