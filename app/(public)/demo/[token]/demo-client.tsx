@@ -46,6 +46,10 @@ interface PostDemoSettings {
   }
   navButtonColor?: string
   navButtonText?: string
+  // Системная нижняя панель «Назад/Завершить».
+  // true = показывать всегда; false = скрыть всегда;
+  // undefined (АВТО) = показывать только если уроков > 1.
+  showSystemNav?: boolean
 }
 
 type FormFieldKey = "firstName" | "lastName" | "email" | "phone" | "telegram" | "birthDate" | "city"
@@ -1490,44 +1494,78 @@ export default function DemoPage() {
                 )}
               </div>
             ))}
+
+            {/* Панель навигации скрыта (showSystemNav=false) — финиш всё равно
+                обязателен: рендерим ОДНУ кнопку инлайн в потоке контента
+                (без «Назад» и sticky-бара), иначе кандидат не сможет завершить. */}
+            {!(data.postDemoSettings?.showSystemNav === true
+              || (data.postDemoSettings?.showSystemNav === undefined && totalLessons > 1)) && (
+              <div className="pt-4 flex justify-center">
+                <Button
+                  onClick={handleNext}
+                  disabled={hasRequiredUnanswered || saving || isAnyMediaUploading}
+                  title={isAnyMediaUploading ? "Дождитесь окончания загрузки видео" : undefined}
+                  className="h-12 text-base font-medium px-8"
+                  style={{ backgroundColor: navBtnColor, borderColor: navBtnColor }}
+                >
+                  {saving || isAnyMediaUploading ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : currentIndex === totalLessons - 1 ? (
+                    data.postDemoSettings?.navButtonText || "Завершить"
+                  ) : (
+                    <>
+                      {data.postDemoSettings?.navButtonText || "Далее"}
+                      <ChevronRight className="ml-1 h-5 w-5" />
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* Navigation buttons */}
-      <div className="sticky bottom-0 border-t bg-white/90 backdrop-blur-sm">
-        <div className="mx-auto max-w-2xl px-4 py-4 flex gap-3">
-          {currentIndex > 0 && (
-            <Button
-              onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
-              variant="outline"
-              className="h-12 text-base font-medium px-6"
-              disabled={saving}
-            >
-              <ChevronRight className="mr-1 h-5 w-5 rotate-180" />
-              Назад
-            </Button>
-          )}
-          <Button
-            onClick={handleNext}
-            disabled={hasRequiredUnanswered || saving || isAnyMediaUploading}
-            title={isAnyMediaUploading ? "Дождитесь окончания загрузки видео" : undefined}
-            className="flex-1 h-12 text-base font-medium"
-            style={{ backgroundColor: navBtnColor, borderColor: navBtnColor }}
-          >
-            {saving || isAnyMediaUploading ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : currentIndex === totalLessons - 1 ? (
-              "Завершить"
-            ) : (
-              <>
-                {data.postDemoSettings?.navButtonText || "Далее"}
-                <ChevronRight className="ml-1 h-5 w-5" />
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
+      {(() => {
+        const showNav = data.postDemoSettings?.showSystemNav === true
+          || (data.postDemoSettings?.showSystemNav === undefined && totalLessons > 1)
+        if (!showNav) return null
+        return (
+          <div className="sticky bottom-0 border-t bg-white/90 backdrop-blur-sm">
+            <div className="mx-auto max-w-2xl px-4 py-4 flex gap-3">
+              {currentIndex > 0 && (
+                <Button
+                  onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
+                  variant="outline"
+                  className="h-12 text-base font-medium px-6"
+                  disabled={saving}
+                >
+                  <ChevronRight className="mr-1 h-5 w-5 rotate-180" />
+                  Назад
+                </Button>
+              )}
+              <Button
+                onClick={handleNext}
+                disabled={hasRequiredUnanswered || saving || isAnyMediaUploading}
+                title={isAnyMediaUploading ? "Дождитесь окончания загрузки видео" : undefined}
+                className="flex-1 h-12 text-base font-medium"
+                style={{ backgroundColor: navBtnColor, borderColor: navBtnColor }}
+              >
+                {saving || isAnyMediaUploading ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : currentIndex === totalLessons - 1 ? (
+                  "Завершить"
+                ) : (
+                  <>
+                    {data.postDemoSettings?.navButtonText || "Далее"}
+                    <ChevronRight className="ml-1 h-5 w-5" />
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
