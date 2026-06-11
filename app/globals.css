@@ -222,6 +222,12 @@
 [data-slot="sidebar-wrapper"]:has([data-state="collapsed"]) {
   --sidebar-effective-width: var(--sidebar-width-icon);
 }
+/* На мобиле сайдбар — Sheet-оверлей, не занимает место в потоке. Поэтому
+   sticky/fixed-хедеры должны идти от left:0, а не от ширины десктоп-сайдбара
+   (иначе шапка съезжает на ~256px вправо и не перекрывает левую часть экрана). */
+@media (max-width: 767px) {
+  [data-slot="sidebar-wrapper"] { --sidebar-effective-width: 0px; }
+}
 
 
 @layer base {

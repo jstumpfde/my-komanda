@@ -227,7 +227,7 @@ export function FunnelView({ columns, settings, onOpenProfile, onAction }: Funne
           colorTo: col.colorTo,
         }))
         return (
-          <div className="rounded-xl border border-border overflow-hidden bg-card">
+          <div className="rounded-xl border border-border overflow-x-auto bg-card">
             <div
               className="h-1.5"
               style={{ background: `linear-gradient(90deg, ${col.colorFrom}, ${col.colorTo})` }}
@@ -242,7 +242,7 @@ export function FunnelView({ columns, settings, onOpenProfile, onAction }: Funne
             ) : (
               <>
                 {/* Table Header */}
-                <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1.5fr_auto] gap-4 px-4 py-2.5 bg-muted/60 border-b border-border text-[13px] font-medium text-muted-foreground tracking-normal">
+                <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1.5fr_auto] min-w-[760px] gap-4 px-4 py-2.5 bg-muted/60 border-b border-border text-[13px] font-medium text-muted-foreground tracking-normal">
                   <div>Кандидат</div>
                   {settings?.showScore !== false && <div>AI скор</div>}
                   {(settings?.showSalary || settings?.showSalaryFull) !== false && <div>Зарплата</div>}
@@ -260,7 +260,7 @@ export function FunnelView({ columns, settings, onOpenProfile, onAction }: Funne
                       <div
                         key={candidate.id}
                         className={cn(
-                          "grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1.5fr_auto] gap-4 px-4 items-center hover:bg-muted/40 transition-colors min-h-[56px] text-[14px]",
+                          "grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1.5fr_auto] min-w-[760px] gap-4 px-4 items-center hover:bg-muted/40 transition-colors min-h-[56px] text-[14px]",
                           i % 2 === 0 ? "" : "bg-muted/20"
                         )}
                       >

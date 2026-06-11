@@ -98,7 +98,7 @@ export function SidebarCustomizationSheet({ open, onOpenChange, visibility, onSa
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-[400px] overflow-y-auto">
+      <SheetContent className="w-full sm:w-[400px] overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Настройка меню</SheetTitle>
           <p className="text-sm text-muted-foreground">Выберите модули и пункты для отображения</p>

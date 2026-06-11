@@ -229,7 +229,7 @@ export function EventModal({
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent className="w-[440px] sm:max-w-[440px]">
+      <SheetContent className="w-full sm:w-[440px] sm:max-w-[440px]">
         <SheetHeader>
           <SheetTitle>{event ? "Редактировать событие" : "Новое событие"}</SheetTitle>
         </SheetHeader>
