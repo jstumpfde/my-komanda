@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback, Suspense } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Plus, Eye, Pencil, Trash2, Loader2, Copy, BookOpen, FileText, Search, Puzzle, ListChecks, RotateCcw, Trash, AlertTriangle, MoreHorizontal, Globe, Lock } from "lucide-react"
+import { Plus, Eye, Pencil, Trash2, Loader2, Copy, BookOpen, FileText, Search, Puzzle, ListChecks, RotateCcw, Trash, AlertTriangle, MoreHorizontal, Globe, Lock, FolderInput } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -111,6 +112,46 @@ function RowMenu({ children }: { children: React.ReactNode }) {
   )
 }
 
+// ─── Move to section (подменю «Переместить в раздел») ───────────────────────
+
+// Ключи разделов библиотеки (как в /api/library/move).
+type SectionKey = "demo" | "block" | "test" | "anketa"
+
+const SECTION_LABELS: Record<SectionKey, string> = {
+  anketa: "Анкеты",
+  demo: "Демонстрации",
+  test: "Тесты",
+  block: "Блоки",
+}
+
+const SECTION_ORDER: SectionKey[] = ["anketa", "demo", "test", "block"]
+
+// Подменю выбора целевого раздела. Текущий раздел — disabled.
+function MoveSubmenu({ current, onMove }: {
+  current: SectionKey
+  onMove: (to: SectionKey) => void
+}) {
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger className="gap-2 cursor-pointer">
+        <FolderInput className="h-3.5 w-3.5" />Переместить в раздел
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        {SECTION_ORDER.map((s) => (
+          <DropdownMenuItem
+            key={s}
+            disabled={s === current}
+            className="cursor-pointer"
+            onClick={() => { if (s !== current) onMove(s) }}
+          >
+            {SECTION_LABELS[s]}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  )
+}
+
 // ─── Empty state (переиспользуемый) ─────────────────────────────────────────
 
 function EmptyMaterialsState({ type, onCreate }: { type: CreatableType; onCreate: () => void }) {
@@ -132,10 +173,11 @@ function EmptyMaterialsState({ type, onCreate }: { type: CreatableType; onCreate
 
 // ─── Materials table (демо / блоки / тесты) ──────────────────────────────────
 
-function MaterialsTable({ rows, onDelete, onDuplicate }: {
+function MaterialsTable({ rows, onDelete, onDuplicate, onMove }: {
   rows: TemplateData[]
   onDelete: (id: string) => void
   onDuplicate: (t: TemplateData) => void
+  onMove: (t: TemplateData, to: SectionKey) => void
 }) {
   return (
     <DataTable>
@@ -185,6 +227,9 @@ function MaterialsTable({ rows, onDelete, onDuplicate }: {
                       <Copy className="h-3.5 w-3.5" />Дублировать
                     </DropdownMenuItem>
                     {!t.isSystem && (
+                      <MoveSubmenu current={getMaterialType(t.length) as SectionKey} onMove={(to) => onMove(t, to)} />
+                    )}
+                    {!t.isSystem && (
                       <>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onClick={() => onDelete(t.id)}>
@@ -205,7 +250,7 @@ function MaterialsTable({ rows, onDelete, onDuplicate }: {
 
 // ─── Questionnaires table (анкеты) ──────────────────────────────────────────
 
-function QuestionnairesTable({ rows, isPlatformAdmin, onEdit, onDuplicate, onDelete, onAssignAll, onUnassignAll }: {
+function QuestionnairesTable({ rows, isPlatformAdmin, onEdit, onDuplicate, onDelete, onAssignAll, onUnassignAll, onMove }: {
   rows: QuestionnaireTemplate[]
   isPlatformAdmin: boolean
   onEdit: (q: QuestionnaireTemplate) => void
@@ -213,6 +258,7 @@ function QuestionnairesTable({ rows, isPlatformAdmin, onEdit, onDuplicate, onDel
   onDelete: (id: string) => void
   onAssignAll: (q: QuestionnaireTemplate) => void
   onUnassignAll: (q: QuestionnaireTemplate) => void
+  onMove: (q: QuestionnaireTemplate, to: SectionKey) => void
 }) {
   return (
     <DataTable>
@@ -251,6 +297,9 @@ function QuestionnairesTable({ rows, isPlatformAdmin, onEdit, onDuplicate, onDel
                     <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => onDuplicate(q)}>
                       <Copy className="h-3.5 w-3.5" />Дублировать
                     </DropdownMenuItem>
+                    {!q.isSystem && (
+                      <MoveSubmenu current="anketa" onMove={(to) => onMove(q, to)} />
+                    )}
                     {isPlatformAdmin && (
                       <>
                         <DropdownMenuSeparator />
@@ -561,6 +610,35 @@ function LibraryContent() {
     }
   }
 
+  // ── Перемещение между разделами ───────────────────────────────────────────
+  const moveToSection = async (id: string, from: SectionKey, to: SectionKey) => {
+    if (from === to) return
+    try {
+      const res = await fetch("/api/library/move", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, from, to }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        toast.error(body.error || "Не удалось переместить")
+        return
+      }
+      toast.success(`Перемещено в раздел «${SECTION_LABELS[to]}»`)
+      // Источник и/или назначение могут лежать в любой из двух таблиц → рефетчим обе.
+      fetchTemplates()
+      fetchQuestionnaires()
+    } catch {
+      toast.error("Ошибка сети")
+    }
+  }
+
+  const moveMaterial = (t: TemplateData, to: SectionKey) =>
+    moveToSection(t.id, getMaterialType(t.length) as SectionKey, to)
+
+  const moveQuestionnaire = (q: QuestionnaireTemplate, to: SectionKey) =>
+    moveToSection(q.id, "anketa", to)
+
   // ── Анкеты ───────────────────────────────────────────────────────────────
   const editQuestionnaire = (q: QuestionnaireTemplate) => {
     router.push(`/hr/library/anketa-editor?id=${q.id}`)
@@ -653,7 +731,7 @@ function LibraryContent() {
               <EmptyMaterialsState type={kind} onCreate={() => startCreate(kind)} />
             )
           ) : (
-            <MaterialsTable rows={shown} onDelete={(id) => setDeleteId(id)} onDuplicate={handleDuplicate} />
+            <MaterialsTable rows={shown} onDelete={(id) => setDeleteId(id)} onDuplicate={handleDuplicate} onMove={moveMaterial} />
           )}
         </CardContent>
       </TableCard>
@@ -753,6 +831,7 @@ function LibraryContent() {
                         onDelete={(id) => setDeleteQId(id)}
                         onAssignAll={assignAll}
                         onUnassignAll={unassignAll}
+                        onMove={moveQuestionnaire}
                       />
                     )}
                   </CardContent>
