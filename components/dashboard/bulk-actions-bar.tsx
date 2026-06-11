@@ -33,6 +33,7 @@ import {
   ClipboardList,
   Trash2,
   GitCompare,
+  MessageSquare,
 } from "lucide-react"
 
 export type BulkAction =
@@ -43,10 +44,11 @@ export type BulkAction =
   | "toggle_favorite"
   | "restore"
   | "send_test"
-  | "compare"       // открыть страницу сравнения ответов
-  | "trash"         // в «Корзину» (мягкое удаление)
-  | "untrash"       // вернуть из «Корзины»
-  | "hard_delete"   // удалить навсегда
+  | "compare"         // открыть страницу сравнения ответов
+  | "trash"           // в «Корзину» (мягкое удаление)
+  | "untrash"         // вернуть из «Корзины»
+  | "hard_delete"     // удалить навсегда
+  | "hh_broadcast"    // полу-ручная рассылка через hh-чат
 
 interface StageOption {
   id: string
@@ -204,6 +206,19 @@ export function BulkActionsBar({ count, stages, onClear, onAction, allRejected =
           >
             {busy === "send_test" ? <Loader2 className="size-4 animate-spin" /> : <ClipboardList className="size-4" />}
             <span className="hidden md:inline">Отправить тест</span>
+          </Button>
+
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 px-2.5 gap-1.5 text-sm text-orange-600 border-orange-300 hover:bg-orange-500/10 hover:text-orange-700 dark:text-orange-300 dark:border-orange-700"
+            disabled={!!busy}
+            onClick={() => run("hh_broadcast")}
+            title="Полу-ручная рассылка через hh-чат"
+          >
+            {busy === "hh_broadcast" ? <Loader2 className="size-4 animate-spin" /> : <MessageSquare className="size-4" />}
+            <span className="hidden md:inline">Рассылка через hh</span>
           </Button>
 
           <Button
