@@ -220,9 +220,25 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
     )
   }
 
-  // Фильтруем для UI: только динамические блоки (kind='block:*')
-  // Легаси kind='demo'/'test' скрыты из конструктора — они управляются через dual-write
-  const uiBlocks = blocks.filter(b => b.kind.startsWith("block:"))
+  // Видимость блоков в конструкторе:
+  // - block:* — всегда видны (новый формат).
+  // - Легаси kind='demo'/'test' — боевые записи старого формата. 13 вакансий
+  //   живут ТОЛЬКО на них, поэтому прятать их нельзя (демо «исчезнет»).
+  //   Прячем легаси-строку только когда ею уже управляет dual-write —
+  //   т.е. существует block:* того же типа с включённым «Боевой».
+  const liveTestBlockExists = blocks.some(b => b.kind.startsWith("block:") && b.contentType === "test" && b.isLiveBattle)
+  const liveDemoBlockExists = blocks.some(b => b.kind.startsWith("block:") && b.contentType !== "test" && b.isLiveBattle)
+  const uiBlocks = blocks
+    .filter(b =>
+      b.kind.startsWith("block:")
+      || (b.kind === "test" && !liveTestBlockExists)
+      || (b.kind === "demo" && !liveDemoBlockExists)
+    )
+    .map(b =>
+      b.kind === "demo" ? { ...b, contentType: "presentation" as ContentBlock["contentType"], isLiveBattle: true }
+      : b.kind === "test" ? { ...b, contentType: "test" as ContentBlock["contentType"], isLiveBattle: true }
+      : b
+    )
 
   // Пустое состояние
   if (uiBlocks.length === 0) {
