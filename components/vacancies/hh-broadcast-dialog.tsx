@@ -111,9 +111,8 @@ export function HhBroadcastDialog({
 
   const handleOpenChange = useCallback(
     (o: boolean) => {
-      if (o && phase === "loading" && items.length === 0 && !loadError) {
-        void loadData()
-      }
+      // Загрузку делает useEffect ниже (на проп `open`) — здесь НЕ дублируем,
+      // иначе при некоторых версиях Radix два параллельных loadData (гонка).
       if (!o) {
         // Сброс при закрытии
         setPhase("loading")
@@ -121,7 +120,7 @@ export function HhBroadcastDialog({
       }
       onOpenChange(o)
     },
-    [phase, items.length, loadError, loadData, onOpenChange],
+    [onOpenChange],
   )
 
   // При открытии — загружаем. ВАЖНО: диалог открывается программно
@@ -310,7 +309,6 @@ export function HhBroadcastDialog({
                   "flex-1 gap-2",
                   current.hasNoChat && "opacity-50 cursor-not-allowed",
                 )}
-                disabled={current.hasNoChat}
                 disabled={current.hasNoChat || cooldown > 0}
                 onClick={() => void copyAndOpen()}
                 title={

@@ -227,7 +227,9 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
   //   Прячем легаси-строку только когда ею уже управляет dual-write —
   //   т.е. существует block:* того же типа с включённым «Боевой».
   const liveTestBlockExists = blocks.some(b => b.kind.startsWith("block:") && b.contentType === "test" && b.isLiveBattle)
-  const liveDemoBlockExists = blocks.some(b => b.kind.startsWith("block:") && b.contentType !== "test" && b.isLiveBattle)
+  // Только "presentation" синкается в kind='demo'. "task" синкается в kind='test',
+  // поэтому он НЕ должен скрывать legacy-демо (иначе демо пропадёт из конструктора).
+  const liveDemoBlockExists = blocks.some(b => b.kind.startsWith("block:") && b.contentType === "presentation" && b.isLiveBattle)
   const uiBlocks = blocks
     .filter(b =>
       b.kind.startsWith("block:")

@@ -513,7 +513,20 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
         </div>
         {(() => {
           const showNav = showSystemNav === true || (showSystemNav === undefined && demo.lessons.length > 1)
-          if (!showNav) return null
+          // Панель скрыта — но финиш-кнопка нужна (как у кандидата): рендерим одну
+          // инлайн-кнопку по центру, иначе из превью не пролистать/не закрыть.
+          if (!showNav) {
+            return (
+              <div className="flex justify-center mt-5">
+                <Button
+                  onClick={() => previewIdx < demo.lessons.length - 1 ? setPreviewIdx(previewIdx + 1) : setPreviewMode(false)}
+                  style={navButtonColor ? { backgroundColor: navButtonColor, borderColor: navButtonColor } : undefined}
+                >
+                  {localNavText || navButtonText || (previewIdx < demo.lessons.length - 1 ? "Далее" : "Завершить ✓")}
+                </Button>
+              </div>
+            )
+          }
           return (
             <div className="flex items-center justify-between mt-5">
               <Button variant="outline" disabled={previewIdx === 0} onClick={() => setPreviewIdx(previewIdx - 1)}>
