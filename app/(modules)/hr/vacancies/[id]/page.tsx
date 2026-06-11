@@ -58,6 +58,7 @@ import { OutboundSourcingTab } from "@/components/vacancies/outbound-sourcing-ta
 import { VacancyActionsMenuItems } from "@/components/vacancies/vacancy-actions-menu"
 import { ExportCandidatesDialog } from "@/components/vacancies/export-candidates-dialog"
 import { PermanentDeleteDialog } from "@/components/vacancies/permanent-delete-dialog"
+import { HhBroadcastDialog } from "@/components/vacancies/hh-broadcast-dialog"
 import {
   getVacancyState,
   VACANCY_STATUS_ON_PAUSE, VACANCY_STATUS_ON_RESUME,
@@ -748,6 +749,10 @@ export default function VacancyPage() {
   // Bulk-selection state (только список — выделение между кандидатами)
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Set<string>>(new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
+  // Окно «Рассылка через hh»: полу-ручной мастер прохода по кандидатам.
+  const [hhBroadcastOpen, setHhBroadcastOpen] = useState(false)
+  const [hhBroadcastIds, setHhBroadcastIds] = useState<string[]>([])
+
   // Окно «Отправить тест»: показывает/редактирует текст приглашения перед отправкой.
   const [testInviteOpen, setTestInviteOpen] = useState(false)
   const [testInviteText, setTestInviteText] = useState("")
@@ -1567,6 +1572,11 @@ export default function VacancyPage() {
         setTestInviteText(msg)
         setTestInviteIds(ids)
         setTestInviteOpen(true)
+        return
+      }
+      if (action === "hh_broadcast") {
+        setHhBroadcastIds(ids)
+        setHhBroadcastOpen(true)
         return
       }
       setBulkBusy(true)
@@ -4044,6 +4054,14 @@ export default function VacancyPage() {
         onClear={() => setSelectedCandidateIds(new Set())}
         onAction={handleBulkAction}
       />}
+
+      {/* Диалог-мастер «Рассылка через hh»: полу-ручная отправка по одному. */}
+      <HhBroadcastDialog
+        open={hhBroadcastOpen}
+        onOpenChange={setHhBroadcastOpen}
+        vacancyId={id}
+        candidateIds={hhBroadcastIds}
+      />
 
       {/* Окно «Отправить тест»: текст приглашения (предзаполнен), можно
           отредактировать — правка сохраняется как шаблон вакансии. */}
