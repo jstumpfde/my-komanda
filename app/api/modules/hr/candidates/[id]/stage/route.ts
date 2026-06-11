@@ -3,7 +3,7 @@ import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, companies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
-import { trySyncStageToHh } from "@/lib/hh/sync-stage"
+import { trySyncStageToHh, trySyncRejectToHh, trySyncInviteToHh } from "@/lib/hh/sync-stage"
 import { sendWebhook } from "@/lib/webhooks"
 import { sendToBitrix } from "@/lib/bitrix"
 import { scheduleInterviewInvite } from "@/lib/messaging/schedule-invite"
@@ -40,8 +40,16 @@ export async function PUT(
       rejectionReasonCategory?: string | null
       rejectionInitiator?: string | null
       rejectionComment?: string | null
+      // sendMessage: если false — перевод стадии ТИХИЙ (сообщение не уходит).
+      // По умолчанию (undefined/true) — прежнее поведение (обратная совместимость).
+      sendMessage?: boolean
+      // messageOverride: кастомный текст сообщения вместо шаблона вакансии.
+      // Актуален только когда sendMessage !== false.
+      messageOverride?: string | null
     }
     const stage = body.stage as Stage | undefined
+    // undefined → true (backward-compat: параметр не передан = старое поведение)
+    const sendMessage = body.sendMessage !== false
 
     if (!stage || !(VALID_STAGES as readonly string[]).includes(stage)) {
       return apiError(
@@ -92,26 +100,59 @@ export async function PUT(
     // rejected = discard), но теперь HR может настроить hh-action на любой
     // стадии в табе «Воронка».
     //
+    // sendMessage=false → пропускаем hh-sync и schedule_invite полностью.
+    // messageOverride → передаём кастомный текст в hh (только для discard/invitation).
+    //
     // Защита от повторного invite: если HR двигает кандидата в стадию с
     // hhAction=invitation, а кандидат уже был дальше по воронке —
     // пропускаем sync. Иначе HR-исправление back-to-primary_contact
     // привело бы к повторному hh-приглашению.
-    const alreadyInvited = stage === "primary_contact"
-      && row.previousStage !== null
-      && POST_INVITE_STAGES.has(row.previousStage as Stage)
-    if (!alreadyInvited) {
-      trySyncStageToHh(id, stage).catch((err) => {
-        console.warn(`[stage-route] hh sync failed for ${id} (${stage}):`, err)
-      })
-    }
+    if (sendMessage) {
+      const alreadyInvited = stage === "primary_contact"
+        && row.previousStage !== null
+        && POST_INVITE_STAGES.has(row.previousStage as Stage)
+      if (!alreadyInvited) {
+        // Если передан messageOverride — используем специализированные функции
+        // (они умеют принять готовый текст), иначе — универсальный trySyncStageToHh.
+        const override = typeof body.messageOverride === "string" && body.messageOverride.trim().length > 0
+          ? body.messageOverride.trim()
+          : null
+        if (override) {
+          // Определяем действие через trySyncStageToHh (пайплайн внутри), но
+          // с override-текстом нужны специализированные функции.
+          // Для rejected — trySyncRejectToHh поддерживает customMessage.
+          // Для invitation — trySyncInviteToHh не поддерживает override пока,
+          // поэтому при override на invitation-стадию игнорируем переопределение
+          // и падаем обратно на trySyncStageToHh.
+          if (stage === "rejected") {
+            trySyncRejectToHh(id, override).catch((err) => {
+              console.warn(`[stage-route] hh reject (override) failed for ${id}:`, err)
+            })
+          } else {
+            trySyncStageToHh(id, stage).catch((err) => {
+              console.warn(`[stage-route] hh sync failed for ${id} (${stage}):`, err)
+            })
+          }
+        } else {
+          trySyncStageToHh(id, stage).catch((err) => {
+            console.warn(`[stage-route] hh sync failed for ${id} (${stage}):`, err)
+          })
+        }
+      }
 
-    // #3.1: авто-отправка ссылки /schedule/[token] кандидату при входе в стадию
-    // интервью. Триггерим только на ПЕРЕХОД в 'interview' (не при повторном
-    // сохранении той же стадии) — scheduleInterviewInvite сам идемпотентен
-    // (дедуп pending|sent schedule_invite). Канал — hh-чат через cron follow-up.
-    if (stage === "interview" && row.previousStage !== "interview") {
-      void scheduleInterviewInvite({ candidateId: id, vacancyId: updated.vacancyId })
-        .catch((err) => console.warn(`[stage-route] schedule invite failed for ${id}:`, err))
+      // #3.1: авто-отправка ссылки /schedule/[token] кандидату при входе в стадию
+      // интервью. Триггерим только на ПЕРЕХОД в 'interview' (не при повторном
+      // сохранении той же стадии) — scheduleInterviewInvite сам идемпотентен
+      // (дедуп pending|sent schedule_invite). Канал — hh-чат через cron follow-up.
+      if (stage === "interview" && row.previousStage !== "interview") {
+        const overrideText = typeof body.messageOverride === "string" && body.messageOverride.trim().length > 0
+          ? body.messageOverride.trim()
+          : undefined
+        void scheduleInterviewInvite({ candidateId: id, vacancyId: updated.vacancyId, messageText: overrideText })
+          .catch((err) => console.warn(`[stage-route] schedule invite failed for ${id}:`, err))
+      }
+    } else {
+      console.info(`[stage-route] sendMessage=false → тихий перевод ${id} → ${stage}`)
     }
 
     // Webhooks (hiring_defaults.webhooks): отправляем событие смены этапа во

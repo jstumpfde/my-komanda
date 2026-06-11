@@ -40,6 +40,7 @@ import {
   type ContactChannel,
   type ContactOutcome,
 } from "@/lib/hr/contacts"
+import { StageMessageControl } from "@/components/candidates/stage-message-control"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -221,6 +222,14 @@ export default function CandidateDetailPage() {
   const [rejectReason, setRejectReason] = useState("")
   const [rejectComment, setRejectComment] = useState("")
 
+  // Тумблер «Отправить сообщение» — общий для отказа и смены стадии
+  const [sendMessage, setSendMessage] = useState(true)
+  const [stageMessageText, setStageMessageText] = useState("")
+
+  // Диалог смены стадии (для кнопок «Пригласить», «В резерв» и дропдауна)
+  const [stageDialogOpen, setStageDialogOpen] = useState(false)
+  const [pendingStage, setPendingStage] = useState<string | null>(null)
+
   // Лог контактов
   const [contacts, setContacts] = useState<CandidateContact[]>([])
   const [contactsLoading, setContactsLoading] = useState(false)
@@ -288,27 +297,55 @@ export default function CandidateDetailPage() {
     if (saved) setNoteText(saved)
   }, [id])
 
-  const changeStage = async (stage: string) => {
-    if (!candidate) return
+  // Открыть диалог смены стадии (кроме rejected — у него свой диалог)
+  const openStageDialog = (stage: string) => {
+    if (stage === "rejected") {
+      setRejectInitiator("company")
+      setRejectReason("")
+      setRejectComment("")
+      setSendMessage(true)
+      setStageMessageText("")
+      setRejectDialogOpen(true)
+      return
+    }
+    setPendingStage(stage)
+    setSendMessage(true)
+    setStageMessageText("")
+    setStageDialogOpen(true)
+  }
+
+  // Подтверждение смены стадии из диалога
+  const confirmStageChange = async () => {
+    if (!candidate || !pendingStage) return
     setStageChanging(true)
     try {
+      const override = stageMessageText.trim() || null
       const res = await fetch(`/api/modules/hr/candidates/${id}/stage`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage }),
+        body: JSON.stringify({
+          stage: pendingStage,
+          sendMessage,
+          ...(override ? { messageOverride: override } : {}),
+        }),
       })
       if (!res.ok) throw new Error()
       const updated = await res.json()
       setCandidate(prev => prev ? { ...prev, stage: updated.stage } : prev)
-      toast.success(`Этап изменён: ${getStageLabel(stage)}`)
+      setStageDialogOpen(false)
+      setPendingStage(null)
+      toast.success(`Этап изменён: ${getStageLabel(pendingStage)}`)
     } catch { toast.error("Ошибка смены этапа") }
     finally { setStageChanging(false) }
   }
+
+  const changeStage = (stage: string) => openStageDialog(stage)
 
   const submitReject = async () => {
     if (!candidate) return
     setStageChanging(true)
     try {
+      const override = stageMessageText.trim() || null
       const res = await fetch(`/api/modules/hr/candidates/${id}/stage`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -317,6 +354,8 @@ export default function CandidateDetailPage() {
           rejectionReasonCategory: rejectReason || null,
           rejectionInitiator: rejectInitiator || null,
           rejectionComment: rejectComment.trim() || null,
+          sendMessage,
+          ...(override ? { messageOverride: override } : {}),
         }),
       })
       if (!res.ok) throw new Error()
@@ -859,6 +898,17 @@ export default function CandidateDetailPage() {
                 className="resize-none text-sm"
               />
             </div>
+            {/* Тумблер: отправить сообщение кандидату */}
+            <div className="border-t border-border pt-3">
+              <StageMessageControl
+                stage="rejected"
+                vacancyId={candidate?.vacancyId ?? null}
+                sendMessage={sendMessage}
+                onSendMessageChange={setSendMessage}
+                messageText={stageMessageText}
+                onMessageTextChange={setStageMessageText}
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRejectDialogOpen(false)} disabled={stageChanging}>
@@ -871,6 +921,36 @@ export default function CandidateDetailPage() {
             >
               {stageChanging ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
               Отказать
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══ Диалог смены стадии (кроме отказа) ═══ */}
+      <Dialog open={stageDialogOpen} onOpenChange={(open) => { setStageDialogOpen(open); if (!open) setPendingStage(null) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {pendingStage ? `Перевести на: ${getStageLabel(pendingStage)}` : "Сменить стадию"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <StageMessageControl
+              stage={pendingStage}
+              vacancyId={candidate?.vacancyId ?? null}
+              sendMessage={sendMessage}
+              onSendMessageChange={setSendMessage}
+              messageText={stageMessageText}
+              onMessageTextChange={setStageMessageText}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setStageDialogOpen(false); setPendingStage(null) }} disabled={stageChanging}>
+              Отмена
+            </Button>
+            <Button onClick={confirmStageChange} disabled={stageChanging}>
+              {stageChanging ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+              Подтвердить
             </Button>
           </DialogFooter>
         </DialogContent>
