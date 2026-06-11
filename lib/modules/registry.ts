@@ -136,6 +136,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Контент',         href: '/marketing/content',     icon: 'FileText' },
       { label: 'SEO',             href: '/marketing/seo',         icon: 'Search' },
       { label: 'Рекламные кампании', href: '/marketing/campaigns', icon: 'Megaphone' },
+      { label: 'Яндекс.Директ',   href: '/marketing/yandex-direct', icon: 'Target' },
       { label: 'Соцсети',         href: '/marketing/social',      icon: 'Globe' },
       { label: 'Email-рассылки',  href: '/marketing/email',       icon: 'MessageSquare' },
       { label: 'Лендинги',        href: '/marketing/landings',    icon: 'Layers' },

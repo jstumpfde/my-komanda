@@ -257,6 +257,36 @@ Per-vacancy стоп-факторы в vacancy.stopFactorsJson:
 2. Пометить стадию кандидата как rejected
 3. Поставить autoProcessingStoppedReason = "stop_factor:{factor}"
 
+## Яндекс.Директ AI-агент (модуль marketing)
+
+Страница /marketing/yandex-direct (пункт меню «Яндекс.Директ»). Агент:
+создаёт кампании на поиске и в РСЯ из брифа (Claude Sonnet → черновик →
+редактирование → публикация через API Директа v5), синкает кампании и
+дневную статистику, оптимизирует (пауза фраз-пожирателей, минус-слова,
+ставки, бюджеты) в двух режимах — recommend / autopilot.
+
+- Код: lib/yandex-direct/ (oauth, client — API v5 + Reports, sync,
+  generate-campaign, publish-campaign, agent)
+- OAuth: /api/integrations/yandex-direct/auth + callback (по образцу hh)
+- API: /api/modules/marketing/yandex-direct/* (overview, sync, generate,
+  publish, agent, agent/[id], settings)
+- Таблицы: yandex_direct_integrations, yandex_direct_campaigns,
+  yandex_direct_campaign_stats, yandex_direct_agent_actions (миграция 0202)
+- Деньги в БД — рубли; в микроединицы API (×1 000 000) конвертирует client.ts
+- Автопилот применяет только безопасные действия (pause_keyword,
+  add_negative_keywords, set_keyword_bid с потолком maxCpc); pause_campaign
+  и set_daily_budget — всегда вручную кнопкой «Применить». publish и
+  settings — requireDirector
+- Env: YANDEX_DIRECT_CLIENT_ID, YANDEX_DIRECT_CLIENT_SECRET,
+  YANDEX_DIRECT_REDIRECT_URI (https://company24.pro/api/integrations/yandex-direct/callback),
+  YANDEX_DIRECT_SANDBOX=true — песочница Директа
+- Cron (cooldown 4 ч, лог в cron_runs):
+  ```
+  0 3,9,15,21 * * * curl -s -X POST -H "X-Cron-Secret: $CRON_SECRET" \
+    https://company24.pro/api/cron/yandex-direct-agent \
+    >> /var/log/yandex-direct-agent.log 2>&1
+  ```
+
 ## Environment Variables
 
 - DATABASE_URL — postgresql://mykomanda:<пароль в .env на сервере>@localhost:5432/mykomanda
@@ -267,6 +297,8 @@ Per-vacancy стоп-факторы в vacancy.stopFactorsJson:
 - PLATFORM_ADMIN_EMAILS — comma-separated emails, кто видит /admin/platform
 - CRON_SECRET — для авторизации cron-эндпоинтов
 - HH_CLIENT_ID / HH_CLIENT_SECRET — hh.ru OAuth
+- YANDEX_DIRECT_CLIENT_ID / YANDEX_DIRECT_CLIENT_SECRET / YANDEX_DIRECT_REDIRECT_URI — OAuth Яндекс.Директа
+- YANDEX_DIRECT_SANDBOX — true = песочница API Директа
 
 ## Корзина вакансий (Trash)
 

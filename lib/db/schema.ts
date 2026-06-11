@@ -11,6 +11,9 @@ import {
   primaryKey,
   index,
   real,
+  bigint,
+  doublePrecision,
+  uniqueIndex,
 } from "drizzle-orm/pg-core"
 
 // ─── Modules ──────────────────────────────────────────────────────────────────
@@ -3163,6 +3166,104 @@ export const vacancySpecs = pgTable("vacancy_specs", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
 })
+
+// ─── Яндекс.Директ AI-агент (миграция 0202) ─────────────────────────────────
+// Модуль marketing: подключение Яндекс.Директа по OAuth, синк кампаний и
+// статистики, AI-агент (создание кампаний на поиске/РСЯ + оптимизация).
+// Деньги храним в рублях (number), конвертация в микроединицы API (×1 000 000)
+// — только внутри lib/yandex-direct/client.ts.
+
+export interface YandexDirectAgentSettings {
+  mode:                 "recommend" | "autopilot" // autopilot — агент сам применяет безопасные действия
+  targetCpa?:           number                    // целевой CPA, ₽ (ориентир для оптимизатора)
+  maxCpc?:              number                    // потолок ставки за клик, ₽ (автопилот не поднимет выше)
+  dailyBudgetLimit?:    number                    // потолок дневного бюджета кампании, ₽
+  minClicksForDecision: number                    // не трогать ключ, пока не набрал N кликов (default 30)
+  analysisPeriodDays:   number                    // окно анализа статистики (default 14)
+  pausedByAgentEnabled: boolean                   // разрешить автопилоту останавливать ключи/кампании
+}
+
+export const YANDEX_DIRECT_AGENT_DEFAULTS: YandexDirectAgentSettings = {
+  mode: "recommend",
+  minClicksForDecision: 30,
+  analysisPeriodDays: 14,
+  pausedByAgentEnabled: true,
+}
+
+export const yandexDirectIntegrations = pgTable("yandex_direct_integrations", {
+  id:               uuid("id").primaryKey().defaultRandom(),
+  companyId:        uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }).unique(),
+  yandexLogin:      text("yandex_login"),                 // логин аккаунта Директа (из OAuth userinfo)
+  accessToken:      text("access_token").notNull(),
+  refreshToken:     text("refresh_token"),
+  tokenExpiresAt:   timestamp("token_expires_at", { withTimezone: true }),
+  connectedBy:      uuid("connected_by").references(() => users.id, { onDelete: "set null" }),
+  agentSettingsJson: jsonb("agent_settings_json").$type<YandexDirectAgentSettings>(),
+  lastSyncedAt:     timestamp("last_synced_at", { withTimezone: true }),
+  isActive:         boolean("is_active").notNull().default(true),
+  createdAt:        timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt:        timestamp("updated_at", { withTimezone: true }).defaultNow(),
+})
+
+// Зеркало кампаний Директа (источник правды — API, синк перезаписывает).
+export const yandexDirectCampaigns = pgTable("yandex_direct_campaigns", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  companyId:    uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  directId:     bigint("direct_id", { mode: "number" }).notNull(),  // Id кампании в Директе
+  name:         text("name").notNull(),
+  campaignType: text("campaign_type").notNull().default("TEXT_CAMPAIGN"),
+  placement:    text("placement"),                  // search | network | mixed (по стратегиям)
+  state:        text("state"),                      // ON | OFF | SUSPENDED | ENDED | ARCHIVED
+  status:       text("status"),                     // ACCEPTED | MODERATION | DRAFT | REJECTED
+  dailyBudget:  doublePrecision("daily_budget"),    // ₽/день (null = недельная стратегия)
+  createdByAgent: boolean("created_by_agent").notNull().default(false),
+  raw:          jsonb("raw"),                       // полный объект из API (на будущее)
+  createdAt:    timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt:    timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (t) => [
+  uniqueIndex("yd_campaigns_company_direct_idx").on(t.companyId, t.directId),
+])
+
+// Дневная статистика кампаний (Reports API). Upsert по (company, campaign, date).
+export const yandexDirectCampaignStats = pgTable("yandex_direct_campaign_stats", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  companyId:   uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  directId:    bigint("direct_id", { mode: "number" }).notNull(),
+  date:        text("date").notNull(),               // YYYY-MM-DD
+  impressions: integer("impressions").notNull().default(0),
+  clicks:      integer("clicks").notNull().default(0),
+  cost:        doublePrecision("cost").notNull().default(0),        // ₽
+  conversions: integer("conversions").notNull().default(0),
+  createdAt:   timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (t) => [
+  uniqueIndex("yd_stats_company_campaign_date_idx").on(t.companyId, t.directId, t.date),
+])
+
+export interface YandexDirectActionPayload {
+  // Параметры действия — состав зависит от type (см. lib/yandex-direct/agent.ts)
+  [k: string]: unknown
+}
+
+// Журнал агента: рекомендации и применённые действия. Каждое действие
+// автопилота тоже пишется сюда (status='applied', appliedBy=null → автопилот).
+export const yandexDirectAgentActions = pgTable("yandex_direct_agent_actions", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  companyId:   uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  directCampaignId: bigint("direct_campaign_id", { mode: "number" }),
+  type:        text("type").notNull(),       // pause_keyword | add_negative_keywords | set_keyword_bid | pause_campaign | set_daily_budget | insight
+  title:       text("title").notNull(),      // короткий заголовок по-русски
+  description: text("description").notNull(),// объяснение агента «почему»
+  payload:     jsonb("payload").$type<YandexDirectActionPayload>(),
+  impact:      text("impact"),               // high | medium | low
+  status:      text("status").notNull().default("proposed"), // proposed | applied | dismissed | failed
+  source:      text("source").notNull().default("agent"),    // agent | autopilot
+  appliedBy:   uuid("applied_by").references(() => users.id, { onDelete: "set null" }),
+  appliedAt:   timestamp("applied_at", { withTimezone: true }),
+  error:       text("error"),
+  createdAt:   timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (t) => [
+  index("yd_actions_company_status_idx").on(t.companyId, t.status, t.createdAt),
+])
 
 // ─── Nancy Feedback (миграция 0199) ──────────────────────────────────────────
 // Фидбек по ответам Нэнси — 👍/👎 с привязкой к вопросу, ответу, модулю.
