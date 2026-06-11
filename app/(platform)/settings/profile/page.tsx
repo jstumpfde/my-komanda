@@ -87,6 +87,7 @@ export default function ProfileSettingsPage() {
 
   // Личный рабочий график (users.custom_schedule)
   const [scheduleDays, setScheduleDays] = useState<Record<string, ScheduleDay>>(DEFAULT_DAYS)
+  const [lunch, setLunch] = useState<{ enabled: boolean; start: string; end: string }>({ enabled: false, start: "13:00", end: "14:00" })
   const [savingSchedule, setSavingSchedule] = useState(false)
 
   const updateScheduleDay = (dayId: string, patch: Partial<ScheduleDay>) =>
@@ -98,11 +99,11 @@ export default function ProfileSettingsPage() {
       const res = await fetch("/api/auth/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customSchedule: { enabled: true, days: scheduleDays } }),
+        body: JSON.stringify({ customSchedule: { enabled: true, days: scheduleDays, lunch } }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) { toast.error(json.error ?? "Ошибка сохранения"); return }
-      setProfile(prev => prev ? { ...prev, customSchedule: { enabled: true, days: scheduleDays } } : prev)
+      setProfile(prev => prev ? { ...prev, customSchedule: { enabled: true, days: scheduleDays, lunch } } : prev)
       toast.success("Рабочий график сохранён")
     } catch { toast.error("Ошибка сети") }
     finally { setSavingSchedule(false) }
@@ -147,6 +148,7 @@ export default function ProfileSettingsPage() {
         setAvatarUrl((p as unknown as { avatarUrl?: string }).avatarUrl ?? null)
         if (p.customSchedule?.days) {
           setScheduleDays({ ...DEFAULT_DAYS, ...p.customSchedule.days })
+          if (p.customSchedule.lunch) setLunch(p.customSchedule.lunch)
         }
       })
       .catch(() => {
@@ -559,6 +561,28 @@ export default function ProfileSettingsPage() {
                       )
                     })}
                   </div>
+
+                  {/* Обед — один перерыв на все рабочие дни */}
+                  <div className="grid grid-cols-[44px_44px_1fr] items-center py-1.5 mt-2 border-t pt-3">
+                    <Switch checked={lunch.enabled} onCheckedChange={v => setLunch(prev => ({ ...prev, enabled: v }))} />
+                    <span className={cn("text-sm font-medium", !lunch.enabled && "text-muted-foreground")}>Обед</span>
+                    {lunch.enabled ? (
+                      <div className="flex items-center gap-2">
+                        <Select value={lunch.start} onValueChange={v => setLunch(prev => ({ ...prev, start: v }))}>
+                          <SelectTrigger className="w-24 h-7 text-sm bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
+                          <SelectContent>{HALF_HOURS.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
+                        </Select>
+                        <span className="text-muted-foreground text-xs">—</span>
+                        <Select value={lunch.end} onValueChange={v => setLunch(prev => ({ ...prev, end: v }))}>
+                          <SelectTrigger className="w-24 h-7 text-sm bg-[var(--input-bg)]"><SelectValue /></SelectTrigger>
+                          <SelectContent>{HALF_HOURS.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">Без перерыва</span>
+                    )}
+                  </div>
+
                   <div className="flex justify-end pt-3">
                     <Button size="sm" className="gap-2" onClick={handleSaveSchedule} disabled={savingSchedule || loadingProfile}>
                       {savingSchedule ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}

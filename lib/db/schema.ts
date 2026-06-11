@@ -274,6 +274,8 @@ export type NancyAssistantSettings = NancyVoiceSettings
 export interface UserCustomSchedule {
   enabled: boolean
   days: Record<string, { active: boolean; start: string; end: string }>
+  // Обеденный перерыв (один на все рабочие дни)
+  lunch?: { enabled: boolean; start: string; end: string }
 }
 
 export const companies = pgTable("companies", {
