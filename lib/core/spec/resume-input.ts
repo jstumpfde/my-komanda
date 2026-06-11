@@ -85,12 +85,17 @@ export function buildSpecResumeInput(
 }
 
 /**
- * Полигон-гейт R4 этапа 2: скоринг по Spec включён только для вакансий,
- * перечисленных в env SPEC_SCORING_VACANCY_IDS (uuid через запятую).
- * Пустая/отсутствующая переменная = Spec-скоринг выключен везде.
+ * Гейт R4 этапа 2.5 (решение Юрия 11.06.2026): Spec-скоринг включён по
+ * умолчанию ДЛЯ ВСЕХ вакансий, КРОМЕ перечисленных в env
+ * SPEC_SCORING_LEGACY_VACANCY_IDS (uuid через запятую) — это снимок уже
+ * размещённых боевых вакансий Орлинка, они оцениваются по-старому.
+ *
+ * Двойная страховка: даже при включённом гейте вакансия без сохранённого
+ * непустого Spec оценивается legacy-путём (fallback в process-queue) —
+ * по-новому реально считаются только вакансии с заполненным «Кого ищем».
  */
 export function isSpecScoringEnabled(vacancyId: string): boolean {
-  const raw = process.env.SPEC_SCORING_VACANCY_IDS
-  if (!raw) return false
-  return raw.split(",").map(s => s.trim()).filter(Boolean).includes(vacancyId)
+  const legacy = process.env.SPEC_SCORING_LEGACY_VACANCY_IDS
+  if (!legacy) return true
+  return !legacy.split(",").map(s => s.trim()).filter(Boolean).includes(vacancyId)
 }

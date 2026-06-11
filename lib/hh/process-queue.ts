@@ -583,9 +583,9 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                 citizenshipNames: (extracted.citizenshipNames as string[] | undefined) ?? null,
             }
 
-            // R4 этап 2: для вакансий из SPEC_SCORING_VACANCY_IDS (полигон)
-            // критерии берутся из Spec («Кого ищем»), не из legacy-портрета.
-            // Честное A/B 11.06: совпадение зон 93%, медиана |Δ|=0.
+            // R4 этап 2.5: Spec-скоринг («Кого ищем») по умолчанию для всех,
+            // КРОМЕ вакансий из SPEC_SCORING_LEGACY_VACANCY_IDS (снимок боевых
+            // вакансий Орлинка — по-старому). Честное A/B 11.06: зоны 93%, медиана 0.
             // При пустом/недоступном Spec — тихий fallback на legacy.
             let screenInput: Parameters<typeof screenResume>[0] | null = null
             if (isSpecScoringEnabled(localVac.id)) {
