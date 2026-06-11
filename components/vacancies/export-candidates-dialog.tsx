@@ -81,7 +81,8 @@ export function ExportCandidatesDialog({ open, onOpenChange, vacancyId, selected
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+      {/* Шире на десктопе (22 колонки в 3 ряда), на мобиле — узкая с 2 рядами */}
+      <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Экспорт кандидатов в Excel</DialogTitle>
         </DialogHeader>
@@ -131,7 +132,7 @@ export function ExportCandidatesDialog({ open, onOpenChange, vacancyId, selected
                 {allFieldsOn ? "Снять все" : "Выбрать все"}
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-1.5">
               {CANDIDATE_EXPORT_FIELDS.map(({ key, label }) => (
                 <label key={key} className="flex items-center gap-2 cursor-pointer text-sm">
                   <Checkbox checked={fields.has(key)} onCheckedChange={() => toggleField(key)} />
