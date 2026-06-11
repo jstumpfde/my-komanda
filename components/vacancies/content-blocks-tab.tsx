@@ -9,10 +9,15 @@ import {
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Loader2, Plus, Pencil, Trash2, Sparkles, FileText, AlertCircle, Save, BookOpen, Eye, Check, Download, ChevronDown, FilePlus } from "lucide-react"
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
+import { Loader2, Plus, Pencil, Trash2, Sparkles, FileText, AlertCircle, Save, BookOpen, Eye, Check, Download, ChevronDown, FilePlus, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { useContentBlocks, type ContentBlock } from "@/hooks/use-content-blocks"
+import { useContentBlocks, type ContentBlock, type ContentType } from "@/hooks/use-content-blocks"
 import { NotionEditor, type NotionEditorHandle } from "./notion-editor"
 import { createBlock, type Demo, type Lesson } from "@/lib/course-types"
 
@@ -51,19 +56,38 @@ function blockToDemo(block: ContentBlock): Demo {
   }
 }
 
+/** Бэдж типа блока — синий «Демо» или янтарный «Тест». */
+function ContentTypeBadge({ contentType }: { contentType: ContentType }) {
+  if (contentType === "test" || contentType === "task") {
+    return (
+      <span className="inline-flex items-center rounded px-1 py-0 text-[9px] font-semibold bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 shrink-0">
+        Тест
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center rounded px-1 py-0 text-[9px] font-semibold bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 shrink-0">
+      Демо
+    </span>
+  )
+}
+
 interface ContentBlocksTabProps {
   vacancyId: string
   vacancyTitle?: string | null
 }
 
 export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
-  const { blocks, loading, error, createBlock, updateBlock, saveSettings, deleteBlock, reorder } = useContentBlocks(vacancyId)
+  const { blocks, loading, error, createBlock: apiCreateBlock, updateBlock, saveSettings, deleteBlock, reorder, setLiveBattle } = useContentBlocks(vacancyId)
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renamingValue, setRenamingValue] = useState("")
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+
+  // Диалог выбора типа при создании блока
+  const [typePickerOpen, setTypePickerOpen] = useState(false)
 
   // Управление редактором выбранного блока (общий ряд кнопок справа)
   const editorRef = useRef<NotionEditorHandle>(null)
@@ -77,28 +101,44 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
   // Выбор первого блока после загрузки / сброс при удалении выбранного
   useEffect(() => {
     if (!loading && blocks.length > 0 && !selectedId) {
-      setSelectedId(blocks[0].id)
+      // Предпочитаем первый block:* (не legacy kind='demo'/'test')
+      const first = blocks.find(b => b.kind.startsWith("block:")) ?? blocks[0]
+      setSelectedId(first.id)
     }
     if (selectedId && !blocks.find(b => b.id === selectedId)) {
-      setSelectedId(blocks.length > 0 ? blocks[0].id : null)
+      const first = blocks.find(b => b.kind.startsWith("block:")) ?? (blocks.length > 0 ? blocks[0] : null)
+      setSelectedId(first ? first.id : null)
     }
   }, [blocks, loading, selectedId])
 
   const selectedBlock = blocks.find(b => b.id === selectedId) ?? null
 
-  // Создать блок и сразу открыть инлайн-ввод имени (тип не выбираем — свободный контент)
-  const handleAddBlock = useCallback(async () => {
+  // Создать блок с выбором типа
+  const handleAddBlock = useCallback(() => {
+    setTypePickerOpen(true)
+  }, [])
+
+  const doCreateBlock = useCallback(async (contentType: ContentType) => {
+    setTypePickerOpen(false)
     setCreating(true)
-    const block = await createBlock("presentation", "Новый блок")
+    const title = contentType === "test" || contentType === "task" ? "Новый тест" : "Новый блок"
+    const block = await apiCreateBlock(contentType, title)
     setCreating(false)
     if (block) {
       setSelectedId(block.id)
       setRenamingId(block.id)
-      setRenamingValue("Новый блок")
+      setRenamingValue(title)
+      // Если первый тест-блок на вакансии — автоматически делаем боевым
+      if (contentType === "test" || contentType === "task") {
+        const hasOtherLive = blocks.some(b => b.contentType === contentType && b.isLiveBattle)
+        if (!hasOtherLive) {
+          await setLiveBattle(block.id, true)
+        }
+      }
     } else {
       toast.error("Не удалось создать блок")
     }
-  }, [createBlock])
+  }, [apiCreateBlock, blocks, setLiveBattle])
 
   const startRenaming = useCallback((block: ContentBlock) => {
     setRenamingId(block.id)
@@ -151,6 +191,15 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
   }
   const handleDragEnd = () => { dragIdxRef.current = null; setDragOverIdx(null) }
 
+  // Переключатель «Боевой тест/демо» — показывать только для block:* блоков
+  const handleToggleLiveBattle = useCallback(async (block: ContentBlock, isLive: boolean) => {
+    await setLiveBattle(block.id, isLive)
+    if (isLive) {
+      const typeName = block.contentType === "presentation" ? "демо" : "тест"
+      toast.success(`Блок «${block.title}» — боевой ${typeName} вакансии`)
+    }
+  }, [setLiveBattle])
+
   // --- Render ---
 
   if (loading) {
@@ -171,26 +220,39 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
     )
   }
 
+  // Фильтруем для UI: только динамические блоки (kind='block:*')
+  // Легаси kind='demo'/'test' скрыты из конструктора — они управляются через dual-write
+  const uiBlocks = blocks.filter(b => b.kind.startsWith("block:"))
+
   // Пустое состояние
-  if (blocks.length === 0) {
+  if (uiBlocks.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
-        <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-          <FileText className="w-6 h-6 text-muted-foreground" />
+      <>
+        <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
+          <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+            <FileText className="w-6 h-6 text-muted-foreground" />
+          </div>
+          <div>
+            <p className="font-medium text-foreground">Блоков контента нет</p>
+            <p className="text-sm text-muted-foreground mt-1">Создайте блок и наполните его чем угодно — текст, видео, вопросы, задание</p>
+          </div>
+          <button
+            disabled={creating}
+            onClick={handleAddBlock}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary text-primary-foreground px-3 py-2 text-sm hover:bg-primary/90 transition-colors"
+          >
+            {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+            Добавить блок
+          </button>
         </div>
-        <div>
-          <p className="font-medium text-foreground">Блоков контента нет</p>
-          <p className="text-sm text-muted-foreground mt-1">Создайте блок и наполните его чем угодно — текст, видео, вопросы, задание</p>
-        </div>
-        <button
-          disabled={creating}
-          onClick={handleAddBlock}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-primary text-primary-foreground px-3 py-2 text-sm hover:bg-primary/90 transition-colors"
-        >
-          {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-          Добавить блок
-        </button>
-      </div>
+
+        {/* Диалог выбора типа блока */}
+        <BlockTypePickerDialog
+          open={typePickerOpen}
+          onClose={() => setTypePickerOpen(false)}
+          onCreate={doCreateBlock}
+        />
+      </>
     )
   }
 
@@ -200,7 +262,7 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
       <div className="flex items-center gap-3 shrink-0">
         {/* Блоки контента — по порядку показа кандидату */}
         <div className="flex items-center gap-2 overflow-x-auto flex-1 min-w-0 pb-0.5">
-          {blocks.map((block, idx) => {
+          {uiBlocks.map((block, idx) => {
             const isActive = selectedId === block.id
             const isRenaming = renamingId === block.id
             const scored = blockHasScoredContent(block.lessons)
@@ -226,6 +288,16 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
                   "text-[10px] font-semibold w-4 h-4 rounded flex items-center justify-center shrink-0",
                   isActive ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
                 )}>{idx + 1}</span>
+
+                {/* Тип блока */}
+                {!isRenaming && <ContentTypeBadge contentType={block.contentType} />}
+
+                {/* Иконка молнии — боевой блок */}
+                {!isRenaming && block.isLiveBattle && (
+                  <span title="Боевой блок — уходит кандидатам" className="shrink-0">
+                    <Zap className="w-3 h-3 text-amber-500 fill-amber-400" />
+                  </span>
+                )}
 
                 {isRenaming ? (
                   <input
@@ -339,13 +411,25 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
         )}
       </div>
 
-      {/* Статус блока — отдельной строкой под чипами, выровнено вправо (под «Предпросмотр») */}
+      {/* Статус блока + переключатель «Боевой» */}
       {selectedBlock && (
-        <div className="text-[11px] leading-tight -mt-1 text-right">
-          <span className={cn("font-medium", blockIsLinked(selectedBlock.kind) ? "text-emerald-600" : "text-amber-600")}>
-            {blockIsLinked(selectedBlock.kind) ? "● Активно" : "○ Черновик"}
-          </span>
-          <span className="text-muted-foreground/60"> · изм. {fmtDate(selectedBlock.updatedAt)}</span>
+        <div className="flex items-center justify-between -mt-1">
+          {/* Статус активности */}
+          <div className="text-[11px] leading-tight">
+            <span className={cn("font-medium", blockIsLinked(selectedBlock.kind) ? "text-emerald-600" : "text-amber-600")}>
+              {blockIsLinked(selectedBlock.kind) ? "● Активно" : "○ Черновик"}
+            </span>
+            <span className="text-muted-foreground/60"> · изм. {fmtDate(selectedBlock.updatedAt)}</span>
+          </div>
+
+          {/* Переключатель «Боевой» — только для block:* блоков */}
+          {selectedBlock.kind.startsWith("block:") && (
+            <LiveBattleToggle
+              block={selectedBlock}
+              allBlocks={uiBlocks}
+              onToggle={handleToggleLiveBattle}
+            />
+          )}
         </div>
       )}
 
@@ -376,6 +460,13 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
         )}
       </div>
 
+      {/* Диалог выбора типа блока */}
+      <BlockTypePickerDialog
+        open={typePickerOpen}
+        onClose={() => setTypePickerOpen(false)}
+        onCreate={doCreateBlock}
+      />
+
       {/* Диалог подтверждения удаления */}
       <AlertDialog open={!!deleteConfirmId} onOpenChange={open => { if (!open) setDeleteConfirmId(null) }}>
         <AlertDialogContent>
@@ -383,6 +474,11 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
             <AlertDialogTitle>Удалить блок?</AlertDialogTitle>
             <AlertDialogDescription>
               Блок и весь его контент будут удалены. Это действие нельзя отменить.
+              {deleteConfirmId && blocks.find(b => b.id === deleteConfirmId)?.isLiveBattle && (
+                <span className="block mt-2 text-amber-600 dark:text-amber-400 font-medium">
+                  Это боевой блок — после удаления тест/демо кандидатам будет недоступен.
+                </span>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -421,5 +517,96 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  )
+}
+
+// ─── Переключатель «Боевой тест/демо вакансии» ───────────────────────────────
+
+interface LiveBattleToggleProps {
+  block: ContentBlock
+  allBlocks: ContentBlock[]
+  onToggle: (block: ContentBlock, isLive: boolean) => Promise<void>
+}
+
+function LiveBattleToggle({ block, allBlocks, onToggle }: LiveBattleToggleProps) {
+  const [busy, setBusy] = useState(false)
+
+  const typeName = block.contentType === "presentation" ? "демо" : "тест"
+  const label = `Боевой ${typeName} вакансии`
+
+  // Есть ли другой боевой блок того же типа
+  const otherLive = allBlocks.find(b => b.id !== block.id && b.contentType === block.contentType && b.isLiveBattle)
+
+  const handleChange = async (checked: boolean) => {
+    // Нельзя снять флаг если это единственный боевой (можно только переключить на другой)
+    if (!checked && block.isLiveBattle && !otherLive) return
+    setBusy(true)
+    try {
+      await onToggle(block, checked)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      {busy && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+      <Label htmlFor={`live-battle-${block.id}`} className="text-[11px] text-muted-foreground cursor-pointer select-none flex items-center gap-1">
+        <Zap className={cn("w-3 h-3", block.isLiveBattle ? "text-amber-500 fill-amber-400" : "text-muted-foreground/50")} />
+        {label}
+      </Label>
+      <Switch
+        id={`live-battle-${block.id}`}
+        checked={block.isLiveBattle}
+        disabled={busy}
+        onCheckedChange={handleChange}
+        className="scale-75 origin-right"
+      />
+    </div>
+  )
+}
+
+// ─── Диалог выбора типа блока ─────────────────────────────────────────────────
+
+interface BlockTypePickerDialogProps {
+  open: boolean
+  onClose: () => void
+  onCreate: (contentType: ContentType) => void
+}
+
+function BlockTypePickerDialog({ open, onClose, onCreate }: BlockTypePickerDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Тип блока</DialogTitle>
+          <DialogDescription>
+            Выберите тип нового блока контента
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3 pt-2">
+          <button
+            onClick={() => onCreate("presentation")}
+            className="flex flex-col items-center gap-2 rounded-xl border border-border p-4 hover:bg-blue-50 dark:hover:bg-blue-950/20 hover:border-blue-300 dark:hover:border-blue-700 transition-colors text-left"
+          >
+            <span className="text-2xl">🎯</span>
+            <div>
+              <p className="text-sm font-semibold text-blue-700 dark:text-blue-400">Демонстрация</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Рассказываете о вакансии и компании</p>
+            </div>
+          </button>
+          <button
+            onClick={() => onCreate("test")}
+            className="flex flex-col items-center gap-2 rounded-xl border border-border p-4 hover:bg-amber-50 dark:hover:bg-amber-950/20 hover:border-amber-300 dark:hover:border-amber-700 transition-colors text-left"
+          >
+            <span className="text-2xl">📝</span>
+            <div>
+              <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Тест</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Задания и вопросы для кандидата</p>
+            </div>
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
