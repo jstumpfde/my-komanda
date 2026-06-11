@@ -620,21 +620,28 @@ function TaskBlock({
   )
 }
 
-function ButtonBlock({ block }: { block: Block }) {
+function ButtonBlock({ block, onNext, nextDisabled }: { block: Block; onNext?: () => void; nextDisabled?: boolean }) {
+  const cls = `inline-flex items-center gap-2 rounded-lg px-6 py-3 font-medium transition-colors disabled:opacity-50 ${
+    block.buttonVariant === "outline"
+      ? "border border-gray-300 text-gray-700 hover:bg-gray-50"
+      : "bg-indigo-600 text-white hover:bg-indigo-700"
+  }`
+  const style = block.buttonColor && block.buttonVariant !== "outline"
+    ? { backgroundColor: block.buttonColor } : undefined
+  // «Куда ведёт: Ссылка» — внешняя ссылка; иначе (next/по умолчанию) — переход
+  // на следующую страницу демо (на последней — завершение), как настроено в редакторе.
+  const isUrl = (block.buttonTarget === "url" || (!block.buttonTarget && !!block.buttonUrl)) && !!block.buttonUrl
   return (
     <div className="flex justify-center">
-      <a
-        href={block.buttonUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={`inline-flex items-center gap-2 rounded-lg px-6 py-3 font-medium transition-colors ${
-          block.buttonVariant === "outline"
-            ? "border border-gray-300 text-gray-700 hover:bg-gray-50"
-            : "bg-indigo-600 text-white hover:bg-indigo-700"
-        }`}
-      >
-        {block.buttonText || "Подробнее"}
-      </a>
+      {isUrl ? (
+        <a href={block.buttonUrl} target="_blank" rel="noopener noreferrer" className={cls} style={style}>
+          {block.buttonText || "Подробнее"}
+        </a>
+      ) : (
+        <button type="button" onClick={onNext} disabled={nextDisabled || !onNext} className={cls} style={style}>
+          {block.buttonText || "Далее"}
+        </button>
+      )}
     </div>
   )
 }
@@ -1391,7 +1398,7 @@ export default function DemoPage() {
                 {block.type === "info" && <InfoBlock block={block} data={data} />}
                 {block.type === "video" && <VideoBlock block={block} />}
                 {block.type === "image" && <ImageBlock block={block} />}
-                {block.type === "button" && <ButtonBlock block={block} />}
+                {block.type === "button" && <ButtonBlock block={block} onNext={handleNext} nextDisabled={hasRequiredUnanswered || saving || isAnyMediaUploading} />}
                 {block.type === "task" && (
                   <TaskBlock
                     block={block}
