@@ -17,6 +17,8 @@ export interface ContentBlock {
   createdAt: string
   updatedAt: string
   postDemoSettings?: Record<string, unknown>
+  /** Блок является «боевым» — его данные синкаются в kind='test'/'demo' (dual-write). */
+  isLiveBattle: boolean
 }
 
 interface ApiContentBlock {
@@ -35,6 +37,7 @@ interface ApiContentBlock {
 
 function apiBlockToBlock(d: ApiContentBlock): ContentBlock {
   const ct = d.contentType === "test" || d.contentType === "task" ? d.contentType : "presentation"
+  const settings = d.postDemoSettings ?? {}
   return {
     id: d.id,
     vacancyId: d.vacancyId,
@@ -46,7 +49,8 @@ function apiBlockToBlock(d: ApiContentBlock): ContentBlock {
     sortOrder: d.sortOrder ?? 0,
     createdAt: d.createdAt,
     updatedAt: d.updatedAt,
-    postDemoSettings: d.postDemoSettings ?? {},
+    postDemoSettings: settings,
+    isLiveBattle: settings.isLiveBattle === true,
   }
 }
 
@@ -55,6 +59,7 @@ export type BlockPatch = {
   contentType?: ContentType
   lessons?: Lesson[]
   status?: "draft" | "published"
+  isLiveBattle?: boolean
 }
 
 interface UseContentBlocksResult {
@@ -66,6 +71,8 @@ interface UseContentBlocksResult {
   saveSettings: (id: string, settings: Record<string, unknown>) => Promise<void>
   deleteBlock: (id: string) => Promise<boolean>
   reorder: (idsInOrder: string[]) => Promise<void>
+  /** Назначить/снять флаг «боевой» для блока. Если назначаем — сбрасываем у остальных блоков того же типа. */
+  setLiveBattle: (id: string, isLive: boolean) => Promise<void>
 }
 
 export function useContentBlocks(vacancyId: string | null): UseContentBlocksResult {
@@ -112,6 +119,10 @@ export function useContentBlocks(vacancyId: string | null): UseContentBlocksResu
     if (patch.contentType !== undefined) body.content_type = patch.contentType
     if (patch.lessons !== undefined) body.lessons_json = patch.lessons
     if (patch.status !== undefined) body.status = patch.status
+    // isLiveBattle хранится внутри post_demo_settings (merge-patch)
+    if (patch.isLiveBattle !== undefined) {
+      body.post_demo_settings = { isLiveBattle: patch.isLiveBattle }
+    }
     try {
       const res = await fetch(`/api/modules/hr/demos/${id}`, {
         method: "PUT",
@@ -161,6 +172,10 @@ export function useContentBlocks(vacancyId: string | null): UseContentBlocksResu
         ...(patch.contentType !== undefined ? { contentType: patch.contentType } : {}),
         ...(patch.lessons !== undefined ? { lessons: patch.lessons } : {}),
         ...(patch.status !== undefined ? { status: patch.status } : {}),
+        ...(patch.isLiveBattle !== undefined ? {
+          isLiveBattle: patch.isLiveBattle,
+          postDemoSettings: { ...(b.postDemoSettings ?? {}), isLiveBattle: patch.isLiveBattle },
+        } : {}),
       }
     }))
 
@@ -244,5 +259,42 @@ export function useContentBlocks(vacancyId: string | null): UseContentBlocksResu
     )
   }, [blocks])
 
-  return { blocks, loading, error, createBlock, updateBlock, saveSettings, deleteBlock, reorder }
+  /**
+   * Назначить/снять флаг «боевой» для блока.
+   * При назначении — сбрасываем isLiveBattle у остальных блоков того же contentType
+   * (только один боевой на тип), потом устанавливаем у выбранного.
+   */
+  const setLiveBattle = useCallback(async (id: string, isLive: boolean) => {
+    const block = blocks.find(b => b.id === id)
+    if (!block) return
+
+    if (isLive) {
+      // Сброс у остальных блоков того же contentType (optimistic + persist)
+      const others = blocks.filter(b => b.id !== id && b.contentType === block.contentType && b.isLiveBattle)
+      for (const other of others) {
+        setBlocks(prev => prev.map(b => b.id === other.id
+          ? { ...b, isLiveBattle: false, postDemoSettings: { ...(b.postDemoSettings ?? {}), isLiveBattle: false } }
+          : b
+        ))
+        await fetch(`/api/modules/hr/demos/${other.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ post_demo_settings: { isLiveBattle: false } }),
+        }).catch(() => {})
+      }
+    }
+
+    // Устанавливаем/снимаем у выбранного
+    setBlocks(prev => prev.map(b => b.id === id
+      ? { ...b, isLiveBattle: isLive, postDemoSettings: { ...(b.postDemoSettings ?? {}), isLiveBattle: isLive } }
+      : b
+    ))
+    await fetch(`/api/modules/hr/demos/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ post_demo_settings: { isLiveBattle: isLive } }),
+    }).catch(() => {})
+  }, [blocks])
+
+  return { blocks, loading, error, createBlock, updateBlock, saveSettings, deleteBlock, reorder, setLiveBattle }
 }

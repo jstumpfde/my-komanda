@@ -1197,6 +1197,12 @@ export interface PostDemoSettings {
   testReminderEnabled?:  boolean
   testReminderDays?:     number[]
   testReminderMessages?: string[]
+  // Флаг «боевого» тест-блока или демо-блока конструктора. Только один блок
+  // с contentType='test' на вакансию может быть боевым (isLiveBattle=true).
+  // При сохранении боевого тест-блока API делает upsert записи kind='test';
+  // при удалении — переводит kind='test' в status='draft'. Аналогично для демо.
+  isLiveBattle?: boolean
+
   // Цвет кнопок навигации «Далее/Назад» у кандидата. undefined/null → бренд-цвет компании.
   navButtonColor?: string
   // Текст кнопки «Далее» у кандидата. undefined/'' → «Далее».

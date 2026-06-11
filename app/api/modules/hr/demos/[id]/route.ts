@@ -1,8 +1,9 @@
 import { NextRequest } from "next/server"
 import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { demos, vacancies } from "@/lib/db/schema"
+import { demos, vacancies, type PostDemoSettings } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { syncLiveBattleOnSave, syncLiveBattleOnDelete } from "@/lib/content-blocks/sync-live-battle"
 
 // Verify demo exists and belongs to the user's company
 async function getOwnedDemo(demoId: string, companyId: string) {
@@ -104,6 +105,20 @@ export async function PUT(
       .where(eq(demos.id, id))
       .returning()
 
+    // Dual-write: если это динамический блок конструктора (kind='block:*')
+    // и он помечен как боевой (isLiveBattle=true) — синкаем в kind='test'/'demo'.
+    if (updated && updated.kind.startsWith("block:")) {
+      const settings = (updated.postDemoSettings as PostDemoSettings | null) ?? null
+      await syncLiveBattleOnSave({
+        vacancyId:        updated.vacancyId,
+        blockId:          updated.id,
+        contentType:      updated.contentType,
+        title:            updated.title,
+        lessonsJson:      Array.isArray(updated.lessonsJson) ? updated.lessonsJson : [],
+        postDemoSettings: settings,
+      }).catch(e => console.error("[demos/[id] PUT] syncLiveBattle failed:", e))
+    }
+
     return apiSuccess(updated)
   } catch (err) {
     if (err instanceof Response) return err
@@ -135,6 +150,16 @@ export async function DELETE(
 
     const existing = await getOwnedDemo(id, user.companyId)
     if (!existing) return apiError("Демо не найдено", 404)
+
+    // Dual-write: если удаляем боевой блок конструктора — переводим kind='test'/'demo' в draft.
+    if (existing.kind.startsWith("block:")) {
+      const settings = (existing.postDemoSettings as PostDemoSettings | null) ?? null
+      await syncLiveBattleOnDelete({
+        vacancyId:        existing.vacancyId,
+        contentType:      existing.contentType,
+        postDemoSettings: settings,
+      }).catch(e => console.error("[demos/[id] DELETE] syncLiveBattle failed:", e))
+    }
 
     await db.delete(demos).where(eq(demos.id, id))
 
