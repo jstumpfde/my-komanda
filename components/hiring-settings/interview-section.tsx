@@ -445,7 +445,7 @@ export function InterviewSection({
           <div className="rounded-lg border p-3 space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium">Обеденный перерыв</p>
+                <p className="text-sm font-medium">Обед</p>
                 <p className="text-xs text-muted-foreground">В это время слоты не предлагаются</p>
               </div>
               <Switch checked={lunchEnabled} onCheckedChange={setLunchEnabled} />

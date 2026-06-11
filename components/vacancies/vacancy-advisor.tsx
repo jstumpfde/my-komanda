@@ -1091,7 +1091,7 @@ function SuggestionsPanel({ suggestions, onApply, vacancyData }: {
       {/* ── Группа 2: Кого ищем — точечно, топ-5 */}
       {hasStopFactors && (
         <>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Кого ищем (оценка кандидата)</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Портрет (оценка кандидата)</p>
           <div className="rounded-lg border p-2.5 space-y-1.5">
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium">Неприемлемо</span>

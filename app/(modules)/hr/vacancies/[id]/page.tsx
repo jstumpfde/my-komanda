@@ -2903,8 +2903,8 @@ export default function VacancyPage() {
                   {([
                     { value: "page"           as const, label: "Брендинг",   icon: Globe },
                     { value: "funnel-builder" as const, label: "Воронка",     icon: Workflow },
-                    // R4 Candidate Spec (новый контур): единый экран «Кого ищем».
-                    { value: "spec"           as const, label: "Кого ищем",   icon: Target },
+                    // R4 Candidate Spec (новый контур): единый экран «Портрет».
+                    { value: "spec"           as const, label: "Портрет",     icon: Target },
                     { value: "sources"        as const, label: "Источники",   icon: Link2 },
                     { value: "ai"             as const, label: "Расписание",  icon: Clock },
                     { value: "integrations"   as const, label: "Интеграции",  icon: Settings },

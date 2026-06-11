@@ -1,35 +1,8 @@
-"use client"
+// Старая заглушка «Шаблоны сообщений» («В разработке»). Реальные сообщения
+// кандидатам (приветствие/отказ/приглашение/дожим) настраиваются в блоках воронки —
+// /hr/hiring-settings → «Воронка и автоматизация». Редиректим туда.
+import { redirect } from "next/navigation"
 
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
-import { DashboardHeader } from "@/components/dashboard/header"
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { Card, CardContent } from "@/components/ui/card"
-import { FileText } from "lucide-react"
-
-export default function TemplatesPage() {
-  return (
-    <SidebarProvider defaultOpen={true}>
-      <DashboardSidebar />
-      <SidebarInset>
-        <DashboardHeader />
-        <div className="flex-1 overflow-auto bg-background min-w-0">
-          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
-            <div className="mb-6">
-              <div className="flex items-center gap-2"><FileText className="h-5 w-5 text-violet-600" /><h1 className="text-lg font-semibold">Шаблоны сообщений</h1></div>
-              <p className="text-sm text-muted-foreground">Шаблоны писем и сообщений для кандидатов</p>
-            </div>
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-                <FileText className="size-12 text-muted-foreground/30 mb-4" />
-                <p className="text-muted-foreground font-medium">В разработке</p>
-                <p className="text-sm text-muted-foreground/60 mt-1 max-w-sm">
-                  Здесь можно будет создавать шаблоны писем: приглашение на интервью, оффер, отказ, приветствие и другие. С поддержкой переменных (имя, вакансия, дата).
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
-  )
+export default function TemplatesRedirectPage() {
+  redirect("/hr/hiring-settings?tab=funnel")
 }

@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/select"
 import { toast } from "sonner"
 import {
-  Target, Plus, X, Save, Loader2, ShieldAlert, FileText, Gauge,
+  Target, Plus, X, Loader2, ShieldAlert, FileText, Gauge,
   ArrowRightLeft, AlertTriangle, Sparkles,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -184,7 +184,6 @@ export function SpecEditor({ vacancyId, onSaved }: SpecEditorProps) {
   const [spec, setSpec]     = useState<CandidateSpec | null>(null)
   const [source, setSource] = useState<"spec" | "legacy" | null>(null)
   const [loaded, setLoaded] = useState(false)
-  const [saving, setSaving] = useState(false)
   // Излишки при переносе v1→v2 (то, что не влезло в лимиты must=5/nice=5/deal=3)
   const [overflow, setOverflow] = useState<{ must: string[]; nice: string[]; deal: string[] } | null>(null)
 
@@ -252,13 +251,8 @@ export function SpecEditor({ vacancyId, onSaved }: SpecEditorProps) {
     const json = await res.json().catch(() => null) as { spec?: CandidateSpec } | null
     if (json?.spec) setSpec(json.spec)
     setSource("spec")
-    toast.success("«Кого ищем» сохранено")
+    toast.success("«Портрет» сохранён")
     onSaved?.()
-  }
-
-  const saveClick = async () => {
-    setSaving(true)
-    try { await save() } catch { /* toast уже показан */ } finally { setSaving(false) }
   }
 
   // Регистрация в sticky-баре настроек (жёлтая точка на сабтабе + общая кнопка)
@@ -305,7 +299,7 @@ export function SpecEditor({ vacancyId, onSaved }: SpecEditorProps) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-12 text-muted-foreground">
         <Loader2 className="w-5 h-5 animate-spin" />
-        <span className="text-sm">Загрузка «Кого ищем»…</span>
+        <span className="text-sm">Загрузка «Портрета»…</span>
       </div>
     )
   }
@@ -336,7 +330,7 @@ export function SpecEditor({ vacancyId, onSaved }: SpecEditorProps) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-lg font-semibold text-foreground mb-1 flex items-center gap-2">
-            <Target className="w-5 h-5 text-primary" /> Кого ищем
+            <Target className="w-5 h-5 text-primary" /> Портрет
           </h3>
           <p className="text-sm text-muted-foreground">
             Единый профиль кандидата: критерии, стоп-факторы, пороги AI-оценки.
@@ -752,17 +746,13 @@ export function SpecEditor({ vacancyId, onSaved }: SpecEditorProps) {
         </CardContent>
       </Card>
 
-      {/* Кнопка сохранения */}
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-muted-foreground">
-          Spec пока не управляет скорингом (новый контур, этап внедрения) —
-          действующие настройки воронки продолжают работать.
-        </p>
-        <Button onClick={saveClick} disabled={saving || !weightsValid} className="gap-1.5 shrink-0">
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          Сохранить
-        </Button>
-      </div>
+      {/* Сохранение — через общую кнопку «Сохранить настройки» внизу страницы
+          (sticky-бар, зарегистрирован выше). Отдельная кнопка убрана, чтобы не
+          дублировать действие. */}
+      <p className="text-xs text-muted-foreground">
+        Заполненный Портрет используется для AI-оценки откликов (новый контур).
+        У вакансий с пустым Портретом действуют прежние настройки воронки.
+      </p>
     </div>
   )
 }

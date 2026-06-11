@@ -1,35 +1,8 @@
-"use client"
+// Старая заглушка «Источники кандидатов» («В разработке»). Реальный функционал
+// живёт в табе «Источники» внутри вакансии и в /hr/hiring-settings → «Интеграции».
+// Чтобы прямой URL не упирался в пустой экран — редиректим на настройки найма.
+import { redirect } from "next/navigation"
 
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
-import { DashboardHeader } from "@/components/dashboard/header"
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { Card, CardContent } from "@/components/ui/card"
-import { Globe } from "lucide-react"
-
-export default function SourcesPage() {
-  return (
-    <SidebarProvider defaultOpen={true}>
-      <DashboardSidebar />
-      <SidebarInset>
-        <DashboardHeader />
-        <div className="flex-1 overflow-auto bg-background min-w-0">
-          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
-            <div className="mb-6">
-              <div className="flex items-center gap-2"><Globe className="h-5 w-5 text-violet-600" /><h1 className="text-lg font-semibold">Источники кандидатов</h1></div>
-              <p className="text-sm text-muted-foreground">Настройка источников привлечения: hh.ru, реферал, прямой и другие</p>
-            </div>
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-                <Globe className="size-12 text-muted-foreground/30 mb-4" />
-                <p className="text-muted-foreground font-medium">В разработке</p>
-                <p className="text-sm text-muted-foreground/60 mt-1 max-w-sm">
-                  Здесь можно будет управлять списком источников кандидатов: добавлять новые, переименовывать, настраивать UTM-метки и интеграции с job-бордами.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
-  )
+export default function SourcesRedirectPage() {
+  redirect("/hr/hiring-settings?tab=integrations")
 }

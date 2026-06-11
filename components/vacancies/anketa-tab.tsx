@@ -1861,7 +1861,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
           <TagInputWithSuggestions tags={data.unacceptableSkills} onChange={v => set("unacceptableSkills", v)} placeholder="Что неприемлемо..." suggestions={UNACCEPTABLE_SUGGESTIONS} customType="skill" />
         </div>
         <p className="text-[11px] text-muted-foreground leading-snug">
-          Основные настройки AI-оценки — в блоке «AI-профиль кандидата» ниже; эти поля используются как запасной вариант.
+          Основные настройки AI-оценки — в блоке «Портрет: AI-оценка» ниже; эти поля используются как запасной вариант.
         </p>
 
         {/* Образование и языки — используются в «Исходящем подборе» (hh-фильтры) */}
@@ -2691,7 +2691,7 @@ function AiProfileSection({ data, set }: {
             🤖
           </span>
           <div>
-            <span className="font-medium text-sm">AI-профиль кандидата</span>
+            <span className="font-medium text-sm">Портрет: AI-оценка</span>
             <p className="text-[10px] text-muted-foreground">Данные для автоматического скрининга и оценки</p>
           </div>
         </div>
