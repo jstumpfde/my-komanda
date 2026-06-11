@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import {
   Dialog,
   DialogContent,
@@ -68,6 +68,11 @@ export function HhBroadcastDialog({
   const [skippedIds, setSkippedIds] = useState<Set<string>>(new Set())
   const [copied, setCopied] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  // Темп рассылки: интервал между открытиями чатов (анти-бан) + авто-открытие.
+  const [intervalSec, setIntervalSec] = useState(20)
+  const [autoOpen, setAutoOpen] = useState(false)
+  const [cooldown, setCooldown] = useState(0) // сек до разблокировки кнопки «Открыть»
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Загружаем данные при открытии
   const loadData = useCallback(async () => {
@@ -133,6 +138,21 @@ export function HhBroadcastDialog({
   const total = items.length
   const processed = sentIds.size + skippedIds.size
 
+  // Запустить обратный отсчёт интервала (замок на кнопку «Открыть»).
+  const startCooldown = useCallback(() => {
+    if (cooldownRef.current) clearInterval(cooldownRef.current)
+    setCooldown(intervalSec)
+    cooldownRef.current = setInterval(() => {
+      setCooldown((c) => {
+        if (c <= 1) {
+          if (cooldownRef.current) clearInterval(cooldownRef.current)
+          return 0
+        }
+        return c - 1
+      })
+    }, 1000)
+  }, [intervalSec])
+
   const copyAndOpen = useCallback(async () => {
     if (!current) return
     const text = messages[current.id] ?? current.personalMessage
@@ -147,21 +167,35 @@ export function HhBroadcastDialog({
     if (url) window.open(url, "_blank", "noopener,noreferrer")
   }, [current, messages])
 
+  // Авто-открытие: когда замок дошёл до 0 и включён авто-режим — открыть чат.
+  // window.open после паузы может быть заблокирован попап-блокером браузера —
+  // тогда остаётся ручная кнопка (она снова активна) + подсказка.
+  useEffect(() => {
+    if (autoOpen && cooldown === 0 && phase === "wizard" && current && !current.hasNoChat) {
+      void copyAndOpen()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cooldown, autoOpen, phase, currentIdx])
+
+  useEffect(() => () => { if (cooldownRef.current) clearInterval(cooldownRef.current) }, [])
+
   const markSent = useCallback(() => {
     if (!current) return
     setSentIds((prev) => new Set([...prev, current.id]))
     const next = currentIdx + 1
-    if (next >= total) setPhase("done")
-    else setCurrentIdx(next)
-  }, [current, currentIdx, total])
+    if (next >= total) { setPhase("done"); return }
+    setCurrentIdx(next)
+    startCooldown() // следующий чат откроется не раньше интервала
+  }, [current, currentIdx, total, startCooldown])
 
   const skipCurrent = useCallback(() => {
     if (!current) return
     setSkippedIds((prev) => new Set([...prev, current.id]))
     const next = currentIdx + 1
-    if (next >= total) setPhase("done")
-    else setCurrentIdx(next)
-  }, [current, currentIdx, total])
+    if (next >= total) { setPhase("done"); return }
+    setCurrentIdx(next)
+    startCooldown()
+  }, [current, currentIdx, total, startCooldown])
 
   // ─── Рендер ───────────────────────────────────────────────────────────────
 
@@ -277,6 +311,7 @@ export function HhBroadcastDialog({
                   current.hasNoChat && "opacity-50 cursor-not-allowed",
                 )}
                 disabled={current.hasNoChat}
+                disabled={current.hasNoChat || cooldown > 0}
                 onClick={() => void copyAndOpen()}
                 title={
                   current.hasNoChat
@@ -291,6 +326,11 @@ export function HhBroadcastDialog({
                     <CheckCircle2 className="size-4 text-emerald-400" />
                     Скопировано!
                   </>
+                ) : cooldown > 0 ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Доступно через {cooldown}с
+                  </>
                 ) : (
                   <>
                     <Copy className="size-4" />
@@ -300,6 +340,36 @@ export function HhBroadcastDialog({
                 )}
               </Button>
             </div>
+
+            {/* Темп рассылки — анти-бан: равномерный интервал между открытиями */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md bg-muted/50 px-3 py-2 text-xs">
+              <span className="text-muted-foreground">Интервал между чатами:</span>
+              <div className="flex items-center gap-1">
+                {[10, 20, 30, 60].map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setIntervalSec(s)}
+                    className={
+                      "rounded px-2 py-0.5 transition-colors " +
+                      (intervalSec === s
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-background hover:bg-muted text-muted-foreground")
+                    }
+                  >{s}с</button>
+                ))}
+              </div>
+              <label className="flex items-center gap-1.5 ml-auto cursor-pointer select-none">
+                <input type="checkbox" checked={autoOpen} onChange={(e) => setAutoOpen(e.target.checked)} className="accent-primary" />
+                <span className="text-muted-foreground">Авто-открытие</span>
+              </label>
+            </div>
+            {autoOpen && (
+              <p className="text-[11px] text-muted-foreground/70 -mt-1">
+                Чат следующего откроется сам через интервал. Если браузер заблокирует
+                всплывающее окно — разрешите попапы для company24.pro или жмите кнопку вручную.
+              </p>
+            )}
 
             <div className="flex items-center gap-2">
               <Button
