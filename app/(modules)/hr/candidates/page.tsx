@@ -16,12 +16,16 @@ import { useDebounce } from "@/hooks/use-debounce"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell, DataSelectHeadCell, DataSelectCell } from "@/components/ui/data-table"
 import Link from "next/link"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { getStageLabel, getStageColorClasses } from "@/lib/stages"
+import { StageMessageControl } from "@/components/candidates/stage-message-control"
 
 // ─── Types & constants ───────────────────────────────────────────────────────
 
@@ -188,40 +192,101 @@ export default function CandidatesPage() {
 
   const [bulkLoading, setBulkLoading] = useState(false)
 
-  const changeStage = async (candidateId: string, stage: string, candidateName: string) => {
-    try {
-      const res = await fetch(`/api/modules/hr/candidates/${candidateId}/stage`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage }),
-      })
-      if (!res.ok) throw new Error()
-      setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, stage } : c))
-      toast.success(`${candidateName}: ${getStageLabel(stage)}`)
-    } catch { toast.error("Ошибка смены этапа") }
+  // Диалог смены стадии (одиночный и bulk)
+  const [stageDialogOpen, setStageDialogOpen] = useState(false)
+  const [pendingStage, setPendingStage]   = useState<string | null>(null)
+  // null = bulk, string = одиночный candidateId
+  const [pendingCandidateId, setPendingCandidateId]   = useState<string | null>(null)
+  const [pendingCandidateName, setPendingCandidateName] = useState<string | null>(null)
+  // vacancyId нужен для предпросмотра (берём из кандидата при одиночном, null при bulk)
+  const [pendingVacancyId, setPendingVacancyId] = useState<string | null>(null)
+  const [sendMessage, setSendMessage]   = useState(true)
+  const [stageMessageText, setStageMessageText] = useState("")
+  const [stageDialogLoading, setStageDialogLoading] = useState(false)
+
+  // Открыть диалог для одиночного действия
+  const openStageDialog = (candidateId: string, candidateName: string, stage: string, vacancyId: string) => {
+    setPendingCandidateId(candidateId)
+    setPendingCandidateName(candidateName)
+    setPendingStage(stage)
+    setPendingVacancyId(vacancyId)
+    setSendMessage(true)
+    setStageMessageText("")
+    setStageDialogOpen(true)
   }
 
-  const bulkChangeStage = async (stage: string) => {
-    const ids = [...selected]
-    if (ids.length === 0) return
-    setBulkLoading(true)
+  // Открыть диалог для bulk-действия
+  const openBulkStageDialog = (stage: string) => {
+    if (selected.size === 0) return
+    setPendingCandidateId(null)
+    setPendingCandidateName(null)
+    setPendingStage(stage)
+    // При bulk vacancyId может быть разным — передаём null, тумблер покажет общий текст
+    // На практике у большинства HR все выбранные кандидаты в одной вакансии,
+    // но для безопасности берём vacancyId первого выбранного.
+    const firstId = [...selected][0]
+    const firstCandidate = candidates.find(c => c.id === firstId)
+    setPendingVacancyId(firstCandidate?.vacancyId ?? null)
+    setSendMessage(true)
+    setStageMessageText("")
+    setStageDialogOpen(true)
+  }
+
+  // Подтвердить смену стадии из диалога
+  const confirmStageChange = async () => {
+    if (!pendingStage) return
+    const override = stageMessageText.trim() || null
+    setStageDialogLoading(true)
     try {
-      await Promise.all(ids.map(id =>
-        fetch(`/api/modules/hr/candidates/${id}/stage`, {
+      if (pendingCandidateId) {
+        // Одиночный
+        const res = await fetch(`/api/modules/hr/candidates/${pendingCandidateId}/stage`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ stage }),
+          body: JSON.stringify({
+            stage: pendingStage,
+            sendMessage,
+            ...(override ? { messageOverride: override } : {}),
+          }),
         })
-      ))
-      setCandidates(prev => prev.map(c => selected.has(c.id) ? { ...c, stage } : c))
-      setSelected(new Set())
-      toast.success(`${ids.length} кандидатов: ${getStageLabel(stage)}`)
+        if (!res.ok) throw new Error()
+        setCandidates(prev => prev.map(c => c.id === pendingCandidateId ? { ...c, stage: pendingStage } : c))
+        toast.success(`${pendingCandidateName ?? "Кандидат"}: ${getStageLabel(pendingStage)}`)
+      } else {
+        // Bulk
+        const ids = [...selected]
+        await Promise.all(ids.map(id =>
+          fetch(`/api/modules/hr/candidates/${id}/stage`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              stage: pendingStage,
+              sendMessage,
+              ...(override ? { messageOverride: override } : {}),
+            }),
+          })
+        ))
+        setCandidates(prev => prev.map(c => selected.has(c.id) ? { ...c, stage: pendingStage } : c))
+        setSelected(new Set())
+        toast.success(`${ids.length} кандидатов: ${getStageLabel(pendingStage)}`)
+      }
+      setStageDialogOpen(false)
+      setPendingStage(null)
+      setPendingCandidateId(null)
     } catch {
-      toast.error("Ошибка массового действия")
+      toast.error("Ошибка смены этапа")
     } finally {
-      setBulkLoading(false)
+      setStageDialogLoading(false)
     }
   }
+
+  // Обёртки для совместимости с существующими вызовами
+  const changeStage = (candidateId: string, stage: string, candidateName: string) => {
+    const c = candidates.find(x => x.id === candidateId)
+    openStageDialog(candidateId, candidateName, stage, c?.vacancyId ?? "")
+  }
+
+  const bulkChangeStage = (stage: string) => openBulkStageDialog(stage)
 
   async function toggleFavorite(id: string) {
     const target = candidates.find(c => c.id === id)
@@ -516,6 +581,44 @@ export default function CandidatesPage() {
           </div>
         </div>
       </SidebarInset>
+
+      {/* ═══ Диалог смены стадии (одиночный и bulk) ═══ */}
+      <Dialog open={stageDialogOpen} onOpenChange={(open) => { setStageDialogOpen(open); if (!open) { setPendingStage(null); setPendingCandidateId(null) } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {pendingCandidateId && pendingCandidateName
+                ? `${pendingCandidateName} → ${pendingStage ? getStageLabel(pendingStage) : ""}`
+                : pendingStage
+                  ? `${[...selected].length} кандидатов → ${getStageLabel(pendingStage)}`
+                  : "Сменить стадию"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <StageMessageControl
+              stage={pendingStage}
+              vacancyId={pendingVacancyId}
+              sendMessage={sendMessage}
+              onSendMessageChange={setSendMessage}
+              messageText={stageMessageText}
+              onMessageTextChange={setStageMessageText}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => { setStageDialogOpen(false); setPendingStage(null); setPendingCandidateId(null) }}
+              disabled={stageDialogLoading}
+            >
+              Отмена
+            </Button>
+            <Button onClick={confirmStageChange} disabled={stageDialogLoading}>
+              {stageDialogLoading ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : null}
+              Подтвердить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </SidebarProvider>
   )
 }
