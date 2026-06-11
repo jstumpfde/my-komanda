@@ -1494,6 +1494,33 @@ export default function DemoPage() {
                 )}
               </div>
             ))}
+
+            {/* Панель навигации скрыта (showSystemNav=false) — финиш всё равно
+                обязателен: рендерим ОДНУ кнопку инлайн в потоке контента
+                (без «Назад» и sticky-бара), иначе кандидат не сможет завершить. */}
+            {!(data.postDemoSettings?.showSystemNav === true
+              || (data.postDemoSettings?.showSystemNav === undefined && totalLessons > 1)) && (
+              <div className="pt-4 flex justify-center">
+                <Button
+                  onClick={handleNext}
+                  disabled={hasRequiredUnanswered || saving || isAnyMediaUploading}
+                  title={isAnyMediaUploading ? "Дождитесь окончания загрузки видео" : undefined}
+                  className="h-12 text-base font-medium px-8"
+                  style={{ backgroundColor: navBtnColor, borderColor: navBtnColor }}
+                >
+                  {saving || isAnyMediaUploading ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : currentIndex === totalLessons - 1 ? (
+                    data.postDemoSettings?.navButtonText || "Завершить"
+                  ) : (
+                    <>
+                      {data.postDemoSettings?.navButtonText || "Далее"}
+                      <ChevronRight className="ml-1 h-5 w-5" />
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </div>
