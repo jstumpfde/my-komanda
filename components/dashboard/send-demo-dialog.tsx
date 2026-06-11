@@ -64,15 +64,17 @@ export function SendDemoDialog({ open, onOpenChange, candidateName, token, posit
           <div className="border-t pt-4">
             <p className="text-sm text-muted-foreground mb-3">Отправить через:</p>
             <div className="grid grid-cols-3 gap-2">
-              <Button variant="outline" className="h-auto py-3 flex-col gap-1.5" onClick={() => { toast.success("SMS отправлено (заглушка)"); onOpenChange(false) }}>
+              {/* Прямая отправка по этим каналам ещё не подключена — честно
+                  говорим об этом, не имитируя успех. Рабочий путь — «Скопировать текст». */}
+              <Button variant="outline" className="h-auto py-3 flex-col gap-1.5" onClick={() => toast.info("Отправка по SMS пока не подключена — скопируйте текст и отправьте кандидату")}>
                 <Phone className="w-4 h-4" />
                 <span className="text-xs">SMS</span>
               </Button>
-              <Button variant="outline" className="h-auto py-3 flex-col gap-1.5" onClick={() => { toast.success("Email отправлен (заглушка)"); onOpenChange(false) }}>
+              <Button variant="outline" className="h-auto py-3 flex-col gap-1.5" onClick={() => toast.info("Отправка по Email пока не подключена — скопируйте текст и отправьте кандидату")}>
                 <Mail className="w-4 h-4" />
                 <span className="text-xs">Email</span>
               </Button>
-              <Button variant="outline" className="h-auto py-3 flex-col gap-1.5" onClick={() => { toast.success("Сообщение в Telegram отправлено (заглушка)"); onOpenChange(false) }}>
+              <Button variant="outline" className="h-auto py-3 flex-col gap-1.5" onClick={() => toast.info("Отправка в Telegram пока не подключена — скопируйте текст и отправьте кандидату")}>
                 <MessageCircle className="w-4 h-4" />
                 <span className="text-xs">Telegram</span>
               </Button>

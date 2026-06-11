@@ -355,7 +355,7 @@ export async function POST(
     const html = await res.text()
     const mappedData = parseHhHtml(html)
     mappedData.city = extractCityName(mappedData.city)
-    console.log("[hh-import] HH parsed:", JSON.stringify(mappedData, null, 2))
+    console.log(`[hh-import] HH parsed: title="${mappedData.title ?? "—"}" city="${mappedData.city ?? "—"}" descLen=${mappedData.description?.length ?? 0}`)
 
     if (!mappedData.title && !mappedData.description) {
       return apiError("Не удалось извлечь данные со страницы hh.ru", 422)
@@ -363,8 +363,9 @@ export async function POST(
 
     // Split description → responsibilities + requirements via AI (falls back
     // to description-in-responsibilities if Anthropic unavailable).
+    // Обрезаем до 20k символов — защита от расхода токенов на аномально длинных описаниях.
     const split = mappedData.description
-      ? await splitDescriptionWithAi(mappedData.description)
+      ? await splitDescriptionWithAi(mappedData.description.slice(0, 20000))
       : null
     const anketaResponsibilities = split?.responsibilities || mappedData.description
     const anketaRequirements = split?.requirements || ""
@@ -487,7 +488,7 @@ export async function POST(
     if (mappedData.category) updates.category = mappedData.category
     if (anketaEmployment.length) updates.employment = anketaEmployment[0]
 
-    console.log("[hh-import] DB updates:", JSON.stringify(updates, null, 2))
+    console.log(`[hh-import] DB updates: ${Object.keys(updates).length} полей обновлено`)
 
     const [updated] = await db
       .update(vacancies)

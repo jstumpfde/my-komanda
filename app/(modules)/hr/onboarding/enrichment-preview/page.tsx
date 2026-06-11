@@ -290,7 +290,7 @@ export default function EnrichmentPreviewPage() {
       is_multi_product: false,
     }
     saveCompany(company)
-    router.push("/vacancies/create")
+    router.push("/hr/vacancies/create")
   }
 
   return (
@@ -302,7 +302,7 @@ export default function EnrichmentPreviewPage() {
             variant="ghost"
             size="sm"
             className="gap-1.5 text-muted-foreground"
-            onClick={() => router.push("/onboarding/smart-input")}
+            onClick={() => router.push("/hr/onboarding/smart-input")}
           >
             <ArrowLeft className="w-4 h-4" />
             Назад
@@ -556,7 +556,7 @@ export default function EnrichmentPreviewPage() {
             <Button
               variant="ghost"
               className="w-full text-muted-foreground"
-              onClick={() => router.push("/vacancies/create")}
+              onClick={() => router.push("/hr/vacancies/create")}
             >
               Хочу заполнить заново вручную
             </Button>

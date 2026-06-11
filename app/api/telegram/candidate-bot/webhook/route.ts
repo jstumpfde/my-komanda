@@ -187,9 +187,11 @@ async function handleIncoming(
   chatId:    number,
   text:      string,
   _username: string | null,
-  _companyId: string,
+  companyId: string,
 ) {
-  // Найти кандидата по chat_id
+  // Найти кандидата по chat_id В РАМКАХ КОМПАНИИ из секрета вебхука —
+  // tenant-изоляция через JOIN (без неё совпадение chat_id увело бы
+  // сообщение в чужой тенант). Аналогично handleStart.
   const [row] = await db
     .select({
       id:            candidates.id,
@@ -197,6 +199,10 @@ async function handleIncoming(
       tgMessages:    candidates.tgMessages,
     })
     .from(candidates)
+    .innerJoin(vacancies, and(
+      eq(candidates.vacancyId, vacancies.id),
+      eq(vacancies.companyId, companyId),
+    ))
     .where(eq(candidates.telegramChatId, String(chatId)))
     .limit(1)
 
@@ -205,10 +211,10 @@ async function handleIncoming(
     return
   }
 
-  // Сохранить входящее сообщение
+  // Сохранить входящее сообщение (обрезаем до лимита Telegram — 4096 символов)
   const newMsg: TgMessage = {
     role:   "candidate",
-    text,
+    text:   text.slice(0, 4096),
     sentAt: new Date().toISOString(),
   }
 

@@ -7,17 +7,23 @@ import { logAudit } from "@/lib/audit/log";
 
 // GET — текущие дефолты найма компании
 export async function GET() {
-  const ctx = await requireCompany();
-  if (ctx instanceof NextResponse) return ctx;
+  try {
+    const ctx = await requireCompany();
 
-  const [company] = await db
-    .select({ hiringDefaultsJson: companies.hiringDefaultsJson })
-    .from(companies)
-    .where(eq(companies.id, ctx.companyId));
+    const [company] = await db
+      .select({ hiringDefaultsJson: companies.hiringDefaultsJson })
+      .from(companies)
+      .where(eq(companies.id, ctx.companyId));
 
-  return NextResponse.json({
-    hiringDefaults: (company?.hiringDefaultsJson ?? {}) as CompanyHiringDefaults,
-  });
+    return NextResponse.json({
+      hiringDefaults: (company?.hiringDefaultsJson ?? {}) as CompanyHiringDefaults,
+    });
+  } catch (err) {
+    // requireCompany бросает apiError (NextResponse) при 401/403 — возвращаем его,
+    // иначе клиент получил бы 500 вместо чистого статуса.
+    if (err instanceof Response) return err;
+    throw err;
+  }
 }
 
 // Глубокий мердж на уровне верхних ключей-объектов, чтобы частичный
@@ -58,10 +64,18 @@ function mergeDefaults(
 
 // PATCH — частичное обновление дефолтов найма (deep-merge верхних ключей)
 export async function PATCH(req: NextRequest) {
+  try {
   const ctx = await requireCompany();
-  if (ctx instanceof NextResponse) return ctx;
 
   const patch = (await req.json().catch(() => ({}))) as Partial<CompanyHiringDefaults>;
+
+  // Интеграции уровня компании (webhooks/bitrix) рассылают данные наружу —
+  // менять их может только директор (иначе hr_lead мог бы увести уведомления
+  // на свой сервер). Аналогично rolePermissions/candidateColumns ниже.
+  if (("webhooks" in patch || "bitrix" in patch) &&
+      !["director", "client", "platform_admin", "admin"].includes(ctx.role)) {
+    return NextResponse.json({ error: "Только директор компании может менять интеграции" }, { status: 403 });
+  }
 
   // --- Defense-in-depth: размерные лимиты ---
 
@@ -152,4 +166,8 @@ export async function PATCH(req: NextRequest) {
   }
 
   return NextResponse.json({ hiringDefaults: merged });
+  } catch (err) {
+    if (err instanceof Response) return err;
+    throw err;
+  }
 }

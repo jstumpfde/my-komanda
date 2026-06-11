@@ -168,7 +168,7 @@ export function VacancyScheduleSettings({ vacancyId }: Props) {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
-            <Clock className="w-4 h-4" /> Рабочие часы и дни
+            <Clock className="w-4 h-4" /> Рабочие дни и часы
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">

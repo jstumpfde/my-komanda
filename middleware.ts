@@ -60,6 +60,15 @@ const PUBLIC_PREFIXES = [
   "/uploads/",
   "/careers",            // публичная карьерная страница компании (поддомен)
   "/jobs/",              // карьерная страница компании по слагу: /jobs/{companySlug}
+  // Публичные маркетинговые и юридические страницы (группа (public)) — без них
+  // неавторизованный посетитель редиректился на /login вместо контента.
+  "/about",
+  "/contact",
+  "/changelog",
+  "/privacy",
+  "/terms",
+  "/status",
+  "/team",
   // Webhook кандидатского TG-бота: запросы приходят от серверов Telegram (без
   // сессии), роут сам проверяет обязательный X-Telegram-Bot-Api-Secret-Token.
   "/api/telegram/candidate-bot/webhook",

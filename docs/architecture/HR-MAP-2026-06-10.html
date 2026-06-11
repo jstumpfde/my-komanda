@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Карта раздела HR — Company24 · 10.06.2026</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root{
+    --violet:#7c3aed; --violet-d:#6d28d9; --violet-l:#ede9fe;
+    --green:#16a34a; --green-l:#dcfce7;
+    --amber:#d97706; --amber-l:#fef3c7;
+    --gray:#64748b; --gray-l:#f1f5f9;
+    --ink:#0f172a; --muted:#475569; --line:#e2e8f0;
+  }
+  *{box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Inter,sans-serif;
+    color:var(--ink); margin:0; background:#f8fafc; line-height:1.55;}
+  .wrap{max-width:1180px; margin:0 auto; padding:32px 24px 80px;}
+  header.top{display:flex; align-items:center; gap:14px; margin-bottom:6px;}
+  header.top .dot{width:42px;height:42px;border-radius:12px;background:var(--violet-l);
+    display:flex;align-items:center;justify-content:center;font-size:22px;}
+  h1{font-size:26px; margin:0; letter-spacing:-.01em;}
+  .sub{color:var(--muted); font-size:14px; margin:2px 0 22px;}
+  h2{font-size:19px; margin:40px 0 6px; display:flex; align-items:center; gap:9px;}
+  h2 .n{width:26px;height:26px;border-radius:8px;background:var(--violet);color:#fff;
+    font-size:14px;display:inline-flex;align-items:center;justify-content:center;flex:none;}
+  h2 small{font-weight:400;color:var(--muted);font-size:13px;}
+  h3.grp{font-size:15px;margin:20px 0 6px;color:var(--violet-d);display:flex;align-items:center;gap:8px;}
+  h3.grp .b{font-size:12px;font-weight:600;color:var(--muted);background:var(--gray-l);border-radius:999px;padding:2px 9px;}
+  .note{color:var(--muted); font-size:14px; margin:4px 0 14px;}
+  .card{background:#fff;border:1px solid var(--line);border-radius:16px;
+    padding:18px 18px 6px;margin:10px 0 8px;box-shadow:0 1px 2px rgba(15,23,42,.04);overflow-x:auto;}
+  .mermaid{display:flex;justify-content:center;}
+  .legend{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:13px;color:var(--muted);margin:8px 0 0;}
+  .chip{display:inline-flex;align-items:center;gap:6px;}
+  .sw{width:13px;height:13px;border-radius:4px;display:inline-block;border:1px solid rgba(0,0,0,.08)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:12px 0;}
+  @media(max-width:780px){.grid{grid-template-columns:1fr}}
+  .panel{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 18px;}
+  .panel h3{margin:0 0 8px;font-size:15px;}
+  .panel ul{margin:6px 0 0;padding-left:18px;}
+  .panel li{margin:3px 0;font-size:13.5px;color:var(--muted);}
+  .panel li b{color:var(--ink);font-weight:600;}
+  .callout{border-left:4px solid var(--amber);background:var(--amber-l);
+    padding:12px 16px;border-radius:0 10px 10px 0;margin:14px 0;font-size:13.5px;color:#7c2d12;}
+  .callout b{color:#7c2d12;}
+  .summary{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0 6px;}
+  .scard{flex:1;min-width:150px;border:1px solid var(--line);border-radius:13px;padding:13px 15px;background:#fff;}
+  .scard .num{font-size:24px;font-weight:700;line-height:1;}
+  .scard .lbl{font-size:12.5px;color:var(--muted);margin-top:4px;}
+  .scard.ok{background:var(--green-l);border-color:#bbf7d0}.scard.ok .num{color:#15803d}
+  .scard.new{background:var(--violet-l);border-color:#ddd6fe}.scard.new .num{color:#6d28d9}
+  .scard.dev{background:var(--amber-l);border-color:#fde68a}.scard.dev .num{color:#b45309}
+  .scard.stub{background:var(--gray-l);border-color:#e2e8f0}.scard.stub .num{color:#475569}
+  table.cat{width:100%;border-collapse:collapse;font-size:13px;margin:4px 0 14px;}
+  table.cat th,table.cat td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top;}
+  table.cat th{color:var(--muted);font-weight:600;background:var(--gray-l);font-size:12px;}
+  table.cat td.r{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--ink);white-space:nowrap;}
+  table.cat td.d{color:var(--gray);font-size:11.5px;white-space:nowrap;}
+  table.cat td.note{color:var(--muted);}
+  .pill{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:999px;white-space:nowrap;}
+  .p-ok{background:var(--green-l);color:#166534;}
+  .p-new{background:var(--violet-l);color:#5b21b6;}
+  .p-dev{background:var(--amber-l);color:#92400e;}
+  .p-stub{background:var(--gray-l);color:#475569;}
+  .p-del{background:#fee2e2;color:#991b1b;}
+  .p-plan{background:#e0f2fe;color:#075985;}
+  .foot{color:var(--gray);font-size:12.5px;margin-top:34px;border-top:1px solid var(--line);padding-top:14px;}
+  code{background:var(--gray-l);padding:1px 6px;border-radius:5px;font-size:12.5px;}
+  a.route{color:var(--violet-d);text-decoration:none;border-bottom:1px dashed #c4b5fd;cursor:pointer;}
+  a.route:hover{color:#fff;background:var(--violet);border-radius:4px;border-bottom-color:transparent;padding:1px 4px;margin:-1px -4px;}
+  a.route::after{content:" ↗";font-size:10px;opacity:.5;}
+  span.route-param{color:var(--gray);}
+  .basepick{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#fff;border:1px solid var(--line);
+    border-radius:12px;padding:11px 15px;margin:14px 0 4px;font-size:13px;}
+  .basepick b{font-size:13px}
+  .basepick label{display:inline-flex;align-items:center;gap:5px;cursor:pointer;color:var(--muted);
+    padding:4px 11px;border-radius:999px;border:1px solid var(--line);}
+  .basepick label:has(input:checked){background:var(--violet-l);border-color:#c4b5fd;color:var(--violet-d);font-weight:600;}
+  .basepick input{accent-color:var(--violet);}
+  .basepick .hint{color:var(--gray);font-size:12px;}
+  table.cat th.chk,table.cat td.chk{text-align:center;width:40px;}
+  table.cat td.chk input{width:17px;height:17px;accent-color:var(--violet);cursor:pointer;}
+  tr.done{opacity:.45;}
+  tr.done td.r a.route{text-decoration:line-through;}
+  .progress-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#fff;
+    border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin:10px 0 6px;font-size:14px;}
+  .progress-bar .pcount{font-weight:700;color:var(--violet-d);white-space:nowrap;}
+  .progress-bar .ptrack{flex:1;min-width:160px;height:9px;background:var(--gray-l);border-radius:999px;overflow:hidden;}
+  .progress-bar .pfill{height:100%;background:var(--violet);width:0;transition:width .25s;}
+  .progress-bar button{font-size:12px;border:1px solid var(--line);background:#fff;border-radius:8px;
+    padding:5px 12px;cursor:pointer;color:var(--muted);}
+  .progress-bar button:hover{background:var(--gray-l);}
+  .progress-bar .savehint{color:var(--gray);font-size:12px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="dot">🗺️</div>
+    <div>
+      <h1>Карта раздела HR <span style="font-size:15px;color:var(--violet-d)">· редакция 10.06.2026</span></h1>
+      <div class="sub">Company24 · страницы со статусами · потоки и взаимосвязи · прод = main <code>3f130a29</code> · копия HR-MAP.html от 09.06 + всё изменённое и запланированное</div>
+    </div>
+  </header>
+
+  <div class="summary">
+    <div class="scard ok"><div class="num">25</div><div class="lbl">✅ Рабочих<br>(реальные данные)</div></div>
+    <div class="scard new"><div class="num">9</div><div class="lbl">🆕 Фич выкачено<br>10.06 (этап A + волна F)</div></div>
+    <div class="scard dev"><div class="num">21</div><div class="lbl">🟡 В разработке<br>(UI есть, данные частично)</div></div>
+    <div class="scard stub"><div class="num">19</div><div class="lbl">⚪ Заглушка / эксперимент<br>(−2: overview/overview2 удалены)</div></div>
+  </div>
+  <div class="legend">
+    <span class="chip"><span class="pill p-ok">✅ Рабочая</span> тянет данные из API, в проде</span>
+    <span class="chip"><span class="pill p-new">🆕 10.06</span> сделана/обновлена 10.06.2026</span>
+    <span class="chip"><span class="pill p-dev">🟡 В разработке</span> интерфейс есть, данные частичные</span>
+    <span class="chip"><span class="pill p-stub">⚪ Заглушка</span> 0 API / «Скоро» / редирект / PoC</span>
+    <span class="chip"><span class="pill p-plan">🔭 План</span> утверждено в целевой архитектуре, ещё не сделано</span>
+    <span class="chip"><span class="pill p-del">🗑 Удалена</span> снесена 10.06</span>
+  </div>
+
+  <div class="callout" style="border-left-color:var(--violet);background:var(--violet-l);color:#5b21b6;">
+    <b>Обновление 10.06.2026 — ВЫКАЧЕНО НА ПРОД (main 3f130a29, два деплоя за день, по журналу присутствия):</b>
+    <ul style="margin:6px 0 0;padding-left:18px;">
+      <li><b>Этап A аудита — 13 багфиксов:</b> календарь сохраняет рабочее расписание (был useState) · bulk-бар только на табе «Кандидаты» · hh-импорт подтягивает Категорию · удалены мёртвые «Дефолтный сценарий»/«Автоматизация» · снесены overview/overview2 · сайдбар без битых ссылок · SuperJob/Яндекс-заглушки убраны · hh-черновик не подключается автоматически · кнопка «Сохранить» у формы анонимных кандидатов · баннер мультикомпании только при включённом режиме · legacy-секции → редирект на конструктор · подтаб «AI» → «Расписание».</li>
+      <li><b>Фикс 502 Нэнси</b> — HR-чат Нэнси ходит через прокси с fallback (<code>CLAUDE_PROXY_URLS</code>), а не через сломанный CF-worker.</li>
+      <li><b>R4 Candidate Spec, этап 1 (спящий)</b> — новый контур: <code>lib/core/spec</code>, таблица <code>vacancy_specs</code> (миграция 0197), API <code>/api/core/spec/[id]</code> с legacy-мостом. Рантайм не тронут.</li>
+      <li><b>F2 Telegram-постинг</b> — вакансия → Источники: каналы компании, AI-генерация поста, переиспользуемая трекинг-ссылка <code>/v/[slug]</code>, «Скопировать».</li>
+      <li><b>F3 Карьерная страница + SEO</b> — единый <code>CareerPageView</code>, две точки входа: поддомен <code>{sub}.company24.pro</code> и <code>/jobs/{slug}</code>; JSON-LD <b>JobPosting</b> на списке и на странице каждой вакансии (+метатеги/OG — их не было) → шанс Google for Jobs. URL в настройках брендинга.</li>
+      <li><b>F4 Асинхронное видео-интервью</b> — видео-визитка расширена до 1–5 вопросов (ответы по одному, прогресс); просмотр HR в карточке; обратная совместимость.</li>
+      <li><b>F5 Пресет «Стажировка» (practice-to-hire)</b> — сценарий воронки + стадия <code>internship</code> (17-я, выкл. по умолчанию) + формат практики: оплачиваемое тестовое / мини-ГПХ / без оплаты — выбирает клиент.</li>
+      <li><b>F7 Telegram-чат с кандидатами (MVP)</b> — бот компании (официальный Bot API): подключение в /hr/integrations, deep-link «Продолжить в Telegram» из демо, <code>/start</code>-связка, <code>/stop</code>-отписка, переписка в drawer «Каналы». Миграция 0198, webhook в <code>PUBLIC_PREFIXES</code> (обязательный secret).</li>
+      <li><b>🔐 Ротация ключей</b> — пароль БД (был в git!), CRON_SECRET (включая crontab), PLATFORM_ADMIN_KEY — сменены без простоя. Остался ANTHROPIC_API_KEY (нужна консоль Anthropic — Юрий).</li>
+    </ul>
+  </div>
+
+  <div class="callout" style="border-left-color:#0ea5e9;background:#e0f2fe;color:#075985;">
+    <b>На стейджинге / готово к интеграции (10.06, не на проде):</b>
+    <ul style="margin:6px 0 0;padding-left:18px;">
+      <li><b>R4 этап 2 — экран «Кого ищем»</b> (вакансия → Настройки, между Воронкой и Источниками): must/nice/dealbreakers тегами, веса Σ=100, стоп-факторы, ДВЕ карточки порогов (резюме 75/40 ⟂ анкета 75/50 — в одном месте), идеальный профиль, кнопка «Перенести из старого Портрета». Находка: пороги анкеты реально жили в <code>demos.post_demo_settings</code> — ещё один скрытый дубль, сведён.</li>
+      <li><b>F1 Rediscovery базы</b> — «Поискать в базе» на табе Кандидаты: префильтр по компании (до 500) → текстовый ранжинг по Spec → топ-50 → AI-оценка батчами (≤5 вызовов Haiku) → список со score/причиной → «Добавить выбранных» (копия с source='rediscovery', дедуп по телефону/email/hh-резюме — против B3).</li>
+      <li><b>CI-деплой (подготовлен)</b> — GitHub Actions: сборка off-box → артефакт → атомарный своп .next (только после проверки BUILD_ID) → reload → health → авто-откат. Запуск вручную, стейджинг по умолчанию. Для включения: 5 секретов + первый прогон на стейджинге.</li>
+    </ul>
+  </div>
+
+  <div class="basepick">
+    <b>Открывать страницы на:</b>
+    <label><input type="radio" name="base" value="https://new.company24.pro" checked> Стейджинг (new)</label>
+    <label><input type="radio" name="base" value="https://company24.pro"> Прод</label>
+    <label><input type="radio" name="base" value="http://localhost:3000"> Локально :3000</label>
+    <span class="hint">Клик по маршруту откроет страницу в новой вкладке. У маршрутов с <code>[id]</code> открывается список.</span>
+  </div>
+
+  <!-- 0. ЦЕЛЕВАЯ АРХИТЕКТУРА -->
+  <h2><span class="n">0</span> Целевая архитектура <small>— утверждена 10.06, полная версия: docs/audit/HR-system-map-and-target-2026-06-10.md</small></h2>
+  <div class="note"><b>Главный принцип — Nancy-first:</b> весь найм управляется и кнопками, и голосом через Нэнси («составь вакансию», «кто готов к собеседованию»). Кнопки UI и Нэнси вызывают ОДНИ И ТЕ ЖЕ серверные операции. Создание вакансии = три действия: <b>Бриф → Spec → Сценарий</b>, остальное — override'ы дефолтов компании.</div>
+  <div class="card">
+    <div class="mermaid">
+flowchart TB
+  subgraph IN["Входы управления"]
+    UI["🖱 UI (кнопки)"]:::src
+    NAN["🎙 Нэнси (голос/чат)"]:::src
+  end
+  OPS["Слой операций (tools)<br/><small>vacancy.create_from_brief · funnel.apply_template ·<br/>candidate.invite/reject · interview.propose_slots · report.query</small>"]:::proc
+  UI --> OPS
+  NAN --> OPS
+  subgraph CORE["8 реестров — источники правды"]
+    R1["R1 Бренд"]:::st
+    R2["R2 Время и люди<br/><small>календари, слоты, мульти-HR</small>"]:::st
+    R3["R3 Стадии (17)"]:::st
+    R4["R4 Candidate Spec ★<br/><small>кого ищем · пороги · стоп-факторы</small>"]:::win
+    R5["R5 Контент-библиотека"]:::st
+    R6["R6 Чат-интенты<br/><small>опора — AI чат-бот</small>"]:::st
+    R7["R7 Машина касаний<br/><small>дожимы · прогрев · цель=параметр</small>"]:::st
+    R8["R8 Реестр сообщений<br/><small>оффер · приглашение · отказы</small>"]:::st
+  end
+  OPS --> CORE
+  MACH["⚙️ Машина найма: 9 шагов вертикали + 4 горизонтали<br/><small>фильтр/скоринг → сообщение → демо → анкета → тест → интервью → реф-чек → оффер → найм/резерв</small>"]:::proc
+  CORE --> MACH
+  PROJ["📺 Проекции UI: вакансия · одна таблица кандидатов + один drawer ·<br/>календарь-центр · дашборды по ролям · библиотека · резерв"]:::ai
+  CORE --> PROJ
+
+  classDef src fill:#ede9fe,stroke:#c4b5fd,color:#5b21b6,font-weight:bold;
+  classDef proc fill:#e0e7ff,stroke:#a5b4fc,color:#3730a3,font-weight:bold;
+  classDef st fill:#dcfce7,stroke:#86efac,color:#166534;
+  classDef win fill:#bbf7d0,stroke:#4ade80,color:#14532d,font-weight:bold;
+  classDef ai fill:#fae8ff,stroke:#e9d5ff,color:#86198f;
+    </div>
+    <div class="legend"><span class="chip">★ R4 — первый реестр, этап 1 на проде (спящий), этап 2 на стейджинге</span></div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <h3>🗺 Дорожная карта (этапы)</h3>
+      <ul>
+        <li><b>A. Мёртвое + баги</b> — <span class="pill p-ok">✅ на проде 10.06</span></li>
+        <li><b>B. Реестры ядра</b> — R4 <span class="pill p-new">🆕 этап 1 прод / этап 2 стейджинг</span>, дальше R8→R7→R6→R2→R3→R5 <span class="pill p-plan">🔭</span></li>
+        <li><b>C. Проекции UI</b> — одна таблица+drawer кандидатов · воронка 23 блока → 9 шагов + 4 горизонтали · календарь-центр (interviews = вид) · URL-табы (<code>/hr/vacancies/123/candidates</code>) + «reload → та же страница» · ширина Sheet адаптивная <span class="pill p-plan">🔭</span></li>
+        <li><b>D. Операции + Нэнси N1–N2</b> (отчёты голосом → действия с подтверждением) <span class="pill p-plan">🔭</span></li>
+        <li><b>E. Нэнси N3</b> — вакансия по голосовому брифу <span class="pill p-plan">🔭</span></li>
+        <li><b>F. Каналы найма</b> — F2/F3/F4/F5/F7 <span class="pill p-ok">✅ прод</span> · F1 rediscovery <span class="pill p-new">🆕 готов</span> · F6 источники в порядок <span class="pill p-plan">🔭 в C</span></li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>🛡 Двухконтурная схема (не ломать действующее)</h3>
+      <ul>
+        <li><b>Контур 1 «Действующий»</b> — только баг-фиксы, реформа в него не лезет.</li>
+        <li><b>Контур 2 «Новое ядро»</b> — ТОЛЬКО новые файлы (<code>lib/core/…</code>, <code>/api/core/…</code>) и новые таблицы; пока флаг выключен — код спит.</li>
+        <li><b>Переключение флагом</b> поэтапно: полигон-вакансия «Помощник по маркетингу» (ИП) → ИП целиком → Орлинк → все. Откат = выключить флаг.</li>
+        <li><b>Платформа продуктов</b> (решение 10.06): модульный монолит + лицензии <code>company_modules</code> + поддомены как маршрутизация; БЕЗ распила на серверы; dedicated-инсталляция того же кода — для enterprise; форк кода под клиента ЗАПРЕЩЁН.</li>
+        <li><b>Деплой-гейт</b>: окно 19:00–08:00 МСК ИЛИ журнал присутствия пуст.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout">
+    <b>Карта дублей (диагноз, полная таблица в docs/audit):</b> ~17 сущностей настраиваются из 2–6 мест каждая.
+    Рекордсмены: интервью — 6 мест · расписание — 5 · «анкеты» — 5 · стоп-факторы, критерии «кого ищем», дожимы, чат-реакции — по 4.
+    Конфликты: одни стоп-слова → в чат-боте эскалация, в блоке — отказ; два набора AI-порогов (резюме 75/40 ⟂ анкета 75/50 — сведены в Spec).
+    Лечение — реестры R1–R8 + принцип «ОДНО место + фильтр/селектор + переиспользуемый компонент».
+  </div>
+
+  <!-- 1. КАТАЛОГ -->
+  <h2><span class="n">1</span> Полный каталог страниц</h2>
+
+  <h3 class="grp">🟢 НАЙМ — ядро продукта <span class="b">в активном меню</span></h3>
+  <table class="cat">
+    <tr><th style="width:22%">Маршрут</th><th style="width:13%">Статус</th><th>Что это</th><th style="width:11%">Изменён</th></tr>
+    <tr><td class="r">/hr/dashboard</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Дашборд найма: KPI, воронка, AI-инсайты. <b>Целевое (Юрий):</b> live-кокпит HR «кто движется / кто готов / кого собеседовать» — дорабатываем в конце, после сборки функционала</td><td class="d">04.06</td></tr>
+    <tr><td class="r">/hr/report</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Отчёт по найму = дашборд руководителя: KPI, таблица по вакансиям (hh-счётчики), причины отказа, share-ссылка + TV-режим. <b>Будущее:</b> общий TV-борд со вкладками отделов (HR/продажи/…)</td><td class="d">09.06</td></tr>
+    <tr><td class="r">/hr/vacancies</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Список вакансий: Активные / Архив / Корзина</td><td class="d">01.06</td></tr>
+    <tr><td class="r">/hr/vacancies/[id]</td><td><span class="pill p-new">🆕 10.06</span></td><td class="note">Карточка вакансии (ядро): <b>10.06</b> — bulk-бар заскоупен, legacy-секции → конструктор, «AI»→«Расписание», баннер мультикомпании условный, Источники: +Telegram-постинг, −SuperJob/Яндекс, hh-черновик без авто-подключения; видео-интервью в визитке. <b>Стейджинг:</b> +«Кого ищем» (Spec) и «Поискать в базе» (rediscovery). <b>План (C):</b> URL-табы <code>/hr/vacancies/[id]/candidates</code></td><td class="d">10.06</td></tr>
+    <tr><td class="r">/hr/vacancies/create/wizard</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Мастер создания. <b>Целевое:</b> Бриф → Spec → Сценарий (3 действия, входы: голос Нэнси / текст / hh-импорт / шаблон)</td><td class="d">02.04</td></tr>
+    <tr><td class="r">/hr/vacancies/[id]/compare</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Сравнение кандидатов: AI-группировка ответов</td><td class="d">05.06</td></tr>
+    <tr><td class="r">/hr/vacancies/[id]/edit</td><td><span class="pill p-dev">🟡 Legacy</span></td><td class="note">Legacy-редактор (почти не используется)</td><td class="d">02.04</td></tr>
+    <tr><td class="r">/hr/candidates</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Общий список кандидатов. <b>Директива Юрия (этап C):</b> 1-в-1 та же БОГАТАЯ таблица и тот же drawer, что на табе вакансии (сейчас бедная версия + клик ведёт на отдельную страницу — должен открывать drawer)</td><td class="d">29.05</td></tr>
+    <tr><td class="r">/hr/candidates/[id]</td><td><span class="pill p-dev">🟡 На замену</span></td><td class="note">Полная страница кандидата (5 табов) — <b>заменяется общим drawer'ом</b> (8 табов, эталон ширины Sheet) в этапе C</td><td class="d">29.05</td></tr>
+    <tr><td class="r">/hr/talent-pool</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Резерв: база, кампании-прогрев, рефералы, формы. <b>План:</b> прогрев = машина касаний R7; формы/трекинг → единый реестр источников (F6); таблица кандидатов → общий компонент</td><td class="d">04.06</td></tr>
+    <tr><td class="r">/hr/calendar</td><td><span class="pill p-new">🆕 10.06</span></td><td class="note"><b>10.06: рабочее расписание сохраняется на сервер</b> (был только useState). <b>Целевое (R2):</b> календарь = ЦЕНТР времени компании (слоты, праздники, iCal/Google, мульти-HR: личные + общий слот-пул, вакансия→HR); Нэнси предлагает кандидатам слоты отсюда</td><td class="d">10.06</td></tr>
+    <tr><td class="r">/hr/interviews</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Интервью. <b>План (C):</b> становится ВИДОМ календаря; тайм-бакеты — из localStorage в сохранённые виды; стадии — из единого реестра R3</td><td class="d">05.06</td></tr>
+    <tr><td class="r">/hr/hiring-settings</td><td><span class="pill p-new">🆕 10.06</span></td><td class="note"><b>10.06: удалены мёртвые секции</b> «Дефолтный сценарий» и «Автоматизация» (ничего не читало). <b>План:</b> компания-дефолты реестров (стадии-редактор из конструктора — он удобнее), интеграции собрать в одно место, Битрикс → уровень платформы</td><td class="d">10.06</td></tr>
+    <tr><td class="r">/hr/integrations</td><td><span class="pill p-new">🆕 10.06</span></td><td class="note"><b>10.06: + карточка «Telegram-бот для кандидатов»</b> (токен → getMe → webhook с секретом)</td><td class="d">10.06</td></tr>
+    <tr><td class="r">/hr/audit-log</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Журнал аудита ПДн (ФЗ-152)</td><td class="d">05.06</td></tr>
+    <tr><td class="r">/hr/library (+create, editor)</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Библиотека шаблонов контента (R5): демо, блоки, тесты, анкеты — ИСТОЧНИК, вакансия переиспользует (двусторонний reuse подтверждён). <b>План:</b> свести 5 хранилищ шаблонов; «анкет» 5 видов → прояснить</td><td class="d">29.05</td></tr>
+    <tr><td class="r">/hr/analytics</td><td><span class="pill p-stub">⚪ Редирект</span></td><td class="note">→ /hr/dashboard?tab=analytics. <b>Принцип (Юрий):</b> аналитика = общий дашборд + селектор вакансии, не зарываться в каждую</td><td class="d">05.04</td></tr>
+    <tr><td class="r">/hr/demo-editor</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Редактор демо-потока (NotionEditor)</td><td class="d">18.04</td></tr>
+  </table>
+
+  <h3 class="grp">🌐 ПУБЛИЧНЫЕ ПОВЕРХНОСТИ <span class="b">кандидаты и внешние</span></h3>
+  <table class="cat">
+    <tr><th style="width:22%">Маршрут</th><th style="width:13%">Статус</th><th>Что это</th><th style="width:11%">Изменён</th></tr>
+    <tr><td class="r">{sub}.company24.pro · /jobs/[slug]</td><td><span class="pill p-new">🆕 10.06</span></td><td class="note"><b>Карьерная страница компании</b> — единый CareerPageView, 2 точки входа; JSON-LD Organization+ItemList+JobPosting; брендинг; URL в настройках брендинга</td><td class="d">10.06</td></tr>
+    <tr><td class="r">/vacancy/[slug]</td><td><span class="pill p-new">🆕 10.06</span></td><td class="note">Публичная страница вакансии: <b>10.06 добавлены JSON-LD JobPosting + метатеги/OG</b> (не было вовсе) → Google for Jobs</td><td class="d">10.06</td></tr>
+    <tr><td class="r">/demo/[token]</td><td><span class="pill p-new">🆕 10.06</span></td><td class="note">Демо кандидата: <b>10.06</b> — видео-интервью (вопросы по одному) + кнопка «Продолжить общение в Telegram» (если бот подключён)</td><td class="d">10.06</td></tr>
+    <tr><td class="r">/report/[token]</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Публичный отчёт + TV-режим (?tv=1)</td><td class="d">09.06</td></tr>
+    <tr><td class="r">/v/[code] · /f/[code]</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Трекинг-ссылки (клики/кандидаты) — их же использует Telegram-постинг</td><td class="d">10.06</td></tr>
+    <tr><td class="r">/api/telegram/candidate-bot/webhook</td><td><span class="pill p-new">🆕 10.06</span></td><td class="note">Webhook кандидатского TG-бота (обязательный secret_token; /start-связка, /stop-отписка)</td><td class="d">10.06</td></tr>
+    <tr><td class="r">/ask/[code]</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Публичная Нэнси базы знаний (после фикса прокси)</td><td class="d">10.06</td></tr>
+  </table>
+
+  <h3 class="grp">🟡 АДАПТАЦИЯ · ОРГСТРУКТУРА <span class="b">частично в меню</span></h3>
+  <table class="cat">
+    <tr><th style="width:22%">Маршрут</th><th style="width:13%">Статус</th><th>Что это</th><th style="width:11%">Изменён</th></tr>
+    <tr><td class="r">/hr/adaptation/analytics · assignments</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Аналитика и назначения адаптации</td><td class="d">04.06</td></tr>
+    <tr><td class="r">/hr/adaptation/plans · gamification</td><td><span class="pill p-dev">🟡 В разработке</span></td><td class="note">Планы адаптации, геймификация</td><td class="d">23.05</td></tr>
+    <tr><td class="r">/hr/onboarding (+channel, smart-input, voice)</td><td><span class="pill p-stub">⚪ Эксперименты</span></td><td class="note">Хаб «Ввод информации» и каналы сбора (0 API) — группа «В разработке» в сайдбаре</td><td class="d">07.04</td></tr>
+    <tr><td class="r">/hr/preboarding · offboarding · buddy</td><td><span class="pill p-dev">🟡 В разработке</span></td><td class="note">Пребординг, оффбординг, наставничество</td><td class="d">08.04</td></tr>
+    <tr><td class="r">/hr/org-structure · departments · positions</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Оргсхема, отделы, должности</td><td class="d">04.06</td></tr>
+  </table>
+
+  <h3 class="grp">⚪ ПЕРСОНАЛ · ОБУЧЕНИЕ · AI · LEGACY <span class="b">вне активного меню</span></h3>
+  <table class="cat">
+    <tr><th style="width:22%">Маршрут</th><th style="width:13%">Статус</th><th>Что это</th><th style="width:11%">Изменён</th></tr>
+    <tr><td class="r">/hr/flight-risk</td><td><span class="pill p-ok">✅ Рабочая</span></td><td class="note">Риск увольнения + удержание</td><td class="d">04.06</td></tr>
+    <tr><td class="r">/hr/pulse-surveys · employees/[id]/skills · courses (+ai-generate) · assessments · certificates · skills</td><td><span class="pill p-dev">🟡 В разработке</span></td><td class="note">Обучение/оценка — длинный хвост</td><td class="d">23.05</td></tr>
+    <tr><td class="r">/hr/reskilling · predictive-hiring · marketplace · agents</td><td><span class="pill p-stub">⚪ Эксперименты</span></td><td class="note">HR-tech будущее (0 API)</td><td class="d">29.03</td></tr>
+    <tr><td class="r">/hr/scoring-lab · ai-assistant</td><td><span class="pill p-dev">🟡 Прототипы</span></td><td class="note">Лаборатория скоринга; AI-ассистент HR. <b>Целевое:</b> AI-ассистент вакансии усилить (анализ ниши по нескольким hh-вакансиям, опыт↔зарплата, правдивое «время публикации»; рекомендации без конфликтов и перегруза; AI только предлагает, НЕ редактирует)</td><td class="d">30.05</td></tr>
+    <tr><td class="r">/hr/settings/notifications</td><td><span class="pill p-dev">🟡 Рабочая</span></td><td class="note">Уведомления HR (Telegram)</td><td class="d">23.05</td></tr>
+    <tr><td class="r">/hr/settings/schedule · templates · sources</td><td><span class="pill p-stub">⚪ Заглушки</span></td><td class="note">Кандидаты на снос при сведении реестров (R2/R8/источники)</td><td class="d">08.04</td></tr>
+    <tr><td class="r">/hr/overview · /hr/overview2</td><td><span class="pill p-del">🗑 Удалены 10.06</span></td><td class="note">Снесены (мёртвые, 0 API); редирект платформенных ролей → /hr/vacancies</td><td class="d">10.06</td></tr>
+    <tr><td class="r">/hr/funnel · /hr/sources</td><td><span class="pill p-stub">⚪ Legacy</span></td><td class="note">Кандидаты на снос следующей чисткой</td><td class="d">23.05</td></tr>
+  </table>
+
+  <!-- 3. СКВОЗНОЙ ПОТОК -->
+  <h2><span class="n">2</span> Сквозной поток найма <small>— путь кандидата (целевые 9 шагов + 4 горизонтали)</small></h2>
+  <div class="note">Стадии: <code>lib/stages.ts</code> — теперь <b>17</b> канонических (+ <code>internship</code> 10.06). Горизонтали работают вдоль всей воронки и питаются реестрами.</div>
+  <div class="card">
+    <div class="mermaid">
+flowchart TB
+  hh["hh.ru отклики"]:::src --> Q
+  site["Сайт / Карьерная стр. / Демо"]:::src --> Q
+  tg["Telegram-постинг /v/ссылки"]:::src --> Q
+  red["♻️ Rediscovery базы (F1)"]:::src --> Q
+  ref["Рефералы / Резерв"]:::src --> Q
+  Q["1 · Фильтр и скоринг<br/><small>стоп-факторы + AI-скоринг по Spec (R4) + маршрутизация</small>"]:::proc
+  Q -->|не прошёл| REJ["❌ Отказ (нейтральный текст из R8)"]:::rej
+  Q --> MSG["2 · Первое сообщение (R8)"]:::stage
+  MSG --> DEMO["3 · Демо (контент R5)<br/><small>+ видео-интервью 1-5 вопросов</small>"]:::stage
+  DEMO --> ANK["4 · Анкета + AI-скрининг<br/><small>пороги из Spec</small>"]:::stage
+  ANK --> TEST["5 · Тест / Практика<br/><small>формат: оплачиваемое · мини-ГПХ · обычное</small>"]:::stage
+  TEST --> INT["6 · Интервью<br/><small>слоты из календаря R2 · Нэнси предлагает</small>"]:::stage
+  INT --> STAG["6.5 · Стажировка<br/><small>пресет practice-to-hire</small>"]:::stage
+  STAG --> RC["7 · Реф-чек"]:::stage
+  RC --> OFF["8 · Оффер (R8, эл. подпись)"]:::stage
+  OFF --> HIRE["9 · ✅ Нанят"]:::win
+  Q -.-> POOL["♻️ Резерв + прогрев (R7)"]:::side
+
+  CHAT["💬 Горизонталь: чат-движок R6<br/><small>интенты → реакции · AI-бот (hh + Telegram) · FAQ ручной режим</small>"]:::ai
+  TOUCH["📬 Горизонталь: машина касаний R7<br/><small>дожим демо/анкеты/теста · прогрев · глушители</small>"]:::ai
+  TIME["⏰ Горизонталь: время R2<br/><small>окно отправки · слоты · праздники</small>"]:::ai
+  ST["🪜 Горизонталь: стадии R3 (17)"]:::ai
+  CHAT -.-> MSG & DEMO & ANK & TEST
+  TOUCH -.-> DEMO & ANK & TEST
+  TIME -.-> MSG & INT
+  ST -.-> Q & HIRE
+
+  classDef src fill:#ede9fe,stroke:#c4b5fd,color:#5b21b6;
+  classDef proc fill:#e0e7ff,stroke:#a5b4fc,color:#3730a3,font-weight:bold;
+  classDef stage fill:#dcfce7,stroke:#86efac,color:#166534;
+  classDef ai fill:#fae8ff,stroke:#e9d5ff,color:#86198f;
+  classDef rej fill:#fee2e2,stroke:#fca5a5,color:#991b1b;
+  classDef win fill:#bbf7d0,stroke:#4ade80,color:#14532d,font-weight:bold;
+  classDef side fill:#f1f5f9,stroke:#cbd5e1,color:#475569;
+    </div>
+  </div>
+
+  <!-- 4. AI ЧАТ-БОТ -->
+  <h2><span class="n">3</span> AI чат-бот — 4 слоя безопасности <small>опорный блок для чат-интентов R6</small></h2>
+  <div class="note">По решению Юрия чат-логика сводится В ОДНУ систему «интент → реакция» на базе чат-бота: его триггеры-темы (зарплата/график/звонок/…) = готовые интенты; «Стоп-слова», «Хочет созвониться», FAQ — становятся режимами этой системы (авто/ручной). Конфликт «стоп-слово → отказ vs эскалация» устраняется. <b>Новый канал доставки 10.06: Telegram-бот</b> (кандидат начинает первым по deep-link, /stop, лимиты).</div>
+  <div class="card">
+    <div class="mermaid">
+flowchart TB
+  MSG["💬 Сообщение кандидата (hh-чат · Telegram)"]:::in --> PRE["① Pre-filter · Haiku<br/><small>injection · abuse · code · offtopic</small>"]:::hk
+  PRE -->|угроза| ESC["⚠️ Эскалация / авто-отказ"]:::rej
+  PRE -->|чисто| INT{"Интент? (R6)<br/><small>зарплата · график · звонок · отказ · вопрос</small>"}:::dec
+  INT -->|авто| EX["② Executor · Sonnet<br/><small>промпт из Spec + бренда</small>"]:::sn
+  INT -->|ручной| FAQ["FAQ-подсказка HR (копировать)"]:::side
+  EX --> POST["③ Post-filter · Haiku"]:::hk
+  POST -->|нарушение| ESC
+  POST -->|чисто| SEND["✅ Ответ + тайминги «как человек»"]:::ok
+  SEND -.-> WATCH["④ Watcher · cron"]:::sn
+  KILL["🛑 Kill-switch · вакансия/компания/платформа"]:::kill -.-> EX
+
+  classDef in fill:#ede9fe,stroke:#c4b5fd,color:#5b21b6,font-weight:bold;
+  classDef hk fill:#dbeafe,stroke:#93c5fd,color:#1e40af;
+  classDef sn fill:#fae8ff,stroke:#e9d5ff,color:#86198f;
+  classDef ok fill:#dcfce7,stroke:#86efac,color:#166534,font-weight:bold;
+  classDef rej fill:#fee2e2,stroke:#fca5a5,color:#991b1b;
+  classDef kill fill:#fef3c7,stroke:#fcd34d,color:#92400e;
+  classDef dec fill:#fef9c3,stroke:#fde047,color:#854d0e;
+  classDef side fill:#f1f5f9,stroke:#cbd5e1,color:#475569;
+    </div>
+  </div>
+
+  <!-- 5. ДАННЫЕ -->
+  <h2><span class="n">4</span> Модель данных и связи <small>+ новое 10.06</small></h2>
+  <div class="card">
+    <div class="mermaid">
+flowchart TB
+  CO["🏢 companies<br/><small>+ hiringDefaults + tg-боты + brand</small>"]:::co --> VAC["📋 vacancies"]:::vac
+  CO --> HH["🔗 hhIntegrations · OAuth"]:::hh
+  CO --> AV["🟠 avito (выкл.)"]:::hh
+  CO --> TGB["🤖 Кандидатский TG-бот 🆕<br/><small>token · webhook-secret</small>"]:::hh
+  VAC --> SPEC["🎯 vacancy_specs 🆕<br/><small>R4: кого ищем · пороги ×2 · стоп-факторы</small>"]:::win
+  VAC --> CAND["👤 candidates<br/><small>+ tg_chat_id · tg_messages · invite_token 🆕</small>"]:::cand
+  VAC --> UTM["🔗 vacancyUtmLinks<br/><small>+ telegram-постинг 🆕</small>"]:::side
+  VAC -->|pipeline| ST["Стадии · 17 (+internship 🆕)"]:::st
+  SPEC -.->|скоринг · бот · outbound · rediscovery| CAND
+  CAND --> CHAT["💬 ai_chatbot_messages · tg_messages"]:::side
+  CAND --> CAL["📅 calendar_events"]:::cal
+  CAND --> POOL["♻️ talent_pool"]:::side
+  VAC --> DEMO["🎬 demos<br/><small>+ post_demo_settings (пороги анкеты — сведено в Spec)</small>"]:::side
+  CAND -.-> AUD["📒 audit_log · ФЗ-152"]:::aud
+
+  classDef co fill:#7c3aed,stroke:#6d28d9,color:#fff,font-weight:bold;
+  classDef vac fill:#dcfce7,stroke:#86efac,color:#166534,font-weight:bold;
+  classDef cand fill:#dbeafe,stroke:#93c5fd,color:#1e40af,font-weight:bold;
+  classDef hh fill:#ffedd5,stroke:#fdba74,color:#9a3412;
+  classDef st fill:#fae8ff,stroke:#e9d5ff,color:#86198f;
+  classDef cal fill:#ede9fe,stroke:#c4b5fd,color:#5b21b6;
+  classDef side fill:#f1f5f9,stroke:#cbd5e1,color:#475569;
+  classDef aud fill:#fef3c7,stroke:#fcd34d,color:#92400e;
+  classDef win fill:#bbf7d0,stroke:#4ade80,color:#14532d,font-weight:bold;
+    </div>
+  </div>
+
+  <!-- 6. КОНФИГ -->
+  <h2><span class="n">5</span> Где что настраивается <small>сейчас → целевое</small></h2>
+  <div class="grid">
+    <div class="panel">
+      <h3>🏢 Уровень компании (дефолты)</h3>
+      <ul>
+        <li><b>Настройки найма</b> · стадии-редактор (компонент из конструктора), стоп-факторы-дефолт, корзина</li>
+        <li><b>Интеграции</b> · hh/Авито + <b>Telegram-бот кандидатов 🆕</b>; Битрикс → уехать на платформу</li>
+        <li><b>Календарь R2</b> = центр времени: слоты, праздники, iCal/Google, мульти-HR</li>
+        <li><b>Брендинг</b> · + карьерная страница (2 URL) 🆕</li>
+        <li><b>Каналы Telegram-постинга</b> 🆕</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>📋 Уровень вакансии (override)</h3>
+      <ul>
+        <li><b>«Кого ищем» (Spec)</b> 🆕 стейджинг — критерии, веса, стоп-факторы, пороги ×2, идеальный профиль</li>
+        <li><b>Воронка</b> · сценарий-first: пресет (6 шт., +«Стажировка» 🆕) → шаги → «Расширенные»</li>
+        <li><b>Источники</b> · трекинг-ссылки, форма, HTML-лендинг, tg-постинг 🆕</li>
+        <li><b>Расписание</b> · ТОЛЬКО окно отправки сообщений (остальное наследуется из календаря)</li>
+        <li><b>Кандидаты</b> · «Разобрать», «Поискать в базе» (rediscovery) 🆕</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 7. КРОНЫ -->
+  <h2><span class="n">6</span> Фоновые кроны и инфраструктура</h2>
+  <div class="card">
+    <table class="cat">
+      <tr><th>Крон / сервис</th><th>Что делает</th><th>Outward?</th><th>Статус</th></tr>
+      <tr><td class="r">hh-import</td><td class="note">Импорт откликов → стоп-факторы → AI-скоринг → действия</td><td class="note">да</td><td><span class="pill p-ok">прод</span></td></tr>
+      <tr><td class="r">hh-incoming-messages</td><td class="note">Входящие hh-чата → чат-движок (бот/стоп-слова/эскалации)</td><td class="note">да</td><td><span class="pill p-ok">прод</span></td></tr>
+      <tr><td class="r">follow-up</td><td class="note">Дожим: касания в hh-чат (цель=параметр в целевой R7)</td><td class="note">да</td><td><span class="pill p-ok">прод</span></td></tr>
+      <tr><td class="r">pending-rejections · prequalification</td><td class="note">Отложенные отказы · предквалификация</td><td class="note">да</td><td><span class="pill p-ok">прод</span></td></tr>
+      <tr><td class="r">ai-chatbot-watcher</td><td class="note">Аудит ответов AI (раз в час)</td><td class="note">нет</td><td><span class="pill p-ok">прод</span></td></tr>
+      <tr><td class="r">interview-reminders</td><td class="note">Напоминания HR за 24ч/2ч</td><td class="note">нет</td><td><span class="pill p-ok">прод</span></td></tr>
+      <tr><td class="r">trash-cleanup · hh-vacancy-sync</td><td class="note">Корзина · hh-архив вакансий</td><td class="note">нет</td><td><span class="pill p-ok">прод</span></td></tr>
+      <tr><td class="r">tg candidate-bot webhook</td><td class="note">🆕 Входящие Telegram от кандидатов (push, не крон)</td><td class="note">нет</td><td><span class="pill p-new">🆕 прод</span></td></tr>
+      <tr><td class="r">CI deploy (GitHub Actions)</td><td class="note">🔭 Off-box сборка → атомарный своп → reload → авто-откат (workflow_dispatch)</td><td class="note">нет</td><td><span class="pill p-plan">подготовлен</span></td></tr>
+    </table>
+    <div class="note">🔐 Ротация 10.06: пароль БД, CRON_SECRET (env+crontab), PLATFORM_ADMIN_KEY — сменены. ANTHROPIC_API_KEY — за Юрием (консоль Anthropic + прокси Рига/CF). AI-прокси: <code>CLAUDE_PROXY_URLS</code> (Рига, fallback) — все пути, включая Нэнси (фикс 10.06).</div>
+  </div>
+
+  <!-- 8. РЕШЕНИЯ -->
+  <h2><span class="n">7</span> Что просит внимания — точки для решений</h2>
+  <div class="grid">
+    <div class="panel">
+      <h3>🟢 Ближайшее (этап C и хвосты)</h3>
+      <ul>
+        <li><b>Единая таблица кандидатов + drawer</b> везде (общий список / вакансия / резерв)</li>
+        <li><b>URL-табы</b> (<code>/hr/vacancies/[id]/candidates</code>) + «reload → та же страница»</li>
+        <li><b>Ширина Sheet</b> — адаптивная, эталон drawer кандидата</li>
+        <li><b>hh-импорт: донести поля</b> — языки, права, отдел, спец-условия, брендированный шаблон, детализация часов, полный регион (Юрий: важно)</li>
+        <li><b>Включить CI-деплой</b>: секреты + тест на стейджинге</li>
+        <li><b>F1 rediscovery + R4-2 «Кого ищем»</b> — обкатка на стейджинге → прод</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>⚠️ Архитектурные узлы (этапы B–E)</h3>
+      <ul>
+        <li><b>Реестры R8→R7→R6→R2→R3→R5</b> — порядок после R4; интенты R6 на базе AI чат-бота</li>
+        <li><b>Воронка 23 блока → 9 шагов + 4 горизонтали</b> — сценарий-first, «гибкая и простая»</li>
+        <li><b>Слой операций + Нэнси N1–N4</b> — голосовое управление наймом (предусловие: реестры)</li>
+        <li><b>Лицензии продуктов</b> · company_modules + поддомены (на базе СУЩЕСТВУЮЩЕЙ /admin/platform — не строить параллельную!)</li>
+        <li><b>«Длинный хвост» ~19 заглушек</b> — добивать / прятать / удалять</li>
+        <li><b>Двусторонний синк воронки hh ↔ портал</b> — открыт с 09.06</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="foot">
+    Редакция 10.06.2026 — копия HR-MAP.html (09.06) + изменения дня: прод main <code>3f130a29</code> (два деплоя),
+    стейджинг develop <code>999996b1</code> (R4-2 «Кого ищем»). Источники: docs/audit/HR-module-audit-2026-06-10.md (аудит, P1–P9) ·
+    docs/audit/HR-redesign-notes-from-yuri.md (37 батчей комментариев Юрия) · docs/audit/HR-system-map-and-target-2026-06-10.md
+    (целевая архитектура: 8 реестров, 4 слоя, Nancy-first, этапы A–F) · docs/audit/R4-candidate-spec-design.md.
+    Оригинал карты НЕ изменён. Файл самодостаточный — открывается в браузере, печатается в PDF.
+  </div>
+
+</div>
+<script>
+  mermaid.initialize({
+    startOnLoad:true, theme:'base',
+    themeVariables:{
+      primaryColor:'#ede9fe', primaryTextColor:'#0f172a', primaryBorderColor:'#c4b5fd',
+      lineColor:'#94a3b8', fontSize:'14px',
+      fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif"
+    },
+    flowchart:{curve:'basis', padding:14, nodeSpacing:40, rankSpacing:46}
+  });
+
+  // Кликабельные маршруты
+  (function(){
+    function currentBase(){
+      var el = document.querySelector('input[name="base"]:checked');
+      return el ? el.value : 'https://new.company24.pro';
+    }
+    function navPath(path){
+      return path.replace(/\/\[[^\]]+\].*$/, '');
+    }
+    var links = [];
+    document.querySelectorAll('td.r').forEach(function(td){
+      var raw = td.textContent.trim();
+      var first = raw.split(/\s/)[0];
+      if(first.indexOf('/hr/') !== 0 && first.indexOf('/jobs') !== 0 && first.indexOf('/vacancy') !== 0 && first.indexOf('/demo') !== 0 && first.indexOf('/report') !== 0) return;
+      var rest = raw.slice(first.length);
+      var a = document.createElement('a');
+      a.className = 'route';
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.dataset.path = navPath(first);
+      a.textContent = first;
+      td.textContent = '';
+      td.appendChild(a);
+      if(rest){ var s = document.createElement('span'); s.className='route-param'; s.textContent = rest; td.appendChild(s); }
+      links.push(a);
+    });
+    function applyBase(){
+      var base = currentBase();
+      links.forEach(function(a){ a.href = base + a.dataset.path; });
+    }
+    document.querySelectorAll('input[name="base"]').forEach(function(r){ r.addEventListener('change', applyBase); });
+    applyBase();
+  })();
+
+  // Чеклист ревизии (отдельный ключ от старой карты)
+  (function(){
+    var STORE = 'hrmap-checklist-v2-20260610';
+    var state = {};
+    try { state = JSON.parse(localStorage.getItem(STORE) || '{}'); } catch(e) {}
+    function save(){ try { localStorage.setItem(STORE, JSON.stringify(state)); } catch(e) {} }
+    var boxes = [];
+
+    document.querySelectorAll('table.cat').forEach(function(tbl){
+      var rows = Array.prototype.slice.call(tbl.querySelectorAll('tr'));
+      var isCatalog = rows.some(function(r){
+        var rc = r.querySelector('td.r');
+        return rc && (rc.textContent.trim().indexOf('/hr/') === 0 || rc.textContent.trim().indexOf('/jobs') === 0 || rc.textContent.trim().indexOf('{sub}') === 0 || rc.textContent.trim().indexOf('/vacancy') === 0 || rc.textContent.trim().indexOf('/demo') === 0);
+      });
+      if(!isCatalog) return;
+
+      rows.forEach(function(r, i){
+        if(i === 0){
+          var th = document.createElement('th'); th.className = 'chk'; th.textContent = '✓';
+          r.appendChild(th); return;
+        }
+        var rc = r.querySelector('td.r');
+        var td = document.createElement('td'); td.className = 'chk';
+        if(rc){
+          var key = rc.textContent.trim();
+          var cb = document.createElement('input'); cb.type = 'checkbox'; cb.dataset.key = key;
+          cb.title = 'Отметить как просмотренное';
+          if(state[key]){ cb.checked = true; r.classList.add('done'); }
+          cb.addEventListener('change', function(){
+            if(cb.checked){ state[key] = 1; } else { delete state[key]; }
+            r.classList.toggle('done', cb.checked);
+            save(); updateProgress();
+          });
+          td.appendChild(cb); boxes.push(cb);
+        }
+        r.appendChild(td);
+      });
+    });
+
+    var h2 = document.querySelectorAll('h2')[1]; // раздел 1 (каталог) — второй h2 (после «Целевая архитектура»)
+    var bar = document.createElement('div'); bar.className = 'progress-bar';
+    bar.innerHTML = '<span>Прогресс ревизии:</span>'
+      + '<span class="pcount">0 / ' + boxes.length + '</span>'
+      + '<span class="ptrack"><span class="pfill"></span></span>'
+      + '<button id="chkreset" type="button">Сбросить</button>'
+      + '<span class="savehint">отметки сохраняются в этом браузере</span>';
+    if(h2 && h2.parentNode){ h2.parentNode.insertBefore(bar, h2.nextSibling); }
+
+    function updateProgress(){
+      var done = boxes.filter(function(b){ return b.checked; }).length;
+      bar.querySelector('.pcount').textContent = done + ' / ' + boxes.length;
+      bar.querySelector('.pfill').style.width = (boxes.length ? (done / boxes.length * 100) : 0) + '%';
+    }
+    bar.querySelector('#chkreset').addEventListener('click', function(){
+      if(!confirm('Снять все отметки ревизии?')) return;
+      boxes.forEach(function(b){ b.checked = false; var tr = b.closest('tr'); if(tr) tr.classList.remove('done'); });
+      state = {}; save(); updateProgress();
+    });
+    updateProgress();
+  })();
+</script>
+</body>
+</html>

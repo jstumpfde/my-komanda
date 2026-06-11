@@ -3292,7 +3292,7 @@ export default function VacancyPage() {
                             <p className="text-[11px] text-muted-foreground">Интеграция настроена, но выключена. Включите в Настройки → Интеграции.</p>
                           </div>
                           <Badge variant="outline" className="text-xs h-6 text-amber-700 border-amber-200 bg-amber-50 shrink-0">Выключено</Badge>
-                          <Button size="sm" variant="outline" className="h-8 text-xs shrink-0" onClick={() => window.open("/hr/settings?tab=integrations", "_blank")}>Включить</Button>
+                          <Button size="sm" variant="outline" className="h-8 text-xs shrink-0" onClick={() => window.open("/hr/hiring-settings?tab=integrations", "_blank")}>Включить</Button>
                         </div>
                       ) : (
                         /* Не настроено — ведём в Интеграции */
@@ -3303,7 +3303,7 @@ export default function VacancyPage() {
                             <p className="text-[11px] text-muted-foreground">Подключите Авито Мессенджер в Настройки → Интеграции, чтобы получать отклики.</p>
                           </div>
                           <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
-                          <Button size="sm" className="h-8 text-xs shrink-0" onClick={() => window.open("/hr/settings?tab=integrations", "_blank")}>Подключить</Button>
+                          <Button size="sm" className="h-8 text-xs shrink-0" onClick={() => window.open("/hr/hiring-settings?tab=integrations", "_blank")}>Подключить</Button>
                         </div>
                       )}
                     </div>

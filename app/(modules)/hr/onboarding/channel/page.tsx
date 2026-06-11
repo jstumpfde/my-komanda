@@ -30,7 +30,7 @@ const CHANNEL_METHODS: ChannelMethod[] = [
     duration: "~5–7 мин",
     highlighted: true,
     action: "navigate",
-    target: "/vacancies/create",
+    target: "/hr/vacancies/create",
   },
   {
     id: "voice",
@@ -40,7 +40,7 @@ const CHANNEL_METHODS: ChannelMethod[] = [
     duration: "~3 мин",
     highlighted: false,
     action: "navigate",
-    target: "/onboarding/voice",
+    target: "/hr/onboarding/voice",
   },
   {
     id: "telegram",
@@ -59,7 +59,7 @@ const CHANNEL_METHODS: ChannelMethod[] = [
     duration: "~2 мин",
     highlighted: true,
     action: "navigate",
-    target: "/onboarding/smart-input",
+    target: "/hr/onboarding/smart-input",
   },
   {
     id: "auto",
@@ -69,7 +69,7 @@ const CHANNEL_METHODS: ChannelMethod[] = [
     duration: "~2 мин",
     highlighted: true,
     action: "navigate",
-    target: "/onboarding/smart-input",
+    target: "/hr/onboarding/smart-input",
   },
 ]
 
@@ -117,7 +117,7 @@ export default function OnboardingScreenClient() {
           {/* Skip */}
           <button
             type="button"
-            onClick={() => router.push("/vacancies/create")}
+            onClick={() => router.push("/hr/vacancies/create")}
             className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
           >
             пропустить
@@ -281,7 +281,7 @@ export default function OnboardingScreenClient() {
                 className="w-full"
                 onClick={() => {
                   setTelegramDialogOpen(false)
-                  router.push("/vacancies/create")
+                  router.push("/hr/vacancies/create")
                 }}
               >
                 Продолжить на сайте

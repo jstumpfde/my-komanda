@@ -193,7 +193,7 @@ export default function VoicePage() {
             variant="ghost"
             size="sm"
             className="gap-1.5 text-muted-foreground"
-            onClick={() => router.push("/onboarding/channel")}
+            onClick={() => router.push("/hr/onboarding/channel")}
           >
             <ArrowLeft className="w-4 h-4" />
             Назад
@@ -490,7 +490,7 @@ export default function VoicePage() {
                 </Button>
                 <Button
                   className="w-full gap-2"
-                  onClick={() => router.push("/vacancies/create")}
+                  onClick={() => router.push("/hr/vacancies/create")}
                 >
                   Заполнить на сайте
                   <ArrowRight className="w-4 h-4" />
@@ -498,7 +498,7 @@ export default function VoicePage() {
                 <Button
                   variant="ghost"
                   className="w-full text-muted-foreground"
-                  onClick={() => router.push("/vacancies/create")}
+                  onClick={() => router.push("/hr/vacancies/create")}
                 >
                   Опубликовать как есть
                 </Button>

@@ -243,7 +243,7 @@ export default function SmartInputPage() {
     }
 
     await new Promise((r) => setTimeout(r, 400))
-    router.push("/onboarding/enrichment-preview")
+    router.push("/hr/onboarding/enrichment-preview")
   }
 
   const canProcess = rawInput.trim().length > 0 || uploadedFiles.length > 0
@@ -257,7 +257,7 @@ export default function SmartInputPage() {
             variant="ghost"
             size="sm"
             className="gap-1.5 text-muted-foreground"
-            onClick={() => router.push("/onboarding/channel")}
+            onClick={() => router.push("/hr/onboarding/channel")}
           >
             <ArrowLeft className="w-4 h-4" />
             Назад

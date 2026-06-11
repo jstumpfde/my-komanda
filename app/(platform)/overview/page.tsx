@@ -191,7 +191,7 @@ export default function OverviewPage() {
   if (kpiInterviewsToday > 0) {
     attentionItems.push({
       text: `${kpiInterviewsToday} интервью сегодня`,
-      href: "/interviews",
+      href: "/hr/interviews",
       cta: "Расписание",
     })
   }

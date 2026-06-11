@@ -447,7 +447,7 @@ function InterviewsPageContent() {
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-5">
                 <div className="flex items-center gap-2 sm:hidden">
                   {/* заголовок скрыт на больших экранах — уже в шапке выше */}
-                  <span className="text-base font-semibold text-muted-foreground">Собеседования</span>
+                  <span className="text-base font-semibold text-muted-foreground">Интервью</span>
                 </div>
                 <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
                   {/* View switcher — shadcn Tabs */}

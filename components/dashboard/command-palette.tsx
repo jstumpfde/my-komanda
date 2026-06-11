@@ -66,7 +66,7 @@ export function CommandPalette() {
             </CommandItem>
             <CommandItem onSelect={() => navigate("/hr/interviews")}>
               <Calendar className="mr-2 h-4 w-4" />
-              <span>Собеседования</span>
+              <span>Интервью и календарь</span>
             </CommandItem>
             <CommandItem onSelect={() => navigate("/analytics")}>
               <BarChart3 className="mr-2 h-4 w-4" />
