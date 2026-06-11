@@ -492,7 +492,11 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
           </div>
           <div className="space-y-5">
             {lesson.blocks.map((block) => (
-              <SimplePreviewBlock key={block.id} block={block} />
+              <SimplePreviewBlock
+                key={block.id}
+                block={block}
+                onNext={() => previewIdx < demo.lessons.length - 1 ? setPreviewIdx(previewIdx + 1) : setPreviewMode(false)}
+              />
             ))}
           </div>
         </div>
@@ -4571,7 +4575,7 @@ function TaskPreviewBlock({ block }: { block: Block }) {
 
 // ─── Preview block (candidate view) ───────────────────────────────────────
 
-function SimplePreviewBlock({ block }: { block: Block }) {
+function SimplePreviewBlock({ block, onNext }: { block: Block; onNext?: () => void }) {
   switch (block.type) {
     case "text": {
       const html = block.content?.trim()
@@ -4697,24 +4701,33 @@ function SimplePreviewBlock({ block }: { block: Block }) {
           ? { backgroundColor: btnColor, borderColor: btnColor, color: "#fff" }
           : { borderColor: btnColor, color: btnColor }
         : {}
+      const btnCls = cn(
+        "inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+        isPrimary
+          ? btnColor ? "text-white" : "bg-primary text-primary-foreground hover:bg-primary/90"
+          : btnColor ? "bg-transparent border hover:bg-muted/50" : "border border-border hover:bg-muted/50"
+      )
+      const inner = (
+        <>
+          {block.buttonIconBefore && <span>{block.buttonIconBefore}</span>}
+          {block.buttonText || "Кнопка"}
+          {block.buttonIconAfter && <span>{block.buttonIconAfter}</span>}
+        </>
+      )
+      // «Куда ведёт: Следующая страница» — в предпросмотре листает уроки (onNext),
+      // как у кандидата; «Ссылка» — открывает URL.
+      const isUrl = (block.buttonTarget === "url" || (!block.buttonTarget && !!block.buttonUrl)) && !!block.buttonUrl
       return (
         <div className="flex justify-center">
-          <a
-            href={block.buttonUrl || "#"}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={cn(
-              "inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-              isPrimary
-                ? btnColor ? "text-white" : "bg-primary text-primary-foreground hover:bg-primary/90"
-                : btnColor ? "bg-transparent border hover:bg-muted/50" : "border border-border hover:bg-muted/50"
-            )}
-            style={previewStyle}
-          >
-            {block.buttonIconBefore && <span>{block.buttonIconBefore}</span>}
-            {block.buttonText || "Кнопка"}
-            {block.buttonIconAfter && <span>{block.buttonIconAfter}</span>}
-          </a>
+          {isUrl ? (
+            <a href={block.buttonUrl} target="_blank" rel="noopener noreferrer" className={btnCls} style={previewStyle}>
+              {inner}
+            </a>
+          ) : (
+            <button type="button" onClick={onNext} className={btnCls} style={previewStyle}>
+              {inner}
+            </button>
+          )}
         </div>
       )
     }
