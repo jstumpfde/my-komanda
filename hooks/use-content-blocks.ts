@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import { toast } from "sonner"
 import type { Lesson } from "@/lib/course-types"
 
 export type ContentType = "presentation" | "test" | "task"
@@ -131,7 +132,9 @@ export function useContentBlocks(vacancyId: string | null): UseContentBlocksResu
       })
       if (!res.ok) throw new Error("save failed")
     } catch {
-      // silent — оптимистичный апдейт уже применён в state
+      // Оптимистичный апдейт в state остаётся, но НЕ молчим — иначе HR думает,
+      // что сохранилось, а данные потеряны (тип блока/«боевой»/контент).
+      toast.error("Не удалось сохранить изменения блока — проверьте соединение")
     }
   }, [])
 
@@ -276,11 +279,13 @@ export function useContentBlocks(vacancyId: string | null): UseContentBlocksResu
           ? { ...b, isLiveBattle: false, postDemoSettings: { ...(b.postDemoSettings ?? {}), isLiveBattle: false } }
           : b
         ))
+        // Если сброс у старого боевого не записался — будут ДВА боевых блока
+        // одного типа, кандидаты получат не тот контент. Поэтому не молчим.
         await fetch(`/api/modules/hr/demos/${other.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ post_demo_settings: { isLiveBattle: false } }),
-        }).catch(() => {})
+        }).then(r => { if (!r.ok) throw new Error() }).catch(() => toast.error("Не удалось снять «боевой» у предыдущего блока — обновите страницу"))
       }
     }
 
@@ -293,7 +298,7 @@ export function useContentBlocks(vacancyId: string | null): UseContentBlocksResu
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ post_demo_settings: { isLiveBattle: isLive } }),
-    }).catch(() => {})
+    }).then(r => { if (!r.ok) throw new Error() }).catch(() => toast.error("Не удалось сохранить «боевой» статус блока"))
   }, [blocks])
 
   return { blocks, loading, error, createBlock, updateBlock, saveSettings, deleteBlock, reorder, setLiveBattle }
