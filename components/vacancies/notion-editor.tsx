@@ -504,18 +504,20 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
               <Button variant="outline" disabled={previewIdx === 0} onClick={() => setPreviewIdx(previewIdx - 1)}>
                 <ChevronLeft className="w-4 h-4 mr-1" />Назад
               </Button>
+              {/* Заданное HR название кнопки приоритетно ВЕЗДЕ (включая последнюю
+                  страницу); дефолты «Далее»/«Завершить» — только если не задано. */}
               {previewIdx < demo.lessons.length - 1 ? (
                 <Button
                   onClick={() => setPreviewIdx(previewIdx + 1)}
                   style={navButtonColor ? { backgroundColor: navButtonColor, borderColor: navButtonColor } : undefined}
                 >
-                  Далее<ChevronRight className="w-4 h-4 ml-1" />
+                  {localNavText || navButtonText || "Далее"}<ChevronRight className="w-4 h-4 ml-1" />
                 </Button>
               ) : (
                 <Button
                   onClick={() => setPreviewMode(false)}
                   style={navButtonColor ? { backgroundColor: navButtonColor, borderColor: navButtonColor } : undefined}
-                >Завершить ✓</Button>
+                >{localNavText || navButtonText || "Завершить ✓"}</Button>
               )}
             </div>
           )

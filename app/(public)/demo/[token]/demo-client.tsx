@@ -1561,7 +1561,8 @@ export default function DemoPage() {
                 {saving || isAnyMediaUploading ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
                 ) : currentIndex === totalLessons - 1 ? (
-                  "Завершить"
+                  // Заданное HR название приоритетно и на последней странице
+                  data.postDemoSettings?.navButtonText || "Завершить"
                 ) : (
                   <>
                     {data.postDemoSettings?.navButtonText || "Далее"}
