@@ -177,7 +177,7 @@ interface LibraryDialogProps {
   onApplyTemplate: (lessons: Lesson[]) => void
   onInsertModule: (lesson: Lesson) => void
   savedModules: Lesson[]
-  savedTemplates: { title: string; category: string; lessons: Lesson[] }[]
+  savedTemplates: { id?: string; title: string; category: string; lessons: Lesson[] }[]
 }
 
 export function LibraryDialog({

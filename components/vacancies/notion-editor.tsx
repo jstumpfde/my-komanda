@@ -140,7 +140,8 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false)
   const [saveTemplateName, setSaveTemplateName] = useState("")
   const [saveTemplateCategory, setSaveTemplateCategory] = useState("Общее")
-  const [savedTemplates, setSavedTemplates] = useState<{ title: string; category: string; lessons: Lesson[] }[]>([])
+  // id — uuid записи в БД (undefined для шаблонов из старого localStorage-кэша)
+  const [savedTemplates, setSavedTemplates] = useState<{ id?: string; title: string; category: string; lessons: Lesson[] }[]>([])
   // #26: новая UX-модель диалога — radio "Новый" / "Заменить" + dropdown +
   // подтверждение перед заменой. Стейт описывает текущий выбор.
   const [saveMode, setSaveMode] = useState<"new" | "replace">("new")
@@ -149,16 +150,79 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
   const [replaceConfirmIdx, setReplaceConfirmIdx] = useState<number | null>(null)
   const [savedModules, setSavedModules] = useState<Lesson[]>([])
 
+  // Загружаем шаблоны и модули из БД при маунте. localStorage используется как
+  // мгновенный кэш до первого ответа API (показывается сразу, потом заменяется).
   useEffect(() => {
+    // Мгновенный кэш из localStorage
     try {
       const t = localStorage.getItem("hireflow_demo_templates")
       if (t) setSavedTemplates(JSON.parse(t))
       const m = localStorage.getItem("hireflow_demo_modules")
       if (m) setSavedModules(JSON.parse(m))
     } catch {}
+
+    // Загружаем из API — источник правды
+    fetch("/api/demo-templates")
+      .then((r) => r.json())
+      .then((data) => {
+        const rows: Array<{ id: string; name: string; niche: string; length: string; sections: Lesson[]; tenantId: string | null; isSystem: boolean }> = Array.isArray(data) ? data : (data?.data ?? [])
+        // Фильтруем только tenant-шаблоны (не системные) и разделяем templates vs modules
+        const tenantRows = rows.filter((r) => !r.isSystem)
+        const templates = tenantRows
+          .filter((r) => r.length !== "module")
+          .map((r) => ({ id: r.id, title: r.name, category: r.niche || "Общее", lessons: Array.isArray(r.sections) ? r.sections : [] }))
+        const modules = tenantRows
+          .filter((r) => r.length === "module")
+          .map((r) => {
+            // Модуль = один урок; берём первый элемент sections или создаём заглушку
+            const lesson = Array.isArray(r.sections) && r.sections.length > 0
+              ? r.sections[0]
+              : { id: r.id, emoji: "", title: r.name, blocks: [] }
+            return { ...lesson, _dbId: r.id } as Lesson & { _dbId?: string }
+          })
+        setSavedTemplates(templates)
+        setSavedModules(modules)
+        // Обновляем localStorage-кэш
+        try {
+          localStorage.setItem("hireflow_demo_templates", JSON.stringify(templates))
+          localStorage.setItem("hireflow_demo_modules", JSON.stringify(modules))
+        } catch {}
+      })
+      .catch(() => {
+        // При ошибке сети остаётся localStorage-кэш, загруженный выше
+      })
   }, [])
 
-  const persistTemplates = useCallback((items: { title: string; category: string; lessons: Lesson[] }[]) => {
+  // Рефетч шаблонов и модулей из API (вызывается после POST/PATCH/DELETE)
+  const refetchTemplates = useCallback(async () => {
+    try {
+      const r = await fetch("/api/demo-templates")
+      const data = await r.json()
+      const rows: Array<{ id: string; name: string; niche: string; length: string; sections: Lesson[]; tenantId: string | null; isSystem: boolean }> = Array.isArray(data) ? data : (data?.data ?? [])
+      const tenantRows = rows.filter((r) => !r.isSystem)
+      const templates = tenantRows
+        .filter((r) => r.length !== "module")
+        .map((r) => ({ id: r.id, title: r.name, category: r.niche || "Общее", lessons: Array.isArray(r.sections) ? r.sections : [] }))
+      const modules = tenantRows
+        .filter((r) => r.length === "module")
+        .map((r) => {
+          const lesson = Array.isArray(r.sections) && r.sections.length > 0
+            ? r.sections[0]
+            : { id: r.id, emoji: "", title: r.name, blocks: [] }
+          return { ...lesson, _dbId: r.id } as Lesson & { _dbId?: string }
+        })
+      setSavedTemplates(templates)
+      setSavedModules(modules)
+      try {
+        localStorage.setItem("hireflow_demo_templates", JSON.stringify(templates))
+        localStorage.setItem("hireflow_demo_modules", JSON.stringify(modules))
+      } catch {}
+    } catch {
+      // Не обрабатываем — пользователь увидит актуальные данные при следующем открытии
+    }
+  }, [])
+
+  const persistTemplates = useCallback((items: { id?: string; title: string; category: string; lessons: Lesson[] }[]) => {
     setSavedTemplates(items)
     try { localStorage.setItem("hireflow_demo_templates", JSON.stringify(items)) } catch {}
   }, [])
@@ -869,16 +933,31 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
               <Button
                 size="sm"
                 disabled={saveMode === "replace" && replaceTargetIdx === null}
-                onClick={() => {
+                onClick={async () => {
                   if (saveMode === "new") {
                     if (!saveTemplateName.trim()) { toast.error("Укажите название"); return }
-                    const next = [
-                      ...savedTemplates,
-                      { title: saveTemplateName.trim(), category: saveTemplateCategory.trim() || "Общее", lessons: demo.lessons },
-                    ]
-                    persistTemplates(next)
-                    setSaveTemplateOpen(false)
-                    toast.success("Шаблон сохранён в библиотеку")
+                    try {
+                      const res = await fetch("/api/demo-templates", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          name: saveTemplateName.trim(),
+                          niche: saveTemplateCategory.trim() || "Общее",
+                          length: "standard",
+                          sections: demo.lessons,
+                          audience: ["candidates"],
+                        }),
+                      })
+                      if (!res.ok) {
+                        const err = await res.json().catch(() => ({}))
+                        throw new Error((err as { error?: string }).error || `HTTP ${res.status}`)
+                      }
+                      await refetchTemplates()
+                      setSaveTemplateOpen(false)
+                      toast.success("Сохранено в библиотеку")
+                    } catch (e) {
+                      toast.error(`Ошибка сохранения: ${e instanceof Error ? e.message : "неизвестная ошибка"}`)
+                    }
                   } else {
                     // Replace mode — открыть confirm.
                     if (replaceTargetIdx !== null) setReplaceConfirmIdx(replaceTargetIdx)
@@ -910,16 +989,35 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
             <Button
               variant="destructive"
               size="sm"
-              onClick={() => {
+              onClick={async () => {
                 if (replaceConfirmIdx === null) return
                 const t = savedTemplates[replaceConfirmIdx]
-                const next = savedTemplates.map((x, j) =>
-                  j === replaceConfirmIdx ? { ...x, lessons: demo.lessons } : x
-                )
-                persistTemplates(next)
-                setReplaceConfirmIdx(null)
-                setSaveTemplateOpen(false)
-                toast.success(`Шаблон «${t?.title}» обновлён`)
+                try {
+                  if (t?.id) {
+                    // Есть id из БД — PATCH
+                    const res = await fetch(`/api/demo-templates/${t.id}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ sections: demo.lessons }),
+                    })
+                    if (!res.ok) {
+                      const err = await res.json().catch(() => ({}))
+                      throw new Error((err as { error?: string }).error || `HTTP ${res.status}`)
+                    }
+                  } else {
+                    // Нет id (старый localStorage-кэш) — обновляем только локально
+                    const next = savedTemplates.map((x, j) =>
+                      j === replaceConfirmIdx ? { ...x, lessons: demo.lessons } : x
+                    )
+                    persistTemplates(next)
+                  }
+                  await refetchTemplates()
+                  setReplaceConfirmIdx(null)
+                  setSaveTemplateOpen(false)
+                  toast.success(`Шаблон «${t?.title}» обновлён`)
+                } catch (e) {
+                  toast.error(`Ошибка обновления: ${e instanceof Error ? e.message : "неизвестная ошибка"}`)
+                }
               }}
             >
               Заменить
