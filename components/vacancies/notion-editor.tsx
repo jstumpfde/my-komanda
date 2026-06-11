@@ -311,14 +311,33 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
     openLibrary: () => { if (onOpenLibrary) onOpenLibrary(); else setLibraryOpen(true) },
     openSaveTemplate: () => setSaveTemplateOpen(true),
     downloadTxt: () => {
+      const ANSWER_LABEL: Record<string, string> = {
+        short: "короткий ответ", long: "развёрнутый ответ", yesno: "да/нет",
+        single: "выбор одного", multiple: "выбор нескольких", sort: "расставить по порядку",
+        text: "короткий ответ", video: "видео-ответ",
+      }
       const parts: string[] = []
       demo.lessons.forEach((l, i) => {
         parts.push(`=== Урок ${i + 1}. ${l.title} ===`)
-        const body = l.blocks
-          .map(b => htmlToPlainText(b.content || ""))
-          .filter(Boolean)
-          .join("\n\n")
-        if (body) parts.push(body)
+        l.blocks.forEach((b) => {
+          // Текстовый/медийный контент блока
+          const body = htmlToPlainText(b.content || "")
+          if (body) parts.push(body)
+          // Блок-задание: выгружаем заголовок, описание и сами вопросы с вариантами
+          if (b.type === "task") {
+            const tTitle = htmlToPlainText(b.taskTitle || "")
+            const tDesc = htmlToPlainText(b.taskDescription || "")
+            if (tTitle) parts.push(tTitle)
+            if (tDesc) parts.push(tDesc)
+            ;(b.questions || []).forEach((q, qi) => {
+              const label = ANSWER_LABEL[q.answerType] || q.answerType
+              parts.push(`${qi + 1}. ${htmlToPlainText(q.text || "") || "(без текста)"} [${label}${q.required ? ", обязательный" : ""}]`)
+              if (Array.isArray(q.options) && q.options.length > 0) {
+                q.options.forEach((opt, oi) => parts.push(`   ${String.fromCharCode(97 + oi)}) ${opt}`))
+              }
+            })
+          }
+        })
         parts.push("")
       })
       const content = parts.join("\n")
