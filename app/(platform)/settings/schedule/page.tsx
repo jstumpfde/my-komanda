@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
-  Globe, Clock, Coffee, CalendarOff, Palmtree, Save, Plus, Trash2, Copy, ChevronDown, Loader2,
+  Globe, Clock, CalendarOff, Palmtree, Save, Plus, Trash2, Copy, ChevronDown, Loader2,
 } from "lucide-react"
 import { type CountryCode, COUNTRY_LABELS, getHolidaysForCountry } from "@/lib/holidays"
 import type { CompanyWorkSchedule } from "@/lib/db/schema"
@@ -337,10 +337,7 @@ export default function CompanySchedulePage() {
                   Та же grid-сетка, что и WEEKDAYS, чтобы все колонки совпали. */}
               <div className="grid grid-cols-[44px_64px_1fr] items-center px-4 py-2 bg-muted/10">
                 <div><Switch checked={lunchEnabled} onCheckedChange={setLunchEnabled} /></div>
-                <span className={cn("text-sm font-medium inline-flex items-center gap-1", !lunchEnabled && "text-muted-foreground")}>
-                  <Coffee className="size-3.5 text-orange-600" />
-                  Обед
-                </span>
+                <span className={cn("text-sm font-medium", !lunchEnabled && "text-muted-foreground")}>Обед</span>
                 {lunchEnabled ? (
                   <div className="flex items-center gap-2">
                     <Select value={lunchFrom} onValueChange={setLunchFrom}>
