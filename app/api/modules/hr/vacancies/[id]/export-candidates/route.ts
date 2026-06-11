@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server"
 import { eq, and, ne, or, isNull, inArray, desc, type SQL } from "drizzle-orm"
 import * as XLSX from "xlsx"
+import { nanoid } from "nanoid"
 import { db } from "@/lib/db"
 import { candidates, vacancies, demos, hhResponses } from "@/lib/db/schema"
 import { requireCompany, apiError } from "@/lib/api-helpers"
@@ -16,6 +17,140 @@ import { logAudit, ipFromRequest } from "@/lib/audit/log"
 
 interface DemoBlock { blockId?: string; status?: string }
 interface LessonShape { blocks?: { id?: string }[] }
+
+// ─── hh raw_data contact types ───────────────────────────────────────────────
+interface HhContactValue {
+  formatted?: string
+  email?: string
+  number?: string
+}
+interface HhContact {
+  type?: { id?: string; name?: string }
+  value?: string | HhContactValue
+  preferred?: boolean
+}
+interface HhSite {
+  type?: { id?: string; name?: string }
+  url?: string
+}
+interface HhResume {
+  contact?: HhContact[]
+  site?: HhSite[]
+}
+interface HhRawData {
+  resume?: HhResume
+}
+
+// ─── Вспомогательные функции для hh контактов ────────────────────────────────
+
+/** Извлечь строку-значение из HhContact.value */
+function extractContactValue(v: string | HhContactValue | undefined): string {
+  if (!v) return ""
+  if (typeof v === "string") return v.trim()
+  return (
+    (typeof v.email === "string" && v.email.trim()) ||
+    (typeof v.formatted === "string" && v.formatted.trim()) ||
+    (typeof v.number === "string" && v.number.trim()) ||
+    ""
+  )
+}
+
+/** Собрать все телефоны из raw.resume.contact[] */
+function extractAllPhones(raw: HhRawData | null): string {
+  const contacts = raw?.resume?.contact
+  if (!Array.isArray(contacts)) return ""
+  const phones: string[] = []
+  for (const c of contacts) {
+    const id = c?.type?.id
+    if (!id || !["cell", "phone", "home", "work"].includes(id)) continue
+    const val = extractContactValue(c.value)
+    if (val) phones.push(val)
+  }
+  return phones.join(", ")
+}
+
+/** Извлечь email из raw.resume.contact[] */
+function extractHhEmail(raw: HhRawData | null): string {
+  const contacts = raw?.resume?.contact
+  if (!Array.isArray(contacts)) return ""
+  for (const c of contacts) {
+    if (c?.type?.id !== "email") continue
+    const val = extractContactValue(c.value)
+    if (val) return val
+  }
+  return ""
+}
+
+/** Извлечь Telegram из raw.resume.contact[] */
+function extractHhTelegram(raw: HhRawData | null): string {
+  const contacts = raw?.resume?.contact
+  if (!Array.isArray(contacts)) return ""
+  for (const c of contacts) {
+    if (c?.type?.id !== "telegram") continue
+    const val = extractContactValue(c.value)
+    if (val) return val
+  }
+  return ""
+}
+
+/** WhatsApp из raw.resume.contact[] */
+function extractHhWhatsapp(raw: HhRawData | null): string {
+  const contacts = raw?.resume?.contact
+  if (!Array.isArray(contacts)) return ""
+  for (const c of contacts) {
+    if (c?.type?.id !== "whatsapp") continue
+    const val = extractContactValue(c.value)
+    if (val) return val
+  }
+  return ""
+}
+
+/** Прочие мессенджеры/ссылки из raw.resume.contact[] (Skype, MAX и т.п.) и raw.resume.site[] */
+function extractHhOtherLinks(raw: HhRawData | null): string {
+  const parts: string[] = []
+  const contacts = raw?.resume?.contact
+  const skip = new Set(["cell", "phone", "home", "work", "email", "telegram", "whatsapp"])
+  if (Array.isArray(contacts)) {
+    for (const c of contacts) {
+      const id = c?.type?.id
+      if (!id || skip.has(id)) continue
+      const name = c?.type?.name || id
+      const val = extractContactValue(c.value)
+      if (val) parts.push(`${name}: ${val}`)
+    }
+  }
+  const sites = raw?.resume?.site
+  if (Array.isArray(sites)) {
+    for (const s of sites) {
+      if (s?.url) {
+        const label = s.type?.name || s.type?.id || "Ссылка"
+        parts.push(`${label}: ${s.url}`)
+      }
+    }
+  }
+  return parts.join("; ")
+}
+
+/**
+ * Предпочтительный способ связи.
+ * Ищем контакт с preferred=true в raw.resume.contact[].
+ * Возвращаем строку вида «Телефон: +7…» или «Email: …» или пусто.
+ */
+function extractPreferredContact(raw: HhRawData | null): string {
+  const contacts = raw?.resume?.contact
+  if (!Array.isArray(contacts)) return ""
+  for (const c of contacts) {
+    if (!c?.preferred) continue
+    const id = c?.type?.id
+    const name = c?.type?.name || id || "Контакт"
+    const val = extractContactValue(c.value)
+    if (val) return `${name}: ${val}`
+    return name
+  }
+  return ""
+}
+
+// ─── Утилиты ─────────────────────────────────────────────────────────────────
 
 function extractBirthDate(birthDate: string | Date | null, anketa: unknown): string | null {
   if (birthDate) {
@@ -78,6 +213,8 @@ interface RowCtx {
   birth: string | null
   age: number | null
   progress: string
+  raw: HhRawData | null
+  testLink: string
 }
 
 // Каталог колонок — единый источник правды для GET, POST и клиентского диалога.
@@ -89,20 +226,32 @@ const COLUMN_DEFS: Array<{
   width: number
   value: (c: CandRow, ctx: RowCtx) => string | number
 }> = [
-  { key: "fio",          header: "ФИО",           width: 28, value: (c, x) => deriveCandidateName(c.name, c.anketaAnswers, x.hhName) },
-  { key: "birthDate",    header: "Дата рождения", width: 14, value: (_c, x) => x.birth ? new Date(x.birth).toLocaleDateString("ru-RU") : "" },
-  { key: "age",          header: "Возраст",       width: 8,  value: (_c, x) => x.age ?? "" },
-  { key: "city",         header: "Город",         width: 18, value: (c) => c.city ?? "" },
-  { key: "salary",       header: "Зарплата",      width: 18, value: (c) => formatSalary(c.salaryMin, c.salaryMax, c.salaryCurrency) },
-  { key: "responseDate", header: "Дата отклика",  width: 13, value: (c) => c.createdAt ? new Date(c.createdAt).toLocaleDateString("ru-RU") : "" },
-  { key: "resumeScore",  header: "AI-резюме",     width: 10, value: (c) => c.resumeScore ?? "" },
-  { key: "aiScore",      header: "AI-оценка",     width: 10, value: (c) => c.aiScore ?? "" },
-  { key: "demoProgress", header: "Прогресс демо", width: 12, value: (_c, x) => x.progress },
-  { key: "stage",        header: "Этап воронки",  width: 20, value: (c) => c.stage ? (STAGE_LABELS[c.stage] ?? c.stage) : "" },
-  { key: "source",       header: "Источник",      width: 12, value: (c) => c.source ?? "" },
-  { key: "resumeUrl",    header: "Резюме hh",     width: 36, value: (_c, x) => x.hhResumeUrl ?? "" },
-  { key: "phone",        header: "Телефон",       width: 16, value: (c) => c.phone ?? "" },
-  { key: "email",        header: "Email",         width: 26, value: (c) => c.email ?? "" },
+  { key: "fio",              header: "ФИО",                           width: 28, value: (c, x) => deriveCandidateName(c.name, c.anketaAnswers, x.hhName) },
+  { key: "birthDate",        header: "Дата рождения",                 width: 14, value: (_c, x) => x.birth ? new Date(x.birth).toLocaleDateString("ru-RU") : "" },
+  { key: "age",              header: "Возраст",                       width: 8,  value: (_c, x) => x.age ?? "" },
+  { key: "city",             header: "Город",                         width: 18, value: (c) => c.city ?? "" },
+  { key: "salary",           header: "Зарплата",                      width: 18, value: (c) => formatSalary(c.salaryMin, c.salaryMax, c.salaryCurrency) },
+  { key: "responseDate",     header: "Дата отклика",                  width: 13, value: (c) => c.createdAt ? new Date(c.createdAt).toLocaleDateString("ru-RU") : "" },
+  { key: "resumeScore",      header: "AI-резюме",                     width: 10, value: (c) => c.resumeScore ?? "" },
+  { key: "aiScore",          header: "AI-оценка",                     width: 10, value: (c) => c.aiScore ?? "" },
+  { key: "demoProgress",     header: "Прогресс демо",                 width: 12, value: (_c, x) => x.progress },
+  { key: "stage",            header: "Этап воронки",                  width: 20, value: (c) => c.stage ? (STAGE_LABELS[c.stage] ?? c.stage) : "" },
+  { key: "source",           header: "Источник",                      width: 12, value: (c) => c.source ?? "" },
+  { key: "resumeUrl",        header: "Резюме hh",                     width: 36, value: (_c, x) => x.hhResumeUrl ?? "" },
+  // Базовые контакты (из candidates)
+  { key: "phone",            header: "Телефон",                       width: 16, value: (c) => c.phone ?? "" },
+  { key: "email",            header: "Email",                         width: 26, value: (c) => c.email ?? "" },
+  // Расширенные контакты из hh raw_data
+  { key: "hhPhones",         header: "Телефоны (hh)",                 width: 30, value: (_c, x) => extractAllPhones(x.raw) },
+  { key: "hhEmail",          header: "Email (hh)",                    width: 26, value: (_c, x) => extractHhEmail(x.raw) },
+  { key: "hhTelegram",       header: "Telegram (hh)",                 width: 22, value: (_c, x) => extractHhTelegram(x.raw) },
+  { key: "hhWhatsapp",       header: "WhatsApp (hh)",                 width: 22, value: (_c, x) => extractHhWhatsapp(x.raw) },
+  { key: "hhOtherLinks",     header: "Прочие контакты/ссылки (hh)",   width: 40, value: (_c, x) => extractHhOtherLinks(x.raw) },
+  { key: "preferredContact", header: "Предпочтительный способ связи", width: 30, value: (_c, x) => extractPreferredContact(x.raw) },
+  // Telegram привязка через нашу платформу
+  { key: "telegramLinked",   header: "Telegram привязан",             width: 18, value: (c) => c.telegramChatId ? "да" : "нет" },
+  // Персональная ссылка на тест
+  { key: "testLink",         header: "Ссылка на тест",                width: 44, value: (_c, x) => x.testLink },
 ]
 const ALL_FIELD_KEYS = COLUMN_DEFS.map(d => d.key)
 // Клиентский каталог полей — в lib/candidates-export-fields.ts (route-файлам
@@ -137,16 +286,39 @@ async function buildXlsx(
   }
 
   const candidateIds = rows.map(r => r.id)
-  const hhByCandidate = new Map<string, { resumeUrl: string | null; name: string | null }>()
+  const hhByCandidate = new Map<string, { resumeUrl: string | null; name: string | null; raw: HhRawData | null }>()
   if (candidateIds.length > 0) {
     const hhRows = await db
-      .select({ candidateId: hhResponses.localCandidateId, resumeUrl: hhResponses.resumeUrl, name: hhResponses.candidateName })
+      .select({
+        candidateId: hhResponses.localCandidateId,
+        resumeUrl: hhResponses.resumeUrl,
+        name: hhResponses.candidateName,
+        rawData: hhResponses.rawData,
+      })
       .from(hhResponses)
       .where(and(eq(hhResponses.companyId, companyId), inArray(hhResponses.localCandidateId, candidateIds)))
     for (const h of hhRows) {
       if (h.candidateId && !hhByCandidate.has(h.candidateId)) {
-        hhByCandidate.set(h.candidateId, { resumeUrl: h.resumeUrl ?? null, name: h.name ?? null })
+        hhByCandidate.set(h.candidateId, {
+          resumeUrl: h.resumeUrl ?? null,
+          name: h.name ?? null,
+          raw: (h.rawData as HhRawData | null) ?? null,
+        })
       }
+    }
+  }
+
+  // Дозаполнение token=NULL (кандидаты созданные в обход штатного флоу).
+  // nanoid(32) — тот же способ, что lib/hh/client.ts при импорте hh-откликов.
+  const rowsWithNullToken = rows.filter(r => !r.token)
+  if (rowsWithNullToken.length > 0) {
+    for (const r of rowsWithNullToken) {
+      const newToken = nanoid(32)
+      await db
+        .update(candidates)
+        .set({ token: newToken })
+        .where(eq(candidates.id, r.id))
+      r.token = newToken
     }
   }
 
@@ -175,12 +347,18 @@ async function buildXlsx(
   const data = rows.map((c) => {
     const hh = hhByCandidate.get(c.id)
     const birth = extractBirthDate(c.birthDate as string | Date | null, c.anketaAnswers)
+    // Ссылка на тест: /test/{shortId} если есть, иначе /test/{token}.
+    // token к этому моменту гарантированно заполнен (дозаполнили выше).
+    const testSlug = c.shortId ?? c.token
+    const testLink = testSlug ? `https://company24.pro/test/${testSlug}` : ""
     const ctx: RowCtx = {
       hhName: hh?.name ?? null,
       hhResumeUrl: hh?.resumeUrl ?? null,
       birth,
       age: ageFromBirthDate(birth),
       progress: progressOf(c.demoProgressJson),
+      raw: hh?.raw ?? null,
+      testLink,
     }
     const rec: Record<string, string | number> = {}
     for (const col of cols) rec[col.header] = col.value(c, ctx)
