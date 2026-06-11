@@ -268,11 +268,11 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
 
   const activeLesson = demo.lessons.find((l) => l.id === activeLessonId)
 
-  // Высота панели уроков: минимум ~5 строк (даже если уроков меньше), дальше
-  // растёт по числу уроков. Свёрнутый и развёрнутый виды — одинаковой высоты.
+  // Высота СПИСКА уроков: минимум 7 строк видимы всегда (решение Юрия 11.06),
+  // максимум 12 — дальше прокрутка. Контейнер панели растёт по содержимому
+  // (auto), поэтому футеры (кнопка «Далее», тумблер) не отъедают место у списка.
   const LESSON_ROW_H = 30           // высота строки урока (изм. ~29px + запас)
-  const LESSON_PANEL_CHROME = 84    // шапка (45) + паддинги списка (8) + кнопка «+ Урок» (31)
-  const lessonsPanelHeight = `min(${LESSON_PANEL_CHROME + Math.max(5, demo.lessons.length) * LESSON_ROW_H}px, 100%)`
+  const lessonListHeight = `${Math.max(7, Math.min(demo.lessons.length, 12)) * LESSON_ROW_H}px`
 
   // Save helper
   const save = useCallback((lessons: Lesson[]) => {
@@ -594,7 +594,7 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
         {showSidebar && (
           sidebarCollapsed ? (
             /* Свёрнутый вид — узкая полоска: раскрыть сверху, ниже сразу — добавить урок */
-            <div className="flex-shrink-0 self-start border border-border rounded-xl bg-card overflow-hidden flex flex-col items-center py-2 gap-1" style={{ width: 36, height: lessonsPanelHeight }}>
+            <div className="flex-shrink-0 self-start border border-border rounded-xl bg-card overflow-hidden flex flex-col items-center py-2 gap-1" style={{ width: 36, minHeight: lessonListHeight }}>
               <Button
                 size="sm"
                 variant="ghost"
@@ -635,7 +635,7 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
               </button>
             </div>
           ) : (
-            <div className="w-[260px] flex-shrink-0 self-start border border-border rounded-xl bg-card overflow-hidden flex flex-col" style={{ height: lessonsPanelHeight }}>
+            <div className="w-[260px] flex-shrink-0 self-start border border-border rounded-xl bg-card overflow-hidden flex flex-col">
               <div className="flex items-center gap-1 px-3 py-2 border-b border-border shrink-0">
                 {/* кнопка свернуть */}
                 <Button
@@ -650,7 +650,7 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
                 <h4 className="text-sm font-semibold text-foreground">Уроки</h4>
               </div>
 
-              <div className="flex-1 overflow-y-auto px-1.5 py-1 min-h-0">
+              <div className="overflow-y-auto px-1.5 py-1" style={{ height: lessonListHeight }}>
                 {demo.lessons.map((lesson, i) => {
                   const isActive = activeLessonId === lesson.id
                   const isRenaming = renamingLessonId === lesson.id
