@@ -124,14 +124,14 @@ export function HhBroadcastDialog({
     [phase, items.length, loadError, loadData, onOpenChange],
   )
 
-  // При открытии — загружаем
-  const handleOpenAutoLoad = useCallback(
-    (o: boolean) => {
-      if (o) void loadData()
-      handleOpenChange(o)
-    },
-    [loadData, handleOpenChange],
-  )
+  // При открытии — загружаем. ВАЖНО: диалог открывается программно
+  // (setOpen(true)), а Radix onOpenChange при этом НЕ вызывается — поэтому
+  // грузим данные через useEffect на проп `open`, а не в onOpenChange,
+  // иначе loadData не запустится и спиннер «Подготовка данных» висит вечно.
+  useEffect(() => {
+    if (open && candidateIds.length > 0) void loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   const current = items[currentIdx] ?? null
   const currentMessage = current ? (messages[current.id] ?? current.personalMessage) : ""
@@ -200,7 +200,7 @@ export function HhBroadcastDialog({
   // ─── Рендер ───────────────────────────────────────────────────────────────
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenAutoLoad}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
