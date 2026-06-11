@@ -125,8 +125,11 @@ export async function POST(
 
       const chatId = hh?.chatId ?? null
       const resumeUrl = hh?.resumeUrl ?? null
-      const chatUrl = chatId ? `https://chat.hh.ru/chat/${chatId}` : null
-      const hasNoChat = !chatUrl && !resumeUrl
+      // resume_url (с ?t={negotiationId}) — НАДЁЖНО открывается и ведёт в контекст
+      // отклика, где чат на один клик. Прямой chat.hh.ru/chat/{id} не открывался,
+      // поэтому основной URL = resumeUrl (Юрий подтвердил, что он работает).
+      const chatUrl = resumeUrl
+      const hasNoChat = !chatUrl
 
       return {
         id: c.id,
