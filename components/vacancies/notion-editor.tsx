@@ -140,6 +140,9 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false)
   const [saveTemplateName, setSaveTemplateName] = useState("")
   const [saveTemplateCategory, setSaveTemplateCategory] = useState("Общее")
+  // Куда сохранить в библиотеку: демонстрация / переиспользуемый блок / тест.
+  // Определяет demo_templates.length → раскладывается по вкладкам библиотеки.
+  const [saveDest, setSaveDest] = useState<"demo" | "block" | "test">("demo")
   // id — uuid записи в БД (undefined для шаблонов из старого localStorage-кэша)
   const [savedTemplates, setSavedTemplates] = useState<{ id?: string; title: string; category: string; lessons: Lesson[] }[]>([])
   // #26: новая UX-модель диалога — radio "Новый" / "Заменить" + dropdown +
@@ -811,10 +814,11 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
           setSaveTemplateCategory("Общее")
           setSaveMode("new")
           setReplaceTargetIdx(null)
+          setSaveDest("demo")
         }
       }}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Сохранить демо в библиотеку</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Сохранить в библиотеку</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-2">
             <RadioGroup
               value={saveMode}
@@ -843,6 +847,32 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
                           onChange={(e) => setSaveTemplateCategory(e.target.value)}
                           placeholder="Категория (напр. Продажи)"
                         />
+                        {/* Куда сохранить — раскладывается по вкладкам библиотеки */}
+                        <div className="space-y-1.5 pt-1">
+                          <span className="text-xs text-muted-foreground">Сохранить в раздел:</span>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {([
+                              { key: "demo",  label: "Демонстрация", hint: "набор уроков" },
+                              { key: "block", label: "Блок",         hint: "переиспользуемый" },
+                              { key: "test",  label: "Тест",          hint: "задание" },
+                            ] as const).map((opt) => (
+                              <button
+                                key={opt.key}
+                                type="button"
+                                onClick={() => setSaveDest(opt.key)}
+                                className={cn(
+                                  "rounded-md border px-2 py-1.5 text-xs text-left transition-colors",
+                                  saveDest === opt.key
+                                    ? "border-primary bg-primary/5 text-foreground"
+                                    : "border-border text-muted-foreground hover:bg-muted/50",
+                                )}
+                              >
+                                <span className="block font-medium">{opt.label}</span>
+                                <span className="block text-[10px] opacity-70">{opt.hint}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -943,7 +973,8 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
                         body: JSON.stringify({
                           name: saveTemplateName.trim(),
                           niche: saveTemplateCategory.trim() || "Общее",
-                          length: "standard",
+                          // length определяет вкладку библиотеки: block→Блоки, test→Тесты, иначе Демонстрации
+                          length: saveDest === "block" ? "block" : saveDest === "test" ? "test" : "standard",
                           sections: demo.lessons,
                           audience: ["candidates"],
                         }),
@@ -954,7 +985,7 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
                       }
                       await refetchTemplates()
                       setSaveTemplateOpen(false)
-                      toast.success("Сохранено в библиотеку")
+                      toast.success(`Сохранено в раздел «${saveDest === "block" ? "Блоки" : saveDest === "test" ? "Тесты" : "Демонстрации"}»`)
                     } catch (e) {
                       toast.error(`Ошибка сохранения: ${e instanceof Error ? e.message : "неизвестная ошибка"}`)
                     }
