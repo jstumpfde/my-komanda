@@ -5,7 +5,7 @@
 import { NextRequest } from "next/server"
 import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { vacancies } from "@/lib/db/schema"
+import { vacancies, companies, type CompanyWorkSchedule } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 
 interface CustomHoliday {
@@ -72,23 +72,50 @@ export async function GET(
     const user = await requireCompany()
     const { id } = await params
 
-    const [row] = await db
-      .select({
-        autoProcessingEnabled:      vacancies.autoProcessingEnabled,
-        scheduleEnabled:            vacancies.scheduleEnabled,
-        scheduleStart:              vacancies.scheduleStart,
-        scheduleEnd:                vacancies.scheduleEnd,
-        scheduleTimezone:           vacancies.scheduleTimezone,
-        scheduleWorkingDays:        vacancies.scheduleWorkingDays,
-        scheduleExcludedHolidayIds: vacancies.scheduleExcludedHolidayIds,
-        scheduleCustomHolidays:     vacancies.scheduleCustomHolidays,
-      })
-      .from(vacancies)
-      .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
-      .limit(1)
+    const [[row], [companyRow]] = await Promise.all([
+      db
+        .select({
+          autoProcessingEnabled:      vacancies.autoProcessingEnabled,
+          scheduleEnabled:            vacancies.scheduleEnabled,
+          scheduleStart:              vacancies.scheduleStart,
+          scheduleEnd:                vacancies.scheduleEnd,
+          scheduleTimezone:           vacancies.scheduleTimezone,
+          scheduleWorkingDays:        vacancies.scheduleWorkingDays,
+          scheduleExcludedHolidayIds: vacancies.scheduleExcludedHolidayIds,
+          scheduleCustomHolidays:     vacancies.scheduleCustomHolidays,
+        })
+        .from(vacancies)
+        .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
+        .limit(1),
+      db
+        .select({ workScheduleJson: companies.workScheduleJson })
+        .from(companies)
+        .where(eq(companies.id, user.companyId))
+        .limit(1),
+    ])
 
     if (!row) return apiError("Vacancy not found", 404)
-    return apiSuccess(asScheduleResponse(row))
+
+    const result = asScheduleResponse(row)
+
+    // Если у вакансии нет своих excludedHolidayIds — берём company-level (single source of truth #14)
+    const companyWs = (companyRow?.workScheduleJson ?? {}) as CompanyWorkSchedule
+    if (
+      result.scheduleExcludedHolidayIds.length === 0 &&
+      Array.isArray(companyWs.calendarExcludedHolidayIds) &&
+      companyWs.calendarExcludedHolidayIds.length > 0
+    ) {
+      result.scheduleExcludedHolidayIds = companyWs.calendarExcludedHolidayIds
+    }
+    if (
+      result.scheduleCustomHolidays.length === 0 &&
+      Array.isArray(companyWs.calendarCustomHolidays) &&
+      companyWs.calendarCustomHolidays.length > 0
+    ) {
+      result.scheduleCustomHolidays = companyWs.calendarCustomHolidays
+    }
+
+    return apiSuccess(result)
   } catch (err) {
     if (err instanceof Response) return err
     console.error("[schedule-settings GET]", err)
