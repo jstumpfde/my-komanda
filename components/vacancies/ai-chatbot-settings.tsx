@@ -113,6 +113,20 @@ interface Settings {
   abuseFilter?: AbuseFilter
   rejectionMessages: Required<RejectionMessages>
   responseTiming: ResponseTiming
+  autonomy: Autonomy
+}
+
+// Фаза 2 «бот ведёт». Всё выключено по умолчанию — бот остаётся Q&A, пока HR
+// явно не включит. Интервью бот НЕ назначает никогда (нет в списке).
+interface Autonomy {
+  enabled: boolean
+  canRequestAnketa: boolean
+  canSendTest: boolean
+  canAdvanceStage: boolean
+}
+
+const DEFAULT_AUTONOMY: Autonomy = {
+  enabled: false, canRequestAnketa: false, canSendTest: false, canAdvanceStage: false,
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -124,6 +138,7 @@ const DEFAULT_SETTINGS: Settings = {
   telegramChannel: "",
   rejectionMessages: DEFAULT_REJECTION_MESSAGES,
   responseTiming: DEFAULT_RESPONSE_TIMING,
+  autonomy: DEFAULT_AUTONOMY,
 }
 
 interface AbuseHistoryItem {
@@ -189,6 +204,8 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
                 ? d.settings.responseTiming.shortMessages
                 : DEFAULT_SHORT_MESSAGES,
             },
+            // Фаза 2: автономность (всё выключено, если в БД нет).
+            autonomy: { ...DEFAULT_AUTONOMY, ...(d.settings.autonomy ?? {}) },
           }))
         }
         if (typeof d.prompt === "string") setPrompt(d.prompt)
@@ -805,6 +822,54 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
               disabled={saving}
               className="gap-1.5 h-8 text-xs"
             >
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              Сохранить
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Фаза 2: автономность — бот сам ведёт по воронке */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Loader2 className="w-4 h-4" /> Автономные действия (бот ведёт по воронке)
+          </CardTitle>
+          <CardDescription>
+            По умолчанию выключено — бот только отвечает на вопросы. Включите, чтобы бот
+            сам предлагал следующий шаг подходящему кандидату. Интервью бот не назначает —
+            это всегда делает HR. Рекомендуем сначала проверить в песочнице («Тестировать»).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <Label className="text-sm cursor-pointer">Разрешить боту вести воронку</Label>
+            <Switch
+              checked={settings.autonomy.enabled}
+              onCheckedChange={v => setSettings(s => ({ ...s, autonomy: { ...s.autonomy, enabled: v } }))}
+            />
+          </div>
+          <div className={`space-y-2 pl-1 ${settings.autonomy.enabled ? "" : "opacity-50 pointer-events-none"}`}>
+            {[
+              { key: "canRequestAnketa" as const, label: "Отправлять демо/анкету вовлечённому кандидату" },
+              { key: "canSendTest" as const,      label: "Отправлять тестовое задание готовому кандидату" },
+              { key: "canAdvanceStage" as const,  label: "Двигать стадию кандидата вперёд" },
+            ].map(item => (
+              <div key={item.key} className="flex items-center justify-between gap-3">
+                <Label className="text-xs text-muted-foreground cursor-pointer">{item.label}</Label>
+                <Switch
+                  checked={settings.autonomy[item.key]}
+                  disabled={!settings.autonomy.enabled}
+                  onCheckedChange={v => setSettings(s => ({ ...s, autonomy: { ...s.autonomy, [item.key]: v } }))}
+                />
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-amber-600">
+            ⚠ Это живые сообщения кандидатам в hh. Включайте по одной возможности и следите за диалогами первое время.
+          </p>
+          <div className="flex justify-end">
+            <Button size="sm" variant="outline" onClick={() => save()} disabled={saving} className="gap-1.5 h-8 text-xs">
               {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
               Сохранить
             </Button>
