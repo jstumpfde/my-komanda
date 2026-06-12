@@ -98,7 +98,9 @@ const DEFAULT_FILTERS: FilterState = {
   sources: [], workFormats: [],
   relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20,
   funnelStatuses: DEFAULT_FUNNEL_STATUSES.slice(),
-  hideRejected: false,
+  // По умолчанию отказы СКРЫТЫ — HR работает с активной воронкой, отказных
+  // не видим, пока явно не нажмём «Показать отказы». (Решение Юрия.)
+  hideRejected: true,
   hideNoSalary: false,
   activeNow: false,
   demoProgress: [],
@@ -242,7 +244,9 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
     (filters.businessTrips ?? "any") !== "any" ? 1 : 0,
     (filters.experienceMin ?? 0) > 0 || (filters.experienceMax ?? 20) < 20 ? 1 : 0,
     (filters.funnelStatuses?.length ?? 0) > 0 ? 1 : 0,
-    filters.hideRejected ? 1 : 0,
+    // Отказы скрыты по умолчанию → «активно» считаем ОТХОД от дефолта: когда
+    // отказы ПОКАЗАНЫ (!hideRejected). Иначе бейдж горел бы на чистом экране.
+    !filters.hideRejected ? 1 : 0,
     (filters.demoProgress?.length ?? 0) > 0 ? 1 : 0,
     filters.dateRange || filters.dateFrom || filters.dateTo ? 1 : 0,
     (filters.ageMin ?? 18) > 18 || (filters.ageMax ?? 65) < 65 ? 1 : 0,
@@ -502,7 +506,7 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
             <CollapsibleTrigger className="flex w-full items-center justify-between text-sm font-medium [&[data-state=open]>svg]:rotate-180">
               <span className="flex items-center gap-2">
                 Статус и этап
-                {((filters.funnelStatuses?.length ?? 0) > 0 || filters.hideRejected || (filters.demoProgress?.length ?? 0) > 0) && (
+                {((filters.funnelStatuses?.length ?? 0) > 0 || !filters.hideRejected || (filters.demoProgress?.length ?? 0) > 0) && (
                   <span className="text-[10px] rounded-full bg-primary/15 text-primary px-1.5 py-0.5">активны</span>
                 )}
               </span>
