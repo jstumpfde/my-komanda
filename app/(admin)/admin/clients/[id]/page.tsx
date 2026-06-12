@@ -95,6 +95,180 @@ const ROLE_LABELS: Record<string, string> = {
 
 const CLIENT_ROLES = ["director", "hr_lead", "hr_manager", "department_head", "observer"]
 
+// ─── Типы для счетов и активности ────────────────────────────────────────────
+
+interface InvoiceItem {
+  id: string; invoiceNumber: string; amountRub: number | null
+  periodStart: string | null; periodEnd: string | null
+  status: string; dueDate: string | null; paidAt: string | null
+  issuedAt: string | null; planName: string | null; createdAt: string | null
+}
+
+interface ActivityItem {
+  id: string; action: string; entityType: string | null; entityId: string | null
+  count: number | null; meta: Record<string, unknown> | null; ip: string | null
+  createdAt: string; userId: string | null; userEmail: string | null; userName: string | null
+}
+
+const INVOICE_STATUS: Record<string, { label: string; cls: string }> = {
+  pending:   { label: "Ожидает",     cls: "bg-yellow-500/10 text-yellow-700 border-yellow-200" },
+  issued:    { label: "Выставлен",   cls: "bg-blue-500/10 text-blue-700 border-blue-200" },
+  paid:      { label: "Оплачен",     cls: "bg-emerald-500/10 text-emerald-700 border-emerald-200" },
+  cancelled: { label: "Аннулирован", cls: "bg-muted text-muted-foreground border-border" },
+}
+
+function fmtDate(v: string | null) {
+  if (!v) return "—"
+  return new Date(v).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" })
+}
+
+function fmtRub(v: number | null) {
+  if (v == null) return "—"
+  return v.toLocaleString("ru-RU") + " ₽"
+}
+
+function fmtPeriod(start: string | null, end: string | null) {
+  if (!start && !end) return "—"
+  return `${fmtDate(start)} — ${fmtDate(end)}`
+}
+
+function ACTION_LABEL(action: string) {
+  const map: Record<string, string> = {
+    candidate_export:        "Экспорт кандидатов",
+    candidate_delete:        "Удаление кандидата",
+    candidate_view_contacts: "Просмотр контактов",
+    candidate_bulk_update:   "Массовое обновление",
+  }
+  return map[action] ?? action
+}
+
+// ─── Компонент: Счета клиента ─────────────────────────────────────────────────
+
+function ClientInvoicesPanel({ clientId }: { clientId: string }) {
+  const [invoices, setInvoices] = useState<InvoiceItem[]>([])
+  const [loading, setLoading]  = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    fetch(`/api/admin/clients/${clientId}/invoices`)
+      .then(r => r.json())
+      .then(data => setInvoices(Array.isArray(data) ? data : []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [clientId])
+
+  if (loading) return (
+    <div className="flex justify-center py-10">
+      <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+    </div>
+  )
+
+  if (invoices.length === 0) return (
+    <div className="text-center py-10 text-sm text-muted-foreground">
+      <Receipt className="w-8 h-8 mx-auto mb-2 opacity-30" />
+      <p>Счетов пока нет</p>
+    </div>
+  )
+
+  return (
+    <div className="overflow-x-auto">
+      <DataTable>
+        <DataHead>
+          <DataHeadCell>Номер</DataHeadCell>
+          <DataHeadCell>Тариф</DataHeadCell>
+          <DataHeadCell align="right">Сумма</DataHeadCell>
+          <DataHeadCell>Период</DataHeadCell>
+          <DataHeadCell align="center">Статус</DataHeadCell>
+          <DataHeadCell>Срок</DataHeadCell>
+          <DataHeadCell>Оплачен</DataHeadCell>
+        </DataHead>
+        <tbody>
+          {invoices.map(inv => {
+            const st = INVOICE_STATUS[inv.status] ?? { label: inv.status, cls: "" }
+            return (
+              <DataRow key={inv.id}>
+                <DataCell className="font-medium whitespace-nowrap">{inv.invoiceNumber}</DataCell>
+                <DataCell className="text-muted-foreground text-sm">{inv.planName ?? "—"}</DataCell>
+                <DataCell align="right" className="font-medium whitespace-nowrap">{fmtRub(inv.amountRub)}</DataCell>
+                <DataCell className="text-muted-foreground whitespace-nowrap">{fmtPeriod(inv.periodStart, inv.periodEnd)}</DataCell>
+                <DataCell align="center">
+                  <Badge variant="outline" className={cn("text-xs", st.cls)}>{st.label}</Badge>
+                </DataCell>
+                <DataCell className="whitespace-nowrap">{fmtDate(inv.dueDate)}</DataCell>
+                <DataCell className="whitespace-nowrap">{fmtDate(inv.paidAt)}</DataCell>
+              </DataRow>
+            )
+          })}
+        </tbody>
+      </DataTable>
+    </div>
+  )
+}
+
+// ─── Компонент: Журнал активности ─────────────────────────────────────────────
+
+function ClientActivityPanel({ clientId }: { clientId: string }) {
+  const [events, setEvents] = useState<ActivityItem[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    fetch(`/api/admin/clients/${clientId}/activity`)
+      .then(r => r.json())
+      .then(data => setEvents(Array.isArray(data) ? data : []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [clientId])
+
+  if (loading) return (
+    <div className="flex justify-center py-10">
+      <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+    </div>
+  )
+
+  if (events.length === 0) return (
+    <div className="text-center py-10 text-sm text-muted-foreground">
+      <Activity className="w-8 h-8 mx-auto mb-2 opacity-30" />
+      <p>Событий аудита пока нет</p>
+    </div>
+  )
+
+  return (
+    <div className="overflow-x-auto">
+      <DataTable>
+        <DataHead>
+          <DataHeadCell>Время</DataHeadCell>
+          <DataHeadCell>Пользователь</DataHeadCell>
+          <DataHeadCell>Действие</DataHeadCell>
+          <DataHeadCell>Объект</DataHeadCell>
+          <DataHeadCell>IP</DataHeadCell>
+        </DataHead>
+        <tbody>
+          {events.map(ev => (
+            <DataRow key={ev.id}>
+              <DataCell className="whitespace-nowrap text-muted-foreground text-xs">
+                {new Date(ev.createdAt).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+              </DataCell>
+              <DataCell>
+                <div className="text-sm">{ev.userName ?? ev.userEmail ?? "—"}</div>
+                {ev.userEmail && ev.userName && (
+                  <div className="text-xs text-muted-foreground">{ev.userEmail}</div>
+                )}
+              </DataCell>
+              <DataCell className="text-sm font-medium">{ACTION_LABEL(ev.action)}</DataCell>
+              <DataCell className="text-muted-foreground text-xs">
+                {ev.entityType ? `${ev.entityType}${ev.entityId ? ` #${ev.entityId.slice(0, 8)}` : ""}` : "—"}
+                {ev.count != null && ` (${ev.count})`}
+              </DataCell>
+              <DataCell className="text-muted-foreground text-xs whitespace-nowrap">{ev.ip ?? "—"}</DataCell>
+            </DataRow>
+          ))}
+        </tbody>
+      </DataTable>
+    </div>
+  )
+}
+
 // ─── Компоненты ───────────────────────────────────────────────────────────────
 
 function UsageBar({ label, used, limit }: { label: string; used: number; limit: number | null | undefined }) {
@@ -862,12 +1036,8 @@ export default function AdminClientPage() {
                       История счетов
                     </CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <div className="text-center py-8 text-sm text-muted-foreground">
-                      <Receipt className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                      <p>История счетов пока недоступна</p>
-                      <p className="text-xs mt-1">Будет добавлена в следующем обновлении</p>
-                    </div>
+                  <CardContent className="p-0 pb-2">
+                    <ClientInvoicesPanel clientId={clientId} />
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -881,12 +1051,8 @@ export default function AdminClientPage() {
                       Журнал активности
                     </CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <div className="text-center py-8 text-sm text-muted-foreground">
-                      <Activity className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                      <p>В разработке</p>
-                      <p className="text-xs mt-1">Журнал активности компании будет доступен в следующем релизе</p>
-                    </div>
+                  <CardContent className="p-0 pb-2">
+                    <ClientActivityPanel clientId={clientId} />
                   </CardContent>
                 </Card>
               </TabsContent>
