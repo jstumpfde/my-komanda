@@ -139,7 +139,10 @@ export default function HiringSettingsPage() {
             </div>
 
             {/* Контент активного таба */}
-            <div className="max-w-3xl">
+            {/* Воронка — широкая (таблица стадий с 8 колонками), чтобы без
+                горизонтального скролла. Остальные табы — простые формы,
+                комфортная ширина max-w-3xl (широкие формы читать хуже). */}
+            <div className={activeTab === "funnel" ? "max-w-6xl" : "max-w-3xl"}>
 
               {activeTab === "funnel" && (
                 <FunnelAutomationSection defaults={defaults} onPatch={onPatch} />

@@ -83,14 +83,18 @@ const STAGE_DOT_CLASSES: Record<StageColor, string> = {
 }
 
 // ─── hh.ru маппинг стадий (статусы переговоров hh) ───────────────────────────
-// Фиксированный список статусов кандидата на hh.ru — как он видит их в ЛК
+// Статусы (коллекции переговоров) кандидата на hh.ru — куда переносим отклик.
 const HH_STAGE_OPTIONS = [
-  { value: "none", label: "—" },
-  { value: "response",   label: "Новый отклик" },
-  { value: "phone_interview", label: "Тел. интервью" },
-  { value: "interview",  label: "Интервью" },
-  { value: "offer",      label: "Оффер" },
-  { value: "hired",      label: "Принят" },
+  { value: "none",                 label: "—" },
+  { value: "response",             label: "Новый отклик" },
+  { value: "consider",             label: "Думаю / в работе" },
+  { value: "phone_interview",      label: "Телефонное интервью" },
+  { value: "assessment",           label: "Тестовое задание" },
+  { value: "interview",            label: "Собеседование" },
+  { value: "offer",                label: "Оффер" },
+  { value: "hired",                label: "Принят / выход на работу" },
+  { value: "discard_by_employer",  label: "Отказ (мы отказали)" },
+  { value: "discard_by_applicant", label: "Кандидат отказался" },
 ]
 
 // ─── Тип пресета компании ─────────────────────────────────────────────────────
