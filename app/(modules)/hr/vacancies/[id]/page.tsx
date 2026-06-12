@@ -3190,7 +3190,7 @@ export default function VacancyPage() {
                                         htmlFor="brand-logo-input"
                                         className="text-[10px] text-primary cursor-pointer hover:underline"
                                       >
-                                        {selectedBrand?.logo ? "Загрузить своё" : "Загрузить"}
+                                        {selectedBrand?.logo ? "Изменить лого" : "Загрузить"}
                                       </label>
                                     )}
                                   </div>
@@ -3311,7 +3311,7 @@ export default function VacancyPage() {
                                 Отвязать
                               </Button>
                             </div>
-                            <div className="mt-3 pt-3 border-t flex items-center gap-2 flex-wrap">
+                            <div className="mt-3 pt-3 border-t pl-11 flex items-center gap-2 flex-wrap">
                               <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded-full bg-muted text-[11px] text-muted-foreground">
                                 <span aria-hidden>📥</span>
                                 <span>Откликов:</span>
