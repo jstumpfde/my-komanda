@@ -7,8 +7,11 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Loader2, Pencil, Check, X, Trash2, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
+import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
+import { VacancyTestFollowupSettings } from "@/components/vacancies/vacancy-test-followup-settings"
 
 interface QueueItem {
   messageId: string
@@ -166,6 +169,7 @@ export function MessageQueueReviewSheet({ vacancyId, open, onOpenChange, onChang
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-2xl overflow-y-auto p-0">
+        <Tabs defaultValue="queue">
         <SheetHeader className="px-5 pt-5 pb-3 border-b sticky top-0 bg-background z-10">
           <SheetTitle className="flex items-center gap-2">
             Очередь рассылки
@@ -177,11 +181,15 @@ export function MessageQueueReviewSheet({ vacancyId, open, onOpenChange, onChang
             )}
           </SheetTitle>
           <SheetDescription className="text-xs">
-            Отложенные сообщения. Проверьте имя (особенно с пометкой), поправьте при
-            необходимости и удалите лишнее до отправки.
+            Отложенные сообщения и готовые шаблоны касаний для этой вакансии.
           </SheetDescription>
+          <TabsList className="mt-2">
+            <TabsTrigger value="queue">Очередь</TabsTrigger>
+            <TabsTrigger value="templates">Шаблоны рассылки</TabsTrigger>
+          </TabsList>
         </SheetHeader>
 
+        <TabsContent value="queue" className="m-0">
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
@@ -288,6 +296,20 @@ export function MessageQueueReviewSheet({ vacancyId, open, onOpenChange, onChang
             })}
           </div>
         )}
+        </TabsContent>
+
+        <TabsContent value="templates" className="m-0 px-5 py-4 space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Готовые тексты касаний, из которых собирается очередь. Переменные:
+            <code className="mx-1">{"{{name}}"}</code>(имя),
+            <code className="mx-1">{"{{vacancy}}"}</code>(должность),
+            <code className="mx-1">{"{{test_link}}"}</code>,
+            <code className="mx-1">{"{{demo_link}}"}</code>. Пустой слот → берётся текст по умолчанию.
+          </p>
+          <VacancyFollowupSettings vacancyId={vacancyId} />
+          <VacancyTestFollowupSettings vacancyId={vacancyId} />
+        </TabsContent>
+        </Tabs>
       </SheetContent>
     </Sheet>
   )
