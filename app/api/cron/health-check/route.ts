@@ -10,6 +10,7 @@ import { db } from "@/lib/db"
 import { cronRuns } from "@/lib/db/schema"
 import { and, desc, eq, sql } from "drizzle-orm"
 import { checkCronAuth } from "@/lib/cron/auth"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 
 interface CronSpec {
   name: string
@@ -38,10 +39,27 @@ interface CronStatus {
   errorMessage?: string | null
 }
 
+const CRON_NAME = "health-check"
+
 export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
-  return runHealthCheck()
+  const run = await startCronRun(CRON_NAME).catch(() => null)
+  const { statuses, stale } = await collectStatus()
+  if (run) await finishCronRun(run.id, stale ? "error" : "ok", { stale, problems: statuses.filter(s => s.stale).length }).catch(() => null)
+  const problems = statuses.filter(s => s.stale)
+  if (problems.length > 0) {
+    const lines = problems.map(p =>
+      `[CRON-HEALTH] STALE ${p.name} (${p.label}): last finished ${p.lastFinishedAt ?? "never"} ` +
+      `(${p.staleMinutes === null ? "never" : `${p.staleMinutes} min ago`}, ` +
+      `threshold ${p.thresholdMinutes} min, last status=${p.lastStatus ?? "none"})`,
+    )
+    console.error(lines.join("\n"))
+  }
+  return NextResponse.json(
+    { ok: !stale, checkedAt: new Date().toISOString(), statuses, problems },
+    { status: stale ? 503 : 200 },
+  )
 }
 
 // GET-вариант — чтобы UptimeRobot мог дёрнуть без секрета (только статус,

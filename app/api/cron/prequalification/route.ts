@@ -3,10 +3,13 @@ import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates } from "@/lib/db/schema"
 import { checkCronAuth } from "@/lib/cron/auth"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { getPrequalConfig, daysSinceSent, finalizePrequalification } from "@/lib/prequalification/finalize"
 import { sendCandidateMessage } from "@/lib/prequalification/start"
 import { renderTemplate } from "@/lib/template-renderer"
 import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
+
+const CRON_NAME = "prequalification"
 
 // POST /api/cron/prequalification
 //
@@ -42,7 +45,7 @@ function renderReminder(template: string, args: { firstName: string; vacancyTitl
 export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
-
+  const run = await startCronRun(CRON_NAME).catch(() => null)
   const now = new Date()
   const startedAt = Date.now()
 
@@ -139,9 +142,11 @@ export async function POST(req: NextRequest) {
     const durationMs = Date.now() - startedAt
     const result = { processed, reminderD1, reminderD3, fallback, failed, skipped }
     console.log(JSON.stringify({ tag: "cron/prequalification", ...result, durationMs, ts: now.toISOString() }))
+    if (run) await finishCronRun(run.id, "ok", { ...result, durationMs })
     return NextResponse.json({ ok: true, ...result, durationMs, ts: now.toISOString() })
   } catch (err) {
     console.error("[cron/prequalification]", err)
+    if (run) await finishCronRun(run.id, "error", null, err instanceof Error ? err.message : String(err))
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

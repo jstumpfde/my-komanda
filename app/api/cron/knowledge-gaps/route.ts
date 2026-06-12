@@ -9,6 +9,7 @@ import {
 } from "@/lib/db/schema"
 import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
 import { checkCronAuth } from "@/lib/cron/auth"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 
 // POST /api/cron/knowledge-gaps — Protected by X-Cron-Secret header.
 // Weekly: для каждого тенанта находит топ-10 неотвеченных вопросов за 7 дней,
@@ -83,10 +84,12 @@ async function askClaudeRecommendations(
   }
 }
 
+const CRON_NAME = "knowledge-gaps"
+
 export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
-
+  const run = await startCronRun(CRON_NAME).catch(() => null)
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
   try {
@@ -193,6 +196,7 @@ export async function POST(req: NextRequest) {
       notified++
     }
 
+    if (run) await finishCronRun(run.id, "ok", { tenants: tenantIds.length, notified })
     return NextResponse.json({
       ok: true,
       tenants: tenantIds.length,
@@ -201,6 +205,7 @@ export async function POST(req: NextRequest) {
     })
   } catch (err) {
     console.error("[cron/knowledge-gaps]", err)
+    if (run) await finishCronRun(run.id, "error", null, err instanceof Error ? err.message : String(err))
     return NextResponse.json({ error: "Internal error" }, { status: 500 })
   }
 }
