@@ -3067,6 +3067,31 @@ export const companyFunnelTemplates = pgTable("company_funnel_templates", {
   index("idx_cft_company").on(t.companyId),
 ])
 
+// Менеджер пресетов дожима (Issue 12.06): СВОИ пресеты HR компании — именованные
+// бандлы расписания + текстов касаний. Системные (soft/standard/aggressive)
+// виртуальны (из lib/followup/presets.ts + default-messages.ts), в таблице НЕ
+// хранятся — всегда доступны read-only и копируемы. Здесь только пользовательские.
+export const companyFollowupPresets = pgTable("company_followup_presets", {
+  id:                 uuid("id").primaryKey().defaultRandom(),
+  companyId:          uuid("company_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  name:               text("name").notNull(),
+  description:        text("description"),
+  // Расписание касаний (как followUpCampaigns.preset) + опц. кастомные дни.
+  preset:             text("preset").notNull().default("standard"), // off|soft|standard|aggressive
+  customDays:         jsonb("custom_days").$type<number[] | null>(),
+  // Тексты касаний (9 слотов). Ветка «не открыл» — основная; остальные опц.
+  messages:           jsonb("messages").$type<string[] | null>(),
+  messagesOpened:     jsonb("messages_opened").$type<string[] | null>(),
+  testPreset:         text("test_preset"),
+  testMessages:       jsonb("test_messages").$type<string[] | null>(),
+  testMessagesOpened: jsonb("test_messages_opened").$type<string[] | null>(),
+  createdBy:          uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt:          timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:          timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("idx_cfp_company").on(t.companyId),
+])
+
 // Group 16: библиотека пер-платформенных шаблонов воронки.
 // Создаёт platform-admin (через /admin/platform → Templates). Видна всем
 // HR компаниям через GET /api/modules/hr/funnel-templates/platform
