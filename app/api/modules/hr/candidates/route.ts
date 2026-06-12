@@ -384,6 +384,9 @@ export async function GET(req: NextRequest) {
           aiScore: candidates.aiScore,
           resumeScore: candidates.resumeScore,
           rubricScore: candidates.rubricScore,
+          salaryMin: candidates.salaryMin,
+          salaryMax: candidates.salaryMax,
+          salaryCurrency: candidates.salaryCurrency,
           vacancyId: candidates.vacancyId,
           vacancyTitle: vacancies.title,
           createdAt: candidates.createdAt,
@@ -447,6 +450,49 @@ export async function GET(req: NextRequest) {
         }
       }
 
+      // Состояние теста для колонки «Тест» (как в пер-вакансионном списке):
+      // последняя test_submission на кандидата + приглашения (follow_up).
+      const gCandidateIds = rows.map(r => r.id)
+      const gTestByCandidate = new Map<string, { score: number | null; answersCount: number; submitted: boolean }>()
+      const gTestLiveInvited = new Set<string>()
+      const gTestFailedInvited = new Set<string>()
+      if (gCandidateIds.length > 0) {
+        const subRows = await db
+          .select({
+            candidateId: testSubmissions.candidateId,
+            aiScore: testSubmissions.aiScore,
+            answersJson: testSubmissions.answersJson,
+            submittedAt: testSubmissions.submittedAt,
+          })
+          .from(testSubmissions)
+          .where(inArray(testSubmissions.candidateId, gCandidateIds))
+          .orderBy(desc(testSubmissions.submittedAt))
+        for (const s of subRows) {
+          if (!s.candidateId || gTestByCandidate.has(s.candidateId)) continue
+          const answers = (s.answersJson as { answers?: { value?: string }[] } | null)?.answers
+          const answersCount = Array.isArray(answers)
+            ? answers.filter((a) => (a?.value ?? "").trim().length > 0).length
+            : 0
+          gTestByCandidate.set(s.candidateId, {
+            score: testScoreOf(s.aiScore, s.answersJson),
+            answersCount,
+            submitted: s.submittedAt != null,
+          })
+        }
+        const invRows = await db
+          .select({ candidateId: followUpMessages.candidateId, status: followUpMessages.status })
+          .from(followUpMessages)
+          .where(and(
+            inArray(followUpMessages.candidateId, gCandidateIds),
+            eq(followUpMessages.branch, "test_invite"),
+          ))
+        for (const iv of invRows) {
+          if (!iv.candidateId) continue
+          if (iv.status === "sent" || iv.status === "pending") gTestLiveInvited.add(iv.candidateId)
+          else if (iv.status === "failed") gTestFailedInvited.add(iv.candidateId)
+        }
+      }
+
       const now = Date.now()
 
       const enriched = rows.map((r) => {
@@ -499,6 +545,22 @@ export async function GET(req: NextRequest) {
         // если name пустой/«Новый кандидат»
         const displayName = deriveCandidateName(r.name, r.anketaAnswers, r.hhCandidateName)
 
+        // Колонка «Тест»: балл + статус (как в пер-вакансионном списке).
+        const test = gTestByCandidate.get(r.id)
+        let testStatus: "submitted" | "in_progress" | "opened" | "sent" | "failed" | null
+        if (test) {
+          testStatus = test.submitted ? "submitted" : test.answersCount > 0 ? "in_progress" : "opened"
+        } else if (gTestLiveInvited.has(r.id)) {
+          testStatus = "sent"
+        } else if (gTestFailedInvited.has(r.id)) {
+          testStatus = "failed"
+        } else if (TEST_SENT_STAGES.has(r.stage ?? "")) {
+          testStatus = "sent"
+        } else {
+          testStatus = null
+        }
+        const testScore = test?.score ?? null
+
         // Strip demoProgressJson + anketaAnswers + hhCandidateName — не нужны клиенту
         const { demoProgressJson: _drop1, anketaAnswers: _drop2, hhCandidateName: _drop3, ...rest } = r
         void _drop1; void _drop2; void _drop3
@@ -509,6 +571,8 @@ export async function GET(req: NextRequest) {
           demoCompletedBlocks,
           progressPercent,
           isActive,
+          testScore,
+          testStatus,
         }
       })
 
