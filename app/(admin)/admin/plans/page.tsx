@@ -7,8 +7,9 @@ import { AdminPageLayout } from "@/components/admin/admin-page-layout"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
-import { LayoutGrid, Pencil, Package } from "lucide-react"
+import { Pencil, Package } from "lucide-react"
 import Link from "next/link"
+import { CreatePlanButton } from "@/components/admin/create-plan-button"
 
 function formatPrice(kopecks: number) {
   return (kopecks / 100).toLocaleString("ru-RU") + " ₽"
@@ -59,9 +60,12 @@ export default async function AdminPlansPage() {
     <AdminPageLayout>
       <div className="py-6 px-8">
             <div className="mb-6">
-              <div className="flex items-center gap-2 pt-3 pb-2">
-                <Package className="h-5 w-5 text-violet-600" />
-                <h1 className="text-lg font-semibold">Тарифы</h1>
+              <div className="flex items-center justify-between pt-3 pb-2">
+                <div className="flex items-center gap-2">
+                  <Package className="h-5 w-5 text-violet-600" />
+                  <h1 className="text-lg font-semibold">Тарифы</h1>
+                </div>
+                <CreatePlanButton />
               </div>
               <p className="text-muted-foreground text-sm">Управление тарифными планами и модулями</p>
             </div>
