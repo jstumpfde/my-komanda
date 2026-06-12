@@ -2081,6 +2081,8 @@ export const calendarEvents = pgTable("calendar_events", {
   location:    text("location"),
   meetingUrl:  text("meeting_url"),
   scope:       text("scope").notNull().default("company"), // company|hr|personal
+  // Внешние участники (не из платформы) — имена/email вручную, free-text.
+  externalParticipants: jsonb("external_participants").$type<string[]>().default([]),
   createdAt:   timestamp("created_at").defaultNow(),
   updatedAt:   timestamp("updated_at").defaultNow(),
 })

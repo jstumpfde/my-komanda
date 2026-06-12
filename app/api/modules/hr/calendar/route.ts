@@ -62,8 +62,13 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
 
     const { title, description, type, startAt, endAt, allDay, roomId, color, recurrence, participants,
+            externalParticipants,
             candidateId, vacancyId, interviewer, interviewType, interviewFormat, interviewStatus, scope,
             location, meetingUrl } = body
+
+    const cleanExternal = Array.isArray(externalParticipants)
+      ? (externalParticipants as unknown[]).map(String).map(s => s.trim()).filter(Boolean)
+      : []
 
     if (!title || !startAt || !endAt) {
       return apiError("Обязательные поля: title, startAt, endAt")
@@ -93,6 +98,7 @@ export async function POST(req: NextRequest) {
         location:    location ?? null,
         meetingUrl:  meetingUrl ?? null,
         scope: (scope === "hr" || scope === "personal") ? scope : "company",
+        externalParticipants: cleanExternal,
       })
       .returning()
 

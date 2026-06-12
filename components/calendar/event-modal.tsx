@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { AlertCircle, Trash2, Users } from "lucide-react"
+import { AlertCircle, Trash2, Users, UserPlus, X } from "lucide-react"
 import type { CalendarEvent } from "./week-view"
 
 interface Room {
@@ -48,6 +48,7 @@ export interface EventFormData {
   description: string
   roomId: string
   participants?: string[]
+  externalParticipants?: string[]
   // Поля интервью (отправляются только для type='interview').
   vacancyId?: string | null
   interviewer?: string
@@ -95,6 +96,9 @@ export function EventModal({
   const [loading, setLoading] = useState(false)
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([])
   const [companyUsers, setCompanyUsers] = useState<{ id: string; name: string }[]>([])
+  // Внешние участники (не из платформы) — вводятся вручную.
+  const [externalParticipants, setExternalParticipants] = useState<string[]>([])
+  const [externalInput, setExternalInput] = useState("")
   // Поля интервью
   const [vacancyId, setVacancyId] = useState("")
   const [interviewer, setInterviewer] = useState("")
@@ -152,8 +156,31 @@ export function EventModal({
       setMeetingUrl("")
     }
     setConflict(null)
-    setSelectedParticipantIds([])
+    setExternalInput("")
+    // При редактировании — подгрузить текущих участников (платформенные id +
+    // внешние имена), чтобы их можно было увидеть и убрать. При создании — пусто.
+    if (event?.id) {
+      fetch(`/api/modules/hr/calendar/${event.id}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(j => {
+          const d = j?.data ?? j
+          setSelectedParticipantIds(Array.isArray(d?.participantIds) ? d.participantIds : [])
+          setExternalParticipants(Array.isArray(d?.externalParticipants) ? d.externalParticipants : [])
+        })
+        .catch(() => { setSelectedParticipantIds([]); setExternalParticipants([]) })
+    } else {
+      setSelectedParticipantIds([])
+      setExternalParticipants([])
+    }
   }, [event, defaultDate, open])
+
+  // Добавить внешнего участника (по имени/email), без дублей.
+  const addExternal = () => {
+    const v = externalInput.trim()
+    if (!v) return
+    setExternalParticipants(prev => prev.includes(v) ? prev : [...prev, v])
+    setExternalInput("")
+  }
 
   // #60/#C4: авто-проверка пересечений при изменении времени/переговорной/участников (дебаунс).
   useEffect(() => {
@@ -203,6 +230,7 @@ export function EventModal({
       await onSave({
         title, type, scope, startAt, endAt, description, roomId,
         participants: selectedParticipantIds.length > 0 ? selectedParticipantIds : undefined,
+        externalParticipants,
         vacancyId:       isInterview ? (vacancyId || null) : null,
         interviewer:     isInterview ? interviewer : "",
         interviewType:   isInterview ? interviewType : "",
@@ -229,7 +257,7 @@ export function EventModal({
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent className="w-full sm:w-[440px] sm:max-w-[440px]">
+      <SheetContent className="w-full sm:w-[560px] sm:max-w-[560px] overflow-y-auto">
         <SheetHeader>
           <SheetTitle>{event ? "Редактировать событие" : "Новое событие"}</SheetTitle>
         </SheetHeader>
@@ -389,12 +417,14 @@ export function EventModal({
             )}
           </div>
 
-          {companyUsers.length > 0 && (
-            <div className="space-y-1.5">
-              <Label className="flex items-center gap-1.5">
-                <Users className="w-3.5 h-3.5" />
-                Участники
-              </Label>
+          <div className="space-y-2">
+            <Label className="flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5" />
+              Участники
+            </Label>
+
+            {/* Из платформы — клик добавляет/убирает */}
+            {companyUsers.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {companyUsers.map(u => {
                   const selected = selectedParticipantIds.includes(u.id)
@@ -416,8 +446,47 @@ export function EventModal({
                   )
                 })}
               </div>
+            )}
+
+            {/* Внешние участники (не из платформы) — добавить вручную */}
+            <div className="space-y-1.5">
+              <p className="text-[11px] text-muted-foreground">
+                Добавить вручную (нет на платформе) — имя или email
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  value={externalInput}
+                  onChange={(e) => setExternalInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addExternal() } }}
+                  placeholder="Иван Петров или ivan@mail.ru"
+                  className="h-8 text-sm"
+                />
+                <Button type="button" variant="outline" size="sm" className="h-8 shrink-0 gap-1" onClick={addExternal} disabled={!externalInput.trim()}>
+                  <UserPlus className="w-3.5 h-3.5" /> Добавить
+                </Button>
+              </div>
+              {externalParticipants.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {externalParticipants.map((name) => (
+                    <span
+                      key={name}
+                      className="inline-flex items-center gap-1 rounded-full pl-2.5 pr-1 py-0.5 text-xs border bg-secondary text-secondary-foreground border-border"
+                    >
+                      {name}
+                      <button
+                        type="button"
+                        onClick={() => setExternalParticipants(prev => prev.filter(n => n !== name))}
+                        className="inline-flex items-center justify-center rounded-full hover:bg-foreground/10 p-0.5"
+                        title="Убрать"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
+          </div>
 
           <div className="space-y-1">
             <Label htmlFor="description">Описание</Label>

@@ -18,7 +18,15 @@ export async function GET(
       .where(and(eq(calendarEvents.id, id), eq(calendarEvents.companyId, user.companyId)))
 
     if (!event) return apiError("Событие не найдено", 404)
-    return apiSuccess(event)
+
+    // Участники-пользователи платформы (id) — чтобы модалка предзаполнила выбор
+    // при редактировании (внешние участники уже лежат в колонке самого события).
+    const parts = await db
+      .select({ userId: calendarEventParticipants.userId })
+      .from(calendarEventParticipants)
+      .where(eq(calendarEventParticipants.eventId, id))
+
+    return apiSuccess({ ...event, participantIds: parts.map(p => p.userId) })
   } catch (err: unknown) {
     if (err instanceof Response) return err
     return apiError("Ошибка сервера", 500)
@@ -62,6 +70,11 @@ export async function PATCH(
     if (body.meetingUrl !== undefined) updateData.meetingUrl = body.meetingUrl
     if (body.scope !== undefined) {
       updateData.scope = (body.scope === "hr" || body.scope === "personal") ? body.scope : "company"
+    }
+    if (body.externalParticipants !== undefined) {
+      updateData.externalParticipants = Array.isArray(body.externalParticipants)
+        ? (body.externalParticipants as unknown[]).map(String).map(s => s.trim()).filter(Boolean)
+        : []
     }
 
     const [updated] = await db
