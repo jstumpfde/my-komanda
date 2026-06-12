@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
@@ -11,7 +12,7 @@ import { toast } from "sonner"
 import { getBrand, type BrandConfig } from "@/lib/branding"
 import {
   Copy, Check, ExternalLink, Eye, Code2, FileText,
-  Globe, Smartphone, Monitor, ChevronRight,
+  Globe, Smartphone, Monitor, ChevronRight, Plus, X, Save, Sparkles,
 } from "lucide-react"
 
 export interface MiniFormFieldForHtml {
@@ -36,6 +37,11 @@ interface PublishTabProps {
     slogan?: string
   }
   formFields?: MiniFormFieldForHtml[]
+  // Редактируемые буллеты-выгоды над формой (descriptionJson.landingBenefits).
+  vacancyId?: string
+  benefits?: string[]
+  descriptionJson?: unknown
+  onSaved?: () => void
 }
 
 interface BrandOverride {
@@ -55,11 +61,26 @@ function escHtml(str: string): string {
     .replace(/'/g, "&#x27;")
 }
 
+// Дефолтные буллеты-выгоды (если HR ничего не задал) — часть динамическая
+// (доход×1.5 от нижней вилки, город). После ручного редактирования буллеты
+// сохраняются как есть (literal) в descriptionJson.landingBenefits.
+function defaultBenefits(v: { city?: string; salaryFrom?: number }): string[] {
+  return [
+    v.salaryFrom
+      ? `Доход от ${Math.round(v.salaryFrom * 1.5).toLocaleString("ru-RU")} ₽ через 3 месяца`
+      : "Доход выше среднего по рынку через 3 месяца",
+    "Обучение и наставник с первого дня",
+    "Карьерный рост до руководителя за 6-12 мес.",
+    `Современный офис${v.city ? " в " + v.city : ""}`,
+  ]
+}
+
 function generateFullPageHtml(
   brand: BrandConfig,
   vacancy: { title: string; slug: string; city?: string; salaryFrom?: number; salaryTo?: number },
   override?: BrandOverride,
   formFields?: MiniFormFieldForHtml[],
+  benefits?: string[],
 ): string {
   const primary = override?.color || brand.primaryColor || "#3b82f6"
   const bg = override?.color ? override.color + "10" : brand.bgColor
@@ -113,10 +134,11 @@ h1{font-size:28px;font-weight:800;color:${text};margin-bottom:8px;line-height:1.
 <h1>${vacancy.title}</h1>
 ${slogan ? `<p class="slogan">${slogan}</p>\n` : ""}<p class="meta">${vacancy.city || ""}${salary ? " · " + salary : ""}</p>
 <div class="highlights">
-<div class="highlight"><span class="check">✓</span>${vacancy.salaryFrom ? "Доход от " + Math.round(vacancy.salaryFrom * 1.5).toLocaleString("ru-RU") + " ₽ через 3 месяца" : "Доход выше среднего по рынку через 3 месяца"}</div>
-<div class="highlight"><span class="check">✓</span>Обучение и наставник с первого дня</div>
-<div class="highlight"><span class="check">✓</span>Карьерный рост до руководителя за 6-12 мес.</div>
-<div class="highlight"><span class="check">✓</span>Современный офис${vacancy.city ? " в " + vacancy.city : ""}</div>
+${(benefits && benefits.length > 0 ? benefits : defaultBenefits(vacancy))
+  .map(b => b.trim())
+  .filter(Boolean)
+  .map(b => `<div class="highlight"><span class="check">✓</span>${escHtml(b)}</div>`)
+  .join("\n")}
 </div>
 <div class="form-card">
 <input type="text" id="hf-name" placeholder="Ваше имя" required />
@@ -186,10 +208,24 @@ const CMS_INSTRUCTIONS: { id: string; name: string; steps: string[] }[] = [
   ]},
 ]
 
-export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom, salaryTo, brandOverride, formFields }: PublishTabProps) {
+export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom, salaryTo, brandOverride, formFields, vacancyId, benefits, descriptionJson, onSaved }: PublishTabProps) {
   const [brand, setBrand] = useState<BrandConfig | null>(null)
   const [copied, setCopied] = useState(false)
   const [activeInstruction, setActiveInstruction] = useState<string | null>(null)
+
+  // Редактируемые буллеты-выгоды. Если HR ещё ничего не сохранял —
+  // подставляем дефолтные (динамические по зарплате/городу).
+  const [benefitList, setBenefitList] = useState<string[]>(
+    benefits && benefits.length > 0 ? benefits : defaultBenefits({ city: vacancyCity, salaryFrom }),
+  )
+  const [savingBenefits, setSavingBenefits] = useState(false)
+
+  // Подхватываем буллеты при загрузке/смене вакансии (родитель догружает async).
+  useEffect(() => {
+    setBenefitList(
+      benefits && benefits.length > 0 ? benefits : defaultBenefits({ city: vacancyCity, salaryFrom }),
+    )
+  }, [benefits, vacancyCity, salaryFrom])
 
   useEffect(() => {
     const base = { ...getBrand() }
@@ -201,9 +237,34 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
     setBrand(base)
   }, [brandOverride])
 
+  // Буллеты для генерации HTML — только непустые.
+  const cleanBenefits = benefitList.map(b => b.trim()).filter(Boolean)
+
+  const handleSaveBenefits = async () => {
+    if (!vacancyId) return
+    setSavingBenefits(true)
+    try {
+      const currentJson = descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null
+        ? (descriptionJson as Record<string, unknown>)
+        : {}
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description_json: { ...currentJson, landingBenefits: cleanBenefits } }),
+      })
+      if (!res.ok) throw new Error()
+      toast.success("Выгоды сохранены")
+      onSaved?.()
+    } catch {
+      toast.error("Не удалось сохранить выгоды")
+    } finally {
+      setSavingBenefits(false)
+    }
+  }
+
   const handleCopyCode = async () => {
     if (!brand) return
-    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields)
+    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields, cleanBenefits)
     await navigator.clipboard.writeText(html)
     setCopied(true)
     toast.success("HTML-код скопирован в буфер обмена")
@@ -212,7 +273,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
 
   const handlePreview = () => {
     if (!brand) return
-    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields)
+    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields, cleanBenefits)
     const blob = new Blob([html], { type: "text/html" })
     const url = URL.createObjectURL(blob)
     window.open(url, "_blank")
@@ -221,7 +282,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
 
   const handleDownload = () => {
     if (!brand) return
-    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields)
+    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields, cleanBenefits)
     const blob = new Blob([html], { type: "text/html" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
@@ -236,6 +297,68 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
 
   return (
     <div className="space-y-6">
+      {/* Редактор буллетов-выгод (показывается над формой на лендинге) */}
+      {vacancyId && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Sparkles className="w-4 h-4" />
+              Выгоды над формой
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Список галочек-преимуществ, который кандидат видит над формой отклика
+              на лендинге. Отредактируйте под свою вакансию.
+            </p>
+            <div className="space-y-2">
+              {benefitList.map((b, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Check className="w-4 h-4 shrink-0 text-primary" />
+                  <Input
+                    value={b}
+                    onChange={(e) => setBenefitList(prev => prev.map((x, j) => j === i ? e.target.value : x))}
+                    placeholder="Преимущество вакансии"
+                    className="h-9 text-sm"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => setBenefitList(prev => prev.filter((_, j) => j !== i))}
+                    title="Удалить"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1.5"
+                onClick={() => setBenefitList(prev => [...prev, ""])}
+              >
+                <Plus className="w-3.5 h-3.5" /> Добавить выгоду
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 text-xs gap-1.5"
+                onClick={handleSaveBenefits}
+                disabled={savingBenefits || cleanBenefits.length === 0}
+              >
+                <Save className="w-3.5 h-3.5" />
+                {savingBenefits ? "Сохранение…" : "Сохранить выгоды"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Способ 4 — Полная страница */}
       <Card>
         <CardHeader className="pb-3">
@@ -300,6 +423,17 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
                 <p className="text-xs" style={{ color: brand.textColor + "80" }}>
                   {vacancyCity}{salaryFrom ? ` · ${salaryFrom.toLocaleString("ru-RU")} – ${salaryTo?.toLocaleString("ru-RU")} ₽` : ""}
                 </p>
+                {/* Bullets preview */}
+                {cleanBenefits.length > 0 && (
+                  <div className="bg-white rounded-lg p-3 text-left space-y-1">
+                    {cleanBenefits.map((b, i) => (
+                      <div key={i} className="flex items-start gap-1.5 text-[10px]" style={{ color: brand.textColor }}>
+                        <span className="shrink-0" style={{ color: brand.primaryColor }}>✓</span>
+                        <span className="truncate">{b}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {/* Mini form preview */}
                 <div className="space-y-1.5 bg-white rounded-lg p-3">
                   <div className="h-7 rounded-md border bg-white" />

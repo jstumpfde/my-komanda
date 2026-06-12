@@ -3419,10 +3419,16 @@ export default function VacancyPage() {
                   <PublishTab
                     vacancyTitle={internalName || vacancyTitle}
                     vacancySlug={id}
+                    vacancyId={id}
                     vacancyCity={apiVacancy?.city ?? "Москва"}
                     salaryFrom={apiVacancy?.salaryMin}
                     salaryTo={apiVacancy?.salaryMax}
                     brandOverride={{ companyName: brandCompanyName, color: brandColor, logo: brandLogo, slogan: brandSlogan }}
+                    descriptionJson={apiVacancy?.descriptionJson}
+                    onSaved={() => refetchVacancy()}
+                    benefits={Array.isArray((apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.landingBenefits)
+                      ? (apiVacancy!.descriptionJson as Record<string, unknown>).landingBenefits as string[]
+                      : undefined}
                     formFields={Array.isArray((apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.miniFormFields)
                       ? (apiVacancy!.descriptionJson as Record<string, unknown>).miniFormFields as Array<{ id: string; label: string; type: string; required: boolean; placeholder?: string; options?: string[] }>
                       : undefined}
