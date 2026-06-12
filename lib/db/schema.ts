@@ -805,6 +805,17 @@ export const vacancies = pgTable("vacancies", {
   // Когда true — cron follow-up пропускает все pending-сообщения этой вакансии.
   // HR управляет через секцию «Очередь сообщений» в настройках вакансии.
   outboundPaused: boolean("outbound_paused").notNull().default(false),
+  // Уровень 3 интеграций: per-vacancy override.
+  // enabled=true → используются поля ниже вместо company-level.
+  // enabled=false/undefined (дефолт) → наследуем настройки компании.
+  integrationsOverride: jsonb("integrations_override")
+    .$type<{
+      enabled?: boolean
+      webhooks?: { url?: string; events?: Record<string, boolean> }
+      bitrix?:   { url?: string; trigger?: string }
+    }>()
+    .notNull()
+    .default({}),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

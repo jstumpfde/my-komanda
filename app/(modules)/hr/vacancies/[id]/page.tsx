@@ -46,6 +46,7 @@ import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
 import { defaultColumnColors, COLUMN_ORDER, type CandidateAction, getNextColumnId, PROGRESS_BY_COLUMN } from "@/lib/column-config"
 import type { Candidate } from "@/components/dashboard/candidate-card"
@@ -251,6 +252,10 @@ export default function VacancyPage() {
       // B5: колонки списка кандидатов единые для компании
       if (hd?.candidateColumns && typeof hd.candidateColumns === "object" && Object.keys(hd.candidateColumns).length > 0) {
         setCardSettingsLocal((prev) => ({ ...prev, ...hd.candidateColumns } as typeof prev))
+      }
+      // Уровень 2: сохраняем company webhook URL для отображения в секции интеграций вакансии
+      if (typeof hd?.webhooks?.url === "string") {
+        setCompanyWebhookUrl(hd.webhooks.url)
       }
     }).catch(() => {})
   }, [])
@@ -689,6 +694,20 @@ export default function VacancyPage() {
     if (typeof anketa?.brandCompanyId === "string") {
       setVacancyBrandCompanyId(anketa.brandCompanyId)
     }
+    // Уровень 3 интеграций: инициализируем форму из integrationsOverride вакансии
+    const integrOvr = (apiVacancy as Record<string, unknown> | undefined)?.integrationsOverride as {
+      enabled?: boolean
+      webhooks?: { url?: string; events?: Record<string, boolean> }
+      bitrix?:   { url?: string; trigger?: string }
+    } | null | undefined
+    if (integrOvr) {
+      setIntegrEnabled(integrOvr.enabled === true)
+      setIntegrWebhookUrl(integrOvr.webhooks?.url ?? "")
+      setIntegrEventNewCandidate(integrOvr.webhooks?.events?.new_candidate === true)
+      setIntegrEventAiScreening(integrOvr.webhooks?.events?.ai_screening === true)
+      setIntegrBitrixUrl(integrOvr.bitrix?.url ?? "")
+      setIntegrBitrixTrigger(integrOvr.bitrix?.trigger ?? "")
+    }
   }, [apiVacancy])
 
   // Populate columns from API candidates
@@ -797,6 +816,44 @@ export default function VacancyPage() {
       setSavingName(false)
     }
   }
+  // Сохранение per-vacancy override интеграций (уровень 3)
+  const saveIntegrations = async () => {
+    setIntegrSaving(true)
+    try {
+      const body = {
+        integrations_override: {
+          enabled: integrEnabled,
+          webhooks: {
+            url: integrWebhookUrl.trim() || undefined,
+            events: {
+              new_candidate: integrEventNewCandidate,
+              ai_screening: integrEventAiScreening,
+            },
+          },
+          bitrix: {
+            url: integrBitrixUrl.trim() || undefined,
+            trigger: integrBitrixTrigger.trim() || undefined,
+          },
+        },
+      }
+      const res = await fetch(`/api/modules/hr/vacancies/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string }
+        throw new Error(err.error || "Не удалось сохранить")
+      }
+      await refetchVacancy()
+      toast.success("Интеграции сохранены")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ошибка сохранения")
+    } finally {
+      setIntegrSaving(false)
+    }
+  }
+
   const [showStickyHeader, setShowStickyHeader] = useState(false)
   const [advisorScore, setAdvisorScore] = useState<{ score: number; label: string }>({ score: 0, label: "" })
   const mainHeaderRef = useRef<HTMLDivElement>(null)
@@ -822,6 +879,16 @@ export default function VacancyPage() {
   const [brandWebsite, setBrandWebsite] = useState("")
   const [editingSlug, setEditingSlug] = useState(false)
   const [brandSaving, setBrandSaving] = useState(false)
+  // Уровень 3 интеграций: per-vacancy override
+  const [integrEnabled, setIntegrEnabled] = useState(false)
+  const [integrWebhookUrl, setIntegrWebhookUrl] = useState("")
+  const [integrEventNewCandidate, setIntegrEventNewCandidate] = useState(false)
+  const [integrEventAiScreening, setIntegrEventAiScreening] = useState(false)
+  const [integrBitrixUrl, setIntegrBitrixUrl] = useState("")
+  const [integrBitrixTrigger, setIntegrBitrixTrigger] = useState("")
+  const [integrSaving, setIntegrSaving] = useState(false)
+  // Company-level webhook URL для отображения в режиме наследования
+  const [companyWebhookUrl, setCompanyWebhookUrl] = useState("")
   // Данные основной компании (для дефолтов брендинга)
   const [mainCompanyData, setMainCompanyData] = useState<{
     brandName: string; logoUrl: string; brandSlogan: string; website: string; subdomain: string
@@ -3544,34 +3611,99 @@ export default function VacancyPage() {
                 {/* ───────── ТАБ «Интеграции» ───────── */}
                 {settingsSection === "integrations" && (
                 <div className="space-y-6 max-w-3xl">
-                  <div>
-                    <h3 className="text-lg font-semibold text-foreground mb-1">CRM-интеграции</h3>
-                    <p className="text-sm text-muted-foreground mb-3">Синхронизация воронки с CRM</p>
-                    <div className="space-y-3">
-                      {isPlatformAdmin ? (<>
-                      <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[9px] font-bold" style={{ backgroundColor: "#2FC6F6" }}>Б24</div>
-                        <div className="flex-1 min-w-0"><p className="text-sm font-medium flex items-center gap-2">Битрикс24 <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span></p><p className="text-[11px] text-muted-foreground">Синхронизация воронки и кандидатов</p></div>
-                        <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
-                        <Button size="sm" className="h-8 text-xs shrink-0" disabled>Подключить</Button>
+
+                  {/* Уровень 3: per-vacancy override интеграций */}
+                  <div className="rounded-lg border bg-card p-5 space-y-5">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">Свои интеграции для этой вакансии</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {integrEnabled
+                            ? "Вакансия использует собственные настройки, компанийские игнорируются"
+                            : `Наследуются от компании${companyWebhookUrl ? `: ${companyWebhookUrl}` : " — webhook не настроен"}`}
+                        </p>
                       </div>
-                      <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#7B68EE" }}>amo</div>
-                        <div className="flex-1 min-w-0"><p className="text-sm font-medium flex items-center gap-2">AmoCRM <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span></p><p className="text-[11px] text-muted-foreground">Синхронизация воронки и кандидатов</p></div>
-                        <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
-                        <Button size="sm" className="h-8 text-xs shrink-0" disabled>Подключить</Button>
-                      </div>
-                      <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white" style={{ backgroundColor: "#6B7280" }}><Settings className="w-3.5 h-3.5" /></div>
-                        <div className="flex-1 min-w-0"><p className="text-sm font-medium flex items-center gap-2">Другая CRM <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Скоро</span></p><p className="text-[11px] text-muted-foreground">Подключение через API или webhook</p></div>
-                        <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Не подключено</Badge>
-                        <Button size="sm" className="h-8 text-xs shrink-0" disabled>Настроить</Button>
-                      </div>
-                      </>) : (
-                      <p className="text-sm text-muted-foreground">CRM-интеграции скоро будут доступны.</p>
-                      )}
+                      <Switch
+                        checked={integrEnabled}
+                        onCheckedChange={setIntegrEnabled}
+                      />
                     </div>
-                    <p className="text-[11px] text-muted-foreground mt-3">Любые webhook/API-настройки появятся здесь после подключения CRM.</p>
+
+                    {integrEnabled && (
+                      <div className="space-y-5 pt-1 border-t">
+                        {/* Webhook */}
+                        <div className="space-y-3">
+                          <p className="text-sm font-medium text-foreground">Webhook</p>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground">URL для уведомлений</Label>
+                            <Input
+                              placeholder="https://example.com/webhook"
+                              value={integrWebhookUrl}
+                              onChange={e => setIntegrWebhookUrl(e.target.value)}
+                              className="h-9 text-sm"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground">События</p>
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                id="ev-new-candidate"
+                                checked={integrEventNewCandidate}
+                                onCheckedChange={v => setIntegrEventNewCandidate(v === true)}
+                              />
+                              <Label htmlFor="ev-new-candidate" className="text-sm font-normal cursor-pointer">
+                                Новый кандидат (<code className="text-xs bg-muted px-1 rounded">new_candidate</code>)
+                              </Label>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                id="ev-ai-screening"
+                                checked={integrEventAiScreening}
+                                onCheckedChange={v => setIntegrEventAiScreening(v === true)}
+                              />
+                              <Label htmlFor="ev-ai-screening" className="text-sm font-normal cursor-pointer">
+                                AI-скоринг завершён (<code className="text-xs bg-muted px-1 rounded">ai_screening</code>)
+                              </Label>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Битрикс */}
+                        <div className="space-y-3 pt-3 border-t">
+                          <p className="text-sm font-medium text-foreground">Битрикс24</p>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground">URL вебхука Битрикс24</Label>
+                            <Input
+                              placeholder="https://company.bitrix24.ru/rest/1/xxx/"
+                              value={integrBitrixUrl}
+                              onChange={e => setIntegrBitrixUrl(e.target.value)}
+                              className="h-9 text-sm"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground">Событие (trigger)</Label>
+                            <Input
+                              placeholder="crm.lead.add"
+                              value={integrBitrixTrigger}
+                              onChange={e => setIntegrBitrixTrigger(e.target.value)}
+                              className="h-9 text-sm"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex justify-end pt-1">
+                      <Button
+                        size="sm"
+                        className="h-8 text-xs"
+                        onClick={saveIntegrations}
+                        disabled={integrSaving}
+                      >
+                        {integrSaving ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Save className="w-3.5 h-3.5 mr-1.5" />}
+                        Сохранить
+                      </Button>
+                    </div>
                   </div>
 
                   {/* AI-агент (перенесён из «AI сценарии» по ТЗ-1 Часть 1.2; #24: переименован с «Бот-звонарь») */}

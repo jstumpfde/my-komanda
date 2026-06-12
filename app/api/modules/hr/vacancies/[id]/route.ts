@@ -68,6 +68,12 @@ export async function PUT(
       hiring_plan?: number
       employee_type?: string
       branding_override_enabled?: boolean
+      // Уровень 3 интеграций: per-vacancy override webhooks/bitrix.
+      integrations_override?: {
+        enabled?: boolean
+        webhooks?: { url?: string; events?: Record<string, boolean> }
+        bitrix?:   { url?: string; trigger?: string }
+      }
     }
 
     const updates: Record<string, unknown> = {
@@ -103,6 +109,10 @@ export async function PUT(
     // Группа 38: переключатель override брендинга.
     if (body.branding_override_enabled !== undefined) {
       updates.brandingOverrideEnabled = body.branding_override_enabled === true
+    }
+    // Уровень 3 интеграций: per-vacancy override webhooks/bitrix.
+    if (body.integrations_override !== undefined) {
+      updates.integrationsOverride = body.integrations_override
     }
 
     const [updated] = await db
