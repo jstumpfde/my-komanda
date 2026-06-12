@@ -40,7 +40,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, RefreshCw, Bot, Workflow, FilePlus, UserSearch, Trash2, Target} from "lucide-react"
+import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, RefreshCw, Bot, Workflow, FilePlus, UserSearch, Trash2, Target, Inbox} from "lucide-react"
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-factors-settings"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -2463,6 +2463,7 @@ export default function VacancyPage() {
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
                     { value: "analytics", icon: BarChart3, label: "Аналитика" },
                     { value: "outbound", icon: UserSearch, label: "Исходящий подбор" },
+                    { value: "queue", icon: Inbox, label: "Очередь" },
                     { value: "anketa", icon: ClipboardList, label: "Вакансия" },
                     { value: "content", icon: BookOpen, label: "Контент" },
                   ] : [
@@ -2471,6 +2472,7 @@ export default function VacancyPage() {
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
                     { value: "analytics", icon: BarChart3, label: "Аналитика" },
                     { value: "outbound", icon: UserSearch, label: "Исходящий подбор" },
+                    { value: "queue", icon: Inbox, label: "Очередь" },
                   ]).map(tab => (
                     <TabsTrigger key={tab.value} value={tab.value} className="gap-1.5">
                       <tab.icon className="w-3.5 h-3.5" />{tab.label}
@@ -2686,6 +2688,13 @@ export default function VacancyPage() {
                   рантайм их по-прежнему читает по kind. */}
               <TabsContent value="content">
                 <ContentBlocksTab vacancyId={id} vacancyTitle={vacancyTitle} />
+              </TabsContent>
+
+              {/* #23: «Очередь сообщений» — отдельный таб (раньше был в Настройки→Источники) */}
+              <TabsContent value="queue">
+                <div className="max-w-3xl">
+                  <MessageQueueSection vacancyId={id} />
+                </div>
               </TabsContent>
 
               <TabsContent value="outbound">
@@ -3408,9 +3417,6 @@ export default function VacancyPage() {
                       ? (apiVacancy!.descriptionJson as Record<string, unknown>).miniFormFields as Array<{ id: string; label: string; type: string; required: boolean; placeholder?: string; options?: string[] }>
                       : undefined}
                   />
-
-                  {/* Очередь исходящих сообщений (пауза + очистка) */}
-                  <MessageQueueSection vacancyId={id} />
                 </div>
                 )}
 
