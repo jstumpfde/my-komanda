@@ -171,9 +171,11 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
 
   const handleResetBlank = useCallback(() => {
     if (!selectedBlock) return
-    if (blockHasContent(selectedBlock)) setResetConfirmId(selectedBlock.id)
-    else doResetBlank(selectedBlock.id)
-  }, [selectedBlock, doResetBlank])
+    // ВСЕГДА подтверждаем «Создать с нуля» — он удаляет весь контент блока. Был
+    // инцидент потери демо (детектор контента мог не сработать) — больше никаких
+    // тихих сбросов: показываем диалог всегда, даже если блок кажется пустым.
+    setResetConfirmId(selectedBlock.id)
+  }, [selectedBlock])
 
   // Drag-and-drop reorder
   const handleDragStart = (idx: number) => { dragIdxRef.current = idx }
