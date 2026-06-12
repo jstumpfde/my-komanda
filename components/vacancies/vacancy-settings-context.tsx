@@ -51,6 +51,8 @@ interface VacancySettingsCtx {
    * initial → state) и НЕ помечают секцию как dirty.
    */
   hasUserInteracted: boolean
+  /** Метка времени последней реальной интеракции HR (для per-секционного dirty). */
+  getLastInteractionAt: () => number
 }
 
 const Ctx = createContext<VacancySettingsCtx | null>(null)
@@ -60,6 +62,12 @@ export function VacancySettingsProvider({ children }: { children: ReactNode }) {
   const [saving, setSaving] = useState(false)
   const [hasUserInteracted, setHasUserInteracted] = useState(false)
   const interactedRef = useRef(false)
+  // Метка времени ПОСЛЕДНЕЙ реальной интеракции HR. Секция считает себя dirty
+  // только если её baseline установлен РАНЬШЕ последней интеракции — это отсекает
+  // ложные срабатывания при до-загрузке данных в секции, открытой после того, как
+  // HR уже что-то трогал в другой секции (раньше глобальный флаг метил всё подряд).
+  const interactionAtRef = useRef(0)
+  const getLastInteractionAt = useCallback(() => interactionAtRef.current, [])
   const registrations = useRef<Map<SectionKey, Registration>>(new Map())
 
   // Bug #82: глобальный слушатель «реальной» интеракции HR. Клики на табах,
@@ -75,10 +83,12 @@ export function VacancySettingsProvider({ children }: { children: ReactNode }) {
       ) != null
     }
     const handler = (e: Event) => {
-      if (interactedRef.current) return
       if (!isRealInteraction(e.target)) return
-      interactedRef.current = true
-      setHasUserInteracted(true)
+      interactionAtRef.current = Date.now()
+      if (!interactedRef.current) {
+        interactedRef.current = true
+        setHasUserInteracted(true)
+      }
     }
     document.addEventListener('pointerdown', handler, true)
     document.addEventListener('keydown', handler, true)
@@ -160,7 +170,8 @@ export function VacancySettingsProvider({ children }: { children: ReactNode }) {
     tabHasPending,
     saving,
     hasUserInteracted,
-  }), [pendingCount, hasPending, pendingChanges, markChanged, markSaved, registerSaver, unregisterSaver, saveAll, tabHasPending, saving, hasUserInteracted])
+    getLastInteractionAt,
+  }), [pendingCount, hasPending, pendingChanges, markChanged, markSaved, registerSaver, unregisterSaver, saveAll, tabHasPending, saving, hasUserInteracted, getLastInteractionAt])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
@@ -184,6 +195,7 @@ export function useVacancySectionRegister(opts: {
   const { sectionKey, tabKey, loaded, watchedValues, save } = opts
   const ctx = useVacancySettings()
   const baselineRef = useRef<string | null>(null)
+  const baselineAtRef = useRef(0)   // когда установлен baseline этой секции
   const saveRef = useRef(save)
   saveRef.current = save
   const watchedRef = useRef(watchedValues)
@@ -195,36 +207,36 @@ export function useVacancySectionRegister(opts: {
   const markSaved = ctx?.markSaved
   const registerSaver = ctx?.registerSaver
   const unregisterSaver = ctx?.unregisterSaver
-  const hasUserInteracted = ctx?.hasUserInteracted ?? false
+  const getLastInteractionAt = ctx?.getLastInteractionAt
 
-  // Bug #82: baseline ставится на первом рендере с loaded=true. Но parent
-  // часто делает resync через useEffect(initial → setState), что меняет
-  // watchedValues уже ПОСЛЕ установки baseline — false positive dirty.
-  //
-  // Решение: пока HR не сделал ни одной реальной интеракции (см. Provider),
-  // любые расхождения baseline ≠ current трактуем как программную
-  // нормализацию и переносим baseline. Как только interacted=true,
-  // переключаемся в обычный режим — реальные правки сразу markChanged.
+  // Bug #82 (исправлено): секция считается dirty ТОЛЬКО если последняя реальная
+  // интеракция HR была ПОЗЖЕ установки baseline этой секции. Если изменение
+  // watchedValues пришло без интеракции после baseline — это до-загрузка/
+  // нормализация данных (parent дотащил initial→state), переносим baseline без
+  // markChanged. Раньше использовался глобальный флаг hasUserInteracted, из-за
+  // чего секция, открытая ПОСЛЕ правки в другой секции, ложно метилась грязной.
   useEffect(() => {
     if (!loaded) return
     const cur = JSON.stringify(watchedValues)
     if (baselineRef.current === null) {
       baselineRef.current = cur
+      baselineAtRef.current = Date.now()
       return
     }
     if (cur === baselineRef.current) {
       markSaved?.(sectionKey)
       return
     }
-    if (!hasUserInteracted) {
-      // Нормализация: parent дотащил данные → state обновился. Перенастраиваем
-      // baseline без вызова markChanged.
+    const lastInteraction = getLastInteractionAt?.() ?? 0
+    if (lastInteraction <= baselineAtRef.current) {
+      // Нормализация без интеракции — переносим baseline, не помечаем dirty.
       baselineRef.current = cur
+      baselineAtRef.current = Date.now()
       markSaved?.(sectionKey)
       return
     }
     markChanged?.(sectionKey)
-  }, [loaded, watchedValues, sectionKey, markChanged, markSaved, hasUserInteracted])
+  }, [loaded, watchedValues, sectionKey, markChanged, markSaved, getLastInteractionAt])
 
   // Регистрация saver — вызывает save и сбрасывает baseline.
   useEffect(() => {
@@ -232,6 +244,7 @@ export function useVacancySectionRegister(opts: {
     registerSaver(sectionKey, tabKey, async () => {
       await saveRef.current()
       baselineRef.current = JSON.stringify(watchedRef.current)
+      baselineAtRef.current = Date.now()
       markSaved?.(sectionKey)
     })
     return () => unregisterSaver?.(sectionKey)
@@ -261,21 +274,15 @@ export function useSafeSubTabSwitch(currentTab: VacancyTabKey | null): (next: Va
       doSwitch()
       return
     }
-    // 1) Save before switching?
-    const wantSave = window.confirm(
-      "У вас есть несохранённые изменения в текущем разделе. Сохранить перед переходом?\n\n" +
-      "OK — сохранить и перейти.\nОтмена — отказаться от сохранения (откроется второй вопрос).",
+    // Один вопрос, без второго. OK — сохранить и перейти; Отмена — остаться
+    // (ничего не теряется, можно сохранить кнопкой внизу).
+    const save = window.confirm(
+      "В этом разделе есть несохранённые изменения.\n\n" +
+      "OK — сохранить и перейти.\nОтмена — остаться (изменения не потеряются).",
     )
-    if (wantSave) {
+    if (save) {
       void ctx.saveAll().then(() => doSwitch())
-      return
     }
-    // 2) Discard or stay?
-    const discard = window.confirm(
-      "Перейти без сохранения? Несохранённые правки будут потеряны.\n\n" +
-      "OK — потерять правки и перейти.\nОтмена — остаться в текущем разделе.",
-    )
-    if (discard) doSwitch()
   }
 }
 

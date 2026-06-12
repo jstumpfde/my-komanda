@@ -146,7 +146,11 @@ export function WebhooksBlock({ defaults, onPatch }: {
     <Card className="max-w-3xl">
       <CardHeader className="pb-3">
         <CardTitle className="text-sm font-medium">Webhooks</CardTitle>
-        <CardDescription>Отправлять события в внешние системы</CardDescription>
+        <CardDescription>
+          Отправлять события в внешние системы. Это дефолт для всех вакансий
+          компании — в настройках конкретной вакансии (вкладка «Интеграции») можно
+          задать свой webhook.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="space-y-1.5">
@@ -236,7 +240,10 @@ export function BitrixBlock({ defaults, onPatch }: {
     <Card className="max-w-3xl">
       <CardHeader className="pb-3">
         <CardTitle className="text-sm font-medium">Интеграция с Битрикс24</CardTitle>
-        <CardDescription>Отправлять кандидатов в CRM Битрикс24</CardDescription>
+        <CardDescription>
+          Отправлять кандидатов в CRM Битрикс24. Дефолт для всех вакансий — в
+          настройках вакансии («Интеграции») можно переопределить.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="space-y-1.5">
