@@ -398,7 +398,7 @@ export default function KnowledgeV2CreatePage() {
         <SidebarInset>
           <DashboardHeader />
           <div className="flex-1 overflow-auto bg-background min-w-0">
-            <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+            <div className="py-6 px-4 sm:px-14">
               <div className="max-w-xl mx-auto mt-12">
                 <div className="rounded-xl border border-border bg-card p-8 text-center">
                   <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
@@ -426,7 +426,7 @@ export default function KnowledgeV2CreatePage() {
       <SidebarInset>
         <DashboardHeader />
         <div className="flex-1 overflow-auto bg-background min-w-0">
-          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+          <div className="py-6 px-4 sm:px-14">
             <div className="max-w-5xl mx-auto">
               <div className="mb-6">
                 <h1 className="text-lg font-semibold">Создать корпоративный материал</h1>

@@ -514,7 +514,7 @@ export default function TrainingSessionPage() {
           ) : (
             <>
               {/* Header */}
-              <div className="border-b px-6 py-3 flex items-center gap-3" style={{ paddingLeft: 56, paddingRight: 56 }}>
+              <div className="border-b px-6 py-3 flex items-center gap-3 px-4 sm:px-14">
                 <Button variant="ghost" size="sm" onClick={() => router.push("/knowledge-v2/training")} className="gap-1">
                   <ChevronLeft className="size-4" />
                   Все тренировки
@@ -541,7 +541,7 @@ export default function TrainingSessionPage() {
               </div>
 
               {/* Body */}
-              <div className="flex-1 overflow-hidden flex flex-col" style={{ paddingLeft: 56, paddingRight: 56 }}>
+              <div className="flex-1 overflow-hidden flex flex-col px-4 sm:px-14">
                 {!sessionStarted ? (
                   <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8 text-center">
                     <div className="p-4 rounded-full bg-violet-500/10">

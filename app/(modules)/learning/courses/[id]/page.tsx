@@ -721,7 +721,7 @@ export default function AiCourseProjectPage() {
         <DashboardHeader />
         <div className="flex-1 overflow-auto bg-background min-w-0">
           {/* Header */}
-          <div className="border-b px-6 py-4" style={{ paddingLeft: 56, paddingRight: 56 }}>
+          <div className="border-b px-6 py-4 px-4 sm:px-14">
             <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-2">
               <Link href="/learning/dashboard" className="hover:text-foreground transition-colors">Обучение</Link>
               <ChevronRight className="size-3.5" />

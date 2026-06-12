@@ -164,7 +164,7 @@ export default function SalesAnalyticsPage() {
       <SidebarInset>
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
-          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+          <div className="py-6 px-4 sm:px-14">
             {/* Header */}
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">

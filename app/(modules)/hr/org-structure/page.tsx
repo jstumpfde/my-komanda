@@ -671,7 +671,7 @@ export default function OrgStructurePage() {
       <SidebarInset>
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
-          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+          <div className="py-6 px-4 sm:px-14">
             <div className="mb-6">
               <h1 className="text-lg font-semibold tracking-tight flex items-center gap-2"><Network className="h-6 w-6 text-primary" />Оргструктура</h1>
               <p className="text-sm text-muted-foreground mt-1">Визуальное представление структуры компании</p>

@@ -274,7 +274,7 @@ function DashboardContent() {
       <SidebarInset>
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
-          <div className="py-6 space-y-5" style={{ paddingLeft: 56, paddingRight: 56 }}>
+          <div className="py-6 space-y-5 px-4 sm:px-14">
 
             {/* ═══ Header ═══
                 #29: имя из SSR-сессии. Если пустое (первый mount) — показываем

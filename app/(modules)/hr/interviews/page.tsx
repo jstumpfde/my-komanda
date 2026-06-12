@@ -442,7 +442,7 @@ function InterviewsPageContent() {
 
           {/* ═══ ТАБ: ИНТЕРВЬЮ ═══ */}
           {activeTab === "interviews" && (
-            <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+            <div className="py-6 px-4 sm:px-14">
               {/* Header */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-5">
                 <div className="flex items-center gap-2 sm:hidden">

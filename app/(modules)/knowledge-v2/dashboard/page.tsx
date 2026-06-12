@@ -258,7 +258,7 @@ export default function KnowledgeDashboardPage() {
             animation: gradientShift 12s ease infinite;
           }
         ` }} />
-        <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+        <div className="py-6 px-4 sm:px-14">
           <div className="flex items-center justify-between mb-6">
             <div>
               <div className="flex items-center gap-2 pt-3 pb-2">

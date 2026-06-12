@@ -160,7 +160,7 @@ export default function AnalyticsPage() {
       <SidebarInset>
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
-          <div className="py-6 space-y-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+          <div className="py-6 space-y-6 px-4 sm:px-14">
             {/* Header + Filter */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>

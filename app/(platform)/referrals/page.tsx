@@ -90,7 +90,7 @@ export default function ReferralsPage() {
       <SidebarInset>
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
-          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+          <div className="py-6 px-4 sm:px-14">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
               <div>
                 <div className="flex items-center gap-2 pt-3 pb-2">

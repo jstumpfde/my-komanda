@@ -280,7 +280,7 @@ function KnowledgeV2PageContent() {
       <DashboardSidebar />
       <SidebarInset>
         <DashboardHeader />
-        <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+        <div className="py-6 px-4 sm:px-14">
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <div>

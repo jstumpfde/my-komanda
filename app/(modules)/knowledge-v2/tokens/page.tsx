@@ -81,7 +81,7 @@ export default function TokensPage() {
       <SidebarInset>
         <DashboardHeader />
         <div className="flex-1 overflow-auto bg-background min-w-0">
-          <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+          <div className="py-6 px-4 sm:px-14">
             <div className="max-w-6xl mx-auto space-y-6">
               <div>
                 <h1 className="text-lg font-semibold">Расход AI-токенов</h1>
