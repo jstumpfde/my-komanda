@@ -26,8 +26,11 @@ interface ChatMessage {
     preMessage?:      string | null
     preMessageDelayMs?: number | null
     replyDelayMs?:    number | null
+    funnelDecision?:  FunnelDecision | null
   }
 }
+
+interface FunnelDecision { action: string; reason: string; confidence: number }
 
 interface SandboxApiResponse {
   action:            string
@@ -38,7 +41,13 @@ interface SandboxApiResponse {
   category:          string | null
   confidence:        number | null
   escalationReason:  string | null
+  funnelDecision:    FunnelDecision | null
   diagnostics:       Record<string, unknown>
+}
+
+const FUNNEL_ACTION_LABEL: Record<string, string> = {
+  none: "ничего", clarify: "уточнить", request_anketa: "отправить демо/анкету",
+  send_test: "отправить тест", advance: "двинуть стадию",
 }
 
 function shortConf(c: number | null | undefined): string {
@@ -140,6 +149,7 @@ export function AiChatbotSandbox({
           confidence:       data.confidence,
           escalationReason: data.escalationReason,
           replyDelayMs:     data.replyDelayMs,
+          funnelDecision:   data.funnelDecision ?? null,
         },
       }
       setMessages(prev => [...prev, assistantMsg])
@@ -219,6 +229,11 @@ export function AiChatbotSandbox({
                 {(m.diagnostics.preMessageDelayMs || m.diagnostics.replyDelayMs) && (
                   <span>
                     delay: {Math.round((m.diagnostics.preMessageDelayMs ?? m.diagnostics.replyDelayMs ?? 0) / 1000)}с
+                  </span>
+                )}
+                {m.diagnostics.funnelDecision && m.diagnostics.funnelDecision.action !== "none" && (
+                  <span className="px-1.5 py-0.5 rounded bg-violet-100 text-violet-800" title={m.diagnostics.funnelDecision.reason}>
+                    воронка: {FUNNEL_ACTION_LABEL[m.diagnostics.funnelDecision.action] ?? m.diagnostics.funnelDecision.action} ({shortConf(m.diagnostics.funnelDecision.confidence)})
                   </span>
                 )}
               </div>
