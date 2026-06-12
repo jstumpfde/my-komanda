@@ -96,23 +96,29 @@ export async function POST(
 
     const hhByCandidate = new Map<
       string,
-      { resumeUrl: string | null; name: string | null; chatId: string | null }
+      { resumeUrl: string | null; name: string | null; chatId: string | null; firstNameHh: string | null }
     >()
     for (const h of hhRows) {
       if (!h.candidateId || hhByCandidate.has(h.candidateId)) continue
-      const raw = h.rawData as HhRawDataWithChat | null
+      const raw = h.rawData as (HhRawDataWithChat & { resume?: { first_name?: string }; first_name?: string }) | null
       const chatId = raw?.chat_id != null ? String(raw.chat_id) : null
+      // hh отдаёт имя/фамилию РАЗДЕЛЬНО — берём first_name (имя), т.к. в name
+      // кандидата формат «Фамилия Имя» и split[0] = ФАМИЛИЯ (баг приветствия).
+      const firstNameHh = (raw?.resume?.first_name ?? raw?.first_name ?? "").trim() || null
       hhByCandidate.set(h.candidateId, {
         resumeUrl: h.resumeUrl ?? null,
         name: h.candidateName ?? null,
         chatId,
+        firstNameHh,
       })
     }
 
     const result = rows.map((c) => {
       const hh = hhByCandidate.get(c.id)
       const fullName = deriveCandidateName(c.name, c.anketaAnswers, hh?.name ?? null)
-      const firstName = fullName.split(/\s+/)[0] || ""
+      // Приоритет — first_name из hh-резюме (настоящее имя), иначе fallback
+      // на первое слово полного имени.
+      const firstName = hh?.firstNameHh || fullName.split(/\s+/)[0] || ""
 
       const testSlug = c.shortId ?? c.token
       const testLink = testSlug ? `https://company24.pro/test/${testSlug}` : ""

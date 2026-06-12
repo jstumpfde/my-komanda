@@ -367,8 +367,12 @@ async function buildXlsx(
     // token к этому моменту гарантированно заполнен (дозаполнили выше).
     const testSlug = c.shortId ?? c.token
     const testLink = testSlug ? `https://company24.pro/test/${testSlug}` : ""
-    // Готовое сообщение: имя кандидата + шаблон + ссылка (плейсхолдеры как в кроне).
-    const firstName = (deriveCandidateName(c.name, c.anketaAnswers, hh?.name ?? null) || "").split(/\s+/)[0] || ""
+    // Готовое сообщение: ИМЯ кандидата (не фамилия) + шаблон + ссылка.
+    // hh хранит имя/фамилию раздельно — берём first_name из raw, т.к. в name
+    // формат «Фамилия Имя» и split[0] = ФАМИЛИЯ.
+    const rawName = hh?.raw as ({ resume?: { first_name?: string }; first_name?: string }) | null | undefined
+    const firstNameHh = (rawName?.resume?.first_name ?? rawName?.first_name ?? "").trim()
+    const firstName = firstNameHh || (deriveCandidateName(c.name, c.anketaAnswers, hh?.name ?? null) || "").split(/\s+/)[0] || ""
     const personalMessage = inviteTpl
       .replaceAll("{{name}}", firstName)
       .replaceAll("{{vacancy}}", vacTitle || "")
