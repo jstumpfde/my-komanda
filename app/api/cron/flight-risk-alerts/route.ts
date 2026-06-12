@@ -3,12 +3,16 @@ import { db } from "@/lib/db"
 import { flightRiskScores, notifications } from "@/lib/db/schema"
 import { eq, and, sql, inArray } from "drizzle-orm"
 import { checkCronAuth } from "@/lib/cron/auth"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 
 // POST /api/cron/flight-risk-alerts — detect risk level transitions
 // Protected by X-Cron-Secret header.
+const CRON_NAME = "flight-risk-alerts"
+
 export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
+  const run = await startCronRun(CRON_NAME).catch(() => null)
   try {
     // Find employees with high/critical risk that don't have a recent notification
     const highRisk = await db
@@ -49,8 +53,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (run) await finishCronRun(run.id, "ok", { scanned: highRisk.length, alertsCreated })
     return NextResponse.json({ scanned: highRisk.length, alertsCreated })
   } catch (err) {
+    if (run) await finishCronRun(run.id, "error", null, err instanceof Error ? err.message : String(err))
     return NextResponse.json({ error: "Failed to scan flight risk alerts" }, { status: 500 })
   }
 }

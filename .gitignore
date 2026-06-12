@@ -66,3 +66,6 @@ sheet-probe.json
 
 # Worktree-песочницы фоновых агентов — не коммитим
 .claude/worktrees/
+
+# package-lock.json создаётся npm в облачной среде (проект на pnpm)
+package-lock.json

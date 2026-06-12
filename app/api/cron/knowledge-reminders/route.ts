@@ -10,6 +10,7 @@ import {
 } from "@/lib/db/schema"
 
 import { checkCronAuth } from "@/lib/cron/auth"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 
 // POST /api/cron/knowledge-reminders — Protected by X-Cron-Secret header.
 // Ежедневно: находит активные назначения с дедлайном < 3 дней
@@ -41,10 +42,12 @@ function countRemainingLessons(progress: unknown, materials: unknown): number {
   return Math.max(0, totalMaterials - done)
 }
 
+const CRON_NAME = "knowledge-reminders"
+
 export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
-
+  const run = await startCronRun(CRON_NAME).catch(() => null)
   const now = new Date()
   const in3Days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)
 
@@ -135,6 +138,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (run) await finishCronRun(run.id, "ok", { checked: rows.length, reminded, telegrams })
     return NextResponse.json({
       ok: true,
       checked: rows.length,
@@ -144,6 +148,7 @@ export async function POST(req: NextRequest) {
     })
   } catch (err) {
     console.error("[cron/knowledge-reminders]", err)
+    if (run) await finishCronRun(run.id, "error", null, err instanceof Error ? err.message : String(err))
     return NextResponse.json({ error: "Internal error" }, { status: 500 })
   }
 }
