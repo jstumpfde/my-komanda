@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { departments } from "@/lib/db/schema"
-import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { requireOrgManager, apiError, apiSuccess } from "@/lib/api-helpers"
 
 // PATCH /api/modules/hr/departments/[id]
 export async function PATCH(
@@ -10,7 +10,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireCompany()
+    const user = await requireOrgManager()
     const { id } = await params
     const body = await req.json() as {
       name?: string
@@ -48,7 +48,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireCompany()
+    const user = await requireOrgManager()
     const { id } = await params
 
     const [deleted] = await db

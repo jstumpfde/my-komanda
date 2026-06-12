@@ -2,9 +2,9 @@ import { NextRequest } from "next/server"
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { positions, departments, users } from "@/lib/db/schema"
-import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { requireCompany, requireOrgManager, apiError, apiSuccess } from "@/lib/api-helpers"
 
-// GET /api/modules/hr/org/positions
+// GET /api/modules/hr/org/positions — доступно всем
 export async function GET() {
   try {
     const user = await requireCompany()
@@ -37,10 +37,10 @@ export async function GET() {
   }
 }
 
-// POST /api/modules/hr/org/positions
+// POST /api/modules/hr/org/positions — только директор или manage_org_structure
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireCompany()
+    const user = await requireOrgManager()
     const body = await req.json() as {
       name: string
       departmentId?: string

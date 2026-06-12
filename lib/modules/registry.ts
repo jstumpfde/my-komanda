@@ -29,6 +29,8 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Удержание',              href: '/hr/retention',               icon: 'Shield' },
       { label: 'Аналитика персонала',    href: '/hr/people-analytics',        icon: 'PieChart' },
       // Оргструктура
+      { label: 'Структура компании',   href: '/hr/company-structure',       icon: 'Network' },
+      // Редиректы (сохранены для обратной совместимости)
       { label: 'Отделы',               href: '/hr/departments',             icon: 'Building2' },
       { label: 'Должности',            href: '/hr/positions',               icon: 'Briefcase' },
       { label: 'Оргструктура',         href: '/hr/org-structure',           icon: 'Network' },
