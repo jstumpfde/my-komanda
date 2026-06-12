@@ -45,3 +45,25 @@ async function call(model: string, prompt: string, system?: string, maxTokens = 
 
 export const callClaudeHaiku  = (prompt: string, system?: string, maxTokens = 800)  => call(HAIKU, prompt, system, maxTokens)
 export const callClaudeSonnet = (prompt: string, system?: string, maxTokens = 3000) => call(SONNET, prompt, system, maxTokens)
+
+// Вариант с полной историей сообщений (Фаза 1 «бот прозревает») — Executor
+// видит предыдущие реплики диалога, а не только текущее сообщение.
+export type ChatTurn = { role: "user" | "assistant"; content: string }
+
+async function callMessages(
+  model: string, messages: ChatTurn[], system?: string, maxTokens = 1500,
+): Promise<string> {
+  return withRetry(async () => {
+    const resp = await client().messages.create({
+      model,
+      max_tokens: maxTokens,
+      system,
+      messages: messages.map(m => ({ role: m.role, content: m.content })),
+    })
+    const block = resp.content[0]
+    return block?.type === "text" ? block.text : ""
+  })
+}
+
+export const callClaudeSonnetMessages = (messages: ChatTurn[], system?: string, maxTokens = 3000) =>
+  callMessages(SONNET, messages, system, maxTokens)

@@ -25,7 +25,8 @@
 import { and, eq, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, companies } from "@/lib/db/schema"
-import { callClaudeHaiku, callClaudeSonnet } from "@/lib/ai/client"
+import { callClaudeHaiku, callClaudeSonnetMessages, type ChatTurn } from "@/lib/ai/client"
+import { loadCandidateContext, formatCandidateContextBlock } from "@/lib/ai/candidate-context"
 import { matchStopWord } from "@/lib/followup/stop-words"
 import { createNotification } from "@/lib/notifications"
 import { sendTelegramAlert } from "@/lib/notifications/telegram"
@@ -619,6 +620,7 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
   // пайплайн на синтетических данных, кандидата с таким id может не быть.
   let candidateInfo: CandidateLoad | null = null
   let abuseWarningsCount = 0
+  let candidateStage: string | null = null
   if (!dryRun) {
     const [c] = await db
       .select({
@@ -632,6 +634,7 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
     if (c.stopped || c.stage === "rejected" || c.stage === "hired") {
       return { handled: false, action: "skipped", escalationReason: "candidate_inactive" }
     }
+    candidateStage = c.stage ?? null
     candidateInfo = await loadCandidate(candidateId)
     abuseWarningsCount = candidateInfo?.abuseWarningsCount ?? 0
   } else {
@@ -1013,13 +1016,28 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
   // SAFETY_RULES прокидываются ВСЕГДА перед user-prompt'ом. Offtopic-hint
   // добавляем только на ход с offtopic — это локальная инструкция, не
   // глобальное правило.
+  // Фаза 1 «бот прозревает»: контекст кандидата (выжимка резюме + стадия) кладём
+  // в system-prompt; историю диалога передаём как полноценные turns. В sandbox
+  // (dryRun) резюме/стадии нет — берём только историю из UI.
+  let candidateContextBlock = ""
+  if (!dryRun) {
+    const cctx = await loadCandidateContext(candidateId, candidateStage)
+    candidateContextBlock = formatCandidateContextBlock(cctx, candidateInfo?.name ?? null)
+  }
   const armoredSystemPrompt = offtopicHint
-    ? SAFETY_RULES + "\n" + OFFTOPIC_REDIRECT_HINT + "\n\n" + prompt
-    : SAFETY_RULES + "\n\n" + prompt
+    ? SAFETY_RULES + "\n" + OFFTOPIC_REDIRECT_HINT + candidateContextBlock + "\n\n" + prompt
+    : SAFETY_RULES + candidateContextBlock + "\n\n" + prompt
+
+  // История диалога (последние пары) + текущее сообщение — как messages[], чтобы
+  // Executor видел предыдущие реплики, а не отвечал в вакууме.
+  const convo: ChatTurn[] = [
+    ...context.map((t) => ({ role: t.role, content: t.text })),
+    { role: "user" as const, content: incomingText },
+  ]
 
   let reply = ""
   try {
-    reply = (await callClaudeSonnet(incomingText, armoredSystemPrompt, 800)).trim()
+    reply = (await callClaudeSonnetMessages(convo, armoredSystemPrompt, 800)).trim()
   } catch (err) {
     console.warn("[chatbot] generator failed:", err)
   }
