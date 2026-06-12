@@ -169,9 +169,11 @@ function SortableField({
 interface MiniFormBuilderProps {
   vacancyId: string
   descriptionJson?: unknown
+  /** Вызывается после успешного сохранения — позволяет родителю рефетчить данные */
+  onSaved?: () => void
 }
 
-export function MiniFormBuilder({ vacancyId, descriptionJson }: MiniFormBuilderProps) {
+export function MiniFormBuilder({ vacancyId, descriptionJson, onSaved }: MiniFormBuilderProps) {
   const [fields, setFields] = useState<MiniFormField[]>([])
   const [saving, setSaving] = useState(false)
   const [showCustomDialog, setShowCustomDialog] = useState(false)
@@ -274,6 +276,7 @@ export function MiniFormBuilder({ vacancyId, descriptionJson }: MiniFormBuilderP
 
       if (!res.ok) throw new Error("Ошибка сохранения")
       toast.success("Поля формы сохранены")
+      onSaved?.()
     } catch {
       toast.error("Не удалось сохранить поля формы")
     } finally {

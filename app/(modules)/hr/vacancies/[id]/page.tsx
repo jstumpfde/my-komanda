@@ -3394,7 +3394,7 @@ export default function VacancyPage() {
                   <UtmLinksSection vacancyId={id} vacancySlug={id} />
 
                   {/* Поля мини-формы (перенесено из «Брендинг» по P0-38) */}
-                  <MiniFormBuilder vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} />
+                  <MiniFormBuilder vacancyId={id} descriptionJson={apiVacancy?.descriptionJson} onSaved={() => refetchVacancy()} />
 
                   {/* HTML-страница (перенесено из «Брендинг» по P0-38) */}
                   <PublishTab
