@@ -92,6 +92,9 @@ export async function POST(
       category:         result.category ?? null,
       confidence:       result.confidence ?? null,
       escalationReason: result.escalationReason ?? null,
+      // Фаза 2 (наблюдение): что бот РЕШИЛ БЫ сделать по воронке (если включена
+      // автономность). Пока не исполняется — для проверки решений в песочнице.
+      funnelDecision:   result.funnelDecision ?? null,
       diagnostics: {
         promptLength:    (vacancy.aiChatbotPrompt ?? "").length,
         triggers:        settings.triggers ?? {},

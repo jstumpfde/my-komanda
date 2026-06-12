@@ -26,7 +26,8 @@ import { and, eq, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, companies } from "@/lib/db/schema"
 import { callClaudeHaiku, callClaudeSonnetMessages, type ChatTurn } from "@/lib/ai/client"
-import { loadCandidateContext, formatCandidateContextBlock } from "@/lib/ai/candidate-context"
+import { loadCandidateContext, formatCandidateContextBlock, type CandidateContext } from "@/lib/ai/candidate-context"
+import { decideFunnelNextStep, allowedActionsFromAutonomy, type FunnelDecision } from "@/lib/ai/funnel-decision"
 import { matchStopWord } from "@/lib/followup/stop-words"
 import { createNotification } from "@/lib/notifications"
 import { sendTelegramAlert } from "@/lib/notifications/telegram"
@@ -146,6 +147,22 @@ export interface ChatbotSettings {
   rejectionMessages?:   RejectionMessages
   /** Группа 33. */
   responseTiming?:      ResponseTimingSettings
+  /** Фаза 2 «бот ведёт». Все действия ВЫКЛЮЧЕНЫ по умолчанию — включаются HR
+   *  по одному per-вакансия. Без enabled бот остаётся чистым Q&A (как раньше). */
+  autonomy?:            AutonomySettings
+}
+
+// Фаза 2: автономные действия бота в воронке. Дефолт — всё false (спящий режим).
+// Интервью НИКОГДА не входит сюда — жёсткое правило «назначает только HR».
+export interface AutonomySettings {
+  /** Мастер-выключатель. false → движок решений не запускается вовсе. */
+  enabled?:          boolean
+  /** Бот может предложить/отправить демо+анкету подходящему кандидату. */
+  canRequestAnketa?: boolean
+  /** Бот может отправить тестовое задание. */
+  canSendTest?:      boolean
+  /** Бот может двигать стадию кандидата вперёд (не в rejected — это отдельно). */
+  canAdvanceStage?:  boolean
 }
 
 export interface ProcessVacancy {
@@ -196,6 +213,10 @@ export interface ProcessResult {
   preMessageDelayMs?: number
   /** Задержка перед основным reply (если preMessage нет — общая задержка). */
   replyDelayMs?:    number
+  /** Фаза 2 «бот ведёт»: рекомендованный следующий шаг воронки. Сейчас только
+   *  НАБЛЮДАЕМ (логируем + показываем в песочнице), НЕ исполняем. Исполнение —
+   *  Фаза 2b под тумблерами autonomy.*. undefined — автономность выключена. */
+  funnelDecision?:  FunnelDecision
 }
 
 const TRIGGER_TO_CATEGORY: Record<string, IntentCategory> = {
@@ -1020,9 +1041,10 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
   // в system-prompt; историю диалога передаём как полноценные turns. В sandbox
   // (dryRun) резюме/стадии нет — берём только историю из UI.
   let candidateContextBlock = ""
+  let candCtx: CandidateContext = { resumeSummary: null, stageLabel: null }
   if (!dryRun) {
-    const cctx = await loadCandidateContext(candidateId, candidateStage)
-    candidateContextBlock = formatCandidateContextBlock(cctx, candidateInfo?.name ?? null)
+    candCtx = await loadCandidateContext(candidateId, candidateStage)
+    candidateContextBlock = formatCandidateContextBlock(candCtx, candidateInfo?.name ?? null)
   }
   const armoredSystemPrompt = offtopicHint
     ? SAFETY_RULES + "\n" + OFFTOPIC_REDIRECT_HINT + candidateContextBlock + "\n\n" + prompt
@@ -1108,6 +1130,31 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
     }
   }
 
+  // Фаза 2 «бот ведёт» (НАБЛЮДЕНИЕ): если HR включил автономность — спрашиваем
+  // движок решений, какой шаг воронки уместен. Пока только логируем/возвращаем,
+  // НЕ исполняем (живые отправки — Фаза 2b). Сбой движка не ломает основной ответ.
+  let funnelDecision: FunnelDecision | undefined
+  const allowed = allowedActionsFromAutonomy(settings.autonomy)
+  if (allowed.length > 0) {
+    try {
+      funnelDecision = await decideFunnelNextStep({
+        stageLabel:    candCtx.stageLabel,
+        resumeSummary: candCtx.resumeSummary,
+        latestMessage: incomingText,
+        history:       context,
+        allowed,
+      })
+      if (!dryRun && funnelDecision && funnelDecision.action !== "none") {
+        console.log("[chatbot] funnel-decision (observe-only)", JSON.stringify({
+          candidateId, vacancyId, action: funnelDecision.action,
+          confidence: funnelDecision.confidence, reason: funnelDecision.reason,
+        }))
+      }
+    } catch (err) {
+      console.warn("[chatbot] funnel-decision failed:", err instanceof Error ? err.message : err)
+    }
+  }
+
   return {
     handled:           true,
     action:            "sent",
@@ -1117,6 +1164,7 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
     preMessage,
     preMessageDelayMs,
     replyDelayMs:      timing.delaySeconds * 1000,
+    funnelDecision,
   }
 }
 
