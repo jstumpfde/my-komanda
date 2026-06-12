@@ -12,6 +12,7 @@ import { Loader2, Pencil, Check, X, Trash2, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
 import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
 import { VacancyTestFollowupSettings } from "@/components/vacancies/vacancy-test-followup-settings"
+import { FollowupPresetsManager } from "@/components/vacancies/followup-presets-manager"
 
 interface QueueItem {
   messageId: string
@@ -306,6 +307,7 @@ export function MessageQueueReviewSheet({ vacancyId, open, onOpenChange, onChang
             <code className="mx-1">{"{{test_link}}"}</code>,
             <code className="mx-1">{"{{demo_link}}"}</code>. Пустой слот → берётся текст по умолчанию.
           </p>
+          <FollowupPresetsManager vacancyId={vacancyId} />
           <VacancyFollowupSettings vacancyId={vacancyId} />
           <VacancyTestFollowupSettings vacancyId={vacancyId} />
         </TabsContent>
