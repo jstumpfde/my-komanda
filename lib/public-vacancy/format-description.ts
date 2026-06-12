@@ -263,6 +263,8 @@ function splitFallback(text: string): string[] {
     lastIdx = m.index + m[0].length
   }
   sentences.push(normalized2.slice(lastIdx).trim())
+  // Отбрасываем пустые предложения (на стыках/мусоре).
+  const filteredSentences = sentences.map(s => s.trim()).filter(Boolean)
   if (filteredSentences.length <= 1) return [text.trim()]
 
   const chunks: string[] = []
