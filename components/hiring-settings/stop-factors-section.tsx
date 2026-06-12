@@ -12,6 +12,34 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import type { CompanyHiringDefaults, VacancyStopFactors } from "@/lib/db/schema"
 
+// Каноничные названия гражданств — как их отдаёт hh (важно для совпадения при
+// матчинге стоп-фактора). Выбираются чипами, чтобы HR не угадывал формат «РФ».
+const CITIZENSHIPS = [
+  "Россия", "Беларусь", "Казахстан", "Узбекистан", "Киргизия", "Таджикистан",
+  "Армения", "Азербайджан", "Украина", "Молдова", "Грузия", "Туркменистан",
+]
+// Алиасы старых сокращений → каноничное (чтобы уже сохранённые «РФ/БЛ/КЗ» подхватились).
+const CITIZENSHIP_ALIASES: Record<string, string> = {
+  "рф": "Россия", "россия": "Россия",
+  "бл": "Беларусь", "рб": "Беларусь", "беларусь": "Беларусь", "белоруссия": "Беларусь",
+  "кз": "Казахстан", "рк": "Казахстан", "казахстан": "Казахстан",
+  "уз": "Узбекистан", "узбекистан": "Узбекистан",
+  "кг": "Киргизия", "киргизия": "Киргизия", "кыргызстан": "Киргизия",
+  "тж": "Таджикистан", "таджикистан": "Таджикистан",
+  "ам": "Армения", "армения": "Армения",
+  "аз": "Азербайджан", "азербайджан": "Азербайджан",
+  "уа": "Украина", "украина": "Украина",
+  "мд": "Молдова", "молдова": "Молдова", "молдавия": "Молдова",
+  "гр": "Грузия", "грузия": "Грузия",
+  "тм": "Туркменистан", "туркменистан": "Туркменистан",
+}
+function normalizeCitizenship(s: string): string {
+  const k = s.trim().toLowerCase()
+  if (CITIZENSHIP_ALIASES[k]) return CITIZENSHIP_ALIASES[k]
+  const canon = CITIZENSHIPS.find(c => c.toLowerCase() === k)
+  return canon ?? s.trim()
+}
+
 export function StopFactorsSection({ defaults, onPatch }: {
   defaults: CompanyHiringDefaults
   onPatch: (patch: Partial<CompanyHiringDefaults>) => Promise<void>
@@ -28,9 +56,13 @@ export function StopFactorsSection({ defaults, onPatch }: {
     sf?.age?.maxAge != null ? String(sf.age.maxAge) : ""
   )
   const [sfCitizenship, setSfCitizenship] = useState<boolean>(!!sf?.citizenship?.enabled)
-  const [sfCitizenshipValue, setSfCitizenshipValue] = useState<string>(
-    sf?.citizenship?.allowed ? sf.citizenship.allowed.join(", ") : ""
+  const [sfCitizenshipList, setSfCitizenshipList] = useState<string[]>(
+    Array.isArray(sf?.citizenship?.allowed)
+      ? [...new Set(sf!.citizenship!.allowed!.map(normalizeCitizenship))]
+      : []
   )
+  const toggleCitizenship = (c: string) =>
+    setSfCitizenshipList(list => list.includes(c) ? list.filter(x => x !== c) : [...list, c])
 
   // Мастер-тумблер живого применения ко всем вакансиям
   const [applyToAll, setApplyToAll] = useState<boolean>(
@@ -49,7 +81,7 @@ export function StopFactorsSection({ defaults, onPatch }: {
         ? { enabled: true, minAge: Number(sfAgeMin) || undefined, maxAge: Number(sfAgeMax) || undefined }
         : { enabled: false },
       citizenship: sfCitizenship
-        ? { enabled: true, allowed: sfCitizenshipValue ? sfCitizenshipValue.split(",").map(c => c.trim()).filter(Boolean) : [] }
+        ? { enabled: true, allowed: sfCitizenshipList }
         : { enabled: false },
       city: { enabled: false },
       format: { enabled: false },
@@ -120,6 +152,15 @@ export function StopFactorsSection({ defaults, onPatch }: {
                       при автоматической обработке откликов. Включайте осознанно: кандидаты,
                       попадающие под фактор, будут автоматически отклоняться по всем вакансиям.
                     </p>
+                    {/* Явный статус — чтобы было однозначно понятно, работает или нет. */}
+                    <p className={cn(
+                      "text-xs font-medium mt-1",
+                      applyToAll ? "text-green-700 dark:text-green-400" : "text-muted-foreground",
+                    )}>
+                      {applyToAll
+                        ? "✓ Сейчас применяются ко всем вакансиям."
+                        : "Сейчас НЕ применяются ко всем — это только базовый шаблон для вакансий."}
+                    </p>
                   </div>
                   <Switch
                     checked={applyToAll}
@@ -142,13 +183,27 @@ export function StopFactorsSection({ defaults, onPatch }: {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
+                {!applyToAll && (
+                  <p className="text-xs text-amber-600 mb-1">
+                    Мастер-тумблер выше выключен — эти факторы сейчас НЕ применяются ко всем
+                    вакансиям. Они работают как базовый шаблон (подхватываются на уровне вакансии).
+                  </p>
+                )}
 
                 {/* Возраст */}
-                <div className="flex items-center justify-between rounded-lg border p-4">
+                <div className={cn("flex items-center justify-between rounded-lg border p-4", !applyToAll && "opacity-70")}>
                   <div className="flex items-center gap-3 flex-1">
                     <Switch checked={sfAge} onCheckedChange={setSfAge} />
                     <div className="flex-1">
-                      <p className="text-sm font-medium">Возраст</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium">Возраст</p>
+                        <Badge variant="outline" className={cn("text-[10px] h-4 px-1.5 font-normal",
+                          !sfAge ? "text-muted-foreground"
+                            : applyToAll ? "text-green-700 border-green-300"
+                            : "text-amber-600 border-amber-300")}>
+                          {!sfAge ? "Выкл" : applyToAll ? "Применяется" : "Только шаблон"}
+                        </Badge>
+                      </div>
                       {sfAge && (
                         <div className="flex items-center gap-2 mt-2">
                           <Input
@@ -171,18 +226,44 @@ export function StopFactorsSection({ defaults, onPatch }: {
                 </div>
 
                 {/* Гражданство */}
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                  <div className="flex items-center gap-3 flex-1">
-                    <Switch checked={sfCitizenship} onCheckedChange={setSfCitizenship} />
+                <div className={cn("flex items-start justify-between rounded-lg border p-4", !applyToAll && "opacity-70")}>
+                  <div className="flex items-start gap-3 flex-1">
+                    <Switch checked={sfCitizenship} onCheckedChange={setSfCitizenship} className="mt-0.5" />
                     <div className="flex-1">
-                      <p className="text-sm font-medium">Гражданство</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium">Гражданство</p>
+                        <Badge variant="outline" className={cn("text-[10px] h-4 px-1.5 font-normal",
+                          !sfCitizenship ? "text-muted-foreground"
+                            : applyToAll ? "text-green-700 border-green-300"
+                            : "text-amber-600 border-amber-300")}>
+                          {!sfCitizenship ? "Выкл" : applyToAll ? "Применяется" : "Только шаблон"}
+                        </Badge>
+                      </div>
                       {sfCitizenship && (
-                        <Input
-                          value={sfCitizenshipValue}
-                          onChange={e => setSfCitizenshipValue(e.target.value)}
-                          placeholder="Например: РФ"
-                          className="mt-2 h-8 text-sm bg-[var(--input-bg)] max-w-xs"
-                        />
+                        <div className="mt-2 space-y-1.5">
+                          <p className="text-[11px] text-muted-foreground">
+                            Разрешённые гражданства — кандидаты с другими отклоняются. Выберите из списка:
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {CITIZENSHIPS.map(c => {
+                              const on = sfCitizenshipList.includes(c)
+                              return (
+                                <button
+                                  key={c}
+                                  type="button"
+                                  onClick={() => toggleCitizenship(c)}
+                                  className={cn(
+                                    "text-xs rounded-full border px-2.5 py-1 transition-colors",
+                                    on ? "bg-violet-600 text-white border-violet-600"
+                                       : "bg-muted/40 border-border hover:bg-muted",
+                                  )}
+                                >
+                                  {c}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>
