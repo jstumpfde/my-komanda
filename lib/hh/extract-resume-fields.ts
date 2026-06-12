@@ -10,6 +10,9 @@ export interface ExtractedHhFields {
   salaryMin?:          number | null
   salaryMax?:          number | null
   salaryCurrency?:     string | null   // RUR/RUB/EUR/USD/...
+  // Контакты (из resume.contact[])
+  phone?:              string | null
+  email?:              string | null
   // HR-020 фильтры
   birthDate?:          string | null   // YYYY-MM-DD (date column)
   experienceYears?:    number | null
@@ -35,6 +38,11 @@ export interface ExtractedHhFields {
 type RawResume = {
   birth_date?: unknown
   age?: unknown
+  contact?: Array<{
+    type?: { id?: unknown }
+    preferred?: unknown
+    value?: { formatted?: unknown; email?: unknown } | null
+  }> | unknown
   area?: { name?: unknown } | null
   salary?: { amount?: unknown; currency?: unknown } | null
   total_experience?: { months?: unknown } | null
@@ -172,6 +180,46 @@ function parseBirthDate(raw: RawResume): string | null {
   return deriveBirthDateFromAge(raw.age)
 }
 
+// Парсит resume.contact[] → { phone, email }.
+// hh отдаёт массив контактов с type.id = "cell" | "home" | "work" | "email".
+// Предпочитаем контакт с preferred=true; в value — либо formatted (телефон), либо email.
+function parseContacts(raw: RawResume): { phone: string | null; email: string | null } {
+  if (!Array.isArray(raw.contact)) return { phone: null, email: null }
+  const contacts = raw.contact as Array<{
+    type?: { id?: unknown }
+    preferred?: unknown
+    value?: { formatted?: unknown; email?: unknown } | null
+  }>
+
+  let phone: string | null = null
+  let email: string | null = null
+
+  // Два прохода: сначала preferred=true, затем любой подходящего типа
+  for (const pref of [true, false]) {
+    for (const c of contacts) {
+      const typeId = c.type?.id
+      if (pref && c.preferred !== true) continue
+
+      if (typeId === "cell" || typeId === "home" || typeId === "work") {
+        if (!phone) {
+          const formatted = c.value?.formatted
+          if (isString(formatted)) phone = formatted
+        }
+      } else if (typeId === "email") {
+        if (!email) {
+          const emailVal = c.value?.email ?? c.value?.formatted
+          if (isString(emailVal)) email = emailVal
+        }
+      }
+
+      if (phone && email) break
+    }
+    if (phone && email) break
+  }
+
+  return { phone, email }
+}
+
 // Главный парсер. raw — это либо resp.rawData.resume, либо resp.rawData (если рез-резюме
 // уже разложено на верхнем уровне).
 export function extractHhResumeFields(raw: unknown): ExtractedHhFields {
@@ -255,6 +303,14 @@ export function extractHhResumeFields(raw: unknown): ExtractedHhFields {
     if (names.length > 0) out.professionalRoles = names
   }
 
+  // contacts (phone / email) из resume.contact[]
+  // Доступны только в полном резюме /resumes/{id}, не в preview из /negotiations.
+  // COALESCE-семантика применяется на уровне вызывающего кода (process-queue,
+  // client.ts) — здесь просто извлекаем то, что есть.
+  const { phone: contactPhone, email: contactEmail } = parseContacts(r)
+  if (contactPhone) out.phone = contactPhone
+  if (contactEmail) out.email = contactEmail
+
   // photo: hh отдаёт несколько размеров {small,medium,big,100,240,500}.
   // Для UI кандидата лучше «среднего» размера: medium → 240 → big → 100 → small.
   // Если ни один не строка — null (нет фото).
@@ -278,8 +334,12 @@ export function extractHhResumeFields(raw: unknown): ExtractedHhFields {
 // у нас есть осмысленное значение. Boolean/числовые null НЕ записываем,
 // чтобы случайно не зануливать заполненные данные. Массивы пишем только если
 // они непустые.
+// ВАЖНО: phone/email включены сюда, но вызывающий код применяет
+// COALESCE-семантику — не перезаписывает уже заполненные вручную значения.
 export function toCandidateColumns(fields: ExtractedHhFields): Record<string, unknown> {
   const cols: Record<string, unknown> = {}
+  if (fields.phone) cols.phone = fields.phone
+  if (fields.email) cols.email = fields.email
   if (fields.city) cols.city = fields.city
   if (typeof fields.salaryMin === "number") cols.salaryMin = fields.salaryMin
   if (typeof fields.salaryMax === "number") cols.salaryMax = fields.salaryMax
