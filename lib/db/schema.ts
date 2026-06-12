@@ -249,6 +249,11 @@ export interface CompanyWorkSchedule {
   // Настройки рабочего расписания календаря HR (/hr/calendar → шестерёнка).
   // БЕЗ миграции — jsonb принимает любые поля.
   calendarWeekSchedule?: Record<string, CalendarDaySchedule> // ключ = день недели (0–6)
+  // Единый company-level источник праздников (#14).
+  // Читается и CalendarView (шестерёнка → Праздничные дни), и VacancyScheduleSettings
+  // (Нерабочие дни). БЕЗ миграции — jsonb принимает любые поля.
+  calendarExcludedHolidayIds?: string[]  // id из RU_HOLIDAYS
+  calendarCustomHolidays?: { from: string; to: string; label: string }[] // произвольные даты
 }
 
 // ── NancyVoiceSettings (drizzle/0182) ──

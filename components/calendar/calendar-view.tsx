@@ -40,9 +40,11 @@ import {
   Building2,
   UserCircle,
   Users,
-  Search,
 } from "lucide-react"
 import { toast } from "sonner"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { RU_HOLIDAYS } from "@/lib/schedule/holidays"
 import { WeekView } from "@/components/calendar/week-view"
 import { DayView } from "@/components/calendar/day-view"
 import { MonthView } from "@/components/calendar/month-view"
@@ -136,7 +138,11 @@ export function CalendarView() {
     try {
       const res = await fetch("/api/modules/hr/calendar/settings")
       if (res.ok) {
-        const data = await res.json() as { calendarWeekSchedule?: Record<string, DaySchedule> | null }
+        const data = await res.json() as {
+          calendarWeekSchedule?: Record<string, DaySchedule> | null
+          calendarExcludedHolidayIds?: string[] | null
+          calendarCustomHolidays?: { from: string; to: string; label: string }[] | null
+        }
         if (data.calendarWeekSchedule && typeof data.calendarWeekSchedule === "object") {
           const loaded: Record<number, DaySchedule> = { ...DEFAULT_WEEK_SCHEDULE }
           for (const [k, v] of Object.entries(data.calendarWeekSchedule)) {
@@ -146,6 +152,12 @@ export function CalendarView() {
             }
           }
           setWeekSchedule(loaded)
+        }
+        if (Array.isArray(data.calendarExcludedHolidayIds)) {
+          setExcludedHolidayIds(data.calendarExcludedHolidayIds)
+        }
+        if (Array.isArray(data.calendarCustomHolidays)) {
+          setCustomHolidays(data.calendarCustomHolidays)
         }
       }
     } catch {
@@ -178,32 +190,44 @@ export function CalendarView() {
     }
   }
 
-  const [holidayCalendars, setHolidayCalendars] = useState<{ code: string; name: string; enabled: boolean }[]>([
-    { code: "RU", name: "Российская Федерация", enabled: true },
-  ])
-  const [holidaySearch, setHolidaySearch] = useState("")
-  const AVAILABLE_COUNTRIES = [
-    { code: "RU", name: "Российская Федерация" }, { code: "BY", name: "Беларусь" }, { code: "KZ", name: "Казахстан" },
-    { code: "UZ", name: "Узбекистан" }, { code: "KG", name: "Кыргызстан" }, { code: "AM", name: "Армения" },
-    { code: "GE", name: "Грузия" }, { code: "AZ", name: "Азербайджан" }, { code: "UA", name: "Украина" },
-    { code: "US", name: "США" }, { code: "DE", name: "Германия" }, { code: "GB", name: "Великобритания" },
-    { code: "FR", name: "Франция" }, { code: "CN", name: "Китай" }, { code: "TR", name: "Турция" },
-    { code: "AE", name: "ОАЭ" }, { code: "IL", name: "Израиль" }, { code: "IN", name: "Индия" },
-    { code: "JP", name: "Япония" }, { code: "KR", name: "Южная Корея" },
-  ]
-  const filteredCountries = holidaySearch.trim()
-    ? AVAILABLE_COUNTRIES.filter(c => c.name.toLowerCase().includes(holidaySearch.toLowerCase()) && !holidayCalendars.some(h => h.code === c.code))
-    : []
-  const addHolidayCalendar = (country: { code: string; name: string }) => {
-    setHolidayCalendars(prev => [...prev, { ...country, enabled: true }])
-    setHolidaySearch("")
-    toast.success(`Добавлен календарь: ${country.name}`)
+  // ── Company-level праздники (единый источник #14) ──────────────────────────
+  const [excludedHolidayIds, setExcludedHolidayIds] = useState<string[]>([])
+  const [customHolidays, setCustomHolidays] = useState<{ from: string; to: string; label: string }[]>([])
+  const [savingHolidays, setSavingHolidays] = useState(false)
+  const [customHolidayDialogOpen, setCustomHolidayDialogOpen] = useState(false)
+
+  const toggleExcludedHoliday = (id: string) => {
+    setExcludedHolidayIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id],
+    )
   }
-  const removeHolidayCalendar = (code: string) => {
-    setHolidayCalendars(prev => prev.filter(c => c.code !== code))
+  const removeCustomHoliday = (idx: number) => {
+    setCustomHolidays(prev => prev.filter((_, i) => i !== idx))
   }
-  const toggleHolidayCalendar = (code: string) => {
-    setHolidayCalendars(prev => prev.map(c => c.code === code ? { ...c, enabled: !c.enabled } : c))
+  const addCustomHoliday = (h: { from: string; to: string; label: string }) => {
+    setCustomHolidays(prev => [...prev, h])
+  }
+  const saveHolidays = async () => {
+    setSavingHolidays(true)
+    try {
+      const res = await fetch("/api/modules/hr/calendar/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          calendarExcludedHolidayIds: excludedHolidayIds,
+          calendarCustomHolidays: customHolidays,
+        }),
+      })
+      if (res.ok) {
+        toast.success("Праздничные дни сохранены")
+      } else {
+        toast.error("Не удалось сохранить праздники")
+      }
+    } catch {
+      toast.error("Ошибка сохранения")
+    } finally {
+      setSavingHolidays(false)
+    }
   }
   const [timezone, setTimezone] = useState("Europe/Moscow")
   const [showWeekNumbers, setShowWeekNumbers] = useState(false)
@@ -544,45 +568,67 @@ export function CalendarView() {
                 </div>
                 <Separator className="my-2" />
                 <div>
-                  <Label className="text-sm font-medium">Праздничные календари</Label>
-                  <p className="text-xs text-muted-foreground mt-0.5 mb-2">Нерабочие праздничные дни по странам</p>
+                  <Label className="text-sm font-medium">Праздничные дни РФ</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5 mb-2">
+                    Отметьте дни, когда НЕ работаете. Эти настройки применяются и в расписании вакансий.
+                  </p>
+                  <div className="grid grid-cols-2 gap-y-1.5 mb-3">
+                    {RU_HOLIDAYS.map(h => (
+                      <label key={h.id} className="flex items-center gap-2 cursor-pointer text-sm">
+                        <Checkbox
+                          checked={excludedHolidayIds.includes(h.id)}
+                          onCheckedChange={() => toggleExcludedHoliday(h.id)}
+                        />
+                        <span className="text-foreground text-xs font-mono">
+                          {String(h.day).padStart(2, "0")}.{String(h.month).padStart(2, "0")}
+                        </span>
+                        <span className="text-muted-foreground text-xs truncate">{h.label}</span>
+                      </label>
+                    ))}
+                  </div>
 
-                  {holidayCalendars.map(cal => (
-                    <div key={cal.code} className="flex items-center justify-between py-1.5">
-                      <div className="flex items-center gap-2">
-                        <Switch checked={cal.enabled} onCheckedChange={() => toggleHolidayCalendar(cal.code)} className="scale-90" />
-                        <span className="text-sm">{cal.name}</span>
-                        <span className="text-[10px] text-muted-foreground font-mono">{cal.code}</span>
-                      </div>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => removeHolidayCalendar(cal.code)}>
-                        <Trash2 className="size-3" />
-                      </Button>
-                    </div>
-                  ))}
-
-                  <div className="relative mt-2">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-                    <Input
-                      value={holidaySearch}
-                      onChange={e => setHolidaySearch(e.target.value)}
-                      placeholder="Найти страну..."
-                      className="h-8 pl-8 text-sm"
-                    />
-                    {filteredCountries.length > 0 && (
-                      <div className="absolute top-full left-0 right-0 z-20 mt-1 rounded-lg border bg-popover shadow-lg max-h-40 overflow-y-auto">
-                        {filteredCountries.map(c => (
-                          <button
-                            key={c.code}
-                            onClick={() => addHolidayCalendar(c)}
-                            className="flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-accent text-left"
+                  <div className="flex items-center justify-between mb-1.5">
+                    <Label className="text-sm font-medium">Свои нерабочие дни</Label>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 gap-1 text-xs"
+                      onClick={() => setCustomHolidayDialogOpen(true)}
+                    >
+                      <Plus className="size-3" /> Добавить
+                    </Button>
+                  </div>
+                  {customHolidays.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic mb-2">
+                      Корпоративные выходные, перенесённые дни и т.п.
+                    </p>
+                  ) : (
+                    <div className="space-y-1 mb-2">
+                      {customHolidays.map((c, i) => (
+                        <div key={i} className="flex items-center justify-between rounded border bg-card px-2.5 py-1.5 text-xs">
+                          <div>
+                            <span className="font-medium">{c.label || "(без названия)"}</span>
+                            <span className="text-muted-foreground ml-2">
+                              {c.from === c.to ? c.from : `${c.from} — ${c.to}`}
+                            </span>
+                          </div>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6 text-destructive"
+                            onClick={() => removeCustomHoliday(i)}
                           >
-                            <Plus className="size-3.5 text-muted-foreground" />
-                            <span>{c.name}</span>
-                            <span className="text-[10px] text-muted-foreground font-mono ml-auto">{c.code}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                            <Trash2 className="size-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex justify-end">
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={saveHolidays} disabled={savingHolidays}>
+                      <Check className="size-3" />
+                      {savingHolidays ? "Сохранение…" : "Сохранить праздники"}
+                    </Button>
                   </div>
                 </div>
               </CardContent>
@@ -743,6 +789,94 @@ export function CalendarView() {
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* ── Диалог «Свой нерабочий день» ── */}
+      <CalendarCustomHolidayDialog
+        open={customHolidayDialogOpen}
+        onOpenChange={setCustomHolidayDialogOpen}
+        onAdd={(h) => { addCustomHoliday(h); setCustomHolidayDialogOpen(false) }}
+      />
     </div>
+  )
+}
+
+// ── Диалог добавления кастомного нерабочего дня ─────────────────────────────
+
+function CalendarCustomHolidayDialog({
+  open, onOpenChange, onAdd,
+}: {
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  onAdd: (h: { from: string; to: string; label: string }) => void
+}) {
+  const [mode, setMode] = useState<"single" | "range">("single")
+  const [from, setFrom] = useState("")
+  const [to, setTo] = useState("")
+  const [label, setLabel] = useState("")
+  const [error, setError] = useState<string | null>(null)
+
+  const reset = () => { setMode("single"); setFrom(""); setTo(""); setLabel(""); setError(null) }
+  useEffect(() => { if (!open) reset() }, [open])
+
+  const submit = () => {
+    if (!from) { setError("Укажите дату"); return }
+    const finalTo = mode === "range" ? to : from
+    if (mode === "range" && !to) { setError("Укажите дату окончания"); return }
+    if (finalTo < from) { setError("Дата окончания раньше начала"); return }
+    if (!label.trim()) { setError("Введите название"); return }
+    onAdd({ from, to: finalTo, label: label.trim() })
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Свой нерабочий день</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-1">
+          <div className="flex gap-2">
+            {(["single", "range"] as const).map(m => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMode(m)}
+                className={cn(
+                  "flex-1 h-9 rounded-md border text-sm font-medium transition-colors",
+                  mode === m
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-card text-muted-foreground border-input",
+                )}
+              >
+                {m === "single" ? "Один день" : "Период"}
+              </button>
+            ))}
+          </div>
+          <div className="space-y-2">
+            <Label className="text-sm">{mode === "single" ? "Дата" : "С"}</Label>
+            <Input type="date" value={from} onChange={e => { setFrom(e.target.value); setError(null) }} />
+          </div>
+          {mode === "range" && (
+            <div className="space-y-2">
+              <Label className="text-sm">До</Label>
+              <Input type="date" value={to} onChange={e => { setTo(e.target.value); setError(null) }} />
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label className="text-sm">Название</Label>
+            <Input
+              value={label}
+              onChange={e => { setLabel(e.target.value); setError(null) }}
+              placeholder="Например: Корпоративный отпуск"
+              maxLength={100}
+            />
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Отмена</Button>
+          <Button type="button" onClick={submit}>Добавить</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

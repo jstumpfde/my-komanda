@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useMemo, useEffect, useCallback, Suspense, lazy } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useState, useMemo, useEffect, useCallback, Suspense } from "react"
+import { useRouter } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -14,14 +14,10 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import {Video, Building2, ExternalLink, ChevronLeft, ChevronRight, List, CalendarDays, CalendarRange, Clock, Settings, Plus, GripVertical, Pencil, Trash2, Save, X, Bell, BellOff, LayoutGrid} from "lucide-react"
+import { Video, Building2, ExternalLink, ChevronLeft, ChevronRight, List, CalendarDays, CalendarRange, Clock, Settings, Plus, GripVertical, Pencil, Trash2, Save, X, Bell, BellOff, LayoutGrid, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-
-// Ленивая загрузка CalendarView — монтируется только при активном табе «Календарь»
-const CalendarView = lazy(() =>
-  import("@/components/calendar/calendar-view").then(m => ({ default: m.CalendarView }))
-)
+import { CalendarView } from "@/components/calendar/calendar-view"
 
 // ─── Типы ────────────────────────────────────────────────────
 
@@ -162,24 +158,9 @@ function MiniCard({ iv, compact }: { iv: Interview; compact?: boolean }) {
 
 function InterviewsPageContent() {
   const router = useRouter()
-  const searchParams = useSearchParams()
 
-  // tab=interviews (по умолчанию) | tab=calendar
-  const [activeTab, setActiveTab] = useState<"interviews" | "calendar">(() => {
-    const t = searchParams?.get("tab")
-    return t === "calendar" ? "calendar" : "interviews"
-  })
-  // Синхронизируем таб в URL при изменении
-  useEffect(() => {
-    const sp = new URLSearchParams(window.location.search)
-    if (activeTab === "calendar") {
-      sp.set("tab", "calendar")
-    } else {
-      sp.delete("tab")
-    }
-    router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab])
+  // Список интервью можно свернуть/развернуть под основным CalendarView
+  const [listOpen, setListOpen] = useState(true)
 
   const [view, setView] = useState<ViewMode>("list")
   const [interviews, setInterviews] = useState<Interview[]>([])
@@ -426,47 +407,59 @@ function InterviewsPageContent() {
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
 
-          {/* ═══ Верхний переключатель разделов ═══ */}
-          <div className="flex items-center justify-between px-4 sm:px-14 pt-5 pb-3 border-b">
-            <div className="flex items-center gap-2">
-              <CalendarDays className="h-5 w-5 text-violet-600" />
-              <h1 className="text-lg font-semibold">Интервью</h1>
-            </div>
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "interviews" | "calendar")}>
-              <TabsList>
-                <TabsTrigger value="interviews">Интервью</TabsTrigger>
-                <TabsTrigger value="calendar">Календарь</TabsTrigger>
-              </TabsList>
-            </Tabs>
+          {/* ═══ Основной заголовок ═══ */}
+          <div className="flex items-center px-4 sm:px-14 pt-5 pb-3 border-b">
+            <CalendarDays className="h-5 w-5 text-violet-600 mr-2" />
+            <h1 className="text-lg font-semibold">Интервью</h1>
           </div>
 
-          {/* ═══ ТАБ: ИНТЕРВЬЮ ═══ */}
-          {activeTab === "interviews" && (
-            <div className="py-6 px-4 sm:px-14">
-              {/* Header */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-5">
-                <div className="flex items-center gap-2 sm:hidden">
-                  {/* заголовок скрыт на больших экранах — уже в шапке выше */}
-                  <span className="text-base font-semibold text-muted-foreground">Интервью</span>
-                </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
-                  {/* View switcher — shadcn Tabs */}
-                  <Tabs value={view} onValueChange={(v) => setView(v as ViewMode)}>
-                    <TabsList>
-                      {views.map(v => (
-                        <TabsTrigger key={v.mode} value={v.mode} className="gap-1 text-xs">
-                          <v.icon className="w-3.5 h-3.5" /><span className="hidden sm:inline">{v.label}</span>
-                        </TabsTrigger>
-                      ))}
-                    </TabsList>
-                  </Tabs>
-                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setSettingsOpen(true)}>
-                    <Settings className="w-3.5 h-3.5" /><span className="hidden sm:inline">Настроить стадии</span>
-                  </Button>
-                  <Button size="sm" className="gap-1.5" onClick={openCreate}>
-                    <Plus className="w-3.5 h-3.5" /><span className="hidden sm:inline">Запланировать интервью</span>
-                  </Button>
-                </div>
+          {/* ═══ Главный CalendarView — основной календарь компании ═══ */}
+          <Suspense fallback={
+            <div className="flex items-center justify-center h-64 text-sm text-muted-foreground">
+              Загрузка календаря…
+            </div>
+          }>
+            <CalendarView />
+          </Suspense>
+
+          {/* ═══ Список интервью по стадиям (сворачиваемый) ═══ */}
+          <div className="border-t bg-background">
+            {/* Заголовок секции — кликабелен для сворачивания */}
+            <div
+              className="flex items-center justify-between px-4 sm:px-14 py-3 cursor-pointer hover:bg-muted/40 transition-colors"
+              onClick={() => setListOpen(v => !v)}
+            >
+              <div className="flex items-center gap-2">
+                <List className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-semibold">Список интервью</span>
+                <Badge variant="outline" className="text-[10px] px-1.5 h-4">
+                  {interviews.length}
+                </Badge>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" className="gap-1.5 h-7 text-xs" onClick={e => { e.stopPropagation(); setSettingsOpen(true) }}>
+                  <Settings className="w-3 h-3" /><span className="hidden sm:inline">Стадии</span>
+                </Button>
+                <Button size="sm" className="gap-1.5 h-7 text-xs" onClick={e => { e.stopPropagation(); openCreate() }}>
+                  <Plus className="w-3 h-3" /><span className="hidden sm:inline">Запланировать</span>
+                </Button>
+                <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", listOpen && "rotate-180")} />
+              </div>
+            </div>
+
+            {listOpen && (
+            <div className="px-4 sm:px-14 pb-6">
+              {/* View switcher */}
+              <div className="flex items-center gap-2 mb-4">
+                <Tabs value={view} onValueChange={(v) => setView(v as ViewMode)}>
+                  <TabsList>
+                    {views.map(v => (
+                      <TabsTrigger key={v.mode} value={v.mode} className="gap-1 text-xs">
+                        <v.icon className="w-3.5 h-3.5" /><span className="hidden sm:inline">{v.label}</span>
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
               </div>
 
               {/* Dynamic stage tabs */}
@@ -726,18 +719,8 @@ function InterviewsPageContent() {
                 </div>
               )}
             </div>
-          )}
-
-          {/* ═══ ТАБ: КАЛЕНДАРЬ ═══ */}
-          {activeTab === "calendar" && (
-            <Suspense fallback={
-              <div className="flex items-center justify-center h-64 text-sm text-muted-foreground">
-                Загрузка календаря…
-              </div>
-            }>
-              <CalendarView />
-            </Suspense>
-          )}
+            )} {/* listOpen */}
+          </div> {/* border-t секция */}
 
         </main>
       </SidebarInset>
