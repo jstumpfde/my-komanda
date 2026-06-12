@@ -1046,9 +1046,22 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
     candCtx = await loadCandidateContext(candidateId, candidateStage)
     candidateContextBlock = formatCandidateContextBlock(candCtx, candidateInfo?.name ?? null)
   }
+
+  // Фаза 4 «человеческое ведение»: когда HR включил автономность, разрешаем боту
+  // в самом ответе мягко уточнять недостающее и предлагать следующий шаг. Без
+  // автономности блок не добавляется → поведение прежнее (чистый Q&A).
+  const funnelGuidance = settings.autonomy?.enabled
+    ? "\n\n─── ВЕДЕНИЕ ПО ВОРОНКЕ ───\n" +
+      "Тебе разрешено мягко вести кандидата, как живой рекрутер:\n" +
+      "- Если не хватает важных данных для оценки (опыт, занятость, формат, готовность) — задай ОДИН конкретный уточняющий вопрос, по-человечески.\n" +
+      "- Если кандидат заинтересован и в целом подходит — естественно предложи следующий шаг (посмотреть демо / заполнить анкету / тест), без формальностей.\n" +
+      "- Пиши коротко и живо, не списком. Не дави. Не обещай оффер/зарплату/дату/интервью (это решает HR).\n" +
+      "──────────────────────────\n"
+    : ""
+
   const armoredSystemPrompt = offtopicHint
-    ? SAFETY_RULES + "\n" + OFFTOPIC_REDIRECT_HINT + candidateContextBlock + "\n\n" + prompt
-    : SAFETY_RULES + candidateContextBlock + "\n\n" + prompt
+    ? SAFETY_RULES + "\n" + OFFTOPIC_REDIRECT_HINT + candidateContextBlock + funnelGuidance + "\n\n" + prompt
+    : SAFETY_RULES + candidateContextBlock + funnelGuidance + "\n\n" + prompt
 
   // История диалога (последние пары) + текущее сообщение — как messages[], чтобы
   // Executor видел предыдущие реплики, а не отвечал в вакууме.
