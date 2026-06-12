@@ -442,13 +442,22 @@ export default function VacanciesPage() {
 
   const handleArchive = useCallback(async (v: ApiVacancy) => {
     try {
+      // Принцип: в архив уходит ОСТАНОВЛЕННАЯ вакансия. Если активна — сначала
+      // останавливаем, затем архивируем (без подтверждений, одним действием).
+      if (v.status === "active" || v.status === "published") {
+        await fetch(`/api/modules/hr/vacancies/${v.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "paused" }),
+        })
+      }
       const res = await fetch(`/api/modules/hr/vacancies/${v.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "archived" }),
       })
       if (!res.ok) throw new Error()
-      toast.success("Вакансия перемещена в архив")
+      toast.success("Вакансия перенесена в архив")
       refetch()
     } catch {
       toast.error("Не удалось архивировать вакансию")
@@ -678,7 +687,7 @@ export default function VacanciesPage() {
                   {/* Активные/Приостановленные → пауза / архив / корзина */}
                   {scope === "active" && (<>
                     <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" disabled={bulkBusy} onClick={bulkPause}>
-                      <Pause className="size-3.5" />Приостановить
+                      <Pause className="size-3.5" />Остановить
                     </Button>
                     <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" disabled={bulkBusy} onClick={bulkArchive}>
                       <Archive className="size-3.5" />В архив

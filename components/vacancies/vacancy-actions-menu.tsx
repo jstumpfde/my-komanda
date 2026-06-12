@@ -4,15 +4,17 @@
 // вакансии («Действия»), и в строке списка вакансий («...»). Единый источник
 // правды по составу/доступности пунктов, чтобы меню не расходились.
 //
-// Состав (8 пунктов, всегда в одном порядке; недоступные — серые с тултипом):
-//   Дублировать · Экспорт в Excel · Остановить · Возобновить ·
-//   Закрыть, в архив · Восстановить · В корзину · Удалить навсегда
+// Состав (пункты всегда в одном порядке; недоступные — серые с тултипом):
+//   Дублировать · Остановить · Возобновить · В архив · Восстановить ·
+//   В корзину · Удалить навсегда
+// (Экспорт в Excel убран — он есть внутри вакансии. «В архив» сам останавливает
+//  активную вакансию перед архивацией — логика в обработчике onArchive.)
 //
 // Доступность зависит от состояния (lib/vacancies/lifecycle.ts):
 //   active / paused / closed / trashed.
 
 import type { ElementType } from "react"
-import { Copy, Download, Pause, Play, X, RotateCcw, Trash2, Trash, Loader2 } from "lucide-react"
+import { Copy, Pause, Play, X, RotateCcw, Trash2, Trash, Loader2 } from "lucide-react"
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip"
 import { type VacancyLifecycle, getLifecycleAdjLabel } from "@/lib/vacancies/lifecycle"
@@ -82,8 +84,6 @@ export function VacancyActionsMenuItems({
     <TooltipProvider>
       <ActionMenuItem icon={Copy} label="Дублировать" enabled busy={duplicating}
         onClick={handlers.onDuplicate} disabledReason={reason} />
-      <ActionMenuItem icon={Download} label="Экспорт в Excel" enabled
-        onClick={handlers.onExport} disabledReason={reason} />
       <DropdownMenuSeparator />
       <ActionMenuItem icon={Pause} label="Остановить"
         enabled={lifecycle === "active"}
@@ -91,7 +91,7 @@ export function VacancyActionsMenuItems({
       <ActionMenuItem icon={Play} label="Возобновить"
         enabled={lifecycle === "paused"}
         onClick={handlers.onResume} disabledReason={reason} />
-      <ActionMenuItem icon={X} label="Закрыть, в архив"
+      <ActionMenuItem icon={X} label="В архив"
         enabled={lifecycle === "active" || lifecycle === "paused"}
         onClick={handlers.onArchive} disabledReason={reason} />
       <ActionMenuItem icon={RotateCcw} label="Восстановить"
