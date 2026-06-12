@@ -211,39 +211,17 @@ function SortableStageRow({
         )}
       </td>
 
-      {/* Drag-handle + кнопки ↑↓ */}
+      {/* Drag-handle (порядок — только перетаскиванием) */}
       <td className="px-1 py-1.5">
-        <div className="flex items-center gap-0.5">
-          <button
-            type="button"
-            className="cursor-grab active:cursor-grabbing p-0.5 rounded hover:bg-muted text-muted-foreground touch-none"
-            aria-label="Перетащить"
-            {...attributes}
-            {...listeners}
-          >
-            <GripVertical className="size-3.5" />
-          </button>
-          <div className="flex flex-col gap-0">
-            <button
-              type="button"
-              disabled={idx === 0}
-              onClick={() => onMoveUp(slug)}
-              className="p-0.5 rounded hover:bg-muted disabled:opacity-20 disabled:cursor-not-allowed"
-              aria-label="Переместить вверх"
-            >
-              <ChevronUp className="size-3 text-muted-foreground" />
-            </button>
-            <button
-              type="button"
-              disabled={idx === totalCount - 1}
-              onClick={() => onMoveDown(slug)}
-              className="p-0.5 rounded hover:bg-muted disabled:opacity-20 disabled:cursor-not-allowed"
-              aria-label="Переместить вниз"
-            >
-              <ChevronDown className="size-3 text-muted-foreground" />
-            </button>
-          </div>
-        </div>
+        <button
+          type="button"
+          className="cursor-grab active:cursor-grabbing p-1 rounded hover:bg-muted text-muted-foreground touch-none"
+          aria-label="Перетащить для изменения порядка"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="size-4" />
+        </button>
       </td>
 
       {/* Стадия */}
@@ -295,8 +273,8 @@ function SortableStageRow({
         </Popover>
       </td>
 
-      {/* Название — растянутое */}
-      <td className="px-2 py-1.5 min-w-[200px]">
+      {/* Название — компактное (уже в 2 раза) */}
+      <td className="px-2 py-1.5 w-[240px]">
         <Input
           value={label}
           onChange={(e) => onLabelChange(slug, e.target.value)}
@@ -306,7 +284,7 @@ function SortableStageRow({
       </td>
 
       {/* Действие (hh-action: Пригласить/Тест/Отказать/Ничего) */}
-      <td className="px-2 py-1.5 w-[140px]">
+      <td className="px-2 py-1.5 w-[176px]">
         <Select
           value={hhAction ?? "none"}
           onValueChange={(v) =>
@@ -329,7 +307,7 @@ function SortableStageRow({
       </td>
 
       {/* hh.ru — маппинг на стадию переговоров hh */}
-      <td className="px-2 py-1.5 w-[140px]">
+      <td className="px-2 py-1.5 w-[176px]">
         <Select
           value={hhStage || "none"}
           onValueChange={(v) => onHhStageChange(slug, v)}
@@ -348,7 +326,7 @@ function SortableStageRow({
       </td>
 
       {/* Авито */}
-      <td className="px-2 py-1.5 w-[120px]">
+      <td className="px-2 py-1.5 w-[150px]">
         <Select
           value={avitoVal || "none"}
           onValueChange={(v) => onAvitoChange(slug, v)}
@@ -705,13 +683,13 @@ export function FunnelAutomationSection({
 
           {/* Таблица с горизонтальным скроллом */}
           <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full text-sm">
+            <table className="text-sm">
               <thead>
                 <tr className="border-b bg-muted/40">
                   <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[42px]">
                     Вкл
                   </th>
-                  <th className="px-1 py-2 text-left text-xs font-medium text-muted-foreground w-[60px]">
+                  <th className="px-1 py-2 text-left text-xs font-medium text-muted-foreground w-[44px]">
                     Порядок
                   </th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground w-[110px]">
@@ -720,16 +698,16 @@ export function FunnelAutomationSection({
                   <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[40px]">
                     Цвет
                   </th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">
+                  <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[240px]">
                     Название
                   </th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[140px]">
+                  <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[176px]">
                     Действие
                   </th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[140px]">
+                  <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[176px]">
                     hh.ru
                   </th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[120px]">
+                  <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[150px]">
                     <span>Авито</span>{" "}
                     <Badge variant="secondary" className="text-[10px] px-1 py-0 align-middle">скоро</Badge>
                   </th>
