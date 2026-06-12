@@ -71,6 +71,9 @@ interface CandidateFiltersProps {
   filters: FilterState
   onFiltersChange: (filters: FilterState) => void
   candidates?: Candidate[]
+  /** #18: серверные фасеты по ВСЕЙ вакансии (города/источники со счётчиками).
+   *  Если заданы — дропдауны строятся из них, а не из загруженной страницы. */
+  facets?: { cities: { city: string; count: number }[]; sources: { source: string; count: number }[] } | null
   /**
    * Ф6: pipeline текущей вакансии. ТЗ-3 Ч.4: больше НЕ влияет на выбор
    * стадий — фильтр всегда показывает все 14 системных стадий из
@@ -180,7 +183,7 @@ const INDUSTRY_OPTIONS = [
   "Бухгалтерия/Аудит", "Страхование", "Консалтинг", "Управление персоналом", "Другое",
 ]
 
-export function CandidateFilters({ filters, onFiltersChange, candidates = [], vacancyPipeline }: CandidateFiltersProps) {
+export function CandidateFilters({ filters, onFiltersChange, candidates = [], vacancyPipeline, facets }: CandidateFiltersProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [showAllCities, setShowAllCities] = useState(false)
   const [showAllSources, setShowAllSources] = useState(false)
@@ -188,22 +191,29 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
   const [industryOpen, setIndustryOpen] = useState(false)
   const [skillsOpen, setSkillsOpen] = useState(false)
 
-  // Compute dynamic lists from candidates
+  // #18: если есть серверные фасеты по всей вакансии — берём их (полный список),
+  // иначе fallback на подсчёт по загруженной странице.
   const cityCounts = useMemo(() => {
+    if (facets?.cities?.length) {
+      return facets.cities.filter(c => c.city).sort((a, b) => b.count - a.count)
+    }
     const map = new Map<string, number>()
     candidates.forEach((c) => map.set(c.city, (map.get(c.city) || 0) + 1))
     return Array.from(map.entries())
       .map(([city, count]) => ({ city, count }))
       .sort((a, b) => b.count - a.count)
-  }, [candidates])
+  }, [candidates, facets])
 
   const sourceCounts = useMemo(() => {
+    if (facets?.sources?.length) {
+      return facets.sources.filter(s => s.source).sort((a, b) => b.count - a.count)
+    }
     const map = new Map<string, number>()
     candidates.forEach((c) => map.set(c.source, (map.get(c.source) || 0) + 1))
     return Array.from(map.entries())
       .map(([source, count]) => ({ source, count }))
       .sort((a, b) => b.count - a.count)
-  }, [candidates])
+  }, [candidates, facets])
 
   const visibleCities = showAllCities ? cityCounts : cityCounts.slice(0, 3)
   const hiddenCitiesCount = cityCounts.length - 3

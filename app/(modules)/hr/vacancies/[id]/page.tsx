@@ -495,6 +495,16 @@ export default function VacancyPage() {
   const stageFromUrl = searchParams?.get("stage")
   const initialFunnelStatuses = stageFromUrl ? stageFromUrl.split(",").filter(Boolean) : DEFAULT_FUNNEL_STATUSES.slice()
   const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: initialFunnelStatuses, hideRejected: true, hideNoSalary: false, activeNow: false, demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
+  // #18: фасеты фильтра (города/источники) по ВСЕЙ вакансии — серверная агрегация.
+  const [candidateFacets, setCandidateFacets] = useState<{ cities: { city: string; count: number }[]; sources: { source: string; count: number }[] } | null>(null)
+  useEffect(() => {
+    let off = false
+    fetch(`/api/modules/hr/vacancies/${id}/candidate-facets`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (!off && d) setCandidateFacets((d.data ?? d) as { cities: { city: string; count: number }[]; sources: { source: string; count: number }[] }) })
+      .catch(() => {})
+    return () => { off = true }
+  }, [id])
   const [trashOpen, setTrashOpen] = useState(false) // Корзина кандидатов (Sheet)
   const [rediscoveryOpen, setRediscoveryOpen] = useState(false) // Поиск в базе (Sheet)
 
@@ -2492,9 +2502,9 @@ export default function VacancyPage() {
                     <CandidateFilters
                       filters={filters}
                       onFiltersChange={(f) => { setFilters(f); if (useListPaginated) paginated.setPage(1) }}
-                      // Источник фасетов (города/источники в фильтре). В режиме
-                      // списка kanban-`columns` пуст — берём видимые из paginated,
-                      // иначе секция «Города» не показывается.
+                      // #18: серверные фасеты по ВСЕЙ вакансии (города/источники) —
+                      // дропдауны показывают все значения, а не только из страницы.
+                      facets={candidateFacets}
                       candidates={useListPaginated ? (paginatedColumns?.[0]?.candidates ?? []) : columns.flatMap((c) => c.candidates)}
                     />
                     {false && <SortMenu sortMode={sortMode} onSortChange={setSortMode} />}
