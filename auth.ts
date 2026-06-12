@@ -12,16 +12,21 @@ import { checkPasswordAttempts } from "@/lib/rate-limit"
 
 // Expose a stable ref so the JWT callback can read the DB
 // (needed when updateSession() is called after onboarding saves companyId)
-const getFreshUserFields = async (userId: string): Promise<{ companyId: string | null; name: string | null; avatarUrl: string | null }> => {
+const getFreshUserFields = async (userId: string): Promise<{ companyId: string | null; name: string | null; avatarUrl: string | null; permissions: Record<string, boolean> | null }> => {
   try {
     const [row] = await db
-      .select({ companyId: users.companyId, name: users.name, avatarUrl: users.avatarUrl })
+      .select({ companyId: users.companyId, name: users.name, avatarUrl: users.avatarUrl, permissions: users.permissions })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1)
-    return { companyId: row?.companyId ?? null, name: row?.name ?? null, avatarUrl: row?.avatarUrl ?? null }
+    return {
+      companyId: row?.companyId ?? null,
+      name: row?.name ?? null,
+      avatarUrl: row?.avatarUrl ?? null,
+      permissions: (row?.permissions as Record<string, boolean> | null) ?? null,
+    }
   } catch {
-    return { companyId: null, name: null, avatarUrl: null }
+    return { companyId: null, name: null, avatarUrl: null, permissions: null }
   }
 }
 
@@ -37,6 +42,7 @@ declare module "next-auth" {
       companyId: string | null
       avatarUrl: string | null
       isPlatformAdmin: boolean
+      permissions: Record<string, boolean> | null
     }
   }
 
@@ -150,6 +156,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.id = user.id as string
         token.role = ((user.role as UserRole) ?? "client") as string
         token.companyId = (user.companyId ?? null) as string | null
+        // Load permissions on first sign-in
+        if (user.id) {
+          const fresh = await getFreshUserFields(user.id)
+          token.permissions = fresh.permissions
+        }
       }
       // updateSession() fires with trigger === "update".
       if (trigger === "update" && token.id) {
@@ -161,6 +172,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.companyId = fresh.companyId
         if (fresh.name && !updateData?.name) token.name = fresh.name
         token.avatarUrl = fresh.avatarUrl
+        token.permissions = fresh.permissions
       }
       return token
     },
@@ -171,6 +183,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       session.user.companyId = (token.companyId as string | null) ?? null
       session.user.avatarUrl = (token.avatarUrl as string | null) ?? null
       session.user.isPlatformAdmin = isPlatformAdminEmail(session.user.email)
+      session.user.permissions = (token.permissions as Record<string, boolean> | null) ?? null
       return session
     },
   },

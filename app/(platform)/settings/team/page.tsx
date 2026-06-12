@@ -107,6 +107,7 @@ const PERMISSIONS_CONFIG = [
   { key: "create_vacancies", label: "Создание вакансий" },
   { key: "edit_knowledge", label: "База знаний" },
   { key: "view_analytics", label: "Аналитика" },
+  { key: "manage_org_structure", label: "Структура компании" },
 ] as const
 
 // ─── Компонент ──────────────────────────────────────────────

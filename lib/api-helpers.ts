@@ -41,6 +41,17 @@ export async function requireDirector() {
   return user
 }
 
+// Настройки оргструктуры (отделы/должности): директор ИЛИ пользователь с флагом manage_org_structure.
+export async function requireOrgManager() {
+  const user = await requireCompany()
+  const isDirectorLike = DIRECTOR_ROLES.has(user.role as string)
+  const perms = (user.permissions as Record<string, boolean> | null) ?? {}
+  if (!isDirectorLike && !perms["manage_org_structure"]) {
+    throw apiError("Только директор компании или назначенный менеджер может изменять структуру компании", 403)
+  }
+  return user
+}
+
 export async function requirePlatformAdmin() {
   const user = await requireAuth()
   // DB role "admin" maps to platform_admin in the client migration
