@@ -11,7 +11,7 @@ import {
 import { Eye, ChevronDown, RotateCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth"
-import type { CardDisplaySettings } from "./card-settings"
+import { CANDIDATE_COLUMN_TOGGLES, type CardDisplaySettings } from "./card-settings"
 import type { ViewMode } from "./kanban-board"
 
 interface ViewSettingsProps {
@@ -32,20 +32,10 @@ const VIEW_MODES: Array<{ value: ViewMode; label: string }> = [
   { value: "tiles",  label: "Плитки"  },
 ]
 
-// Порядок повторяет колонки списка (list-view.tsx): после «Кандидат» идут
-// Демо(прогресс) → AI-резм. → AI-оцен. → Зарплата → Город → Дата → Источник →
-// Действия. Тумблеры выстроены в том же порядке.
-const DISPLAY_TOGGLES: Array<{ key: keyof CardDisplaySettings; label: string }> = [
-  { key: "showProgress",      label: "Прогресс демо" },
-  { key: "showResumeScore",   label: "AI резюме" },
-  { key: "showScore",         label: "AI оценка" },
-  { key: "showTestScore",     label: "Тест" },
-  { key: "showSalaryFull",    label: "Зарплата" },
-  { key: "showCity",          label: "Город" },
-  { key: "showResponseDate",  label: "Дата отклика" },
-  { key: "showSource",        label: "Источник" },
-  { key: "showActions",       label: "Кнопки действий" },
-]
+// Тумблеры колонок берём из ЕДИНОГО реестра CANDIDATE_COLUMN_TOGGLES
+// (card-settings.tsx) — он в порядке колонок таблицы и без системных колонок.
+// Добавилась/убралась колонка → тумблер меняется автоматически.
+const DISPLAY_TOGGLES = CANDIDATE_COLUMN_TOGGLES
 
 export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeChange, testTableHref, onReset }: ViewSettingsProps) {
   const { role } = useAuth()

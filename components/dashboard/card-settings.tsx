@@ -27,6 +27,24 @@ export interface CardDisplaySettings {
   showResponseDate?: boolean
 }
 
+// ЕДИНЫЙ реестр тумблеров колонок СПИСКА кандидатов — источник правды для панели
+// «Вид» (view-settings.tsx). Порядок ДОЛЖЕН совпадать с порядком колонок в
+// list-view.tsx (слева→направо). Системные колонки (★ Избранное, Кандидат/ФИО,
+// Статус) сюда НЕ входят — они всегда видны. Добавил колонку с новым ключом в
+// list-view — добавь сюда строку, и тумблер появится автоматически (и наоборот).
+export const CANDIDATE_COLUMN_TOGGLES: Array<{ key: keyof CardDisplaySettings; label: string }> = [
+  { key: "showProgress",     label: "Прогресс демо" },
+  { key: "showResumeScore",  label: "AI резюме" },
+  { key: "showScore",        label: "AI оценка" },
+  { key: "showRubricScore",  label: "Рубрика" },
+  { key: "showTestScore",    label: "Тест" },
+  { key: "showSalaryFull",   label: "Зарплата" },
+  { key: "showCity",         label: "Город" },
+  { key: "showResponseDate", label: "Дата отклика" },
+  { key: "showSource",       label: "Источник" },
+  { key: "showActions",      label: "Кнопки действий" },
+]
+
 interface CardSettingsProps {
   settings: CardDisplaySettings
   onSettingsChange: (settings: CardDisplaySettings) => void
