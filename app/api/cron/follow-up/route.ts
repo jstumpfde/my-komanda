@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { eq, and, lte, gte, ne, isNotNull, sql } from "drizzle-orm"
+import { eq, and, lte, gte, ne, isNotNull, inArray, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancies, candidates, followUpMessages, followUpCampaigns, hhResponses, companies, testSubmissions } from "@/lib/db/schema"
 import { getValidToken } from "@/lib/hh-helpers"
@@ -99,6 +99,18 @@ async function resolveCompanyDelayMs(
 }
 
 async function processCampaignTouches(now: Date) {
+  // Восстановление зависших броней: строка, застрявшая в 'sending' дольше 5 минут,
+  // означает упавший прошлый проход (одна реальная отправка занимает секунды).
+  // Возвращаем такие в очередь, чтобы кандидат не потерял касание. Свежие 'sending'
+  // (моложе 5 мин) НЕ трогаем — их сейчас обрабатывает параллельный проход.
+  await db
+    .update(followUpMessages)
+    .set({ status: "pending" })
+    .where(and(
+      eq(followUpMessages.status, "sending"),
+      lte(followUpMessages.sentAt, new Date(now.getTime() - 5 * 60 * 1000)),
+    ))
+
   const pending = await db
     .select()
     .from(followUpMessages)
@@ -422,7 +434,9 @@ async function processOneTouch(
     .from(followUpMessages)
     .where(and(
       eq(followUpMessages.candidateId, msg.candidateId),
-      eq(followUpMessages.status, "sent"),
+      // 'sent' — уже ушло; 'sending' — прямо сейчас в полёте у параллельного
+      // прохода. Оба означают «этот текст кандидату уже идёт» → текущую отменяем.
+      inArray(followUpMessages.status, ["sent", "sending"]),
       eq(followUpMessages.messageText, msg.messageText),
       ne(followUpMessages.id, msg.id),
     ))
@@ -458,6 +472,22 @@ async function processOneTouch(
   // отправкой. Возвращаем delayMs во всех исходах ниже (sent / hh-ошибка /
   // исключение), чтобы вызывающий цикл выждал нужную паузу.
   const delayMs = await resolveCompanyDelayMs(vacancy.companyId, delayCache)
+
+  // Атомарная бронь строки ОДНИМ апдейтом pending→sending. Cron бежит каждую
+  // минуту, а отправка тянется ~31с на сообщение, поэтому проходы накладываются:
+  // следующий тик видит те же ещё-pending строки. Бронь гарантирует, что один и
+  // тот же дожим уйдёт ровно один раз — кто первым перевёл строку в 'sending',
+  // тот и шлёт; проигравший получает 0 обновлённых строк и пропускает.
+  // sentAt тут = время попытки (для восстановления зависших; на успехе совпадёт
+  // с фактической отправкой с точностью до секунд).
+  const claimed = await db
+    .update(followUpMessages)
+    .set({ status: "sending", sentAt: new Date() })
+    .where(and(eq(followUpMessages.id, msg.id), eq(followUpMessages.status, "pending")))
+    .returning({ id: followUpMessages.id })
+  if (claimed.length === 0) {
+    return { outcome: "skipped", reason: "already_claimed" }
+  }
 
   try {
     const form = new URLSearchParams()

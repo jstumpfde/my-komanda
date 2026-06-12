@@ -41,12 +41,19 @@ function isRealName(s: string | null | undefined): boolean {
 }
 
 // Fallback по candidates.name: формат "Фамилия Имя [Отчество]" → берём ВТОРОЕ
-// слово (имя). Если слово одно — его. Если пусто/заглушка/аноним — "Здравствуйте".
+// слово (имя). Если слово ОДНО — оно неоднозначно (см. ниже) → "Здравствуйте".
+// Если пусто/заглушка/аноним — тоже "Здравствуйте".
 function fallbackFromFullName(fullName: string): string {
   if (!isRealName(fullName)) return "Здравствуйте"
   const parts = fullName.trim().split(/\s+/).filter(Boolean)
-  const name = parts[1] || parts[0] || ""
-  return isRealName(name) ? name : "Здравствуйте"
+  // Формат "Фамилия Имя [Отчество]" → имя = ВТОРОЕ слово.
+  if (parts.length >= 2) {
+    return isRealName(parts[1]) ? parts[1] : "Здравствуйте"
+  }
+  // Одно слово неоднозначно: у hh-кандидатов со скрытым именем это почти всегда
+  // ФАМИЛИЯ. Обращаться по ней («Здравствуйте, Петренко») — та самая ошибка
+  // «фамилия вместо имени». Безопаснее нейтральное приветствие, чем угадывать.
+  return "Здравствуйте"
 }
 
 export async function getCandidateFirstName(candidateId: string): Promise<CandidateFirstName> {
