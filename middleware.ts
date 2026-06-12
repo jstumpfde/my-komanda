@@ -90,7 +90,7 @@ const MODULE_PATH_MAP: { prefix: string; slugs: string[]; moduleParam: string }[
   { prefix: "/marketing/", slugs: ["marketing"],   moduleParam: "marketing" },
   { prefix: "/sales/",     slugs: ["sales"],       moduleParam: "sales" },
   { prefix: "/warehouse/", slugs: ["warehouse"],   moduleParam: "warehouse" },
-  { prefix: "/knowledge/", slugs: ["knowledge"],   moduleParam: "knowledge" },
+  { prefix: "/knowledge-v2/", slugs: ["knowledge"], moduleParam: "knowledge" },
   { prefix: "/tasks/",     slugs: ["tasks"],       moduleParam: "tasks" },
   { prefix: "/booking/",   slugs: ["booking"],     moduleParam: "booking" },
 ]
