@@ -224,21 +224,7 @@ function SortableStageRow({
         </button>
       </td>
 
-      {/* Стадия */}
-      <td className="px-3 py-1.5">
-        <div className="flex items-center gap-1">
-          <span className="text-xs text-muted-foreground truncate max-w-[90px]">
-            {def.defaultLabel}
-          </span>
-          {isSystem && (
-            <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0">
-              сист.
-            </Badge>
-          )}
-        </div>
-      </td>
-
-      {/* Цвет — палитра 2 ряда по 6 */}
+      {/* Цвет — палитра 2 ряда по 6 (перед «Стадией») */}
       <td className="px-2 py-1.5">
         <Popover>
           <PopoverTrigger asChild>
@@ -273,6 +259,20 @@ function SortableStageRow({
         </Popover>
       </td>
 
+      {/* Стадия */}
+      <td className="px-3 py-1.5">
+        <div className="flex items-center gap-1">
+          <span className="text-xs text-muted-foreground truncate max-w-[90px]">
+            {def.defaultLabel}
+          </span>
+          {isSystem && (
+            <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0">
+              сист.
+            </Badge>
+          )}
+        </div>
+      </td>
+
       {/* Название — компактное (уже в 2 раза) */}
       <td className="px-2 py-1.5 w-[240px]">
         <Input
@@ -284,7 +284,7 @@ function SortableStageRow({
       </td>
 
       {/* Действие (hh-action: Пригласить/Тест/Отказать/Ничего) */}
-      <td className="px-2 py-1.5 w-[176px]">
+      <td className="px-2 py-1.5 w-[220px]">
         <Select
           value={hhAction ?? "none"}
           onValueChange={(v) =>
@@ -307,7 +307,7 @@ function SortableStageRow({
       </td>
 
       {/* hh.ru — маппинг на стадию переговоров hh */}
-      <td className="px-2 py-1.5 w-[176px]">
+      <td className="px-2 py-1.5 w-[220px]">
         <Select
           value={hhStage || "none"}
           onValueChange={(v) => onHhStageChange(slug, v)}
@@ -326,7 +326,7 @@ function SortableStageRow({
       </td>
 
       {/* Авито */}
-      <td className="px-2 py-1.5 w-[150px]">
+      <td className="px-2 py-1.5 w-[188px]">
         <Select
           value={avitoVal || "none"}
           onValueChange={(v) => onAvitoChange(slug, v)}
@@ -692,22 +692,22 @@ export function FunnelAutomationSection({
                   <th className="px-1 py-2 text-left text-xs font-medium text-muted-foreground w-[44px]">
                     Порядок
                   </th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground w-[110px]">
-                    Стадия
-                  </th>
                   <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[40px]">
                     Цвет
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground w-[110px]">
+                    Стадия
                   </th>
                   <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[240px]">
                     Название
                   </th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[176px]">
+                  <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[220px]">
                     Действие
                   </th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[176px]">
+                  <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[220px]">
                     hh.ru
                   </th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[150px]">
+                  <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[188px]">
                     <span>Авито</span>{" "}
                     <Badge variant="secondary" className="text-[10px] px-1 py-0 align-middle">скоро</Badge>
                   </th>

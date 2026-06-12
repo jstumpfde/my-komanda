@@ -92,7 +92,7 @@ export default function HiringSettingsPage() {
             <div className="py-6 px-4 sm:px-14">
               <div className="flex items-center gap-2 pt-3 pb-2">
                 <Settings className="h-5 w-5 text-violet-600" />
-                <h1 className="text-lg font-semibold">Настройки найма</h1>
+                <h1 className="text-lg font-semibold">Настройки HR</h1>
               </div>
               <p className="text-sm text-muted-foreground">Загрузка…</p>
             </div>
@@ -113,7 +113,7 @@ export default function HiringSettingsPage() {
             {/* Шапка */}
             <div className="flex items-center gap-2 pt-3 pb-2">
               <Settings className="h-5 w-5 text-violet-600" />
-              <h1 className="text-lg font-semibold">Настройки найма</h1>
+              <h1 className="text-lg font-semibold">Настройки HR</h1>
             </div>
             <p className="text-sm text-muted-foreground mb-4">
               Эти настройки применяются ко всем новым вакансиям при создании.
