@@ -5,9 +5,6 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Input } from "@/components/ui/input"
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select"
 import { Search, Users, UserPlus, Archive, XCircle, Loader2, Star, ChevronDown } from "lucide-react"
 import { useDebounce } from "@/hooks/use-debounce"
 import { Button } from "@/components/ui/button"
@@ -16,7 +13,7 @@ import { cn } from "@/lib/utils"
 import { ListView, type ListSortState } from "@/components/dashboard/list-view"
 import type { CardDisplaySettings } from "@/components/dashboard/card-settings"
 import { CANDIDATE_COLUMN_TOGGLES } from "@/components/dashboard/card-settings"
-import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
+import { CandidateDrawer, type InitialCandidateSnapshot } from "@/components/candidates/candidate-drawer"
 import type { Candidate } from "@/components/dashboard/candidate-card"
 import {
   Popover, PopoverContent, PopoverTrigger,
@@ -29,6 +26,7 @@ import {
 } from "@/components/ui/dialog"
 import { StageMessageControl } from "@/components/candidates/stage-message-control"
 import { getStageLabel } from "@/lib/stages"
+import { CandidateFilters, type FilterState } from "@/components/dashboard/candidate-filters"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -60,24 +58,6 @@ interface GlobalCandidate {
 
 // ─── Константы ────────────────────────────────────────────────────────────────
 
-const STATUS_FILTER = [
-  { value: "all", label: "Все статусы" },
-  { value: "new", label: "Новый" },
-  { value: "demo", label: "На демо" },
-  { value: "scheduled", label: "Интервью назн." },
-  { value: "interviewed", label: "Интервью пройд." },
-  { value: "hired", label: "Принят" },
-  { value: "rejected", label: "Отказ" },
-]
-
-const SOURCE_FILTER = [
-  { value: "all", label: "Все источники" },
-  { value: "hh", label: "hh.ru" },
-  { value: "referral", label: "Реферал" },
-  { value: "manual", label: "Вручную" },
-  { value: "site", label: "Сайт" },
-]
-
 const DEFAULT_SETTINGS: CardDisplaySettings = {
   showSalary: false,
   showSalaryFull: true,
@@ -87,7 +67,8 @@ const DEFAULT_SETTINGS: CardDisplaySettings = {
   showCity: true,
   showExperience: false,
   showSkills: false,
-  showActions: false,
+  // Колонка «Действия» включена по умолчанию — как в таблице внутри вакансии
+  showActions: true,
   showProgress: true,
   showResponseDate: true,
 }
@@ -200,13 +181,29 @@ export default function CandidatesPage() {
   const [total, setTotal] = useState(0)
   const [loadingMore, setLoadingMore] = useState(false)
 
-  // Фильтры
+  // Поисковая строка (отдельно — быстрый debounce)
   const [search, setSearch] = useState("")
   const debouncedSearch = useDebounce(search, 300)
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [vacancyFilter, setVacancyFilter] = useState("all")
-  const [sourceFilter, setSourceFilter] = useState("all")
+
+  // Избранное (кнопка в тулбаре)
   const [favoriteOnly, setFavoriteOnly] = useState(false)
+
+  // Поп-овер фильтров (CandidateFilters)
+  const [filters, setFilters] = useState<FilterState>({
+    searchText: "", cities: [], salaryMin: 0, salaryMax: 250000,
+    scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0,
+    sources: [], workFormats: [],
+    relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20,
+    funnelStatuses: [],
+    // По умолчанию отказы скрыты — аналогично странице вакансии
+    hideRejected: true,
+    hideNoSalary: false, activeNow: false, demoProgress: [],
+    dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65,
+    education: [], languages: [], otherLanguages: [], skills: [], industries: [],
+  })
+
+  // Серверные фасеты (города/источники по всей компании) для поп-овера
+  const [facets, setFacets] = useState<{ cities: { city: string; count: number }[]; sources: { source: string; count: number }[] } | null>(null)
 
   // Сортировка
   const [sort, setSort] = useState<ListSortState | null>({ key: "responseDate", dir: "desc" })
@@ -220,6 +217,8 @@ export default function CandidatesPage() {
   // Drawer
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerCandidateId, setDrawerCandidateId] = useState<string | null>(null)
+  // Снапшот из списка — рендерится в шапке drawer мгновенно до полного fetch
+  const [drawerInitialCandidate, setDrawerInitialCandidate] = useState<InitialCandidateSnapshot | null>(null)
 
   // Диалог смены стадии
   const [stageDialogOpen, setStageDialogOpen] = useState(false)
@@ -231,20 +230,37 @@ export default function CandidatesPage() {
   const [stageMessageText, setStageMessageText] = useState("")
   const [stageDialogLoading, setStageDialogLoading] = useState(false)
 
-  // Список вакансий для фильтра
-  const [allVacancyTitles, setAllVacancyTitles] = useState<string[]>([])
 
   // ─── Серверные фильтры ────────────────────────────────────────────────────
 
   const filterParams = useMemo(() => {
     const ps = new URLSearchParams()
-    if (statusFilter !== "all") ps.set("stage", statusFilter)
-    if (sourceFilter !== "all") ps.set("source", sourceFilter)
+    // Поисковая строка
     if (debouncedSearch.trim()) ps.set("search", debouncedSearch.trim())
-    if (vacancyFilter !== "all") ps.set("vacancyTitle", vacancyFilter)
+    // Избранное
     if (favoriteOnly) ps.set("favorite", "true")
+    // Из FilterState: стадии воронки
+    if (filters.funnelStatuses.length > 0) {
+      ps.set("funnelStatuses", filters.funnelStatuses.join(","))
+    }
+    // Скрыть отказы
+    if (filters.hideRejected) ps.set("hideRejected", "true")
+    // Города (множественный выбор)
+    if (filters.cities.length > 0) ps.set("cities", filters.cities.join(","))
+    // Источники (множественный выбор)
+    if (filters.sources.length > 0) ps.set("sources", filters.sources.join(","))
+    // AI-скор по анкете
+    if (filters.scoreMinAnketa > 0) ps.set("scoreMinAnketa", String(filters.scoreMinAnketa))
+    // AI-скор по резюме
+    if (filters.scoreMinResume > 0) ps.set("scoreMinResume", String(filters.scoreMinResume))
+    // Зарплата
+    if (filters.salaryMin > 0) ps.set("salaryMin", String(filters.salaryMin))
+    if (filters.salaryMax < 250000) ps.set("salaryMax", String(filters.salaryMax))
+    // Диапазон дат
+    if (filters.dateFrom) ps.set("dateFrom", filters.dateFrom)
+    if (filters.dateTo) ps.set("dateTo", filters.dateTo)
     return ps
-  }, [statusFilter, sourceFilter, debouncedSearch, vacancyFilter, favoriteOnly])
+  }, [debouncedSearch, favoriteOnly, filters])
 
   // ─── Загрузка кандидатов ──────────────────────────────────────────────────
 
@@ -298,30 +314,16 @@ export default function CandidatesPage() {
     }
   }
 
-  // ─── Список вакансий для фильтра ─────────────────────────────────────────
+  // ─── Загрузка фасетов (города/источники по всей компании) ───────────────
 
   useEffect(() => {
-    fetch("/api/modules/hr/vacancies")
+    fetch("/api/modules/hr/candidates/facets")
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then((data) => {
-        const list = Array.isArray(data) ? data
-          : Array.isArray(data?.items) ? data.items
-          : Array.isArray(data?.data) ? data.data
-          : []
-        const titles = [...new Set(
-          (list as { title?: string }[]).map(v => v?.title).filter((t): t is string => !!t)
-        )].sort((a, b) => a.localeCompare(b, "ru"))
-        setAllVacancyTitles(titles)
+      .then((data: { data?: { cities?: { city: string; count: number }[]; sources?: { source: string; count: number }[] } }) => {
+        if (data?.data) setFacets(data.data as { cities: { city: string; count: number }[]; sources: { source: string; count: number }[] })
       })
       .catch(() => {})
   }, [])
-
-  const vacancyOptions = useMemo(() => {
-    const titles = allVacancyTitles.length > 0
-      ? allVacancyTitles
-      : [...new Set(candidates.map(c => c.vacancyTitle).filter(Boolean))]
-    return [{ value: "all", label: "Все вакансии" }, ...titles.map(t => ({ value: t, label: t }))]
-  }, [allVacancyTitles, candidates])
 
   // ─── Маппинг в формат ListView ────────────────────────────────────────────
 
@@ -418,9 +420,23 @@ export default function CandidatesPage() {
   // ─── Drawer ───────────────────────────────────────────────────────────────
 
   const handleOpenProfile = useCallback((candidate: Candidate) => {
+    // Находим полную запись в нашем локальном списке, чтобы передать снапшот
+    const gc = candidates.find(c => c.id === candidate.id)
+    setDrawerInitialCandidate(gc ? {
+      id: gc.id,
+      name: gc.name,
+      photoUrl: gc.photoUrl ?? null,
+      stage: gc.stage,
+      vacancyTitle: gc.vacancyTitle,
+      city: gc.city ?? null,
+      source: gc.source ?? null,
+      aiScore: gc.aiScore ?? null,
+      resumeScore: gc.resumeScore ?? null,
+      isFavorite: gc.isFavorite,
+    } : null)
     setDrawerCandidateId(candidate.id)
     setDrawerOpen(true)
-  }, [])
+  }, [candidates])
 
   const handleDrawerStageChange = useCallback((candidateId: string, newStage: string) => {
     setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, stage: newStage } : c))
@@ -450,8 +466,8 @@ export default function CandidatesPage() {
               </div>
             </div>
 
-            {/* Toolbar */}
-            <div className="flex items-center gap-3 mb-4 flex-wrap">
+            {/* Toolbar — поиск + фильтр-поповер + избранные + вид (как в странице вакансии) */}
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
               <div className="relative flex-[2] min-w-[160px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
                 <Input
@@ -461,31 +477,21 @@ export default function CandidatesPage() {
                   className={cn("pl-9", FILTER_INPUT)}
                 />
               </div>
-              <Select value={vacancyFilter} onValueChange={setVacancyFilter}>
-                <SelectTrigger className={cn("flex-1 min-w-[140px]", FILTER_INPUT)}><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {vacancyOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className={cn("flex-1 min-w-[120px]", FILTER_INPUT)}><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {STATUS_FILTER.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Select value={sourceFilter} onValueChange={setSourceFilter}>
-                <SelectTrigger className={cn("flex-1 min-w-[120px]", FILTER_INPUT)}><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {SOURCE_FILTER.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              {/* Поп-овер фильтров — аналогично странице вакансии */}
+              <CandidateFilters
+                filters={filters}
+                onFiltersChange={(f) => { setFilters(f); setPage(1) }}
+                facets={facets}
+                candidates={[]}
+              />
+              {/* Кнопка «Избранные» */}
               <Button
                 type="button"
                 variant={favoriteOnly ? "default" : "outline"}
                 size="sm"
                 onClick={() => setFavoriteOnly((v) => !v)}
                 className={cn(
-                  "h-10 gap-2 shrink-0",
+                  "h-8 gap-2 shrink-0",
                   favoriteOnly && "bg-amber-500 hover:bg-amber-600 text-white border-amber-500",
                 )}
                 aria-pressed={favoriteOnly}
@@ -494,6 +500,7 @@ export default function CandidatesPage() {
                 <Star className={cn("size-4", favoriteOnly && "fill-current")} />
                 <span className="hidden lg:inline">Избранные</span>
               </Button>
+              {/* Тумблеры колонок (Вид) */}
               <ColumnToggles
                 settings={settings}
                 onSettingsChange={setSettings}
@@ -592,14 +599,20 @@ export default function CandidatesPage() {
         </div>
       </SidebarInset>
 
-      {/* Drawer кандидата — тот же, что и внутри вакансии */}
+      {/* Drawer кандидата — тот же, что и внутри вакансии.
+          initialCandidate — снапшот из списка: рисует шапку мгновенно
+          пока идёт полный fetch детальных данных. */}
       <CandidateDrawer
         candidateId={drawerCandidateId}
         open={drawerOpen}
         onOpenChange={(open) => {
           setDrawerOpen(open)
-          if (!open) setDrawerCandidateId(null)
+          if (!open) {
+            setDrawerCandidateId(null)
+            setDrawerInitialCandidate(null)
+          }
         }}
+        initialCandidate={drawerInitialCandidate}
         onToggleFavorite={handleToggleFavorite}
         onStageChange={handleDrawerStageChange}
       />

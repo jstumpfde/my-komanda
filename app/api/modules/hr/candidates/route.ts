@@ -279,6 +279,78 @@ export async function GET(req: NextRequest) {
         listConds.push(eq(candidates.isFavorite, true))
       }
 
+      // ── Расширенные фильтры из FilterState (поп-овер «Фильтр» на /hr/candidates) ──
+
+      // Города (множественный выбор, через запятую)
+      const citiesParam = url.searchParams.get("cities")
+      if (citiesParam) {
+        const cityList = citiesParam.split(",").map(c => c.trim()).filter(Boolean)
+        if (cityList.length === 1) {
+          listConds.push(eq(candidates.city, cityList[0]))
+        } else if (cityList.length > 1) {
+          listConds.push(inArray(candidates.city, cityList))
+        }
+      }
+
+      // Источники (множественный выбор, через запятую)
+      const sourcesParam = url.searchParams.get("sources")
+      if (sourcesParam) {
+        const sourceList = sourcesParam.split(",").map(s => s.trim()).filter(Boolean)
+        if (sourceList.length === 1) {
+          listConds.push(eq(candidates.source, sourceList[0]))
+        } else if (sourceList.length > 1) {
+          listConds.push(inArray(candidates.source, sourceList))
+        }
+      }
+
+      // Стадии воронки (множественный выбор, через запятую) — если задан, stage-param игнорируется
+      const funnelStatusesParam = url.searchParams.get("funnelStatuses")
+      if (funnelStatusesParam && !stageParam) {
+        const stages = funnelStatusesParam.split(",").map(s => s.trim()).filter(Boolean)
+        if (stages.length === 1) {
+          listConds.push(eq(candidates.stage, stages[0]))
+        } else if (stages.length > 1) {
+          listConds.push(inArray(candidates.stage, stages))
+        }
+      }
+
+      // Скрыть отказы (hideRejected=true)
+      if (url.searchParams.get("hideRejected") === "true") {
+        listConds.push(ne(candidates.stage, "rejected"))
+      }
+
+      // Порог AI-скора по анкете (aiScore >= scoreMinAnketa)
+      const scoreMinAnketa = url.searchParams.get("scoreMinAnketa")
+      if (scoreMinAnketa && Number(scoreMinAnketa) > 0) {
+        listConds.push(sql`${candidates.aiScore} >= ${Number(scoreMinAnketa)}`)
+      }
+
+      // Порог AI-скора по резюме (resumeScore >= scoreMinResume)
+      const scoreMinResume = url.searchParams.get("scoreMinResume")
+      if (scoreMinResume && Number(scoreMinResume) > 0) {
+        listConds.push(sql`${candidates.resumeScore} >= ${Number(scoreMinResume)}`)
+      }
+
+      // Зарплатный диапазон (salaryMin/salaryMax из FilterState)
+      const filterSalaryMin = url.searchParams.get("salaryMin")
+      const filterSalaryMax = url.searchParams.get("salaryMax")
+      if (filterSalaryMin && Number(filterSalaryMin) > 0) {
+        listConds.push(sql`(${candidates.salaryMin} >= ${Number(filterSalaryMin)} OR ${candidates.salaryMax} >= ${Number(filterSalaryMin)})`)
+      }
+      if (filterSalaryMax && Number(filterSalaryMax) < 250000) {
+        listConds.push(sql`(${candidates.salaryMin} <= ${Number(filterSalaryMax)} OR ${candidates.salaryMax} <= ${Number(filterSalaryMax)})`)
+      }
+
+      // Диапазон дат создания (dateFrom/dateTo в формате YYYY-MM-DD)
+      const dateFrom = url.searchParams.get("dateFrom")
+      const dateTo   = url.searchParams.get("dateTo")
+      if (dateFrom) {
+        listConds.push(sql`${candidates.createdAt} >= ${dateFrom}::date`)
+      }
+      if (dateTo) {
+        listConds.push(sql`${candidates.createdAt} < (${dateTo}::date + interval '1 day')`)
+      }
+
       const whereExpr = and(
         eq(vacancies.companyId, user.companyId),
         or(isNull(candidates.source), ne(candidates.source, "preview")),

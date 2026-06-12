@@ -531,6 +531,21 @@ function buildTimeline(args: {
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
+/** Краткая сводка кандидата — достаточно чтобы мгновенно отрисовать шапку
+ *  до завершения полного fetch. Передаётся из списка (где данные уже есть). */
+export interface InitialCandidateSnapshot {
+  id: string
+  name: string
+  photoUrl?: string | null
+  stage: string
+  vacancyTitle?: string
+  city?: string | null
+  source?: string | null
+  aiScore?: number | null
+  resumeScore?: number | null
+  isFavorite?: boolean
+}
+
 export interface CandidateDrawerProps {
   candidateId: string | null
   open: boolean
@@ -549,6 +564,11 @@ export interface CandidateDrawerProps {
     aiRequiredHardSkills?: string[] | null
     aiStopFactors?: string[] | null
   } | null
+  /**
+   * Краткая сводка кандидата из списка — показывается в шапке мгновенно,
+   * пока загружаются полные данные. Необязательный, обратная совместимость.
+   */
+  initialCandidate?: InitialCandidateSnapshot | null
 }
 
 // Ищем URL видео-визитки в anketaAnswers. Структура такая же, как
@@ -581,6 +601,7 @@ export function CandidateDrawer({
   onToggleFavorite,
   vacancyPipeline,
   vacancyAnketa,
+  initialCandidate,
 }: CandidateDrawerProps) {
   const [sheetExpanded, setSheetExpanded] = useState(false)
   const [candidate, setCandidate] = useState<ApiCandidate | null>(null)
@@ -1150,12 +1171,44 @@ export function CandidateDrawer({
         </button>
         {/* ── Header ─────────────────────────────────────────────────── */}
         <SheetHeader className="px-6 pt-6 pb-4 border-b border-border shrink-0">
-          {loadingCandidate ? (
+          {/* Если есть снапшот из списка — шапку рисуем сразу, без скелетона.
+              Тяжёлые секции (табы) остаются под скелетоном пока идёт fetch. */}
+          {loadingCandidate && !initialCandidate ? (
             <div className="flex items-center gap-4 animate-pulse">
               <div className="w-12 h-12 rounded-full bg-muted" />
               <div className="flex-1 space-y-2">
                 <div className="h-5 w-40 bg-muted rounded" />
                 <div className="h-3 w-24 bg-muted rounded" />
+              </div>
+            </div>
+          ) : loadingCandidate && initialCandidate ? (
+            /* Мгновенная шапка по снапшоту из списка, пока подгружаются детали */
+            <div className="flex items-start gap-4">
+              <AvatarInitials name={initialCandidate.name} size="md" />
+              <div className="flex-1 min-w-0">
+                <div className="text-base font-semibold leading-tight mb-1 flex items-center gap-2">
+                  <span className="truncate">{initialCandidate.name}</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {initialCandidate.stage && (() => {
+                    const cfg = { label: getStageLabel(initialCandidate.stage, vacancyPipeline), color: getStageColorClasses(initialCandidate.stage, vacancyPipeline) }
+                    return (
+                      <Badge variant="outline" className={cn("text-xs border", cfg.color)}>
+                        {cfg.label}
+                      </Badge>
+                    )
+                  })()}
+                  {initialCandidate.aiScore != null && (
+                    <AiScoreBadge score={initialCandidate.aiScore} onClick={() => {}} />
+                  )}
+                  {/* Мини-спиннер — сигнал что детали ещё грузятся */}
+                  <span className="ml-1 inline-flex items-center gap-1 text-xs text-muted-foreground/60">
+                    <svg className="animate-spin size-3" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                    </svg>
+                  </span>
+                </div>
               </div>
             </div>
           ) : candidate ? (
