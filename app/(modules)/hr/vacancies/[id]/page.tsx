@@ -80,6 +80,7 @@ import { FirstMessagesChainEditor } from "@/components/vacancies/first-messages-
 import { FunnelBuilder } from "@/components/vacancies/funnel-builder"
 import { SpecEditor } from "@/components/vacancies/spec-editor"
 import { FunnelTab } from "@/components/vacancies/funnel-tab"
+import { MessageQueueSection } from "@/components/vacancies/message-queue-section"
 import { parsePipeline, type CompanyStageHhActions, type CompanyStagePalette } from "@/lib/stages"
 import { BrandingOverrideSwitch } from "@/components/vacancies/branding-override-switch"
 import { VacancySettingsProvider, VacancyTabPendingDot, VacancyStickySaveBar, useVacancySectionRegister, useSafeSubTabSwitch, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
@@ -3340,6 +3341,9 @@ export default function VacancyPage() {
                       ? (apiVacancy!.descriptionJson as Record<string, unknown>).miniFormFields as Array<{ id: string; label: string; type: string; required: boolean; placeholder?: string; options?: string[] }>
                       : undefined}
                   />
+
+                  {/* Очередь исходящих сообщений (пауза + очистка) */}
+                  <MessageQueueSection vacancyId={id} />
                 </div>
                 )}
 

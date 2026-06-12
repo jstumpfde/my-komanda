@@ -351,6 +351,7 @@ async function processOneTouch(
       companyId:                  vacancies.companyId,
       title:                      vacancies.title,
       aiChatbotEnabled:           vacancies.aiChatbotEnabled,
+      outboundPaused:             vacancies.outboundPaused,
       scheduleEnabled:            vacancies.scheduleEnabled,
       scheduleStart:              vacancies.scheduleStart,
       scheduleEnd:                vacancies.scheduleEnd,
@@ -365,6 +366,12 @@ async function processOneTouch(
   if (!vacancy) {
     await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "vacancy_missing" }).where(eq(followUpMessages.id, msg.id))
     return { outcome: "cancelled", reason: "vacancy_missing" }
+  }
+
+  // Пауза исходящей очереди: если HR приостановил отправки на вакансии —
+  // оставляем сообщение pending (не отменяем), следующий cron проверит снова.
+  if (vacancy.outboundPaused) {
+    return { outcome: "skipped", reason: "outbound_paused" }
   }
 
   // #15 phase 5/6: если у вакансии включён AI-чат-бот — он сам ведёт диалог,

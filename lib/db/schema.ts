@@ -801,6 +801,10 @@ export const vacancies = pgTable("vacancies", {
   // Дефолт ['hh'] — существующие вакансии работают как раньше.
   // При добавлении 'avito' система начинает принимать входящие из Авито Messenger.
   channelSources:             jsonb("channel_sources").$type<Array<"hh" | "avito">>().notNull().default(["hh"]),
+  // Пауза исходящей очереди сообщений (дожимы/приглашения/тесты).
+  // Когда true — cron follow-up пропускает все pending-сообщения этой вакансии.
+  // HR управляет через секцию «Очередь сообщений» в настройках вакансии.
+  outboundPaused: boolean("outbound_paused").notNull().default(false),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
