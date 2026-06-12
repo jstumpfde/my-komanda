@@ -422,6 +422,9 @@ export function FunnelAutomationSection({
   // ── Диалог переименования пресета ──
   const [renamePresetId, setRenamePresetId] = useState<string | null>(null)
   const [renamePresetName, setRenamePresetName] = useState("")
+  // Последний применённый пресет — для подсветки активной кнопки.
+  // Ключ встроенного («fast»/«standard»/«deep») или id шаблона компании.
+  const [appliedPreset, setAppliedPreset] = useState<string | null>(null)
 
   // ── Режим «обновить пресет» — сохраняем поверх существующего ──
   const [updatePresetId, setUpdatePresetId] = useState<string | null>(null)
@@ -508,6 +511,7 @@ export function FunnelAutomationSection({
     )
     setEnabledStages(enabled)
     setStageOrder(ALL_STAGE_SLUGS)
+    setAppliedPreset(presetKey)
     toast.success(`Пресет «${preset.label}» применён — сохраните чтобы зафиксировать`)
   }
 
@@ -521,6 +525,7 @@ export function FunnelAutomationSection({
       (preset.stageHhActions ?? {}) as Record<string, "invitation" | "discard" | "assessment" | null>
     )
     setStageAvitoActions(preset.stageAvitoActions ?? {})
+    setAppliedPreset(preset.id)
     toast.success(`Шаблон «${preset.name}» применён — сохраните чтобы зафиксировать`)
   }
 
@@ -626,32 +631,75 @@ export function FunnelAutomationSection({
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
               Быстрое применение пресета
             </p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {(Object.entries(FUNNEL_PRESETS) as [string, typeof FUNNEL_PRESETS[keyof typeof FUNNEL_PRESETS]][]).map(
-                ([key, preset]) => (
-                  <Button
-                    key={key}
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() => applyBuiltinPreset(key as "fast" | "standard" | "deep")}
-                  >
-                    {preset.label}
-                  </Button>
-                )
+                ([key, preset]) => {
+                  const isActive = appliedPreset === key
+                  return (
+                    <Button
+                      key={key}
+                      variant={isActive ? "default" : "outline"}
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => applyBuiltinPreset(key as "fast" | "standard" | "deep")}
+                    >
+                      {isActive && <Check className="size-3" />}
+                      {preset.label}
+                    </Button>
+                  )
+                }
               )}
-              {companyPresets.map(preset => (
-                <Button
-                  key={preset.id}
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs border-primary/40 text-primary hover:bg-primary/5"
-                  onClick={() => applyCompanyPreset(preset)}
-                >
-                  <Check className="size-3 mr-1" />
-                  {preset.name}
-                </Button>
-              ))}
+              {/* Шаблоны компании — чип: применить (по клику) + карандаш (переименовать) + удалить.
+                  Активный (последний применённый) подсвечен заливкой. */}
+              {companyPresets.map(preset => {
+                const isActive = appliedPreset === preset.id
+                return (
+                  <div
+                    key={preset.id}
+                    className={cn(
+                      "inline-flex items-center h-7 rounded-md border text-xs transition-colors",
+                      isActive
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-primary/40 text-primary"
+                    )}
+                  >
+                    <button
+                      type="button"
+                      className={cn(
+                        "inline-flex items-center gap-1 pl-2.5 pr-1.5 h-full font-medium rounded-l-md",
+                        !isActive && "hover:bg-primary/5"
+                      )}
+                      onClick={() => applyCompanyPreset(preset)}
+                      title="Применить шаблон"
+                    >
+                      {isActive && <Check className="size-3" />}
+                      {preset.name}
+                    </button>
+                    <button
+                      type="button"
+                      className={cn(
+                        "inline-flex items-center justify-center w-6 h-full",
+                        isActive ? "hover:bg-primary-foreground/15" : "hover:bg-primary/10 text-muted-foreground hover:text-foreground"
+                      )}
+                      onClick={() => { setRenamePresetId(preset.id); setRenamePresetName(preset.name) }}
+                      title="Переименовать"
+                    >
+                      <Pencil className="size-3" />
+                    </button>
+                    <button
+                      type="button"
+                      className={cn(
+                        "inline-flex items-center justify-center w-6 h-full rounded-r-md",
+                        isActive ? "hover:bg-primary-foreground/15" : "hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                      )}
+                      onClick={() => setDeletePresetId(preset.id)}
+                      title="Удалить"
+                    >
+                      <Trash2 className="size-3" />
+                    </button>
+                  </div>
+                )
+              })}
             </div>
           </div>
 
@@ -753,72 +801,9 @@ export function FunnelAutomationSection({
             </p>
           </div>
 
-          {/* Сохранённые шаблоны компании */}
-          {companyPresets.length > 0 && (
-            <div className="rounded-lg border divide-y">
-              <div className="px-3 py-2 bg-muted/30">
-                <p className="text-xs font-medium text-muted-foreground">Сохранённые шаблоны компании</p>
-              </div>
-              {companyPresets.map(preset => (
-                <div key={preset.id} className="flex items-center justify-between px-3 py-2 gap-2">
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium truncate">{preset.name}</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {new Date(preset.createdAt).toLocaleDateString("ru-RU")} ·{" "}
-                      {Object.values(preset.enabledStages).filter(Boolean).length} стадий включено
-                    </p>
-                  </div>
-                  <div className="flex gap-1 shrink-0">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs"
-                      onClick={() => applyCompanyPreset(preset)}
-                    >
-                      Применить
-                    </Button>
-                    {/* Обновить пресет (применить + сохранить поверх) */}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs"
-                      title="Перезаписать шаблон текущими настройками"
-                      onClick={() => {
-                        setUpdatePresetId(preset.id)
-                        setPresetName(preset.name)
-                        setSaveDialogOpen(true)
-                      }}
-                    >
-                      <Save className="size-3" />
-                    </Button>
-                    {/* Переименовать */}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-                      title="Переименовать шаблон"
-                      onClick={() => {
-                        setRenamePresetId(preset.id)
-                        setRenamePresetName(preset.name)
-                      }}
-                    >
-                      <Pencil className="size-3.5" />
-                    </Button>
-                    {/* Удалить */}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                      title="Удалить шаблон"
-                      onClick={() => setDeletePresetId(preset.id)}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          {/* Список «Сохранённые шаблоны компании» убран — управление шаблонами
+              (применить / переименовать / удалить) перенесено на чипы пресетов
+              сверху; ниже остаются «Сохранить как шаблон» и «Сохранить стадии». */}
 
           <div className="flex items-center justify-between gap-2 pt-1">
             <Button

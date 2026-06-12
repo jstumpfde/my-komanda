@@ -14,7 +14,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Video, Building2, ExternalLink, ChevronLeft, ChevronRight, List, CalendarDays, CalendarRange, Clock, Settings, Plus, GripVertical, Pencil, Trash2, Save, X, Bell, BellOff, LayoutGrid, ChevronDown } from "lucide-react"
+import { Video, Building2, ExternalLink, ChevronLeft, ChevronRight, List, CalendarDays, CalendarRange, Clock, Settings, Plus, GripVertical, Pencil, Trash2, Save, X, Bell, BellOff, LayoutGrid } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { CalendarView } from "@/components/calendar/calendar-view"
@@ -160,7 +160,9 @@ function InterviewsPageContent() {
   const router = useRouter()
 
   // Список интервью можно свернуть/развернуть под основным CalendarView
-  const [listOpen, setListOpen] = useState(true)
+  // Верхний переключатель раздела: богатый вид интервью (стадии/канбан/список)
+  // vs полный календарь компании. По умолчанию — «Интервью» (как было до мерджа).
+  const [topTab, setTopTab] = useState<"interviews" | "calendar">("interviews")
 
   const [view, setView] = useState<ViewMode>("list")
   const [interviews, setInterviews] = useState<Interview[]>([])
@@ -407,13 +409,22 @@ function InterviewsPageContent() {
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
 
-          {/* ═══ Основной заголовок ═══ */}
-          <div className="flex items-center px-4 sm:px-14 pt-5 pb-3 border-b">
-            <CalendarDays className="h-5 w-5 text-violet-600 mr-2" />
-            <h1 className="text-lg font-semibold">Интервью</h1>
+          {/* ═══ Основной заголовок + переключатель Интервью/Календарь ═══ */}
+          <div className="flex items-center justify-between gap-3 px-4 sm:px-14 pt-5 pb-3 border-b">
+            <div className="flex items-center">
+              <CalendarDays className="h-5 w-5 text-violet-600 mr-2" />
+              <h1 className="text-lg font-semibold">Интервью</h1>
+            </div>
+            <Tabs value={topTab} onValueChange={(v) => setTopTab(v as "interviews" | "calendar")}>
+              <TabsList>
+                <TabsTrigger value="interviews" className="gap-1.5 text-xs"><List className="w-3.5 h-3.5" />Интервью</TabsTrigger>
+                <TabsTrigger value="calendar" className="gap-1.5 text-xs"><CalendarDays className="w-3.5 h-3.5" />Календарь</TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
 
-          {/* ═══ Главный CalendarView — основной календарь компании ═══ */}
+          {/* ═══ Таб «Календарь» — основной календарь компании ═══ */}
+          {topTab === "calendar" && (
           <Suspense fallback={
             <div className="flex items-center justify-center h-64 text-sm text-muted-foreground">
               Загрузка календаря…
@@ -421,14 +432,13 @@ function InterviewsPageContent() {
           }>
             <CalendarView />
           </Suspense>
+          )}
 
-          {/* ═══ Список интервью по стадиям (сворачиваемый) ═══ */}
-          <div className="border-t bg-background">
-            {/* Заголовок секции — кликабелен для сворачивания */}
-            <div
-              className="flex items-center justify-between px-4 sm:px-14 py-3 cursor-pointer hover:bg-muted/40 transition-colors"
-              onClick={() => setListOpen(v => !v)}
-            >
+          {/* ═══ Таб «Интервью» — стадии/канбан/список ═══ */}
+          {topTab === "interviews" && (
+          <div className="bg-background">
+            {/* Заголовок секции с кнопками «Стадии» и «Запланировать» */}
+            <div className="flex items-center justify-between px-4 sm:px-14 py-3">
               <div className="flex items-center gap-2">
                 <List className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-semibold">Список интервью</span>
@@ -437,17 +447,15 @@ function InterviewsPageContent() {
                 </Badge>
               </div>
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" className="gap-1.5 h-7 text-xs" onClick={e => { e.stopPropagation(); setSettingsOpen(true) }}>
-                  <Settings className="w-3 h-3" /><span className="hidden sm:inline">Стадии</span>
+                <Button variant="outline" size="sm" className="gap-1.5 h-7 text-xs" onClick={() => setSettingsOpen(true)}>
+                  <Settings className="w-3 h-3" /><span className="hidden sm:inline">Настроить стадии</span>
                 </Button>
-                <Button size="sm" className="gap-1.5 h-7 text-xs" onClick={e => { e.stopPropagation(); openCreate() }}>
-                  <Plus className="w-3 h-3" /><span className="hidden sm:inline">Запланировать</span>
+                <Button size="sm" className="gap-1.5 h-7 text-xs" onClick={() => openCreate()}>
+                  <Plus className="w-3 h-3" /><span className="hidden sm:inline">Запланировать интервью</span>
                 </Button>
-                <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", listOpen && "rotate-180")} />
               </div>
             </div>
 
-            {listOpen && (
             <div className="px-4 sm:px-14 pb-6">
               {/* View switcher */}
               <div className="flex items-center gap-2 mb-4">
@@ -719,8 +727,8 @@ function InterviewsPageContent() {
                 </div>
               )}
             </div>
-            )} {/* listOpen */}
-          </div> {/* border-t секция */}
+          </div>
+          )} {/* topTab === interviews */}
 
         </main>
       </SidebarInset>
