@@ -6,6 +6,7 @@ import { db } from "@/lib/db"
 import { candidates, vacancies, demos, hhResponses } from "@/lib/db/schema"
 import { requireCompany, apiError } from "@/lib/api-helpers"
 import { deriveCandidateName } from "@/lib/candidate-name"
+import { pickGivenName } from "@/lib/messaging/candidate-name"
 import { logAudit, ipFromRequest } from "@/lib/audit/log"
 import { DEFAULT_TEST_INVITE_TEXT } from "@/lib/messaging/test-invite"
 
@@ -368,11 +369,13 @@ async function buildXlsx(
     const testSlug = c.shortId ?? c.token
     const testLink = testSlug ? `https://company24.pro/test/${testSlug}` : ""
     // Готовое сообщение: ИМЯ кандидата (не фамилия) + шаблон + ссылка.
-    // hh хранит имя/фамилию раздельно — берём first_name из raw, т.к. в name
-    // формат «Фамилия Имя» и split[0] = ФАМИЛИЯ.
-    const rawName = hh?.raw as ({ resume?: { first_name?: string }; first_name?: string }) | null | undefined
-    const firstNameHh = (rawName?.resume?.first_name ?? rawName?.first_name ?? "").trim()
-    const firstName = firstNameHh || (deriveCandidateName(c.name, c.anketaAnswers, hh?.name ?? null) || "").split(/\s+/)[0] || ""
+    // hh хранит имя/фамилию раздельно, НО кандидат мог вписать их наоборот
+    // (first_name=«Макаренко»). Имя определяет единый резолвер по словарю.
+    const rawName = hh?.raw as ({ resume?: { first_name?: string; last_name?: string }; first_name?: string }) | null | undefined
+    const hhFirst = (rawName?.resume?.first_name ?? rawName?.first_name ?? "").trim()
+    const hhLast  = (rawName?.resume?.last_name ?? "").trim()
+    const fullNm  = deriveCandidateName(c.name, c.anketaAnswers, hh?.name ?? null) || ""
+    const firstName = pickGivenName({ hhFirst, hhLast, fullName: fullNm })
     const personalMessage = inviteTpl
       .replaceAll("{{name}}", firstName)
       .replaceAll("{{vacancy}}", vacTitle || "")

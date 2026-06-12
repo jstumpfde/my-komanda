@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { candidates, vacancies, demos, hhResponses } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { deriveCandidateName } from "@/lib/candidate-name"
+import { pickGivenName } from "@/lib/messaging/candidate-name"
 import { DEFAULT_TEST_INVITE_TEXT } from "@/lib/messaging/test-invite"
 import { nanoid } from "nanoid"
 
@@ -96,29 +97,31 @@ export async function POST(
 
     const hhByCandidate = new Map<
       string,
-      { resumeUrl: string | null; name: string | null; chatId: string | null; firstNameHh: string | null }
+      { resumeUrl: string | null; name: string | null; chatId: string | null; hhFirst: string | null; hhLast: string | null }
     >()
     for (const h of hhRows) {
       if (!h.candidateId || hhByCandidate.has(h.candidateId)) continue
-      const raw = h.rawData as (HhRawDataWithChat & { resume?: { first_name?: string }; first_name?: string }) | null
+      const raw = h.rawData as (HhRawDataWithChat & { resume?: { first_name?: string; last_name?: string }; first_name?: string }) | null
       const chatId = raw?.chat_id != null ? String(raw.chat_id) : null
-      // hh отдаёт имя/фамилию РАЗДЕЛЬНО — берём first_name (имя), т.к. в name
-      // кандидата формат «Фамилия Имя» и split[0] = ФАМИЛИЯ (баг приветствия).
-      const firstNameHh = (raw?.resume?.first_name ?? raw?.first_name ?? "").trim() || null
+      // hh отдаёт имя/фамилию РАЗДЕЛЬНО, НО кандидат мог вписать их наоборот
+      // (first_name=«Макаренко»). Имя определит pickGivenName по словарю — здесь
+      // только сохраняем оба поля.
+      const hhFirst = (raw?.resume?.first_name ?? raw?.first_name ?? "").trim() || null
+      const hhLast  = (raw?.resume?.last_name ?? "").trim() || null
       hhByCandidate.set(h.candidateId, {
         resumeUrl: h.resumeUrl ?? null,
         name: h.candidateName ?? null,
         chatId,
-        firstNameHh,
+        hhFirst,
+        hhLast,
       })
     }
 
     const result = rows.map((c) => {
       const hh = hhByCandidate.get(c.id)
       const fullName = deriveCandidateName(c.name, c.anketaAnswers, hh?.name ?? null)
-      // Приоритет — first_name из hh-резюме (настоящее имя), иначе fallback
-      // на первое слово полного имени.
-      const firstName = hh?.firstNameHh || fullName.split(/\s+/)[0] || ""
+      // Имя через единый резолвер: словарь имён, устойчив к перепутанным полям hh.
+      const firstName = pickGivenName({ hhFirst: hh?.hhFirst, hhLast: hh?.hhLast, fullName })
 
       const testSlug = c.shortId ?? c.token
       const testLink = testSlug ? `https://company24.pro/test/${testSlug}` : ""
