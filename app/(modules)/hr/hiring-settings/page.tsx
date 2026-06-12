@@ -6,12 +6,13 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
-import { Settings, Plug, GitBranch, Clock, ShieldAlert, Wrench, MessageSquare } from "lucide-react"
+import { Settings, Plug, GitBranch, Clock, ShieldAlert, Wrench, MessageSquare, Heart } from "lucide-react"
 import { IntegrationsContent } from "@/components/hr/integrations-content"
 import { SendDelaySettings } from "@/components/company/send-delay-settings"
 import { TrashRetentionSettings } from "@/components/company/trash-retention-settings"
 import { FunnelAutomationSection } from "@/components/hiring-settings/funnel-automation-section"
 import { InterviewSection } from "@/components/hiring-settings/interview-section"
+import { AdaptationSection } from "@/components/hiring-settings/adaptation-section"
 import { StopFactorsSection } from "@/components/hiring-settings/stop-factors-section"
 import { ServiceSection } from "@/components/hiring-settings/service-section"
 import type { CompanyHiringDefaults } from "@/lib/db/schema"
@@ -20,11 +21,12 @@ import type { CompanyHiringDefaults } from "@/lib/db/schema"
 
 const HIRING_DEFAULTS_URL = "/api/modules/hr/company/hiring-defaults"
 
-type TabKey = "funnel" | "interview" | "ai" | "stop-factors" | "service" | "integrations"
+type TabKey = "funnel" | "interview" | "adaptation" | "ai" | "stop-factors" | "service" | "integrations"
 
 const TABS: { value: TabKey; label: string; icon: typeof Settings }[] = [
   { value: "funnel",        label: "Воронка и автоматизация", icon: GitBranch },
   { value: "interview",     label: "Интервью",                icon: Clock },
+  { value: "adaptation",    label: "Адаптация",               icon: Heart },
   { value: "stop-factors",  label: "Стоп-факторы",           icon: ShieldAlert },
   { value: "service",       label: "Служебное",               icon: Wrench },
   { value: "integrations",  label: "Интеграции",              icon: Plug },
@@ -150,6 +152,10 @@ export default function HiringSettingsPage() {
 
               {activeTab === "interview" && (
                 <InterviewSection defaults={defaults} onPatch={onPatch} />
+              )}
+
+              {activeTab === "adaptation" && (
+                <AdaptationSection defaults={defaults} onPatch={onPatch} />
               )}
 
               {activeTab === "stop-factors" && (
