@@ -690,6 +690,22 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
 
           <div className="space-y-1.5">
             <Label className="text-xs">Текст сообщения</Label>
+            {/* Мягкие заготовки в один клик — «видели анкету, спасибо, оценим». */}
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { label: "Мягкое «спасибо»", text: "{{name}}, спасибо! Получили вашу анкету по «{{vacancy}}». В ближайшие дни внимательно изучим и вернёмся к вам с ответом." },
+                { label: "Тепло + следующий шаг", text: "{{name}}, благодарим за заполнение анкеты! Мы её получили и в ближайшие дни оценим. Если всё подойдёт — расскажем, что дальше." },
+              ].map((t) => (
+                <button
+                  key={t.label}
+                  type="button"
+                  onClick={() => setAutoReplyText(t.text)}
+                  className="text-[11px] rounded-full border border-border bg-muted/40 px-2 py-0.5 hover:bg-muted transition-colors"
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
             <textarea
               ref={autoReplyTextareaRef}
               className="w-full border rounded-lg p-2 text-sm resize-none h-20 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
