@@ -198,6 +198,19 @@ function SortableStageRow({
         isEnabled ? "hover:bg-muted/20" : "bg-muted/10 opacity-60",
       )}
     >
+      {/* Drag-handle (порядок — только перетаскиванием) — крайняя левая колонка */}
+      <td className="px-1 py-1.5">
+        <button
+          type="button"
+          className="cursor-grab active:cursor-grabbing p-1 rounded hover:bg-muted text-muted-foreground touch-none"
+          aria-label="Перетащить для изменения порядка"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="size-4" />
+        </button>
+      </td>
+
       {/* Вкл/выкл */}
       <td className="px-2 py-1.5 text-center">
         {isSystem ? (
@@ -209,19 +222,6 @@ function SortableStageRow({
             className="scale-75 origin-center"
           />
         )}
-      </td>
-
-      {/* Drag-handle (порядок — только перетаскиванием) */}
-      <td className="px-1 py-1.5">
-        <button
-          type="button"
-          className="cursor-grab active:cursor-grabbing p-1 rounded hover:bg-muted text-muted-foreground touch-none"
-          aria-label="Перетащить для изменения порядка"
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="size-4" />
-        </button>
       </td>
 
       {/* Цвет — палитра 2 ряда по 6 (перед «Стадией») */}
@@ -597,7 +597,7 @@ export function FunnelAutomationSection({
             Стадии воронки
           </CardTitle>
           <CardDescription>
-            Включите нужные стадии, перетащите или нажмите ↑↓ для порядка, настройте
+            Включите нужные стадии, перетащите для порядка, настройте
             цвет, название и действия на джоб-бордах. Системные стадии выключить
             нельзя. Это дефолт компании — применяется ко всем вакансиям.
           </CardDescription>
@@ -686,11 +686,9 @@ export function FunnelAutomationSection({
             <table className="text-sm">
               <thead>
                 <tr className="border-b bg-muted/40">
+                  <th className="px-1 py-2 text-left text-xs font-medium text-muted-foreground w-[28px]" aria-label="Порядок" />
                   <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[42px]">
                     Вкл
-                  </th>
-                  <th className="px-1 py-2 text-left text-xs font-medium text-muted-foreground w-[44px]">
-                    Порядок
                   </th>
                   <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[40px]">
                     Цвет
