@@ -4,7 +4,8 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
@@ -37,8 +38,10 @@ interface PublishTabProps {
     slogan?: string
   }
   formFields?: MiniFormFieldForHtml[]
-  // Редактируемые буллеты-выгоды над формой (descriptionJson.landingBenefits).
+  // Редактируемые текстовые блоки над формой (descriptionJson.landingBlocks).
+  // benefits — legacy string[] (descriptionJson.landingBenefits) для обратной совместимости.
   vacancyId?: string
+  blocks?: LandingBlock[]
   benefits?: string[]
   descriptionJson?: unknown
   onSaved?: () => void
@@ -61,18 +64,32 @@ function escHtml(str: string): string {
     .replace(/'/g, "&#x27;")
 }
 
-// Дефолтные буллеты-выгоды (если HR ничего не задал) — часть динамическая
-// (доход×1.5 от нижней вилки, город). После ручного редактирования буллеты
-// сохраняются как есть (literal) в descriptionJson.landingBenefits.
-function defaultBenefits(v: { city?: string; salaryFrom?: number }): string[] {
+// Текстовый блок над формой лендинга: иконка (эмодзи) + текст (может быть
+// многострочным). Хранится в descriptionJson.landingBlocks.
+export interface LandingBlock { icon: string; text: string }
+
+// Палитра иконок для блоков.
+export const BLOCK_ICONS = ["✓", "⭐", "🚀", "💰", "📈", "🎯", "🏆", "✅", "💼", "🔥", "⚡", "🎓", "📍", "🤝", "💎", "❤️", "🌟", "📌"]
+
+// Дефолтные блоки (если HR ничего не задал) — часть динамическая (доход×1.5 от
+// нижней вилки, город). После редактирования сохраняются как есть в landingBlocks.
+function defaultBlocks(v: { city?: string; salaryFrom?: number }): LandingBlock[] {
   return [
-    v.salaryFrom
+    { icon: "💰", text: v.salaryFrom
       ? `Доход от ${Math.round(v.salaryFrom * 1.5).toLocaleString("ru-RU")} ₽ через 3 месяца`
-      : "Доход выше среднего по рынку через 3 месяца",
-    "Обучение и наставник с первого дня",
-    "Карьерный рост до руководителя за 6-12 мес.",
-    `Современный офис${v.city ? " в " + v.city : ""}`,
+      : "Доход выше среднего по рынку через 3 месяца" },
+    { icon: "🎓", text: "Обучение и наставник с первого дня" },
+    { icon: "📈", text: "Карьерный рост до руководителя за 6-12 мес." },
+    { icon: "📍", text: `Современный офис${v.city ? " в " + v.city : ""}` },
   ]
+}
+
+// Нормализация входа: новые landingBlocks, либо legacy landingBenefits (string[]),
+// либо дефолт.
+function resolveBlocks(blocks: LandingBlock[] | undefined, benefits: string[] | undefined, v: { city?: string; salaryFrom?: number }): LandingBlock[] {
+  if (blocks && blocks.length > 0) return blocks.map(b => ({ icon: b.icon || "✓", text: b.text ?? "" }))
+  if (benefits && benefits.length > 0) return benefits.map(text => ({ icon: "✓", text }))
+  return defaultBlocks(v)
 }
 
 function generateFullPageHtml(
@@ -80,7 +97,7 @@ function generateFullPageHtml(
   vacancy: { title: string; slug: string; city?: string; salaryFrom?: number; salaryTo?: number },
   override?: BrandOverride,
   formFields?: MiniFormFieldForHtml[],
-  benefits?: string[],
+  blocks?: LandingBlock[],
 ): string {
   const primary = override?.color || brand.primaryColor || "#3b82f6"
   const bg = override?.color ? override.color + "10" : brand.bgColor
@@ -134,10 +151,9 @@ h1{font-size:28px;font-weight:800;color:${text};margin-bottom:8px;line-height:1.
 <h1>${vacancy.title}</h1>
 ${slogan ? `<p class="slogan">${slogan}</p>\n` : ""}<p class="meta">${vacancy.city || ""}${salary ? " · " + salary : ""}</p>
 <div class="highlights">
-${(benefits && benefits.length > 0 ? benefits : defaultBenefits(vacancy))
-  .map(b => b.trim())
-  .filter(Boolean)
-  .map(b => `<div class="highlight"><span class="check">✓</span>${escHtml(b)}</div>`)
+${(blocks && blocks.length > 0 ? blocks : defaultBlocks(vacancy))
+  .filter(b => (b.text ?? "").trim())
+  .map(b => `<div class="highlight"><span class="check">${escHtml(b.icon || "✓")}</span><span>${escHtml(b.text.trim()).replace(/\n/g, "<br>")}</span></div>`)
   .join("\n")}
 </div>
 <div class="form-card">
@@ -208,24 +224,22 @@ const CMS_INSTRUCTIONS: { id: string; name: string; steps: string[] }[] = [
   ]},
 ]
 
-export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom, salaryTo, brandOverride, formFields, vacancyId, benefits, descriptionJson, onSaved }: PublishTabProps) {
+export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom, salaryTo, brandOverride, formFields, vacancyId, blocks, benefits, descriptionJson, onSaved }: PublishTabProps) {
   const [brand, setBrand] = useState<BrandConfig | null>(null)
   const [copied, setCopied] = useState(false)
   const [activeInstruction, setActiveInstruction] = useState<string | null>(null)
 
-  // Редактируемые буллеты-выгоды. Если HR ещё ничего не сохранял —
-  // подставляем дефолтные (динамические по зарплате/городу).
-  const [benefitList, setBenefitList] = useState<string[]>(
-    benefits && benefits.length > 0 ? benefits : defaultBenefits({ city: vacancyCity, salaryFrom }),
+  // Текстовые блоки над формой. Если HR ещё ничего не сохранял — дефолтные
+  // (динамические по зарплате/городу). Поддерживаем legacy landingBenefits.
+  const [blockList, setBlockList] = useState<LandingBlock[]>(
+    resolveBlocks(blocks, benefits, { city: vacancyCity, salaryFrom }),
   )
-  const [savingBenefits, setSavingBenefits] = useState(false)
+  const [savingBlocks, setSavingBlocks] = useState(false)
 
-  // Подхватываем буллеты при загрузке/смене вакансии (родитель догружает async).
+  // Подхватываем блоки при загрузке/смене вакансии (родитель догружает async).
   useEffect(() => {
-    setBenefitList(
-      benefits && benefits.length > 0 ? benefits : defaultBenefits({ city: vacancyCity, salaryFrom }),
-    )
-  }, [benefits, vacancyCity, salaryFrom])
+    setBlockList(resolveBlocks(blocks, benefits, { city: vacancyCity, salaryFrom }))
+  }, [blocks, benefits, vacancyCity, salaryFrom])
 
   useEffect(() => {
     const base = { ...getBrand() }
@@ -237,34 +251,37 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
     setBrand(base)
   }, [brandOverride])
 
-  // Буллеты для генерации HTML — только непустые.
-  const cleanBenefits = benefitList.map(b => b.trim()).filter(Boolean)
+  // Блоки для генерации HTML — только с непустым текстом.
+  const cleanBlocks = blockList
+    .map(b => ({ icon: b.icon || "✓", text: b.text.trim() }))
+    .filter(b => b.text)
 
-  const handleSaveBenefits = async () => {
+  const handleSaveBlocks = async () => {
     if (!vacancyId) return
-    setSavingBenefits(true)
+    setSavingBlocks(true)
     try {
       const currentJson = descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null
         ? (descriptionJson as Record<string, unknown>)
         : {}
+      // Сохраняем landingBlocks; legacy landingBenefits чистим (источник — blocks).
       const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description_json: { ...currentJson, landingBenefits: cleanBenefits } }),
+        body: JSON.stringify({ description_json: { ...currentJson, landingBlocks: cleanBlocks, landingBenefits: [] } }),
       })
       if (!res.ok) throw new Error()
-      toast.success("Выгоды сохранены")
+      toast.success("Блоки сохранены")
       onSaved?.()
     } catch {
-      toast.error("Не удалось сохранить выгоды")
+      toast.error("Не удалось сохранить")
     } finally {
-      setSavingBenefits(false)
+      setSavingBlocks(false)
     }
   }
 
   const handleCopyCode = async () => {
     if (!brand) return
-    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields, cleanBenefits)
+    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields, cleanBlocks)
     await navigator.clipboard.writeText(html)
     setCopied(true)
     toast.success("HTML-код скопирован в буфер обмена")
@@ -273,7 +290,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
 
   const handlePreview = () => {
     if (!brand) return
-    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields, cleanBenefits)
+    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields, cleanBlocks)
     const blob = new Blob([html], { type: "text/html" })
     const url = URL.createObjectURL(blob)
     window.open(url, "_blank")
@@ -282,7 +299,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
 
   const handleDownload = () => {
     if (!brand) return
-    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields, cleanBenefits)
+    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields, cleanBlocks)
     const blob = new Blob([html], { type: "text/html" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
@@ -297,37 +314,68 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
 
   return (
     <div className="space-y-6">
-      {/* Редактор буллетов-выгод (показывается над формой на лендинге) */}
+      {/* Редактор текстовых блоков (показываются над формой на лендинге) */}
       {vacancyId && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Sparkles className="w-4 h-4" />
-              Выгоды над формой
+              Текст над формой
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Список галочек-преимуществ, который кандидат видит над формой отклика
-              на лендинге. Отредактируйте под свою вакансию.
+              Текстовые блоки, которые кандидат видит над формой отклика на лендинге.
+              У каждого блока можно выбрать иконку. Отредактируйте под свою вакансию.
             </p>
-            <div className="space-y-2">
-              {benefitList.map((b, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <Check className="w-4 h-4 shrink-0 text-primary" />
-                  <Input
-                    value={b}
-                    onChange={(e) => setBenefitList(prev => prev.map((x, j) => j === i ? e.target.value : x))}
-                    placeholder="Преимущество вакансии"
-                    className="h-9 text-sm"
+            <div className="space-y-2.5">
+              {blockList.map((b, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  {/* Выбор иконки */}
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-9 w-9 shrink-0 p-0 text-lg leading-none"
+                        title="Выбрать иконку"
+                      >
+                        {b.icon || "✓"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-56 p-2" align="start">
+                      <div className="grid grid-cols-6 gap-1">
+                        {BLOCK_ICONS.map(ic => (
+                          <button
+                            key={ic}
+                            type="button"
+                            className={cn(
+                              "h-8 w-8 rounded-md text-lg leading-none hover:bg-muted transition-colors",
+                              b.icon === ic && "bg-primary/10 ring-1 ring-primary",
+                            )}
+                            onClick={() => setBlockList(prev => prev.map((x, j) => j === i ? { ...x, icon: ic } : x))}
+                          >
+                            {ic}
+                          </button>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                  {/* Текст блока (многострочный) */}
+                  <Textarea
+                    value={b.text}
+                    onChange={(e) => setBlockList(prev => prev.map((x, j) => j === i ? { ...x, text: e.target.value } : x))}
+                    placeholder="Текст блока"
+                    rows={1}
+                    className="min-h-9 text-sm resize-y"
                   />
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
                     className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
-                    onClick={() => setBenefitList(prev => prev.filter((_, j) => j !== i))}
-                    title="Удалить"
+                    onClick={() => setBlockList(prev => prev.filter((_, j) => j !== i))}
+                    title="Удалить блок"
                   >
                     <X className="w-4 h-4" />
                   </Button>
@@ -340,19 +388,19 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
                 variant="outline"
                 size="sm"
                 className="h-8 text-xs gap-1.5"
-                onClick={() => setBenefitList(prev => [...prev, ""])}
+                onClick={() => setBlockList(prev => [...prev, { icon: "✓", text: "" }])}
               >
-                <Plus className="w-3.5 h-3.5" /> Добавить выгоду
+                <Plus className="w-3.5 h-3.5" /> Добавить текстовый блок
               </Button>
               <Button
                 type="button"
                 size="sm"
                 className="h-8 text-xs gap-1.5"
-                onClick={handleSaveBenefits}
-                disabled={savingBenefits || cleanBenefits.length === 0}
+                onClick={handleSaveBlocks}
+                disabled={savingBlocks || cleanBlocks.length === 0}
               >
                 <Save className="w-3.5 h-3.5" />
-                {savingBenefits ? "Сохранение…" : "Сохранить выгоды"}
+                {savingBlocks ? "Сохранение…" : "Сохранить"}
               </Button>
             </div>
           </CardContent>
@@ -423,13 +471,13 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
                 <p className="text-xs" style={{ color: brand.textColor + "80" }}>
                   {vacancyCity}{salaryFrom ? ` · ${salaryFrom.toLocaleString("ru-RU")} – ${salaryTo?.toLocaleString("ru-RU")} ₽` : ""}
                 </p>
-                {/* Bullets preview */}
-                {cleanBenefits.length > 0 && (
+                {/* Blocks preview */}
+                {cleanBlocks.length > 0 && (
                   <div className="bg-white rounded-lg p-3 text-left space-y-1">
-                    {cleanBenefits.map((b, i) => (
+                    {cleanBlocks.map((b, i) => (
                       <div key={i} className="flex items-start gap-1.5 text-[10px]" style={{ color: brand.textColor }}>
-                        <span className="shrink-0" style={{ color: brand.primaryColor }}>✓</span>
-                        <span className="truncate">{b}</span>
+                        <span className="shrink-0">{b.icon}</span>
+                        <span className="truncate">{b.text}</span>
                       </div>
                     ))}
                   </div>

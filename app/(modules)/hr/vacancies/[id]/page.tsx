@@ -3426,6 +3426,9 @@ export default function VacancyPage() {
                     brandOverride={{ companyName: brandCompanyName, color: brandColor, logo: brandLogo, slogan: brandSlogan }}
                     descriptionJson={apiVacancy?.descriptionJson}
                     onSaved={() => refetchVacancy()}
+                    blocks={Array.isArray((apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.landingBlocks)
+                      ? (apiVacancy!.descriptionJson as Record<string, unknown>).landingBlocks as { icon: string; text: string }[]
+                      : undefined}
                     benefits={Array.isArray((apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.landingBenefits)
                       ? (apiVacancy!.descriptionJson as Record<string, unknown>).landingBenefits as string[]
                       : undefined}
