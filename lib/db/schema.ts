@@ -1274,6 +1274,10 @@ export const candidates = pgTable("candidates", {
   id: uuid("id").primaryKey().defaultRandom(),
   vacancyId: uuid("vacancy_id").references(() => vacancies.id).notNull(),
   name: text("name").notNull(),
+  // Ручная коррекция ИМЕНИ для подстановки {{name}} в сообщения. Когда задано —
+  // имеет высший приоритет над hh/словарём (HR поправил в ревизии очереди, напр.
+  // когда hh-поля перепутаны). NULL = определяем автоматически (pickGivenName).
+  firstNameOverride: text("first_name_override"),
   phone: text("phone"),
   email: text("email"),
   city: text("city"),

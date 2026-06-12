@@ -14,9 +14,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Loader2, PauseCircle, Trash2 } from "lucide-react"
+import { Loader2, PauseCircle, Trash2, ListChecks } from "lucide-react"
 import { toast } from "sonner"
 import { Label } from "@/components/ui/label"
+import { MessageQueueReviewSheet } from "@/components/vacancies/message-queue-review-sheet"
 
 interface QueueData {
   paused: boolean
@@ -56,6 +57,7 @@ export function MessageQueueSection({ vacancyId }: Props) {
   const [pauseLoading, setPauseLoading] = useState(false)
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
   const [clearLoading, setClearLoading] = useState(false)
+  const [reviewOpen, setReviewOpen] = useState(false)
 
   const fetchData = useCallback(async () => {
     try {
@@ -186,9 +188,18 @@ export function MessageQueueSection({ vacancyId }: Props) {
         </div>
       )}
 
-      {/* Кнопка очистки */}
+      {/* Кнопки: просмотр очереди + очистка */}
       {data && totalPending > 0 && (
-        <div className="pt-1">
+        <div className="pt-1 flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => setReviewOpen(true)}
+          >
+            <ListChecks className="w-3.5 h-3.5 mr-1.5" />
+            Просмотреть очередь
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -201,6 +212,14 @@ export function MessageQueueSection({ vacancyId }: Props) {
           </Button>
         </div>
       )}
+
+      {/* Sheet ревизии очереди */}
+      <MessageQueueReviewSheet
+        vacancyId={vacancyId}
+        open={reviewOpen}
+        onOpenChange={setReviewOpen}
+        onChanged={fetchData}
+      />
 
       {/* Диалог подтверждения очистки */}
       <AlertDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>

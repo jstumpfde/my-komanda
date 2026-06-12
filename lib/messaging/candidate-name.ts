@@ -71,32 +71,80 @@ function word1(s: string): string {
 // имя. Приоритет: hh first_name → hh last_name → слова candidates.name.
 // Если словарь молчит (имя редкое/нерусское) — валидный hh first_name, иначе
 // fallback по ФИО. Возвращает токен с оригинальным регистром либо «Здравствуйте».
-export function pickGivenName(opts: {
+export type NameSource =
+  | "override"      // ручная коррекция HR
+  | "hh_first"      // hh first_name опознан словарём как имя (норма)
+  | "hh_last_swap"  // имя нашлось в hh last_name — поля перепутаны
+  | "fullname"      // имя нашлось в словах candidates.name
+  | "hh_first_raw"  // словарь молчит, взяли hh first_name как есть (МОЖЕТ быть фамилией)
+  | "neutral"       // имени нет — нейтральное «Здравствуйте»
+
+export interface GivenNameMeta {
+  firstName: string
+  source:    NameSource
+  confident: boolean   // false → стоит проверить глазами (источник ненадёжен)
+}
+
+// Мета-резолвер: имя + ОТКУДА взято + уверенность. Единственный источник правды
+// для определения имени; pickGivenName — тонкая обёртка над ним.
+export function resolveGivenNameMeta(opts: {
+  override?: string | null
   hhFirst?: string | null
   hhLast?:  string | null
   fullName?: string | null
-}): string {
+}): GivenNameMeta {
+  const override = (opts.override ?? "").trim()
+  if (override && isRealName(override)) {
+    return { firstName: word1(override), source: "override", confident: true }
+  }
+
   const hhFirst  = (opts.hhFirst ?? "").trim()
   const hhLast   = (opts.hhLast ?? "").trim()
   const fullName = (opts.fullName ?? "").trim()
   const fullWords = fullName.split(/\s+/).filter(Boolean)
+  const w1f = word1(hhFirst)
+  const w1l = word1(hhLast)
 
-  const ordered = [word1(hhFirst), word1(hhLast), ...fullWords]
-  for (const tok of ordered) {
-    if (tok && isKnownGivenName(tok) && isRealName(tok)) return tok
+  if (w1f && isKnownGivenName(w1f) && isRealName(w1f)) {
+    return { firstName: w1f, source: "hh_first", confident: true }
   }
-  if (hhFirst && isRealName(hhFirst)) return word1(hhFirst)
-  return fallbackFromFullName(fullName)
+  if (w1l && isKnownGivenName(w1l) && isRealName(w1l)) {
+    // Имя опознано в поле «Фамилия» hh — кандидат перепутал поля. Словарь
+    // уверен, но помечаем источник, чтобы HR при желании глянул.
+    return { firstName: w1l, source: "hh_last_swap", confident: true }
+  }
+  for (const w of fullWords) {
+    if (isKnownGivenName(w) && isRealName(w)) {
+      return { firstName: w, source: "fullname", confident: true }
+    }
+  }
+  if (hhFirst && isRealName(hhFirst)) {
+    // Имя не из словаря (редкое/нерусское) — берём hh first_name как есть, но
+    // НЕ уверены: вдруг это фамилия. Такие строки HR стоит проверить.
+    return { firstName: word1(hhFirst), source: "hh_first_raw", confident: false }
+  }
+  return { firstName: fallbackFromFullName(fullName), source: "neutral", confident: false }
+}
+
+// Тонкая обёртка: только имя (для подстановки {{name}}).
+export function pickGivenName(opts: {
+  override?: string | null
+  hhFirst?: string | null
+  hhLast?:  string | null
+  fullName?: string | null
+}): string {
+  return resolveGivenNameMeta(opts).firstName
 }
 
 export async function getCandidateFirstName(candidateId: string): Promise<CandidateFirstName> {
   // 1. candidates.name — источник для fallback.
   const [cand] = await db
-    .select({ name: candidates.name })
+    .select({ name: candidates.name, firstNameOverride: candidates.firstNameOverride })
     .from(candidates)
     .where(eq(candidates.id, candidateId))
     .limit(1)
   const fullName = (cand?.name ?? "").trim()
+  const override = (cand?.firstNameOverride ?? "").trim()
 
   // 2. hh_responses.raw_data->'resume' — first_name И last_name. Кандидат может
   //    иметь несколько откликов — берём первый, где есть имя/фамилия.
@@ -124,10 +172,11 @@ export async function getCandidateFirstName(candidateId: string): Promise<Candid
     console.warn("[candidate-name] hh lookup failed:", err instanceof Error ? err.message : err)
   }
 
-  // 3. Единый чистый резолвер (словарь имён, устойчив к перепутанным полям hh).
-  const firstName = pickGivenName({ hhFirst: hhFirstName, hhLast: hhLastName, fullName })
-  // fallback=true только если имя по словарю/hh не нашли и ушли в нейтральное.
+  // 3. Единый чистый резолвер (override HR → словарь имён, устойчив к перепутанным полям hh).
+  const firstName = pickGivenName({ override, hhFirst: hhFirstName, hhLast: hhLastName, fullName })
+  // Ручная коррекция или опознанное имя — это НЕ fallback.
   const recognized =
+    (!!override && isRealName(override)) ||
     isKnownGivenName(firstName) || (!!hhFirstName && isRealName(hhFirstName) && firstName === word1(hhFirstName))
   if (!recognized) {
     console.log("[candidate-name] fallback used", { candidateId, name: fullName })
