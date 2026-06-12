@@ -102,8 +102,8 @@ export function BulkActionsBar({ count, stages, onClear, onAction, allRejected =
       <div
         className={cn(
           "fixed bottom-4 left-1/2 -translate-x-1/2 z-40",
-          "w-[calc(100%-2rem)] max-w-4xl",
-          "flex items-center gap-2 px-3 py-2.5",
+          "w-[calc(100%-2rem)] max-w-5xl",
+          "flex items-center gap-3 px-3 py-2.5",
           "rounded-xl border border-border shadow-lg",
           "bg-background/85 backdrop-blur-sm supports-[backdrop-filter]:bg-background/70",
         )}
@@ -127,13 +127,10 @@ export function BulkActionsBar({ count, stages, onClear, onAction, allRejected =
           </Button>
         </div>
 
-        <div className="flex-1" />
-
-        {/* Right: actions. Если все выделенные в 'rejected' — показываем
-            только «Вернуть в воронку» (отдельный bulk-restore флоу),
-            обычный набор действий скрываем (отказать/пригласить/... нет
-            смысла на уже отказанных). */}
-        <div className="flex items-center gap-1.5 flex-nowrap justify-end">
+        {/* Actions. Если все выделенные в 'rejected' — показываем только
+            «Вернуть в воронку», обычный набор скрываем. flex-wrap, чтобы кнопки
+            переносились, а не вылезали за бар (и не заезжали под виджет Нэнси). */}
+        <div className="flex flex-1 items-center gap-1.5 flex-wrap justify-end">
           {trashedView ? (
             <>
               <Button
