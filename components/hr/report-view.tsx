@@ -9,7 +9,7 @@ import { useState } from "react"
 import type { DateRange } from "react-day-picker"
 import {
   Briefcase, Users, CalendarDays, CheckCircle2, XCircle,
-  TrendingUp, BarChart3, Phone,
+  TrendingUp, BarChart3, Phone, UserCheck,
 } from "lucide-react"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -97,6 +97,7 @@ const KPI_COLORS: Record<string, string> = {
   violet:  "bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 sm:bg-violet-500 sm:text-white dark:sm:bg-violet-500 dark:sm:text-white",
   indigo:  "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 sm:bg-indigo-500 sm:text-white dark:sm:bg-indigo-500 dark:sm:text-white",
   rose:    "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 sm:bg-rose-500 sm:text-white dark:sm:bg-rose-500 dark:sm:text-white",
+  teal:    "bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 sm:bg-teal-500 sm:text-white dark:sm:bg-teal-500 dark:sm:text-white",
 }
 
 function KpiCard({ icon: Icon, label, shortLabel, value, color, tv }: {
@@ -483,7 +484,10 @@ function RejectionsBlock({ rejections, loading, tv }: { rejections: ReportData["
   if (!hasCategories && !hasInitiators && !hasAuto) {
     return <EmptyState text="Данных об отказах нет. Причины фиксируются автоматически (AI, стоп-факторы) и вручную при переводе кандидата в «Отказ»." />
   }
-  const maxCat = Math.max(1, ...rejections.byCategory.map(r => r.count))
+  // «Отказался» = кандидаты, отказавшиеся сами (rejectionInitiator='candidate') —
+  // отдельная строка в «Почему не подошли», помимо причин «мы отказали».
+  const selfRejected = rejections.byInitiator.find(i => i.id === "candidate")?.count ?? 0
+  const maxCat = Math.max(1, ...rejections.byCategory.map(r => r.count), selfRejected)
   const maxAuto = Math.max(1, ...(rejections.automatic ?? []).map(r => r.count))
   const lbl = tv ? "text-sm" : "text-xs"
   const t = tv ? "text-base" : "text-sm"
@@ -511,7 +515,7 @@ function RejectionsBlock({ rejections, loading, tv }: { rejections: ReportData["
         </div>
       )}
 
-      {hasCategories && (
+      {(hasCategories || selfRejected > 0) && (
         <div>
           <p className={`${lbl} font-semibold text-muted-foreground uppercase tracking-wide mb-3`}>Почему не подошли</p>
           <div className="space-y-2">
@@ -526,6 +530,18 @@ function RejectionsBlock({ rejections, loading, tv }: { rejections: ReportData["
                 </div>
               </div>
             ))}
+            {/* Отказался сам — отдельная строка (кандидат сам отказался) */}
+            {selfRejected > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className={lbl}>Отказался <span className="text-muted-foreground">(сам)</span></span>
+                  <span className={`${lbl} font-semibold`}>{selfRejected}</span>
+                </div>
+                <div className={`${tv ? "h-6" : "h-5"} bg-muted/30 rounded-full overflow-hidden`}>
+                  <div className="h-full rounded-full transition-all" style={{ width: `${Math.round((selfRejected / maxCat) * 100)}%`, backgroundColor: COLORS.slate }} />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -718,11 +734,12 @@ export function ReportView({
       )}
 
       {/* KPI */}
-      <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 ${tv ? "gap-4" : "gap-2 sm:gap-3"}`}>
-        <KpiCard icon={Briefcase}    label="Активных вакансий"  shortLabel="Активных"  value={kpi?.activeVacancies ?? "—"}    color="emerald" tv={tv} />
+      <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 ${tv ? "gap-4" : "gap-2 sm:gap-3"}`}>
+        <KpiCard icon={Briefcase}    label="Вакансий"           value={kpi?.activeVacancies ?? "—"}    color="emerald" tv={tv} />
         <KpiCard icon={Users}        label="Откликов всего"     shortLabel="Откликов"  value={kpi?.totalCandidates ?? "—"}    color="blue"    tv={tv} />
-        <KpiCard icon={CalendarDays} label="Назначено интервью" shortLabel="Назначено" value={kpi?.interviewScheduled ?? "—"} color="violet"  tv={tv} />
-        <KpiCard icon={CheckCircle2} label="Проведено интервью" shortLabel="Проведено" value={kpi?.interviewConducted ?? "—"} color="indigo"  tv={tv} />
+        <KpiCard icon={CalendarDays} label="Назначено инт."     shortLabel="Назначено" value={kpi?.interviewScheduled ?? "—"} color="violet"  tv={tv} />
+        <KpiCard icon={CheckCircle2} label="Проведено инт."     shortLabel="Проведено" value={kpi?.interviewConducted ?? "—"} color="indigo"  tv={tv} />
+        <KpiCard icon={UserCheck}    label="Нанято"             value={kpi?.totalHired ?? "—"}         color="teal"    tv={tv} />
         <KpiCard icon={XCircle}      label="Отказов"            value={kpi?.totalRejected ?? "—"}      color="rose"    tv={tv} />
       </div>
 
