@@ -28,6 +28,7 @@ import { hhResponses, candidates, followUpMessages, hhCandidates, vacancies } fr
 import { getValidToken } from "@/lib/hh-helpers"
 import { classifyCandidateResponse } from "@/lib/ai/classify-candidate-response"
 import { processChatbotMessage } from "@/lib/ai/chatbot-processor"
+import { executeFunnelAction } from "@/lib/ai/funnel-execute"
 import { isBlockEnabled } from "@/lib/funnel-builder/runtime"
 import { saveCandidatePhoto } from "@/lib/hh/save-candidate-photo"
 import { extractHhResumeFields } from "@/lib/hh/extract-resume-fields"
@@ -493,6 +494,18 @@ export async function scanIncomingMessages(opts: {
               }
               const ok = await sendFarewell(accessToken, resp.hhResponseId, cb.reply)
               console.info(`[scan-incoming] ${candidateId} ai_chatbot_sent ok=${ok} cat=${cb.category} conf=${cb.confidence?.toFixed(2)} text="${preview}"`)
+
+              // Фаза 2b «бот ведёт» (СПЯЩАЯ): если HR включил autonomy.* у вакансии
+              // и движок уверенно рекомендует шаг воронки — исполняем. По умолчанию
+              // autonomy выключена → funnelDecision="none" → сюда не входим.
+              if (
+                cb.funnelDecision &&
+                (cb.funnelDecision.action === "request_anketa" || cb.funnelDecision.action === "send_test") &&
+                cb.funnelDecision.confidence >= 0.75
+              ) {
+                const ex = await executeFunnelAction(cb.funnelDecision.action, { candidateId, vacancyId: candVac.vacancyId })
+                console.info(`[scan-incoming] ${candidateId} funnel-action ${cb.funnelDecision.action} executed=${ex.executed} detail=${ex.detail}`)
+              }
             } else if (cb.action === "escalated") {
               console.info(`[scan-incoming] ${candidateId} ai_chatbot_escalated reason=${cb.escalationReason} cat=${cb.category ?? "-"} text="${preview}"`)
             } else if (cb.action === "rejected") {
