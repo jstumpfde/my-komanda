@@ -1,35 +1,38 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
-import { Search, Users, MoreHorizontal, UserPlus, Archive, XCircle, Loader2, Star, Eye, ChevronDown } from "lucide-react"
+import { Search, Users, UserPlus, Archive, XCircle, Loader2, Star, ChevronDown } from "lucide-react"
 import { useDebounce } from "@/hooks/use-debounce"
+import { Button } from "@/components/ui/button"
+import { toast } from "sonner"
+import { cn } from "@/lib/utils"
+import { ListView, type ListSortState } from "@/components/dashboard/list-view"
+import type { CardDisplaySettings } from "@/components/dashboard/card-settings"
+import { CANDIDATE_COLUMN_TOGGLES } from "@/components/dashboard/card-settings"
+import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
+import type { Candidate } from "@/components/dashboard/candidate-card"
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover"
+import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
+import { Eye, RotateCcw } from "lucide-react"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell, DataSelectHeadCell, DataSelectCell } from "@/components/ui/data-table"
-import Link from "next/link"
-import { toast } from "sonner"
-import { cn } from "@/lib/utils"
-import { getStageLabel, getStageColorClasses } from "@/lib/stages"
 import { StageMessageControl } from "@/components/candidates/stage-message-control"
+import { getStageLabel } from "@/lib/stages"
 
-// ─── Types & constants ───────────────────────────────────────────────────────
+// ─── Types ─────────────────────────────────────────────────────────────────────
 
-interface Candidate {
+interface GlobalCandidate {
   id: string
   name: string
   vacancyId: string
@@ -43,19 +46,19 @@ interface Candidate {
   progressPercent: number | null
   isActive: boolean
   isFavorite: boolean
+  aiScore?: number | null
+  resumeScore?: number | null
+  rubricScore?: number | null
+  testScore?: number | null
+  testStatus?: "submitted" | "in_progress" | "opened" | "sent" | null
+  salaryMin?: number | null
+  salaryMax?: number | null
+  salaryCurrency?: string | null
+  photoUrl?: string | null
+  demoProgressJson?: unknown
 }
 
-// Лейблы и цвета статусов — единый источник правды в lib/stages.ts
-// (getStageLabel / getStageColorClasses), локальные карты убраны (баг A1).
-
-const STATUS_ORDER: Record<string, number> = {
-  new: 0, demo: 1, scheduled: 2, interviewed: 3, interview: 3, decision: 4, offer: 5, hired: 6, rejected: 7, talent_pool: 8,
-}
-
-const SOURCE_LABELS: Record<string, string> = {
-  hh: "hh.ru", avito: "Авито", telegram: "Telegram", site: "Сайт",
-  referral: "Реферал", manual: "Вручную", direct: "Прямой",
-}
+// ─── Константы ────────────────────────────────────────────────────────────────
 
 const STATUS_FILTER = [
   { value: "all", label: "Все статусы" },
@@ -75,62 +78,164 @@ const SOURCE_FILTER = [
   { value: "site", label: "Сайт" },
 ]
 
+const DEFAULT_SETTINGS: CardDisplaySettings = {
+  showSalary: false,
+  showSalaryFull: true,
+  showScore: true,
+  showAge: false,
+  showSource: true,
+  showCity: true,
+  showExperience: false,
+  showSkills: false,
+  showActions: false,
+  showProgress: true,
+  showResponseDate: true,
+}
+
+const PAGE_SIZE = 50
+
 const FILTER_INPUT = "h-10 text-sm border border-input rounded-md"
 
-const AVATAR_COLORS = ["#8b5cf6", "#3b82f6", "#ef4444", "#f59e0b", "#22c55e", "#0ea5e9", "#6b7280", "#ec4899"]
+// ─── Маппинг GlobalCandidate → Candidate (для ListView) ───────────────────────
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return "—"
-  const d = new Date(dateStr)
-  return d.toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })
+function toListCandidate(c: GlobalCandidate): Candidate & { vacancyTitle: string } {
+  return {
+    id: c.id,
+    name: c.name,
+    city: c.city ?? "",
+    salaryMin: c.salaryMin ?? 0,
+    salaryMax: c.salaryMax ?? 0,
+    salaryCurrency: c.salaryCurrency ?? null,
+    score: 50,
+    progress: 0,
+    source: c.source ?? "",
+    experience: "",
+    skills: [],
+    addedAt: new Date(c.createdAt),
+    lastSeen: new Date(c.createdAt),
+    aiScore: c.aiScore ?? undefined,
+    resumeScore: c.resumeScore ?? null,
+    rubricScore: c.rubricScore ?? null,
+    testScore: c.testScore ?? null,
+    testStatus: c.testStatus ?? null,
+    isActive: c.isActive,
+    demoProgressJson: c.demoProgressJson as Candidate["demoProgressJson"],
+    demoTotalBlocks: c.demoTotalBlocks,
+    demoCompletedBlocks: c.demoCompletedBlocks,
+    progressPercent: c.progressPercent,
+    isFavorite: c.isFavorite,
+    createdAt: c.createdAt,
+    stage: c.stage,
+    photoUrl: c.photoUrl ?? null,
+    vacancyTitle: c.vacancyTitle,
+  }
 }
 
-function getInitials(name: string): string {
-  return name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()
-}
+// ─── Компонент тумблеров вид (упрощённый, только колонки, без переключения видов) ──
 
-function avatarColor(id: string): string {
-  let hash = 0
-  for (let i = 0; i < id.length; i++) hash = ((hash << 5) - hash + id.charCodeAt(i)) | 0
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
-}
+function ColumnToggles({
+  settings,
+  onSettingsChange,
+  onReset,
+}: {
+  settings: CardDisplaySettings
+  onSettingsChange: (s: CardDisplaySettings) => void
+  onReset: () => void
+}) {
+  const handleToggle = (key: keyof CardDisplaySettings) => {
+    const next = { ...settings, [key]: settings[key] === false ? undefined : false }
+    if (key === "showSalaryFull" && next.showSalaryFull) next.showSalary = false
+    if (key === "showSalary" && next.showSalary) next.showSalaryFull = false
+    onSettingsChange(next)
+  }
 
-function progressTextClass(percent: number | null, isActive: boolean): string {
-  if (percent === null || percent === 0) return "text-muted-foreground"
-  if (percent === 100) return "text-emerald-500"
-  if (percent >= 71) return "text-blue-500"
-  if (percent >= 31) return "text-amber-600"
-  return cn("text-red-500", isActive && "animate-pulse")
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="h-10 gap-2 shrink-0">
+          <Eye className="size-4" />
+          <span className="hidden sm:inline">Вид</span>
+          <ChevronDown className="size-3.5 opacity-60" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-52 p-3" align="end">
+        <div className="space-y-2">
+          {CANDIDATE_COLUMN_TOGGLES.map(({ key, label }) => {
+            const checked = settings[key] !== false
+            return (
+              <div key={key} className="flex items-center justify-between">
+                <Label className="text-sm font-normal cursor-pointer">{label}</Label>
+                <Switch
+                  checked={checked}
+                  onCheckedChange={() => handleToggle(key)}
+                  className="scale-90"
+                />
+              </div>
+            )
+          })}
+          <div className="pt-1 border-t">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs w-full gap-1.5 text-muted-foreground"
+              onClick={onReset}
+            >
+              <RotateCcw className="size-3" />
+              Сбросить
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
 }
-
-type ColumnSort = { column: string; dir: "asc" | "desc" } | null
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function CandidatesPage() {
-  const router = useRouter()
-  const [candidates, setCandidates] = useState<Candidate[]>([])
+  const [candidates, setCandidates] = useState<GlobalCandidate[]>([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(false)
   const [total, setTotal] = useState(0)
   const [loadingMore, setLoadingMore] = useState(false)
+
+  // Фильтры
   const [search, setSearch] = useState("")
   const debouncedSearch = useDebounce(search, 300)
   const [statusFilter, setStatusFilter] = useState("all")
   const [vacancyFilter, setVacancyFilter] = useState("all")
   const [sourceFilter, setSourceFilter] = useState("all")
   const [favoriteOnly, setFavoriteOnly] = useState(false)
-  const [colSort, setColSort] = useState<ColumnSort>({ column: "date", dir: "desc" })
+
+  // Сортировка
+  const [sort, setSort] = useState<ListSortState | null>({ key: "responseDate", dir: "desc" })
+
+  // Выделение (bulk)
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
-  const PAGE_SIZE = 50
+  // Настройки колонок
+  const [settings, setSettings] = useState<CardDisplaySettings>(DEFAULT_SETTINGS)
 
-  // Серверные фильтры: меняются → сбрасываем на стр.1 и перегружаем.
-  // B6: ВСЕ фильтры серверные (включая «Избранные») — иначе на пагинации
-  // клиентский фильтр видел только загруженную страницу.
+  // Drawer
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [drawerCandidateId, setDrawerCandidateId] = useState<string | null>(null)
+
+  // Диалог смены стадии
+  const [stageDialogOpen, setStageDialogOpen] = useState(false)
+  const [pendingStage, setPendingStage] = useState<string | null>(null)
+  const [pendingCandidateId, setPendingCandidateId] = useState<string | null>(null)
+  const [pendingCandidateName, setPendingCandidateName] = useState<string | null>(null)
+  const [pendingVacancyId, setPendingVacancyId] = useState<string | null>(null)
+  const [sendMessage, setSendMessage] = useState(true)
+  const [stageMessageText, setStageMessageText] = useState("")
+  const [stageDialogLoading, setStageDialogLoading] = useState(false)
+
+  // Список вакансий для фильтра
+  const [allVacancyTitles, setAllVacancyTitles] = useState<string[]>([])
+
+  // ─── Серверные фильтры ────────────────────────────────────────────────────
+
   const filterParams = useMemo(() => {
     const ps = new URLSearchParams()
     if (statusFilter !== "all") ps.set("stage", statusFilter)
@@ -141,6 +246,8 @@ export default function CandidatesPage() {
     return ps
   }, [statusFilter, sourceFilter, debouncedSearch, vacancyFilter, favoriteOnly])
 
+  // ─── Загрузка кандидатов ──────────────────────────────────────────────────
+
   useEffect(() => {
     let cancelled = false
     setLoading(true)
@@ -149,12 +256,13 @@ export default function CandidatesPage() {
     qs.set("pageSize", String(PAGE_SIZE))
     fetch(`/api/modules/hr/candidates?${qs}`)
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then((data: { items?: Candidate[]; total?: number; hasMore?: boolean }) => {
+      .then((data: { items?: GlobalCandidate[]; total?: number; hasMore?: boolean }) => {
         if (cancelled) return
         setCandidates(Array.isArray(data.items) ? data.items : [])
         setTotal(data.total ?? 0)
         setHasMore(!!data.hasMore)
         setPage(1)
+        setSelected(new Set())
       })
       .catch(() => {
         if (!cancelled) {
@@ -177,7 +285,7 @@ export default function CandidatesPage() {
       qs.set("pageSize", String(PAGE_SIZE))
       const res = await fetch(`/api/modules/hr/candidates?${qs}`)
       if (!res.ok) throw new Error()
-      const data = await res.json() as { items?: Candidate[]; total?: number; hasMore?: boolean }
+      const data = await res.json() as { items?: GlobalCandidate[]; total?: number; hasMore?: boolean }
       const items = Array.isArray(data.items) ? data.items : []
       setCandidates(prev => [...prev, ...items])
       setTotal(data.total ?? total)
@@ -190,133 +298,8 @@ export default function CandidatesPage() {
     }
   }
 
-  const [bulkLoading, setBulkLoading] = useState(false)
+  // ─── Список вакансий для фильтра ─────────────────────────────────────────
 
-  // Диалог смены стадии (одиночный и bulk)
-  const [stageDialogOpen, setStageDialogOpen] = useState(false)
-  const [pendingStage, setPendingStage]   = useState<string | null>(null)
-  // null = bulk, string = одиночный candidateId
-  const [pendingCandidateId, setPendingCandidateId]   = useState<string | null>(null)
-  const [pendingCandidateName, setPendingCandidateName] = useState<string | null>(null)
-  // vacancyId нужен для предпросмотра (берём из кандидата при одиночном, null при bulk)
-  const [pendingVacancyId, setPendingVacancyId] = useState<string | null>(null)
-  const [sendMessage, setSendMessage]   = useState(true)
-  const [stageMessageText, setStageMessageText] = useState("")
-  const [stageDialogLoading, setStageDialogLoading] = useState(false)
-
-  // Открыть диалог для одиночного действия
-  const openStageDialog = (candidateId: string, candidateName: string, stage: string, vacancyId: string) => {
-    setPendingCandidateId(candidateId)
-    setPendingCandidateName(candidateName)
-    setPendingStage(stage)
-    setPendingVacancyId(vacancyId)
-    setSendMessage(true)
-    setStageMessageText("")
-    setStageDialogOpen(true)
-  }
-
-  // Открыть диалог для bulk-действия
-  const openBulkStageDialog = (stage: string) => {
-    if (selected.size === 0) return
-    setPendingCandidateId(null)
-    setPendingCandidateName(null)
-    setPendingStage(stage)
-    // При bulk vacancyId может быть разным — передаём null, тумблер покажет общий текст
-    // На практике у большинства HR все выбранные кандидаты в одной вакансии,
-    // но для безопасности берём vacancyId первого выбранного.
-    const firstId = [...selected][0]
-    const firstCandidate = candidates.find(c => c.id === firstId)
-    setPendingVacancyId(firstCandidate?.vacancyId ?? null)
-    setSendMessage(true)
-    setStageMessageText("")
-    setStageDialogOpen(true)
-  }
-
-  // Подтвердить смену стадии из диалога
-  const confirmStageChange = async () => {
-    if (!pendingStage) return
-    const override = stageMessageText.trim() || null
-    setStageDialogLoading(true)
-    try {
-      if (pendingCandidateId) {
-        // Одиночный
-        const res = await fetch(`/api/modules/hr/candidates/${pendingCandidateId}/stage`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            stage: pendingStage,
-            sendMessage,
-            ...(override ? { messageOverride: override } : {}),
-          }),
-        })
-        if (!res.ok) throw new Error()
-        setCandidates(prev => prev.map(c => c.id === pendingCandidateId ? { ...c, stage: pendingStage } : c))
-        toast.success(`${pendingCandidateName ?? "Кандидат"}: ${getStageLabel(pendingStage)}`)
-      } else {
-        // Bulk
-        const ids = [...selected]
-        await Promise.all(ids.map(id =>
-          fetch(`/api/modules/hr/candidates/${id}/stage`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              stage: pendingStage,
-              sendMessage,
-              ...(override ? { messageOverride: override } : {}),
-            }),
-          })
-        ))
-        setCandidates(prev => prev.map(c => selected.has(c.id) ? { ...c, stage: pendingStage } : c))
-        setSelected(new Set())
-        toast.success(`${ids.length} кандидатов: ${getStageLabel(pendingStage)}`)
-      }
-      setStageDialogOpen(false)
-      setPendingStage(null)
-      setPendingCandidateId(null)
-    } catch {
-      toast.error("Ошибка смены этапа")
-    } finally {
-      setStageDialogLoading(false)
-    }
-  }
-
-  // Обёртки для совместимости с существующими вызовами
-  const changeStage = (candidateId: string, stage: string, candidateName: string) => {
-    const c = candidates.find(x => x.id === candidateId)
-    openStageDialog(candidateId, candidateName, stage, c?.vacancyId ?? "")
-  }
-
-  const bulkChangeStage = (stage: string) => openBulkStageDialog(stage)
-
-  async function toggleFavorite(id: string) {
-    const target = candidates.find(c => c.id === id)
-    const next = !(target?.isFavorite ?? false)
-    setCandidates(prev => prev.map(c => c.id === id ? { ...c, isFavorite: next } : c))
-    try {
-      const res = await fetch(`/api/modules/hr/candidates/${id}/favorite`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isFavorite: next }),
-      })
-      if (!res.ok) throw new Error()
-    } catch {
-      setCandidates(prev => prev.map(c => c.id === id ? { ...c, isFavorite: !next } : c))
-      toast.error("Не удалось обновить избранное")
-    }
-  }
-
-  const toggleColSort = (column: string) => {
-    setColSort((prev) => {
-      if (prev?.column !== column) return { column, dir: "asc" }
-      if (prev.dir === "asc") return { column, dir: "desc" }
-      return null
-    })
-  }
-
-  // Полный список вакансий компании для выпадашки (раньше строился только из
-  // загруженной страницы кандидатов → для больших тенантов был неполным, и
-  // нужную вакансию нельзя было выбрать — часть B6).
-  const [allVacancyTitles, setAllVacancyTitles] = useState<string[]>([])
   useEffect(() => {
     fetch("/api/modules/hr/vacancies")
       .then(r => r.ok ? r.json() : Promise.reject())
@@ -340,24 +323,110 @@ export default function CandidatesPage() {
     return [{ value: "all", label: "Все вакансии" }, ...titles.map(t => ({ value: t, label: t }))]
   }, [allVacancyTitles, candidates])
 
-  // Фильтрация — серверная (filterParams). Здесь только клиентская сортировка
-  // уже загруженных строк (B6: убрали клиентские фильтры, ломавшие пагинацию).
-  const filtered = useMemo(() => {
-    return [...candidates].sort((a, b) => {
-      if (!colSort) return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      const mul = colSort.dir === "asc" ? 1 : -1
-      if (colSort.column === "status") return mul * ((STATUS_ORDER[a.stage] ?? 9) - (STATUS_ORDER[b.stage] ?? 9))
-      if (colSort.column === "date") return mul * (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-      if (colSort.column === "source") return mul * (a.source ?? "").localeCompare(b.source ?? "", "ru")
-      if (colSort.column === "progress") return mul * ((a.progressPercent ?? -1) - (b.progressPercent ?? -1))
-      if (colSort.column === "blocks") return mul * (a.demoCompletedBlocks - b.demoCompletedBlocks)
-      return 0
-    })
-  }, [candidates, colSort])
+  // ─── Маппинг в формат ListView ────────────────────────────────────────────
 
-  const allSelected = filtered.length > 0 && filtered.every((c) => selected.has(c.id))
-  const toggleOne = (id: string) => { setSelected((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n }) }
-  const toggleAll = () => { allSelected ? setSelected(new Set()) : setSelected(new Set(filtered.map((c) => c.id))) }
+  // ListView принимает columns[] с candidates[]. Упаковываем всех в одну
+  // синтетическую колонку (как в vacancy page в paginated-режиме).
+  const listColumns = useMemo(() => {
+    const items = candidates.map(c => toListCandidate(c))
+    return [{
+      id: "all",
+      title: "Кандидаты",
+      colorFrom: "#a78bfa",
+      colorTo: "#c084fc",
+      candidates: items,
+    }]
+  }, [candidates])
+
+  // ─── Действия ─────────────────────────────────────────────────────────────
+
+  const handleToggleFavorite = useCallback(async (candidateId: string, isFavorite: boolean) => {
+    setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, isFavorite } : c))
+    try {
+      const res = await fetch(`/api/modules/hr/candidates/${candidateId}/favorite`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isFavorite }),
+      })
+      if (!res.ok) throw new Error()
+    } catch {
+      setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, isFavorite: !isFavorite } : c))
+      toast.error("Не удалось обновить избранное")
+    }
+  }, [])
+
+  const openStageDialog = (candidateId: string, candidateName: string, stage: string, vacancyId: string) => {
+    setPendingCandidateId(candidateId)
+    setPendingCandidateName(candidateName)
+    setPendingStage(stage)
+    setPendingVacancyId(vacancyId)
+    setSendMessage(true)
+    setStageMessageText("")
+    setStageDialogOpen(true)
+  }
+
+  const openBulkStageDialog = (stage: string) => {
+    if (selected.size === 0) return
+    setPendingCandidateId(null)
+    setPendingCandidateName(null)
+    setPendingStage(stage)
+    const firstId = [...selected][0]
+    const firstCandidate = candidates.find(c => c.id === firstId)
+    setPendingVacancyId(firstCandidate?.vacancyId ?? null)
+    setSendMessage(true)
+    setStageMessageText("")
+    setStageDialogOpen(true)
+  }
+
+  const confirmStageChange = async () => {
+    if (!pendingStage) return
+    const override = stageMessageText.trim() || null
+    setStageDialogLoading(true)
+    try {
+      if (pendingCandidateId) {
+        const res = await fetch(`/api/modules/hr/candidates/${pendingCandidateId}/stage`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ stage: pendingStage, sendMessage, ...(override ? { messageOverride: override } : {}) }),
+        })
+        if (!res.ok) throw new Error()
+        setCandidates(prev => prev.map(c => c.id === pendingCandidateId ? { ...c, stage: pendingStage } : c))
+        toast.success(`${pendingCandidateName ?? "Кандидат"}: ${getStageLabel(pendingStage)}`)
+      } else {
+        const ids = [...selected]
+        await Promise.all(ids.map(id =>
+          fetch(`/api/modules/hr/candidates/${id}/stage`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ stage: pendingStage, sendMessage, ...(override ? { messageOverride: override } : {}) }),
+          })
+        ))
+        setCandidates(prev => prev.map(c => selected.has(c.id) ? { ...c, stage: pendingStage } : c))
+        setSelected(new Set())
+        toast.success(`${ids.length} кандидатов: ${getStageLabel(pendingStage)}`)
+      }
+      setStageDialogOpen(false)
+      setPendingStage(null)
+      setPendingCandidateId(null)
+    } catch {
+      toast.error("Ошибка смены этапа")
+    } finally {
+      setStageDialogLoading(false)
+    }
+  }
+
+  // ─── Drawer ───────────────────────────────────────────────────────────────
+
+  const handleOpenProfile = useCallback((candidate: Candidate) => {
+    setDrawerCandidateId(candidate.id)
+    setDrawerOpen(true)
+  }, [])
+
+  const handleDrawerStageChange = useCallback((candidateId: string, newStage: string) => {
+    setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, stage: newStage } : c))
+  }, [])
+
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
     <SidebarProvider defaultOpen={true}>
@@ -374,33 +443,38 @@ export default function CandidatesPage() {
                   <h1 className="text-lg font-semibold text-foreground">Кандидаты</h1>
                 </div>
                 <p className="text-sm text-muted-foreground mt-0.5">
-                  {filtered.length} из {candidates.length}
-                  {total > candidates.length ? ` (всего ${total})` : ""} кандидатов
+                  {candidates.length > 0 && total > candidates.length
+                    ? `${candidates.length} из ${total} кандидатов`
+                    : `${candidates.length} кандидатов`}
                 </p>
               </div>
             </div>
 
             {/* Toolbar */}
-            <div className="flex items-center gap-3 mb-4">
-              <div className="relative flex-[2] min-w-0">
+            <div className="flex items-center gap-3 mb-4 flex-wrap">
+              <div className="relative flex-[2] min-w-[160px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
-                <Input placeholder="Поиск по фамилии..." value={search} onChange={(e) => setSearch(e.target.value)}
-                  className={cn("pl-9", FILTER_INPUT)} />
+                <Input
+                  placeholder="Поиск по имени..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className={cn("pl-9", FILTER_INPUT)}
+                />
               </div>
               <Select value={vacancyFilter} onValueChange={setVacancyFilter}>
-                <SelectTrigger className={cn("flex-1 min-w-0", FILTER_INPUT)}><SelectValue /></SelectTrigger>
+                <SelectTrigger className={cn("flex-1 min-w-[140px]", FILTER_INPUT)}><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {vacancyOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className={cn("flex-1 min-w-0", FILTER_INPUT)}><SelectValue /></SelectTrigger>
+                <SelectTrigger className={cn("flex-1 min-w-[120px]", FILTER_INPUT)}><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {STATUS_FILTER.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                 </SelectContent>
               </Select>
               <Select value={sourceFilter} onValueChange={setSourceFilter}>
-                <SelectTrigger className={cn("flex-1 min-w-0", FILTER_INPUT)}><SelectValue /></SelectTrigger>
+                <SelectTrigger className={cn("flex-1 min-w-[120px]", FILTER_INPUT)}><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {SOURCE_FILTER.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                 </SelectContent>
@@ -420,22 +494,31 @@ export default function CandidatesPage() {
                 <Star className={cn("size-4", favoriteOnly && "fill-current")} />
                 <span className="hidden lg:inline">Избранные</span>
               </Button>
+              <ColumnToggles
+                settings={settings}
+                onSettingsChange={setSettings}
+                onReset={() => setSettings(DEFAULT_SETTINGS)}
+              />
             </div>
 
+            {/* Bulk bar */}
             {selected.size > 0 && (
               <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-primary/5 border border-primary/20">
                 <span className="text-sm font-medium text-primary mr-1">Выбрано: {selected.size}</span>
-                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" disabled={bulkLoading} onClick={() => bulkChangeStage("scheduled")}>
+                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => openBulkStageDialog("scheduled")}>
                   <UserPlus className="size-3.5" />На интервью
                 </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" disabled={bulkLoading} onClick={() => bulkChangeStage("talent_pool")}>
+                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => openBulkStageDialog("talent_pool")}>
                   <Archive className="size-3.5" />В резерв
                 </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-destructive hover:text-destructive" disabled={bulkLoading} onClick={() => bulkChangeStage("rejected")}>
+                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-destructive hover:text-destructive" onClick={() => openBulkStageDialog("rejected")}>
                   <XCircle className="size-3.5" />Отказать
                 </Button>
-                {bulkLoading && <Loader2 className="size-4 animate-spin text-muted-foreground ml-1" />}
-                <button type="button" className="ml-auto text-xs text-muted-foreground hover:text-foreground transition-colors" onClick={() => setSelected(new Set())}>
+                <button
+                  type="button"
+                  className="ml-auto text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setSelected(new Set())}
+                >
                   Снять выделение
                 </button>
               </div>
@@ -449,117 +532,44 @@ export default function CandidatesPage() {
             )}
 
             {/* Empty */}
-            {!loading && filtered.length === 0 && (
+            {!loading && candidates.length === 0 && (
               <div className="flex flex-col items-center justify-center py-20 text-center">
                 <Users className="size-12 text-muted-foreground/30 mb-4" />
-                <p className="text-muted-foreground font-medium">
-                  {candidates.length === 0 ? "Нет кандидатов" : "Кандидатов не найдено"}
-                </p>
+                <p className="text-muted-foreground font-medium">Нет кандидатов</p>
                 <p className="text-sm text-muted-foreground/60 mt-1">
-                  {candidates.length === 0 ? "Кандидаты появятся после первого отклика" : "Попробуйте изменить фильтры"}
+                  {total === 0 ? "Кандидаты появятся после первого отклика" : "Попробуйте изменить фильтры"}
                 </p>
               </div>
             )}
 
-            {/* Table */}
-            {!loading && filtered.length > 0 && (
-              <TableCard>
-                <DataTable className="text-left">
-                  <DataHead>
-                    <DataSelectHeadCell checked={allSelected} onCheckedChange={toggleAll} />
-                    <DataHeadCell width="40px" className="px-2"> </DataHeadCell>
-                    <DataHeadCell>ФИО</DataHeadCell>
-                    <DataHeadCell>Вакансия</DataHeadCell>
-                    <DataHeadCell sortable sortDir={colSort?.column === "status" ? colSort.dir : null} onSort={() => toggleColSort("status")}>Статус</DataHeadCell>
-                    <DataHeadCell sortable sortDir={colSort?.column === "progress" ? colSort.dir : null} onSort={() => toggleColSort("progress")}>Прогресс</DataHeadCell>
-                    <DataHeadCell sortable sortDir={colSort?.column === "blocks" ? colSort.dir : null} onSort={() => toggleColSort("blocks")}>Блоки</DataHeadCell>
-                    <DataHeadCell sortable sortDir={colSort?.column === "date" ? colSort.dir : null} onSort={() => toggleColSort("date")}>Дата отклика</DataHeadCell>
-                    <DataHeadCell sortable sortDir={colSort?.column === "source" ? colSort.dir : null} onSort={() => toggleColSort("source")}>Источник</DataHeadCell>
-                    <DataHeadCell width="60px">Действия</DataHeadCell>
-                  </DataHead>
-                  <tbody>
-                    {filtered.map((c) => (
-                      <DataRow
-                        key={c.id}
-                        onClick={() => router.push(`/hr/candidates/${c.id}`)}
-                        className={cn("cursor-pointer", selected.has(c.id) && "bg-primary/[0.04]")}
-                      >
-                        <DataSelectCell checked={selected.has(c.id)} onCheckedChange={() => toggleOne(c.id)} />
-                        <DataCell className="px-2" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); toggleFavorite(c.id) }}
-                            className="inline-flex items-center justify-center p-1 rounded hover:bg-accent/60 transition-colors"
-                            aria-label={c.isFavorite ? "Убрать из избранного" : "В избранное"}
-                          >
-                            <Star className={cn("size-4", c.isFavorite ? "fill-amber-400 text-amber-400" : "text-muted-foreground/40")} />
-                          </button>
-                        </DataCell>
-                        <DataCell>
-                          <div className="flex items-center gap-3">
-                            <Avatar className="size-8">
-                              <AvatarFallback className="text-xs font-bold text-white" style={{ backgroundColor: avatarColor(c.id) }}>
-                                {getInitials(c.name)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <Link href={`/hr/candidates/${c.id}`} onClick={(e) => e.stopPropagation()} className="font-medium text-foreground hover:text-primary hover:underline transition-colors">{c.name}</Link>
-                              <p className="text-xs text-muted-foreground">{c.city ?? ""}</p>
-                            </div>
-                          </div>
-                        </DataCell>
-                        <DataCell className="text-muted-foreground">{c.vacancyTitle}</DataCell>
-                        <DataCell>
-                          <Badge variant="outline" className={cn("border-0 text-xs", getStageColorClasses(c.stage))}>
-                            {getStageLabel(c.stage)}
-                          </Badge>
-                        </DataCell>
-                        <DataCell>
-                          {c.progressPercent === null || c.demoTotalBlocks === 0 ? (
-                            <span className="text-muted-foreground">—</span>
-                          ) : (
-                            <span className={cn("font-medium tabular-nums", progressTextClass(c.progressPercent, c.isActive))}>
-                              {c.progressPercent}%
-                            </span>
-                          )}
-                        </DataCell>
-                        <DataCell className="text-muted-foreground tabular-nums whitespace-nowrap">
-                          {c.demoTotalBlocks === 0 ? "—" : `${Math.min(c.demoCompletedBlocks, c.demoTotalBlocks)} / ${c.demoTotalBlocks}`}
-                        </DataCell>
-                        <DataCell className="text-muted-foreground whitespace-nowrap">{formatDate(c.createdAt)}</DataCell>
-                        <DataCell className="text-muted-foreground">{SOURCE_LABELS[c.source ?? ""] ?? c.source ?? "—"}</DataCell>
-                        <DataCell onClick={(e) => e.stopPropagation()}>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <MoreHorizontal className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem className="gap-2 text-xs" onClick={() => router.push(`/hr/candidates/${c.id}`)}>
-                                <Eye className="w-3.5 h-3.5" />Открыть карточку
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem className="gap-2 text-xs" onClick={() => changeStage(c.id, "scheduled", c.name)}>
-                                <UserPlus className="w-3.5 h-3.5" />Пригласить на интервью
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="gap-2 text-xs" onClick={() => changeStage(c.id, "talent_pool", c.name)}>
-                                <Archive className="w-3.5 h-3.5" />В резерв
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="gap-2 text-xs text-destructive" onClick={() => changeStage(c.id, "rejected", c.name)}>
-                                <XCircle className="w-3.5 h-3.5" />Отказать
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </DataCell>
-                      </DataRow>
-                    ))}
-                  </tbody>
-                </DataTable>
-              </TableCard>
+            {/* ListView */}
+            {!loading && candidates.length > 0 && (
+              <ListView
+                columns={listColumns}
+                settings={settings}
+                sort={sort}
+                onSortChange={setSort}
+                serverSorted={false}
+                showVacancyColumn={true}
+                selectedIds={selected}
+                onSelectionChange={setSelected}
+                onOpenProfile={handleOpenProfile}
+                onToggleFavorite={handleToggleFavorite}
+                onAction={(candidateId, _colId, action) => {
+                  const c = candidates.find(x => x.id === candidateId)
+                  if (!c) return
+                  const stageMap: Record<string, string> = {
+                    advance: "scheduled",
+                    reject: "rejected",
+                    reserve: "talent_pool",
+                  }
+                  const stage = stageMap[action]
+                  if (stage) openStageDialog(candidateId, c.name, stage, c.vacancyId)
+                }}
+              />
             )}
 
-            {/* Load more — серверная пагинация по 50 строк */}
+            {/* Load more */}
             {!loading && hasMore && (
               <div className="flex justify-center mt-4">
                 <Button
@@ -582,8 +592,26 @@ export default function CandidatesPage() {
         </div>
       </SidebarInset>
 
-      {/* ═══ Диалог смены стадии (одиночный и bulk) ═══ */}
-      <Dialog open={stageDialogOpen} onOpenChange={(open) => { setStageDialogOpen(open); if (!open) { setPendingStage(null); setPendingCandidateId(null) } }}>
+      {/* Drawer кандидата — тот же, что и внутри вакансии */}
+      <CandidateDrawer
+        candidateId={drawerCandidateId}
+        open={drawerOpen}
+        onOpenChange={(open) => {
+          setDrawerOpen(open)
+          if (!open) setDrawerCandidateId(null)
+        }}
+        onToggleFavorite={handleToggleFavorite}
+        onStageChange={handleDrawerStageChange}
+      />
+
+      {/* Диалог смены стадии */}
+      <Dialog
+        open={stageDialogOpen}
+        onOpenChange={(open) => {
+          setStageDialogOpen(open)
+          if (!open) { setPendingStage(null); setPendingCandidateId(null) }
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>

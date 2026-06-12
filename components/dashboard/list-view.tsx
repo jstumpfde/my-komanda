@@ -44,6 +44,8 @@ interface ListViewProps {
   onSelectionChange?: (next: Set<string>) => void
   /** @deprecated Колонка № удалена. Поле сохранено для совместимости интерфейса с callers. */
   startIndex?: number
+  /** Если true — показывает дополнительную колонку «Вакансия» (для глобального списка). */
+  showVacancyColumn?: boolean
   /** В paginated-режиме сервер уже отсортировал — повторно сортировать не нужно.
    *  Иначе локальный сорт по `sort.key=favorite` перетасовывает строки сразу
    *  после optimistic-апдейта isFavorite, и кандидат «пропадает» из текущей
@@ -144,6 +146,7 @@ export function ListView({
   sortMode = "date_desc", sort = null, onSortChange,
   selectedIds, onSelectionChange,
   serverSorted = false,
+  showVacancyColumn = false,
 }: ListViewProps) {
   const lastSelectedIdRef = useRef<string | null>(null)
   const selectionEnabled = !!selectedIds && !!onSelectionChange
@@ -284,6 +287,7 @@ export function ListView({
   if (selectionEnabled) cols.push("24px")               // ☐ — фикс (компактнее)
   cols.push("28px")                                     // ★ — фикс (w-7, ужато)
   cols.push("minmax(280px, 2.4fr)")                     // Кандидат — +~10% (вмещает полное ФИО, длиннее → «…»)
+  if (showVacancyColumn) cols.push("minmax(140px, 1.8fr)") // Вакансия — для глобального списка
   if (showProgress) cols.push("minmax(80px, 1fr)")      // Демо — сегменты-«шаги», сужено ~15%
   if (showResumeScore) cols.push("60px")                // AI-резм. — AI-скор резюме (фикс, w-8 badge + место под header)
   if (showScore) cols.push("minmax(60px, 0.85fr)")      // AI-оцен.
@@ -395,6 +399,7 @@ export function ListView({
             <span>Кандидат</span>
           )}
         </div>
+        {showVacancyColumn && <div className="text-muted-foreground">Вакансия</div>}
         {showProgress && <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} align="center" />}
         {showResumeScore && <SortHeader label="AI-резм." sortKey="resumeScore" sort={sort} onToggle={handleSort} align="center" />}
         {showScore && <SortHeader label="AI-оцен." sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />}
@@ -491,6 +496,13 @@ export function ListView({
                   )}
                 </div>
               </div>
+
+              {/* Vacancy title — глобальный список кандидатов */}
+              {showVacancyColumn && (
+                <div className="text-[13px] text-muted-foreground truncate min-w-0" title={(candidate as { vacancyTitle?: string | null }).vacancyTitle ?? ""}>
+                  {(candidate as { vacancyTitle?: string | null }).vacancyTitle ?? "—"}
+                </div>
+              )}
 
               {/* Demo progress */}
               {showProgress && (

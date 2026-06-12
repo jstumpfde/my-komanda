@@ -69,6 +69,8 @@ export interface Candidate {
   testStatus?: "submitted" | "in_progress" | "opened" | "sent" | null
   // «Активен сейчас» — проходит демо/тест в последние 30 минут.
   isActive?: boolean
+  /** Название вакансии — показывается в глобальном списке кандидатов (showVacancyColumn). */
+  vacancyTitle?: string | null
 }
 
 interface CandidateCardProps {
