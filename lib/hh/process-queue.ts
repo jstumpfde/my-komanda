@@ -27,6 +27,7 @@ import { renderTemplate } from "@/lib/template-renderer"
 import { matchStopFactors, type StopFactorMatch } from "@/lib/funnel-builder/stop-factors-matcher"
 import { isBlockEnabled } from "@/lib/funnel-builder/runtime"
 import { sendWebhook } from "@/lib/webhooks"
+import { resolveVacancyWebhook } from "@/lib/integrations/resolve"
 
 const DEMO_INVITE_MESSAGE = "Здравствуйте! Спасибо за отклик. Мы подготовили короткую демонстрацию должности — 15 минут, и вы узнаете всё о задачах, команде и доходе."
 
@@ -153,8 +154,9 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
   // stopFactorsApplyToAll — мастер-тумблер (дефолт false = выкл).
   let companyStopFactors: VacancyStopFactors | null = null
   let companyStopFactorsApplyToAll = false
-  let companyWebhookUrl: string | null = null
-  let companyWebhookEvents: Record<string, boolean> = {}
+  // companyHiringDefaults — полные настройки компании, нужны для resolveVacancyWebhook
+  // (уровень 2 → дефолт; уровень 3 = вакансия может переопределить через integrationsOverride).
+  let companyHiringDefaults: CompanyHiringDefaults | null = null
   {
     const [companyRow] = await db
       .select({ hiringDefaultsJson: companies.hiringDefaultsJson })
@@ -162,13 +164,10 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       .where(eq(companies.id, companyId))
       .limit(1)
     const hiringDefaults = (companyRow?.hiringDefaultsJson as CompanyHiringDefaults | null) ?? null
+    companyHiringDefaults = hiringDefaults
     if (hiringDefaults?.stopFactorsApplyToAll === true && hiringDefaults.stopFactorsDefaults) {
       companyStopFactors = hiringDefaults.stopFactorsDefaults
       companyStopFactorsApplyToAll = true
-    }
-    if (hiringDefaults?.webhooks?.url) {
-      companyWebhookUrl = hiringDefaults.webhooks.url
-      companyWebhookEvents = hiringDefaults.webhooks.events ?? {}
     }
   }
 
@@ -433,14 +432,22 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
               await db.update(candidates).set({ photoUrl: local }).where(eq(candidates.id, newCand.id))
             }
           }
-          if (companyWebhookUrl && companyWebhookEvents.new_candidate) {
-            void sendWebhook(companyWebhookUrl, "new_candidate", {
-              candidateId: newCand.id,
-              vacancyId:   localVac.id,
-              name:        newCand.name,
-              source:      "hh",
-              stage:       targetStage,
-            })
+          {
+            // Уровень 3: vacancy override → если enabled, берём url/events вакансии,
+            // иначе — company-level (companyHiringDefaults.webhooks).
+            const effWh = resolveVacancyWebhook(
+              localVac.integrationsOverride as { enabled?: boolean; webhooks?: { url?: string; events?: Record<string, boolean> } } | null,
+              companyHiringDefaults?.webhooks,
+            )
+            if (effWh.url && effWh.events.new_candidate) {
+              void sendWebhook(effWh.url, "new_candidate", {
+                candidateId: newCand.id,
+                vacancyId:   localVac.id,
+                name:        newCand.name,
+                source:      "hh",
+                stage:       targetStage,
+              })
+            }
           }
         }
       } else if (candidateId) {
@@ -616,13 +623,20 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
               await db.update(candidates)
                 .set({ resumeScore: result.score })
                 .where(eq(candidates.id, candidateId))
-              if (companyWebhookUrl && companyWebhookEvents.ai_screening) {
-                void sendWebhook(companyWebhookUrl, "ai_screening", {
-                  candidateId,
-                  vacancyId: localVac?.id ?? null,
-                  score:     result.score,
-                  decision:  (result as { decision?: string }).decision ?? null,
-                })
+              {
+                // Уровень 3: per-vacancy webhook override (наследование от компании если не задано).
+                const effWh = resolveVacancyWebhook(
+                  (localVac?.integrationsOverride ?? null) as { enabled?: boolean; webhooks?: { url?: string; events?: Record<string, boolean> } } | null,
+                  companyHiringDefaults?.webhooks,
+                )
+                if (effWh.url && effWh.events.ai_screening) {
+                  void sendWebhook(effWh.url, "ai_screening", {
+                    candidateId,
+                    vacancyId: localVac?.id ?? null,
+                    score:     result.score,
+                    decision:  (result as { decision?: string }).decision ?? null,
+                  })
+                }
               }
 
               // Два порога (Сессия 6):
