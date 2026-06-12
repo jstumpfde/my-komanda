@@ -1,6 +1,23 @@
 "use client"
 
 import { useState, useCallback } from "react"
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core"
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
@@ -38,6 +55,8 @@ import {
   BookmarkPlus,
   Trash2,
   Check,
+  GripVertical,
+  Pencil,
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -52,8 +71,8 @@ import {
 
 // ─── Палитра цветов ───────────────────────────────────────────────────────────
 const COLOR_ORDER: StageColor[] = [
-  "blue", "indigo", "violet", "purple", "emerald",
-  "green", "amber", "orange", "rose", "red", "slate",
+  "blue", "indigo", "violet", "purple", "emerald", "green",
+  "amber", "orange", "rose", "red", "slate", "yellow",
 ]
 const STAGE_DOT_CLASSES: Record<StageColor, string> = {
   slate: "bg-slate-500",   blue: "bg-blue-500",    indigo: "bg-indigo-500",
@@ -63,14 +82,21 @@ const STAGE_DOT_CLASSES: Record<StageColor, string> = {
   red: "bg-destructive",
 }
 
+// ─── hh.ru маппинг стадий (статусы переговоров hh) ───────────────────────────
+// Фиксированный список статусов кандидата на hh.ru — как он видит их в ЛК
+const HH_STAGE_OPTIONS = [
+  { value: "none", label: "—" },
+  { value: "response",   label: "Новый отклик" },
+  { value: "phone_interview", label: "Тел. интервью" },
+  { value: "interview",  label: "Интервью" },
+  { value: "offer",      label: "Оффер" },
+  { value: "hired",      label: "Принят" },
+]
+
 // ─── Тип пресета компании ─────────────────────────────────────────────────────
 type CompanyPreset = NonNullable<CompanyHiringDefaults["companyFunnelPresets"]>[number]
 
 // ─── Хелперы для порядка стадий ──────────────────────────────────────────────
-/**
- * Возвращает рабочий порядок (slug[]) с учётом сохранённого stageOrder.
- * Новые стадии (добавленные в платформу позже) вставляются в конец.
- */
 function resolveOrder(savedOrder: string[] | undefined): StageSlug[] {
   const all = [...ALL_STAGE_SLUGS]
   if (!savedOrder || savedOrder.length === 0) return all
@@ -79,16 +105,12 @@ function resolveOrder(savedOrder: string[] | undefined): StageSlug[] {
   for (const slug of savedOrder) {
     if (all.includes(slug as StageSlug)) result.push(slug as StageSlug)
   }
-  // Стадии, которых нет в сохранённом порядке (новые платформенные) — в конец
   for (const slug of all) {
     if (!result.includes(slug)) result.push(slug)
   }
   return result
 }
 
-/**
- * Строит enabledStages из сохранённого объекта: системные — всегда true.
- */
 function resolveEnabled(
   saved: Record<string, boolean> | undefined,
 ): Record<StageSlug, boolean> {
@@ -104,7 +126,244 @@ function resolveEnabled(
   return result
 }
 
-// ─── Компонент ───────────────────────────────────────────────────────────────
+// ─── Сортируемая строка таблицы ──────────────────────────────────────────────
+interface SortableStageRowProps {
+  slug: StageSlug
+  idx: number
+  totalCount: number
+  isEnabled: boolean
+  isSystem: boolean
+  color: StageColor
+  label: string
+  hhAction: "invitation" | "discard" | "assessment" | null
+  hhStage: string
+  avitoVal: string
+  onToggle: (slug: StageSlug, value: boolean) => void
+  onMoveUp: (slug: StageSlug) => void
+  onMoveDown: (slug: StageSlug) => void
+  onColorChange: (slug: StageSlug, color: StageColor) => void
+  onLabelChange: (slug: StageSlug, value: string) => void
+  onHhActionChange: (slug: StageSlug, value: "invitation" | "discard" | "assessment" | null) => void
+  onHhStageChange: (slug: StageSlug, value: string) => void
+  onAvitoChange: (slug: StageSlug, value: string) => void
+}
+
+function SortableStageRow({
+  slug,
+  idx,
+  totalCount,
+  isEnabled,
+  isSystem,
+  color,
+  label,
+  hhAction,
+  hhStage,
+  avitoVal,
+  onToggle,
+  onMoveUp,
+  onMoveDown,
+  onColorChange,
+  onLabelChange,
+  onHhActionChange,
+  onHhStageChange,
+  onAvitoChange,
+}: SortableStageRowProps) {
+  const def = PLATFORM_STAGES[slug]
+
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: slug })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  }
+
+  return (
+    <tr
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "transition-colors border-b last:border-0",
+        isDragging ? "opacity-50 bg-muted/40 shadow-md" : "",
+        isEnabled ? "hover:bg-muted/20" : "bg-muted/10 opacity-60",
+      )}
+    >
+      {/* Вкл/выкл */}
+      <td className="px-2 py-1.5 text-center">
+        {isSystem ? (
+          <Lock className="size-3 text-muted-foreground mx-auto" />
+        ) : (
+          <Switch
+            checked={isEnabled}
+            onCheckedChange={(v) => onToggle(slug, v)}
+            className="scale-75 origin-center"
+          />
+        )}
+      </td>
+
+      {/* Drag-handle + кнопки ↑↓ */}
+      <td className="px-1 py-1.5">
+        <div className="flex items-center gap-0.5">
+          <button
+            type="button"
+            className="cursor-grab active:cursor-grabbing p-0.5 rounded hover:bg-muted text-muted-foreground touch-none"
+            aria-label="Перетащить"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="size-3.5" />
+          </button>
+          <div className="flex flex-col gap-0">
+            <button
+              type="button"
+              disabled={idx === 0}
+              onClick={() => onMoveUp(slug)}
+              className="p-0.5 rounded hover:bg-muted disabled:opacity-20 disabled:cursor-not-allowed"
+              aria-label="Переместить вверх"
+            >
+              <ChevronUp className="size-3 text-muted-foreground" />
+            </button>
+            <button
+              type="button"
+              disabled={idx === totalCount - 1}
+              onClick={() => onMoveDown(slug)}
+              className="p-0.5 rounded hover:bg-muted disabled:opacity-20 disabled:cursor-not-allowed"
+              aria-label="Переместить вниз"
+            >
+              <ChevronDown className="size-3 text-muted-foreground" />
+            </button>
+          </div>
+        </div>
+      </td>
+
+      {/* Стадия */}
+      <td className="px-3 py-1.5">
+        <div className="flex items-center gap-1">
+          <span className="text-xs text-muted-foreground truncate max-w-[90px]">
+            {def.defaultLabel}
+          </span>
+          {isSystem && (
+            <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0">
+              сист.
+            </Badge>
+          )}
+        </div>
+      </td>
+
+      {/* Цвет — палитра 2 ряда по 6 */}
+      <td className="px-2 py-1.5">
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                "w-5 h-5 rounded-full transition-all ring-1 ring-offset-1 ring-border hover:ring-foreground/40",
+                STAGE_DOT_CLASSES[color],
+              )}
+              aria-label="Выбрать цвет"
+            />
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-2" align="start">
+            <div className="grid grid-cols-6 gap-1.5">
+              {COLOR_ORDER.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => onColorChange(slug, c)}
+                  className={cn(
+                    "w-5 h-5 rounded-full transition-all hover:scale-110",
+                    STAGE_DOT_CLASSES[c] ?? "bg-slate-400",
+                    color === c
+                      ? "ring-2 ring-offset-1 ring-foreground"
+                      : "opacity-70 hover:opacity-100",
+                  )}
+                  aria-label={c}
+                />
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
+      </td>
+
+      {/* Название — растянутое */}
+      <td className="px-2 py-1.5 min-w-[200px]">
+        <Input
+          value={label}
+          onChange={(e) => onLabelChange(slug, e.target.value)}
+          placeholder={def.defaultLabel}
+          className="h-7 text-xs w-full"
+        />
+      </td>
+
+      {/* Действие (hh-action: Пригласить/Тест/Отказать/Ничего) */}
+      <td className="px-2 py-1.5 w-[140px]">
+        <Select
+          value={hhAction ?? "none"}
+          onValueChange={(v) =>
+            onHhActionChange(
+              slug,
+              v === "invitation" || v === "discard" || v === "assessment" ? v : null,
+            )
+          }
+        >
+          <SelectTrigger className="h-7 text-xs w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">Ничего</SelectItem>
+            <SelectItem value="invitation">Пригласить</SelectItem>
+            <SelectItem value="assessment">Тестовое задание</SelectItem>
+            <SelectItem value="discard">Отказать</SelectItem>
+          </SelectContent>
+        </Select>
+      </td>
+
+      {/* hh.ru — маппинг на стадию переговоров hh */}
+      <td className="px-2 py-1.5 w-[140px]">
+        <Select
+          value={hhStage || "none"}
+          onValueChange={(v) => onHhStageChange(slug, v)}
+        >
+          <SelectTrigger className="h-7 text-xs w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {HH_STAGE_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </td>
+
+      {/* Авито */}
+      <td className="px-2 py-1.5 w-[120px]">
+        <Select
+          value={avitoVal || "none"}
+          onValueChange={(v) => onAvitoChange(slug, v)}
+        >
+          <SelectTrigger className="h-7 text-xs w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">Ничего</SelectItem>
+            <SelectItem value="invitation">Пригласить</SelectItem>
+            <SelectItem value="discard">Отказать</SelectItem>
+          </SelectContent>
+        </Select>
+      </td>
+    </tr>
+  )
+}
+
+// ─── Основной компонент ───────────────────────────────────────────────────────
 
 export function FunnelAutomationSection({
   defaults,
@@ -119,6 +378,12 @@ export function FunnelAutomationSection({
   >(
     (defaults.stageHhActions as Record<string, "invitation" | "discard" | "assessment" | null>) ?? {},
   )
+  // ── Маппинг стадий→hh-стадии переговоров (новое поле, хранится в stageHhStages) ──
+  // Используем stageAvitoActions как резервное поле не трогая его; hh-стадии —
+  // новое поле в defaults. Если поля нет — инициализируем пустым объектом.
+  const [stageHhStages, setStageHhStages] = useState<Record<string, string>>(
+    ((defaults as Record<string, unknown>).stageHhStages as Record<string, string> | undefined) ?? {},
+  )
   const [stageLabels, setStageLabels] = useState<Record<string, string>>(
     (defaults.stageLabels as Record<string, string> | undefined) ?? {},
   )
@@ -129,7 +394,7 @@ export function FunnelAutomationSection({
     (defaults.stageAvitoActions as Record<string, string> | undefined) ?? {},
   )
 
-  // ── Новые поля: порядок и вкл/выкл ──
+  // ── Порядок и вкл/выкл ──
   const [stageOrder, setStageOrder] = useState<StageSlug[]>(() =>
     resolveOrder(defaults.stageOrder),
   )
@@ -150,6 +415,13 @@ export function FunnelAutomationSection({
   // ── Диалог удаления пресета ──
   const [deletePresetId, setDeletePresetId] = useState<string | null>(null)
 
+  // ── Диалог переименования пресета ──
+  const [renamePresetId, setRenamePresetId] = useState<string | null>(null)
+  const [renamePresetName, setRenamePresetName] = useState("")
+
+  // ── Режим «обновить пресет» — сохраняем поверх существующего ──
+  const [updatePresetId, setUpdatePresetId] = useState<string | null>(null)
+
   const [savingStages, setSavingStages] = useState(false)
 
   // ── Опросы обратной связи 30/60/90 ──
@@ -160,6 +432,27 @@ export function FunnelAutomationSection({
   const [feedback60, setFeedback60] = useState(defaults.feedbackSurveys?.d60 ?? true)
   const [feedback90, setFeedback90] = useState(defaults.feedbackSurveys?.d90 ?? true)
   const [savingFeedback, setSavingFeedback] = useState(false)
+
+  // ── DnD сенсоры ──
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  )
+
+  // ── Обработчик завершения drag ──
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    setStageOrder(prev => {
+      const oldIdx = prev.indexOf(active.id as StageSlug)
+      const newIdx = prev.indexOf(over.id as StageSlug)
+      return arrayMove(prev, oldIdx, newIdx)
+    })
+  }, [])
 
   // ── Перемещение стадий (↑/↓) ──
   const moveStage = useCallback((slug: StageSlug, direction: "up" | "down") => {
@@ -181,18 +474,23 @@ export function FunnelAutomationSection({
     setEnabledStages(prev => ({ ...prev, [slug]: value }))
   }, [])
 
+  // ── Собираем patch с учётом новых полей ──
+  const buildStagesPatch = useCallback((): Partial<CompanyHiringDefaults> => ({
+    stageHhActions,
+    stageLabels,
+    stageColors,
+    stageAvitoActions,
+    enabledStages: enabledStages as Record<string, boolean>,
+    stageOrder,
+    // stageHhStages идёт как дополнительное поле через spread
+    ...(Object.keys(stageHhStages).length > 0 ? { stageHhStages } as Record<string, unknown> : {}),
+  }), [stageHhActions, stageLabels, stageColors, stageAvitoActions, enabledStages, stageOrder, stageHhStages])
+
   // ── Сохранение: единая таблица стадий ──
   const handleSaveStages = async () => {
     setSavingStages(true)
     try {
-      await onPatch({
-        stageHhActions,
-        stageLabels,
-        stageColors,
-        stageAvitoActions,
-        enabledStages: enabledStages as Record<string, boolean>,
-        stageOrder,
-      })
+      await onPatch(buildStagesPatch())
       toast.success("Настройки стадий сохранены")
     } catch {
       toast.error("Не удалось сохранить")
@@ -230,12 +528,11 @@ export function FunnelAutomationSection({
       )
     )
     setEnabledStages(enabled)
-    setStageOrder(ALL_STAGE_SLUGS) // встроенные пресеты — платформенный порядок
+    setStageOrder(ALL_STAGE_SLUGS)
     toast.success(`Пресет «${preset.label}» применён — сохраните чтобы зафиксировать`)
   }
 
   const applyCompanyPreset = (preset: CompanyPreset) => {
-    // Восстанавливаем enabledStages (системные всегда включены)
     const enabled = resolveEnabled(preset.enabledStages as Record<string, boolean>)
     setEnabledStages(enabled)
     setStageOrder(resolveOrder(preset.stageOrder))
@@ -248,29 +545,46 @@ export function FunnelAutomationSection({
     toast.success(`Шаблон «${preset.name}» применён — сохраните чтобы зафиксировать`)
   }
 
-  // ── Сохранить текущую конфигурацию как пресет ──
+  // ── Строим данные пресета из текущего состояния ──
+  const buildPresetData = (): Omit<CompanyPreset, "id" | "name" | "createdAt"> => ({
+    enabledStages: enabledStages as Record<string, boolean>,
+    stageOrder,
+    stageLabels,
+    stageColors,
+    stageHhActions: stageHhActions as Record<string, string | null>,
+    stageAvitoActions,
+    stageSjActions: {},
+  })
+
+  // ── Сохранить новый пресет ──
   const handleSavePreset = async () => {
     const name = presetName.trim()
     if (!name) return
     setSavingPreset(true)
     try {
-      const newPreset: CompanyPreset = {
-        id: crypto.randomUUID(),
-        name,
-        createdAt: new Date().toISOString(),
-        enabledStages: enabledStages as Record<string, boolean>,
-        stageOrder,
-        stageLabels,
-        stageColors,
-        stageHhActions: stageHhActions as Record<string, string | null>,
-        stageAvitoActions,
+      let updated: CompanyPreset[]
+      if (updatePresetId) {
+        // Обновляем существующий (перезаписываем данные, сохраняем name и createdAt)
+        updated = companyPresets.map(p =>
+          p.id === updatePresetId
+            ? { ...p, ...buildPresetData(), name }
+            : p
+        )
+      } else {
+        const newPreset: CompanyPreset = {
+          id: crypto.randomUUID(),
+          name,
+          createdAt: new Date().toISOString(),
+          ...buildPresetData(),
+        }
+        updated = [...companyPresets, newPreset]
       }
-      const updated = [...companyPresets, newPreset]
       await onPatch({ companyFunnelPresets: updated })
       setCompanyPresets(updated)
       setPresetName("")
+      setUpdatePresetId(null)
       setSaveDialogOpen(false)
-      toast.success(`Шаблон «${name}» сохранён`)
+      toast.success(updatePresetId ? `Шаблон «${name}» обновлён` : `Шаблон «${name}» сохранён`)
     } catch {
       toast.error("Не удалось сохранить шаблон")
     } finally {
@@ -292,6 +606,25 @@ export function FunnelAutomationSection({
     }
   }
 
+  // ── Переименовать пресет ──
+  const handleRenamePreset = async () => {
+    const name = renamePresetName.trim()
+    if (!name || !renamePresetId) return
+    const updated = companyPresets.map(p =>
+      p.id === renamePresetId ? { ...p, name } : p
+    )
+    try {
+      await onPatch({ companyFunnelPresets: updated })
+      setCompanyPresets(updated)
+      toast.success(`Шаблон переименован в «${name}»`)
+    } catch {
+      toast.error("Не удалось переименовать шаблон")
+    } finally {
+      setRenamePresetId(null)
+      setRenamePresetName("")
+    }
+  }
+
   return (
     <div className="space-y-5">
       {/* ── Блок 3: Единая таблица стадий ── */}
@@ -302,14 +635,14 @@ export function FunnelAutomationSection({
             Стадии воронки
           </CardTitle>
           <CardDescription>
-            Включите нужные стадии, задайте порядок кнопками ↑↓, настройте
+            Включите нужные стадии, перетащите или нажмите ↑↓ для порядка, настройте
             цвет, название и действия на джоб-бордах. Системные стадии выключить
             нельзя. Это дефолт компании — применяется ко всем вакансиям.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
 
-          {/* Пресеты: встроенные + компании */}
+          {/* Пресеты: встроенные */}
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
               Быстрое применение пресета
@@ -321,10 +654,9 @@ export function FunnelAutomationSection({
                     key={key}
                     variant="outline"
                     size="sm"
-                    className="h-7 text-xs gap-1"
+                    className="h-7 text-xs"
                     onClick={() => applyBuiltinPreset(key as "fast" | "standard" | "deep")}
                   >
-                    <span>{preset.emoji}</span>
                     {preset.label}
                   </Button>
                 )
@@ -334,242 +666,130 @@ export function FunnelAutomationSection({
                   key={preset.id}
                   variant="outline"
                   size="sm"
-                  className="h-7 text-xs gap-1 border-primary/40 text-primary hover:bg-primary/5"
+                  className="h-7 text-xs border-primary/40 text-primary hover:bg-primary/5"
                   onClick={() => applyCompanyPreset(preset)}
                 >
-                  <Check className="size-3" />
+                  <Check className="size-3 mr-1" />
                   {preset.name}
                 </Button>
               ))}
             </div>
           </div>
 
-          {/* Таблица с горизонтальным скроллом на мобиле */}
+          {/* Таблица с горизонтальным скроллом */}
           <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full min-w-[580px] text-sm">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/40">
-                  <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[38px]">
+                  <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[42px]">
                     Вкл
                   </th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[52px]">
+                  <th className="px-1 py-2 text-left text-xs font-medium text-muted-foreground w-[60px]">
                     Порядок
                   </th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground w-[110px]">
                     Стадия
                   </th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground w-[110px]">
+                  <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[40px]">
                     Цвет
                   </th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
+                  <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">
                     Название
                   </th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground w-[160px]">
+                  <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[140px]">
+                    Действие
+                  </th>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[140px]">
                     hh.ru
                   </th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground w-[140px]">
+                  <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[120px]">
                     <span>Авито</span>{" "}
                     <Badge variant="secondary" className="text-[10px] px-1 py-0 align-middle">скоро</Badge>
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
-                {stageOrder.map((slug, idx) => {
-                  const def = PLATFORM_STAGES[slug]
-                  const isEnabled = enabledStages[slug] ?? true
-                  const isSystem = def.isSystem
-                  const color = (stageColors[slug] as StageColor | undefined) ?? def.defaultColor
-                  const label = stageLabels[slug] ?? ""
-                  const hhVal =
-                    slug in stageHhActions
-                      ? stageHhActions[slug]
-                      : def.defaultHhAction
-                  const avitoVal = stageAvitoActions[slug] ?? "none"
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext items={stageOrder} strategy={verticalListSortingStrategy}>
+                  <tbody>
+                    {stageOrder.map((slug, idx) => {
+                      const def = PLATFORM_STAGES[slug]
+                      const isEnabled = enabledStages[slug] ?? true
+                      const isSystem = def.isSystem
+                      const color = (stageColors[slug] as StageColor | undefined) ?? def.defaultColor
+                      const label = stageLabels[slug] ?? ""
+                      const hhAction =
+                        slug in stageHhActions
+                          ? stageHhActions[slug]
+                          : def.defaultHhAction
+                      const hhStage = stageHhStages[slug] ?? "none"
+                      const avitoVal = stageAvitoActions[slug] ?? "none"
 
-                  return (
-                    <tr
-                      key={slug}
-                      className={cn(
-                        "transition-colors",
-                        isEnabled ? "hover:bg-muted/20" : "bg-muted/10 opacity-60",
-                      )}
-                    >
-                      {/* Вкл/выкл */}
-                      <td className="px-2 py-2 text-center">
-                        {isSystem ? (
-                          <Lock className="size-3 text-muted-foreground mx-auto" />
-                        ) : (
-                          <Switch
-                            checked={isEnabled}
-                            onCheckedChange={(v) => toggleStage(slug, v)}
-                            className="scale-75 origin-center"
-                          />
-                        )}
-                      </td>
-
-                      {/* Порядок (↑↓) */}
-                      <td className="px-2 py-2">
-                        <div className="flex flex-col gap-0.5">
-                          <button
-                            type="button"
-                            disabled={idx === 0}
-                            onClick={() => moveStage(slug, "up")}
-                            className="p-0.5 rounded hover:bg-muted disabled:opacity-20 disabled:cursor-not-allowed"
-                            aria-label="Переместить вверх"
-                          >
-                            <ChevronUp className="size-3.5 text-muted-foreground" />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={idx === stageOrder.length - 1}
-                            onClick={() => moveStage(slug, "down")}
-                            className="p-0.5 rounded hover:bg-muted disabled:opacity-20 disabled:cursor-not-allowed"
-                            aria-label="Переместить вниз"
-                          >
-                            <ChevronDown className="size-3.5 text-muted-foreground" />
-                          </button>
-                        </div>
-                      </td>
-
-                      {/* Стадия */}
-                      <td className="px-3 py-2">
-                        <div className="flex items-center gap-1">
-                          <span className="text-xs text-muted-foreground truncate max-w-[80px]">
-                            {def.defaultLabel}
-                          </span>
-                          {isSystem && (
-                            <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0">
-                              сист.
-                            </Badge>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Цвет */}
-                      <td className="px-3 py-2">
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <button
-                              type="button"
-                              className={cn(
-                                "w-5 h-5 rounded-full transition-all ring-1 ring-offset-1 ring-border hover:ring-foreground/40",
-                                STAGE_DOT_CLASSES[color],
-                              )}
-                              aria-label="Выбрать цвет"
-                            />
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-2" align="start">
-                            <div className="grid grid-cols-4 gap-1.5">
-                              {COLOR_ORDER.map((c) => (
-                                <button
-                                  key={c}
-                                  type="button"
-                                  onClick={() => setStageColors(prev => ({ ...prev, [slug]: c }))}
-                                  className={cn(
-                                    "w-5 h-5 rounded-full transition-all hover:scale-110",
-                                    STAGE_DOT_CLASSES[c],
-                                    color === c
-                                      ? "ring-2 ring-offset-1 ring-foreground"
-                                      : "opacity-70 hover:opacity-100",
-                                  )}
-                                  aria-label={c}
-                                />
-                              ))}
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-                      </td>
-
-                      {/* Название */}
-                      <td className="px-3 py-2">
-                        <Input
-                          value={label}
-                          onChange={(e) =>
-                            setStageLabels(prev => ({ ...prev, [slug]: e.target.value }))
+                      return (
+                        <SortableStageRow
+                          key={slug}
+                          slug={slug}
+                          idx={idx}
+                          totalCount={stageOrder.length}
+                          isEnabled={isEnabled}
+                          isSystem={isSystem}
+                          color={color}
+                          label={label}
+                          hhAction={hhAction}
+                          hhStage={hhStage}
+                          avitoVal={avitoVal}
+                          onToggle={toggleStage}
+                          onMoveUp={(s) => moveStage(s, "up")}
+                          onMoveDown={(s) => moveStage(s, "down")}
+                          onColorChange={(s, c) => setStageColors(prev => ({ ...prev, [s]: c }))}
+                          onLabelChange={(s, v) => setStageLabels(prev => ({ ...prev, [s]: v }))}
+                          onHhActionChange={(s, v) =>
+                            setStageHhActions(prev => ({ ...prev, [s]: v }))
                           }
-                          placeholder={def.defaultLabel}
-                          className="h-7 text-xs"
+                          onHhStageChange={(s, v) =>
+                            setStageHhStages(prev => ({ ...prev, [s]: v }))
+                          }
+                          onAvitoChange={(s, v) =>
+                            setStageAvitoActions(prev => ({ ...prev, [s]: v }))
+                          }
                         />
-                      </td>
-
-                      {/* hh.ru */}
-                      <td className="px-3 py-2">
-                        <Select
-                          value={hhVal ?? "none"}
-                          onValueChange={(v) =>
-                            setStageHhActions((prev) => ({
-                              ...prev,
-                              [slug]:
-                                v === "invitation" || v === "discard" || v === "assessment"
-                                  ? v
-                                  : null,
-                            }))
-                          }
-                        >
-                          <SelectTrigger className="h-7 text-xs w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">Ничего</SelectItem>
-                            <SelectItem value="invitation">Пригласить</SelectItem>
-                            <SelectItem value="assessment">Тестовое задание</SelectItem>
-                            <SelectItem value="discard">Отказать</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </td>
-
-                      {/* Авито */}
-                      <td className="px-3 py-2">
-                        <Select
-                          value={avitoVal}
-                          onValueChange={(v) =>
-                            setStageAvitoActions((prev) => ({ ...prev, [slug]: v }))
-                          }
-                        >
-                          <SelectTrigger className="h-7 text-xs w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">Ничего</SelectItem>
-                            <SelectItem value="invitation">Пригласить</SelectItem>
-                            <SelectItem value="discard">Отказать</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </td>
-
-                    </tr>
-                  )
-                })}
-              </tbody>
+                      )
+                    })}
+                  </tbody>
+                </SortableContext>
+              </DndContext>
             </table>
           </div>
 
           {/* Подсказки */}
           <div className="space-y-1">
             <p className="text-[11px] text-muted-foreground">
-              Выключенные стадии не показываются в воронке новых вакансий. Системные стадии («Новый», «Отказ») выключить нельзя.
+              Выключенные стадии не показываются в воронке новых вакансий. Системные стадии («Новый», «Отказ») выключить нельзя. Перетащите строки за иконку или используйте кнопки ↑↓.
             </p>
             <p className="text-[11px] text-muted-foreground">
               Авито — интеграция в разработке; действия сохранятся и применятся после подключения. Сейчас работает hh.ru.
             </p>
           </div>
 
-          {/* Сохранённые шаблоны компании с кнопкой удаления */}
+          {/* Сохранённые шаблоны компании */}
           {companyPresets.length > 0 && (
             <div className="rounded-lg border divide-y">
               <div className="px-3 py-2 bg-muted/30">
                 <p className="text-xs font-medium text-muted-foreground">Сохранённые шаблоны компании</p>
               </div>
               {companyPresets.map(preset => (
-                <div key={preset.id} className="flex items-center justify-between px-3 py-2">
-                  <div>
-                    <p className="text-xs font-medium">{preset.name}</p>
+                <div key={preset.id} className="flex items-center justify-between px-3 py-2 gap-2">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium truncate">{preset.name}</p>
                     <p className="text-[11px] text-muted-foreground">
                       {new Date(preset.createdAt).toLocaleDateString("ru-RU")} ·{" "}
                       {Object.values(preset.enabledStages).filter(Boolean).length} стадий включено
                     </p>
                   </div>
-                  <div className="flex gap-1.5">
+                  <div className="flex gap-1 shrink-0">
                     <Button
                       variant="outline"
                       size="sm"
@@ -578,10 +798,39 @@ export function FunnelAutomationSection({
                     >
                       Применить
                     </Button>
+                    {/* Обновить пресет (применить + сохранить поверх) */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      title="Перезаписать шаблон текущими настройками"
+                      onClick={() => {
+                        setUpdatePresetId(preset.id)
+                        setPresetName(preset.name)
+                        setSaveDialogOpen(true)
+                      }}
+                    >
+                      <Save className="size-3" />
+                    </Button>
+                    {/* Переименовать */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                      title="Переименовать шаблон"
+                      onClick={() => {
+                        setRenamePresetId(preset.id)
+                        setRenamePresetName(preset.name)
+                      }}
+                    >
+                      <Pencil className="size-3.5" />
+                    </Button>
+                    {/* Удалить */}
                     <Button
                       variant="ghost"
                       size="sm"
                       className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                      title="Удалить шаблон"
                       onClick={() => setDeletePresetId(preset.id)}
                     >
                       <Trash2 className="size-3.5" />
@@ -598,6 +847,7 @@ export function FunnelAutomationSection({
               size="sm"
               className="h-8 text-xs gap-1.5"
               onClick={() => {
+                setUpdatePresetId(null)
                 setPresetName("")
                 setSaveDialogOpen(true)
               }}
@@ -681,14 +931,25 @@ export function FunnelAutomationSection({
         </CardContent>
       </Card>
 
-      {/* ── Диалог: сохранить как шаблон ── */}
-      <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+      {/* ── Диалог: сохранить / обновить шаблон ── */}
+      <Dialog
+        open={saveDialogOpen}
+        onOpenChange={(o) => {
+          if (!o) {
+            setSaveDialogOpen(false)
+            setUpdatePresetId(null)
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Сохранить шаблон воронки</DialogTitle>
+            <DialogTitle>
+              {updatePresetId ? "Обновить шаблон воронки" : "Сохранить шаблон воронки"}
+            </DialogTitle>
             <DialogDescription>
-              Текущие настройки стадий (включённые, порядок, цвета, названия,
-              действия hh/Авито) будут сохранены как шаблон компании.
+              {updatePresetId
+                ? "Текущие настройки стадий перезапишут выбранный шаблон."
+                : "Текущие настройки стадий (включённые, порядок, цвета, названия, действия hh/Авито) будут сохранены как шаблон компании."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 py-2">
@@ -704,14 +965,52 @@ export function FunnelAutomationSection({
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>
+            <Button variant="outline" onClick={() => {
+              setSaveDialogOpen(false)
+              setUpdatePresetId(null)
+            }}>
               Отмена
             </Button>
             <Button
               onClick={() => void handleSavePreset()}
               disabled={!presetName.trim() || savingPreset}
             >
-              {savingPreset ? "Сохранение…" : "Сохранить шаблон"}
+              {savingPreset
+                ? "Сохранение…"
+                : updatePresetId
+                  ? "Обновить шаблон"
+                  : "Сохранить шаблон"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Диалог: переименование пресета ── */}
+      <Dialog open={!!renamePresetId} onOpenChange={(o) => { if (!o) { setRenamePresetId(null); setRenamePresetName("") } }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Переименовать шаблон</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="rename-preset-name">Новое название</Label>
+            <Input
+              id="rename-preset-name"
+              value={renamePresetName}
+              onChange={(e) => setRenamePresetName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && renamePresetName.trim()) void handleRenamePreset()
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setRenamePresetId(null); setRenamePresetName("") }}>
+              Отмена
+            </Button>
+            <Button
+              onClick={() => void handleRenamePreset()}
+              disabled={!renamePresetName.trim()}
+            >
+              Сохранить
             </Button>
           </DialogFooter>
         </DialogContent>
