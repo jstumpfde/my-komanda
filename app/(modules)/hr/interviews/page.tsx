@@ -721,7 +721,7 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
                         })}
                       </div>
                       {dayHours.map(h => (
-                        <div key={h} className="grid grid-cols-[56px_repeat(7,1fr)] border-b min-h-[52px]">
+                        <div key={h} className="grid grid-cols-[56px_repeat(7,1fr)] border-b min-h-[64px]">
                           <div className="text-right pr-2 py-1 text-[10px] text-muted-foreground font-medium">{String(h).padStart(2, "0")}:00</div>
                           {weekDays.map((wd, di) => {
                             const cellIvs = interviews.filter(iv => isSameDay(iv.date, wd) && parseInt(iv.time) === h)
@@ -744,13 +744,13 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
                                       draggable
                                       onDragStart={() => ivDragStart(iv.id)}
                                       onDragEnd={ivDragEnd}
-                                      className={cn("rounded px-1.5 py-1 text-white text-[10px] leading-tight cursor-grab active:cursor-grabbing mb-0.5 transition-opacity", dragIvId === iv.id && "opacity-40 scale-95")}
-                                      style={{ backgroundColor: TYPE_COLORS[iv.type], minHeight: `${dur * 20}px` }}
-                                      title={`${iv.candidate} · ${iv.type} · ${iv.format}`}
-                                      onClick={() => toast.info(`${iv.candidate} · ${iv.vacancy} · ${iv.time}–${iv.endTime}`)}
+                                      className={cn("rounded-md px-2 py-1.5 text-white text-[10px] leading-tight cursor-pointer active:cursor-grabbing mb-0.5 transition-opacity flex flex-col justify-center gap-0.5", dragIvId === iv.id && "opacity-40 scale-95")}
+                                      style={{ backgroundColor: TYPE_COLORS[iv.type], minHeight: `${dur * 56}px` }}
+                                      title={`${iv.candidate} · ${iv.type} · ${iv.format} · ${iv.time}–${iv.endTime}`}
+                                      onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}
                                     >
-                                      <span className="font-semibold block truncate">{iv.candidate}</span>
-                                      <span className="opacity-80 block truncate">{iv.type} · {iv.format}</span>
+                                      <span className="font-semibold block truncate">{iv.time} {iv.candidate}</span>
+                                      <span className="opacity-85 block truncate">{iv.type} · {iv.format}</span>
                                     </div>
                                   )
                                 })}
