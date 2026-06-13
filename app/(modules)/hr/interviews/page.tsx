@@ -616,7 +616,7 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
                       <div key={wd} className="bg-muted/50 text-center text-[10px] font-semibold text-muted-foreground py-2">{wd}</div>
                     ))}
                     {calDays.map((day, i) => {
-                      if (!day) return <div key={i} className="bg-card min-h-[176px]" />
+                      if (!day) return <div key={i} className="bg-card min-h-[150px]" />
                       const dayIvs = interviews.filter(iv => isSameDay(iv.date, day))
                       const isT = isToday(day)
                       const dayKey = day.toISOString().slice(0, 10)
@@ -624,14 +624,15 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
                       return (
                         <div
                           key={i}
-                          className={cn("bg-card min-h-[176px] p-1 border-t transition-all", isT && "bg-primary/5", isDropTarget && "ring-2 ring-primary ring-inset bg-primary/5")}
+                          className={cn("bg-card min-h-[150px] p-1 border-t transition-all", isT && "bg-primary/5", isDropTarget && "ring-2 ring-primary ring-inset bg-primary/5")}
                           onDragOver={e => { e.preventDefault(); setDropTargetDay(dayKey) }}
                           onDragLeave={() => { if (dropTargetDay === dayKey) setDropTargetDay(null) }}
                           onDrop={e => { e.preventDefault(); calDropOnDay(day) }}
                         >
                           <span className={cn("text-xs font-medium", isT ? "text-primary font-bold" : "text-muted-foreground")}>{day.getDate()}</span>
-                          <div className="space-y-0.5 mt-0.5">
-                            {dayIvs.slice(0, 7).map(iv => (
+                          {/* ~4 события помещаются; больше — внутренний скролл, сетка не растёт */}
+                          <div className="space-y-0.5 mt-0.5 max-h-[116px] overflow-y-auto pr-0.5">
+                            {dayIvs.map(iv => (
                               <div
                                 key={iv.id}
                                 draggable
@@ -643,7 +644,6 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
                                 <MiniCard iv={iv} compact />
                               </div>
                             ))}
-                            {dayIvs.length > 7 && <p className="text-[9px] text-muted-foreground text-center">+{dayIvs.length - 7}</p>}
                           </div>
                         </div>
                       )
@@ -799,15 +799,31 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
                                 onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}
                                 className={cn("transition-all cursor-pointer hover:border-primary/40 active:cursor-grabbing", dragIvId === iv.id && "opacity-40 scale-95")}
                               >
-                                <CardContent className="p-3 space-y-1.5">
-                                  <div className="flex items-center justify-between gap-2"><span className="text-sm font-semibold text-foreground truncate">{iv.candidate}</span><span className="text-[10px] text-muted-foreground shrink-0">{formatDateShort(iv.date)}</span></div>
-                                  {iv.stage && <Badge variant="secondary" className="text-[9px] font-normal h-4 px-1.5">{iv.stage}</Badge>}
-                                  <div className="flex items-center gap-1.5 flex-wrap"><span className="text-xs font-medium">{iv.time}</span><Badge variant="outline" className="text-[10px]">{iv.type}</Badge><Badge variant="outline" className="text-[10px] gap-0.5">{iv.format === "Онлайн" ? <Video className="w-2.5 h-2.5" /> : <Building2 className="w-2.5 h-2.5" />}{iv.format}</Badge></div>
-                                  {iv.phone && <a href={`tel:${iv.phone}`} onClick={e => e.stopPropagation()} className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary"><Phone className="w-2.5 h-2.5" />{iv.phone}</a>}
-                                  <div className="flex items-center gap-2.5 pt-1.5 border-t text-[10px] text-muted-foreground">
-                                    <span className="inline-flex items-center gap-0.5" title="AI-скоринг резюме"><Sparkles className="w-2.5 h-2.5" /><span className={cn("font-bold", scoreColor(iv.aiScore))}>{iv.aiScore != null ? iv.aiScore : "—"}</span></span>
-                                    <span className="inline-flex items-center gap-0.5" title="Анкета"><FileText className="w-2.5 h-2.5" />{iv.anketaFilled ? <Check className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400" /> : <Minus className="w-2.5 h-2.5 opacity-50" />}</span>
-                                    <span className="inline-flex items-center gap-0.5" title="Тест"><ClipboardCheck className="w-2.5 h-2.5" />{iv.tested ? (iv.testScore != null ? <span className={cn("font-bold", scoreColor(iv.testScore))}>{iv.testScore}</span> : <Check className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400" />) : <Minus className="w-2.5 h-2.5 opacity-50" />}</span>
+                                <CardContent className="p-3.5 space-y-2.5">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <span className="text-[15px] font-semibold text-foreground leading-snug">{iv.candidate}</span>
+                                    <span className="text-[11px] text-muted-foreground shrink-0 mt-0.5">{formatDateShort(iv.date)}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-sm font-semibold text-primary">{iv.time}</span>
+                                    {iv.stage && <Badge variant="secondary" className="text-[10px] font-normal h-5">{iv.stage}</Badge>}
+                                    <Badge variant="outline" className="text-[10px] h-5">{iv.type}</Badge>
+                                    <Badge variant="outline" className="text-[10px] h-5 gap-0.5">{iv.format === "Онлайн" ? <Video className="w-3 h-3" /> : <Building2 className="w-3 h-3" />}{iv.format}</Badge>
+                                  </div>
+                                  {iv.phone && <a href={`tel:${iv.phone}`} onClick={e => e.stopPropagation()} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary"><Phone className="w-3 h-3" />{iv.phone}</a>}
+                                  <div className="grid grid-cols-3 gap-1 pt-2.5 border-t">
+                                    <div className="flex flex-col items-center gap-0.5">
+                                      <span className="text-[9px] uppercase tracking-wide text-muted-foreground inline-flex items-center gap-0.5"><Sparkles className="w-2.5 h-2.5" />Резюме</span>
+                                      <span className={cn("text-sm font-bold leading-none", scoreColor(iv.aiScore))}>{iv.aiScore != null ? iv.aiScore : "—"}</span>
+                                    </div>
+                                    <div className="flex flex-col items-center gap-0.5">
+                                      <span className="text-[9px] uppercase tracking-wide text-muted-foreground inline-flex items-center gap-0.5"><FileText className="w-2.5 h-2.5" />Анкета</span>
+                                      {iv.anketaFilled ? <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> : <Minus className="w-4 h-4 text-muted-foreground/40" />}
+                                    </div>
+                                    <div className="flex flex-col items-center gap-0.5">
+                                      <span className="text-[9px] uppercase tracking-wide text-muted-foreground inline-flex items-center gap-0.5"><ClipboardCheck className="w-2.5 h-2.5" />Тест</span>
+                                      {iv.tested ? (iv.testScore != null ? <span className={cn("text-sm font-bold leading-none", scoreColor(iv.testScore))}>{iv.testScore}</span> : <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />) : <Minus className="w-4 h-4 text-muted-foreground/40" />}
+                                    </div>
                                   </div>
                                 </CardContent>
                               </Card>
