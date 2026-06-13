@@ -14,8 +14,13 @@ export async function GET(req: NextRequest) {
     const end = searchParams.get("end")
     const type = searchParams.get("type")
     const filter = searchParams.get("filter") ?? "all" // mine | hr | all
+    const vacancyId = searchParams.get("vacancyId")
 
     const conditions = [eq(calendarEvents.companyId, user.companyId)]
+
+    if (vacancyId) {
+      conditions.push(eq(calendarEvents.vacancyId, vacancyId))
+    }
 
     if (start) {
       conditions.push(gte(calendarEvents.startAt, new Date(start)))

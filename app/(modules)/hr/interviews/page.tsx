@@ -156,7 +156,7 @@ function MiniCard({ iv, compact }: { iv: Interview; compact?: boolean }) {
 
 // ─── Внутренний компонент (читает searchParams) ──────────────
 
-function InterviewsPageContent() {
+export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; embedded?: boolean } = {}) {
   const router = useRouter()
 
   // Список интервью можно свернуть/развернуть под основным CalendarView
@@ -177,6 +177,10 @@ function InterviewsPageContent() {
   const [cInterviewer, setCInterviewer] = useState("")
   const [cType, setCType] = useState("HR")
   const [cFormat, setCFormat] = useState("Онлайн")
+  // Доп. интервьюеры (участники-пользователи): руководитель/директор и т.п.
+  const [cInterviewerIds, setCInterviewerIds] = useState<string[]>([])
+  const [teamMembers, setTeamMembers] = useState<{ id: string; name: string }[]>([])
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string } | null>(null)
   const [stages, setStages] = useState<Stage[]>(DEFAULT_STAGES)
   const [activeStage, setActiveStage] = useState<string>("upcoming")
   const [calMonth, setCalMonth] = useState(today2.getMonth())
@@ -205,7 +209,8 @@ function InterviewsPageContent() {
   const loadInterviews = useCallback(async () => {
     try {
       const [evRes, vacRes] = await Promise.all([
-        fetch("/api/modules/hr/calendar?type=interview"),
+        // В embedded-режиме (таб вакансии) — только интервью этой вакансии.
+        fetch(`/api/modules/hr/calendar?type=interview${vacancyId ? `&vacancyId=${vacancyId}` : ""}`),
         fetch("/api/modules/hr/vacancies?limit=200"),
       ])
       const evJson = evRes.ok ? await evRes.json() : null
@@ -216,13 +221,26 @@ function InterviewsPageContent() {
       const vacMap = new Map(vacs.map(v => [v.id, v.title]))
       setInterviews(events.map(ev => mapEventToInterview(ev, vacMap)))
     } catch { setInterviews([]) }
-  }, [])
+  }, [vacancyId])
   useEffect(() => { void loadInterviews() }, [loadInterviews])
+
+  // Текущий пользователь (для авто-интервьюера) + команда (для доп. интервьюеров).
+  useEffect(() => {
+    fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then((j) => {
+      const u = j?.user ?? j?.data ?? j
+      if (u?.id) setCurrentUser({ id: u.id, name: u.name ?? u.email ?? "Я" })
+    }).catch(() => {})
+    fetch("/api/team").then(r => r.ok ? r.json() : null).then((j) => {
+      const list = Array.isArray(j) ? j : (j?.data ?? j?.members ?? [])
+      if (Array.isArray(list)) setTeamMembers(list.map((m: { id: string; name?: string; email?: string }) => ({ id: m.id, name: m.name ?? m.email ?? "—" })))
+    }).catch(() => {})
+  }, [])
 
   const openCreate = () => {
     const now = new Date()
-    setCName(""); setCVacancyId(""); setCInterviewer(""); setCType("HR"); setCFormat("Онлайн")
-    setCTime("10:00"); setCDuration("45")
+    // #2: интервьюер по умолчанию — текущий пользователь (кто назначает).
+    setCName(""); setCVacancyId(vacancyId ?? ""); setCInterviewer(currentUser?.name ?? ""); setCType("HR"); setCFormat("Онлайн")
+    setCInterviewerIds([]); setCTime("10:00"); setCDuration("45")
     setCDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`)
     setCreateOpen(true)
   }
@@ -240,6 +258,8 @@ function InterviewsPageContent() {
           startAt: start.toISOString(), endAt: end.toISOString(),
           vacancyId: cVacancyId || null, interviewer: cInterviewer || null,
           interviewType: cType, interviewFormat: cFormat,
+          // #3: доп. интервьюеры — участники события (руководитель/директор и т.п.)
+          participants: cInterviewerIds.length > 0 ? cInterviewerIds : undefined,
         }),
       })
       if (!res.ok) throw new Error()
@@ -325,6 +345,7 @@ function InterviewsPageContent() {
 
   const currentStage = stages.find(s => s.id === activeStage) || stages[0]
   const filtered = useMemo(() => {
+    if (activeStage === "all") return [...interviews].sort((a, b) => a.date.getTime() - b.date.getTime())
     if (!currentStage) return []
     const result = filterByCondition(interviews, currentStage.condition)
     return result.sort((a, b) => currentStage.condition === "date_before" ? b.date.getTime() - a.date.getTime() : a.date.getTime() - b.date.getTime())
@@ -374,10 +395,10 @@ function InterviewsPageContent() {
 
   const views: { mode: ViewMode; icon: typeof List; label: string }[] = [
     { mode: "list", icon: List, label: "Список" },
+    { mode: "kanban", icon: LayoutGrid, label: "Канбан" },
     // «Месяц», не «Календарь» — чтобы не путать с верхним табом «Календарь» (полный календарь компании)
     { mode: "calendar", icon: CalendarDays, label: "Месяц" },
     { mode: "week", icon: CalendarRange, label: "Неделя" },
-    { mode: "kanban", icon: LayoutGrid, label: "Канбан" },
     { mode: "day", icon: Clock, label: "День" },
   ]
 
@@ -402,14 +423,17 @@ function InterviewsPageContent() {
 
   const kanbanStatuses: InterviewStatus[] = ["Ожидает", "Подтверждено", "Пройдено", "Отменено"]
 
-  return (
-    <SidebarProvider defaultOpen={true}>
-      <DashboardSidebar />
-      <SidebarInset>
-        <DashboardHeader />
-        <main className="flex-1 overflow-auto bg-background">
+  // Контент интервью-вида (одинаков для standalone и embedded). Хром
+  // (сайдбар/хедер) добавляется ниже только в standalone-режиме. ВАЖНО: не
+  // оборачивать во вложенный компонент — иначе ремоунт поддерева на каждый рендер.
+  const inner = (
+      <>
+        <main className={embedded ? "bg-background" : "flex-1 overflow-auto bg-background"}>
 
-          {/* ═══ Основной заголовок + переключатель Интервью/Календарь ═══ */}
+          {/* ═══ Заголовок + переключатель Интервью/Календарь ═══
+              В embedded (таб вакансии) переключатель скрыт: показываем только
+              интервью-вид (общий календарь компании живёт отдельно на /hr/interviews). */}
+          {!embedded && (
           <div className="flex items-center justify-between gap-3 px-4 sm:px-14 pt-5 pb-3 border-b">
             <div className="flex items-center">
               <CalendarDays className="h-5 w-5 text-violet-600 mr-2" />
@@ -422,29 +446,51 @@ function InterviewsPageContent() {
               </TabsList>
             </Tabs>
           </div>
+          )}
 
-          {/* ═══ Таб «Календарь» — основной календарь компании ═══ */}
-          {topTab === "calendar" && (
+          {/* ═══ Таб «Календарь» — основной календарь компании (только standalone) ═══ */}
+          {!embedded && topTab === "calendar" && (
           <Suspense fallback={
             <div className="flex items-center justify-center h-64 text-sm text-muted-foreground">
               Загрузка календаря…
             </div>
           }>
-            <CalendarView />
+            <CalendarView vacancyId={vacancyId} />
           </Suspense>
           )}
 
           {/* ═══ Таб «Интервью» — стадии/канбан/список ═══ */}
           {topTab === "interviews" && (
           <div className="bg-background">
-            {/* Заголовок секции с кнопками «Стадии» и «Запланировать» */}
-            <div className="flex items-center justify-between px-4 sm:px-14 py-3">
+            {/* Компактная шапка: переключатель видов слева + кнопки справа (одна строка) */}
+            <div className={cn("flex items-center justify-between gap-2 flex-wrap py-3", embedded ? "" : "px-4 sm:px-14")}>
               <div className="flex items-center gap-2">
-                <List className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-semibold">Список интервью</span>
-                <Badge variant="outline" className="text-[10px] px-1.5 h-4">
-                  {interviews.length}
-                </Badge>
+                <Tabs value={view} onValueChange={(v) => setView(v as ViewMode)}>
+                  <TabsList>
+                    {views.map(v => (
+                      <TabsTrigger key={v.mode} value={v.mode} className="gap-1 text-xs">
+                        <v.icon className="w-3.5 h-3.5" /><span className="hidden sm:inline">{v.label}</span>
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
+                <Badge variant="outline" className="text-[10px] px-1.5 h-4">{interviews.length}</Badge>
+                {/* В Канбане фильтр времени — компактным дропдауном прямо в шапке */}
+                {view === "kanban" && (
+                  <Select value={activeStage} onValueChange={setActiveStage}>
+                    <SelectTrigger className="h-7 w-auto min-w-[160px] text-xs gap-1.5"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="text-xs">
+                        <span className="mr-1.5">🗂</span>Все · {interviews.length}
+                      </SelectItem>
+                      {stages.map(s => (
+                        <SelectItem key={s.id} value={s.id} className="text-xs">
+                          <span className="mr-1.5">{s.emoji}</span>{s.name} · {stageCounts[s.id] || 0}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" className="gap-1.5 h-7 text-xs" onClick={() => setSettingsOpen(true)}>
@@ -456,33 +502,27 @@ function InterviewsPageContent() {
               </div>
             </div>
 
-            <div className="px-4 sm:px-14 pb-6">
-              {/* View switcher */}
-              <div className="flex items-center gap-2 mb-4">
-                <Tabs value={view} onValueChange={(v) => setView(v as ViewMode)}>
-                  <TabsList>
-                    {views.map(v => (
-                      <TabsTrigger key={v.mode} value={v.mode} className="gap-1 text-xs">
-                        <v.icon className="w-3.5 h-3.5" /><span className="hidden sm:inline">{v.label}</span>
+            <div className={cn("pb-6", embedded ? "" : "px-4 sm:px-14")}>
+              {/* Фильтр по времени (стадии). В Списке/Календаре — полный ряд табов.
+                  В Канбане фильтр компактным дропдауном в шапке (выше), отдельной строки нет. */}
+              {view !== "kanban" && (
+                <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 mb-5">
+                  <Tabs value={activeStage} onValueChange={setActiveStage}>
+                    <TabsList className="w-max sm:w-auto">
+                      <TabsTrigger value="all" className="gap-1.5">
+                        <span>🗂</span> Все
+                        <Badge className="ml-1 text-[10px] px-1.5 h-4 bg-primary/10 text-primary">{interviews.length}</Badge>
                       </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </Tabs>
-              </div>
-
-              {/* Dynamic stage tabs */}
-              <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 mb-5">
-                <Tabs value={activeStage} onValueChange={setActiveStage}>
-                  <TabsList className="w-max sm:w-auto">
-                    {stages.map(s => (
-                      <TabsTrigger key={s.id} value={s.id} className="gap-1.5">
-                        <span>{s.emoji}</span> {s.name}
-                        <Badge className="ml-1 text-[10px] px-1.5 h-4 bg-primary/10 text-primary">{stageCounts[s.id] || 0}</Badge>
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </Tabs>
-              </div>
+                      {stages.map(s => (
+                        <TabsTrigger key={s.id} value={s.id} className="gap-1.5">
+                          <span>{s.emoji}</span> {s.name}
+                          <Badge className="ml-1 text-[10px] px-1.5 h-4 bg-primary/10 text-primary">{stageCounts[s.id] || 0}</Badge>
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </Tabs>
+                </div>
+              )}
 
               {/* ═══ LIST ════════════════════════════════════════ */}
               {view === "list" && (
@@ -530,7 +570,7 @@ function InterviewsPageContent() {
                       <div key={wd} className="bg-muted/50 text-center text-[10px] font-semibold text-muted-foreground py-2">{wd}</div>
                     ))}
                     {calDays.map((day, i) => {
-                      if (!day) return <div key={i} className="bg-card min-h-[80px]" />
+                      if (!day) return <div key={i} className="bg-card min-h-[120px]" />
                       const dayIvs = interviews.filter(iv => isSameDay(iv.date, day))
                       const isT = isToday(day)
                       const dayKey = day.toISOString().slice(0, 10)
@@ -538,7 +578,7 @@ function InterviewsPageContent() {
                       return (
                         <div
                           key={i}
-                          className={cn("bg-card min-h-[80px] p-1 border-t transition-all", isT && "bg-primary/5", isDropTarget && "ring-2 ring-primary ring-inset bg-primary/5")}
+                          className={cn("bg-card min-h-[120px] p-1 border-t transition-all", isT && "bg-primary/5", isDropTarget && "ring-2 ring-primary ring-inset bg-primary/5")}
                           onDragOver={e => { e.preventDefault(); setDropTargetDay(dayKey) }}
                           onDragLeave={() => { if (dropTargetDay === dayKey) setDropTargetDay(null) }}
                           onDrop={e => { e.preventDefault(); calDropOnDay(day) }}
@@ -731,14 +771,14 @@ function InterviewsPageContent() {
           )} {/* topTab === interviews */}
 
         </main>
-      </SidebarInset>
 
       {/* ═══ Настройка стадий — Sheet ═════════════════════════ */}
       <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
         <SheetContent className="w-full sm:max-w-md overflow-y-auto">
           <SheetHeader><SheetTitle className="flex items-center gap-2"><Settings className="w-5 h-5" /> Настроить стадии</SheetTitle></SheetHeader>
 
-          <div className="mt-6 space-y-4">
+          {/* Паддинг как у шапки (px-4) — чтобы контент выравнивался, а не «выбивался» */}
+          <div className="px-4 pb-6 space-y-4">
             <div className="space-y-1.5">
               {stages.map((stage, idx) => (
                 <div
@@ -848,7 +888,30 @@ function InterviewsPageContent() {
             <div className="space-y-1">
               <Label htmlFor="c-interviewer">Интервьюер</Label>
               <Input id="c-interviewer" value={cInterviewer} onChange={e => setCInterviewer(e.target.value)} placeholder="Кто проводит" />
+              {currentUser && <p className="text-[11px] text-muted-foreground">По умолчанию — вы. Можно изменить.</p>}
             </div>
+            {/* #3: доп. интервьюеры из команды (руководитель/директор и т.п.) */}
+            {teamMembers.length > 0 && (
+              <div className="space-y-1.5">
+                <Label className="text-sm">Доп. интервьюеры</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {teamMembers.map(m => {
+                    const sel = cInterviewerIds.includes(m.id)
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setCInterviewerIds(prev => sel ? prev.filter(x => x !== m.id) : [...prev, m.id])}
+                        className={cn(
+                          "rounded-full px-2.5 py-0.5 text-xs border transition-colors",
+                          sel ? "bg-primary text-primary-foreground border-primary" : "bg-background text-muted-foreground border-border hover:border-muted-foreground/60",
+                        )}
+                      >{m.name}</button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
                 <Label htmlFor="c-type">Тип</Label>
@@ -897,6 +960,17 @@ function InterviewsPageContent() {
           </div>
         </DialogContent>
       </Dialog>
+      </>
+  )
+
+  if (embedded) return <div className="bg-background">{inner}</div>
+  return (
+    <SidebarProvider defaultOpen={true}>
+      <DashboardSidebar />
+      <SidebarInset>
+        <DashboardHeader />
+        {inner}
+      </SidebarInset>
     </SidebarProvider>
   )
 }
@@ -904,7 +978,7 @@ function InterviewsPageContent() {
 export default function InterviewsPage() {
   return (
     <Suspense fallback={null}>
-      <InterviewsPageContent />
+      <InterviewsView />
     </Suspense>
   )
 }

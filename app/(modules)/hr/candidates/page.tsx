@@ -5,6 +5,7 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Search, Users, UserPlus, Archive, XCircle, Loader2, Star, ChevronDown } from "lucide-react"
 import { useDebounce } from "@/hooks/use-debounce"
 import { Button } from "@/components/ui/button"
@@ -188,6 +189,10 @@ export default function CandidatesPage() {
   // Избранное (кнопка в тулбаре)
   const [favoriteOnly, setFavoriteOnly] = useState(false)
 
+  // Фильтр по вакансии (главный для кросс-вакансионной работы). "all" = все.
+  const [vacancyFilter, setVacancyFilter] = useState("all")
+  const [allVacancyTitles, setAllVacancyTitles] = useState<string[]>([])
+
   // Поп-овер фильтров (CandidateFilters)
   const [filters, setFilters] = useState<FilterState>({
     searchText: "", cities: [], salaryMin: 0, salaryMax: 250000,
@@ -239,6 +244,8 @@ export default function CandidatesPage() {
     if (debouncedSearch.trim()) ps.set("search", debouncedSearch.trim())
     // Избранное
     if (favoriteOnly) ps.set("favorite", "true")
+    // Фильтр по вакансии (по названию — глобальная ветка API)
+    if (vacancyFilter !== "all") ps.set("vacancyTitle", vacancyFilter)
     // Из FilterState: стадии воронки
     if (filters.funnelStatuses.length > 0) {
       ps.set("funnelStatuses", filters.funnelStatuses.join(","))
@@ -260,7 +267,31 @@ export default function CandidatesPage() {
     if (filters.dateFrom) ps.set("dateFrom", filters.dateFrom)
     if (filters.dateTo) ps.set("dateTo", filters.dateTo)
     return ps
-  }, [debouncedSearch, favoriteOnly, filters])
+  }, [debouncedSearch, favoriteOnly, vacancyFilter, filters])
+
+  // Список вакансий для фильтра по вакансии.
+  useEffect(() => {
+    fetch("/api/modules/hr/vacancies")
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then((data) => {
+        // API: apiSuccess({ vacancies: [...] }) → { data: { vacancies: [...] } }
+        const list = Array.isArray(data) ? data
+          : Array.isArray(data?.vacancies) ? data.vacancies
+          : Array.isArray(data?.data?.vacancies) ? data.data.vacancies
+          : Array.isArray(data?.items) ? data.items
+          : Array.isArray(data?.data) ? data.data : []
+        const titles = [...new Set(
+          (list as { title?: string }[]).map(v => v?.title).filter((t): t is string => !!t)
+        )].sort((a, b) => a.localeCompare(b, "ru"))
+        setAllVacancyTitles(titles)
+      })
+      .catch(() => {})
+  }, [])
+
+  const vacancyOptions = useMemo(
+    () => [{ value: "all", label: "Все вакансии" }, ...allVacancyTitles.map(t => ({ value: t, label: t }))],
+    [allVacancyTitles],
+  )
 
   // ─── Загрузка кандидатов ──────────────────────────────────────────────────
 
@@ -477,6 +508,17 @@ export default function CandidatesPage() {
                   className={cn("pl-9", FILTER_INPUT)}
                 />
               </div>
+              {/* Главный фильтр — по вакансии (для кросс-вакансионной работы) */}
+              <Select value={vacancyFilter} onValueChange={(v) => { setVacancyFilter(v); setPage(1) }}>
+                <SelectTrigger className={cn("flex-1 min-w-[150px] max-w-[280px]", FILTER_INPUT)}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {vacancyOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {/* Поп-овер фильтров — аналогично странице вакансии */}
               <CandidateFilters
                 filters={filters}
@@ -557,7 +599,7 @@ export default function CandidatesPage() {
                 sort={sort}
                 onSortChange={setSort}
                 serverSorted={false}
-                showVacancyColumn={true}
+                showVacancyColumn={vacancyFilter === "all"}
                 selectedIds={selected}
                 onSelectionChange={setSelected}
                 onOpenProfile={handleOpenProfile}

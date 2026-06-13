@@ -287,7 +287,7 @@ export function ListView({
   if (selectionEnabled) cols.push("24px")               // ☐ — фикс (компактнее)
   cols.push("28px")                                     // ★ — фикс (w-7, ужато)
   cols.push("minmax(280px, 2.4fr)")                     // Кандидат — +~10% (вмещает полное ФИО, длиннее → «…»)
-  if (showVacancyColumn) cols.push("minmax(140px, 1.8fr)") // Вакансия — для глобального списка
+  if (showVacancyColumn) cols.push("minmax(120px, 0.9fr)") // Вакансия — капнута, чтобы длинное название не растягивало таблицу (обрезается «…»)
   if (showProgress) cols.push("minmax(80px, 1fr)")      // Демо — сегменты-«шаги», сужено ~15%
   if (showResumeScore) cols.push("60px")                // AI-резм. — AI-скор резюме (фикс, w-8 badge + место под header)
   if (showScore) cols.push("minmax(60px, 0.85fr)")      // AI-оцен.

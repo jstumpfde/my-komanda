@@ -85,7 +85,7 @@ const VALID_FILTER_MODES: FilterMode[] = ["all", "mine", "hr"]
  * Параметр `tab` (interviews | calendar) управляется родительской страницей
  * и в этом компоненте не затрагивается.
  */
-export function CalendarView() {
+export function CalendarView({ vacancyId }: { vacancyId?: string } = {}) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
@@ -327,6 +327,8 @@ export function CalendarView() {
         end: end.toISOString(),
         filter,
       })
+      // Внутри вакансии — показываем события только этой вакансии.
+      if (vacancyId) params.set("vacancyId", vacancyId)
       const res = await fetch(`/api/modules/hr/calendar?${params}`)
       if (res.ok) {
         const data = await res.json()
@@ -335,7 +337,7 @@ export function CalendarView() {
     } finally {
       setLoading(false)
     }
-  }, [getDateRange, filter])
+  }, [getDateRange, filter, vacancyId])
 
   const loadRooms = useCallback(async () => {
     const res = await fetch("/api/modules/hr/rooms")
@@ -412,6 +414,8 @@ export function CalendarView() {
           startAt: new Date(data.startAt).toISOString(),
           endAt: new Date(data.endAt).toISOString(),
           roomId: data.roomId || null,
+          // Внутри вакансии — новое событие привязываем к ней.
+          vacancyId: data.vacancyId ?? vacancyId ?? null,
         }),
       })
     }
