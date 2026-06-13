@@ -70,9 +70,10 @@ interface GlobalCandidate {
 const DEFAULT_SETTINGS: CardDisplaySettings = {
   showSalary: false,
   showSalaryFull: true,
-  showScore: true,
-  // «Рубрика» (shadow-движок) скрыта по умолчанию — нишевая, экономит ширину
-  // (можно включить в «Вид»). Освобождает место под колонку «Интервью».
+  // «AI-оцен.» (скоринг анкеты) и «Рубрика» (shadow-движок) скрыты по умолчанию —
+  // нишевые, дублируют «AI-резм.»; экономят ширину под «Интервью» и кнопку
+  // «Запланировать». Включаются в «Вид».
+  showScore: false,
   showRubricScore: false,
   showAge: false,
   showSource: true,
@@ -269,6 +270,43 @@ export default function CandidatesPage() {
   const [sendMessage, setSendMessage] = useState(true)
   const [stageMessageText, setStageMessageText] = useState("")
   const [stageDialogLoading, setStageDialogLoading] = useState(false)
+
+  // Диалог планирования интервью из строки
+  const [schedOpen, setSchedOpen] = useState(false)
+  const [schedCand, setSchedCand] = useState<{ id: string; name: string; vacancyId: string | null } | null>(null)
+  const [schedDate, setSchedDate] = useState("")
+  const [schedTime, setSchedTime] = useState("10:00")
+  const [schedDur, setSchedDur] = useState("45")
+  const [schedInterviewer, setSchedInterviewer] = useState("")
+  const [scheduling, setScheduling] = useState(false)
+
+  const openSchedule = useCallback((c: { id: string; name: string; vacancyId?: string | null }) => {
+    setSchedCand({ id: c.id, name: c.name, vacancyId: c.vacancyId ?? null })
+    setSchedDate(""); setSchedTime("10:00"); setSchedDur("45"); setSchedInterviewer("")
+    setSchedOpen(true)
+  }, [])
+
+  const handleSchedule = useCallback(async () => {
+    if (!schedCand || !schedDate || !schedTime) { toast.error("Укажите дату и время"); return }
+    setScheduling(true)
+    try {
+      const [h, m] = schedTime.split(":").map(Number)
+      const start = new Date(schedDate); start.setHours(h, m, 0, 0)
+      const end = new Date(start.getTime() + (parseInt(schedDur) || 45) * 60000)
+      const res = await fetch("/api/modules/hr/calendar", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: schedCand.name, type: "interview",
+          startAt: start.toISOString(), endAt: end.toISOString(),
+          candidateId: schedCand.id, vacancyId: schedCand.vacancyId,
+          interviewer: schedInterviewer || null,
+        }),
+      })
+      if (!res.ok) throw new Error()
+      setSchedOpen(false)
+      toast.success("Интервью запланировано — видно в карточке и в табе «Интервью»")
+    } catch { toast.error("Не удалось запланировать интервью") } finally { setScheduling(false) }
+  }, [schedCand, schedDate, schedTime, schedDur, schedInterviewer])
 
 
   // ─── Серверные фильтры ────────────────────────────────────────────────────
@@ -699,6 +737,7 @@ export default function CandidatesPage() {
                 onOpenProfile={handleOpenProfile}
                 onToggleFavorite={handleToggleFavorite}
                 onVacancyClick={(vacancyId) => router.push(`/hr/vacancies/${vacancyId}`)}
+                onScheduleInterview={(c) => openSchedule({ id: c.id, name: c.name, vacancyId: (c as { vacancyId?: string | null }).vacancyId })}
                 onAction={(candidateId, _colId, action) => {
                   const c = candidates.find(x => x.id === candidateId)
                   if (!c) return
@@ -753,6 +792,39 @@ export default function CandidatesPage() {
         onToggleFavorite={handleToggleFavorite}
         onStageChange={handleDrawerStageChange}
       />
+
+      {/* Диалог планирования интервью из строки */}
+      <Dialog open={schedOpen} onOpenChange={setSchedOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Запланировать интервью{schedCand ? ` — ${schedCand.name}` : ""}</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="cand-sch-date" className="text-xs">Дата</Label>
+              <Input id="cand-sch-date" type="date" value={schedDate} onChange={e => setSchedDate(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cand-sch-time" className="text-xs">Время</Label>
+              <Input id="cand-sch-time" type="time" value={schedTime} onChange={e => setSchedTime(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cand-sch-dur" className="text-xs">Длительность, мин</Label>
+              <Input id="cand-sch-dur" type="number" min={15} step={15} value={schedDur} onChange={e => setSchedDur(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cand-sch-int" className="text-xs">Интервьюер</Label>
+              <Input id="cand-sch-int" value={schedInterviewer} onChange={e => setSchedInterviewer(e.target.value)} placeholder="Кто проводит" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSchedOpen(false)} disabled={scheduling}>Отмена</Button>
+            <Button onClick={handleSchedule} disabled={scheduling || !schedDate || !schedTime}>
+              {scheduling ? "Сохраняю…" : "Запланировать"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Диалог смены стадии */}
       <Dialog
