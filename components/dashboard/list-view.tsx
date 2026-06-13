@@ -289,7 +289,7 @@ export function ListView({
   // -ml-3 на ★ и Кандидате схлопывает gap-4 до 4px edge-to-edge.
   if (selectionEnabled) cols.push("24px")               // ☐ — фикс (компактнее)
   cols.push("28px")                                     // ★ — фикс (w-7, ужато)
-  cols.push("minmax(280px, 2.4fr)")                     // Кандидат — +~10% (вмещает полное ФИО, длиннее → «…»)
+  cols.push("minmax(220px, 2.2fr)")                     // Кандидат — вмещает ФИО, длиннее → «…» (сужено, чтобы таблица влезала по ширине)
   if (showVacancyColumn) cols.push("minmax(120px, 0.9fr)") // Вакансия — капнута, чтобы длинное название не растягивало таблицу (обрезается «…»)
   if (showProgress) cols.push("minmax(80px, 1fr)")      // Демо — сегменты-«шаги», сужено ~15%
   if (showResumeScore) cols.push("60px")                // AI-резм. — AI-скор резюме (фикс, w-8 badge + место под header)
@@ -298,11 +298,11 @@ export function ListView({
   if (showTestScore) cols.push("60px")                  // Тест — балл/«отп.»/«сдан» (фикс, как AI-резм)
   if (showNextInterview) cols.push("minmax(96px, 0.9fr)") // Интервью — ближайшее (дата/время)
   if (showSalary) cols.push("minmax(95px, 1.1fr)")      // Зарплата — ужата (длинных чисел редко > 7 симв)
-  if (showCity) cols.push("minmax(102px, 1.7fr)")       // Город — −~15%
+  if (showCity) cols.push("minmax(88px, 1.2fr)")        // Город — сужен
   if (showResponseDate) cols.push("minmax(70px, 0.7fr)") // Дата — "DD.MM.YY" укладывается в 70px
-  cols.push("minmax(130px, 1.3fr)")                     // Статус — ужат с 140/1.8fr до 130/1.3fr
+  cols.push("minmax(110px, 1.1fr)")                     // Статус — сужен
   if (showSource) cols.push("48px")                     // Источник — фикс (значки "hh"/"av" короткие)
-  if (showActions) cols.push("96px")                    // Действия — фикс (закреплена справа, 3 иконки + border)
+  if (showActions) cols.push("80px")                    // Действия — фикс
 
   // Минимальная ширина таблицы = сумма минимумов колонок (px из фикс-ширин и
   // из minmax(Npx, …)). Нужна, чтобы при узком экране сетка ПЕРЕПОЛНЯЛА контейнер
@@ -415,7 +415,7 @@ export function ListView({
         {showResponseDate && <SortHeader label="Дата" sortKey="responseDate" sort={sort} onToggle={handleSort} align="center" />}
         <SortHeader label="Статус" sortKey="status" sort={sort} onToggle={handleSort} align="center" />
         {showSource && <SortHeader label="Источник" sortKey="source" sort={sort} onToggle={handleSort} align="center" />}
-        {showActions && <div className="text-center sticky right-0 z-20 bg-card border-l border-border pl-2">Действия</div>}
+        {showActions && <div className="text-center">Действия</div>}
       </div>
 
       {/* Rows */}
@@ -704,7 +704,7 @@ export function ListView({
               {/* Actions — компактные иконки, full-height клик-зоны */}
               {showActions && (
                 <div
-                  className="self-stretch flex gap-1 justify-center items-center h-full sticky right-0 z-10 bg-card border-l border-border pl-2"
+                  className="self-stretch flex gap-1 justify-center items-center h-full"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {isDecisionStage ? (

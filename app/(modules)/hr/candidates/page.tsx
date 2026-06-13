@@ -71,6 +71,9 @@ const DEFAULT_SETTINGS: CardDisplaySettings = {
   showSalary: false,
   showSalaryFull: true,
   showScore: true,
+  // «Рубрика» (shadow-движок) скрыта по умолчанию — нишевая, экономит ширину
+  // (можно включить в «Вид»). Освобождает место под колонку «Интервью».
+  showRubricScore: false,
   showAge: false,
   showSource: true,
   showCity: true,
