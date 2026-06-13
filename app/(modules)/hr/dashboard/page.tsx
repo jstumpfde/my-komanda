@@ -13,8 +13,8 @@ import { cn } from "@/lib/utils"
 import { ALL_STAGE_SLUGS, PLATFORM_STAGES, getStageLabel, type StageSlug } from "@/lib/stages"
 import { useAuth } from "@/lib/auth"
 import {
-  Briefcase, Users, UserCheck, TrendingUp, Plus, ChevronRight,
-  Sparkles, Activity, Calendar,
+  Briefcase, Users, UserCheck, Plus, ChevronRight,
+  Sparkles, Activity, Calendar, CalendarDays, CheckCircle2, XCircle,
 } from "lucide-react"
 import { CandidatesProgressMiniTable } from "@/components/candidates/candidates-progress-mini-table"
 import { AwaitingReviewBanner } from "./_components/awaiting-review-banner"
@@ -152,6 +152,8 @@ function DashboardContent() {
   const { user } = useAuth()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loaded, setLoaded] = useState(false)
+  // KPI из отчёта (те же цифры, что на /hr/report) — для верхних карточек.
+  const [reportKpi, setReportKpi] = useState<{ activeVacancies: number; totalCandidates: number; interviewScheduled: number; interviewConducted: number; totalRejected: number; totalHired: number } | null>(null)
   // #30: фильтр по вакансии. "all" = показывать всё (default).
   const [selectedVacancyId, setSelectedVacancyId] = useState<string>("all")
   // #47: имя из localStorage для мгновенного первого рендера. Заменяется на
@@ -189,6 +191,18 @@ function DashboardContent() {
       })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoaded(true) })
+    return () => { cancelled = true }
+  }, [selectedVacancyId])
+
+  // KPI из отчёта (Назначено/Проведено инт., Нанято, Отказов) — те же цифры,
+  // что на /hr/report. period=all → итоги за всё время.
+  useEffect(() => {
+    let cancelled = false
+    const vq = selectedVacancyId !== "all" ? `&vacancyId=${encodeURIComponent(selectedVacancyId)}` : ""
+    fetch(`/api/modules/hr/report?period=all${vq}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled && d?.kpi) setReportKpi(d.kpi) })
+      .catch(() => {})
     return () => { cancelled = true }
   }, [selectedVacancyId])
 
@@ -301,12 +315,13 @@ function DashboardContent() {
                 stage IN demo_opened+, см. /api/.../stats #49). Убраны
                 «Ср. время закрытия» (Скоро-плейсхолдер) и «Всего
                 кандидатов» (бесполезно при наличии «Прошли демо»). */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-              <Metric icon={Briefcase} label="Активных вакансий" value={kpi?.activeVacancies ?? "—"} bg="bg-emerald-500" />
-              <Metric icon={Users} label="Откликов сегодня" value={kpi?.candidatesToday ?? "—"} bg="bg-blue-500" />
-              <Metric icon={UserCheck} label="Прошли демо" value={kpi?.candidatesInWork ?? "—"} bg="bg-violet-500" />
-              <Metric icon={Activity} label="Нанято за месяц" value={kpi?.hiredThisMonth ?? "—"} bg="bg-orange-500" />
-              <Metric icon={TrendingUp} label="Конверсия воронки" value={kpi ? `${kpi.conversionRate}%` : "—"} bg="bg-indigo-500" />
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <Metric icon={Briefcase} label="Вакансий" value={reportKpi?.activeVacancies ?? kpi?.activeVacancies ?? "—"} bg="bg-emerald-500" />
+              <Metric icon={Users} label="Откликов всего" value={reportKpi?.totalCandidates ?? "—"} bg="bg-blue-500" />
+              <Metric icon={CalendarDays} label="Назначено инт." value={reportKpi?.interviewScheduled ?? "—"} bg="bg-violet-500" />
+              <Metric icon={CheckCircle2} label="Проведено инт." value={reportKpi?.interviewConducted ?? "—"} bg="bg-indigo-500" />
+              <Metric icon={UserCheck} label="Нанято" value={reportKpi?.totalHired ?? "—"} bg="bg-teal-500" />
+              <Metric icon={XCircle} label="Отказов" value={reportKpi?.totalRejected ?? "—"} bg="bg-rose-500" />
             </div>
 
             {/* ═══ AI-ассистент — #33: активирован SQL-инсайтами ═══ */}
