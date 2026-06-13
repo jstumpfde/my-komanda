@@ -10,7 +10,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils"
 import type { CandidateAction } from "@/lib/column-config"
 import { applySortMode, type CandidateSortMode } from "@/lib/candidate-sort"
-import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ArrowUp, ArrowDown, Star, CalendarClock } from "lucide-react"
+import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ArrowUp, ArrowDown, Star, CalendarClock, CalendarPlus } from "lucide-react"
 import { DemoProgressBar, calcDemoPercent, calcDemoFraction } from "@/components/hr/demo-progress-bar"
 import { getStageLabel, getStageColorClasses } from "@/lib/stages"
 
@@ -36,6 +36,8 @@ interface ListViewProps {
   onAction?: (candidateId: string, columnId: string, action: CandidateAction) => void
   /** Клик по названию вакансии в строке → переход в эту вакансию. */
   onVacancyClick?: (vacancyId: string) => void
+  /** Если задан — в колонке «Действия» появляется кнопка «Запланировать интервью». */
+  onScheduleInterview?: (candidate: Candidate & { vacancyId?: string | null }) => void
   onToggleFavorite?: (candidateId: string, isFavorite: boolean) => void
   sortMode?: CandidateSortMode
   /** Если задан — сортировка по колонке управляется снаружи (URL/сервер). */
@@ -144,7 +146,7 @@ function SortHeader({
 }
 
 export function ListView({
-  columns, settings, onOpenProfile, onAction, onToggleFavorite, onVacancyClick,
+  columns, settings, onOpenProfile, onAction, onToggleFavorite, onVacancyClick, onScheduleInterview,
   sortMode = "date_desc", sort = null, onSortChange,
   selectedIds, onSelectionChange,
   serverSorted = false,
@@ -302,7 +304,7 @@ export function ListView({
   if (showResponseDate) cols.push("minmax(62px, 0.7fr)") // Дата — "DD.MM.YY"
   cols.push("minmax(104px, 1.1fr)")                     // Статус — сужен
   if (showSource) cols.push("48px")                     // Источник — фикс (значки "hh"/"av" короткие)
-  if (showActions) cols.push("80px")                    // Действия — фикс
+  if (showActions) cols.push(onScheduleInterview ? "108px" : "80px") // Действия (4 иконки если есть планирование)
 
   // Минимальная ширина таблицы = сумма минимумов колонок (px из фикс-ширин и
   // из minmax(Npx, …)). Нужна, чтобы при узком экране сетка ПЕРЕПОЛНЯЛА контейнер
@@ -761,6 +763,16 @@ export function ListView({
                         <ArrowRight className="w-4 h-4" />
                       </button>
                     </>
+                  )}
+                  {onScheduleInterview && (
+                    <button
+                      type="button"
+                      title="Запланировать интервью"
+                      className="w-7 h-full flex items-center justify-center rounded text-violet-600 dark:text-violet-400 hover:bg-violet-500/10 transition-colors"
+                      onClick={() => onScheduleInterview(candidate as Candidate & { vacancyId?: string | null })}
+                    >
+                      <CalendarPlus className="w-4 h-4" />
+                    </button>
                   )}
                 </div>
               )}
