@@ -26,7 +26,13 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
 import { StageMessageControl } from "@/components/candidates/stage-message-control"
-import { getStageLabel } from "@/lib/stages"
+import { getStageLabel, ALL_STAGE_SLUGS } from "@/lib/stages"
+
+interface FacetsData {
+  cities: { city: string; count: number }[]
+  sources: { source: string; count: number }[]
+  stages?: { stage: string; count: number }[]
+}
 import { CandidateFilters, type FilterState } from "@/components/dashboard/candidate-filters"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -228,8 +234,8 @@ export default function CandidatesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Серверные фасеты (города/источники по всей компании) для поп-овера
-  const [facets, setFacets] = useState<{ cities: { city: string; count: number }[]; sources: { source: string; count: number }[] } | null>(null)
+  // Серверные фасеты (города/источники + счётчики этапов) для поп-овера и чипов
+  const [facets, setFacets] = useState<FacetsData | null>(null)
 
   // Сортировка
   const [sort, setSort] = useState<ListSortState | null>({ key: "responseDate", dir: "desc" })
@@ -369,13 +375,14 @@ export default function CandidatesPage() {
   // ─── Загрузка фасетов (города/источники по всей компании) ───────────────
 
   useEffect(() => {
-    fetch("/api/modules/hr/candidates/facets")
+    const qs = vacancyFilter !== "all" ? `?vacancyTitle=${encodeURIComponent(vacancyFilter)}` : ""
+    fetch(`/api/modules/hr/candidates/facets${qs}`)
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then((data: { data?: { cities?: { city: string; count: number }[]; sources?: { source: string; count: number }[] } }) => {
-        if (data?.data) setFacets(data.data as { cities: { city: string; count: number }[]; sources: { source: string; count: number }[] })
+      .then((data: { data?: FacetsData }) => {
+        if (data?.data) setFacets(data.data)
       })
       .catch(() => {})
-  }, [])
+  }, [vacancyFilter])
 
   // ─── Маппинг в формат ListView ────────────────────────────────────────────
 
@@ -570,6 +577,47 @@ export default function CandidatesPage() {
                 onReset={() => setSettings(DEFAULT_SETTINGS)}
               />
             </div>
+
+            {/* Чипы-этапы (инлайн-воронка): клик фильтрует список по этапу */}
+            {facets?.stages && facets.stages.length > 0 && (
+              <div className="flex items-center gap-1.5 mb-4 flex-wrap">
+                <button
+                  onClick={() => { setFilters(f => ({ ...f, funnelStatuses: [] })); setPage(1) }}
+                  className={cn(
+                    "px-2.5 h-7 rounded-full text-xs border transition-colors",
+                    filters.funnelStatuses.length === 0 ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-muted",
+                  )}
+                >
+                  Все
+                </button>
+                {[...ALL_STAGE_SLUGS, ...facets.stages.map(s => s.stage).filter(s => !(ALL_STAGE_SLUGS as readonly string[]).includes(s))]
+                  .map(slug => ({ slug, count: facets.stages?.find(s => s.stage === slug)?.count ?? 0 }))
+                  .filter(x => x.count > 0)
+                  .map(({ slug, count }) => {
+                    const active = filters.funnelStatuses.length === 1 && filters.funnelStatuses[0] === slug
+                    return (
+                      <button
+                        key={slug}
+                        onClick={() => {
+                          setFilters(f => ({
+                            ...f,
+                            funnelStatuses: [slug],
+                            hideRejected: (slug === "rejected" || slug === "test_failed") ? false : f.hideRejected,
+                          }))
+                          setPage(1)
+                        }}
+                        className={cn(
+                          "px-2.5 h-7 rounded-full text-xs border transition-colors inline-flex items-center gap-1.5",
+                          active ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-muted",
+                        )}
+                      >
+                        {getStageLabel(slug)}
+                        <span className={cn("text-[10px] tabular-nums", active ? "text-primary-foreground/80" : "text-muted-foreground")}>{count}</span>
+                      </button>
+                    )
+                  })}
+              </div>
+            )}
 
             {/* Bulk bar */}
             {selected.size > 0 && (
