@@ -289,18 +289,18 @@ export function ListView({
   // -ml-3 на ★ и Кандидате схлопывает gap-4 до 4px edge-to-edge.
   if (selectionEnabled) cols.push("24px")               // ☐ — фикс (компактнее)
   cols.push("28px")                                     // ★ — фикс (w-7, ужато)
-  cols.push("minmax(220px, 2.2fr)")                     // Кандидат — вмещает ФИО, длиннее → «…» (сужено, чтобы таблица влезала по ширине)
-  if (showVacancyColumn) cols.push("minmax(120px, 0.9fr)") // Вакансия — капнута, чтобы длинное название не растягивало таблицу (обрезается «…»)
-  if (showProgress) cols.push("minmax(80px, 1fr)")      // Демо — сегменты-«шаги», сужено ~15%
-  if (showResumeScore) cols.push("60px")                // AI-резм. — AI-скор резюме (фикс, w-8 badge + место под header)
-  if (showScore) cols.push("minmax(60px, 0.85fr)")      // AI-оцен.
-  if (showRubricScore) cols.push("64px")                // Рубрика — новый shadow-движок
-  if (showTestScore) cols.push("60px")                  // Тест — балл/«отп.»/«сдан» (фикс, как AI-резм)
-  if (showNextInterview) cols.push("minmax(96px, 0.9fr)") // Интервью — ближайшее (дата/время)
-  if (showSalary) cols.push("minmax(95px, 1.1fr)")      // Зарплата — ужата (длинных чисел редко > 7 симв)
-  if (showCity) cols.push("minmax(88px, 1.2fr)")        // Город — сужен
-  if (showResponseDate) cols.push("minmax(70px, 0.7fr)") // Дата — "DD.MM.YY" укладывается в 70px
-  cols.push("minmax(110px, 1.1fr)")                     // Статус — сужен
+  cols.push("minmax(200px, 2fr)")                       // Кандидат — вмещает ФИО, длиннее → «…» (сужено, чтобы таблица влезала по ширине)
+  if (showVacancyColumn) cols.push("minmax(112px, 0.9fr)") // Вакансия — капнута, чтобы длинное название не растягивало таблицу (обрезается «…»)
+  if (showProgress) cols.push("minmax(72px, 0.9fr)")    // Демо — сегменты-«шаги»
+  if (showResumeScore) cols.push("56px")                // AI-резм. — AI-скор резюме (фикс, w-8 badge)
+  if (showScore) cols.push("minmax(56px, 0.85fr)")      // AI-оцен.
+  if (showRubricScore) cols.push("60px")                // Рубрика — новый shadow-движок
+  if (showTestScore) cols.push("56px")                  // Тест — балл/«отп.»/«сдан»
+  if (showNextInterview) cols.push("minmax(92px, 0.9fr)") // Интервью — ближайшее (дата/время)
+  if (showSalary) cols.push("minmax(88px, 1fr)")        // Зарплата — ужата (длинных чисел редко > 7 симв)
+  if (showCity) cols.push("minmax(84px, 1.2fr)")        // Город — сужен
+  if (showResponseDate) cols.push("minmax(62px, 0.7fr)") // Дата — "DD.MM.YY"
+  cols.push("minmax(104px, 1.1fr)")                     // Статус — сужен
   if (showSource) cols.push("48px")                     // Источник — фикс (значки "hh"/"av" короткие)
   if (showActions) cols.push("80px")                    // Действия — фикс
 
