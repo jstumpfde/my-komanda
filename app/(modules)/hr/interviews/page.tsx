@@ -142,6 +142,20 @@ const STATUS_DOT: Record<InterviewStatus, string> = {
   "Подтверждено": "bg-emerald-500", "Ожидает": "bg-amber-500", "Пройдено": "bg-gray-400", "Не явился": "bg-red-500", "Отменено": "bg-gray-300",
 }
 
+// Легенда цветов статусов — общая для Недели/Месяца/Дня.
+function StatusLegend({ className }: { className?: string }) {
+  return (
+    <div className={cn("flex items-center gap-4 flex-wrap", className)}>
+      {(Object.entries(STATUS_DOT) as [InterviewStatus, string][]).map(([s, c]) => (
+        <div key={s} className="flex items-center gap-1.5">
+          <div className={cn("w-3 h-3 rounded-full", c)} />
+          <span className="text-[10px] text-muted-foreground">{s}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function isSameDay(a: Date, b: Date) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate() }
 function isToday(dd: Date) { return isSameDay(dd, new Date()) }
 function formatDateShort(dd: Date) { return dd.toLocaleDateString("ru-RU", { day: "numeric", month: "short" }) }
@@ -426,7 +440,9 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
   const monthName = calDate.toLocaleDateString("ru-RU", { month: "long", year: "numeric" })
   const firstDay = (calDate.getDay() + 6) % 7
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate()
-  const calDays = Array.from({ length: 42 }, (_, i) => { const dn = i - firstDay + 1; return (dn < 1 || dn > daysInMonth) ? null : new Date(calYear, calMonth, dn) })
+  // Кол-во недель в сетке зависит от месяца (5 или 6) — без пустой хвостовой строки.
+  const calWeeks = Math.ceil((firstDay + daysInMonth) / 7)
+  const calDays = Array.from({ length: calWeeks * 7 }, (_, i) => { const dn = i - firstDay + 1; return (dn < 1 || dn > daysInMonth) ? null : new Date(calYear, calMonth, dn) })
 
   const viewDay = new Date(today2); viewDay.setDate(viewDay.getDate() + dayOffset)
   const dayInterviews = interviews.filter(iv => isSameDay(iv.date, viewDay)).sort((a, b) => a.time.localeCompare(b.time))
@@ -649,6 +665,7 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
                       )
                     })}
                   </div>
+                  <StatusLegend className="mt-4 px-1" />
                 </CardContent></Card>
               )}
 
@@ -693,6 +710,7 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
                       )
                     })}
                   </div>
+                  <StatusLegend className="mt-4 px-1" />
                 </CardContent></Card>
               )}
 
@@ -762,14 +780,7 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
                       ))}
                     </div>
                   </div>
-                  <div className="flex items-center gap-4 mt-3 px-2 flex-wrap">
-                    {(Object.entries(STATUS_DOT) as [InterviewStatus, string][]).map(([s, c]) => (
-                      <div key={s} className="flex items-center gap-1.5">
-                        <div className={cn("w-3 h-3 rounded-full", c)} />
-                        <span className="text-[10px] text-muted-foreground">{s}</span>
-                      </div>
-                    ))}
-                  </div>
+                  <StatusLegend className="mt-3 px-2" />
                 </CardContent></Card>
               )}
 
