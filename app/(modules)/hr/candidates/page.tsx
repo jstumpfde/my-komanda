@@ -5,6 +5,7 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Search, Users, UserPlus, Archive, XCircle, Loader2, Star, ChevronDown } from "lucide-react"
 import { useDebounce } from "@/hooks/use-debounce"
 import { Button } from "@/components/ui/button"
@@ -25,7 +26,13 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
 import { StageMessageControl } from "@/components/candidates/stage-message-control"
-import { getStageLabel } from "@/lib/stages"
+import { getStageLabel, ALL_STAGE_SLUGS, PLATFORM_STAGES, type StageSlug } from "@/lib/stages"
+
+interface FacetsData {
+  cities: { city: string; count: number }[]
+  sources: { source: string; count: number }[]
+  stages?: { stage: string; count: number }[]
+}
 import { CandidateFilters, type FilterState } from "@/components/dashboard/candidate-filters"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -49,6 +56,7 @@ interface GlobalCandidate {
   rubricScore?: number | null
   testScore?: number | null
   testStatus?: "submitted" | "in_progress" | "opened" | "sent" | null
+  nextInterviewAt?: string | null
   salaryMin?: number | null
   salaryMax?: number | null
   salaryCurrency?: string | null
@@ -99,6 +107,7 @@ function toListCandidate(c: GlobalCandidate): Candidate & { vacancyTitle: string
     rubricScore: c.rubricScore ?? null,
     testScore: c.testScore ?? null,
     testStatus: c.testStatus ?? null,
+    nextInterviewAt: c.nextInterviewAt ?? null,
     isActive: c.isActive,
     demoProgressJson: c.demoProgressJson as Candidate["demoProgressJson"],
     demoTotalBlocks: c.demoTotalBlocks,
@@ -188,6 +197,10 @@ export default function CandidatesPage() {
   // Избранное (кнопка в тулбаре)
   const [favoriteOnly, setFavoriteOnly] = useState(false)
 
+  // Фильтр по вакансии (главный для кросс-вакансионной работы). "all" = все.
+  const [vacancyFilter, setVacancyFilter] = useState("all")
+  const [allVacancyTitles, setAllVacancyTitles] = useState<string[]>([])
+
   // Поп-овер фильтров (CandidateFilters)
   const [filters, setFilters] = useState<FilterState>({
     searchText: "", cities: [], salaryMin: 0, salaryMax: 250000,
@@ -202,8 +215,29 @@ export default function CandidatesPage() {
     education: [], languages: [], otherLanguages: [], skills: [], industries: [],
   })
 
-  // Серверные фасеты (города/источники по всей компании) для поп-овера
-  const [facets, setFacets] = useState<{ cities: { city: string; count: number }[]; sources: { source: string; count: number }[] } | null>(null)
+  // Дип-линк с дашборда/AI-инсайтов: ?stage=<slug> или ?funnelStatuses=<csv>
+  // (+ опц. ?vacancyTitle=). Применяем фильтры один раз при загрузке.
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const sp = new URLSearchParams(window.location.search)
+    const stage = sp.get("stage")
+    const funnelCsv = sp.get("funnelStatuses")
+    const vacTitle = sp.get("vacancyTitle")
+    const stages = funnelCsv ? funnelCsv.split(",").filter(Boolean) : stage ? [stage] : []
+    if (stages.length > 0) {
+      setFilters(prev => ({
+        ...prev,
+        funnelStatuses: stages,
+        // если запросили отказ/терминальную стадию — не прячем отказы
+        hideRejected: stages.includes("rejected") || stages.includes("test_failed") ? false : prev.hideRejected,
+      }))
+    }
+    if (vacTitle) setVacancyFilter(vacTitle)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Серверные фасеты (города/источники + счётчики этапов) для поп-овера и чипов
+  const [facets, setFacets] = useState<FacetsData | null>(null)
 
   // Сортировка
   const [sort, setSort] = useState<ListSortState | null>({ key: "responseDate", dir: "desc" })
@@ -239,6 +273,8 @@ export default function CandidatesPage() {
     if (debouncedSearch.trim()) ps.set("search", debouncedSearch.trim())
     // Избранное
     if (favoriteOnly) ps.set("favorite", "true")
+    // Фильтр по вакансии (по названию — глобальная ветка API)
+    if (vacancyFilter !== "all") ps.set("vacancyTitle", vacancyFilter)
     // Из FilterState: стадии воронки
     if (filters.funnelStatuses.length > 0) {
       ps.set("funnelStatuses", filters.funnelStatuses.join(","))
@@ -260,7 +296,31 @@ export default function CandidatesPage() {
     if (filters.dateFrom) ps.set("dateFrom", filters.dateFrom)
     if (filters.dateTo) ps.set("dateTo", filters.dateTo)
     return ps
-  }, [debouncedSearch, favoriteOnly, filters])
+  }, [debouncedSearch, favoriteOnly, vacancyFilter, filters])
+
+  // Список вакансий для фильтра по вакансии.
+  useEffect(() => {
+    fetch("/api/modules/hr/vacancies")
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then((data) => {
+        // API: apiSuccess({ vacancies: [...] }) → { data: { vacancies: [...] } }
+        const list = Array.isArray(data) ? data
+          : Array.isArray(data?.vacancies) ? data.vacancies
+          : Array.isArray(data?.data?.vacancies) ? data.data.vacancies
+          : Array.isArray(data?.items) ? data.items
+          : Array.isArray(data?.data) ? data.data : []
+        const titles = [...new Set(
+          (list as { title?: string }[]).map(v => v?.title).filter((t): t is string => !!t)
+        )].sort((a, b) => a.localeCompare(b, "ru"))
+        setAllVacancyTitles(titles)
+      })
+      .catch(() => {})
+  }, [])
+
+  const vacancyOptions = useMemo(
+    () => [{ value: "all", label: "Все вакансии" }, ...allVacancyTitles.map(t => ({ value: t, label: t }))],
+    [allVacancyTitles],
+  )
 
   // ─── Загрузка кандидатов ──────────────────────────────────────────────────
 
@@ -317,13 +377,14 @@ export default function CandidatesPage() {
   // ─── Загрузка фасетов (города/источники по всей компании) ───────────────
 
   useEffect(() => {
-    fetch("/api/modules/hr/candidates/facets")
+    const qs = vacancyFilter !== "all" ? `?vacancyTitle=${encodeURIComponent(vacancyFilter)}` : ""
+    fetch(`/api/modules/hr/candidates/facets${qs}`)
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then((data: { data?: { cities?: { city: string; count: number }[]; sources?: { source: string; count: number }[] } }) => {
-        if (data?.data) setFacets(data.data as { cities: { city: string; count: number }[]; sources: { source: string; count: number }[] })
+      .then((data: { data?: FacetsData }) => {
+        if (data?.data) setFacets(data.data)
       })
       .catch(() => {})
-  }, [])
+  }, [vacancyFilter])
 
   // ─── Маппинг в формат ListView ────────────────────────────────────────────
 
@@ -477,6 +538,17 @@ export default function CandidatesPage() {
                   className={cn("pl-9", FILTER_INPUT)}
                 />
               </div>
+              {/* Главный фильтр — по вакансии (для кросс-вакансионной работы) */}
+              <Select value={vacancyFilter} onValueChange={(v) => { setVacancyFilter(v); setPage(1) }}>
+                <SelectTrigger className={cn("flex-1 min-w-[150px] max-w-[280px]", FILTER_INPUT)}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {vacancyOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {/* Поп-овер фильтров — аналогично странице вакансии */}
               <CandidateFilters
                 filters={filters}
@@ -507,6 +579,64 @@ export default function CandidatesPage() {
                 onReset={() => setSettings(DEFAULT_SETTINGS)}
               />
             </div>
+
+            {/* Мини-сводка: роллап по этапам (чипы дают поэтапно, тут — итог) */}
+            {facets?.stages && facets.stages.length > 0 && (() => {
+              let total = 0, inWork = 0, rejected = 0
+              for (const s of facets.stages) {
+                total += s.count
+                if (s.stage === "rejected") rejected += s.count
+                else if (!PLATFORM_STAGES[s.stage as StageSlug]?.isTerminal) inWork += s.count
+              }
+              return (
+                <div className="flex items-center gap-4 mb-3 text-sm flex-wrap">
+                  <span className="text-muted-foreground">Всего: <b className="text-foreground tabular-nums">{total}</b></span>
+                  <span className="text-muted-foreground">В работе: <b className="text-foreground tabular-nums">{inWork}</b></span>
+                  <span className="text-muted-foreground">Отказов: <b className="text-foreground tabular-nums">{rejected}</b></span>
+                </div>
+              )
+            })()}
+
+            {/* Чипы-этапы (инлайн-воронка): клик фильтрует список по этапу */}
+            {facets?.stages && facets.stages.length > 0 && (
+              <div className="flex items-center gap-1.5 mb-4 flex-wrap">
+                <button
+                  onClick={() => { setFilters(f => ({ ...f, funnelStatuses: [] })); setPage(1) }}
+                  className={cn(
+                    "px-2.5 h-7 rounded-full text-xs border transition-colors",
+                    filters.funnelStatuses.length === 0 ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-muted",
+                  )}
+                >
+                  Все
+                </button>
+                {[...ALL_STAGE_SLUGS, ...facets.stages.map(s => s.stage).filter(s => !(ALL_STAGE_SLUGS as readonly string[]).includes(s))]
+                  .map(slug => ({ slug, count: facets.stages?.find(s => s.stage === slug)?.count ?? 0 }))
+                  .filter(x => x.count > 0)
+                  .map(({ slug, count }) => {
+                    const active = filters.funnelStatuses.length === 1 && filters.funnelStatuses[0] === slug
+                    return (
+                      <button
+                        key={slug}
+                        onClick={() => {
+                          setFilters(f => ({
+                            ...f,
+                            funnelStatuses: [slug],
+                            hideRejected: (slug === "rejected" || slug === "test_failed") ? false : f.hideRejected,
+                          }))
+                          setPage(1)
+                        }}
+                        className={cn(
+                          "px-2.5 h-7 rounded-full text-xs border transition-colors inline-flex items-center gap-1.5",
+                          active ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-muted",
+                        )}
+                      >
+                        {getStageLabel(slug)}
+                        <span className={cn("text-[10px] tabular-nums", active ? "text-primary-foreground/80" : "text-muted-foreground")}>{count}</span>
+                      </button>
+                    )
+                  })}
+              </div>
+            )}
 
             {/* Bulk bar */}
             {selected.size > 0 && (
@@ -557,7 +687,7 @@ export default function CandidatesPage() {
                 sort={sort}
                 onSortChange={setSort}
                 serverSorted={false}
-                showVacancyColumn={true}
+                showVacancyColumn={vacancyFilter === "all"}
                 selectedIds={selected}
                 onSelectionChange={setSelected}
                 onOpenProfile={handleOpenProfile}

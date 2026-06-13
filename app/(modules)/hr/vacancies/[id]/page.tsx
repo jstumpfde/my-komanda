@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback, useMemo } from "react"
+import { useState, useRef, useEffect, useCallback, useMemo, Suspense } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth, isPlatformRole } from "@/lib/auth"
@@ -40,7 +40,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, RefreshCw, Bot, Workflow, FilePlus, UserSearch, Trash2, Target, Inbox} from "lucide-react"
+import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, RefreshCw, Bot, Workflow, FilePlus, UserSearch, Trash2, Target, Inbox, CalendarDays} from "lucide-react"
+import { InterviewsView } from "@/app/(modules)/hr/interviews/page"
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-factors-settings"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -2471,6 +2472,7 @@ export default function VacancyPage() {
                       последними (рендерятся отдельным TabsTrigger ниже). */}
                   {((status === "active" || status === "published") ? [
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
+                    { value: "interview", icon: CalendarDays, label: "Интервью" },
                     { value: "analytics", icon: BarChart3, label: "Аналитика" },
                     { value: "outbound", icon: UserSearch, label: "Исходящий подбор" },
                     { value: "queue", icon: Inbox, label: "Очередь" },
@@ -2480,6 +2482,7 @@ export default function VacancyPage() {
                     { value: "anketa", icon: ClipboardList, label: "Вакансия" },
                     { value: "content", icon: BookOpen, label: "Контент" },
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
+                    { value: "interview", icon: CalendarDays, label: "Интервью" },
                     { value: "analytics", icon: BarChart3, label: "Аналитика" },
                     { value: "outbound", icon: UserSearch, label: "Исходящий подбор" },
                     { value: "queue", icon: Inbox, label: "Очередь" },
@@ -2698,6 +2701,14 @@ export default function VacancyPage() {
                   рантайм их по-прежнему читает по kind. */}
               <TabsContent value="content">
                 <ContentBlocksTab vacancyId={id} vacancyTitle={vacancyTitle} />
+              </TabsContent>
+
+              {/* Интервью — календарь компании прямо внутри вакансии (часть единого
+                  рабочего пространства: интервью доступны, не выходя из вакансии). */}
+              <TabsContent value="interview">
+                <Suspense fallback={<div className="flex items-center justify-center h-64 text-sm text-muted-foreground">Загрузка…</div>}>
+                  <InterviewsView vacancyId={id} embedded />
+                </Suspense>
               </TabsContent>
 
               {/* #23: «Очередь сообщений» — отдельный таб (раньше был в Настройки→Источники) */}

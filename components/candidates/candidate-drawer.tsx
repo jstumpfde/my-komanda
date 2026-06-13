@@ -36,6 +36,7 @@ import {
   CheckCircle2,
   XCircle,
   Calendar,
+  CalendarPlus,
   Loader2,
   Send,
   MessageSquare,
@@ -83,6 +84,7 @@ import {
   rejectionInitiatorLabel,
 } from "@/lib/hr/rejection-reasons"
 import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import type { ApiCandidate } from "@/hooks/use-candidates"
 import type { Lesson, Block } from "@/lib/course-types"
@@ -615,6 +617,15 @@ export function CandidateDrawer({
   const [confirmRestoreOpen, setConfirmRestoreOpen] = useState(false)
   const [restoreTargetStage, setRestoreTargetStage] = useState<string | null>(null)
   const [confirmInterviewOpen, setConfirmInterviewOpen] = useState(false)
+  // #1: «Запланировать интервью» из карточки — создаёт событие календаря,
+  // привязанное к кандидату+вакансии (появляется в табе «Интервью»).
+  const [scheduleOpen, setScheduleOpen] = useState(false)
+  const [scheduling, setScheduling] = useState(false)
+  const [schedDate, setSchedDate] = useState("")
+  const [schedTime, setSchedTime] = useState("10:00")
+  const [schedDur, setSchedDur] = useState("45")
+  const [schedInterviewer, setSchedInterviewer] = useState("")
+  const [schedCurrentUser, setSchedCurrentUser] = useState<string>("")
   const [confirmRejectOpen, setConfirmRejectOpen] = useState(false)
   const [rejectInitiator, setRejectInitiator] = useState("company")
   const [rejectReason, setRejectReason] = useState("")
@@ -902,6 +913,44 @@ export function CandidateDrawer({
         toast.error("Не удалось обновить избранное")
       }
     }
+  }
+
+  // #1: текущий пользователь — для авто-интервьюера в диалоге планирования.
+  useEffect(() => {
+    fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then((j) => {
+      const u = j?.user ?? j?.data ?? j
+      if (u?.name || u?.email) setSchedCurrentUser(u.name ?? u.email)
+    }).catch(() => {})
+  }, [])
+
+  const openSchedule = () => {
+    const now = new Date()
+    setSchedDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`)
+    setSchedTime("10:00"); setSchedDur("45"); setSchedInterviewer(schedCurrentUser)
+    setScheduleOpen(true)
+  }
+
+  const handleScheduleInterview = async () => {
+    if (!candidate || !schedDate || !schedTime) { toast.error("Укажите дату и время"); return }
+    setScheduling(true)
+    try {
+      const [h, m] = schedTime.split(":").map(Number)
+      const start = new Date(schedDate); start.setHours(h, m, 0, 0)
+      const end = new Date(start.getTime() + (parseInt(schedDur) || 45) * 60000)
+      const res = await fetch("/api/modules/hr/calendar", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: candidate.name, type: "interview",
+          startAt: start.toISOString(), endAt: end.toISOString(),
+          candidateId: candidate.id,
+          vacancyId: (candidate as { vacancyId?: string | null }).vacancyId ?? null,
+          interviewer: schedInterviewer || null,
+        }),
+      })
+      if (!res.ok) throw new Error()
+      setScheduleOpen(false)
+      toast.success("Интервью запланировано — смотрите в табе «Интервью»")
+    } catch { toast.error("Не удалось запланировать интервью") } finally { setScheduling(false) }
   }
 
   const handleStageChange = async (newStage: string) => {
@@ -2038,9 +2087,58 @@ export function CandidateDrawer({
               </Button>
             )}
 
+            {/* #1: запланировать интервью с датой → событие в табе «Интервью» */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-10 shrink-0 gap-2"
+              onClick={openSchedule}
+              title="Запланировать интервью (с датой)"
+            >
+              <CalendarPlus className="w-4 h-4" />
+              <span className="hidden sm:inline">Запланировать</span>
+            </Button>
+
           </div>
         )}
       </SheetContent>
+
+      {/* #1: Диалог планирования интервью из карточки кандидата */}
+      <Dialog open={scheduleOpen} onOpenChange={setScheduleOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Запланировать интервью{candidate?.name ? ` — ${candidate.name}` : ""}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-1">
+                <Label htmlFor="sch-date" className="text-xs">Дата *</Label>
+                <Input id="sch-date" type="date" value={schedDate} onChange={e => setSchedDate(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="sch-time" className="text-xs">Время *</Label>
+                <Input id="sch-time" type="time" value={schedTime} onChange={e => setSchedTime(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="sch-dur" className="text-xs">Длит., мин</Label>
+                <Input id="sch-dur" type="number" min={15} step={15} value={schedDur} onChange={e => setSchedDur(e.target.value)} />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="sch-interviewer" className="text-xs">Интервьюер</Label>
+              <Input id="sch-interviewer" value={schedInterviewer} onChange={e => setSchedInterviewer(e.target.value)} placeholder="Кто проводит" />
+              {schedCurrentUser && <p className="text-[11px] text-muted-foreground">По умолчанию — вы. Можно изменить.</p>}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setScheduleOpen(false)} disabled={scheduling}>Отмена</Button>
+            <Button onClick={handleScheduleInterview} disabled={scheduling || !schedDate || !schedTime}>
+              {scheduling ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+              Запланировать
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={confirmRestoreOpen} onOpenChange={setConfirmRestoreOpen}>
         <AlertDialogContent>

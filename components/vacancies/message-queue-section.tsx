@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,37 +15,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Loader2, PauseCircle, Trash2, ListChecks } from "lucide-react"
+import { Loader2, PauseCircle, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { Label } from "@/components/ui/label"
-import { MessageQueueReviewSheet } from "@/components/vacancies/message-queue-review-sheet"
+import { MessageQueueJournal } from "@/components/vacancies/message-queue-journal"
+import { FollowupPresetsManager } from "@/components/vacancies/followup-presets-manager"
+import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
+import { VacancyTestFollowupSettings } from "@/components/vacancies/vacancy-test-followup-settings"
 
 interface QueueData {
   paused: boolean
   pendingCount: number
   pendingByBranch: Record<string, number>
   pendingRejections: number
-}
-
-// Русские названия веток дожима
-const BRANCH_LABELS: Record<string, string> = {
-  not_opened:               "Не открыл демо",
-  opened_not_finished:      "Открыл, не дошёл",
-  anketa_confirmation:      "Подтверждение анкеты",
-  anketa_auto_reply:        "Автоответ анкеты",
-  first_msg_2:              "Сообщение 2",
-  first_msg_3:              "Сообщение 3",
-  first_msg_offhours:       "Внерабочий отклик",
-  test_after_message:       "После теста",
-  test_invite:              "Приглашение на тест",
-  test_reminder:            "Напоминание о тесте",
-  test_not_opened:          "Тест не открыт",
-  test_opened_not_submitted:"Тест не отправлен",
-  schedule_invite:          "Приглашение на интервью",
-}
-
-function branchLabel(branch: string): string {
-  return BRANCH_LABELS[branch] ?? branch
 }
 
 interface Props {
@@ -57,7 +40,8 @@ export function MessageQueueSection({ vacancyId }: Props) {
   const [pauseLoading, setPauseLoading] = useState(false)
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
   const [clearLoading, setClearLoading] = useState(false)
-  const [reviewOpen, setReviewOpen] = useState(false)
+  // Меняется при отмене сообщения в журнале — заставляет журнал перечитаться.
+  const [journalKey, setJournalKey] = useState(0)
 
   const fetchData = useCallback(async () => {
     try {
@@ -116,8 +100,8 @@ export function MessageQueueSection({ vacancyId }: Props) {
         `Очищено: ${result.cancelledFollowups} сообщений, ${result.cancelledRejections} отказов`,
       )
       setClearDialogOpen(false)
-      // Обновляем счётчики
       await fetchData()
+      setJournalKey((k) => k + 1)
     } catch {
       toast.error("Не удалось очистить очередь")
     } finally {
@@ -129,6 +113,7 @@ export function MessageQueueSection({ vacancyId }: Props) {
 
   return (
     <div className="rounded-lg border bg-card p-4 space-y-4">
+      {/* Шапка + статус */}
       <div className="flex items-start justify-between gap-3">
         <div>
           <h4 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
@@ -170,56 +155,44 @@ export function MessageQueueSection({ vacancyId }: Props) {
         </Label>
       </div>
 
-      {/* Разбивка по типам */}
-      {data && (data.pendingCount > 0 || data.pendingRejections > 0) && (
-        <div className="space-y-1.5">
-          {data.pendingRejections > 0 && (
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Отложенные отказы</span>
-              <Badge variant="outline" className="text-xs h-5">{data.pendingRejections}</Badge>
+      {/* Журнал (инлайн) + Шаблоны рассылки */}
+      <Tabs defaultValue="journal">
+        <TabsList>
+          <TabsTrigger value="journal">Журнал</TabsTrigger>
+          <TabsTrigger value="templates">Шаблоны рассылки</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="journal" className="mt-3 space-y-3">
+          {totalPending > 0 && (
+            <div className="flex justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs text-destructive border-destructive/40 hover:bg-destructive/5 hover:text-destructive"
+                onClick={() => setClearDialogOpen(true)}
+                disabled={clearLoading}
+              >
+                <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                Очистить очередь
+              </Button>
             </div>
           )}
-          {Object.entries(data.pendingByBranch).map(([branch, cnt]) => (
-            <div key={branch} className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">{branchLabel(branch)}</span>
-              <Badge variant="outline" className="text-xs h-5">{cnt}</Badge>
-            </div>
-          ))}
-        </div>
-      )}
+          <MessageQueueJournal key={journalKey} vacancyId={vacancyId} onChanged={fetchData} />
+        </TabsContent>
 
-      {/* Кнопки: просмотр очереди + очистка */}
-      {data && totalPending > 0 && (
-        <div className="pt-1 flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs"
-            onClick={() => setReviewOpen(true)}
-          >
-            <ListChecks className="w-3.5 h-3.5 mr-1.5" />
-            Просмотреть очередь
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs text-destructive border-destructive/40 hover:bg-destructive/5 hover:text-destructive"
-            onClick={() => setClearDialogOpen(true)}
-            disabled={clearLoading}
-          >
-            <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-            Очистить очередь
-          </Button>
-        </div>
-      )}
-
-      {/* Sheet ревизии очереди */}
-      <MessageQueueReviewSheet
-        vacancyId={vacancyId}
-        open={reviewOpen}
-        onOpenChange={setReviewOpen}
-        onChanged={fetchData}
-      />
+        <TabsContent value="templates" className="mt-3 space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Готовые тексты касаний, из которых собирается очередь. Переменные:
+            <code className="mx-1">{"{{name}}"}</code>(имя),
+            <code className="mx-1">{"{{vacancy}}"}</code>(должность),
+            <code className="mx-1">{"{{test_link}}"}</code>,
+            <code className="mx-1">{"{{demo_link}}"}</code>. Пустой слот → берётся текст по умолчанию.
+          </p>
+          <FollowupPresetsManager vacancyId={vacancyId} />
+          <VacancyFollowupSettings vacancyId={vacancyId} />
+          <VacancyTestFollowupSettings vacancyId={vacancyId} />
+        </TabsContent>
+      </Tabs>
 
       {/* Диалог подтверждения очистки */}
       <AlertDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>

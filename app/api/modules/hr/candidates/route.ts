@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
-import { eq, ne, and, inArray, asc, desc, or, isNull, isNotNull, sql, type SQL } from "drizzle-orm"
+import { eq, ne, and, inArray, asc, desc, or, isNull, isNotNull, gte, sql, type SQL } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, vacancies, demos, hhResponses, testSubmissions, followUpMessages } from "@/lib/db/schema"
+import { candidates, vacancies, demos, hhResponses, testSubmissions, followUpMessages, calendarEvents } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { generateCandidateToken } from "@/lib/candidate-tokens"
 import { generateCandidateShortId } from "@/lib/short-id"
@@ -950,6 +950,26 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Ближайшее запланированное интервью по кандидату (колонка «Ближайшее
+    // интервью» в списке): минимальный будущий start_at, не отменённое.
+    const nextInterviewByCandidateId = new Map<string, string>()
+    if (candidateIds.length > 0) {
+      const ivRows = await db
+        .select({ candidateId: calendarEvents.candidateId, startAt: calendarEvents.startAt })
+        .from(calendarEvents)
+        .where(and(
+          inArray(calendarEvents.candidateId, candidateIds),
+          eq(calendarEvents.type, "interview"),
+          gte(calendarEvents.startAt, new Date()),
+          ne(calendarEvents.status, "cancelled"),
+        ))
+        .orderBy(asc(calendarEvents.startAt))
+      for (const iv of ivRows) {
+        if (!iv.candidateId || nextInterviewByCandidateId.has(iv.candidateId)) continue
+        nextInterviewByCandidateId.set(iv.candidateId, (iv.startAt as Date).toISOString())
+      }
+    }
+
     // Кому тест отправлен/поставлен в очередь — для статуса «отп.» в колонке.
     // Сигнал надёжнее, чем только стадия: рассылка идёт через follow_up_messages
     // (branch='test_invite'), а стадия test_task_sent ставится не во всех путях.
@@ -1062,6 +1082,7 @@ export async function GET(req: NextRequest) {
         testScore: test?.score ?? null,
         testStatus,
         isActive,
+        nextInterviewAt: nextInterviewByCandidateId.get(r.id) ?? null,
       }
     })
 

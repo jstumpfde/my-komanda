@@ -14,7 +14,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Video, Building2, ExternalLink, ChevronLeft, ChevronRight, List, CalendarDays, CalendarRange, Clock, Settings, Plus, GripVertical, Pencil, Trash2, Save, X, Bell, BellOff, LayoutGrid } from "lucide-react"
+import { Video, Building2, ExternalLink, ChevronLeft, ChevronRight, List, CalendarDays, CalendarRange, Clock, Settings, Plus, GripVertical, Pencil, Trash2, Save, X, Bell, BellOff, LayoutGrid, Phone, Check, Minus, FileText, ClipboardCheck, Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { CalendarView } from "@/components/calendar/calendar-view"
@@ -65,6 +65,9 @@ const EMOJI_OPTIONS = ["📅", "🌅", "✅", "❌", "⏳", "🔥", "⭐", "📞
 interface Interview {
   id: string; date: Date; time: string; endTime: string; candidate: string; vacancy: string; interviewer: string; type: InterviewType; format: InterviewFormat; status: InterviewStatus
   candidateId: string | null
+  // Контекст кандидата (из JOIN в /calendar) — для наполнения карточки.
+  aiScore: number | null; resumeScore: number | null; phone: string | null; stage: string | null
+  anketaFilled: boolean; tested: boolean; testScore: number | null
 }
 
 const today2 = new Date()
@@ -77,6 +80,8 @@ interface CalEvent {
   id: string; title: string; startAt: string; endAt: string; status: string | null
   vacancyId: string | null; candidateId: string | null; interviewer: string | null; interviewType: string | null; interviewFormat: string | null
   interviewStatus: string | null
+  candAiScore?: number | null; candResumeScore?: number | null; candScore?: number | null; candPhone?: string | null; candStage?: string | null
+  candAnketaFilled?: boolean; candTested?: boolean; candTestScore?: number | null
 }
 function timeStr(dt: Date): string {
   return `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`
@@ -106,10 +111,25 @@ function mapEventToInterview(ev: CalEvent, vacMap: Map<string, string>): Intervi
     interviewer: ev.interviewer || "—",
     type, format, status,
     candidateId: ev.candidateId ?? null,
+    aiScore: ev.candAiScore ?? ev.candResumeScore ?? null,
+    resumeScore: ev.candResumeScore ?? null,
+    phone: ev.candPhone ?? null,
+    stage: ev.candStage ?? null,
+    anketaFilled: ev.candAnketaFilled ?? false,
+    tested: ev.candTested ?? false,
+    testScore: ev.candTestScore ?? null,
   }
 }
 
 // ─── Утилиты ────────────────────────────────────────────────
+
+// Цвет числового скоринга (0..100): зелёный/янтарный/красный.
+function scoreColor(n: number | null | undefined): string {
+  if (n == null) return "text-muted-foreground"
+  if (n >= 70) return "text-emerald-600 dark:text-emerald-400"
+  if (n >= 40) return "text-amber-600 dark:text-amber-400"
+  return "text-red-600 dark:text-red-400"
+}
 
 const STATUS_STYLES: Record<InterviewStatus, string> = {
   "Подтверждено": "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800",
@@ -156,7 +176,7 @@ function MiniCard({ iv, compact }: { iv: Interview; compact?: boolean }) {
 
 // ─── Внутренний компонент (читает searchParams) ──────────────
 
-function InterviewsPageContent() {
+export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; embedded?: boolean } = {}) {
   const router = useRouter()
 
   // Список интервью можно свернуть/развернуть под основным CalendarView
@@ -177,8 +197,12 @@ function InterviewsPageContent() {
   const [cInterviewer, setCInterviewer] = useState("")
   const [cType, setCType] = useState("HR")
   const [cFormat, setCFormat] = useState("Онлайн")
+  // Доп. интервьюеры (участники-пользователи): руководитель/директор и т.п.
+  const [cInterviewerIds, setCInterviewerIds] = useState<string[]>([])
+  const [teamMembers, setTeamMembers] = useState<{ id: string; name: string }[]>([])
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string } | null>(null)
   const [stages, setStages] = useState<Stage[]>(DEFAULT_STAGES)
-  const [activeStage, setActiveStage] = useState<string>("upcoming")
+  const [activeStage, setActiveStage] = useState<string>("all")
   const [calMonth, setCalMonth] = useState(today2.getMonth())
   const [calYear, setCalYear] = useState(today2.getFullYear())
   const [dayOffset, setDayOffset] = useState(0)
@@ -205,7 +229,8 @@ function InterviewsPageContent() {
   const loadInterviews = useCallback(async () => {
     try {
       const [evRes, vacRes] = await Promise.all([
-        fetch("/api/modules/hr/calendar?type=interview"),
+        // В embedded-режиме (таб вакансии) — только интервью этой вакансии.
+        fetch(`/api/modules/hr/calendar?type=interview${vacancyId ? `&vacancyId=${vacancyId}` : ""}`),
         fetch("/api/modules/hr/vacancies?limit=200"),
       ])
       const evJson = evRes.ok ? await evRes.json() : null
@@ -216,13 +241,26 @@ function InterviewsPageContent() {
       const vacMap = new Map(vacs.map(v => [v.id, v.title]))
       setInterviews(events.map(ev => mapEventToInterview(ev, vacMap)))
     } catch { setInterviews([]) }
-  }, [])
+  }, [vacancyId])
   useEffect(() => { void loadInterviews() }, [loadInterviews])
+
+  // Текущий пользователь (для авто-интервьюера) + команда (для доп. интервьюеров).
+  useEffect(() => {
+    fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then((j) => {
+      const u = j?.user ?? j?.data ?? j
+      if (u?.id) setCurrentUser({ id: u.id, name: u.name ?? u.email ?? "Я" })
+    }).catch(() => {})
+    fetch("/api/team").then(r => r.ok ? r.json() : null).then((j) => {
+      const list = Array.isArray(j) ? j : (j?.data ?? j?.members ?? [])
+      if (Array.isArray(list)) setTeamMembers(list.map((m: { id: string; name?: string; email?: string }) => ({ id: m.id, name: m.name ?? m.email ?? "—" })))
+    }).catch(() => {})
+  }, [])
 
   const openCreate = () => {
     const now = new Date()
-    setCName(""); setCVacancyId(""); setCInterviewer(""); setCType("HR"); setCFormat("Онлайн")
-    setCTime("10:00"); setCDuration("45")
+    // #2: интервьюер по умолчанию — текущий пользователь (кто назначает).
+    setCName(""); setCVacancyId(vacancyId ?? ""); setCInterviewer(currentUser?.name ?? ""); setCType("HR"); setCFormat("Онлайн")
+    setCInterviewerIds([]); setCTime("10:00"); setCDuration("45")
     setCDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`)
     setCreateOpen(true)
   }
@@ -240,6 +278,8 @@ function InterviewsPageContent() {
           startAt: start.toISOString(), endAt: end.toISOString(),
           vacancyId: cVacancyId || null, interviewer: cInterviewer || null,
           interviewType: cType, interviewFormat: cFormat,
+          // #3: доп. интервьюеры — участники события (руководитель/директор и т.п.)
+          participants: cInterviewerIds.length > 0 ? cInterviewerIds : undefined,
         }),
       })
       if (!res.ok) throw new Error()
@@ -325,6 +365,7 @@ function InterviewsPageContent() {
 
   const currentStage = stages.find(s => s.id === activeStage) || stages[0]
   const filtered = useMemo(() => {
+    if (activeStage === "all") return [...interviews].sort((a, b) => a.date.getTime() - b.date.getTime())
     if (!currentStage) return []
     const result = filterByCondition(interviews, currentStage.condition)
     return result.sort((a, b) => currentStage.condition === "date_before" ? b.date.getTime() - a.date.getTime() : a.date.getTime() - b.date.getTime())
@@ -374,10 +415,10 @@ function InterviewsPageContent() {
 
   const views: { mode: ViewMode; icon: typeof List; label: string }[] = [
     { mode: "list", icon: List, label: "Список" },
+    { mode: "kanban", icon: LayoutGrid, label: "Канбан" },
     // «Месяц», не «Календарь» — чтобы не путать с верхним табом «Календарь» (полный календарь компании)
     { mode: "calendar", icon: CalendarDays, label: "Месяц" },
     { mode: "week", icon: CalendarRange, label: "Неделя" },
-    { mode: "kanban", icon: LayoutGrid, label: "Канбан" },
     { mode: "day", icon: Clock, label: "День" },
   ]
 
@@ -398,18 +439,19 @@ function InterviewsPageContent() {
   const weekLabel = `${weekDays[0].toLocaleDateString("ru-RU", { day: "numeric" })}–${weekDays[6].toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}`
   const weekDayNames = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 
-  const TYPE_COLORS: Record<InterviewType, string> = { "Техническое": "#3b82f6", "HR": "#f59e0b", "Финальное": "#22c55e" }
-
   const kanbanStatuses: InterviewStatus[] = ["Ожидает", "Подтверждено", "Пройдено", "Отменено"]
 
-  return (
-    <SidebarProvider defaultOpen={true}>
-      <DashboardSidebar />
-      <SidebarInset>
-        <DashboardHeader />
-        <main className="flex-1 overflow-auto bg-background">
+  // Контент интервью-вида (одинаков для standalone и embedded). Хром
+  // (сайдбар/хедер) добавляется ниже только в standalone-режиме. ВАЖНО: не
+  // оборачивать во вложенный компонент — иначе ремоунт поддерева на каждый рендер.
+  const inner = (
+      <>
+        <main className={embedded ? "bg-background" : "flex-1 overflow-auto bg-background"}>
 
-          {/* ═══ Основной заголовок + переключатель Интервью/Календарь ═══ */}
+          {/* ═══ Заголовок + переключатель Интервью/Календарь ═══
+              В embedded (таб вакансии) переключатель скрыт: показываем только
+              интервью-вид (общий календарь компании живёт отдельно на /hr/interviews). */}
+          {!embedded && (
           <div className="flex items-center justify-between gap-3 px-4 sm:px-14 pt-5 pb-3 border-b">
             <div className="flex items-center">
               <CalendarDays className="h-5 w-5 text-violet-600 mr-2" />
@@ -422,29 +464,51 @@ function InterviewsPageContent() {
               </TabsList>
             </Tabs>
           </div>
+          )}
 
-          {/* ═══ Таб «Календарь» — основной календарь компании ═══ */}
-          {topTab === "calendar" && (
+          {/* ═══ Таб «Календарь» — основной календарь компании (только standalone) ═══ */}
+          {!embedded && topTab === "calendar" && (
           <Suspense fallback={
             <div className="flex items-center justify-center h-64 text-sm text-muted-foreground">
               Загрузка календаря…
             </div>
           }>
-            <CalendarView />
+            <CalendarView vacancyId={vacancyId} />
           </Suspense>
           )}
 
           {/* ═══ Таб «Интервью» — стадии/канбан/список ═══ */}
           {topTab === "interviews" && (
           <div className="bg-background">
-            {/* Заголовок секции с кнопками «Стадии» и «Запланировать» */}
-            <div className="flex items-center justify-between px-4 sm:px-14 py-3">
+            {/* Компактная шапка: переключатель видов слева + кнопки справа (одна строка) */}
+            <div className={cn("flex items-center justify-between gap-2 flex-wrap py-3", embedded ? "" : "px-4 sm:px-14")}>
               <div className="flex items-center gap-2">
-                <List className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-semibold">Список интервью</span>
-                <Badge variant="outline" className="text-[10px] px-1.5 h-4">
-                  {interviews.length}
-                </Badge>
+                <Tabs value={view} onValueChange={(v) => setView(v as ViewMode)}>
+                  <TabsList>
+                    {views.map(v => (
+                      <TabsTrigger key={v.mode} value={v.mode} className="gap-1 text-xs">
+                        <v.icon className="w-3.5 h-3.5" /><span className="hidden sm:inline">{v.label}</span>
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
+                <Badge variant="outline" className="text-[10px] px-1.5 h-4">{interviews.length}</Badge>
+                {/* В Канбане фильтр времени — компактным дропдауном прямо в шапке */}
+                {view === "kanban" && (
+                  <Select value={activeStage} onValueChange={setActiveStage}>
+                    <SelectTrigger className="h-7 w-auto min-w-[160px] text-xs gap-1.5"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="text-xs">
+                        <span className="mr-1.5">🗂</span>Все · {interviews.length}
+                      </SelectItem>
+                      {stages.map(s => (
+                        <SelectItem key={s.id} value={s.id} className="text-xs">
+                          <span className="mr-1.5">{s.emoji}</span>{s.name} · {stageCounts[s.id] || 0}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" className="gap-1.5 h-7 text-xs" onClick={() => setSettingsOpen(true)}>
@@ -456,60 +520,82 @@ function InterviewsPageContent() {
               </div>
             </div>
 
-            <div className="px-4 sm:px-14 pb-6">
-              {/* View switcher */}
-              <div className="flex items-center gap-2 mb-4">
-                <Tabs value={view} onValueChange={(v) => setView(v as ViewMode)}>
-                  <TabsList>
-                    {views.map(v => (
-                      <TabsTrigger key={v.mode} value={v.mode} className="gap-1 text-xs">
-                        <v.icon className="w-3.5 h-3.5" /><span className="hidden sm:inline">{v.label}</span>
+            <div className={cn("pb-6", embedded ? "" : "px-4 sm:px-14")}>
+              {/* Фильтр по времени (стадии) — только в Списке (полный ряд табов).
+                  В Канбане — компактный дропдаун в шапке. В Месяце/Неделе/Дне фильтр
+                  не нужен: эти виды показывают события по датам сами (листаешь период),
+                  табы там ни на что не влияли — поэтому скрыты. */}
+              {view === "list" && (
+                <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 mb-5">
+                  <Tabs value={activeStage} onValueChange={setActiveStage}>
+                    <TabsList className="w-max sm:w-auto">
+                      <TabsTrigger value="all" className="gap-1.5">
+                        <span>🗂</span> Все
+                        <Badge className="ml-1 text-[10px] px-1.5 h-4 bg-primary/10 text-primary">{interviews.length}</Badge>
                       </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </Tabs>
-              </div>
-
-              {/* Dynamic stage tabs */}
-              <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 mb-5">
-                <Tabs value={activeStage} onValueChange={setActiveStage}>
-                  <TabsList className="w-max sm:w-auto">
-                    {stages.map(s => (
-                      <TabsTrigger key={s.id} value={s.id} className="gap-1.5">
-                        <span>{s.emoji}</span> {s.name}
-                        <Badge className="ml-1 text-[10px] px-1.5 h-4 bg-primary/10 text-primary">{stageCounts[s.id] || 0}</Badge>
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </Tabs>
-              </div>
+                      {stages.map(s => (
+                        <TabsTrigger key={s.id} value={s.id} className="gap-1.5">
+                          <span>{s.emoji}</span> {s.name}
+                          <Badge className="ml-1 text-[10px] px-1.5 h-4 bg-primary/10 text-primary">{stageCounts[s.id] || 0}</Badge>
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </Tabs>
+                </div>
+              )}
 
               {/* ═══ LIST ════════════════════════════════════════ */}
               {view === "list" && (
                 <div className="space-y-3">
                   {filtered.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">Нет интервью</p>}
                   {filtered.map(iv => (
-                    <Card key={iv.id}>
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-4">
-                          <div className="flex flex-col items-center justify-center min-w-[56px] bg-muted rounded-lg py-2 px-3">
+                    <Card key={iv.id} className="overflow-hidden transition-colors hover:border-primary/40 cursor-pointer" onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}>
+                      <CardContent className="p-0">
+                        <div className="flex items-stretch">
+                          {/* Дата/время */}
+                          <div className="flex flex-col items-center justify-center min-w-[68px] bg-muted/60 py-3 px-3 border-r">
                             <span className="text-2xl font-bold leading-none">{iv.date.getDate()}</span>
                             <span className="text-[10px] font-medium text-muted-foreground mt-0.5">{iv.date.toLocaleDateString("ru-RU", { month: "short" }).toUpperCase()}</span>
                             <span className="text-xs font-semibold text-primary mt-1">{iv.time}</span>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
+                          {/* Кандидат + контекст */}
+                          <div className="flex-1 min-w-0 py-3 px-4 flex flex-col justify-center gap-1.5">
+                            <div className="flex flex-wrap items-center gap-1.5">
                               <span className="font-semibold text-sm truncate">{iv.candidate}</span>
                               <Badge variant="outline" className={cn("text-[10px]", STATUS_STYLES[iv.status])}>{iv.status}</Badge>
+                              {iv.stage && <Badge variant="secondary" className="text-[10px] font-normal">{iv.stage}</Badge>}
                             </div>
-                            <p className="text-xs text-muted-foreground truncate mb-1">{iv.vacancy}</p>
-                            <p className="text-xs text-muted-foreground">Интервьюер: <span className="text-foreground font-medium">{iv.interviewer}</span></p>
-                            <div className="flex flex-wrap gap-1.5 mt-2">
-                              <Badge variant="outline" className={cn("text-[10px]", iv.type === "Техническое" ? "border-blue-200 text-blue-700" : iv.type === "HR" ? "border-purple-200 text-purple-700" : "border-green-200 text-green-700")}>{iv.type}</Badge>
-                              <Badge variant="outline" className="text-[10px] gap-1">{iv.format === "Онлайн" ? <Video className="w-3 h-3" /> : <Building2 className="w-3 h-3" />}{iv.format}</Badge>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                              <Badge variant="outline" className={cn("text-[10px]", iv.type === "Техническое" ? "border-blue-200 text-blue-700 dark:text-blue-400" : iv.type === "HR" ? "border-purple-200 text-purple-700 dark:text-purple-400" : "border-green-200 text-green-700 dark:text-green-400")}>{iv.type}</Badge>
+                              <span className="inline-flex items-center gap-1">{iv.format === "Онлайн" ? <Video className="w-3 h-3" /> : <Building2 className="w-3 h-3" />}{iv.format}</span>
+                              <span className="truncate">Интервьюер: <span className="text-foreground font-medium">{iv.interviewer}</span></span>
+                              {iv.phone && <a href={`tel:${iv.phone}`} onClick={e => e.stopPropagation()} className="inline-flex items-center gap-1 hover:text-primary"><Phone className="w-3 h-3" />{iv.phone}</a>}
+                              <span className="truncate text-muted-foreground/70">· {iv.vacancy}</span>
                             </div>
                           </div>
-                          <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}><ExternalLink className="h-3.5 w-3.5" /> Открыть</Button>
+                          {/* Метрики кандидата */}
+                          <div className="hidden md:flex items-center gap-5 px-5 border-l">
+                            <div className="flex flex-col items-center min-w-[52px]">
+                              <span className="text-[9px] uppercase tracking-wide text-muted-foreground inline-flex items-center gap-0.5"><Sparkles className="w-2.5 h-2.5" />Резюме</span>
+                              <span className={cn("text-base font-bold leading-tight", scoreColor(iv.aiScore))}>{iv.aiScore != null ? iv.aiScore : "—"}</span>
+                            </div>
+                            <div className="flex flex-col items-center min-w-[52px]">
+                              <span className="text-[9px] uppercase tracking-wide text-muted-foreground inline-flex items-center gap-0.5"><FileText className="w-2.5 h-2.5" />Анкета</span>
+                              {iv.anketaFilled ? <Check className="w-5 h-5 text-emerald-600 dark:text-emerald-400" /> : <Minus className="w-5 h-5 text-muted-foreground/40" />}
+                            </div>
+                            <div className="flex flex-col items-center min-w-[52px]">
+                              <span className="text-[9px] uppercase tracking-wide text-muted-foreground inline-flex items-center gap-0.5"><ClipboardCheck className="w-2.5 h-2.5" />Тест</span>
+                              {iv.tested
+                                ? (iv.testScore != null
+                                    ? <span className={cn("text-base font-bold leading-tight", scoreColor(iv.testScore))}>{iv.testScore}</span>
+                                    : <Check className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />)
+                                : <Minus className="w-5 h-5 text-muted-foreground/40" />}
+                            </div>
+                          </div>
+                          {/* Действие */}
+                          <div className="flex items-center px-4 border-l shrink-0">
+                            <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" tabIndex={-1}><ExternalLink className="h-3.5 w-3.5" /> Открыть</Button>
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -530,7 +616,7 @@ function InterviewsPageContent() {
                       <div key={wd} className="bg-muted/50 text-center text-[10px] font-semibold text-muted-foreground py-2">{wd}</div>
                     ))}
                     {calDays.map((day, i) => {
-                      if (!day) return <div key={i} className="bg-card min-h-[80px]" />
+                      if (!day) return <div key={i} className="bg-card min-h-[150px]" />
                       const dayIvs = interviews.filter(iv => isSameDay(iv.date, day))
                       const isT = isToday(day)
                       const dayKey = day.toISOString().slice(0, 10)
@@ -538,25 +624,26 @@ function InterviewsPageContent() {
                       return (
                         <div
                           key={i}
-                          className={cn("bg-card min-h-[80px] p-1 border-t transition-all", isT && "bg-primary/5", isDropTarget && "ring-2 ring-primary ring-inset bg-primary/5")}
+                          className={cn("bg-card min-h-[150px] p-1 border-t transition-all", isT && "bg-primary/5", isDropTarget && "ring-2 ring-primary ring-inset bg-primary/5")}
                           onDragOver={e => { e.preventDefault(); setDropTargetDay(dayKey) }}
                           onDragLeave={() => { if (dropTargetDay === dayKey) setDropTargetDay(null) }}
                           onDrop={e => { e.preventDefault(); calDropOnDay(day) }}
                         >
                           <span className={cn("text-xs font-medium", isT ? "text-primary font-bold" : "text-muted-foreground")}>{day.getDate()}</span>
-                          <div className="space-y-0.5 mt-0.5">
-                            {dayIvs.slice(0, 3).map(iv => (
+                          {/* ~4 события помещаются; больше — внутренний скролл, сетка не растёт */}
+                          <div className="space-y-0.5 mt-0.5 max-h-[116px] overflow-y-auto pr-0.5">
+                            {dayIvs.map(iv => (
                               <div
                                 key={iv.id}
                                 draggable
                                 onDragStart={() => ivDragStart(iv.id)}
                                 onDragEnd={ivDragEnd}
-                                className={cn(dragIvId === iv.id && "opacity-40 scale-95")}
+                                onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}
+                                className={cn("cursor-pointer", dragIvId === iv.id && "opacity-40 scale-95")}
                               >
                                 <MiniCard iv={iv} compact />
                               </div>
                             ))}
-                            {dayIvs.length > 3 && <p className="text-[9px] text-muted-foreground text-center">+{dayIvs.length - 3}</p>}
                           </div>
                         </div>
                       )
@@ -635,7 +722,7 @@ function InterviewsPageContent() {
                         })}
                       </div>
                       {dayHours.map(h => (
-                        <div key={h} className="grid grid-cols-[56px_repeat(7,1fr)] border-b min-h-[52px]">
+                        <div key={h} className="grid grid-cols-[56px_repeat(7,1fr)] border-b min-h-[64px]">
                           <div className="text-right pr-2 py-1 text-[10px] text-muted-foreground font-medium">{String(h).padStart(2, "0")}:00</div>
                           {weekDays.map((wd, di) => {
                             const cellIvs = interviews.filter(iv => isSameDay(iv.date, wd) && parseInt(iv.time) === h)
@@ -658,13 +745,13 @@ function InterviewsPageContent() {
                                       draggable
                                       onDragStart={() => ivDragStart(iv.id)}
                                       onDragEnd={ivDragEnd}
-                                      className={cn("rounded px-1.5 py-1 text-white text-[10px] leading-tight cursor-grab active:cursor-grabbing mb-0.5 transition-opacity", dragIvId === iv.id && "opacity-40 scale-95")}
-                                      style={{ backgroundColor: TYPE_COLORS[iv.type], minHeight: `${dur * 20}px` }}
-                                      title={`${iv.candidate} · ${iv.type} · ${iv.format}`}
-                                      onClick={() => toast.info(`${iv.candidate} · ${iv.vacancy} · ${iv.time}–${iv.endTime}`)}
+                                      className={cn("rounded-md border px-2 py-1.5 text-[10px] leading-tight cursor-pointer active:cursor-grabbing mb-0.5 transition-opacity flex flex-col justify-center gap-0.5", STATUS_STYLES[iv.status], dragIvId === iv.id && "opacity-40 scale-95")}
+                                      style={{ minHeight: `${dur * 56}px` }}
+                                      title={`${iv.candidate} · ${iv.type} · ${iv.format} · ${iv.time}–${iv.endTime}`}
+                                      onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}
                                     >
-                                      <span className="font-semibold block truncate">{iv.candidate}</span>
-                                      <span className="opacity-80 block truncate">{iv.type} · {iv.format}</span>
+                                      <span className="font-semibold flex items-center gap-1 truncate"><span className={cn("w-1.5 h-1.5 rounded-full shrink-0", STATUS_DOT[iv.status])} />{iv.time} {iv.candidate}</span>
+                                      <span className="opacity-70 block truncate pl-2.5">{iv.type} · {iv.format}</span>
                                     </div>
                                   )
                                 })}
@@ -675,11 +762,11 @@ function InterviewsPageContent() {
                       ))}
                     </div>
                   </div>
-                  <div className="flex items-center gap-4 mt-3 px-2">
-                    {(Object.entries(TYPE_COLORS) as [InterviewType, string][]).map(([t, c]) => (
-                      <div key={t} className="flex items-center gap-1.5">
-                        <div className="w-3 h-3 rounded" style={{ backgroundColor: c }} />
-                        <span className="text-[10px] text-muted-foreground">{t}</span>
+                  <div className="flex items-center gap-4 mt-3 px-2 flex-wrap">
+                    {(Object.entries(STATUS_DOT) as [InterviewStatus, string][]).map(([s, c]) => (
+                      <div key={s} className="flex items-center gap-1.5">
+                        <div className={cn("w-3 h-3 rounded-full", c)} />
+                        <span className="text-[10px] text-muted-foreground">{s}</span>
                       </div>
                     ))}
                   </div>
@@ -709,12 +796,35 @@ function InterviewsPageContent() {
                                 draggable
                                 onDragStart={() => ivDragStart(iv.id)}
                                 onDragEnd={ivDragEnd}
-                                className={cn("transition-all cursor-grab active:cursor-grabbing", dragIvId === iv.id && "opacity-40 scale-95")}
+                                onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}
+                                className={cn("transition-all cursor-pointer hover:border-primary/40 active:cursor-grabbing", dragIvId === iv.id && "opacity-40 scale-95")}
                               >
-                                <CardContent className="p-3 space-y-1.5">
-                                  <div className="flex items-center justify-between"><span className="text-sm font-semibold text-foreground">{iv.candidate}</span><span className="text-[10px] text-muted-foreground">{formatDateShort(iv.date)}</span></div>
-                                  <p className="text-xs text-muted-foreground">{iv.vacancy}</p>
-                                  <div className="flex items-center gap-1.5"><span className="text-xs font-medium">{iv.time}</span><Badge variant="outline" className="text-[10px]">{iv.type}</Badge><Badge variant="outline" className="text-[10px] gap-0.5">{iv.format === "Онлайн" ? <Video className="w-2.5 h-2.5" /> : <Building2 className="w-2.5 h-2.5" />}{iv.format}</Badge></div>
+                                <CardContent className="p-3.5 space-y-2.5">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <span className="text-[15px] font-semibold text-foreground leading-snug">{iv.candidate}</span>
+                                    <span className="text-[11px] text-muted-foreground shrink-0 mt-0.5">{formatDateShort(iv.date)}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-sm font-semibold text-primary">{iv.time}</span>
+                                    {iv.stage && <Badge variant="secondary" className="text-[10px] font-normal h-5">{iv.stage}</Badge>}
+                                    <Badge variant="outline" className="text-[10px] h-5">{iv.type}</Badge>
+                                    <Badge variant="outline" className="text-[10px] h-5 gap-0.5">{iv.format === "Онлайн" ? <Video className="w-3 h-3" /> : <Building2 className="w-3 h-3" />}{iv.format}</Badge>
+                                  </div>
+                                  {iv.phone && <a href={`tel:${iv.phone}`} onClick={e => e.stopPropagation()} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary"><Phone className="w-3 h-3" />{iv.phone}</a>}
+                                  <div className="grid grid-cols-3 gap-1 pt-2.5 border-t">
+                                    <div className="flex flex-col items-center gap-0.5">
+                                      <span className="text-[9px] uppercase tracking-wide text-muted-foreground inline-flex items-center gap-0.5"><Sparkles className="w-2.5 h-2.5" />Резюме</span>
+                                      <span className={cn("text-sm font-bold leading-none", scoreColor(iv.aiScore))}>{iv.aiScore != null ? iv.aiScore : "—"}</span>
+                                    </div>
+                                    <div className="flex flex-col items-center gap-0.5">
+                                      <span className="text-[9px] uppercase tracking-wide text-muted-foreground inline-flex items-center gap-0.5"><FileText className="w-2.5 h-2.5" />Анкета</span>
+                                      {iv.anketaFilled ? <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> : <Minus className="w-4 h-4 text-muted-foreground/40" />}
+                                    </div>
+                                    <div className="flex flex-col items-center gap-0.5">
+                                      <span className="text-[9px] uppercase tracking-wide text-muted-foreground inline-flex items-center gap-0.5"><ClipboardCheck className="w-2.5 h-2.5" />Тест</span>
+                                      {iv.tested ? (iv.testScore != null ? <span className={cn("text-sm font-bold leading-none", scoreColor(iv.testScore))}>{iv.testScore}</span> : <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />) : <Minus className="w-4 h-4 text-muted-foreground/40" />}
+                                    </div>
+                                  </div>
                                 </CardContent>
                               </Card>
                             ))}
@@ -731,14 +841,14 @@ function InterviewsPageContent() {
           )} {/* topTab === interviews */}
 
         </main>
-      </SidebarInset>
 
       {/* ═══ Настройка стадий — Sheet ═════════════════════════ */}
       <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
         <SheetContent className="w-full sm:max-w-md overflow-y-auto">
           <SheetHeader><SheetTitle className="flex items-center gap-2"><Settings className="w-5 h-5" /> Настроить стадии</SheetTitle></SheetHeader>
 
-          <div className="mt-6 space-y-4">
+          {/* Паддинг как у шапки (px-4) — чтобы контент выравнивался, а не «выбивался» */}
+          <div className="px-4 pb-6 space-y-4">
             <div className="space-y-1.5">
               {stages.map((stage, idx) => (
                 <div
@@ -848,7 +958,30 @@ function InterviewsPageContent() {
             <div className="space-y-1">
               <Label htmlFor="c-interviewer">Интервьюер</Label>
               <Input id="c-interviewer" value={cInterviewer} onChange={e => setCInterviewer(e.target.value)} placeholder="Кто проводит" />
+              {currentUser && <p className="text-[11px] text-muted-foreground">По умолчанию — вы. Можно изменить.</p>}
             </div>
+            {/* #3: доп. интервьюеры из команды (руководитель/директор и т.п.) */}
+            {teamMembers.length > 0 && (
+              <div className="space-y-1.5">
+                <Label className="text-sm">Доп. интервьюеры</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {teamMembers.map(m => {
+                    const sel = cInterviewerIds.includes(m.id)
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setCInterviewerIds(prev => sel ? prev.filter(x => x !== m.id) : [...prev, m.id])}
+                        className={cn(
+                          "rounded-full px-2.5 py-0.5 text-xs border transition-colors",
+                          sel ? "bg-primary text-primary-foreground border-primary" : "bg-background text-muted-foreground border-border hover:border-muted-foreground/60",
+                        )}
+                      >{m.name}</button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
                 <Label htmlFor="c-type">Тип</Label>
@@ -897,6 +1030,17 @@ function InterviewsPageContent() {
           </div>
         </DialogContent>
       </Dialog>
+      </>
+  )
+
+  if (embedded) return <div className="bg-background">{inner}</div>
+  return (
+    <SidebarProvider defaultOpen={true}>
+      <DashboardSidebar />
+      <SidebarInset>
+        <DashboardHeader />
+        {inner}
+      </SidebarInset>
     </SidebarProvider>
   )
 }
@@ -904,7 +1048,7 @@ function InterviewsPageContent() {
 export default function InterviewsPage() {
   return (
     <Suspense fallback={null}>
-      <InterviewsPageContent />
+      <InterviewsView />
     </Suspense>
   )
 }

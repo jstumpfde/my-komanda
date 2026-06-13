@@ -7,9 +7,10 @@ import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 // Глобальные фасеты кандидатов по всей компании: уникальные города и источники
 // со счётчиками. Аналог /vacancies/[id]/candidate-facets, но без привязки к
 // конкретной вакансии. Используется поп-овером «Фильтр» на /hr/candidates (#18).
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
     const user = await requireCompany()
+    const vacancyTitle = req.nextUrl.searchParams.get("vacancyTitle")
 
     // Базовые условия: только кандидаты своей компании, без удалённых и без preview
     const baseConds = and(
@@ -17,6 +18,18 @@ export async function GET(_req: NextRequest) {
       or(isNull(candidates.source), ne(candidates.source, "preview")),
       isNull(candidates.deletedAt),
     )
+
+    // Чипы-этапы на /hr/candidates считаем с учётом выбранной вакансии,
+    // чтобы цифры совпадали со списком.
+    const stageConds = vacancyTitle
+      ? and(baseConds, eq(vacancies.title, vacancyTitle))
+      : baseConds
+    const stageRows = await db
+      .select({ stage: candidates.stage, count: sql<number>`count(*)::int` })
+      .from(candidates)
+      .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
+      .where(stageConds)
+      .groupBy(candidates.stage)
 
     const cityRows = await db
       .select({ city: candidates.city, count: sql<number>`count(*)::int` })
@@ -37,6 +50,7 @@ export async function GET(_req: NextRequest) {
     return apiSuccess({
       cities:  cityRows.map(r => ({ city: r.city as string, count: Number(r.count) })),
       sources: sourceRows.map(r => ({ source: r.source as string, count: Number(r.count) })),
+      stages:  stageRows.map(r => ({ stage: (r.stage as string) ?? "new", count: Number(r.count) })),
     })
   } catch (err) {
     if (err instanceof Response) return err

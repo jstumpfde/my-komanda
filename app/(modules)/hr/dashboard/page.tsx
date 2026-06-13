@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, type ReactNode, type ElementType } from "react"
+import { useEffect, useState, type ElementType } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { ALL_STAGE_SLUGS, PLATFORM_STAGES, getStageLabel, type StageSlug } from "@/lib/stages"
 import { useAuth } from "@/lib/auth"
 import {
   Briefcase, Users, UserCheck, TrendingUp, Plus, ChevronRight,
@@ -28,38 +29,17 @@ const C = {
   purple: "#7F77DD",
 }
 
-// ─── Funnel grouping ────────────────────────────────────────────────────────
-// Этап → массив stage-кодов из candidates.stage, которые попадают в этот этап
-// (кумулятивно: «Интервью» включает всех, кто на интервью или дальше).
-// stage-коды берутся из комментария в lib/db/schema.ts → candidates.stage.
+// ─── Funnel ───────────────────────────────────────────────────────────────
+// «Рабочая» воронка: реальные этапы из candidates.stage (по порядку
+// ALL_STAGE_SLUGS), счётчик на этап, клик → список кандидатов этого этапа.
+// Цвет бара — по цвету этапа из PLATFORM_STAGES.
 
-const FUNNEL_STAGES: { label: string; color: string; matches: string[] }[] = [
-  {
-    label: "Отклики",
-    color: C.blue,
-    matches: ["new", "primary_contact", "demo_opened", "demo", "anketa_filled", "ai_screening", "decision", "scheduled", "interview", "interviewed", "final_decision", "offer", "hired"],
-  },
-  {
-    label: "Скрининг",
-    color: C.purple,
-    matches: ["demo_opened", "demo", "anketa_filled", "ai_screening", "decision", "scheduled", "interview", "interviewed", "final_decision", "offer", "hired"],
-  },
-  {
-    label: "Интервью",
-    color: C.green,
-    matches: ["scheduled", "interview", "interviewed", "decision", "final_decision", "offer", "hired"],
-  },
-  {
-    label: "Оффер",
-    color: C.orange,
-    matches: ["offer", "final_decision", "hired"],
-  },
-  {
-    label: "Наняты",
-    color: "#10b981",
-    matches: ["hired"],
-  },
-]
+const STAGE_BAR_BG: Record<string, string> = {
+  slate: "bg-slate-400", blue: "bg-blue-500", indigo: "bg-indigo-500",
+  violet: "bg-violet-500", purple: "bg-purple-500", amber: "bg-amber-500",
+  orange: "bg-orange-500", yellow: "bg-yellow-500", lime: "bg-lime-500",
+  green: "bg-green-500", emerald: "bg-emerald-500", rose: "bg-rose-500", red: "bg-red-500",
+}
 
 // ─── API types ──────────────────────────────────────────────────────────────
 
@@ -122,21 +102,6 @@ function daysSince(iso: string | null): number {
   if (!iso) return 0
   const ms = Date.now() - new Date(iso).getTime()
   return Math.max(0, Math.floor(ms / 86400000))
-}
-
-// ─── ComingSoon overlay ─────────────────────────────────────────────────────
-
-function ComingSoon({ children }: { children: ReactNode }) {
-  return (
-    <div className="relative">
-      <div className="opacity-40 pointer-events-none select-none filter blur-[1px]">{children}</div>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <span className="rounded-full bg-foreground/85 text-background text-[11px] font-medium px-3 py-1 shadow">
-          Скоро
-        </span>
-      </div>
-    </div>
-  )
 }
 
 // ─── Color metric card ──────────────────────────────────────────────────────
@@ -241,13 +206,22 @@ function DashboardContent() {
     return stats?.funnel?.totals ?? {}
   })()
 
-  const funnel = FUNNEL_STAGES.map(s => ({
-    label: s.label,
-    color: s.color,
-    count: s.matches.reduce((sum, key) => sum + (funnelTotals[key] ?? 0), 0),
-  }))
-  const funnelMax = Math.max(1, funnel[0]?.count ?? 0)
-  const funnelEmpty = funnel.every(f => f.count === 0)
+  // Реальные этапы из данных, в каноническом порядке + любые legacy-ключи в конце.
+  const funnel = (() => {
+    const extra = Object.keys(funnelTotals).filter(k => !(ALL_STAGE_SLUGS as string[]).includes(k))
+    const order: string[] = [...ALL_STAGE_SLUGS, ...extra]
+    return order
+      .map(slug => ({
+        slug,
+        label: getStageLabel(slug),
+        count: funnelTotals[slug] ?? 0,
+        barClass: STAGE_BAR_BG[PLATFORM_STAGES[slug as StageSlug]?.color ?? ""] ?? "bg-primary",
+      }))
+      .filter(e => e.count > 0)
+  })()
+  const funnelMax = Math.max(1, ...funnel.map(f => f.count))
+  const funnelEmpty = funnel.length === 0
+  const selectedVacancyTitle = vacancies.find(v => v.id === selectedVacancyId)?.title ?? ""
 
   // Header subtitle
   const headerSubtitle = (() => {
@@ -356,28 +330,31 @@ function DashboardContent() {
                     Воронка пока пуста — кандидаты появятся когда начнётся работа с откликами.
                   </p>
                 ) : (
-                  <div className="space-y-2">
-                    {funnel.map((f, i) => (
-                      <div key={i}>
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-medium">{f.label}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold">{f.count}</span>
-                            {i > 0 && funnel[i - 1].count > 0 && (
-                              <span className="text-[10px] text-muted-foreground">
-                                {Math.round((f.count / funnel[i - 1].count) * 100)}%
-                              </span>
-                            )}
+                  <div className="space-y-1">
+                    {funnel.map((f) => {
+                      const href = `/hr/candidates?stage=${encodeURIComponent(f.slug)}${selectedVacancyTitle ? `&vacancyTitle=${encodeURIComponent(selectedVacancyTitle)}` : ""}`
+                      return (
+                        <Link
+                          key={f.slug}
+                          href={href}
+                          className="block group rounded-lg -mx-2 px-2 py-1.5 hover:bg-muted/50 transition-colors"
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-medium group-hover:text-primary transition-colors">{f.label}</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-semibold tabular-nums">{f.count}</span>
+                              <ChevronRight className="w-3 h-3 text-muted-foreground/40 group-hover:text-primary transition-colors" />
+                            </div>
                           </div>
-                        </div>
-                        <div className="h-7 bg-muted/30 rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all"
-                            style={{ width: `${(f.count / funnelMax) * 100}%`, backgroundColor: f.color }}
-                          />
-                        </div>
-                      </div>
-                    ))}
+                          <div className="h-6 bg-muted/30 rounded-full overflow-hidden">
+                            <div
+                              className={cn("h-full rounded-full transition-all", f.barClass)}
+                              style={{ width: `${Math.max(4, (f.count / funnelMax) * 100)}%` }}
+                            />
+                          </div>
+                        </Link>
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -496,20 +473,8 @@ function DashboardContent() {
               </div>
               )}
 
-              {/* Events — Скоро */}
-              <ComingSoon>
-                <div className="border rounded-xl shadow-sm p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold">Ближайшие события</h3>
-                    <Calendar className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    {[1, 2, 3, 4].map(i => (
-                      <div key={i} className="h-12 bg-muted/30 rounded-lg" />
-                    ))}
-                  </div>
-                </div>
-              </ComingSoon>
+              {/* Ближайшие интервью — реальные данные, фильтр по вакансии из шапки */}
+              <UpcomingInterviews selectedVacancyId={selectedVacancyId} />
             </div>
 
             {/* #36: блоки «Цели месяца», «Источники откликов», «Динамика
@@ -522,6 +487,123 @@ function DashboardContent() {
         </main>
       </SidebarInset>
     </SidebarProvider>
+  )
+}
+
+// ─── Ближайшие интервью (реальные) ───────────────────────────────────────────
+
+const IV_DOT: Record<string, string> = {
+  "Подтверждено": "bg-emerald-500", "Ожидает": "bg-amber-500",
+  "Пройдено": "bg-gray-400", "Не явился": "bg-red-500", "Отменено": "bg-gray-300",
+}
+
+interface UpcomingItem {
+  id: string; candidateId: string | null; candidate: string; vacancy: string
+  date: Date; time: string; type: string; format: string; status: string
+}
+
+function UpcomingInterviews({ selectedVacancyId }: { selectedVacancyId: string }) {
+  const router = useRouter()
+  const [items, setItems] = useState<UpcomingItem[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    const qs = selectedVacancyId !== "all" ? `&vacancyId=${encodeURIComponent(selectedVacancyId)}` : ""
+    Promise.all([
+      fetch(`/api/modules/hr/calendar?type=interview${qs}`).then(r => r.ok ? r.json() : null),
+      fetch(`/api/modules/hr/vacancies?limit=200`).then(r => r.ok ? r.json() : null),
+    ]).then(([evJson, vacJson]) => {
+      if (cancelled) return
+      const evs = (evJson?.data ?? evJson ?? []) as Array<Record<string, unknown>>
+      const vacs = (vacJson?.vacancies ?? vacJson?.data ?? []) as Array<{ id: string; title: string }>
+      const vacMap = new Map(vacs.map(v => [v.id, v.title]))
+      const now = new Date()
+      const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0)
+      const ALL_ST = ["Подтверждено", "Ожидает", "Пройдено", "Не явился", "Отменено"]
+      const mapped: UpcomingItem[] = evs.map((e) => {
+        const start = new Date(e.startAt as string)
+        const end = new Date((e.endAt as string) ?? (e.startAt as string))
+        const ist = e.interviewStatus as string | null
+        let status: string
+        if (ist && ALL_ST.includes(ist)) status = ist
+        else if (e.status === "cancelled") status = "Отменено"
+        else if (end < now) status = "Пройдено"
+        else if (e.status === "tentative") status = "Ожидает"
+        else status = "Подтверждено"
+        const vId = e.vacancyId as string | null
+        return {
+          id: e.id as string,
+          candidateId: (e.candidateId as string) ?? null,
+          candidate: (e.title as string) || "Интервью",
+          vacancy: (vId && vacMap.get(vId)) || "",
+          date: start,
+          time: `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`,
+          type: (e.interviewType as string) || "HR",
+          format: e.interviewFormat === "Офис" ? "Офис" : "Онлайн",
+          status,
+        }
+      })
+        .filter((x) => x.date >= todayStart && x.status !== "Отменено")
+        .sort((a, b) => a.date.getTime() - b.date.getTime())
+      setItems(mapped)
+    }).finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [selectedVacancyId])
+
+  const fmtDay = (d: Date) => {
+    const t = new Date(); t.setHours(0, 0, 0, 0)
+    const dd = new Date(d); dd.setHours(0, 0, 0, 0)
+    const diff = Math.round((dd.getTime() - t.getTime()) / 86400000)
+    if (diff === 0) return "Сегодня"
+    if (diff === 1) return "Завтра"
+    return d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" })
+  }
+
+  const shown = items.slice(0, 8)
+
+  return (
+    <div className="border rounded-xl shadow-sm p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold flex items-center gap-2">
+          <Calendar className="w-4 h-4 text-muted-foreground" />
+          Ближайшие интервью
+          {!loading && items.length > 0 && <Badge variant="secondary" className="text-xs">{items.length}</Badge>}
+        </h3>
+        <Link href="/hr/interviews" className="text-xs text-primary hover:underline inline-flex items-center gap-0.5">
+          Все <ChevronRight className="w-3 h-3" />
+        </Link>
+      </div>
+      {loading ? (
+        <div className="flex flex-col gap-2">
+          {[1, 2, 3].map(i => <div key={i} className="h-12 bg-muted/30 rounded-lg animate-pulse" />)}
+        </div>
+      ) : shown.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-8">Ближайших интервью нет</p>
+      ) : (
+        <div className="flex flex-col divide-y">
+          {shown.map(iv => (
+            <button
+              key={iv.id}
+              onClick={() => { if (iv.candidateId) router.push(`/hr/candidates/${iv.candidateId}`) }}
+              className="flex items-center gap-3 py-2.5 text-left hover:bg-muted/40 -mx-2 px-2 rounded-md transition-colors"
+            >
+              <span className={cn("w-2 h-2 rounded-full shrink-0", IV_DOT[iv.status] ?? "bg-gray-300")} />
+              <div className="flex flex-col items-center justify-center min-w-[64px] shrink-0">
+                <span className="text-[11px] font-medium text-muted-foreground">{fmtDay(iv.date)}</span>
+                <span className="text-sm font-semibold text-primary">{iv.time}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{iv.candidate}</p>
+                <p className="text-xs text-muted-foreground truncate">{iv.type} · {iv.format}{iv.vacancy ? ` · ${iv.vacancy}` : ""}</p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground/50 shrink-0" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
