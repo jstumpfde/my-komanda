@@ -36,6 +36,8 @@ export interface Candidate {
   rubricScore?: number | null
   interviewDate?: Date
   interviewTime?: string
+  // Ближайшее запланированное интервью (ISO) — для колонки в списке.
+  nextInterviewAt?: string | null
   utmSource?: string
   workFormat?: "office" | "remote" | "hybrid"
   age?: number

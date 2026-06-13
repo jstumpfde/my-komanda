@@ -10,7 +10,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils"
 import type { CandidateAction } from "@/lib/column-config"
 import { applySortMode, type CandidateSortMode } from "@/lib/candidate-sort"
-import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ArrowUp, ArrowDown, Star } from "lucide-react"
+import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ArrowUp, ArrowDown, Star, CalendarClock } from "lucide-react"
 import { DemoProgressBar, calcDemoPercent, calcDemoFraction } from "@/components/hr/demo-progress-bar"
 import { getStageLabel, getStageColorClasses } from "@/lib/stages"
 
@@ -157,6 +157,7 @@ export function ListView({
   const showResumeScore  = settings.showResumeScore !== false  // AI-резм. (undefined = вкл)
   const showRubricScore  = settings.showRubricScore !== false  // Рубрика (по умолчанию вкл, как AI-резм)
   const showTestScore    = settings.showTestScore !== false    // Тест (балл/статус; по умолчанию вкл)
+  const showNextInterview = settings.showNextInterview !== false // Интервью (ближайшее; по умолчанию вкл)
   const showSalary       = settings.showSalary || settings.showSalaryFull
   const showSource       = settings.showSource
   const showActions      = settings.showActions
@@ -293,6 +294,7 @@ export function ListView({
   if (showScore) cols.push("minmax(60px, 0.85fr)")      // AI-оцен.
   if (showRubricScore) cols.push("64px")                // Рубрика — новый shadow-движок
   if (showTestScore) cols.push("60px")                  // Тест — балл/«отп.»/«сдан» (фикс, как AI-резм)
+  if (showNextInterview) cols.push("minmax(96px, 0.9fr)") // Интервью — ближайшее (дата/время)
   if (showSalary) cols.push("minmax(95px, 1.1fr)")      // Зарплата — ужата (длинных чисел редко > 7 симв)
   if (showCity) cols.push("minmax(102px, 1.7fr)")       // Город — −~15%
   if (showResponseDate) cols.push("minmax(70px, 0.7fr)") // Дата — "DD.MM.YY" укладывается в 70px
@@ -405,6 +407,7 @@ export function ListView({
         {showScore && <SortHeader label="AI-оцен." sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />}
         {showRubricScore && <SortHeader label="Рубрика" sortKey="rubricScore" sort={sort} onToggle={handleSort} align="center" />}
         {showTestScore && <SortHeader label="Тест" sortKey="testScore" sort={sort} onToggle={handleSort} align="center" />}
+        {showNextInterview && <div className="text-center text-muted-foreground">Интервью</div>}
         {showSalary && <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} align="center" />}
         {showCity && <SortHeader label="Город" sortKey="city" sort={sort} onToggle={handleSort} align="left" />}
         {showResponseDate && <SortHeader label="Дата" sortKey="responseDate" sort={sort} onToggle={handleSort} align="center" />}
@@ -603,6 +606,22 @@ export function ListView({
                   )}
                 </div>
               )}
+
+              {/* Ближайшее интервью — дата + время, или «—» */}
+              {showNextInterview && (() => {
+                const iso = candidate.nextInterviewAt
+                if (!iso) return <div className="text-center text-muted-foreground/40 text-xs">—</div>
+                const d = new Date(iso)
+                const day = d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })
+                const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+                return (
+                  <div className="flex items-center justify-center gap-1 text-[13px] whitespace-nowrap" title="Ближайшее интервью">
+                    <CalendarClock className="w-3.5 h-3.5 text-primary/70 shrink-0" />
+                    <span className="font-medium text-foreground">{day}</span>
+                    <span className="text-muted-foreground">{time}</span>
+                  </div>
+                )
+              })()}
 
               {/* Salary — single expected value (валюта берётся из
                   candidate.salaryCurrency, fallback ₽) */}

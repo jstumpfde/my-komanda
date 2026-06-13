@@ -56,6 +56,7 @@ interface GlobalCandidate {
   rubricScore?: number | null
   testScore?: number | null
   testStatus?: "submitted" | "in_progress" | "opened" | "sent" | null
+  nextInterviewAt?: string | null
   salaryMin?: number | null
   salaryMax?: number | null
   salaryCurrency?: string | null
@@ -106,6 +107,7 @@ function toListCandidate(c: GlobalCandidate): Candidate & { vacancyTitle: string
     rubricScore: c.rubricScore ?? null,
     testScore: c.testScore ?? null,
     testStatus: c.testStatus ?? null,
+    nextInterviewAt: c.nextInterviewAt ?? null,
     isActive: c.isActive,
     demoProgressJson: c.demoProgressJson as Candidate["demoProgressJson"],
     demoTotalBlocks: c.demoTotalBlocks,

@@ -17,6 +17,7 @@ export interface CardDisplaySettings {
   showResumeScore?: boolean   // колонка «AI-резм.» (скоринг резюме); undefined = показывать
   showRubricScore?: boolean   // колонка «Рубрика» (новый shadow-движок); undefined = показывать
   showTestScore?: boolean     // колонка «Тест» (балл/статус теста); undefined = показывать
+  showNextInterview?: boolean // колонка «Интервью» (ближайшее); undefined = показывать
   showAge: boolean
   showSource: boolean
   showCity: boolean
@@ -38,6 +39,7 @@ export const CANDIDATE_COLUMN_TOGGLES: Array<{ key: keyof CardDisplaySettings; l
   { key: "showScore",        label: "AI оценка" },
   { key: "showRubricScore",  label: "Рубрика" },
   { key: "showTestScore",    label: "Тест" },
+  { key: "showNextInterview", label: "Интервью" },
   { key: "showSalaryFull",   label: "Зарплата" },
   { key: "showCity",         label: "Город" },
   { key: "showResponseDate", label: "Дата отклика" },
