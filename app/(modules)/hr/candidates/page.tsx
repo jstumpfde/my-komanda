@@ -207,6 +207,27 @@ export default function CandidatesPage() {
     education: [], languages: [], otherLanguages: [], skills: [], industries: [],
   })
 
+  // Дип-линк с дашборда/AI-инсайтов: ?stage=<slug> или ?funnelStatuses=<csv>
+  // (+ опц. ?vacancyTitle=). Применяем фильтры один раз при загрузке.
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const sp = new URLSearchParams(window.location.search)
+    const stage = sp.get("stage")
+    const funnelCsv = sp.get("funnelStatuses")
+    const vacTitle = sp.get("vacancyTitle")
+    const stages = funnelCsv ? funnelCsv.split(",").filter(Boolean) : stage ? [stage] : []
+    if (stages.length > 0) {
+      setFilters(prev => ({
+        ...prev,
+        funnelStatuses: stages,
+        // если запросили отказ/терминальную стадию — не прячем отказы
+        hideRejected: stages.includes("rejected") || stages.includes("test_failed") ? false : prev.hideRejected,
+      }))
+    }
+    if (vacTitle) setVacancyFilter(vacTitle)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Серверные фасеты (города/источники по всей компании) для поп-овера
   const [facets, setFacets] = useState<{ cities: { city: string; count: number }[]; sources: { source: string; count: number }[] } | null>(null)
 
