@@ -92,7 +92,6 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
   // Управление редактором выбранного блока (общий ряд кнопок справа)
   const editorRef = useRef<NotionEditorHandle>(null)
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving">("saved")
-  const [resetConfirmId, setResetConfirmId] = useState<string | null>(null)
 
   // Drag-reorder (горизонтальный)
   const dragIdxRef = useRef<number | null>(null)
@@ -160,22 +159,19 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
     })
   }, [selectedBlock, updateBlock])
 
-  // «Создать с нуля» — сбросить контент блока к одному пустому уроку.
-  const blockHasContent = (b: ContentBlock | null) =>
-    !!b && b.lessons.some(l => (l.title || "").trim() || l.blocks?.some(bl => (bl.content || "").trim() || (bl.questions?.length ?? 0) > 0))
-
-  const doResetBlank = useCallback((id: string) => {
-    updateBlock(id, { lessons: [{ id: `les-${Date.now()}`, emoji: "", title: "Новый урок", blocks: [createBlock("text")] }] })
-    setResetConfirmId(null)
-  }, [updateBlock])
-
-  const handleResetBlank = useCallback(() => {
-    if (!selectedBlock) return
-    // ВСЕГДА подтверждаем «Создать с нуля» — он удаляет весь контент блока. Был
-    // инцидент потери демо (детектор контента мог не сработать) — больше никаких
-    // тихих сбросов: показываем диалог всегда, даже если блок кажется пустым.
-    setResetConfirmId(selectedBlock.id)
-  }, [selectedBlock])
+  // «Создать с нуля» — создаёт НОВЫЙ блок (а не затирает текущий). Так контент
+  // существующих блоков невозможно потерять (был инцидент потери демо 13.06).
+  // Тип нового блока — как у выбранного (демо/тест), с одним пустым уроком.
+  const handleResetBlank = useCallback(async () => {
+    const type = (selectedBlock?.contentType ?? "presentation") as ContentType
+    const title = type === "test" || type === "task" ? "Новый тест" : "Новый блок"
+    const block = await apiCreateBlock(type, title)
+    if (!block) { toast.error("Не удалось создать блок"); return }
+    updateBlock(block.id, { lessons: [{ id: `les-${Date.now()}`, emoji: "", title: "Новый урок", blocks: [createBlock("text")] }] })
+    setSelectedId(block.id)
+    setRenamingId(block.id)
+    setRenamingValue(title)
+  }, [selectedBlock, apiCreateBlock, updateBlock])
 
   // Drag-and-drop reorder
   const handleDragStart = (idx: number) => { dragIdxRef.current = idx }
@@ -519,23 +515,6 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Подтверждение «Создать с нуля» — затирание текущего контента блока */}
-      <AlertDialog open={!!resetConfirmId} onOpenChange={open => { if (!open) setResetConfirmId(null) }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Создать с нуля?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Текущий контент блока будет заменён одним пустым уроком. Это действие нельзя отменить.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Отмена</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { if (resetConfirmId) doResetBlank(resetConfirmId) }}>
-              Создать с нуля
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   )
 }
