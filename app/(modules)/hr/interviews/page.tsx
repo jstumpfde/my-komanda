@@ -523,9 +523,11 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
             </div>
 
             <div className={cn("pb-6", embedded ? "" : "px-4 sm:px-14")}>
-              {/* Фильтр по времени (стадии). В Списке/Календаре — полный ряд табов.
-                  В Канбане фильтр компактным дропдауном в шапке (выше), отдельной строки нет. */}
-              {view !== "kanban" && (
+              {/* Фильтр по времени (стадии) — только в Списке (полный ряд табов).
+                  В Канбане — компактный дропдаун в шапке. В Месяце/Неделе/Дне фильтр
+                  не нужен: эти виды показывают события по датам сами (листаешь период),
+                  табы там ни на что не влияли — поэтому скрыты. */}
+              {view === "list" && (
                 <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 mb-5">
                   <Tabs value={activeStage} onValueChange={setActiveStage}>
                     <TabsList className="w-max sm:w-auto">
