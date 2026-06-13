@@ -202,7 +202,7 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
   const [teamMembers, setTeamMembers] = useState<{ id: string; name: string }[]>([])
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string } | null>(null)
   const [stages, setStages] = useState<Stage[]>(DEFAULT_STAGES)
-  const [activeStage, setActiveStage] = useState<string>("upcoming")
+  const [activeStage, setActiveStage] = useState<string>("all")
   const [calMonth, setCalMonth] = useState(today2.getMonth())
   const [calYear, setCalYear] = useState(today2.getFullYear())
   const [dayOffset, setDayOffset] = useState(0)
@@ -798,9 +798,15 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
                                 className={cn("transition-all cursor-grab active:cursor-grabbing", dragIvId === iv.id && "opacity-40 scale-95")}
                               >
                                 <CardContent className="p-3 space-y-1.5">
-                                  <div className="flex items-center justify-between"><span className="text-sm font-semibold text-foreground">{iv.candidate}</span><span className="text-[10px] text-muted-foreground">{formatDateShort(iv.date)}</span></div>
-                                  <p className="text-xs text-muted-foreground">{iv.vacancy}</p>
-                                  <div className="flex items-center gap-1.5"><span className="text-xs font-medium">{iv.time}</span><Badge variant="outline" className="text-[10px]">{iv.type}</Badge><Badge variant="outline" className="text-[10px] gap-0.5">{iv.format === "Онлайн" ? <Video className="w-2.5 h-2.5" /> : <Building2 className="w-2.5 h-2.5" />}{iv.format}</Badge></div>
+                                  <div className="flex items-center justify-between gap-2"><span className="text-sm font-semibold text-foreground truncate">{iv.candidate}</span><span className="text-[10px] text-muted-foreground shrink-0">{formatDateShort(iv.date)}</span></div>
+                                  {iv.stage && <Badge variant="secondary" className="text-[9px] font-normal h-4 px-1.5">{iv.stage}</Badge>}
+                                  <div className="flex items-center gap-1.5 flex-wrap"><span className="text-xs font-medium">{iv.time}</span><Badge variant="outline" className="text-[10px]">{iv.type}</Badge><Badge variant="outline" className="text-[10px] gap-0.5">{iv.format === "Онлайн" ? <Video className="w-2.5 h-2.5" /> : <Building2 className="w-2.5 h-2.5" />}{iv.format}</Badge></div>
+                                  {iv.phone && <a href={`tel:${iv.phone}`} onClick={e => e.stopPropagation()} className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary"><Phone className="w-2.5 h-2.5" />{iv.phone}</a>}
+                                  <div className="flex items-center gap-2.5 pt-1.5 border-t text-[10px] text-muted-foreground">
+                                    <span className="inline-flex items-center gap-0.5" title="AI-скоринг резюме"><Sparkles className="w-2.5 h-2.5" /><span className={cn("font-bold", scoreColor(iv.aiScore))}>{iv.aiScore != null ? iv.aiScore : "—"}</span></span>
+                                    <span className="inline-flex items-center gap-0.5" title="Анкета"><FileText className="w-2.5 h-2.5" />{iv.anketaFilled ? <Check className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400" /> : <Minus className="w-2.5 h-2.5 opacity-50" />}</span>
+                                    <span className="inline-flex items-center gap-0.5" title="Тест"><ClipboardCheck className="w-2.5 h-2.5" />{iv.tested ? (iv.testScore != null ? <span className={cn("font-bold", scoreColor(iv.testScore))}>{iv.testScore}</span> : <Check className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400" />) : <Minus className="w-2.5 h-2.5 opacity-50" />}</span>
+                                  </div>
                                 </CardContent>
                               </Card>
                             ))}
