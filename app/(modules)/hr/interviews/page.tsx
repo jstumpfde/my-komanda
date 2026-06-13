@@ -618,7 +618,7 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
                       <div key={wd} className="bg-muted/50 text-center text-[10px] font-semibold text-muted-foreground py-2">{wd}</div>
                     ))}
                     {calDays.map((day, i) => {
-                      if (!day) return <div key={i} className="bg-card min-h-[120px]" />
+                      if (!day) return <div key={i} className="bg-card min-h-[176px]" />
                       const dayIvs = interviews.filter(iv => isSameDay(iv.date, day))
                       const isT = isToday(day)
                       const dayKey = day.toISOString().slice(0, 10)
@@ -626,25 +626,26 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
                       return (
                         <div
                           key={i}
-                          className={cn("bg-card min-h-[120px] p-1 border-t transition-all", isT && "bg-primary/5", isDropTarget && "ring-2 ring-primary ring-inset bg-primary/5")}
+                          className={cn("bg-card min-h-[176px] p-1 border-t transition-all", isT && "bg-primary/5", isDropTarget && "ring-2 ring-primary ring-inset bg-primary/5")}
                           onDragOver={e => { e.preventDefault(); setDropTargetDay(dayKey) }}
                           onDragLeave={() => { if (dropTargetDay === dayKey) setDropTargetDay(null) }}
                           onDrop={e => { e.preventDefault(); calDropOnDay(day) }}
                         >
                           <span className={cn("text-xs font-medium", isT ? "text-primary font-bold" : "text-muted-foreground")}>{day.getDate()}</span>
                           <div className="space-y-0.5 mt-0.5">
-                            {dayIvs.slice(0, 3).map(iv => (
+                            {dayIvs.slice(0, 7).map(iv => (
                               <div
                                 key={iv.id}
                                 draggable
                                 onDragStart={() => ivDragStart(iv.id)}
                                 onDragEnd={ivDragEnd}
-                                className={cn(dragIvId === iv.id && "opacity-40 scale-95")}
+                                onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}
+                                className={cn("cursor-pointer", dragIvId === iv.id && "opacity-40 scale-95")}
                               >
                                 <MiniCard iv={iv} compact />
                               </div>
                             ))}
-                            {dayIvs.length > 3 && <p className="text-[9px] text-muted-foreground text-center">+{dayIvs.length - 3}</p>}
+                            {dayIvs.length > 7 && <p className="text-[9px] text-muted-foreground text-center">+{dayIvs.length - 7}</p>}
                           </div>
                         </div>
                       )
