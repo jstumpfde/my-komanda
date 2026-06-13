@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, type ReactNode, type ElementType } from "react"
+import { useEffect, useState, type ElementType } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
@@ -122,21 +122,6 @@ function daysSince(iso: string | null): number {
   if (!iso) return 0
   const ms = Date.now() - new Date(iso).getTime()
   return Math.max(0, Math.floor(ms / 86400000))
-}
-
-// ─── ComingSoon overlay ─────────────────────────────────────────────────────
-
-function ComingSoon({ children }: { children: ReactNode }) {
-  return (
-    <div className="relative">
-      <div className="opacity-40 pointer-events-none select-none filter blur-[1px]">{children}</div>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <span className="rounded-full bg-foreground/85 text-background text-[11px] font-medium px-3 py-1 shadow">
-          Скоро
-        </span>
-      </div>
-    </div>
-  )
 }
 
 // ─── Color metric card ──────────────────────────────────────────────────────
@@ -496,20 +481,8 @@ function DashboardContent() {
               </div>
               )}
 
-              {/* Events — Скоро */}
-              <ComingSoon>
-                <div className="border rounded-xl shadow-sm p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold">Ближайшие события</h3>
-                    <Calendar className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    {[1, 2, 3, 4].map(i => (
-                      <div key={i} className="h-12 bg-muted/30 rounded-lg" />
-                    ))}
-                  </div>
-                </div>
-              </ComingSoon>
+              {/* Ближайшие интервью — реальные данные, фильтр по вакансии из шапки */}
+              <UpcomingInterviews selectedVacancyId={selectedVacancyId} />
             </div>
 
             {/* #36: блоки «Цели месяца», «Источники откликов», «Динамика
@@ -522,6 +495,123 @@ function DashboardContent() {
         </main>
       </SidebarInset>
     </SidebarProvider>
+  )
+}
+
+// ─── Ближайшие интервью (реальные) ───────────────────────────────────────────
+
+const IV_DOT: Record<string, string> = {
+  "Подтверждено": "bg-emerald-500", "Ожидает": "bg-amber-500",
+  "Пройдено": "bg-gray-400", "Не явился": "bg-red-500", "Отменено": "bg-gray-300",
+}
+
+interface UpcomingItem {
+  id: string; candidateId: string | null; candidate: string; vacancy: string
+  date: Date; time: string; type: string; format: string; status: string
+}
+
+function UpcomingInterviews({ selectedVacancyId }: { selectedVacancyId: string }) {
+  const router = useRouter()
+  const [items, setItems] = useState<UpcomingItem[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    const qs = selectedVacancyId !== "all" ? `&vacancyId=${encodeURIComponent(selectedVacancyId)}` : ""
+    Promise.all([
+      fetch(`/api/modules/hr/calendar?type=interview${qs}`).then(r => r.ok ? r.json() : null),
+      fetch(`/api/modules/hr/vacancies?limit=200`).then(r => r.ok ? r.json() : null),
+    ]).then(([evJson, vacJson]) => {
+      if (cancelled) return
+      const evs = (evJson?.data ?? evJson ?? []) as Array<Record<string, unknown>>
+      const vacs = (vacJson?.vacancies ?? vacJson?.data ?? []) as Array<{ id: string; title: string }>
+      const vacMap = new Map(vacs.map(v => [v.id, v.title]))
+      const now = new Date()
+      const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0)
+      const ALL_ST = ["Подтверждено", "Ожидает", "Пройдено", "Не явился", "Отменено"]
+      const mapped: UpcomingItem[] = evs.map((e) => {
+        const start = new Date(e.startAt as string)
+        const end = new Date((e.endAt as string) ?? (e.startAt as string))
+        const ist = e.interviewStatus as string | null
+        let status: string
+        if (ist && ALL_ST.includes(ist)) status = ist
+        else if (e.status === "cancelled") status = "Отменено"
+        else if (end < now) status = "Пройдено"
+        else if (e.status === "tentative") status = "Ожидает"
+        else status = "Подтверждено"
+        const vId = e.vacancyId as string | null
+        return {
+          id: e.id as string,
+          candidateId: (e.candidateId as string) ?? null,
+          candidate: (e.title as string) || "Интервью",
+          vacancy: (vId && vacMap.get(vId)) || "",
+          date: start,
+          time: `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`,
+          type: (e.interviewType as string) || "HR",
+          format: e.interviewFormat === "Офис" ? "Офис" : "Онлайн",
+          status,
+        }
+      })
+        .filter((x) => x.date >= todayStart && x.status !== "Отменено")
+        .sort((a, b) => a.date.getTime() - b.date.getTime())
+      setItems(mapped)
+    }).finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [selectedVacancyId])
+
+  const fmtDay = (d: Date) => {
+    const t = new Date(); t.setHours(0, 0, 0, 0)
+    const dd = new Date(d); dd.setHours(0, 0, 0, 0)
+    const diff = Math.round((dd.getTime() - t.getTime()) / 86400000)
+    if (diff === 0) return "Сегодня"
+    if (diff === 1) return "Завтра"
+    return d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" })
+  }
+
+  const shown = items.slice(0, 8)
+
+  return (
+    <div className="border rounded-xl shadow-sm p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold flex items-center gap-2">
+          <Calendar className="w-4 h-4 text-muted-foreground" />
+          Ближайшие интервью
+          {!loading && items.length > 0 && <Badge variant="secondary" className="text-xs">{items.length}</Badge>}
+        </h3>
+        <Link href="/hr/interviews" className="text-xs text-primary hover:underline inline-flex items-center gap-0.5">
+          Все <ChevronRight className="w-3 h-3" />
+        </Link>
+      </div>
+      {loading ? (
+        <div className="flex flex-col gap-2">
+          {[1, 2, 3].map(i => <div key={i} className="h-12 bg-muted/30 rounded-lg animate-pulse" />)}
+        </div>
+      ) : shown.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-8">Ближайших интервью нет</p>
+      ) : (
+        <div className="flex flex-col divide-y">
+          {shown.map(iv => (
+            <button
+              key={iv.id}
+              onClick={() => { if (iv.candidateId) router.push(`/hr/candidates/${iv.candidateId}`) }}
+              className="flex items-center gap-3 py-2.5 text-left hover:bg-muted/40 -mx-2 px-2 rounded-md transition-colors"
+            >
+              <span className={cn("w-2 h-2 rounded-full shrink-0", IV_DOT[iv.status] ?? "bg-gray-300")} />
+              <div className="flex flex-col items-center justify-center min-w-[64px] shrink-0">
+                <span className="text-[11px] font-medium text-muted-foreground">{fmtDay(iv.date)}</span>
+                <span className="text-sm font-semibold text-primary">{iv.time}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{iv.candidate}</p>
+                <p className="text-xs text-muted-foreground truncate">{iv.type} · {iv.format}{iv.vacancy ? ` · ${iv.vacancy}` : ""}</p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground/50 shrink-0" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
