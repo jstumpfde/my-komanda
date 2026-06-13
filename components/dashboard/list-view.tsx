@@ -34,6 +34,8 @@ interface ListViewProps {
   settings: CardDisplaySettings
   onOpenProfile?: (candidate: Candidate, columnId: string) => void
   onAction?: (candidateId: string, columnId: string, action: CandidateAction) => void
+  /** Клик по названию вакансии в строке → переход в эту вакансию. */
+  onVacancyClick?: (vacancyId: string) => void
   onToggleFavorite?: (candidateId: string, isFavorite: boolean) => void
   sortMode?: CandidateSortMode
   /** Если задан — сортировка по колонке управляется снаружи (URL/сервер). */
@@ -142,7 +144,7 @@ function SortHeader({
 }
 
 export function ListView({
-  columns, settings, onOpenProfile, onAction, onToggleFavorite,
+  columns, settings, onOpenProfile, onAction, onToggleFavorite, onVacancyClick,
   sortMode = "date_desc", sort = null, onSortChange,
   selectedIds, onSelectionChange,
   serverSorted = false,
@@ -300,7 +302,7 @@ export function ListView({
   if (showResponseDate) cols.push("minmax(70px, 0.7fr)") // Дата — "DD.MM.YY" укладывается в 70px
   cols.push("minmax(130px, 1.3fr)")                     // Статус — ужат с 140/1.8fr до 130/1.3fr
   if (showSource) cols.push("48px")                     // Источник — фикс (значки "hh"/"av" короткие)
-  if (showActions) cols.push("80px")                    // Действия — фикс
+  if (showActions) cols.push("96px")                    // Действия — фикс (закреплена справа, 3 иконки + border)
 
   // Минимальная ширина таблицы = сумма минимумов колонок (px из фикс-ширин и
   // из minmax(Npx, …)). Нужна, чтобы при узком экране сетка ПЕРЕПОЛНЯЛА контейнер
@@ -413,7 +415,7 @@ export function ListView({
         {showResponseDate && <SortHeader label="Дата" sortKey="responseDate" sort={sort} onToggle={handleSort} align="center" />}
         <SortHeader label="Статус" sortKey="status" sort={sort} onToggle={handleSort} align="center" />
         {showSource && <SortHeader label="Источник" sortKey="source" sort={sort} onToggle={handleSort} align="center" />}
-        {showActions && <div className="text-center">Действия</div>}
+        {showActions && <div className="text-center sticky right-0 z-20 bg-card border-l border-border pl-2">Действия</div>}
       </div>
 
       {/* Rows */}
@@ -501,11 +503,25 @@ export function ListView({
               </div>
 
               {/* Vacancy title — глобальный список кандидатов */}
-              {showVacancyColumn && (
-                <div className="text-[13px] text-muted-foreground truncate min-w-0" title={(candidate as { vacancyTitle?: string | null }).vacancyTitle ?? ""}>
-                  {(candidate as { vacancyTitle?: string | null }).vacancyTitle ?? "—"}
-                </div>
-              )}
+              {showVacancyColumn && (() => {
+                const vc = candidate as { vacancyTitle?: string | null; vacancyId?: string | null }
+                const title = vc.vacancyTitle ?? "—"
+                if (vc.vacancyId && onVacancyClick) {
+                  return (
+                    <button
+                      type="button"
+                      title={`Открыть вакансию: ${title}`}
+                      className="text-[13px] text-muted-foreground hover:text-primary hover:underline truncate min-w-0 text-left"
+                      onClick={(e) => { e.stopPropagation(); onVacancyClick(vc.vacancyId!) }}
+                    >
+                      {title}
+                    </button>
+                  )
+                }
+                return (
+                  <div className="text-[13px] text-muted-foreground truncate min-w-0" title={title}>{title}</div>
+                )
+              })()}
 
               {/* Demo progress */}
               {showProgress && (
@@ -688,7 +704,7 @@ export function ListView({
               {/* Actions — компактные иконки, full-height клик-зоны */}
               {showActions && (
                 <div
-                  className="self-stretch flex gap-1 justify-center items-center h-full"
+                  className="self-stretch flex gap-1 justify-center items-center h-full sticky right-0 z-10 bg-card border-l border-border pl-2"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {isDecisionStage ? (

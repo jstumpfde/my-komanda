@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -87,7 +88,7 @@ const FILTER_INPUT = "h-10 text-sm border border-input rounded-md"
 
 // ─── Маппинг GlobalCandidate → Candidate (для ListView) ───────────────────────
 
-function toListCandidate(c: GlobalCandidate): Candidate & { vacancyTitle: string } {
+function toListCandidate(c: GlobalCandidate): Candidate & { vacancyTitle: string; vacancyId: string } {
   return {
     id: c.id,
     name: c.name,
@@ -118,6 +119,7 @@ function toListCandidate(c: GlobalCandidate): Candidate & { vacancyTitle: string
     stage: c.stage,
     photoUrl: c.photoUrl ?? null,
     vacancyTitle: c.vacancyTitle,
+    vacancyId: c.vacancyId,
   }
 }
 
@@ -183,6 +185,7 @@ function ColumnToggles({
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function CandidatesPage() {
+  const router = useRouter()
   const [candidates, setCandidates] = useState<GlobalCandidate[]>([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
@@ -692,6 +695,7 @@ export default function CandidatesPage() {
                 onSelectionChange={setSelected}
                 onOpenProfile={handleOpenProfile}
                 onToggleFavorite={handleToggleFavorite}
+                onVacancyClick={(vacancyId) => router.push(`/hr/vacancies/${vacancyId}`)}
                 onAction={(candidateId, _colId, action) => {
                   const c = candidates.find(x => x.id === candidateId)
                   if (!c) return
