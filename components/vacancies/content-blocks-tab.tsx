@@ -97,6 +97,32 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
   const dragIdxRef = useRef<number | null>(null)
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
 
+  // Сворачивание ленты блоков в выпадающий список при переполнении.
+  // Лента занимает место слева от кнопок редактора; если чипы блоков шире
+  // доступной зоны — показываем дропдаун (выбранный блок + стрелка), а «+ Блок»
+  // всегда остаётся виден справа от блоков.
+  const laneGroupRef = useRef<HTMLDivElement>(null) // flex-1 зона: блоки + «+ Блок»
+  const measureRef = useRef<HTMLDivElement>(null)    // скрытый замер полной ленты
+  const plusRef = useRef<HTMLButtonElement>(null)
+  const [blocksMenuOpen, setBlocksMenuOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
+
+  useEffect(() => {
+    const group = laneGroupRef.current
+    const measure = measureRef.current
+    if (!group || !measure) return
+    const check = () => {
+      const plusW = plusRef.current?.offsetWidth ?? 80
+      // Доступно для самих чипов = ширина зоны минус «+ Блок» и отступы.
+      const avail = group.clientWidth - plusW - 16
+      setCollapsed(measure.scrollWidth > avail)
+    }
+    check()
+    const ro = new ResizeObserver(check)
+    ro.observe(group)
+    return () => ro.disconnect()
+  }, [blocks])
+
   // Выбор первого блока после загрузки / сброс при удалении выбранного
   useEffect(() => {
     if (!loading && blocks.length > 0 && !selectedId) {
@@ -272,100 +298,171 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
     )
   }
 
+  // Рендер одного чипа блока (используется в видимой ленте и в скрытом замере).
+  // measuring=true → без обработчиков/инпута (только для измерения ширины).
+  const renderChip = (block: ContentBlock, idx: number, measuring = false) => {
+    const isActive = selectedId === block.id
+    const isRenaming = !measuring && renamingId === block.id
+    const scored = blockHasScoredContent(block.lessons)
+    return (
+      <div
+        key={block.id}
+        draggable={!measuring && !isRenaming}
+        onDragStart={measuring ? undefined : () => handleDragStart(idx)}
+        onDragOver={measuring ? undefined : (e) => handleDragOver(e, idx)}
+        onDrop={measuring ? undefined : (e) => handleDrop(e, idx)}
+        onDragEnd={measuring ? undefined : handleDragEnd}
+        onClick={measuring ? undefined : () => { if (!isRenaming) setSelectedId(block.id) }}
+        className={cn(
+          "group relative flex items-center gap-1.5 rounded-lg border px-2.5 h-9 cursor-pointer select-none shrink-0 transition-colors",
+          isActive
+            ? "border-primary bg-primary/10 text-foreground"
+            : "border-border bg-card hover:bg-muted/60 text-foreground",
+          !measuring && dragOverIdx === idx && dragIdxRef.current !== idx && "ring-2 ring-primary/40"
+        )}
+        title="Перетащите, чтобы изменить порядок"
+      >
+        <span className={cn(
+          "text-[10px] font-semibold w-4 h-4 rounded flex items-center justify-center shrink-0",
+          isActive ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+        )}>{idx + 1}</span>
+
+        {!isRenaming && <ContentTypeBadge contentType={block.contentType} />}
+
+        {!isRenaming && block.isLiveBattle && (
+          <span title="Боевой блок — уходит кандидатам" className="shrink-0">
+            <Zap className="w-3 h-3 text-amber-500 fill-amber-400" />
+          </span>
+        )}
+
+        {isRenaming ? (
+          <input
+            autoFocus
+            value={renamingValue}
+            onChange={(e) => setRenamingValue(e.target.value)}
+            onFocus={(e) => e.currentTarget.select()}
+            onBlur={() => commitRename(block.id)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); commitRename(block.id) }
+              if (e.key === "Escape") setRenamingId(null)
+            }}
+            onClick={(e) => e.stopPropagation()}
+            placeholder="Название блока…"
+            className="w-40 text-xs font-medium bg-transparent border-b border-primary/50 outline-none placeholder:opacity-50"
+          />
+        ) : (
+          <span
+            className="text-xs font-medium truncate max-w-[180px]"
+            onDoubleClick={measuring ? undefined : (e) => { e.stopPropagation(); startRenaming(block) }}
+          >{block.title}</span>
+        )}
+
+        {scored && !isRenaming && (
+          <span
+            className="inline-flex items-center gap-0.5 text-[9px] font-medium text-primary shrink-0"
+            title="Содержит формы (вопросы/задание/запись) — оценивает ИИ"
+          >
+            <Sparkles className="w-2.5 h-2.5" />ИИ
+          </span>
+        )}
+
+        {!measuring && !isRenaming && (
+          <span className="hidden group-hover:inline-flex items-center gap-0.5 shrink-0 ml-0.5">
+            <button
+              title="Переименовать"
+              onClick={(e) => { e.stopPropagation(); startRenaming(block) }}
+              className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted"
+            ><Pencil className="w-3 h-3" /></button>
+            <button
+              title="Удалить"
+              onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(block.id) }}
+              className="p-0.5 rounded text-muted-foreground hover:text-destructive hover:bg-muted"
+            ><Trash2 className="w-3 h-3" /></button>
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  const renamingBlock = uiBlocks.find(b => b.id === renamingId) ?? null
+  const collapsedSelected = selectedBlock ?? uiBlocks[0] ?? null
+  const collapsedSelIdx = collapsedSelected ? uiBlocks.findIndex(b => b.id === collapsedSelected.id) : -1
+
   return (
     <div className="flex flex-col gap-3">
-      {/* ─── Единый ряд: слева чипы-блоки (скролл), справа действия редактора ─── */}
+      {/* ─── Единый ряд: слева лента блоков, справа действия редактора ─── */}
       <div className="flex items-center gap-3 shrink-0">
-        {/* Блоки контента — по порядку показа кандидату */}
-        <div className="flex items-center gap-2 overflow-x-auto flex-1 min-w-0 pb-0.5">
-          {uiBlocks.map((block, idx) => {
-            const isActive = selectedId === block.id
-            const isRenaming = renamingId === block.id
-            const scored = blockHasScoredContent(block.lessons)
-            return (
-              <div
-                key={block.id}
-                draggable={!isRenaming}
-                onDragStart={() => handleDragStart(idx)}
-                onDragOver={(e) => handleDragOver(e, idx)}
-                onDrop={(e) => handleDrop(e, idx)}
-                onDragEnd={handleDragEnd}
-                onClick={() => { if (!isRenaming) setSelectedId(block.id) }}
-                className={cn(
-                  "group relative flex items-center gap-1.5 rounded-lg border px-2.5 h-9 cursor-pointer select-none shrink-0 transition-colors",
-                  isActive
-                    ? "border-primary bg-primary/10 text-foreground"
-                    : "border-border bg-card hover:bg-muted/60 text-foreground",
-                  dragOverIdx === idx && dragIdxRef.current !== idx && "ring-2 ring-primary/40"
-                )}
-                title="Перетащите, чтобы изменить порядок"
-              >
-                <span className={cn(
-                  "text-[10px] font-semibold w-4 h-4 rounded flex items-center justify-center shrink-0",
-                  isActive ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                )}>{idx + 1}</span>
-
-                {/* Тип блока */}
-                {!isRenaming && <ContentTypeBadge contentType={block.contentType} />}
-
-                {/* Иконка молнии — боевой блок */}
-                {!isRenaming && block.isLiveBattle && (
-                  <span title="Боевой блок — уходит кандидатам" className="shrink-0">
-                    <Zap className="w-3 h-3 text-amber-500 fill-amber-400" />
-                  </span>
-                )}
-
-                {isRenaming ? (
-                  <input
-                    autoFocus
-                    value={renamingValue}
-                    onChange={(e) => setRenamingValue(e.target.value)}
-                    onFocus={(e) => e.currentTarget.select()}
-                    onBlur={() => commitRename(block.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") { e.preventDefault(); commitRename(block.id) }
-                      if (e.key === "Escape") setRenamingId(null)
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    placeholder="Название блока…"
-                    className="w-40 text-xs font-medium bg-transparent border-b border-primary/50 outline-none placeholder:opacity-50"
-                  />
-                ) : (
-                  <span
-                    className="text-xs font-medium truncate max-w-[180px]"
-                    onDoubleClick={(e) => { e.stopPropagation(); startRenaming(block) }}
-                  >{block.title}</span>
-                )}
-
-                {scored && !isRenaming && (
-                  <span
-                    className="inline-flex items-center gap-0.5 text-[9px] font-medium text-primary shrink-0"
-                    title="Содержит формы (вопросы/задание/запись) — оценивает ИИ"
+        {/* Зона ленты: блоки + «+ Блок». Если чипы шире доступного — сворачиваем
+            блоки в дропдаун, «+ Блок» всегда виден справа от них. */}
+        <div ref={laneGroupRef} className="relative flex items-center gap-2 flex-1 min-w-0">
+          {collapsed ? (
+            renamingBlock ? (
+              // Свёрнуто, но идёт переименование — показываем инпут в ленте.
+              <input
+                autoFocus
+                value={renamingValue}
+                onChange={(e) => setRenamingValue(e.target.value)}
+                onFocus={(e) => e.currentTarget.select()}
+                onBlur={() => commitRename(renamingBlock.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") { e.preventDefault(); commitRename(renamingBlock.id) }
+                  if (e.key === "Escape") setRenamingId(null)
+                }}
+                placeholder="Название блока…"
+                className="rounded-lg border border-primary px-2.5 h-9 w-52 text-xs font-medium outline-none bg-card shrink-0"
+              />
+            ) : collapsedSelected && (
+              // Свёрнутый список блоков: выбранный блок + стрелка.
+              <DropdownMenu open={blocksMenuOpen} onOpenChange={setBlocksMenuOpen}>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="group flex items-center gap-1.5 rounded-lg border border-primary bg-primary/10 px-2.5 h-9 min-w-0 max-w-[300px] text-foreground shrink-0"
+                    title="Список блоков"
                   >
-                    <Sparkles className="w-2.5 h-2.5" />ИИ
-                  </span>
-                )}
-
-                {!isRenaming && (
-                  <span className="hidden group-hover:inline-flex items-center gap-0.5 shrink-0 ml-0.5">
-                    <button
-                      title="Переименовать"
-                      onClick={(e) => { e.stopPropagation(); startRenaming(block) }}
-                      className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted"
-                    ><Pencil className="w-3 h-3" /></button>
-                    <button
-                      title="Удалить"
-                      onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(block.id) }}
-                      className="p-0.5 rounded text-muted-foreground hover:text-destructive hover:bg-muted"
-                    ><Trash2 className="w-3 h-3" /></button>
-                  </span>
-                )}
-              </div>
+                    <span className="text-[10px] font-semibold w-4 h-4 rounded flex items-center justify-center shrink-0 bg-primary text-primary-foreground">{collapsedSelIdx + 1}</span>
+                    <ContentTypeBadge contentType={collapsedSelected.contentType} />
+                    {collapsedSelected.isLiveBattle && <Zap className="w-3 h-3 text-amber-500 fill-amber-400 shrink-0" />}
+                    <span className="text-xs font-medium truncate">{collapsedSelected.title}</span>
+                    <span className="text-[10px] text-muted-foreground shrink-0">{uiBlocks.length}</span>
+                    <ChevronDown className="w-3.5 h-3.5 opacity-60 shrink-0" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-72">
+                  {uiBlocks.map((block, idx) => (
+                    <DropdownMenuItem
+                      key={block.id}
+                      className={cn("gap-1.5 cursor-pointer", selectedId === block.id && "bg-primary/10")}
+                      onClick={() => setSelectedId(block.id)}
+                    >
+                      <span className="text-[10px] font-semibold w-4 h-4 rounded flex items-center justify-center shrink-0 bg-muted text-muted-foreground">{idx + 1}</span>
+                      <ContentTypeBadge contentType={block.contentType} />
+                      {block.isLiveBattle && <Zap className="w-3 h-3 text-amber-500 fill-amber-400 shrink-0" />}
+                      <span className="text-xs font-medium truncate flex-1">{block.title}</span>
+                      <button
+                        title="Переименовать"
+                        onClick={(e) => { e.stopPropagation(); setSelectedId(block.id); startRenaming(block); setBlocksMenuOpen(false) }}
+                        className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted shrink-0"
+                      ><Pencil className="w-3 h-3" /></button>
+                      <button
+                        title="Удалить"
+                        onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(block.id) }}
+                        className="p-0.5 rounded text-muted-foreground hover:text-destructive hover:bg-muted shrink-0"
+                      ><Trash2 className="w-3 h-3" /></button>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )
-          })}
+          ) : (
+            <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+              {uiBlocks.map((block, idx) => renderChip(block, idx))}
+            </div>
+          )}
 
-          {/* «+ Блок» — сразу за крайним чипом, едет вправо при добавлении */}
+          {/* «+ Блок» — всегда виден справа от блоков (не уезжает) */}
           <button
+            ref={plusRef}
             type="button"
             disabled={creating}
             onClick={handleAddBlock}
@@ -374,6 +471,11 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
             {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
             Блок
           </button>
+
+          {/* Скрытый замер полной ленты — решает, сворачивать ли в дропдаун */}
+          <div ref={measureRef} aria-hidden className="invisible pointer-events-none absolute left-0 top-0 flex items-center gap-2">
+            {uiBlocks.map((block, idx) => renderChip(block, idx, true))}
+          </div>
         </div>
 
         {/* Действия редактора выбранного блока — справа */}
