@@ -549,7 +549,7 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
                 <div className="space-y-3">
                   {filtered.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">Нет интервью</p>}
                   {filtered.map(iv => (
-                    <Card key={iv.id} className="overflow-hidden transition-colors hover:border-primary/40">
+                    <Card key={iv.id} className="overflow-hidden transition-colors hover:border-primary/40 cursor-pointer" onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}>
                       <CardContent className="p-0">
                         <div className="flex items-stretch">
                           {/* Дата/время */}
@@ -569,7 +569,7 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
                               <Badge variant="outline" className={cn("text-[10px]", iv.type === "Техническое" ? "border-blue-200 text-blue-700 dark:text-blue-400" : iv.type === "HR" ? "border-purple-200 text-purple-700 dark:text-purple-400" : "border-green-200 text-green-700 dark:text-green-400")}>{iv.type}</Badge>
                               <span className="inline-flex items-center gap-1">{iv.format === "Онлайн" ? <Video className="w-3 h-3" /> : <Building2 className="w-3 h-3" />}{iv.format}</span>
                               <span className="truncate">Интервьюер: <span className="text-foreground font-medium">{iv.interviewer}</span></span>
-                              {iv.phone && <a href={`tel:${iv.phone}`} className="inline-flex items-center gap-1 hover:text-primary"><Phone className="w-3 h-3" />{iv.phone}</a>}
+                              {iv.phone && <a href={`tel:${iv.phone}`} onClick={e => e.stopPropagation()} className="inline-flex items-center gap-1 hover:text-primary"><Phone className="w-3 h-3" />{iv.phone}</a>}
                               <span className="truncate text-muted-foreground/70">· {iv.vacancy}</span>
                             </div>
                           </div>
@@ -594,7 +594,7 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
                           </div>
                           {/* Действие */}
                           <div className="flex items-center px-4 border-l shrink-0">
-                            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}><ExternalLink className="h-3.5 w-3.5" /> Открыть</Button>
+                            <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" tabIndex={-1}><ExternalLink className="h-3.5 w-3.5" /> Открыть</Button>
                           </div>
                         </div>
                       </CardContent>
@@ -795,7 +795,8 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
                                 draggable
                                 onDragStart={() => ivDragStart(iv.id)}
                                 onDragEnd={ivDragEnd}
-                                className={cn("transition-all cursor-grab active:cursor-grabbing", dragIvId === iv.id && "opacity-40 scale-95")}
+                                onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}
+                                className={cn("transition-all cursor-pointer hover:border-primary/40 active:cursor-grabbing", dragIvId === iv.id && "opacity-40 scale-95")}
                               >
                                 <CardContent className="p-3 space-y-1.5">
                                   <div className="flex items-center justify-between gap-2"><span className="text-sm font-semibold text-foreground truncate">{iv.candidate}</span><span className="text-[10px] text-muted-foreground shrink-0">{formatDateShort(iv.date)}</span></div>
