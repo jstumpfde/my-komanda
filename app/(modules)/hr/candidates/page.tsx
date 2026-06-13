@@ -26,7 +26,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
 import { StageMessageControl } from "@/components/candidates/stage-message-control"
-import { getStageLabel, ALL_STAGE_SLUGS } from "@/lib/stages"
+import { getStageLabel, ALL_STAGE_SLUGS, PLATFORM_STAGES, type StageSlug } from "@/lib/stages"
 
 interface FacetsData {
   cities: { city: string; count: number }[]
@@ -579,6 +579,23 @@ export default function CandidatesPage() {
                 onReset={() => setSettings(DEFAULT_SETTINGS)}
               />
             </div>
+
+            {/* Мини-сводка: роллап по этапам (чипы дают поэтапно, тут — итог) */}
+            {facets?.stages && facets.stages.length > 0 && (() => {
+              let total = 0, inWork = 0, rejected = 0
+              for (const s of facets.stages) {
+                total += s.count
+                if (s.stage === "rejected") rejected += s.count
+                else if (!PLATFORM_STAGES[s.stage as StageSlug]?.isTerminal) inWork += s.count
+              }
+              return (
+                <div className="flex items-center gap-4 mb-3 text-sm flex-wrap">
+                  <span className="text-muted-foreground">Всего: <b className="text-foreground tabular-nums">{total}</b></span>
+                  <span className="text-muted-foreground">В работе: <b className="text-foreground tabular-nums">{inWork}</b></span>
+                  <span className="text-muted-foreground">Отказов: <b className="text-foreground tabular-nums">{rejected}</b></span>
+                </div>
+              )
+            })()}
 
             {/* Чипы-этапы (инлайн-воронка): клик фильтрует список по этапу */}
             {facets?.stages && facets.stages.length > 0 && (
