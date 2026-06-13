@@ -14,7 +14,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Video, Building2, ExternalLink, ChevronLeft, ChevronRight, List, CalendarDays, CalendarRange, Clock, Settings, Plus, GripVertical, Pencil, Trash2, Save, X, Bell, BellOff, LayoutGrid } from "lucide-react"
+import { Video, Building2, ExternalLink, ChevronLeft, ChevronRight, List, CalendarDays, CalendarRange, Clock, Settings, Plus, GripVertical, Pencil, Trash2, Save, X, Bell, BellOff, LayoutGrid, Phone, Check, Minus, FileText, ClipboardCheck, Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { CalendarView } from "@/components/calendar/calendar-view"
@@ -65,6 +65,9 @@ const EMOJI_OPTIONS = ["📅", "🌅", "✅", "❌", "⏳", "🔥", "⭐", "📞
 interface Interview {
   id: string; date: Date; time: string; endTime: string; candidate: string; vacancy: string; interviewer: string; type: InterviewType; format: InterviewFormat; status: InterviewStatus
   candidateId: string | null
+  // Контекст кандидата (из JOIN в /calendar) — для наполнения карточки.
+  aiScore: number | null; resumeScore: number | null; phone: string | null; stage: string | null
+  anketaFilled: boolean; tested: boolean; testScore: number | null
 }
 
 const today2 = new Date()
@@ -77,6 +80,8 @@ interface CalEvent {
   id: string; title: string; startAt: string; endAt: string; status: string | null
   vacancyId: string | null; candidateId: string | null; interviewer: string | null; interviewType: string | null; interviewFormat: string | null
   interviewStatus: string | null
+  candAiScore?: number | null; candResumeScore?: number | null; candScore?: number | null; candPhone?: string | null; candStage?: string | null
+  candAnketaFilled?: boolean; candTested?: boolean; candTestScore?: number | null
 }
 function timeStr(dt: Date): string {
   return `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`
@@ -106,10 +111,25 @@ function mapEventToInterview(ev: CalEvent, vacMap: Map<string, string>): Intervi
     interviewer: ev.interviewer || "—",
     type, format, status,
     candidateId: ev.candidateId ?? null,
+    aiScore: ev.candAiScore ?? ev.candResumeScore ?? null,
+    resumeScore: ev.candResumeScore ?? null,
+    phone: ev.candPhone ?? null,
+    stage: ev.candStage ?? null,
+    anketaFilled: ev.candAnketaFilled ?? false,
+    tested: ev.candTested ?? false,
+    testScore: ev.candTestScore ?? null,
   }
 }
 
 // ─── Утилиты ────────────────────────────────────────────────
+
+// Цвет числового скоринга (0..100): зелёный/янтарный/красный.
+function scoreColor(n: number | null | undefined): string {
+  if (n == null) return "text-muted-foreground"
+  if (n >= 70) return "text-emerald-600 dark:text-emerald-400"
+  if (n >= 40) return "text-amber-600 dark:text-amber-400"
+  return "text-red-600 dark:text-red-400"
+}
 
 const STATUS_STYLES: Record<InterviewStatus, string> = {
   "Подтверждено": "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800",
@@ -529,27 +549,53 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
                 <div className="space-y-3">
                   {filtered.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">Нет интервью</p>}
                   {filtered.map(iv => (
-                    <Card key={iv.id}>
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-4">
-                          <div className="flex flex-col items-center justify-center min-w-[56px] bg-muted rounded-lg py-2 px-3">
+                    <Card key={iv.id} className="overflow-hidden transition-colors hover:border-primary/40">
+                      <CardContent className="p-0">
+                        <div className="flex items-stretch">
+                          {/* Дата/время */}
+                          <div className="flex flex-col items-center justify-center min-w-[68px] bg-muted/60 py-3 px-3 border-r">
                             <span className="text-2xl font-bold leading-none">{iv.date.getDate()}</span>
                             <span className="text-[10px] font-medium text-muted-foreground mt-0.5">{iv.date.toLocaleDateString("ru-RU", { month: "short" }).toUpperCase()}</span>
                             <span className="text-xs font-semibold text-primary mt-1">{iv.time}</span>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
+                          {/* Кандидат + контекст */}
+                          <div className="flex-1 min-w-0 py-3 px-4 flex flex-col justify-center gap-1.5">
+                            <div className="flex flex-wrap items-center gap-1.5">
                               <span className="font-semibold text-sm truncate">{iv.candidate}</span>
                               <Badge variant="outline" className={cn("text-[10px]", STATUS_STYLES[iv.status])}>{iv.status}</Badge>
+                              {iv.stage && <Badge variant="secondary" className="text-[10px] font-normal">{iv.stage}</Badge>}
                             </div>
-                            <p className="text-xs text-muted-foreground truncate mb-1">{iv.vacancy}</p>
-                            <p className="text-xs text-muted-foreground">Интервьюер: <span className="text-foreground font-medium">{iv.interviewer}</span></p>
-                            <div className="flex flex-wrap gap-1.5 mt-2">
-                              <Badge variant="outline" className={cn("text-[10px]", iv.type === "Техническое" ? "border-blue-200 text-blue-700" : iv.type === "HR" ? "border-purple-200 text-purple-700" : "border-green-200 text-green-700")}>{iv.type}</Badge>
-                              <Badge variant="outline" className="text-[10px] gap-1">{iv.format === "Онлайн" ? <Video className="w-3 h-3" /> : <Building2 className="w-3 h-3" />}{iv.format}</Badge>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                              <Badge variant="outline" className={cn("text-[10px]", iv.type === "Техническое" ? "border-blue-200 text-blue-700 dark:text-blue-400" : iv.type === "HR" ? "border-purple-200 text-purple-700 dark:text-purple-400" : "border-green-200 text-green-700 dark:text-green-400")}>{iv.type}</Badge>
+                              <span className="inline-flex items-center gap-1">{iv.format === "Онлайн" ? <Video className="w-3 h-3" /> : <Building2 className="w-3 h-3" />}{iv.format}</span>
+                              <span className="truncate">Интервьюер: <span className="text-foreground font-medium">{iv.interviewer}</span></span>
+                              {iv.phone && <a href={`tel:${iv.phone}`} className="inline-flex items-center gap-1 hover:text-primary"><Phone className="w-3 h-3" />{iv.phone}</a>}
+                              <span className="truncate text-muted-foreground/70">· {iv.vacancy}</span>
                             </div>
                           </div>
-                          <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}><ExternalLink className="h-3.5 w-3.5" /> Открыть</Button>
+                          {/* Метрики кандидата */}
+                          <div className="hidden md:flex items-center gap-5 px-5 border-l">
+                            <div className="flex flex-col items-center min-w-[52px]">
+                              <span className="text-[9px] uppercase tracking-wide text-muted-foreground inline-flex items-center gap-0.5"><Sparkles className="w-2.5 h-2.5" />Резюме</span>
+                              <span className={cn("text-base font-bold leading-tight", scoreColor(iv.aiScore))}>{iv.aiScore != null ? iv.aiScore : "—"}</span>
+                            </div>
+                            <div className="flex flex-col items-center min-w-[52px]">
+                              <span className="text-[9px] uppercase tracking-wide text-muted-foreground inline-flex items-center gap-0.5"><FileText className="w-2.5 h-2.5" />Анкета</span>
+                              {iv.anketaFilled ? <Check className="w-5 h-5 text-emerald-600 dark:text-emerald-400" /> : <Minus className="w-5 h-5 text-muted-foreground/40" />}
+                            </div>
+                            <div className="flex flex-col items-center min-w-[52px]">
+                              <span className="text-[9px] uppercase tracking-wide text-muted-foreground inline-flex items-center gap-0.5"><ClipboardCheck className="w-2.5 h-2.5" />Тест</span>
+                              {iv.tested
+                                ? (iv.testScore != null
+                                    ? <span className={cn("text-base font-bold leading-tight", scoreColor(iv.testScore))}>{iv.testScore}</span>
+                                    : <Check className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />)
+                                : <Minus className="w-5 h-5 text-muted-foreground/40" />}
+                            </div>
+                          </div>
+                          {/* Действие */}
+                          <div className="flex items-center px-4 border-l shrink-0">
+                            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}><ExternalLink className="h-3.5 w-3.5" /> Открыть</Button>
+                          </div>
                         </div>
                       </CardContent>
                     </Card>

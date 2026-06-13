@@ -1,9 +1,9 @@
 import { NextRequest } from "next/server"
 import { db } from "@/lib/db"
-import { calendarEvents, calendarEventParticipants } from "@/lib/db/schema"
+import { calendarEvents, calendarEventParticipants, candidates, testSubmissions } from "@/lib/db/schema"
 import { requireCompany } from "@/lib/api-helpers"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
-import { eq, and, gte, lte, or, inArray } from "drizzle-orm"
+import { eq, and, gte, lte, or, inArray, desc, getTableColumns } from "drizzle-orm"
 
 export async function GET(req: NextRequest) {
   try {
@@ -48,11 +48,46 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    const events = await db
-      .select()
+    // Обогащаем события данными кандидата (скоринг/телефон/стадия/анкета) —
+    // карточкам интервью нужно показывать контекст, а не только имя.
+    // getTableColumns сохраняет плоскую форму события (обратная совместимость
+    // с остальными потребителями /calendar), добавляя поля cand*.
+    const rows = await db
+      .select({
+        ...getTableColumns(calendarEvents),
+        candAiScore: candidates.aiScore,
+        candResumeScore: candidates.resumeScore,
+        candScore: candidates.score,
+        candPhone: candidates.phone,
+        candStage: candidates.stage,
+        candAnketa: candidates.anketaAnswers,
+      })
       .from(calendarEvents)
+      .leftJoin(candidates, eq(candidates.id, calendarEvents.candidateId))
       .where(and(...conditions))
       .orderBy(calendarEvents.startAt)
+
+    // Последний результат теста по каждому кандидату (одним запросом).
+    const candIds = Array.from(new Set(rows.map(r => r.candidateId).filter(Boolean))) as string[]
+    const testMap = new Map<string, number | null>()
+    if (candIds.length > 0) {
+      const subs = await db
+        .select({ candidateId: testSubmissions.candidateId, aiScore: testSubmissions.aiScore, submittedAt: testSubmissions.submittedAt })
+        .from(testSubmissions)
+        .where(inArray(testSubmissions.candidateId, candIds))
+        .orderBy(desc(testSubmissions.submittedAt))
+      for (const s of subs) if (!testMap.has(s.candidateId)) testMap.set(s.candidateId, s.aiScore)
+    }
+
+    const events = rows.map(r => {
+      const anketaArr = Array.isArray(r.candAnketa) ? r.candAnketa : []
+      return {
+        ...r,
+        candAnketaFilled: anketaArr.length > 0,
+        candTested: r.candidateId ? testMap.has(r.candidateId) : false,
+        candTestScore: r.candidateId ? (testMap.get(r.candidateId) ?? null) : null,
+      }
+    })
 
     return apiSuccess(events)
   } catch (err: unknown) {
