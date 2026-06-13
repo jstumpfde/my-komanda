@@ -439,8 +439,6 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
   const weekLabel = `${weekDays[0].toLocaleDateString("ru-RU", { day: "numeric" })}–${weekDays[6].toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}`
   const weekDayNames = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 
-  const TYPE_COLORS: Record<InterviewType, string> = { "Техническое": "#3b82f6", "HR": "#f59e0b", "Финальное": "#22c55e" }
-
   const kanbanStatuses: InterviewStatus[] = ["Ожидает", "Подтверждено", "Пройдено", "Отменено"]
 
   // Контент интервью-вида (одинаков для standalone и embedded). Хром
@@ -747,13 +745,13 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
                                       draggable
                                       onDragStart={() => ivDragStart(iv.id)}
                                       onDragEnd={ivDragEnd}
-                                      className={cn("rounded-md px-2 py-1.5 text-white text-[10px] leading-tight cursor-pointer active:cursor-grabbing mb-0.5 transition-opacity flex flex-col justify-center gap-0.5", dragIvId === iv.id && "opacity-40 scale-95")}
-                                      style={{ backgroundColor: TYPE_COLORS[iv.type], minHeight: `${dur * 56}px` }}
+                                      className={cn("rounded-md border px-2 py-1.5 text-[10px] leading-tight cursor-pointer active:cursor-grabbing mb-0.5 transition-opacity flex flex-col justify-center gap-0.5", STATUS_STYLES[iv.status], dragIvId === iv.id && "opacity-40 scale-95")}
+                                      style={{ minHeight: `${dur * 56}px` }}
                                       title={`${iv.candidate} · ${iv.type} · ${iv.format} · ${iv.time}–${iv.endTime}`}
                                       onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}
                                     >
-                                      <span className="font-semibold block truncate">{iv.time} {iv.candidate}</span>
-                                      <span className="opacity-85 block truncate">{iv.type} · {iv.format}</span>
+                                      <span className="font-semibold flex items-center gap-1 truncate"><span className={cn("w-1.5 h-1.5 rounded-full shrink-0", STATUS_DOT[iv.status])} />{iv.time} {iv.candidate}</span>
+                                      <span className="opacity-70 block truncate pl-2.5">{iv.type} · {iv.format}</span>
                                     </div>
                                   )
                                 })}
@@ -764,11 +762,11 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
                       ))}
                     </div>
                   </div>
-                  <div className="flex items-center gap-4 mt-3 px-2">
-                    {(Object.entries(TYPE_COLORS) as [InterviewType, string][]).map(([t, c]) => (
-                      <div key={t} className="flex items-center gap-1.5">
-                        <div className="w-3 h-3 rounded" style={{ backgroundColor: c }} />
-                        <span className="text-[10px] text-muted-foreground">{t}</span>
+                  <div className="flex items-center gap-4 mt-3 px-2 flex-wrap">
+                    {(Object.entries(STATUS_DOT) as [InterviewStatus, string][]).map(([s, c]) => (
+                      <div key={s} className="flex items-center gap-1.5">
+                        <div className={cn("w-3 h-3 rounded-full", c)} />
+                        <span className="text-[10px] text-muted-foreground">{s}</span>
                       </div>
                     ))}
                   </div>
