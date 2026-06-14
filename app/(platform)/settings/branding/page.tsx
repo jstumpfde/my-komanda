@@ -27,6 +27,9 @@ const THEME_KEYS = ["light", "dark", "warm"] as const
 
 // #28: готовые пресеты цвета бренда (в один клик). Клик ставит цвет и сразу
 // применяет к интерфейсу. «Свой цвет» — через пикер/инпут рядом.
+// Цвет бренда по умолчанию (платформенный фиолетовый) — для кнопки «По умолчанию».
+const DEFAULT_BRAND_COLOR = "#9437ff"
+
 const BRAND_PRESETS: { name: string; hex: string }[] = [
   { name: "Фиолетовый", hex: "#9437ff" },
   { name: "Индиго",     hex: "#4f46e5" },
@@ -586,6 +589,15 @@ export default function BrandingPage() {
                     />
                   )
                 })}
+                <button
+                  type="button"
+                  onClick={() => { setBrandColor(DEFAULT_BRAND_COLOR); applyBrandColor(DEFAULT_BRAND_COLOR) }}
+                  className="ml-1.5 inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                  title="Вернуть цвет бренда по умолчанию"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  По умолчанию
+                </button>
               </div>
               <p className="text-xs text-muted-foreground">
                 Используется как основной цвет интерфейса и публичных страниц. Выберите пресет или свой цвет.
