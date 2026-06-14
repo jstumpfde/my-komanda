@@ -741,9 +741,11 @@ export default function VacancyPage() {
   // ─── При первой загрузке user-prefs — гидратируем UI ─────────────────────
   useEffect(() => {
     if (!userPrefsLoaded) return
-    // Не-админам доступен только «Список» (см. ViewSettings). Сохранённый
-    // kanban/funnel не гидратируем, иначе застрянут без переключателя режимов.
-    setViewModeLocal((role === "platform_admin" ? userPrefs.viewMode : "list") as ViewMode)
+    // Все режимы доступны админу платформы и директору (см. ViewSettings).
+    // Остальным — только «Список»; сохранённый kanban/funnel не гидратируем,
+    // иначе застрянут без переключателя режимов.
+    const canAllViews = ["platform_admin", "admin", "director", "client"].includes(role)
+    setViewModeLocal((canAllViews ? userPrefs.viewMode : "list") as ViewMode)
     // B5: колонки теперь per-company (hiring-defaults), не per-user.
     // userPrefs.columns намеренно НЕ гидратируем в cardSettings.
   }, [userPrefsLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
