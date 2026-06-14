@@ -1833,6 +1833,7 @@ export default function VacancyPage() {
     city: "city",
     source: "source",
     favorite: "favorite",
+    nextInterview: "nextInterview",
     // P0-8: «Очередь HR» — приоритет anketa_filled первыми.
     // ListView не имеет колонки hrQueue, key используется только как
     // невидимый дефолт первого открытия (см. инжект user-prefs ниже).
