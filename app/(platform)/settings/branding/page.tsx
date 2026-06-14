@@ -341,6 +341,10 @@ export default function BrandingPage() {
             <div className="flex items-center gap-4 flex-1 min-h-[128px]">
               {logoPreview ? (
                 <>
+                  <p className="basis-full text-[11px] text-muted-foreground -mb-1">
+                    Загружается <b>один логотип</b> — ниже превью, как он выглядит в разных местах.
+                    Для сайдбара выберите вариант <b>с подложкой</b> (белый фон — читается на тёмном) или <b>без</b>.
+                  </p>
                   <div className="flex items-start gap-4">
                     {/* Sidebar: два варианта (с подложкой / без) — столбиком,
                         выбранный применяется в реальном сайдбаре. */}
@@ -384,13 +388,13 @@ export default function BrandingPage() {
                       <div className="w-[80px] h-[80px] rounded-xl border bg-muted/20 flex items-center justify-center overflow-hidden">
                         <CompanyLogo logoUrl={logoPreview} companyName={brandName} size="lg" rounded="md" className="!w-[60px] !h-[60px]" />
                       </div>
-                      <span className="text-[10px] text-muted-foreground">Вакансия</span>
+                      <span className="text-[10px] text-muted-foreground">Вакансия (превью)</span>
                     </div>
                     <div className="flex flex-col items-center gap-1">
                       <div className="w-8 h-8 rounded-md border bg-muted/20 flex items-center justify-center overflow-hidden">
                         <CompanyLogo logoUrl={logoPreview} companyName={brandName} size="sm" rounded="sm" />
                       </div>
-                      <span className="text-[10px] text-muted-foreground">Мобильный</span>
+                      <span className="text-[10px] text-muted-foreground">Мобильный (превью)</span>
                     </div>
                   </div>
                   <Button
