@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
 import {
-  Play, Square, Loader2, Settings2, Shield, Gauge, Info,
+  Play, Square, Loader2, Settings2, Shield, Gauge, Info, RefreshCw,
 } from "lucide-react"
 
 interface EnqueueResponse {
@@ -32,6 +32,11 @@ interface HhAutoProcessProps {
   vacancyId?: string
   pendingCount?: number
   onProcessed?: () => void
+  /** Синк hh БЕЗ разбора. Если задан — в поповере появляется кнопка
+   *  «Синхронизировать» (сверху): синк → затем разбор по текущим настройкам. */
+  onSync?: () => Promise<void>
+  /** Внешний флаг идущего синка (для спиннера на кнопке). */
+  syncing?: boolean
   /** "inline" — компактная кнопка с поповером (по умолчанию), "card" — большая карточка. */
   variant?: "inline" | "card"
 }
@@ -49,6 +54,8 @@ export function HhAutoProcess({
   vacancyId,
   pendingCount,
   onProcessed,
+  onSync,
+  syncing = false,
   variant = "inline",
 }: HhAutoProcessProps) {
   const [running, setRunning] = useState(false)
@@ -197,6 +204,15 @@ export function HhAutoProcess({
     }
   }
 
+  // #16: «Синхронизировать» в поповере — сначала синк (onSync), затем разбор
+  // по ТЕКУЩИМ настройкам поповера (скорость/лимит/ручной-авто) = «по сценарию».
+  const syncAndRun = async () => {
+    if (!onSync) return
+    setOpen(false)
+    try { await onSync() } catch { return }
+    await run()
+  }
+
   const labelButton = (() => {
     if (isAll) {
       return pendingCount != null && pendingCount > 0
@@ -341,6 +357,22 @@ export function HhAutoProcess({
                 </Button>
               </PopoverTrigger>
               <PopoverContent align="end" className="w-80 p-4">
+                {onSync && (
+                  <>
+                    <Button
+                      onClick={syncAndRun}
+                      disabled={syncing || running}
+                      size="sm"
+                      variant="outline"
+                      className="w-full h-8 text-xs gap-1.5 mb-3"
+                      title="Подтянуть отклики с hh.ru, затем разобрать по этим настройкам"
+                    >
+                      {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                      Синхронизировать
+                    </Button>
+                    <div className="border-t -mx-4 mb-3" />
+                  </>
+                )}
                 <div className="text-sm font-medium mb-3">Настройки разбора hh-откликов</div>
                 {settingsContent}
               </PopoverContent>
