@@ -6,10 +6,11 @@ export type { MenuGroup }
 // Определение групп для каждого модуля (href → группа)
 const MODULE_GROUP_DEFS: Partial<Record<ModuleId, { label: string; hrefs: string[]; legacy?: boolean }[]>> = {
   hr: [
-    // «Стройнее» (14.06): убраны дубли с Рабочим столом — Дашборд (=таб «Обзор»),
-    // Интервью и Резерв живут как табы /hr/workspace. Сами роуты доступны напрямую.
-    { label: 'Найм',       hrefs: ['/hr/workspace', '/hr/vacancies', '/hr/candidates', '/hr/report', '/hr/library', '/hr/hiring-settings'] },
-    { label: 'Оргструктура', hrefs: ['/hr/company-structure', '/hr/org-structure', '/hr/departments', '/hr/positions'] },
+    // «Стройнее» (14.06): убраны дубли с Рабочим столом. Дашборд/Интервью/Резерв/
+    // Вакансии/Библиотека — табы /hr/workspace; Отделы/Должности/Оргструктура —
+    // табы /hr/company-structure. Сами роуты доступны напрямую.
+    { label: 'Найм',       hrefs: ['/hr/workspace', '/hr/candidates', '/hr/report', '/hr/hiring-settings'] },
+    { label: 'Оргструктура', hrefs: ['/hr/company-structure'] },
     { label: 'В разработке', hrefs: ['/hr/courses'] },
     // Заглушки — скрыты из меню 10.06.2026, вернуть по мере реализации:
     // /hr/onboarding — нет API, мокап роутера к под-страницам
