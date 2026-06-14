@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import {
-  ShieldAlert, Save, ChevronDown, ChevronUp, GripVertical, Plus, Trash2,
+  ShieldAlert, Save, Loader2, ChevronDown, ChevronUp, GripVertical, Plus, Trash2,
   Upload, X, ExternalLink, Building2,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -184,7 +184,8 @@ export function WebhooksBlock({ defaults, onPatch }: {
             ))}
           </div>
         </div>
-        <Button size="sm" className="h-8 text-xs" onClick={handleSave} disabled={saving}>
+        <Button size="sm" className="h-8 text-xs gap-1.5" onClick={handleSave} disabled={saving}>
+          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
           Сохранить
         </Button>
       </CardContent>
@@ -267,7 +268,8 @@ export function BitrixBlock({ defaults, onPatch }: {
           </Select>
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" className="h-8 text-xs" onClick={handleSave} disabled={saving}>
+          <Button size="sm" className="h-8 text-xs gap-1.5" onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
             Сохранить
           </Button>
           <Button

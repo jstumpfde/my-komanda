@@ -780,7 +780,7 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
                       ))}
                     </div>
                   </div>
-                  <StatusLegend className="mt-3 px-2" />
+                  <StatusLegend className="mt-4 px-1" />
                 </CardContent></Card>
               )}
 

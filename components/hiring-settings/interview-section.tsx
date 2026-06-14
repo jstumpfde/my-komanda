@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Clock, Bell, Plug, Save } from "lucide-react"
+import { Clock, Bell, Plug, Save, Loader2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
@@ -519,10 +519,9 @@ export function InterviewSection({
           className="gap-2"
           onClick={handleSave}
           disabled={saving}
-          variant={saved ? "outline" : "default"}
         >
-          <Save className="size-4" />
-          {saving ? "Сохранение…" : saved ? "Сохранено" : "Сохранить"}
+          {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+          {saving ? "Сохранение…" : "Сохранить"}
         </Button>
       </div>
     </div>
