@@ -572,6 +572,8 @@ export default function VacancyPage() {
   // вакансий. Дефолт (без параметра) — текущая раскладка, не меняется.
   const navV2 = searchParams?.get("nav") === "v2"
   const [v2Vacancies, setV2Vacancies] = useState<{ id: string; title: string }[]>([])
+  // v2: текущий под-раздел вкладки «Настройки» (второй ряд табов)
+  const [v2SettingsSub, setV2SettingsSub] = useState<"anketa" | "content" | "queue" | "outbound" | "settings">("anketa")
   useEffect(() => {
     if (!navV2) return
     fetch("/api/modules/hr/vacancies?limit=200&scope=active")
@@ -2253,35 +2255,39 @@ export default function VacancyPage() {
           </div>
 
           <div className="py-6 px-4 sm:px-14">
-            {/* ═══ Breadcrumb ═══════════════════════════════ */}
-            <div className="flex items-center gap-2 mb-2">
-              <Button variant="ghost" size="sm" className="gap-1 text-sm text-muted-foreground -ml-2" onClick={() => router.push("/hr/vacancies")}>
-                <ChevronLeft className="w-3.5 h-3.5" />
-                Все вакансии
-              </Button>
-              {/* v2: переключатель вакансий — прыгать между активными, не возвращаясь */}
-              {navV2 && v2Vacancies.length > 1 && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="gap-1.5 h-7 text-xs">
-                      <RefreshCw className="w-3 h-3" />Сменить вакансию<ChevronDown className="w-3 h-3 opacity-60" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="max-h-80 overflow-y-auto">
-                    {v2Vacancies.map(v => (
-                      <DropdownMenuItem key={v.id} disabled={v.id === id} onClick={() => router.push(`/hr/vacancies/${v.id}?nav=v2&tab=${tabFromUrl}`)}>
-                        {v.id === id ? "● " : ""}{v.title}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-            </div>
-
             {/* ═══ ШАПКА ═══════════════════════════════════ */}
+            {/* Legacy breadcrumb — только в !navV2 */}
+            {!navV2 && (
+              <div className="flex items-center gap-2 mb-2">
+                <Button variant="ghost" size="sm" className="gap-1 text-sm text-muted-foreground -ml-2" onClick={() => router.push("/hr/vacancies")}>
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  Все вакансии
+                </Button>
+              </div>
+            )}
             <div ref={mainHeaderRef} className="flex flex-col sm:flex-row items-start justify-between gap-4 mb-4">
               <div>
                 <div className="flex flex-wrap items-center gap-3 mb-1">
+                  {/* v2: стрелка «Назад» — только если известен источник перехода */}
+                  {navV2 && (searchParams?.get("from") || (typeof document !== "undefined" && document.referrer && new URL(document.referrer).hostname === window.location.hostname && !document.referrer.includes(`/hr/vacancies/${id}`))) && (
+                    <UITooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground -ml-1"
+                          onClick={() => {
+                            const from = searchParams?.get("from")
+                            if (from) router.push(from)
+                            else router.back()
+                          }}
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>К списку вакансий</TooltipContent>
+                    </UITooltip>
+                  )}
                   {isEditingName ? (
                     <input
                       autoFocus
@@ -2301,6 +2307,23 @@ export default function VacancyPage() {
                       <h1 className="text-xl sm:text-2xl font-semibold text-foreground line-clamp-2">{internalName || vacancyTitle}</h1>
                       <Pencil className="size-3.5 text-muted-foreground/0 group-hover:text-muted-foreground transition-colors" />
                     </button>
+                  )}
+                  {/* v2: переключатель вакансий — прыгать между активными, не возвращаясь */}
+                  {navV2 && v2Vacancies.length > 1 && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" className="gap-1 h-7 text-xs text-muted-foreground hover:text-foreground px-1.5">
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="max-h-80 overflow-y-auto">
+                        {v2Vacancies.map(v => (
+                          <DropdownMenuItem key={v.id} disabled={v.id === id} onClick={() => router.push(`/hr/vacancies/${v.id}?nav=v2&tab=${tabFromUrl}`)}>
+                            {v.id === id ? "● " : ""}{v.title}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   )}
                   <VacancyStatusBadge status={status} />
                   {status === "active" && apiVacancy?.createdAt && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="size-3.5" />{Math.floor((Date.now() - new Date(apiVacancy.createdAt).getTime()) / 86400000)} дн.</span>}
@@ -2511,25 +2534,23 @@ export default function VacancyPage() {
                       (Вакансия → Контент), потом работа с людьми. Настройки всегда
                       последними (рендерятся отдельным TabsTrigger ниже). */}
                   {navV2 ? (
-                  /* v2: 3 рабочие вкладки + ⚙ (настройка свёрнута) */
+                  /* v2: 3 рабочих таба + «Настройки» как кнопка (управляет v2SettingsSub) */
                   <>
                     <TabsTrigger value="candidates" className="gap-1.5"><Kanban className="w-3.5 h-3.5" />Кандидаты</TabsTrigger>
                     <TabsTrigger value="interview" className="gap-1.5"><CalendarDays className="w-3.5 h-3.5" />Интервью</TabsTrigger>
                     <TabsTrigger value="analytics" className="gap-1.5"><BarChart3 className="w-3.5 h-3.5" />Аналитика</TabsTrigger>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button type="button" className={cn("inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-sm font-medium transition-colors", ["outbound", "queue", "anketa", "content", "settings"].includes(activeTab) ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
-                          <Settings className="w-3.5 h-3.5" />Настройки<ChevronDown className="w-3 h-3 opacity-60" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start">
-                        <DropdownMenuItem onClick={() => setActiveTab("anketa")}><ClipboardList className="w-3.5 h-3.5 mr-2" />Вакансия</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setActiveTab("content")}><BookOpen className="w-3.5 h-3.5 mr-2" />Контент</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setActiveTab("queue")}><Inbox className="w-3.5 h-3.5 mr-2" />Очередь</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setActiveTab("outbound")}><UserSearch className="w-3.5 h-3.5 mr-2" />Исходящий подбор</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setActiveTab("settings")}><Settings className="w-3.5 h-3.5 mr-2" />Настройки вакансии</DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    {/* Кнопка «Настройки» — не TabsTrigger, управляет v2SettingsSub напрямую */}
+                    <button
+                      type="button"
+                      data-slot="tabs-trigger"
+                      data-state={["anketa", "content", "queue", "outbound", "settings"].includes(activeTab) ? "active" : "inactive"}
+                      onClick={() => { setV2SettingsSub(v2SettingsSub); setActiveTab(v2SettingsSub) }}
+                      className={cn(
+                        "data-[state=active]:bg-background data-[state=active]:border-primary dark:data-[state=active]:text-foreground dark:data-[state=active]:border-primary/70 dark:data-[state=active]:bg-input/30 text-foreground dark:text-muted-foreground inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-md border-2 border-transparent px-2 py-1 text-sm font-medium whitespace-nowrap transition-[color,box-shadow] disabled:pointer-events-none disabled:opacity-50 data-[state=active]:shadow-sm"
+                      )}
+                    >
+                      <Settings className="w-3.5 h-3.5" />Настройки
+                    </button>
                   </>
                   ) : (
                   <>
@@ -2561,6 +2582,19 @@ export default function VacancyPage() {
 
                 {activeTab === "candidates" && (
                   <div className="flex items-center gap-1.5 shrink-0">
+                    {activeTab === "candidates" && hhConnected === true && apiVacancy?.hhVacancyId && hhSyncMeta && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs gap-1.5"
+                        onClick={handleHhSync}
+                        disabled={hhSyncing}
+                        title="Подтянуть отклики с hh.ru и запустить разбор"
+                      >
+                        {hhSyncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                        Синхронизировать
+                      </Button>
+                    )}
                     {activeTab === "candidates" && hhConnected === true && apiVacancy?.hhVacancyId && hhSyncMeta && (
                       <HhAutoProcess
                         vacancyId={id}
@@ -2679,6 +2713,36 @@ export default function VacancyPage() {
                 )}
                 </div>
               </div>
+
+              {/* v2: второй ряд суб-табов «Настройки» — виден только когда активен этот раздел */}
+              {navV2 && ["anketa", "content", "queue", "outbound", "settings"].includes(activeTab) && (
+                <div className="mb-4 border-b overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                  <div className="flex items-center gap-1 min-w-max">
+                    {([
+                      { value: "anketa"   as const, label: "Вакансия",          icon: ClipboardList },
+                      { value: "content"  as const, label: "Контент",            icon: BookOpen },
+                      { value: "queue"    as const, label: "Очередь",            icon: Inbox },
+                      { value: "outbound" as const, label: "Исходящий подбор",   icon: UserSearch },
+                      { value: "settings" as const, label: "Настройки вакансии", icon: Settings },
+                    ] as const).map((s) => (
+                      <button
+                        key={s.value}
+                        type="button"
+                        onClick={() => { setV2SettingsSub(s.value); setActiveTab(s.value) }}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0",
+                          activeTab === s.value
+                            ? "border-primary text-foreground font-medium"
+                            : "border-transparent text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        <s.icon className="w-3.5 h-3.5" />
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <TabsContent value="anketa">
                 <AnketaTab
