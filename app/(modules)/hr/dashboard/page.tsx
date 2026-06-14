@@ -289,7 +289,7 @@ export function DashboardView({ embedded = false }: { embedded?: boolean }) {
                     показываем все. При выборе одной — фильтруем клиентскую
                     voronku/active-vacancies по vacancyId. */}
                 <Select value={selectedVacancyId} onValueChange={setSelectedVacancyId}>
-                  <SelectTrigger className="h-8 w-full sm:w-[200px] text-xs">
+                  <SelectTrigger className="h-8 w-full sm:w-[200px] text-xs min-w-0">
                     <SelectValue placeholder="Все вакансии" />
                   </SelectTrigger>
                   <SelectContent>

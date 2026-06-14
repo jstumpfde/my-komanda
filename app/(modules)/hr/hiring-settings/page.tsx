@@ -121,7 +121,7 @@ export default function HiringSettingsPage() {
             </p>
 
             {/* Горизонтальный таб-бар — стиль настроек вакансии */}
-            <div className="flex items-center gap-1 border-b overflow-x-auto mb-6">
+            <div className="flex items-center gap-1 border-b overflow-x-auto scrollbar-none pb-px mb-6">
               {TABS.map(({ value, label, icon: Icon }) => (
                 <button
                   key={value}

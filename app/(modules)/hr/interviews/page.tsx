@@ -468,7 +468,7 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
               В embedded (таб вакансии) переключатель скрыт: показываем только
               интервью-вид (общий календарь компании живёт отдельно на /hr/interviews). */}
           {!embedded && (
-          <div className="flex items-center justify-between gap-3 px-4 sm:px-14 pt-5 pb-3 border-b">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-14 pt-5 pb-3 border-b">
             <div className="flex items-center">
               <CalendarDays className="h-5 w-5 text-violet-600 mr-2" />
               <h1 className="text-lg font-semibold">Интервью</h1>
@@ -627,6 +627,8 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
                     <span className="text-sm font-semibold capitalize">{monthName}</span>
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { if (calMonth === 11) { setCalMonth(0); setCalYear(calYear + 1) } else setCalMonth(calMonth + 1) }}><ChevronRight className="w-4 h-4" /></Button>
                   </div>
+                  <div className="overflow-x-auto -mx-4 sm:mx-0">
+                  <div className="min-w-[560px] px-4 sm:px-0">
                   <div className="grid grid-cols-7 gap-px bg-border rounded-lg overflow-hidden">
                     {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map(wd => (
                       <div key={wd} className="bg-muted/50 text-center text-[10px] font-semibold text-muted-foreground py-2">{wd}</div>
@@ -664,6 +666,8 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
                         </div>
                       )
                     })}
+                  </div>
+                  </div>
                   </div>
                   <StatusLegend className="mt-4 px-1" />
                 </CardContent></Card>

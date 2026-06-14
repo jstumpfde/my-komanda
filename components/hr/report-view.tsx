@@ -641,7 +641,7 @@ function VacancyFilter({ value, options, onChange, tv }: {
 }) {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className={tv ? "h-11 text-base min-w-[220px]" : "h-9 text-sm min-w-[200px]"}>
+      <SelectTrigger className={tv ? "h-11 text-base min-w-[220px]" : "h-9 text-sm w-full sm:min-w-[200px]"}>
         <SelectValue placeholder="Все вакансии" />
       </SelectTrigger>
       <SelectContent>
@@ -702,8 +702,8 @@ export function ReportView({
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <span className={`${tv ? "text-base" : "text-sm"} text-muted-foreground whitespace-nowrap`}>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className={`${tv ? "text-base" : "text-sm"} text-muted-foreground`}>
             Период: <span className="font-semibold text-foreground">{periodText}</span>
           </span>
           {shareSlot}
@@ -723,7 +723,7 @@ export function ReportView({
               tv={tv}
             />
           )}
-          <div className="ml-auto">
+          <div className="w-full sm:w-auto sm:ml-auto">
             <VacancyFilter value={vacancyId} options={vacancyOptions} onChange={onVacancyChange} tv={tv} />
           </div>
         </div>

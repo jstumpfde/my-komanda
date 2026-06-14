@@ -55,7 +55,7 @@ function WorkspaceInner() {
         {/* Шапка рабочего стола + таб-бар */}
         <div className="border-b bg-background px-4 sm:px-14 pt-5 pb-0">
           <h1 className="text-lg font-semibold mb-3">Рабочий стол</h1>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
             {TABS.map(({ key, label, icon: Icon }) => {
               const active = tab === key
               return (
@@ -70,8 +70,8 @@ function WorkspaceInner() {
                       : "border-transparent text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  <Icon className="w-4 h-4" />
-                  {label}
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span className="whitespace-nowrap">{label}</span>
                 </button>
               )
             })}

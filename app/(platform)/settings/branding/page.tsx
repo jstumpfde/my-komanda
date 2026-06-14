@@ -9,13 +9,14 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { Globe, Save, Loader2, CheckCircle2, XCircle, RefreshCw, Copy, AlertCircle, Upload, Trash2, Link2, Palette, ChevronDown, Pencil, PlugZap } from "lucide-react"
+import { Globe, Save, Loader2, CheckCircle2, XCircle, RefreshCw, Copy, AlertCircle, Upload, Trash2, Link2, Palette, ChevronDown, Pencil, PlugZap, Sparkles } from "lucide-react"
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
 import { saveBrand, canCustomizeBrand, type BrandConfig } from "@/lib/branding"
 import { fetchCompanyApi, updateCompanyApi } from "@/lib/company-storage"
 import { CompanyLogo } from "@/components/company-logo"
 import { useTheme } from "next-themes"
 import { applyBrandColor } from "@/components/brand-color-injector"
+import { applyAiColor } from "@/components/ai-color-injector"
 
 const THEME_PRESETS: Record<string, { label: string; emoji: string }> = {
   light: { label: "Светлая", emoji: "☀️" },
@@ -29,6 +30,19 @@ const THEME_KEYS = ["light", "dark", "warm"] as const
 // применяет к интерфейсу. «Свой цвет» — через пикер/инпут рядом.
 // Цвет бренда по умолчанию (платформенный фиолетовый) — для кнопки «По умолчанию».
 const DEFAULT_BRAND_COLOR = "#9437ff"
+
+// Пресеты «Цвет нейросети» — холодные/tech оттенки.
+const DEFAULT_AI_COLOR = "#9437ff"
+const AI_PRESETS: { name: string; hex: string }[] = [
+  { name: "Фиолетовый",  hex: "#9437ff" },
+  { name: "Индиго",      hex: "#6366f1" },
+  { name: "Синий",       hex: "#2563eb" },
+  { name: "Голубой",     hex: "#06b6d4" },
+  { name: "Бирюзовый",  hex: "#14b8a6" },
+  { name: "Розовый",    hex: "#d946ef" },
+  { name: "Пурпурный",  hex: "#c026d3" },
+  { name: "Тёмный фиол.", hex: "#7c3aed" },
+]
 
 const BRAND_PRESETS: { name: string; hex: string }[] = [
   { name: "Фиолетовый", hex: "#9437ff" },
@@ -76,6 +90,10 @@ export default function BrandingPage() {
   const [themeEnabled, setThemeEnabled] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(THEME_KEYS.map(k => [k, true]))
   )
+  // #28 ч.2: тема компании по умолчанию (для юзеров без личного выбора).
+  const [defaultTheme, setDefaultTheme] = useState<string>("light")
+  // #28 ч.4: цвет AI-элементов.
+  const [aiColor, setAiColor] = useState<string>(DEFAULT_AI_COLOR)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const faviconInputRef = useRef<HTMLInputElement>(null)
 
@@ -121,6 +139,12 @@ export default function BrandingPage() {
         const favicon = ct.faviconUrl
         if (typeof favicon === "string" && favicon) setFaviconPreview(favicon)
         else setFaviconPreview(null)
+        // #28 ч.2: тема по умолчанию компании
+        const dt = ct.defaultTheme
+        if (typeof dt === "string" && THEME_KEYS.includes(dt as typeof THEME_KEYS[number])) setDefaultTheme(dt)
+        // #28 ч.4: цвет нейросети
+        const ac = ct.aiColor
+        if (typeof ac === "string" && ac) setAiColor(ac)
       }
     } catch {
       // ignore
@@ -237,6 +261,8 @@ export default function BrandingPage() {
       const customTheme = {
         ...Object.fromEntries(THEME_KEYS.map(k => [k, { enabled: themeEnabled[k] }])),
         sidebarLogoMode,
+        defaultTheme,
+        aiColor,
         ...(faviconPreview ? { faviconUrl: faviconPreview } : {}),
       }
       await updateCompanyApi({
@@ -248,6 +274,7 @@ export default function BrandingPage() {
         brand_primary_color: brandColor,
       })
       applyBrandColor(brandColor)
+      applyAiColor(aiColor)
       saveBrand({ logoUrl: logoPreview, companyName: brandName })
       toast.success("Сохранено")
       await loadCompany()
@@ -292,6 +319,8 @@ export default function BrandingPage() {
       const customTheme = {
         ...Object.fromEntries(THEME_KEYS.map(k => [k, { enabled: themeEnabled[k] }])),
         sidebarLogoMode,
+        defaultTheme,
+        aiColor,
         ...(faviconPreview ? { faviconUrl: faviconPreview } : {}),
       }
       await updateCompanyApi({
@@ -603,6 +632,69 @@ export default function BrandingPage() {
                 Используется как основной цвет интерфейса и публичных страниц. Выберите пресет или свой цвет.
               </p>
             </div>
+            {/* #28 ч.4: Цвет нейросети */}
+            <div className="space-y-1.5">
+              <Label className="text-sm flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-[var(--ai)]" />
+                Цвет нейросети
+              </Label>
+              <div className="flex items-center gap-2">
+                <div className="relative shrink-0">
+                  <input
+                    type="color"
+                    value={aiColor}
+                    onChange={e => { setAiColor(e.target.value); applyAiColor(e.target.value) }}
+                    className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                    aria-label="Выбрать цвет нейросети"
+                  />
+                  <div
+                    className="w-9 h-9 rounded-md border border-border shadow-sm cursor-pointer"
+                    style={{ backgroundColor: aiColor }}
+                  />
+                </div>
+                <Input
+                  value={aiColor}
+                  onChange={e => {
+                    setAiColor(e.target.value)
+                    applyAiColor(e.target.value)
+                  }}
+                  placeholder="#9437ff"
+                  className="h-9 text-sm font-mono w-32"
+                  maxLength={7}
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
+                {AI_PRESETS.map(p => {
+                  const active = aiColor.toLowerCase() === p.hex.toLowerCase()
+                  return (
+                    <button
+                      key={p.hex}
+                      type="button"
+                      title={p.name}
+                      aria-label={p.name}
+                      onClick={() => { setAiColor(p.hex); applyAiColor(p.hex) }}
+                      className={cn(
+                        "w-7 h-7 rounded-full border shadow-sm transition-transform hover:scale-110",
+                        active ? "ring-2 ring-offset-1 ring-foreground border-transparent" : "border-border"
+                      )}
+                      style={{ backgroundColor: p.hex }}
+                    />
+                  )
+                })}
+                <button
+                  type="button"
+                  onClick={() => { setAiColor(DEFAULT_AI_COLOR); applyAiColor(DEFAULT_AI_COLOR) }}
+                  className="ml-1.5 inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                  title="Вернуть цвет нейросети по умолчанию"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  По умолчанию
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Цвет AI-элементов (нейросеть) — кнопки, иконки и акценты, связанные с AI.
+              </p>
+            </div>
           </div>
 
           {/* Сохранить внутри блока */}
@@ -623,6 +715,9 @@ export default function BrandingPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="px-5 pb-4 pt-0">
+            <p className="text-xs text-muted-foreground mb-3">
+              Тема по умолчанию применяется при первом входе (пока пользователь не выбрал свою). Личный выбор темы через переключатель в шапке — не сбрасывается.
+            </p>
             <div className="grid grid-cols-3 gap-3">
               {THEME_KEYS.map(key => {
                 const preset = THEME_PRESETS[key]
@@ -686,6 +781,9 @@ export default function BrandingPage() {
                     {/* Title + toggle */}
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium">{preset.emoji} {preset.label}</span>
+                      {defaultTheme === key && (
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">По умолч.</Badge>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 mt-2">
                       <Switch
@@ -694,6 +792,18 @@ export default function BrandingPage() {
                       />
                       <span className="text-xs text-muted-foreground">{enabled ? "Включена" : "Отключена"}</span>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setDefaultTheme(key)}
+                      className={cn(
+                        "mt-2 w-full text-[11px] rounded-md border px-2 py-1 transition-colors",
+                        defaultTheme === key
+                          ? "bg-primary/10 border-primary/30 text-primary font-medium"
+                          : "border-border text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                      )}
+                    >
+                      {defaultTheme === key ? "✓ Тема по умолчанию" : "Сделать по умолчанию"}
+                    </button>
                   </div>
                 )
               })}

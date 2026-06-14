@@ -42,8 +42,8 @@ export function RubricRankPanel({ vacancyId, onOpenCandidate }: { vacancyId: str
     <Card className="mb-4 p-3">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-primary" />
-          <span className="text-sm font-medium">Соответствие · рубрика</span>
+          <Sparkles className="w-4 h-4 text-[var(--ai)]" />
+          <span className="text-sm font-medium text-[var(--ai)]">Соответствие · рубрика</span>
           <span className="text-[10px] rounded bg-muted px-1.5 py-0.5 text-muted-foreground">тест</span>
           {ranked && <span className="text-xs text-muted-foreground">оценено {ranked.length}</span>}
         </div>

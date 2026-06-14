@@ -2576,7 +2576,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
 
       {/* Actions */}
       <div className="flex items-center gap-3 justify-end mt-4">
-        <Button variant="outline" size="sm" className="gap-1.5 h-9 text-xs" onClick={handleAiRefill} disabled={aiLoading}>
+        <Button variant="outline" size="sm" className="gap-1.5 h-9 text-xs border-[var(--ai)]/30 text-[var(--ai)] hover:bg-[var(--ai)]/5" onClick={handleAiRefill} disabled={aiLoading}>
           {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
           Перезаполнить через AI
         </Button>

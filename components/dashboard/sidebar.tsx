@@ -476,10 +476,9 @@ export function DashboardSidebar() {
             <div className={cn(
               // Подложка-бейдж выбирается в Брендинге: padded — белый фон (любой
               // логотип читается на тёмном сайдбаре), plain — логотип без подложки.
-              // A: убран min-w-10 — бейдж плотно облегает лого по ширине, меньше белого по бокам.
               "shrink-0 flex items-center justify-center overflow-hidden rounded-md",
-              logoPadded && "bg-white p-px",
-              "h-10 w-auto max-w-[140px]",
+              logoPadded && "bg-white p-0.5",
+              "h-10 w-auto max-w-[140px] min-w-10",
               "group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:max-w-8 group-data-[collapsible=icon]:rounded-[6px] group-data-[collapsible=icon]:p-0.5",
             )}>
               {/* Раскрытый сайдбар → полный логотип */}
