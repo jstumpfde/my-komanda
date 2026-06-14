@@ -46,6 +46,13 @@
 - Только через примитивы `components/ui/data-table.tsx` (TableCard/DataTable/DataHead/
   DataHeadCell/DataRow/DataCell). Шапка без uppercase, `text-sm font-semibold muted`.
   См. [[table-unification-complete]].
+- **Иконка сортировки (эталон портала)** — `ListFilter` (lucide) ПЕРЕД заголовком,
+  `size-3.5`, `gap-1.5`. Неактивна → `opacity-40` + `text-muted-foreground`; активна →
+  `text-foreground` (иконка полная); `desc` → `scale-y-[-1]` (флип). Для колонок
+  `align="right"` — `flex-row-reverse`. Канонический рендер — `DataHeadCell sortable`
+  в `data-table.tsx`; для кастомных таблиц повторять тот же вид (как `SortHeader`
+  в `components/dashboard/list-view.tsx`). НЕ использовать ArrowUp/ArrowDown/ChevronUp
+  и pill-подсветку шапки.
 
 ## Чек-лист соответствия (для каждой новой/правленой страницы)
 1. Заголовок: иконка text-violet-600 + h1 text-lg font-semibold.
