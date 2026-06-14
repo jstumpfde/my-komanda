@@ -1035,6 +1035,51 @@ interface AnketaTabProps {
   registerHandle?: (handle: AnketaTabHandle) => void
 }
 
+// ── Индикатор жёсткости отбора (#23) ────────────────────────────────────────
+// Подсказка, НЕ запрет. Чем больше обязательных навыков, неприемлемого,
+// стоп-факторов и «критичных» критериев — тем строже и тем меньше кандидатов
+// пройдёт. Скоринг НЕ меняет — только предупреждает HR.
+function computeStrictness(d: AnketaData): { hint: number; level: string; tone: "emerald" | "blue" | "amber" | "red"; strict: boolean } {
+  let s = 0
+  s += (d.requiredSkills?.length ?? 0) * 1.0
+  s += (d.unacceptableSkills?.length ?? 0) * 1.5
+  s += (d.stopFactors ?? []).filter(f => f.enabled).length * 1.5
+  if (d.filterCitizenship?.isStopFactor && d.filterCitizenship.mode !== "any") s += 1.5
+  s += Object.values(d.aiWeights ?? {}).filter(w => w === "critical").length * 1.0
+  s += (d.aiCustomCriteria ?? []).filter(c => c.weight === "critical").length * 1.0
+  const hint = Math.min(100, Math.round(s * 6)) // ориентир 0–100, не строгий
+  let level: string, tone: "emerald" | "blue" | "amber" | "red"
+  if (s < 5) { level = "Мягкий"; tone = "emerald" }
+  else if (s < 9) { level = "Средний"; tone = "blue" }
+  else if (s < 13) { level = "Строгий"; tone = "amber" }
+  else { level = "Очень строгий"; tone = "red" }
+  return { hint, level, tone, strict: s >= 9 }
+}
+
+const STRICTNESS_TONE: Record<string, string> = {
+  emerald: "bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800",
+  blue:    "bg-blue-50 text-blue-700 border-blue-300 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800",
+  amber:   "bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800",
+  red:     "bg-red-50 text-red-800 border-red-300 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800",
+}
+
+function ScoringStrictness({ data }: { data: AnketaData }) {
+  const { hint, level, tone, strict } = computeStrictness(data)
+  return (
+    <div className={cn("rounded-md border px-3 py-2 text-xs space-y-1", STRICTNESS_TONE[tone])}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-semibold">Жёсткость отбора: {level}</span>
+        <span className="tabular-nums opacity-70" title="Ориентир, не строгий показатель">~{hint}/100</span>
+      </div>
+      {strict && (
+        <p className="leading-snug">
+          ⚠️ Рекомендуем смягчить требования или снизить порог — подходящих кандидатов будет мало.
+        </p>
+      )}
+    </div>
+  )
+}
+
 export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQualityAnalyzedAt, onTitleChange, onNavigateTab, onScoreChange, onSavingChange, registerHandle }: AnketaTabProps) {
   const [data, setData] = useState<AnketaData>(() => {
     const saved = (descriptionJson as Record<string, unknown>)?.anketa as Record<string, unknown> | undefined
@@ -2787,6 +2832,9 @@ function AiProfileSection({ data, set }: {
             />
             <p className="text-[10px] text-muted-foreground">AI будет сравнивать каждое резюме с этим описанием</p>
           </div>
+
+          {/* #23: индикатор жёсткости отбора (подсказка) */}
+          <ScoringStrictness data={data} />
 
           {/* ── Подблок 1: Жёсткие требования (фильтры отсева) ── */}
           <div className="space-y-3 border-t pt-3">
