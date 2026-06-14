@@ -25,6 +25,19 @@ const THEME_PRESETS: Record<string, { label: string; emoji: string }> = {
 
 const THEME_KEYS = ["light", "dark", "warm"] as const
 
+// #28: готовые пресеты цвета бренда (в один клик). Клик ставит цвет и сразу
+// применяет к интерфейсу. «Свой цвет» — через пикер/инпут рядом.
+const BRAND_PRESETS: { name: string; hex: string }[] = [
+  { name: "Фиолетовый", hex: "#9437ff" },
+  { name: "Индиго",     hex: "#4f46e5" },
+  { name: "Голубой",    hex: "#0ea5e9" },
+  { name: "Изумруд",    hex: "#10b981" },
+  { name: "Оранжевый",  hex: "#f97316" },
+  { name: "Розовый",    hex: "#ec4899" },
+  { name: "Графит",     hex: "#334155" },
+  { name: "Красный",    hex: "#ef4444" },
+]
+
 export default function BrandingPage() {
   const { setTheme: applyTheme, theme: currentTheme } = useTheme()
   const [brandPlan] = useState<BrandConfig["plan"]>("business")
@@ -462,8 +475,28 @@ export default function BrandingPage() {
                   maxLength={7}
                 />
               </div>
+              {/* #28: пресеты цвета в один клик */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
+                {BRAND_PRESETS.map(p => {
+                  const active = brandColor.toLowerCase() === p.hex.toLowerCase()
+                  return (
+                    <button
+                      key={p.hex}
+                      type="button"
+                      title={p.name}
+                      aria-label={p.name}
+                      onClick={() => { setBrandColor(p.hex); applyBrandColor(p.hex) }}
+                      className={cn(
+                        "w-7 h-7 rounded-full border shadow-sm transition-transform hover:scale-110",
+                        active ? "ring-2 ring-offset-1 ring-foreground border-transparent" : "border-border"
+                      )}
+                      style={{ backgroundColor: p.hex }}
+                    />
+                  )
+                })}
+              </div>
               <p className="text-xs text-muted-foreground">
-                Используется как основной цвет интерфейса и публичных страниц
+                Используется как основной цвет интерфейса и публичных страниц. Выберите пресет или свой цвет.
               </p>
             </div>
           </div>
