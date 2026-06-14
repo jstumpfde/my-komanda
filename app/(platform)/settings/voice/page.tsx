@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Slider } from "@/components/ui/slider"
-import { Loader2, Volume2, Bot, Sparkles } from "lucide-react"
+import { Loader2, Volume2, Bot, Sparkles, Save } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { UserRole } from "@/lib/auth"
 import { ROLE_LABELS } from "@/lib/auth"
@@ -447,8 +447,9 @@ export default function VoiceSettingsPage() {
         )}
       </section>
 
-      <Button onClick={save} disabled={saving} className="bg-violet-600 hover:bg-violet-700 gap-2">
-        {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Сохраняю...</> : saved ? "Сохранено ✓" : "Сохранить"}
+      <Button onClick={save} disabled={saving} className="gap-2">
+        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+        {saving ? "Сохраняю..." : "Сохранить"}
       </Button>
     </div>
   )

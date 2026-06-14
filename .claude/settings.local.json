@@ -41,7 +41,9 @@
       "Skill(schedule:*)",
       "Read(//private/tmp/**)",
       "mcp__playwright__browser_fill_form",
-      "mcp__playwright__browser_run_code_unsafe"
+      "mcp__playwright__browser_run_code_unsafe",
+      "mcp__visualize__read_me",
+      "mcp__visualize__show_widget"
     ]
   }
 }

@@ -691,7 +691,8 @@ export default function VacancyPage() {
       if (!tabAutoSyncedRef.current) {
         tabAutoSyncedRef.current = true
         if (!urlTab) {
-          setActiveTab(isActive ? "candidates" : "settings")
+          // v2: черновик открываем на «Вакансия» (anketa), не на «settings»
+          setActiveTab(isActive ? "candidates" : (navV2 ? "anketa" : "settings"))
         }
       }
     }
@@ -2555,24 +2556,50 @@ export default function VacancyPage() {
                       (Вакансия → Контент), потом работа с людьми. Настройки всегда
                       последними (рендерятся отдельным TabsTrigger ниже). */}
                   {navV2 ? (
-                  /* v2: 3 рабочих таба + «Настройки» как кнопка (управляет v2SettingsSub) */
-                  <>
-                    <TabsTrigger value="candidates" className="gap-1.5"><Kanban className="w-3.5 h-3.5" />Кандидаты</TabsTrigger>
-                    <TabsTrigger value="interview" className="gap-1.5"><CalendarDays className="w-3.5 h-3.5" />Интервью</TabsTrigger>
-                    <TabsTrigger value="analytics" className="gap-1.5"><BarChart3 className="w-3.5 h-3.5" />Аналитика</TabsTrigger>
-                    {/* Кнопка «Настройки» — не TabsTrigger, управляет v2SettingsSub напрямую */}
-                    <button
-                      type="button"
-                      data-slot="tabs-trigger"
-                      data-state={["anketa", "content", "queue", "outbound", "settings"].includes(activeTab) ? "active" : "inactive"}
-                      onClick={() => { setV2SettingsSub(v2SettingsSub); setActiveTab(v2SettingsSub) }}
-                      className={cn(
-                        "data-[state=active]:bg-background data-[state=active]:border-primary dark:data-[state=active]:text-foreground dark:data-[state=active]:border-primary/70 dark:data-[state=active]:bg-input/30 text-foreground dark:text-muted-foreground inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-md border-2 border-transparent px-2 py-1 text-sm font-medium whitespace-nowrap transition-[color,box-shadow] disabled:pointer-events-none disabled:opacity-50 data-[state=active]:shadow-sm"
-                      )}
-                    >
-                      <Settings className="w-3.5 h-3.5" />Настройки
-                    </button>
-                  </>
+                  /* v2: 3 рабочих таба + «Настройки» как кнопка.
+                     При черновике (не active/published) рабочие табы disabled с тултипом. */
+                  (() => {
+                    const isVacancyLive = status === "active" || status === "published" || status === "paused" || status === "archived"
+                    const workTabs = [
+                      { value: "candidates", icon: Kanban, label: "Кандидаты" },
+                      { value: "interview",  icon: CalendarDays, label: "Интервью" },
+                      { value: "analytics",  icon: BarChart3, label: "Аналитика" },
+                    ] as const
+                    return (
+                      <>
+                        {workTabs.map((t) => (
+                          isVacancyLive ? (
+                            <TabsTrigger key={t.value} value={t.value} className="gap-1.5">
+                              <t.icon className="w-3.5 h-3.5" />{t.label}
+                            </TabsTrigger>
+                          ) : (
+                            <UITooltip key={t.value}>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex">
+                                  <TabsTrigger value={t.value} className="gap-1.5 opacity-40 pointer-events-none" disabled>
+                                    <t.icon className="w-3.5 h-3.5" />{t.label}
+                                  </TabsTrigger>
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>Доступно после запуска вакансии</TooltipContent>
+                            </UITooltip>
+                          )
+                        ))}
+                        {/* Кнопка «Настройки» — не TabsTrigger, управляет v2SettingsSub напрямую */}
+                        <button
+                          type="button"
+                          data-slot="tabs-trigger"
+                          data-state={["anketa", "content", "queue", "outbound", "settings"].includes(activeTab) ? "active" : "inactive"}
+                          onClick={() => { setV2SettingsSub(v2SettingsSub); setActiveTab(v2SettingsSub) }}
+                          className={cn(
+                            "data-[state=active]:bg-background data-[state=active]:border-primary dark:data-[state=active]:text-foreground dark:data-[state=active]:border-primary/70 dark:data-[state=active]:bg-input/30 text-foreground dark:text-muted-foreground inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-md border-2 border-transparent px-2 py-1 text-sm font-medium whitespace-nowrap transition-[color,box-shadow] disabled:pointer-events-none disabled:opacity-50 data-[state=active]:shadow-sm"
+                          )}
+                        >
+                          <Settings className="w-3.5 h-3.5" />Настройки
+                        </button>
+                      </>
+                    )
+                  })()
                   ) : (
                   <>
                   {((status === "active" || status === "published") ? [
@@ -2724,32 +2751,55 @@ export default function VacancyPage() {
                 </div>
               </div>
 
-              {/* v2: второй ряд суб-табов «Настройки» — виден только когда активен этот раздел */}
+              {/* v2: плоский ряд из 10 под-табов — виден когда активна группа «Настройки» */}
               {navV2 && ["anketa", "content", "queue", "outbound", "settings"].includes(activeTab) && (
                 <div className="mb-4 border-b overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
                   <div className="flex items-center gap-1 min-w-max">
                     {([
-                      { value: "anketa"   as const, label: "Вакансия",          icon: ClipboardList },
-                      { value: "content"  as const, label: "Контент",            icon: BookOpen },
-                      { value: "queue"    as const, label: "Очередь",            icon: Inbox },
-                      { value: "outbound" as const, label: "Исходящий подбор",   icon: UserSearch },
-                      { value: "settings" as const, label: "Настройки вакансии", icon: Settings },
-                    ] as const).map((s) => (
-                      <button
-                        key={s.value}
-                        type="button"
-                        onClick={() => { setV2SettingsSub(s.value); setActiveTab(s.value) }}
-                        className={cn(
-                          "inline-flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0",
-                          activeTab === s.value
-                            ? "border-primary text-foreground font-medium"
-                            : "border-transparent text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        <s.icon className="w-3.5 h-3.5" />
-                        {s.label}
-                      </button>
-                    ))}
+                      /* Порядок по ТЗ #26: Вакансия · Контент · Исходящий подбор · Портрет · Воронка · Источники · Расписание · Интеграции · Брендинг · Очередь */
+                      { kind: "tab",     value: "anketa"         , label: "Вакансия",          icon: ClipboardList, section: null },
+                      { kind: "tab",     value: "content"        , label: "Контент",            icon: BookOpen,      section: null },
+                      { kind: "tab",     value: "outbound"       , label: "Исходящий подбор",   icon: UserSearch,    section: null },
+                      { kind: "section", value: "settings"       , label: "Портрет",            icon: Target,        section: "spec"          },
+                      { kind: "section", value: "settings"       , label: "Воронка",            icon: Workflow,      section: "funnel-builder" },
+                      { kind: "section", value: "settings"       , label: "Источники",          icon: Link2,         section: "sources"        },
+                      { kind: "section", value: "settings"       , label: "Расписание",         icon: Clock,         section: "ai"             },
+                      { kind: "section", value: "settings"       , label: "Интеграции",         icon: Settings,      section: "integrations"   },
+                      { kind: "section", value: "settings"       , label: "Брендинг",           icon: Globe,         section: "page"           },
+                      { kind: "tab",     value: "queue"          , label: "Очередь",            icon: Inbox,         section: null },
+                    ] as const).map((s) => {
+                      const isActive = s.kind === "tab"
+                        ? activeTab === s.value
+                        : activeTab === "settings" && settingsSection === s.section
+                      return (
+                        <button
+                          key={s.kind === "section" ? `section-${s.section}` : s.value}
+                          type="button"
+                          onClick={() => {
+                            if (s.kind === "section") {
+                              setActiveTab("settings")
+                              setSettingsSection(s.section as SettingsSectionId)
+                              const sp = new URLSearchParams(window.location.search)
+                              sp.set("tab", "settings")
+                              sp.set("section", s.section as string)
+                              router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+                            } else {
+                              setV2SettingsSub(s.value)
+                              setActiveTab(s.value)
+                            }
+                          }}
+                          className={cn(
+                            "inline-flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0",
+                            isActive
+                              ? "border-primary text-foreground font-medium"
+                              : "border-transparent text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          <s.icon className="w-3.5 h-3.5" />
+                          {s.label}
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
               )}
@@ -3142,7 +3192,9 @@ export default function VacancyPage() {
 
               <TabsContent value="settings">
                 <VacancySettingsProvider>
-                {/* Сабнав: 6 табов настроек вакансии */}
+                {/* Сабнав настроек: в v2 перенесён в плоский ряд 10 под-табов (над TabsContent);
+                    в legacy — SettingsSubNavButton ниже; здесь рендерим только при !navV2 */}
+                {!navV2 && (
                 <div className="mb-4 border-b overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
                   <div className="flex items-center gap-1 min-w-max">
                   {/* #18: Воронка перед Сообщениями — HR сначала проектирует
@@ -3176,6 +3228,7 @@ export default function VacancyPage() {
                   ))}
                   </div>
                 </div>
+                )}
 
                 {/* ───────── ТАБ «Страница и брендинг» ───────── */}
                 {settingsSection === "page" && (

@@ -13,7 +13,7 @@ import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
-  MessageSquare, Zap, Phone, Brain, Send, Check,
+  MessageSquare, Zap, Phone, Brain, Send, Check, Save,
   ClipboardList, Loader2, Plus, X,
 } from "lucide-react"
 import { useVacancySectionRegister, type VacancyTabKey } from "./vacancy-settings-context"
@@ -977,7 +977,7 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
       {showLocalGlobalSave && (
         <div className="flex justify-end mt-3">
           <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={saveSettings} disabled={saving}>
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             Сохранить настройки
           </Button>
         </div>
