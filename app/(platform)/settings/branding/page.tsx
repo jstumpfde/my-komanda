@@ -50,6 +50,8 @@ export default function BrandingPage() {
   const canBrand = canCustomizeBrand(brandPlan)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [faviconPreview, setFaviconPreview] = useState<string | null>(null)
+  const [uploadingFavicon, setUploadingFavicon] = useState(false)
   const [brandName, setBrandName] = useState("")
   const [brandSlogan, setBrandSlogan] = useState("")
   const [website, setWebsite] = useState("")
@@ -72,6 +74,7 @@ export default function BrandingPage() {
     Object.fromEntries(THEME_KEYS.map(k => [k, true]))
   )
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const faviconInputRef = useRef<HTMLInputElement>(null)
 
   const loadCompany = useCallback(async () => {
     try {
@@ -109,8 +112,12 @@ export default function BrandingPage() {
           }
           return next
         })
-        const mode = (customThemeVal as Record<string, unknown>).sidebarLogoMode
+        const ct = customThemeVal as Record<string, unknown>
+        const mode = ct.sidebarLogoMode
         if (mode === "plain" || mode === "padded") setSidebarLogoMode(mode)
+        const favicon = ct.faviconUrl
+        if (typeof favicon === "string" && favicon) setFaviconPreview(favicon)
+        else setFaviconPreview(null)
       }
     } catch {
       // ignore
@@ -162,6 +169,40 @@ export default function BrandingPage() {
     }
   }
 
+  const uploadFaviconFile = async (file: File) => {
+    if (file.size > 2 * 1024 * 1024) { toast.error("Максимум 2 МБ"); return }
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? ""
+    if (!["png", "jpg", "jpeg", "svg", "webp", "ico"].includes(ext)) { toast.error("PNG, SVG, ICO, JPG или WebP"); return }
+
+    const reader = new FileReader()
+    reader.onload = () => setFaviconPreview(reader.result as string)
+    reader.readAsDataURL(file)
+
+    setUploadingFavicon(true)
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const res = await fetch("/api/upload/logo", { method: "POST", body: fd })
+      const data = await res.json().catch(() => ({})) as { logoUrl?: string; error?: string }
+
+      if (!res.ok) {
+        toast.error(data.error || `HTTP ${res.status}`)
+        return
+      }
+      if (!data.logoUrl) {
+        toast.error("Сервер не вернул URL иконки")
+        return
+      }
+
+      setFaviconPreview(data.logoUrl)
+      toast.success("Иконка загружена")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Ошибка сети")
+    } finally {
+      setUploadingFavicon(false)
+    }
+  }
+
   const verifyDomain = async () => {
     if (!customDomain.trim()) return
     setVerifying(true); setDomainStatus("checking")
@@ -189,9 +230,11 @@ export default function BrandingPage() {
     try {
       // Сохраняем и sidebarLogoMode (вариант «с подложкой / без») — иначе выбор
       // «Без подложки» терялся: он живёт в custom_theme, а этот блок его не слал.
+      // faviconUrl также хранится в custom_theme (без новой колонки).
       const customTheme = {
         ...Object.fromEntries(THEME_KEYS.map(k => [k, { enabled: themeEnabled[k] }])),
         sidebarLogoMode,
+        ...(faviconPreview ? { faviconUrl: faviconPreview } : {}),
       }
       await updateCompanyApi({
         logo_url: logoPreview ?? "",
@@ -246,6 +289,7 @@ export default function BrandingPage() {
       const customTheme = {
         ...Object.fromEntries(THEME_KEYS.map(k => [k, { enabled: themeEnabled[k] }])),
         sidebarLogoMode,
+        ...(faviconPreview ? { faviconUrl: faviconPreview } : {}),
       }
       await updateCompanyApi({
         logo_url: logoPreview ?? "",
@@ -343,7 +387,8 @@ export default function BrandingPage() {
                 <>
                   <p className="basis-full text-[11px] text-muted-foreground -mb-1">
                     Загружается <b>один логотип</b> — ниже превью, как он выглядит в разных местах.
-                    Для сайдбара выберите вариант <b>с подложкой</b> (белый фон — читается на тёмном) или <b>без</b>.
+                    Для сайдбара выберите вариант <b>с подложкой</b> или <b>без</b>.
+                    Отдельно можно загрузить <b>иконку</b> — она заменит логотип в свёрнутом сайдбаре (квадрат 32×32).
                   </p>
                   <div className="flex items-start gap-4">
                     {/* Sidebar: два варианта (с подложкой / без) — столбиком,
@@ -384,6 +429,48 @@ export default function BrandingPage() {
                       </button>
                     ))}
                     </div>
+                    {/* C: Иконка для свёрнутого сайдбара (фавикон) */}
+                    <div className="flex flex-col gap-2">
+                      <div className="flex flex-col items-center gap-1">
+                        <div
+                          className={cn(
+                            "w-10 h-10 rounded-md bg-[#1a1040] flex items-center justify-center overflow-hidden ring-2 transition-all cursor-pointer",
+                            faviconPreview ? "ring-transparent" : "ring-dashed ring-border/60 hover:ring-primary/30",
+                          )}
+                          onClick={() => !uploadingFavicon && faviconInputRef.current?.click()}
+                          title="Загрузить иконку для свёрнутого сайдбара"
+                        >
+                          <input
+                            ref={faviconInputRef}
+                            type="file"
+                            accept=".png,.svg,.jpg,.jpeg,.webp,.ico"
+                            className="hidden"
+                            onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadFaviconFile(f) }}
+                          />
+                          {uploadingFavicon ? (
+                            <Loader2 className="w-4 h-4 animate-spin text-white/50" />
+                          ) : faviconPreview ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img src={faviconPreview} alt="" className="max-w-full max-h-full object-contain" />
+                          ) : (
+                            <Upload className="w-4 h-4 text-white/30" />
+                          )}
+                        </div>
+                        <span className="text-[10px] text-muted-foreground text-center leading-tight">
+                          Иконка<br />свёрн. сайдбар
+                        </span>
+                      </div>
+                      {faviconPreview && (
+                        <button
+                          type="button"
+                          onClick={() => { setFaviconPreview(null); if (faviconInputRef.current) faviconInputRef.current.value = "" }}
+                          className="inline-flex items-center gap-1 text-[10px] text-destructive hover:underline justify-center"
+                        >
+                          <Trash2 className="w-3 h-3" /> Удалить
+                        </button>
+                      )}
+                    </div>
+
                     <div className="flex flex-col items-center gap-1">
                       <div className="w-[80px] h-[80px] rounded-xl border bg-muted/20 flex items-center justify-center overflow-hidden">
                         <CompanyLogo logoUrl={logoPreview} companyName={brandName} size="lg" rounded="md" className="!w-[60px] !h-[60px]" />
