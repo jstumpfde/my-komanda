@@ -6,46 +6,54 @@ import { Loader2 } from "lucide-react"
 
 // «Рабочий стол» — быстрый вход: открывает последнюю открытую вакансию
 // (localStorage "hr:last-vacancy"), либо первую активную, минуя «Все вакансии».
-// Если активных вакансий нет — отправляем на общий список.
+// Редирект устроен максимально надёжно: если есть запомненная вакансия —
+// уходим в неё мгновенно (без ожидания сети); иначе тянем первую активную;
+// плюс жёсткая страховка через 4 сек на случай зависшего fetch.
 export default function HrWorkspaceRedirect() {
   const router = useRouter()
 
   useEffect(() => {
-    let cancelled = false
+    let navigated = false
+    const goVacancy = (vacId: string) => {
+      navigated = true
+      router.replace(`/hr/vacancies/${vacId}?nav=v2&tab=candidates`)
+    }
 
-    async function go() {
-      try {
-        const res = await fetch("/api/modules/hr/vacancies?scope=active&limit=100", {
-          cache: "no-store",
-        })
-        const data = await res.json().catch(() => null)
+    // 1. Оптимистично: запомненная вакансия → открываем сразу.
+    let lastId: string | null = null
+    try {
+      lastId = localStorage.getItem("hr:last-vacancy")
+    } catch {}
+    if (lastId) {
+      goVacancy(lastId)
+      return
+    }
+
+    // 2. Иначе — первая активная вакансия.
+    fetch("/api/modules/hr/vacancies?scope=active&limit=100", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((data) => {
+        if (navigated) return
         const list: Array<{ id: string }> = Array.isArray(data?.vacancies) ? data.vacancies : []
-
-        if (cancelled) return
-
-        if (list.length === 0) {
+        if (list[0]?.id) {
+          goVacancy(list[0].id)
+        } else {
+          navigated = true
           router.replace("/hr/vacancies")
-          return
         }
+      })
+      .catch(() => {
+        if (!navigated) {
+          navigated = true
+          router.replace("/hr/vacancies")
+        }
+      })
 
-        let lastId: string | null = null
-        try {
-          lastId = localStorage.getItem("hr:last-vacancy")
-        } catch {}
-
-        const target =
-          (lastId && list.find((v) => v.id === lastId)) || list[0]
-
-        router.replace(`/hr/vacancies/${target.id}?nav=v2&tab=candidates`)
-      } catch {
-        if (!cancelled) router.replace("/hr/vacancies")
-      }
-    }
-
-    go()
-    return () => {
-      cancelled = true
-    }
+    // 3. Страховка: если за 4 сек так и не ушли — жёсткий переход на список.
+    const safety = setTimeout(() => {
+      if (!navigated) window.location.assign("/hr/vacancies")
+    }, 4000)
+    return () => clearTimeout(safety)
   }, [router])
 
   return (
