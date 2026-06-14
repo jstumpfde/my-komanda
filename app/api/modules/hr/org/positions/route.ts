@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
-import { eq } from "drizzle-orm"
+import { eq, inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { positions, departments, users } from "@/lib/db/schema"
+import { positions, departments, users, positionEmployees } from "@/lib/db/schema"
 import { requireCompany, requireOrgManager, apiError, apiSuccess } from "@/lib/api-helpers"
 
 // GET /api/modules/hr/org/positions — доступно всем
@@ -30,7 +30,29 @@ export async function GET() {
       .leftJoin(users, eq(positions.userId, users.id))
       .where(eq(positions.tenantId, user.companyId))
 
-    return apiSuccess(rows)
+    // Сотрудники на должности (вариант B — many-to-many).
+    const posIds = rows.map((r) => r.id)
+    const empByPos = new Map<string, { id: string; name: string; avatar: string | null }[]>()
+    if (posIds.length > 0) {
+      const emps = await db
+        .select({
+          positionId: positionEmployees.positionId,
+          id: users.id,
+          name: users.name,
+          avatar: users.avatarUrl,
+        })
+        .from(positionEmployees)
+        .innerJoin(users, eq(positionEmployees.userId, users.id))
+        .where(inArray(positionEmployees.positionId, posIds))
+      for (const e of emps) {
+        const arr = empByPos.get(e.positionId) ?? []
+        arr.push({ id: e.id, name: e.name, avatar: e.avatar })
+        empByPos.set(e.positionId, arr)
+      }
+    }
+
+    const result = rows.map((r) => ({ ...r, employees: empByPos.get(r.id) ?? [] }))
+    return apiSuccess(result)
   } catch (err) {
     if (err instanceof Response) return err
     return apiError("Internal server error", 500)
@@ -48,9 +70,14 @@ export async function POST(req: NextRequest) {
       grade?: string
       salaryMin?: number
       salaryMax?: number
+      employeeIds?: string[]
     }
 
     if (!body.name) return apiError("Название обязательно", 400)
+
+    const employeeIds = Array.isArray(body.employeeIds)
+      ? [...new Set(body.employeeIds.filter((x) => typeof x === "string" && x.length > 0))]
+      : []
 
     const [created] = await db.insert(positions).values({
       tenantId: user.companyId,
@@ -60,9 +87,17 @@ export async function POST(req: NextRequest) {
       grade: body.grade ?? null,
       salaryMin: body.salaryMin ?? null,
       salaryMax: body.salaryMax ?? null,
+      // legacy userId = первый сотрудник (обратная совместимость)
+      userId: employeeIds[0] ?? null,
     }).returning()
 
-    return apiSuccess(created, 201)
+    if (employeeIds.length > 0) {
+      await db.insert(positionEmployees)
+        .values(employeeIds.map((uid) => ({ positionId: created.id, userId: uid })))
+        .onConflictDoNothing()
+    }
+
+    return apiSuccess({ ...created, employeeIds }, 201)
   } catch (err) {
     if (err instanceof Response) return err
     return apiError("Internal server error", 500)

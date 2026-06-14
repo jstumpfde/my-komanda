@@ -25,7 +25,7 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import {
   Building2, Briefcase, Network, Plus, Pencil, Trash2, ChevronRight,
-  Users, Crown, Loader2, UserPlus, ArrowLeft, ArrowRight, SlidersHorizontal,
+  Users, Crown, Loader2, UserPlus, ArrowLeft, ArrowRight, SlidersHorizontal, Check,
 } from "lucide-react"
 
 // ─── Types ───────────────────────────────────────────────
@@ -54,6 +54,8 @@ interface Position {
   userId: string | null
   userName: string | null
   userAvatar: string | null
+  // Вариант B: много сотрудников на должность.
+  employees: { id: string; name: string; avatar: string | null }[]
   createdAt: string
 }
 
@@ -164,6 +166,35 @@ type OrgCallbacks = {
   canEdit: boolean
 }
 
+// Мультивыбор сотрудников на должность (вариант B).
+function EmployeeMultiSelect({ team, selected, onChange }: { team: TeamMember[]; selected: string[]; onChange: (ids: string[]) => void }) {
+  const toggle = (id: string) =>
+    onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id])
+  return (
+    <div className="max-h-48 overflow-y-auto rounded-md border divide-y">
+      {team.length === 0 && (
+        <div className="px-3 py-4 text-xs text-muted-foreground text-center">Нет сотрудников в команде</div>
+      )}
+      {team.map((m) => {
+        const on = selected.includes(m.id)
+        return (
+          <button
+            key={m.id}
+            type="button"
+            onClick={() => toggle(m.id)}
+            className={cn("w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors hover:bg-accent/50", on && "bg-primary/5")}
+          >
+            <span className={cn("flex items-center justify-center w-4 h-4 rounded border shrink-0", on ? "bg-primary border-primary text-primary-foreground" : "border-border")}>
+              {on && <Check className="w-3 h-3" />}
+            </span>
+            <span className="truncate flex-1">{m.name}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 function PosRow({ pos, cb }: { pos: Position; cb: OrgCallbacks }) {
   return (
     <div
@@ -177,18 +208,20 @@ function PosRow({ pos, cb }: { pos: Position; cb: OrgCallbacks }) {
     >
       <div className="flex-1 min-w-0">
         <span className="text-sm font-semibold text-left truncate block">{pos.name}</span>
-        {pos.userName ? (
-          <span className="text-xs text-muted-foreground truncate block">{pos.userName}</span>
-        ) : (
-          <span className="text-xs text-muted-foreground/50 italic block">Вакантно</span>
-        )}
+        {(() => {
+          // Фолбэк на legacy userName, если employees ещё не пришёл.
+          const emps = pos.employees ?? (pos.userName ? [{ id: pos.userId ?? "", name: pos.userName, avatar: pos.userAvatar }] : [])
+          if (emps.length === 0) return <span className="text-xs text-muted-foreground/50 italic block">Вакантно</span>
+          const label = emps.length === 1 ? emps[0].name : `${emps[0].name} +${emps.length - 1}`
+          return <span className="text-xs text-muted-foreground truncate block" title={emps.map(e => e.name).join(", ")}>{label}</span>
+        })()}
       </div>
       {cb.canEdit && (
         <button
           type="button"
           className="mt-1 text-muted-foreground hover:text-primary transition-colors shrink-0"
           onClick={(e) => { e.stopPropagation(); cb.onAssign(pos) }}
-          title={pos.userName ? "Сменить сотрудника" : "Назначить сотрудника"}
+          title={(pos.employees?.length ?? (pos.userName ? 1 : 0)) > 0 ? "Сотрудники на должности" : "Назначить сотрудников"}
         >
           <UserPlus className="w-3.5 h-3.5" />
         </button>
@@ -421,7 +454,7 @@ function CompanyStructureInner() {
   // ── Position dialogs ────────────────────────────────────
   const [posDialogOpen, setPosDialogOpen] = useState(false)
   const [posEditId, setPosEditId] = useState<string | null>(null)
-  const [posForm, setPosForm] = useState({ name: "", departmentId: "", description: "", grade: "", salaryMin: "", salaryMax: "", userId: "" })
+  const [posForm, setPosForm] = useState<{ name: string; departmentId: string; description: string; grade: string; salaryMin: string; salaryMax: string; employeeIds: string[] }>({ name: "", departmentId: "", description: "", grade: "", salaryMin: "", salaryMax: "", employeeIds: [] })
   const [posDeleteId, setPosDeleteId] = useState<string | null>(null)
   const [posSaving, setPosSaving] = useState(false)
 
@@ -455,7 +488,7 @@ function CompanyStructureInner() {
   // ── Quick assign ────────────────────────────────────────
   const [asOpen, setAsOpen] = useState(false)
   const [asPos, setAsPos] = useState<Position | null>(null)
-  const [asUserId, setAsUserId] = useState("")
+  const [asEmployeeIds, setAsEmployeeIds] = useState<string[]>([])
   const [asSaving, setAsSaving] = useState(false)
 
   const fetchData = useCallback(async () => {
@@ -554,7 +587,7 @@ function CompanyStructureInner() {
 
   const openPosCreate = (deptId?: string) => {
     setPosEditId(null)
-    setPosForm({ name: "", departmentId: deptId ?? "", description: "", grade: "", salaryMin: "", salaryMax: "", userId: "" })
+    setPosForm({ name: "", departmentId: deptId ?? "", description: "", grade: "", salaryMin: "", salaryMax: "", employeeIds: [] })
     setPosDialogOpen(true)
   }
 
@@ -567,7 +600,7 @@ function CompanyStructureInner() {
       grade: pos.grade ?? "",
       salaryMin: pos.salaryMin != null ? String(pos.salaryMin / 100) : "",
       salaryMax: pos.salaryMax != null ? String(pos.salaryMax / 100) : "",
-      userId: pos.userId ?? "",
+      employeeIds: (pos.employees ?? (pos.userId ? [{ id: pos.userId, name: pos.userName ?? "", avatar: null }] : [])).map(e => e.id),
     })
     setPosDialogOpen(true)
   }
@@ -582,7 +615,7 @@ function CompanyStructureInner() {
       grade: posForm.grade.trim() || null,
       salaryMin: posForm.salaryMin ? Math.round(parseFloat(posForm.salaryMin) * 100) : null,
       salaryMax: posForm.salaryMax ? Math.round(parseFloat(posForm.salaryMax) * 100) : null,
-      userId: posForm.userId && posForm.userId !== "none" ? posForm.userId : null,
+      employeeIds: posForm.employeeIds,
     }
     try {
       const url = posEditId ? `/api/modules/hr/org/positions/${posEditId}` : "/api/modules/hr/org/positions"
@@ -696,20 +729,21 @@ function CompanyStructureInner() {
   }
 
   const openAssign = (pos: Position) => {
-    setAsPos(pos); setAsUserId(pos.userId ?? "__none"); setAsOpen(true)
+    setAsPos(pos)
+    setAsEmployeeIds((pos.employees ?? (pos.userId ? [{ id: pos.userId, name: pos.userName ?? "", avatar: null }] : [])).map(e => e.id))
+    setAsOpen(true)
   }
 
   const handleAssign = async () => {
     if (!asPos) return
     setAsSaving(true)
     try {
-      const uid = asUserId === "__none" ? null : (asUserId || null)
       const res = await fetch(`/api/modules/hr/org/positions/${asPos.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: uid }),
+        body: JSON.stringify({ employeeIds: asEmployeeIds }),
       })
       if (!res.ok) { toast.error("Ошибка назначения"); return }
-      toast.success(uid ? "Сотрудник назначен" : "Назначение снято")
+      toast.success(asEmployeeIds.length ? "Сотрудники обновлены" : "Назначение снято")
       setAsOpen(false)
       await fetchData()
     } catch { toast.error("Ошибка сети") } finally { setAsSaving(false) }
@@ -1232,18 +1266,9 @@ function CompanyStructureInner() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label>Сотрудник</Label>
-              <Select value={posForm.userId || "none"} onValueChange={(v) => setPosForm({ ...posForm, userId: v === "none" ? "" : v })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Не назначен" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">— Не назначен —</SelectItem>
-                  {team.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Сотрудники{posForm.employeeIds.length > 0 ? ` (${posForm.employeeIds.length})` : ""}</Label>
+              <EmployeeMultiSelect team={team} selected={posForm.employeeIds} onChange={(ids) => setPosForm({ ...posForm, employeeIds: ids })} />
+              <p className="text-xs text-muted-foreground">Можно выбрать несколько — на одной должности несколько сотрудников.</p>
             </div>
           </div>
           <DialogFooter className="flex items-center justify-between gap-2">
@@ -1285,31 +1310,21 @@ function CompanyStructureInner() {
       {/* ── Быстрое назначение сотрудника ─────────────────────── */}
       <Dialog open={asOpen} onOpenChange={setAsOpen}>
         <DialogContent className="sm:max-w-sm">
-          <DialogHeader><DialogTitle>Назначить сотрудника</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Сотрудники на должности</DialogTitle></DialogHeader>
           {asPos && (
             <div className="space-y-4 mt-2">
               <p className="text-sm text-muted-foreground">
                 Должность: <span className="font-medium text-foreground">{asPos.name}</span>
               </p>
               <div className="space-y-1.5">
-                <Label>Сотрудник</Label>
-                <Select value={asUserId || "__none"} onValueChange={setAsUserId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Выберите сотрудника" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none">— Снять назначение —</SelectItem>
-                    {team.map((m) => (
-                      <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Сотрудники{asEmployeeIds.length > 0 ? ` (${asEmployeeIds.length})` : ""}</Label>
+                <EmployeeMultiSelect team={team} selected={asEmployeeIds} onChange={setAsEmployeeIds} />
               </div>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" size="sm" onClick={() => setAsOpen(false)}>Отмена</Button>
                 <Button size="sm" onClick={handleAssign} disabled={asSaving}>
                   {asSaving && <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />}
-                  Назначить
+                  Сохранить
                 </Button>
               </div>
             </div>
