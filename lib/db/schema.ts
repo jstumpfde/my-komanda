@@ -2536,6 +2536,10 @@ export const hhResponses = pgTable("hh_responses", {
   // applicant-сообщения и момент последней проверки.
   lastSeenMessageId:  text("last_seen_message_id"),
   lastCheckAt:        timestamp("last_check_at"),
+  // Кэш переписки hh (нормализованные сообщения) — показываем сохранённую
+  // переписку, когда токен hh отвалился. Обновляется при успешном фетче.
+  messagesCache:      jsonb("messages_cache"),
+  messagesCachedAt:   timestamp("messages_cached_at"),
   syncedAt:           timestamp("synced_at").defaultNow(),
   createdAt:          timestamp("created_at").defaultNow(),
 }, (t) => [

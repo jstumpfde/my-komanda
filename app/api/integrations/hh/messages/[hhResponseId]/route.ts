@@ -71,7 +71,18 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ hhR
   if (!resp) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
   const tokenResult = await getValidToken(companyId)
-  if (!tokenResult) return NextResponse.json({ error: "hh не подключён" }, { status: 400 })
+  if (!tokenResult) {
+    // Токен hh отвалился — отдаём СОХРАНЁННУЮ переписку из кэша (если есть),
+    // чтобы HR видел историю; UI покажет плашку «hh не подключён» снизу.
+    const cached = Array.isArray(resp.messagesCache) ? resp.messagesCache : []
+    return NextResponse.json({
+      messages: cached,
+      total: cached.length,
+      candidateName: resp.candidateName,
+      hhConnected: false,
+      cachedAt: resp.messagesCachedAt,
+    })
+  }
 
   // with_text=true критично — без него hh иногда возвращает только метаданные.
   // per_page=100 — максимум для большинства hh-эндпоинтов; пагинацию также
@@ -177,10 +188,18 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ hhR
       }
     }
 
+    // Сохраняем переписку в кэш — чтобы показать её, когда токен hh отвалится.
+    try {
+      await db.update(hhResponses)
+        .set({ messagesCache: messages, messagesCachedAt: new Date() })
+        .where(eq(hhResponses.id, resp.id))
+    } catch { /* кэш не критичен — не валим ответ */ }
+
     return NextResponse.json({
       messages,
       total: totalFound || messages.length,
       candidateName: resp.candidateName,
+      hhConnected: true,
     })
   } catch (err) {
     console.error("[hh/messages] fetch failed", err instanceof Error ? err.message : err)

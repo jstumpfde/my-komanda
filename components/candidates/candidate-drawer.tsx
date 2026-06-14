@@ -669,6 +669,8 @@ export function CandidateDrawer({
   const [hhError, setHhError] = useState<string | null>(null)
   const [hhDraft, setHhDraft] = useState("")
   const [hhSending, setHhSending] = useState(false)
+  // hh-токен жив? false → показываем сохранённую переписку + плашку «не подключён».
+  const [hhConnected, setHhConnected] = useState(true)
   const hhFetchRef = useRef<string | null>(null)
   const hhListRef = useRef<HTMLDivElement | null>(null)
   const tabScrollRef = useRef<HTMLDivElement | null>(null)
@@ -803,8 +805,9 @@ export function CandidateDrawer({
   const reloadHhMessages = useCallback(async (hhResponseId: string) => {
     try {
       const res = await fetch(`/api/integrations/hh/messages/${hhResponseId}`)
-      const data = await res.json() as { messages?: HhMessage[]; error?: string }
+      const data = await res.json() as { messages?: HhMessage[]; error?: string; hhConnected?: boolean }
       if (res.ok && Array.isArray(data.messages)) setHhMessages(data.messages)
+      if (typeof data.hhConnected === "boolean") setHhConnected(data.hhConnected)
     } catch (err) {
       console.error("[hh-chat] reload failed", err)
     }
@@ -851,15 +854,15 @@ export function CandidateDrawer({
     ;(async () => {
       try {
         const res = await fetch(`/api/integrations/hh/messages/${hhResponseId}`)
-        const data = await res.json() as { messages?: HhMessage[]; error?: string; details?: string }
+        const data = await res.json() as { messages?: HhMessage[]; error?: string; details?: string; hhConnected?: boolean }
         if (cancelled) return
         if (!res.ok) {
           console.error("[hh-chat] fetch failed", res.status, data)
           setHhError(data.error ?? `Ошибка ${res.status}`)
         } else {
           const msgs = data.messages ?? []
-          if (msgs.length === 0) console.warn("[hh-chat] empty messages list", { hhResponseId })
           setHhMessages(msgs)
+          setHhConnected(data.hhConnected !== false)
         }
       } catch (err) {
         console.error("[hh-chat] network error", err)
@@ -1662,7 +1665,9 @@ export function CandidateDrawer({
                   ) : (
                     <>
                       {hhMessages.length === 0 ? (
-                        <p className="text-xs text-muted-foreground italic py-2">Пока нет сообщений. Отправь первое — кандидат увидит в hh</p>
+                        <p className="text-xs text-muted-foreground italic py-2">
+                          {hhConnected ? "Пока нет сообщений. Отправь первое — кандидат увидит в hh" : "Сохранённой переписки нет (hh не подключён)"}
+                        </p>
                       ) : (
                         <div ref={hhListRef} className="space-y-2 pt-1 max-h-[50vh] overflow-y-auto pr-1 -mr-1">
                           {hhMessages.map((m) => {
@@ -1699,7 +1704,8 @@ export function CandidateDrawer({
                         </div>
                       )}
 
-                      {/* Input для отправки сообщения в hh */}
+                      {/* Поле ввода при живом hh, иначе — плашка «не подключён» */}
+                      {hhConnected ? (
                       <div className="pt-2 mt-1 border-t border-border/40 space-y-2">
                         <Textarea
                           value={hhDraft}
@@ -1728,6 +1734,15 @@ export function CandidateDrawer({
                           </Button>
                         </div>
                       </div>
+                      ) : (
+                        <div className="pt-2 mt-1 border-t border-amber-300/40">
+                          <div className="rounded-lg border border-amber-300/50 bg-amber-50 dark:bg-amber-900/20 px-3 py-2.5 text-[11px] text-amber-800 dark:text-amber-300 space-y-1.5">
+                            <p className="font-medium">hh не подключён</p>
+                            <p>Показана сохранённая переписка. Новые сообщения не подтянутся, отправка недоступна.</p>
+                            <a href="/hr/integrations" className="inline-block underline font-medium">Переподключить hh →</a>
+                          </div>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
