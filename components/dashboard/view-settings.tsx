@@ -39,9 +39,9 @@ const DISPLAY_TOGGLES = CANDIDATE_COLUMN_TOGGLES
 
 export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeChange, testTableHref, onReset }: ViewSettingsProps) {
   const { role } = useAuth()
-  // Все режимы (Воронка/Канбан/Плитки) — только у администратора платформы.
-  // Все остальные (менеджер платформы + клиентские роли) видят только «Список».
-  const showAllViews = role === "platform_admin"
+  // Все режимы (Воронка/Канбан/Плитки) — администратору платформы и директору
+  // компании (он же владелец аккаунта). Остальные HR-роли видят только «Список».
+  const showAllViews = ["platform_admin", "admin", "director", "client"].includes(role)
   // B5: колонки настраивает только директор/platform_admin; остальные HR — read-only.
   const canEditColumns = ["director", "client", "platform_admin", "admin"].includes(role)
 
