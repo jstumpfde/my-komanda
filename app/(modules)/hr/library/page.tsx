@@ -456,7 +456,7 @@ type TabKey = "questionnaires" | "demos" | "blocks" | "tests" | "trash"
 
 const VALID_LIBRARY_TABS: TabKey[] = ["questionnaires", "demos", "blocks", "tests", "trash"]
 
-function LibraryContent() {
+export function LibraryView({ embedded = false }: { embedded?: boolean }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [templates, setTemplates] = useState<TemplateData[]>([])
@@ -739,10 +739,7 @@ function LibraryContent() {
   }
 
   return (
-    <SidebarProvider>
-      <DashboardSidebar />
-      <SidebarInset>
-        <DashboardHeader />
+    <>
         <div className="flex-1 overflow-auto bg-background min-w-0">
           <div className="pt-6 pb-6 px-4 sm:px-14">
             <div className="mb-5">
@@ -864,7 +861,6 @@ function LibraryContent() {
 
           </div>
         </div>
-      </SidebarInset>
 
       {/* Create-type chooser */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -949,14 +945,20 @@ function LibraryContent() {
         onOpenChange={(o) => { if (!o) setPermanentTarget(null) }}
         onDeleted={() => { setPermanentTarget(null); fetchTrashed() }}
       />
-    </SidebarProvider>
+    </>
   )
 }
 
 export default function LibraryPage() {
   return (
     <Suspense fallback={null}>
-      <LibraryContent />
+      <SidebarProvider>
+        <DashboardSidebar />
+        <SidebarInset>
+          <DashboardHeader />
+          <LibraryView />
+        </SidebarInset>
+      </SidebarProvider>
     </Suspense>
   )
 }
