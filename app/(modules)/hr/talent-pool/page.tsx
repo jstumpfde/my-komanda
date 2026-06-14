@@ -318,13 +318,15 @@ export function TalentPoolView({ embedded = false }: { embedded?: boolean }) {
         )}
 
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TalentTabKey)}>
-              <TabsList className="mb-4">
-                <TabsTrigger value="base" className="gap-1.5"><Users className="w-3.5 h-3.5" />База</TabsTrigger>
-                <TabsTrigger value="campaigns" className="gap-1.5"><Rocket className="w-3.5 h-3.5" />Кампании</TabsTrigger>
-                <TabsTrigger value="referrals" className="gap-1.5"><Heart className="w-3.5 h-3.5" />Рефералы</TabsTrigger>
-                <TabsTrigger value="analytics" className="gap-1.5"><BarChart3 className="w-3.5 h-3.5" />Аналитика</TabsTrigger>
-                <TabsTrigger value="forms" className="gap-1.5"><FileText className="w-3.5 h-3.5" />Формы</TabsTrigger>
-              </TabsList>
+              <div className="overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0 mb-4">
+                <TabsList className="w-max">
+                  <TabsTrigger value="base" className="gap-1.5"><Users className="w-3.5 h-3.5" /><span className="whitespace-nowrap">База</span></TabsTrigger>
+                  <TabsTrigger value="campaigns" className="gap-1.5"><Rocket className="w-3.5 h-3.5" /><span className="whitespace-nowrap">Кампании</span></TabsTrigger>
+                  <TabsTrigger value="referrals" className="gap-1.5"><Heart className="w-3.5 h-3.5" /><span className="whitespace-nowrap">Рефералы</span></TabsTrigger>
+                  <TabsTrigger value="analytics" className="gap-1.5"><BarChart3 className="w-3.5 h-3.5" /><span className="whitespace-nowrap">Аналитика</span></TabsTrigger>
+                  <TabsTrigger value="forms" className="gap-1.5"><FileText className="w-3.5 h-3.5" /><span className="whitespace-nowrap">Формы</span></TabsTrigger>
+                </TabsList>
+              </div>
 
               {/* ═══ TAB: База ═══ */}
               <TabsContent value="base" className="space-y-4">
@@ -393,13 +395,13 @@ export function TalentPoolView({ embedded = false }: { embedded?: boolean }) {
                   <div className="flex-1" />
                   <Button asChild variant="outline" size="sm" className="h-8 text-xs gap-1.5">
                     <label className="cursor-pointer">
-                      <Upload className="w-3.5 h-3.5" />Загрузить CSV
+                      <Upload className="w-3.5 h-3.5" /><span className="hidden sm:inline">Загрузить </span>CSV
                       <input type="file" accept=".csv,text/csv" className="hidden"
                         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCsvFile(f); e.target.value = "" }} />
                     </label>
                   </Button>
-                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => setAddOpen(true)}><Plus className="w-3.5 h-3.5" />Добавить</Button>
-                  <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setCampaignOpen(true)}><Rocket className="w-3.5 h-3.5" />Запустить кампанию</Button>
+                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => setAddOpen(true)}><Plus className="w-3.5 h-3.5" /><span className="hidden sm:inline">Добавить</span></Button>
+                  <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setCampaignOpen(true)}><Rocket className="w-3.5 h-3.5" /><span className="hidden sm:inline">Запустить кампанию</span></Button>
                 </div>
 
                 <TableCard>

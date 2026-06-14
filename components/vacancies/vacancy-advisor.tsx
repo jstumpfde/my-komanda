@@ -287,6 +287,7 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
         onClick={() => setMobileOpen(true)}
         className="rounded-full shadow-lg gap-2 h-12 px-5"
         variant={result && result.score < 40 ? "destructive" : "default"}
+        style={result && result.score >= 40 ? { backgroundColor: "var(--ai)", color: "var(--ai-foreground)" } : undefined}
       >
         <Sparkles className="w-4 h-4" />
         AI-подсказки {result ? `(${result.score}%)` : ""}
@@ -511,8 +512,8 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
         <div className="space-y-3 border-l pl-4 h-full">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Bot className="w-4 h-4 text-primary" />
-              <span className="text-sm font-semibold">AI-ассистент</span>
+              <Bot className="w-4 h-4 text-[var(--ai)]" />
+              <span className="text-sm font-semibold text-[var(--ai)]">AI-ассистент</span>
               {loading && <Loader2 className="w-3 h-3 text-muted-foreground animate-spin" />}
             </div>
             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setCollapsed(!collapsed)}>

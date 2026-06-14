@@ -6,7 +6,6 @@ import { useSearchParams, useRouter } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -754,44 +753,50 @@ function CompanyStructureInner() {
     </div>
   )
 
+  const TABS_DEF = [
+    { key: "departments" as TabId, label: "Отделы",    icon: Building2 },
+    { key: "positions"  as TabId, label: "Должности", icon: Briefcase },
+    { key: "scheme"     as TabId, label: "Схема",     icon: Network },
+  ]
+
   return (
     <SidebarProvider defaultOpen={true}>
       <DashboardSidebar />
       <SidebarInset>
         <DashboardHeader />
+
+        {/* Шапка + таб-бар — стиль Рабочего стола */}
+        <div className="border-b bg-background px-4 sm:px-14 pt-5 pb-0">
+          <h1 className="text-lg font-semibold mb-3">Структура компании</h1>
+          <div className="flex items-center gap-1">
+            {TABS_DEF.map(({ key, label, icon: Icon }) => {
+              const active = activeTab === key
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setTab(key)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+                    active
+                      ? "border-primary text-foreground"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Icon className="w-4 h-4" />
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-6 px-4 sm:px-14">
-            {/* Заголовок */}
-            <div className="flex items-center justify-between mb-6">
+
+            {/* ── Отделы ─────────────────────────────────────────── */}
+            {activeTab === "departments" && (
               <div>
-                <h1 className="text-lg font-semibold flex items-center gap-2">
-                  <Network className="h-5 w-5 text-violet-600" />
-                  Структура компании
-                </h1>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Отделы, должности и визуальная оргструктура
-                </p>
-              </div>
-            </div>
-
-            <Tabs value={activeTab} onValueChange={(v) => setTab(v as TabId)}>
-              <TabsList className="mb-6">
-                <TabsTrigger value="departments" className="gap-2">
-                  <Building2 className="h-4 w-4" />
-                  Отделы
-                </TabsTrigger>
-                <TabsTrigger value="positions" className="gap-2">
-                  <Briefcase className="h-4 w-4" />
-                  Должности
-                </TabsTrigger>
-                <TabsTrigger value="scheme" className="gap-2">
-                  <Network className="h-4 w-4" />
-                  Схема
-                </TabsTrigger>
-              </TabsList>
-
-              {/* ── Отделы ─────────────────────────────────────────── */}
-              <TabsContent value="departments">
                 <div className="flex justify-end mb-4">
                   {canEdit && (
                     <Button onClick={() => openDeptCreate()}>
@@ -856,15 +861,17 @@ function CompanyStructureInner() {
                     </tbody>
                   </DataTable>
                 </TableCard>
-              </TabsContent>
+              </div>
+            )}
 
-              {/* ── Должности ──────────────────────────────────────── */}
-              <TabsContent value="positions">
+            {/* ── Должности ──────────────────────────────────────── */}
+            {activeTab === "positions" && (
+              <div>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <Label className="text-sm text-muted-foreground">Отдел:</Label>
                     <Select
-                      value={activeTab === "positions" ? (searchParams.get("dept") ?? "all") : "all"}
+                      value={searchParams.get("dept") ?? "all"}
                       onValueChange={(v) => router.replace(`/hr/company-structure?tab=positions&dept=${v}`)}
                     >
                       <SelectTrigger className="w-[220px]">
@@ -950,10 +957,12 @@ function CompanyStructureInner() {
                     </TableCard>
                   )
                 })()}
-              </TabsContent>
+              </div>
+            )}
 
-              {/* ── Схема ──────────────────────────────────────────── */}
-              <TabsContent value="scheme">
+            {/* ── Схема ──────────────────────────────────────────── */}
+            {activeTab === "scheme" && (
+              <div>
                 {loading ? (
                   <div className="flex items-center justify-center py-16 gap-2 text-muted-foreground">
                     <Loader2 className="w-5 h-5 animate-spin" />Загрузка...
@@ -987,8 +996,9 @@ function CompanyStructureInner() {
                     </div>
                   </>
                 )}
-              </TabsContent>
-            </Tabs>
+              </div>
+            )}
+
           </div>
         </main>
       </SidebarInset>
