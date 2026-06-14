@@ -79,7 +79,13 @@ function WorkspaceInner() {
         {/* Контент активного таба — монтируется по одному */}
         {tab === "overview" && <DashboardView embedded />}
         {tab === "vacancies" && <VacanciesView embedded />}
-        {tab === "interviews" && <InterviewsView embedded />}
+        {tab === "interviews" && (
+          <Suspense fallback={null}>
+            <div className="px-4 sm:px-14 pt-4 pb-6">
+              <InterviewsView embedded />
+            </div>
+          </Suspense>
+        )}
         {tab === "reserve" && <TalentPoolView embedded />}
       </SidebarInset>
     </SidebarProvider>
