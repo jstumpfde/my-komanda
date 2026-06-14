@@ -1176,6 +1176,27 @@ export default function VacancyPage() {
     finally { setHhSyncing(false) }
   }
 
+  // #16: синк БЕЗ разбора — для кнопки «Синхронизировать» в поповере «Настройки
+  // разбора». Сам разбор после синка запускает HhAutoProcess по своим настройкам
+  // (скорость/лимит/ручной-авто), т.е. «по сценарию», а не зашитыми 50/2с.
+  const syncHhResponses = async () => {
+    setHhSyncing(true)
+    try {
+      await Promise.all([
+        fetch("/api/integrations/hh/vacancies"),
+        fetch("/api/integrations/hh/responses"),
+      ])
+      await Promise.all([loadHhSyncMeta(), loadHeaderStats()])
+      refetchCandidates(); refetchVacancy()
+      toast.success("Синхронизировано с hh.ru")
+    } catch (e) {
+      toast.error("Ошибка синхронизации")
+      throw e
+    } finally {
+      setHhSyncing(false)
+    }
+  }
+
   // Live stats для карточки источника hh.ru на табе «Настройки»
   const [hhStats, setHhStats] = useState<{ totalResponses: number; newResponses: number; lastSyncAt: string | null } | null>(null)
   const loadHhStats = useCallback(async () => {
@@ -2583,22 +2604,11 @@ export default function VacancyPage() {
                 {activeTab === "candidates" && (
                   <div className="flex items-center gap-1.5 shrink-0">
                     {activeTab === "candidates" && hhConnected === true && apiVacancy?.hhVacancyId && hhSyncMeta && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-xs gap-1.5"
-                        onClick={handleHhSync}
-                        disabled={hhSyncing}
-                        title="Подтянуть отклики с hh.ru и запустить разбор"
-                      >
-                        {hhSyncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                        Синхронизировать
-                      </Button>
-                    )}
-                    {activeTab === "candidates" && hhConnected === true && apiVacancy?.hhVacancyId && hhSyncMeta && (
                       <HhAutoProcess
                         vacancyId={id}
-                        onProcessed={() => { refetchCandidates(); handleHhSync() }}
+                        syncing={hhSyncing}
+                        onSync={syncHhResponses}
+                        onProcessed={() => { refetchCandidates(); }}
                       />
                     )}
                     <CandidateFilters
