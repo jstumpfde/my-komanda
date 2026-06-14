@@ -231,6 +231,11 @@ export default function VacancyPage() {
   // B5: роль поднята наверх — нужна в setCardSettings и useEffect для user-prefs
   const { role } = useAuth()
 
+  // «Рабочий стол» (/hr/workspace) открывает последнюю посещённую вакансию.
+  useEffect(() => {
+    try { localStorage.setItem("hr:last-vacancy", id) } catch {}
+  }, [id])
+
   // ── Real API data ──────────────────────────────────────────
   const { vacancy: apiVacancy, loading: vacancyLoading, error: vacancyError, refetch: refetchVacancy } = useVacancy(id)
 

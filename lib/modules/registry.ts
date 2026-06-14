@@ -9,6 +9,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
     basePath: '/hr',
     menuItems: [
       // Найм
+      { label: 'Рабочий стол',     href: '/hr/workspace',         icon: 'LayoutGrid' },
       { label: 'Дашборд',          href: '/hr/dashboard',         icon: 'LayoutDashboard' },
       { label: 'Отчёт по найму',   href: '/hr/report',            icon: 'BarChart3' },
       { label: 'Вакансии',         href: '/hr/vacancies',         icon: 'Briefcase' },

@@ -6,7 +6,7 @@ export type { MenuGroup }
 // Определение групп для каждого модуля (href → группа)
 const MODULE_GROUP_DEFS: Partial<Record<ModuleId, { label: string; hrefs: string[]; legacy?: boolean }[]>> = {
   hr: [
-    { label: 'Найм',       hrefs: ['/hr/dashboard', '/hr/report', '/hr/vacancies', '/hr/candidates', '/hr/library', '/hr/talent-pool', '/hr/interviews', '/hr/hiring-settings'] },
+    { label: 'Найм',       hrefs: ['/hr/workspace', '/hr/dashboard', '/hr/report', '/hr/vacancies', '/hr/candidates', '/hr/library', '/hr/talent-pool', '/hr/interviews', '/hr/hiring-settings'] },
     { label: 'Оргструктура', hrefs: ['/hr/company-structure', '/hr/org-structure', '/hr/departments', '/hr/positions'] },
     { label: 'В разработке', hrefs: ['/hr/courses'] },
     // Заглушки — скрыты из меню 10.06.2026, вернуть по мере реализации:
