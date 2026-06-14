@@ -799,7 +799,7 @@ export function VacanciesView({ embedded = false }: { embedded?: boolean }) {
                     <DataHeadCell className="px-2" sortable sortDir={colSort?.column === "status" ? colSort.dir : null} onSort={() => toggleColSort("status")}>Статус</DataHeadCell>
                     <DataHeadCell className="px-2 whitespace-nowrap" sortable sortDir={colSort?.column === "date" ? colSort.dir : null} onSort={() => toggleColSort("date")}>Создана</DataHeadCell>
                     <DataHeadCell className="px-2 whitespace-nowrap" sortable sortDir={colSort?.column === "hr" ? colSort.dir : null} onSort={() => toggleColSort("hr")}>Менеджер вакансии</DataHeadCell>
-                    <DataHeadCell align="right" className="pl-2 pr-5 whitespace-nowrap">Действия</DataHeadCell>
+                    <DataHeadCell align="center" className="px-2 whitespace-nowrap">Действия</DataHeadCell>
                   </DataHead>
                   <tbody>
                     {filtered.map((v, i) => (
@@ -822,8 +822,8 @@ export function VacanciesView({ embedded = false }: { embedded?: boolean }) {
                             : formatDate(v.createdAt)}
                         </td>
                         <td className="px-2 py-3.5"><HrAvatar name={getHrName(v.createdBy, teamMembers)} /></td>
-                        <td className="pl-2 pr-5 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
-                          <RowActions v={v} handlers={actions} />
+                        <td className="px-2 py-3.5" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex justify-center"><RowActions v={v} handlers={actions} /></div>
                         </td>
                       </tr>
                       </RowContextMenu>
