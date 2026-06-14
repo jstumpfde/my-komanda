@@ -23,10 +23,11 @@ type SortKey =
   | "city"
   | "source"
   | "hrQueue"
+  | "nextInterview"
 
 const ALLOWED_SORT_KEYS: ReadonlySet<SortKey> = new Set<SortKey>([
   "favorite", "aiScore", "resumeScore", "rubricScore", "testScore", "salary", "responseDate", "status", "progress",
-  "createdAt", "name", "stage", "city", "source", "hrQueue",
+  "createdAt", "name", "stage", "city", "source", "hrQueue", "nextInterview",
 ])
 
 const ALLOWED_PAGE_SIZES: ReadonlySet<number> = new Set<number>([20, 50, 100])
@@ -190,6 +191,21 @@ function buildOrderBy(key: SortKey | null, dir: "asc" | "desc"): SQL[] {
       desc(candidates.createdAt),
       tiebreak,
     ]
+    case "nextInterview": {
+      // Сортировка по ближайшему запланированному интервью (коррелированный
+      // подзапрос: минимальный будущий start_at, не отменённое). Кандидаты без
+      // интервью — в конец (NULLS LAST) независимо от направления.
+      const nextIv = sql`(SELECT MIN(${calendarEvents.startAt}) FROM ${calendarEvents}
+        WHERE ${calendarEvents.candidateId} = ${candidates.id}
+          AND ${calendarEvents.type} = 'interview'
+          AND ${calendarEvents.startAt} >= now()
+          AND ${calendarEvents.status} <> 'cancelled')`
+      return [
+        dir === "asc" ? sql`${nextIv} ASC NULLS LAST` : sql`${nextIv} DESC NULLS LAST`,
+        desc(candidates.createdAt),
+        tiebreak,
+      ]
+    }
     default:             return [desc(candidates.createdAt), tiebreak]
   }
 }

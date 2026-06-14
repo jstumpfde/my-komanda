@@ -14,7 +14,7 @@ import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ListFilter,
 import { DemoProgressBar, calcDemoPercent, calcDemoFraction } from "@/components/hr/demo-progress-bar"
 import { getStageLabel, getStageColorClasses } from "@/lib/stages"
 
-export type ListSortKey = "favorite" | "name" | "aiScore" | "resumeScore" | "rubricScore" | "testScore" | "progress" | "salary" | "responseDate" | "status" | "city" | "source"
+export type ListSortKey = "favorite" | "name" | "aiScore" | "resumeScore" | "rubricScore" | "testScore" | "progress" | "salary" | "responseDate" | "status" | "city" | "source" | "nextInterview"
 export type ListSortDir = "asc" | "desc"
 export interface ListSortState {
   key: ListSortKey
@@ -73,6 +73,7 @@ const DEFAULT_DIR: Record<ListSortKey, ListSortDir> = {
   status:       "asc",
   city:         "asc",
   source:       "asc",
+  nextInterview:"asc",
 }
 
 /** Возвращает 0..100 либо null (не приступал).
@@ -234,6 +235,15 @@ export function ListView({
           if (!sa) return 1
           if (!sb) return -1
           return mul * sa.localeCompare(sb, "ru")
+        }
+        case "nextInterview": {
+          // Без интервью — в конец независимо от направления.
+          const ta = a.nextInterviewAt ? new Date(a.nextInterviewAt).getTime() : null
+          const tb = b.nextInterviewAt ? new Date(b.nextInterviewAt).getTime() : null
+          if (ta == null && tb == null) return 0
+          if (ta == null) return 1
+          if (tb == null) return -1
+          return mul * (ta - tb)
         }
       }
       return 0
@@ -409,7 +419,7 @@ export function ListView({
         {showScore && <SortHeader label="AI-оцен." sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />}
         {showRubricScore && <SortHeader label="Рубрика" sortKey="rubricScore" sort={sort} onToggle={handleSort} align="center" />}
         {showTestScore && <SortHeader label="Тест" sortKey="testScore" sort={sort} onToggle={handleSort} align="center" />}
-        {showNextInterview && <div className="text-center text-muted-foreground">Интервью</div>}
+        {showNextInterview && <SortHeader label="Интервью" sortKey="nextInterview" sort={sort} onToggle={handleSort} align="center" />}
         {showSalary && <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} align="center" />}
         {showCity && <SortHeader label="Город" sortKey="city" sort={sort} onToggle={handleSort} align="left" />}
         {showResponseDate && <SortHeader label="Дата" sortKey="responseDate" sort={sort} onToggle={handleSort} align="center" />}
