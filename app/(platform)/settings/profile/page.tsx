@@ -38,8 +38,9 @@ const ROLE_COLORS: Record<string, string> = {
   platform_admin: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
   platform_manager: "bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800",
   admin: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
-  director: "bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-200 dark:border-violet-800",
-  client: "bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-200 dark:border-violet-800",
+  // Бирюзовый — чтобы должность не путалась с фиолетовым «цветом нейросети».
+  director: "bg-teal-500/10 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-800",
+  client: "bg-teal-500/10 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-800",
   hr_lead: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800",
   hr_manager: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800",
   department_head: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800",
@@ -342,43 +343,48 @@ export default function ProfileSettingsPage() {
                       </div>
 
                       <div className="flex-1 min-w-0 space-y-2.5">
-                        {/* Имя + Фамилия — два раздельных поля (#33) */}
-                        <div>
-                          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Имя и фамилия</Label>
-                          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mt-1">
-                            <Input
-                              value={firstName}
-                              onChange={e => setFirstName(e.target.value)}
-                              placeholder="Иван"
-                              onKeyDown={e => { if (e.key === "Enter") handleSaveName() }}
-                              maxLength={100}
-                              className="h-8 text-sm"
-                            />
-                            <Input
-                              value={lastName}
-                              onChange={e => setLastName(e.target.value)}
-                              placeholder="Иванов"
-                              onKeyDown={e => { if (e.key === "Enter") handleSaveName() }}
-                              maxLength={100}
-                              className="h-8 text-sm"
-                            />
-                            <Button
-                              size="sm"
-                              className="h-8 gap-1.5 shrink-0"
-                              onClick={handleSaveName}
-                              disabled={
-                                savingName ||
-                                (firstName.trim() === (profile?.firstName ?? "") &&
-                                  lastName.trim() === (profile?.lastName ?? ""))
-                              }
-                            >
-                              {savingName
-                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                : <Save className="w-3.5 h-3.5" />
-                              }
-                              {savingName ? "..." : "Сохранить"}
-                            </Button>
+                        {/* Имя + Фамилия — два раздельных подписанных поля (#33) */}
+                        <div className="max-w-xl">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Имя</Label>
+                              <Input
+                                value={firstName}
+                                onChange={e => setFirstName(e.target.value)}
+                                placeholder="Иван"
+                                onKeyDown={e => { if (e.key === "Enter") handleSaveName() }}
+                                maxLength={100}
+                                className="h-8 text-sm"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Фамилия</Label>
+                              <Input
+                                value={lastName}
+                                onChange={e => setLastName(e.target.value)}
+                                placeholder="Иванов"
+                                onKeyDown={e => { if (e.key === "Enter") handleSaveName() }}
+                                maxLength={100}
+                                className="h-8 text-sm"
+                              />
+                            </div>
                           </div>
+                          <Button
+                            size="sm"
+                            className="h-8 gap-1.5 shrink-0 mt-2.5"
+                            onClick={handleSaveName}
+                            disabled={
+                              savingName ||
+                              (firstName.trim() === (profile?.firstName ?? "") &&
+                                lastName.trim() === (profile?.lastName ?? ""))
+                            }
+                          >
+                            {savingName
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <Save className="w-3.5 h-3.5" />
+                            }
+                            {savingName ? "..." : "Сохранить"}
+                          </Button>
                         </div>
 
                         {/* Email + роль в одной строке */}
