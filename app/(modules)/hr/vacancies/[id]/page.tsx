@@ -2342,8 +2342,13 @@ export default function VacancyPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="start" className="max-h-80 overflow-y-auto">
                         {v2Vacancies.map(v => (
-                          <DropdownMenuItem key={v.id} disabled={v.id === id} onClick={() => router.push(`/hr/vacancies/${v.id}?nav=v2&tab=${tabFromUrl}`)}>
-                            {v.id === id ? "● " : ""}{v.title}
+                          <DropdownMenuItem
+                            key={v.id}
+                            className={cn("cursor-pointer gap-1.5", v.id === id && "bg-accent font-semibold")}
+                            onClick={() => { if (v.id !== id) router.push(`/hr/vacancies/${v.id}?nav=v2&tab=${tabFromUrl}`) }}
+                          >
+                            {v.id === id && <Check className="w-3.5 h-3.5 text-primary shrink-0" />}
+                            <span className={cn(v.id === id && "underline underline-offset-2")}>{v.title}</span>
                           </DropdownMenuItem>
                         ))}
                       </DropdownMenuContent>
