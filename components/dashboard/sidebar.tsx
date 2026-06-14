@@ -470,7 +470,7 @@ export function DashboardSidebar() {
     <Sidebar collapsible="icon" className="border-r-0">
 
       {/* ── Header ── */}
-      <SidebarHeader className="p-4 border-b border-sidebar-border">
+      <SidebarHeader className="p-4 group-data-[collapsible=icon]:p-2 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
           {companyLogo ? (
             <div className={cn(
@@ -479,7 +479,9 @@ export function DashboardSidebar() {
               "shrink-0 flex items-center justify-center overflow-hidden rounded-md",
               logoPadded && "bg-white p-0.5",
               "h-10 w-auto max-w-[140px] min-w-10",
-              "group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:max-w-8 group-data-[collapsible=icon]:rounded-[6px] group-data-[collapsible=icon]:p-0.5",
+              // Свёрнутый сайдбар: ровный квадрат 32×32 (сбрасываем min-w-10, иначе
+              // бокс растягивается до 40×32 — «вытянутость»), центрируем по рейлу.
+              "group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:min-w-0 group-data-[collapsible=icon]:max-w-8 group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:rounded-[6px] group-data-[collapsible=icon]:p-0.5",
             )}>
               {/* Раскрытый сайдбар → полный логотип */}
               {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -9,9 +9,10 @@ const MODULE_GROUP_DEFS: Partial<Record<ModuleId, { label: string; hrefs: string
     // «Стройнее» (14.06): убраны дубли с Рабочим столом. Дашборд/Интервью/Резерв/
     // Вакансии/Библиотека — табы /hr/workspace; Отделы/Должности/Оргструктура —
     // табы /hr/company-structure. Сами роуты доступны напрямую.
-    { label: 'Найм',       hrefs: ['/hr/workspace', '/hr/candidates', '/hr/report', '/hr/hiring-settings'] },
-    { label: 'Оргструктура', hrefs: ['/hr/company-structure'] },
-    { label: 'В разработке', hrefs: ['/hr/courses'] },
+    { label: 'Найм',       hrefs: ['/hr/workspace', '/hr/candidates', '/hr/calendar', '/hr/report', '/hr/hiring-settings'] },
+    // Без label → пункты рендерятся плоско (без сворачиваемого под-заголовка):
+    // «Структура компании» и «Обучение» вынесены из под-меню Оргструктура/В разработке.
+    { label: '', hrefs: ['/hr/company-structure', '/hr/courses'] },
     // Заглушки — скрыты из меню 10.06.2026, вернуть по мере реализации:
     // /hr/onboarding — нет API, мокап роутера к под-страницам
     // /hr/employees — нет page.tsx (только [id]/skills/page.tsx)
