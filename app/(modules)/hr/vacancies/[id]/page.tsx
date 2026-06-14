@@ -563,6 +563,20 @@ export default function VacancyPage() {
       .then(d => setIsPlatformAdmin(!!(d?.data ?? d)?.isPlatformAdmin)).catch(() => {})
   }, [])
   const tabFromUrl = searchParams?.get("tab") ?? "candidates"
+  // v2-навигация (параллельный вариант, ?nav=v2): сжатый таб-бар + переключатель
+  // вакансий. Дефолт (без параметра) — текущая раскладка, не меняется.
+  const navV2 = searchParams?.get("nav") === "v2"
+  const [v2Vacancies, setV2Vacancies] = useState<{ id: string; title: string }[]>([])
+  useEffect(() => {
+    if (!navV2) return
+    fetch("/api/modules/hr/vacancies?limit=200&scope=active")
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => {
+        const vs = (j?.vacancies ?? j?.data?.vacancies ?? []) as Array<{ id: string; title: string }>
+        setV2Vacancies(vs.map(v => ({ id: v.id, title: v.title })))
+      })
+      .catch(() => {})
+  }, [navV2])
   // Режим серверной пагинации: только tab=candidates + viewMode=list.
   // В этом режиме useCandidates отключается (vacancyId=null), источником
   // строк списка становится usePaginatedCandidates. На остальных видах
@@ -2235,10 +2249,29 @@ export default function VacancyPage() {
 
           <div className="py-6 px-4 sm:px-14">
             {/* ═══ Breadcrumb ═══════════════════════════════ */}
-            <Button variant="ghost" size="sm" className="gap-1 text-sm text-muted-foreground -ml-2 mb-2" onClick={() => router.push("/hr/vacancies")}>
-              <ChevronLeft className="w-3.5 h-3.5" />
-              Все вакансии
-            </Button>
+            <div className="flex items-center gap-2 mb-2">
+              <Button variant="ghost" size="sm" className="gap-1 text-sm text-muted-foreground -ml-2" onClick={() => router.push("/hr/vacancies")}>
+                <ChevronLeft className="w-3.5 h-3.5" />
+                Все вакансии
+              </Button>
+              {/* v2: переключатель вакансий — прыгать между активными, не возвращаясь */}
+              {navV2 && v2Vacancies.length > 1 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-1.5 h-7 text-xs">
+                      <RefreshCw className="w-3 h-3" />Сменить вакансию<ChevronDown className="w-3 h-3 opacity-60" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="max-h-80 overflow-y-auto">
+                    {v2Vacancies.map(v => (
+                      <DropdownMenuItem key={v.id} disabled={v.id === id} onClick={() => router.push(`/hr/vacancies/${v.id}?nav=v2&tab=${tabFromUrl}`)}>
+                        {v.id === id ? "● " : ""}{v.title}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
 
             {/* ═══ ШАПКА ═══════════════════════════════════ */}
             <div ref={mainHeaderRef} className="flex flex-col sm:flex-row items-start justify-between gap-4 mb-4">
@@ -2472,6 +2505,29 @@ export default function VacancyPage() {
                       (Вакансия → Контент). Черновик — сначала настройка
                       (Вакансия → Контент), потом работа с людьми. Настройки всегда
                       последними (рендерятся отдельным TabsTrigger ниже). */}
+                  {navV2 ? (
+                  /* v2: 3 рабочие вкладки + ⚙ (настройка свёрнута) */
+                  <>
+                    <TabsTrigger value="candidates" className="gap-1.5"><Kanban className="w-3.5 h-3.5" />Кандидаты</TabsTrigger>
+                    <TabsTrigger value="interview" className="gap-1.5"><CalendarDays className="w-3.5 h-3.5" />Интервью</TabsTrigger>
+                    <TabsTrigger value="analytics" className="gap-1.5"><BarChart3 className="w-3.5 h-3.5" />Аналитика</TabsTrigger>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button type="button" className={cn("inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-sm font-medium transition-colors", ["outbound", "queue", "anketa", "content", "settings"].includes(activeTab) ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                          <Settings className="w-3.5 h-3.5" />Настройки<ChevronDown className="w-3 h-3 opacity-60" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        <DropdownMenuItem onClick={() => setActiveTab("anketa")}><ClipboardList className="w-3.5 h-3.5 mr-2" />Вакансия</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setActiveTab("content")}><BookOpen className="w-3.5 h-3.5 mr-2" />Контент</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setActiveTab("queue")}><Inbox className="w-3.5 h-3.5 mr-2" />Очередь</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setActiveTab("outbound")}><UserSearch className="w-3.5 h-3.5 mr-2" />Исходящий подбор</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setActiveTab("settings")}><Settings className="w-3.5 h-3.5 mr-2" />Настройки вакансии</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </>
+                  ) : (
+                  <>
                   {((status === "active" || status === "published") ? [
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
                     { value: "interview", icon: CalendarDays, label: "Интервью" },
@@ -2494,6 +2550,8 @@ export default function VacancyPage() {
                     </TabsTrigger>
                   ))}
                   <TabsTrigger value="settings" className="gap-1.5"><Settings className="w-3.5 h-3.5" />Настройки</TabsTrigger>
+                  </>
+                  )}
                 </TabsList>
 
                 {activeTab === "candidates" && (
