@@ -10,7 +10,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils"
 import type { CandidateAction } from "@/lib/column-config"
 import { applySortMode, type CandidateSortMode } from "@/lib/candidate-sort"
-import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ArrowUp, ArrowDown, Star, CalendarClock, CalendarPlus } from "lucide-react"
+import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ListFilter, Star, CalendarClock, CalendarPlus } from "lucide-react"
 import { DemoProgressBar, calcDemoPercent, calcDemoFraction } from "@/components/hr/demo-progress-bar"
 import { getStageLabel, getStageColorClasses } from "@/lib/stages"
 
@@ -129,18 +129,16 @@ function SortHeader({
       onClick={() => onToggle(sortKey)}
       aria-sort={ariaSort}
       className={cn(
-        "inline-flex items-center gap-1 rounded-md px-1.5 -mx-1.5 py-0.5 hover:bg-accent hover:text-foreground transition-colors whitespace-nowrap",
-        active ? "text-primary font-semibold bg-primary/20 ring-1 ring-primary/30" : "text-muted-foreground",
+        // Эталон иконок сортировки портала — как в DataHeadCell (ListFilter
+        // перед заголовком, opacity-40 неактивна, scale-y-flip для desc).
+        "inline-flex items-center gap-1.5 select-none whitespace-nowrap transition-colors",
         align === "center" && "justify-center",
-        align === "right" && "justify-end",
+        align === "right" && "flex-row-reverse",
+        dir ? "text-foreground" : "text-muted-foreground hover:text-foreground",
       )}
     >
+      <ListFilter className={cn("size-3.5 transition-transform", dir === "desc" && "scale-y-[-1]", !dir && "opacity-40")} />
       {label}
-      {dir === "asc" ? (
-        <ArrowUp className="size-3.5" strokeWidth={2.5} />
-      ) : dir === "desc" ? (
-        <ArrowDown className="size-3.5" strokeWidth={2.5} />
-      ) : null}
     </button>
   )
 }
