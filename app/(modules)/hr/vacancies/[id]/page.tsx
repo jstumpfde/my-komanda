@@ -2428,25 +2428,6 @@ export default function VacancyPage() {
                         </span>
                       </>
                     )}
-                    {hhConnected === true && apiVacancy?.hhVacancyId && hhSyncMeta && (<>
-                      <span>·</span>
-                      <UITooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            onClick={handleHhSync}
-                            disabled={hhSyncing}
-                            aria-label="Синхронизировать с hh"
-                            className="inline-flex items-center justify-center w-5 h-5 rounded-full hover:bg-accent disabled:opacity-50 transition-colors"
-                          >
-                            {hhSyncing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          Синхронизировать с hh • синх. {relativeHhSyncTime(hhSyncMeta.syncedAt)} назад
-                        </TooltipContent>
-                      </UITooltip>
-                    </>)}
                   </>}
                 </div>
                 <input
@@ -2639,6 +2620,7 @@ export default function VacancyPage() {
                         vacancyId={id}
                         syncing={hhSyncing}
                         onSync={syncHhResponses}
+                        lastSyncLabel={hhSyncMeta ? `синх. ${relativeHhSyncTime(hhSyncMeta.syncedAt)} назад` : undefined}
                         onProcessed={() => { refetchCandidates(); }}
                       />
                     )}

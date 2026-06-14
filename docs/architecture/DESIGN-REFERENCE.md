@@ -36,6 +36,9 @@
 - Навигация (стрелки/«Сегодня») — `<Button variant="outline" size="icon|sm">`.
 - Основное действие — `<Button size="sm"><Plus className="h-4 w-4 mr-1" />Текст</Button>` (primary).
 - Вспомогательная иконка (шестерёнка и т.п.) — `<Button variant="ghost" size="icon" className="h-8 w-8">`.
+- **Кнопка «Сохранить» — ВСЕГДА в правом нижнем углу** карточки/формы:
+  `<div className="flex justify-end pt-2"><Button>…Сохранить</Button></div>`.
+  Не под полями слева, не по центру.
 
 ## Карточки / Sheet настроек
 - Sheet: `SheetContent` + тело с горизонтальным padding (`px-4`/`px-6`), секции —
