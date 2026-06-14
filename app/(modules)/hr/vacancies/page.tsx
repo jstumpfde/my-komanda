@@ -794,8 +794,8 @@ export function VacanciesView({ embedded = false }: { embedded?: boolean }) {
                 <DataTable className="text-left min-w-[640px]">
                   <DataHead>
                     <DataSelectHeadCell checked={allSelected} onCheckedChange={toggleAll} />
-                    <DataHeadCell className="px-2" style={{ minWidth: 200 }}>Вакансия</DataHeadCell>
-                    <DataHeadCell className="px-2">Город</DataHeadCell>
+                    <DataHeadCell className="px-2" style={{ width: "100%" }}>Вакансия</DataHeadCell>
+                    <DataHeadCell className="px-2 whitespace-nowrap">Город</DataHeadCell>
                     <DataHeadCell className="px-2" sortable sortDir={colSort?.column === "status" ? colSort.dir : null} onSort={() => toggleColSort("status")}>Статус</DataHeadCell>
                     <DataHeadCell className="px-2 whitespace-nowrap" sortable sortDir={colSort?.column === "date" ? colSort.dir : null} onSort={() => toggleColSort("date")}>Создана</DataHeadCell>
                     <DataHeadCell className="px-2 whitespace-nowrap" sortable sortDir={colSort?.column === "hr" ? colSort.dir : null} onSort={() => toggleColSort("hr")}>Менеджер вакансии</DataHeadCell>
@@ -813,15 +813,15 @@ export function VacanciesView({ embedded = false }: { embedded?: boolean }) {
                         <td className="pl-5 pr-2 py-3.5 w-10" style={{ verticalAlign: "middle" }} onClick={(e) => e.stopPropagation()}>
                           <Checkbox checked={selected.has(v.id)} onCheckedChange={() => toggleOne(v.id)} style={{ display: "block", width: "1rem", height: "1rem", minHeight: "1rem", maxHeight: "1rem" }} />
                         </td>
-                        <td className="px-2 py-3.5 font-medium text-sm text-foreground"><div className="truncate max-w-[280px]">{v.title}</div></td>
-                        <td className="px-2 py-3.5 text-sm text-muted-foreground">{v.city ?? "—"}</td>
+                        <td className="px-2 py-3.5 font-medium text-sm text-foreground" style={{ width: "100%", maxWidth: 0 }}><div className="truncate">{v.title}</div></td>
+                        <td className="px-2 py-3.5 text-sm text-muted-foreground whitespace-nowrap">{v.city ?? "—"}</td>
                         <td className="px-2 py-3.5"><StatusBadge status={v.status} /></td>
                         <td className="px-2 py-3.5 text-sm text-muted-foreground whitespace-nowrap">
                           {v.deletedAt
                             ? <TrashCountdownBadge deletedAt={v.deletedAt} retentionDays={trashRetentionDays} />
                             : formatDate(v.createdAt)}
                         </td>
-                        <td className="px-2 py-3.5"><HrAvatar name={getHrName(v.createdBy, teamMembers)} /></td>
+                        <td className="px-2 py-3.5 whitespace-nowrap"><HrAvatar name={getHrName(v.createdBy, teamMembers)} /></td>
                         <td className="px-2 py-3.5" onClick={(e) => e.stopPropagation()}>
                           <div className="flex justify-center"><RowActions v={v} handlers={actions} /></div>
                         </td>
