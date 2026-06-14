@@ -7,7 +7,7 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Search, Users, UserPlus, Archive, XCircle, Loader2, Star, ChevronDown } from "lucide-react"
+import { Search, Users, UserPlus, Archive, XCircle, Loader2, ChevronDown, CalendarDays } from "lucide-react"
 import { useDebounce } from "@/hooks/use-debounce"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
@@ -70,11 +70,10 @@ interface GlobalCandidate {
 const DEFAULT_SETTINGS: CardDisplaySettings = {
   showSalary: false,
   showSalaryFull: true,
-  // «AI-оцен.» (скоринг анкеты) и «Рубрика» (shadow-движок) скрыты по умолчанию —
-  // нишевые, дублируют «AI-резм.»; экономят ширину под «Интервью» и кнопку
-  // «Запланировать». Включаются в «Вид».
-  showScore: false,
-  showRubricScore: false,
+  // Все колонки включены по умолчанию (решение Юрия). Таблица плотная — на
+  // узких экранах горизонтальный скролл; лишнее можно выключить в «Вид».
+  showScore: true,
+  showRubricScore: true,
   showAge: false,
   showSource: true,
   showCity: true,
@@ -201,9 +200,6 @@ export default function CandidatesPage() {
   const [search, setSearch] = useState("")
   const debouncedSearch = useDebounce(search, 300)
 
-  // Избранное (кнопка в тулбаре)
-  const [favoriteOnly, setFavoriteOnly] = useState(false)
-
   // Фильтр по вакансии (главный для кросс-вакансионной работы). "all" = все.
   const [vacancyFilter, setVacancyFilter] = useState("all")
   const [allVacancyTitles, setAllVacancyTitles] = useState<string[]>([])
@@ -315,8 +311,6 @@ export default function CandidatesPage() {
     const ps = new URLSearchParams()
     // Поисковая строка
     if (debouncedSearch.trim()) ps.set("search", debouncedSearch.trim())
-    // Избранное
-    if (favoriteOnly) ps.set("favorite", "true")
     // Фильтр по вакансии (по названию — глобальная ветка API)
     if (vacancyFilter !== "all") ps.set("vacancyTitle", vacancyFilter)
     // Из FilterState: стадии воронки
@@ -340,7 +334,7 @@ export default function CandidatesPage() {
     if (filters.dateFrom) ps.set("dateFrom", filters.dateFrom)
     if (filters.dateTo) ps.set("dateTo", filters.dateTo)
     return ps
-  }, [debouncedSearch, favoriteOnly, vacancyFilter, filters])
+  }, [debouncedSearch, vacancyFilter, filters])
 
   // Список вакансий для фильтра по вакансии.
   useEffect(() => {
@@ -573,7 +567,8 @@ export default function CandidatesPage() {
 
             {/* Toolbar — поиск + фильтр-поповер + избранные + вид (как в странице вакансии) */}
             <div className="flex items-center gap-2 mb-4 flex-wrap">
-              <div className="relative flex-[2] min-w-[160px]">
+              {/* Поиск ФИО — уже (≈половина), прижат влево */}
+              <div className="relative flex-none w-[340px] min-w-[180px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
                 <Input
                   placeholder="Поиск по имени..."
@@ -582,9 +577,9 @@ export default function CandidatesPage() {
                   className={cn("pl-9", FILTER_INPUT)}
                 />
               </div>
-              {/* Главный фильтр — по вакансии (для кросс-вакансионной работы) */}
+              {/* Главный фильтр — по вакансии (рядом с поиском, слева) */}
               <Select value={vacancyFilter} onValueChange={(v) => { setVacancyFilter(v); setPage(1) }}>
-                <SelectTrigger className={cn("flex-1 min-w-[150px] max-w-[280px]", FILTER_INPUT)}>
+                <SelectTrigger className={cn("flex-none w-[220px]", FILTER_INPUT)}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -593,35 +588,34 @@ export default function CandidatesPage() {
                   ))}
                 </SelectContent>
               </Select>
-              {/* Поп-овер фильтров — аналогично странице вакансии */}
-              <CandidateFilters
-                filters={filters}
-                onFiltersChange={(f) => { setFilters(f); setPage(1) }}
-                facets={facets}
-                candidates={[]}
-              />
-              {/* Кнопка «Избранные» */}
-              <Button
-                type="button"
-                variant={favoriteOnly ? "default" : "outline"}
-                size="sm"
-                onClick={() => setFavoriteOnly((v) => !v)}
-                className={cn(
-                  "h-8 gap-2 shrink-0",
-                  favoriteOnly && "bg-amber-500 hover:bg-amber-600 text-white border-amber-500",
-                )}
-                aria-pressed={favoriteOnly}
-                title={favoriteOnly ? "Показать всех" : "Только избранные"}
-              >
-                <Star className={cn("size-4", favoriteOnly && "fill-current")} />
-                <span className="hidden lg:inline">Избранные</span>
-              </Button>
-              {/* Тумблеры колонок (Вид) */}
-              <ColumnToggles
-                settings={settings}
-                onSettingsChange={setSettings}
-                onReset={() => setSettings(DEFAULT_SETTINGS)}
-              />
+              {/* Правая группа — Фильтр / Интервью / Вид (остаются справа) */}
+              <div className="ml-auto flex items-center gap-2">
+                {/* Полный фильтр — те же опции, что внутри вакансии (передаём кандидатов) */}
+                <CandidateFilters
+                  filters={filters}
+                  onFiltersChange={(f) => { setFilters(f); setPage(1) }}
+                  facets={facets}
+                  candidates={listColumns[0].candidates}
+                />
+                {/* Интервью по всем вакансиям */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-2 shrink-0"
+                  onClick={() => router.push("/hr/interviews")}
+                  title="Интервью по всем вакансиям"
+                >
+                  <CalendarDays className="size-4" />
+                  <span className="hidden lg:inline">Интервью</span>
+                </Button>
+                {/* Тумблеры колонок (Вид) */}
+                <ColumnToggles
+                  settings={settings}
+                  onSettingsChange={setSettings}
+                  onReset={() => setSettings(DEFAULT_SETTINGS)}
+                />
+              </div>
             </div>
 
             {/* Мини-сводка: роллап по этапам (чипы дают поэтапно, тут — итог) */}
