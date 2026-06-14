@@ -334,6 +334,12 @@ export default function BrandingPage() {
           </CardHeader>
           <CardContent className="px-5 pb-4 pt-0 space-y-5">
 
+          <p className="text-[11px] text-muted-foreground leading-snug">
+            Загружается <b>один логотип</b> — ниже превью, как он выглядит в разных местах.
+            Для сайдбара выберите вариант <b>с подложкой</b> (белый фон — читается на тёмном) или <b>без</b>.
+            Отдельно можно загрузить <b>иконку</b> — она заменит логотип в свёрнутом сайдбаре (квадрат 32×32).
+          </p>
+
           {/* Логотип */}
           <div className="flex items-start gap-6">
             <div
@@ -385,11 +391,6 @@ export default function BrandingPage() {
             <div className="flex items-center gap-4 flex-1 min-h-[128px]">
               {logoPreview ? (
                 <>
-                  <p className="basis-full text-[11px] text-muted-foreground -mb-1">
-                    Загружается <b>один логотип</b> — ниже превью, как он выглядит в разных местах.
-                    Для сайдбара выберите вариант <b>с подложкой</b> или <b>без</b>.
-                    Отдельно можно загрузить <b>иконку</b> — она заменит логотип в свёрнутом сайдбаре (квадрат 32×32).
-                  </p>
                   <div className="flex items-start gap-4">
                     {/* Sidebar: два варианта (с подложкой / без) — столбиком,
                         выбранный применяется в реальном сайдбаре. */}
