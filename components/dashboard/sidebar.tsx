@@ -168,6 +168,7 @@ export function DashboardSidebar() {
   // Company branding — предпочитаем brandName (короткий бренд), fallback на name.
   // fullName (юр. название) в sidebar не показываем.
   const [companyLogo, setCompanyLogo] = useState<string | null>(null)
+  const [companyFavicon, setCompanyFavicon] = useState<string | null>(null)
   const [companyName, setCompanyName] = useState<string | null>(null)
   const [companySlogan, setCompanySlogan] = useState<string | null>(null)
   // Вид логотипа: подложка-бейдж (padded, по умолчанию) или без неё (plain).
@@ -182,7 +183,9 @@ export function DashboardSidebar() {
             const display = d.brandName?.trim() || d.name?.trim() || null
             setCompanyName(display)
             setCompanySlogan(d.brandSlogan?.trim() || null)
-            setLogoPadded((d.customTheme as Record<string, unknown> | undefined)?.sidebarLogoMode !== "plain")
+            const theme = d.customTheme as Record<string, unknown> | undefined
+            setLogoPadded(theme?.sidebarLogoMode !== "plain")
+            setCompanyFavicon((theme?.faviconUrl as string | undefined) ?? null)
           }
         }).catch(() => {})
     }
@@ -473,17 +476,32 @@ export function DashboardSidebar() {
             <div className={cn(
               // Подложка-бейдж выбирается в Брендинге: padded — белый фон (любой
               // логотип читается на тёмном сайдбаре), plain — логотип без подложки.
+              // A: убран min-w-10 — бейдж плотно облегает лого по ширине, меньше белого по бокам.
               "shrink-0 flex items-center justify-center overflow-hidden rounded-md",
-              logoPadded && "bg-white p-0.5",
-              "h-10 w-auto max-w-[140px] min-w-10",
+              logoPadded && "bg-white p-px",
+              "h-10 w-auto max-w-[140px]",
               "group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:max-w-8 group-data-[collapsible=icon]:rounded-[6px] group-data-[collapsible=icon]:p-0.5",
             )}>
+              {/* Раскрытый сайдбар → полный логотип */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={companyLogo}
                 alt=""
-                className="max-h-full max-w-full object-contain"
+                className={cn(
+                  "max-h-full max-w-full object-contain",
+                  // C: если задан фавикон — скрываем логотип в свёрнутом состоянии
+                  companyFavicon && "group-data-[collapsible=icon]:hidden",
+                )}
               />
+              {/* C: фавикон — показывается только в свёрнутом состоянии */}
+              {companyFavicon && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={companyFavicon}
+                  alt=""
+                  className="hidden group-data-[collapsible=icon]:block max-h-full max-w-full object-contain"
+                />
+              )}
             </div>
           ) : companyName ? (
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shrink-0 text-base font-semibold">
