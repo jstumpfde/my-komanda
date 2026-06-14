@@ -1,6 +1,6 @@
 # docs/INDEX.md — карта документации my-komanda
 
-> Обновлено: 2026-06-10. Перемещены 46 файлов из корня репо.
+> Обновлено: 2026-06-14. Добавлена секция docs/architecture/ (вкл. SCORING-SYSTEMS.md). Ранее (10.06) перемещены 46 файлов из корня репо.
 > В корне остались только: README.md, CLAUDE.md, SALES-MODULE-HANDOFF.md, HANDOFF-audit-2026-06-10-cloud.md.
 
 ---
@@ -90,10 +90,31 @@
 | [employer_negotiations.md](employer_negotiations.md) | Заметки о переговорах с работодателями |
 | [smtp-setup.md](smtp-setup.md) | Настройка SMTP для отправки писем |
 
-## docs/architecture/ — архитектура, бэклог, роадмап (уже существовали)
+## docs/architecture/ — архитектура, бэклог, роадмап, скоринг
 
-Файлы в `docs/architecture/` не перемещались (уже на месте).
-Хэндоффы 04–05.06 (`HANDOFF-2026-06-04-*`, `HANDOFF-2026-06-05-FULL.md`) — там же.
+| Файл | Содержимое |
+|---|---|
+| [00-START-HERE.md](architecture/00-START-HERE.md) | Точка входа в архитектурную документацию |
+| [SCORING-SYSTEMS.md](architecture/SCORING-SYSTEMS.md) | ⭐ Три системы оценки кандидата (AI-резм./AI-оцен./Рубрика): когда что считается, что влияет на воронку |
+| [BIG-PICTURE.md](architecture/BIG-PICTURE.md) | Общая картина платформы |
+| [PRODUCT-VISION.md](architecture/PRODUCT-VISION.md) | Продуктовое видение |
+| [MODULE-MAP.md](architecture/MODULE-MAP.md) | Карта модулей |
+| [DESIGN-REFERENCE.md](architecture/DESIGN-REFERENCE.md) | Эталон дизайна (стиль /hr/calendar) |
+| [DECISIONS.md](architecture/DECISIONS.md) | Зафиксированные решения |
+| [OPEN-QUESTIONS.md](architecture/OPEN-QUESTIONS.md) | Открытые вопросы |
+| [MASTER-BACKLOG.md](architecture/MASTER-BACKLOG.md) | Главный бэклог |
+| [ROADMAP-ETA.md](architecture/ROADMAP-ETA.md) | Роадмап с оценками сроков |
+| [TASK-QUEUE.md](architecture/TASK-QUEUE.md) | Очередь задач |
+| [BUGS-AND-QUICKWINS.md](architecture/BUGS-AND-QUICKWINS.md) | Баги и быстрые победы |
+| [REQUIREMENTS-CHECKLIST.md](architecture/REQUIREMENTS-CHECKLIST.md) | Чеклист требований |
+| [SPEC-funnel-scoring-consolidation.md](architecture/SPEC-funnel-scoring-consolidation.md) | Спецификация консолидации воронки и скоринга (R4 Spec) |
+| [FUNNEL-TABS-AUDIT.md](architecture/FUNNEL-TABS-AUDIT.md) | Аудит табов воронки |
+| [PHASE0-funnel-parity.md](architecture/PHASE0-funnel-parity.md) · [PHASE1-PLAN.md](architecture/PHASE1-PLAN.md) · [PHASE3-RUNBOOK.md](architecture/PHASE3-RUNBOOK.md) | Этапы консолидации воронки |
+| [ROLES-VISIBILITY-ANALYSIS.md](architecture/ROLES-VISIBILITY-ANALYSIS.md) | Анализ ролей и видимости |
+| [STATUS-INTAKE.md](architecture/STATUS-INTAKE.md) · [intake-notes.md](architecture/intake-notes.md) | Интейк (спецификация вакансии) |
+| [TASKS-calendar.md](architecture/TASKS-calendar.md) · [TASKS-hiring-settings.md](architecture/TASKS-hiring-settings.md) · [TASKS-talent-pool.md](architecture/TASKS-talent-pool.md) · [TASKS-vacancy-editor.md](architecture/TASKS-vacancy-editor.md) | Задачи по разделам |
+| [ROLLBACK-RUNBOOK.md](architecture/ROLLBACK-RUNBOOK.md) · [WILDCARD-SUBDOMAIN-RUNBOOK.md](architecture/WILDCARD-SUBDOMAIN-RUNBOOK.md) | Раннбуки (откат, wildcard-поддомены) |
+| HANDOFF-2026-06-04-* · [HANDOFF-2026-06-05-FULL.md](architecture/HANDOFF-2026-06-05-FULL.md) · [SESSION-2026-06-03-EVENING.md](architecture/SESSION-2026-06-03-EVENING.md) · [PARALLEL-WORK-STATUS.md](architecture/PARALLEL-WORK-STATUS.md) | Хэндоффы и статусы сессий |
 
 ## docs/audit/ и docs/audits/ — аудиты (уже существовали)
 

@@ -1050,6 +1050,14 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
   const [aiLoadingStep, setAiLoadingStep] = useState(0)
   const [showCompanySection, setShowCompanySection] = useState(false)
   const [companyDescription, setCompanyDescription] = useState("")
+  // Задача #20: refs для авто-высоты textarea обязанностей и требований
+  const responsibilitiesRef = useRef<HTMLTextAreaElement>(null)
+  const requirementsRef = useRef<HTMLTextAreaElement>(null)
+  const autoResizeTextarea = (el: HTMLTextAreaElement | null) => {
+    if (!el) return
+    el.style.height = "auto"
+    el.style.height = `${el.scrollHeight}px`
+  }
   // O1 мультикомпанийность: основная компания (№1, из кабинета) + бренды (№2+).
   type BrandCompany = { id: string; name: string; slogan?: string; description?: string }
   const [mainCompanyName, setMainCompanyName] = useState("")
@@ -1498,15 +1506,22 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
   }, [data, scheduleAutosave])
   const handleBlur = useCallback(() => scheduleAutosave(), [scheduleAutosave])
 
+  // Задача #20: авто-высота textarea при изменении значений и монтировании
+  useEffect(() => { autoResizeTextarea(responsibilitiesRef.current) }, [data.responsibilities])
+  useEffect(() => { autoResizeTextarea(requirementsRef.current) }, [data.requirements])
+
   const sectionFilled = (idx: number) => {
     switch (idx) {
-      case 1: return !!(data.companyName || data.clientCompanyId || data.companyMode === "own")
+      // Секция 1 теперь объединяет «Компания» + «О компании» (задача #19)
+      case 1: return !!(data.companyName || data.clientCompanyId || data.companyMode === "own" || data.companyDescription)
       case 2: return !!data.positionCategory
       case 3: return !!(data.salaryFrom || data.salaryTo)
-      case 4: return !!data.companyDescription
-      case 5: return !!(data.responsibilities || data.requirements)
-      case 6: return data.requiredSkills.length > 0
-      case 7: return data.conditions.length > 0 || data.conditionsCustom.length > 0
+      // 4 = бывшая 5 «Обязанности и требования»
+      case 4: return !!(data.responsibilities || data.requirements)
+      // 5 = бывшая 6 «Портрет кандидата»
+      case 5: return data.requiredSkills.length > 0
+      // 6 = бывшая 7 «Условия»
+      case 6: return data.conditions.length > 0 || data.conditionsCustom.length > 0
       default: return false
     }
   }
@@ -1561,11 +1576,15 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
       </div>
 
       {/* ── 1. Компания ── */}
-      {/* Секция «Компания» — только при включённой мультикомпании (company-level
-          showCompanySelector) или локальном флаге. Баннера-приглашения для
-          одиночных компаний нет: им режим агентства не нужен. */}
-      {(showCompanySection || brandSelectorEnabled) && (
-        <Section title="Компания" number={1} filled={sectionFilled(1)} id="section-1">
+      {/* Секция объединяет «Компания» (селектор) + «О компании» (описание).
+          Показываем всегда: описание компании нужно любой вакансии.
+          Агентский CompanySelector — только при включённой мультикомпании. */}
+      <Section title="Компания" number={1} filled={sectionFilled(1)} id="section-1">
+        {/* Карточка компании: без дублирующего заголовка и без радиокнопок «Своя/Для клиента».
+            Агентский CompanySelector (с режимом «Для клиента») — только если явно включён флаг агентства.
+            По умолчанию показываем карточку основной компании из кабинета. */}
+        {(showCompanySection || brandSelectorEnabled) && data.companyMode === "client" ? (
+          /* Агентский режим активен — показываем полный селектор (включая RadioGroup) */
           <CompanySelector
             mode={data.companyMode}
             clientCompanyId={data.clientCompanyId}
@@ -1574,8 +1593,83 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
             onCompanyChange={v => set("clientCompanyId", v)}
             onContactChange={v => set("clientContactId", v)}
           />
-        </Section>
-      )}
+        ) : (showCompanySection || brandSelectorEnabled) ? (
+          /* Агентский режим доступен, но выбрана своя компания — компактная карточка + кнопка переключения */
+          <div className="space-y-2">
+            <div className="rounded-lg border px-3 py-2.5 bg-[var(--input-bg)] flex items-center gap-2 w-fit min-w-[260px] max-w-[50%]">
+              <span className="text-sm font-medium truncate">{mainCompanyName || "Из кабинета"}</span>
+            </div>
+            <button
+              type="button"
+              className="text-xs text-primary hover:underline"
+              onClick={() => set("companyMode", "client")}
+            >
+              Заполняю для клиента →
+            </button>
+          </div>
+        ) : null}
+
+        {/* O1: выбор компании-бренда, под которую идёт вакансия */}
+        {brandSelectorEnabled && brandCompanies.length > 0 && (
+          <div className="space-y-1.5 pb-3 border-b">
+            <Label className="text-xs">Компания вакансии</Label>
+            <Select
+              value={data.brandCompanyId || "__main__"}
+              onValueChange={(v) => {
+                const id = v === "__main__" ? "" : v
+                set("brandCompanyId", id)
+                if (id === "") {
+                  if (companyDescription) set("companyDescription", companyDescription)
+                } else {
+                  const bc = brandCompanies.find(c => c.id === id)
+                  if (bc?.description?.trim()) set("companyDescription", bc.description)
+                }
+              }}
+            >
+              <SelectTrigger className="h-9 bg-[var(--input-bg)] border border-input w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__main__">Основная: {mainCompanyName || "из кабинета"}</SelectItem>
+                {brandCompanies.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Под какую компанию идёт вакансия. Кандидат увидит её название и описание ниже.
+              Основная компания и список брендов настраиваются в{" "}
+              <a href="/hr/hiring-settings" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Настройках найма</a>.
+            </p>
+          </div>
+        )}
+
+        {/* Описание компании */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-xs">Описание компании</Label>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-[11px] gap-1 px-2"
+              disabled={!companyDescription}
+              onClick={() => set("companyDescription", companyDescription)}
+            >
+              <RefreshCw className="w-3 h-3" /> Подтянуть из настроек
+            </Button>
+          </div>
+          <Textarea
+            value={data.companyDescription}
+            onChange={e => set("companyDescription", e.target.value)}
+            onFocus={() => setAdvisorFocusedField("company")}
+            placeholder="Краткое описание компании для кандидатов..."
+            rows={5}
+            className="w-full text-sm bg-[var(--input-bg)] border border-input"
+          />
+          <p className="text-xs text-muted-foreground">Описание отображается в вакансии. По умолчанию подтягивается из настроек компании.</p>
+        </div>
+      </Section>
 
       {/* ── 2. Должность ── */}
       <Section title="Должность" number={2} filled={sectionFilled(2)} id="section-2">
@@ -1680,85 +1774,23 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
         </div>
       </Section>
 
-      {/* ── 4. О компании ── */}
-      <Section title="О компании" number={4} filled={sectionFilled(4)} id="section-4">
-        {/* O1: выбор компании-бренда, под которую идёт вакансия. №1 — основная
-            из кабинета (не редактируется), №2+ — бренды из Настроек найма. */}
-        {brandSelectorEnabled && brandCompanies.length > 0 && (
-          <div className="space-y-1.5 mb-3 pb-3 border-b">
-            <Label className="text-xs">Компания вакансии</Label>
-            <Select
-              value={data.brandCompanyId || "__main__"}
-              onValueChange={(v) => {
-                const id = v === "__main__" ? "" : v
-                set("brandCompanyId", id)
-                // Подставить описание выбранной компании (основная — из кабинета,
-                // бренд — из его описания). Имя бренда кандидат увидит на странице.
-                if (id === "") {
-                  if (companyDescription) set("companyDescription", companyDescription)
-                } else {
-                  const bc = brandCompanies.find(c => c.id === id)
-                  if (bc?.description?.trim()) set("companyDescription", bc.description)
-                }
-              }}
-            >
-              <SelectTrigger className="h-9 bg-[var(--input-bg)] border border-input w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__main__">Основная: {mainCompanyName || "из кабинета"}</SelectItem>
-                {brandCompanies.map(c => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Под какую компанию идёт вакансия. Кандидат увидит её название и описание ниже.
-              Основная компания и список брендов настраиваются в{" "}
-              <a href="/hr/hiring-settings" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Настройках найма</a>.
-            </p>
-          </div>
-        )}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between gap-2">
-            <Label className="text-xs">Описание компании</Label>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 text-[11px] gap-1 px-2"
-              disabled={!companyDescription}
-              onClick={() => set("companyDescription", companyDescription)}
-            >
-              <RefreshCw className="w-3 h-3" /> Подтянуть из настроек
-            </Button>
-          </div>
-          <Textarea
-            value={data.companyDescription}
-            onChange={e => set("companyDescription", e.target.value)}
-            onFocus={() => setAdvisorFocusedField("company")}
-            placeholder="Краткое описание компании для кандидатов..."
-            rows={5}
-            className="w-full text-sm bg-[var(--input-bg)] border border-input"
-          />
-          <p className="text-xs text-muted-foreground">Описание отображается в вакансии. По умолчанию подтягивается из настроек компании.</p>
-        </div>
-      </Section>
-
-      {/* ── 5. Обязанности и требования ── */}
-      <Section title="Обязанности и требования" number={5} filled={sectionFilled(5)} id="section-5">
+      {/* ── 4. Обязанности и требования (бывшая 5) ── */}
+      <Section title="Обязанности и требования" number={4} filled={sectionFilled(4)} id="section-4">
         <p className="text-xs text-muted-foreground mt-1">Описание задач и функционала должности</p>
         <div className="space-y-1.5">
           <div className="flex items-center gap-2">
             <Label className="text-xs">Обязанности</Label>
           </div>
+          {/* Задача #20: авто-высота по контенту, ручной ресайз сохранён */}
           <Textarea
+            ref={responsibilitiesRef}
             value={data.responsibilities}
             onChange={e => set("responsibilities", e.target.value)}
+            onInput={e => autoResizeTextarea(e.currentTarget)}
             onFocus={() => setAdvisorFocusedField("responsibilities")}
             placeholder="Опишите задачи и функционал должности..."
-            rows={4}
-            className="text-sm bg-[var(--input-bg)] border border-input"
+            className="text-sm bg-[var(--input-bg)] border border-input resize-vertical overflow-hidden"
+            style={{ minHeight: "96px" }}
           />
         </div>
         <div className="space-y-1.5">
@@ -1766,12 +1798,14 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
             <Label className="text-xs">Требования</Label>
           </div>
           <Textarea
+            ref={requirementsRef}
             value={data.requirements}
             onChange={e => set("requirements", e.target.value)}
+            onInput={e => autoResizeTextarea(e.currentTarget)}
             onFocus={() => setAdvisorFocusedField("requirements")}
             placeholder="Что должен знать и уметь кандидат..."
-            rows={4}
-            className="text-sm bg-[var(--input-bg)] border border-input"
+            className="text-sm bg-[var(--input-bg)] border border-input resize-vertical overflow-hidden"
+            style={{ minHeight: "96px" }}
           />
         </div>
 
@@ -1841,8 +1875,8 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
         )}
       </Section>
 
-      {/* ── 6. Портрет кандидата ── */}
-      <Section title="Портрет кандидата" number={6} filled={sectionFilled(6)} id="section-6">
+      {/* ── 5. Портрет кандидата (бывшая 6) ── */}
+      <Section title="Портрет кандидата" number={5} filled={sectionFilled(5)} id="section-5">
         {/* Skills */}
         <div className="space-y-1.5" onFocus={() => setAdvisorFocusedField("skills")}>
           <div className="flex items-center gap-2">
@@ -1866,16 +1900,17 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
 
         {/* Образование и языки — используются в «Исходящем подборе» (hh-фильтры) */}
         <div className="space-y-3 pt-2 border-t">
-          <div className="space-y-1.5 max-w-xs">
+          {/* Задача #21: лейбл «Образование», триггер w-full в контейнере min-w-[220px] */}
+          <div className="space-y-1.5" style={{ minWidth: "220px", maxWidth: "320px" }}>
             <div className="flex items-center gap-2">
-              <Label className="text-xs">Уровень образования</Label>
+              <Label className="text-xs">Образование</Label>
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground border-muted-foreground/30">hh.ru</Badge>
             </div>
             <Select
               value={data.educationLevel || "any"}
               onValueChange={v => set("educationLevel", v === "any" ? "" : v)}
             >
-              <SelectTrigger className="h-9">
+              <SelectTrigger className="h-9 w-full">
                 <SelectValue placeholder="Любое" />
               </SelectTrigger>
               <SelectContent>
@@ -2132,8 +2167,8 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
         </div>
       </Section>
 
-      {/* ── 7. Условия ── */}
-      <Section title="Условия" number={7} filled={sectionFilled(7)} id="section-7">
+      {/* ── 6. Условия (бывшая 7) ── */}
+      <Section title="Условия" number={6} filled={sectionFilled(6)} id="section-6">
         <div className="flex flex-wrap gap-x-4 gap-y-2" onFocus={() => setAdvisorFocusedField("conditions")}>
           {CONDITIONS_OPTIONS.map(opt => (
             <label key={opt} className="flex items-center gap-1.5">
@@ -2263,7 +2298,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
       {/* ── Документы и файлы ── скрыто по решению Юрия (не нужно в основном потоке анкеты) */}
       {/* Код секции сохранён — при необходимости убрать обёртку <div className="hidden"> */}
       <div className="hidden">
-      <Section title={`Документы${attachments.length > 0 ? ` (${attachments.length})` : ""}`} number={8} filled={attachments.length > 0}>
+      <Section title={`Документы${attachments.length > 0 ? ` (${attachments.length})` : ""}`} number={7} filled={attachments.length > 0}>
         <input ref={attachInputRef} type="file" multiple accept=".pdf,.doc,.docx,.xlsx,.xls,.txt,.jpg,.jpeg,.png,.webp" className="hidden"
           onChange={e => { if (e.target.files?.length) handleAttachUpload(e.target.files); e.target.value = "" }} />
 
@@ -2330,8 +2365,8 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
       </Section>
       </div>{/* /hidden Документы */}
 
-      {/* ── 9. AI-генерация ── */}
-      <Section title="AI-генерация" number={9} filled={data.screeningQuestions.length > 0 || !!data.hhDescription}>
+      {/* ── 7. AI-генерация (бывшая 9) ── */}
+      <Section title="AI-генерация" number={8} filled={data.screeningQuestions.length > 0 || !!data.hhDescription}>
         {/* Screening questions — блок виден всегда, чтобы можно было добавить
             первый вопрос вручную (а не только после AI-парса). БАГ-6. */}
         <div className="space-y-2">
@@ -2500,7 +2535,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
           {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
           Перезаполнить через AI
         </Button>
-        <Button variant="outline" size="sm" className="gap-1.5 h-9 text-xs" onClick={() => { setPreviewFullscreen(false); setPreviewOpen(true) }}>
+        <Button variant="outline" size="sm" className="gap-1.5 h-9 text-xs" onClick={() => { setPreviewFullscreen(true); setPreviewOpen(true) }}>
           <Eye className="w-3.5 h-3.5" />
           Предпросмотр вакансии
         </Button>
@@ -2540,6 +2575,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
                     data.requiredSkills.length > 0 && `\nОбязательные навыки: ${data.requiredSkills.join(", ")}`,
                     data.desiredSkills.length > 0 && `Желательные навыки: ${data.desiredSkills.join(", ")}`,
                     (data.conditions.length > 0 || data.conditionsCustom.length > 0) && `\nУсловия: ${[...data.conditions, ...data.conditionsCustom].join(", ")}`,
+                    data.companyDescription && `\nО компании:\n${data.companyDescription}`,
                   ].filter(Boolean).join("\n")
                   await navigator.clipboard.writeText(lines)
                   toast.success("Скопировано")
@@ -2558,6 +2594,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
                     data.requiredSkills.length > 0 && `<h3>Обязательные навыки</h3><p>${data.requiredSkills.join(", ")}</p>`,
                     data.desiredSkills.length > 0 && `<h3>Желательные навыки</h3><p>${data.desiredSkills.join(", ")}</p>`,
                     (data.conditions.length > 0 || data.conditionsCustom.length > 0) && `<h3>Условия</h3><p>${[...data.conditions, ...data.conditionsCustom].join(", ")}</p>`,
+                    data.companyDescription && `<h3>О компании</h3><p style="white-space:pre-line">${data.companyDescription}</p>`,
                   ].filter(Boolean).join("")
                   const w = window.open("", "_blank")
                   if (w) {
@@ -2626,6 +2663,12 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
                 <div className="flex flex-wrap gap-1.5">
                   {[...data.conditions, ...data.conditionsCustom].map(c => <Badge key={c} variant="secondary" className="text-xs">{c}</Badge>)}
                 </div>
+              </div>
+            )}
+            {data.companyDescription && (
+              <div className="mb-4">
+                <p className="font-semibold text-sm text-muted-foreground uppercase mb-1">О компании</p>
+                <div className="whitespace-pre-line">{data.companyDescription}</div>
               </div>
             )}
           </div>

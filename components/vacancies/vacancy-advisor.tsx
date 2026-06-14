@@ -632,7 +632,7 @@ function FormatCard({ workFormats }: { workFormats: string[] }) {
 
   const tips: { emoji: string; text: string }[] = []
   if (hasRemote) tips.push({ emoji: "✅", text: "Удалёнка: пул кандидатов шире — нет географических ограничений" })
-  if (hasOffice && !hasRemote) tips.push({ emoji: "📍", text: "Офис сужает пул, но повышает контроль. Премия к зарплате +10-20%" })
+  if (hasOffice && !hasRemote) tips.push({ emoji: "📍", text: "Офис сужает пул, но повышает контроль. Зарплаты выше +10-20%" })
   if (hasHybrid) tips.push({ emoji: "🔄", text: "Гибрид — компромисс: +30% к пулу vs офис" })
 
   return (
