@@ -6,10 +6,11 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
-import { LayoutGrid, Briefcase, Users } from "lucide-react"
+import { LayoutGrid, Briefcase, CalendarDays, Users } from "lucide-react"
 import { DashboardView } from "../dashboard/page"
 import { VacanciesView } from "../vacancies/page"
 import { TalentPoolView } from "../talent-pool/page"
+import { InterviewsView } from "../interviews/page"
 
 // «Рабочий стол» — единый экран-обзор HR с тремя табами:
 //   Обзор (дашборд по всем вакансиям) / Вакансии (список) / Резерв.
@@ -19,6 +20,7 @@ import { TalentPoolView } from "../talent-pool/page"
 const TABS = [
   { key: "overview",  label: "Обзор",    icon: LayoutGrid },
   { key: "vacancies", label: "Вакансии", icon: Briefcase },
+  { key: "interviews", label: "Интервью", icon: CalendarDays },
   { key: "reserve",   label: "Резерв",   icon: Users },
 ] as const
 
@@ -77,6 +79,7 @@ function WorkspaceInner() {
         {/* Контент активного таба — монтируется по одному */}
         {tab === "overview" && <DashboardView embedded />}
         {tab === "vacancies" && <VacanciesView embedded />}
+        {tab === "interviews" && <InterviewsView embedded />}
         {tab === "reserve" && <TalentPoolView embedded />}
       </SidebarInset>
     </SidebarProvider>
