@@ -428,6 +428,10 @@ export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
   name: text("name").notNull(),
+  // Раздельные Имя/Фамилия (миграция 0209). NULLABLE — legacy-юзеры без разбивки.
+  // При заполнении обоих полей name обновляется как `${firstName} ${lastName}`.
+  firstName: text("first_name"),
+  lastName: text("last_name"),
   passwordHash: text("password_hash").notNull(),
   role: text("role").notNull(), // 'admin' | 'manager' | 'client' | 'client_hr'
   companyId: uuid("company_id").references(() => companies.id),

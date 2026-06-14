@@ -607,17 +607,17 @@ export function VacanciesView({ embedded = false }: { embedded?: boolean }) {
       <div className="flex-1 overflow-auto bg-background min-w-0">
         <div className="pt-6 pb-36 md:pb-6 px-4 sm:px-14">
           {/* Header */}
-          <div className="flex items-center justify-between mb-5">
+          <div className="flex flex-wrap items-center gap-3 mb-5">
             {!embedded && (
-              <div>
+              <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <Briefcase className="h-5 w-5 text-violet-600" />
+                  <Briefcase className="h-5 w-5 text-violet-600 shrink-0" />
                   <h1 className="text-lg font-semibold text-foreground">Вакансии</h1>
                 </div>
                 {!loading && <p className="text-sm text-muted-foreground mt-0.5">{total} вакансий</p>}
               </div>
             )}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 ml-auto">
                 <div className="flex items-center rounded-lg border border-border bg-card p-0.5">
                   {VIEW_MODES.map((m) => (
                     <button key={m.value} type="button" onClick={() => setView(m.value)} title={m.label}
@@ -637,7 +637,7 @@ export function VacanciesView({ embedded = false }: { embedded?: boolean }) {
 
             {/* Табы: Активные (active+paused) / Архив (закрытые) / Корзина
                 (deleted_at, авто-удаление через trash_retention_days). Счётчики — по БД. */}
-            <div className="flex items-center gap-1 mb-4 border-b border-border">
+            <div className="flex items-center gap-1 mb-4 border-b border-border overflow-x-auto scrollbar-none">
               {([
                 { key: "active",  label: "Активные", n: counts.active },
                 { key: "archive", label: "Архив",    n: counts.archived },
@@ -648,7 +648,7 @@ export function VacanciesView({ embedded = false }: { embedded?: boolean }) {
                   type="button"
                   onClick={() => { setScope(t.key); setSelected(new Set()) }}
                   className={cn(
-                    "px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+                    "px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0",
                     scope === t.key
                       ? "border-primary text-foreground"
                       : "border-transparent text-muted-foreground hover:text-foreground",
@@ -661,20 +661,20 @@ export function VacanciesView({ embedded = false }: { embedded?: boolean }) {
 
             {/* Toolbar */}
             {!loading && vacancies.length > 0 && (<>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="relative flex-1 basis-1/2">
+              <div className="flex flex-wrap items-center gap-3 mb-4">
+                <div className="relative w-full sm:flex-1 sm:basis-1/2">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
                   <Input placeholder="Поиск по названию..." value={search} onChange={(e) => setSearch(e.target.value)}
                     className={cn("pl-9", FILTER_INPUT)} />
                 </div>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className={cn("flex-1 basis-1/4", FILTER_INPUT)}><SelectValue /></SelectTrigger>
+                  <SelectTrigger className={cn("w-full sm:flex-1 sm:basis-1/4", FILTER_INPUT)}><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {STATUS_FILTER_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <Select value={hrFilter} onValueChange={setHrFilter}>
-                  <SelectTrigger className={cn("flex-1 basis-1/4", FILTER_INPUT)}><SelectValue placeholder="Все HR" /></SelectTrigger>
+                  <SelectTrigger className={cn("w-full sm:flex-1 sm:basis-1/4", FILTER_INPUT)}><SelectValue placeholder="Все HR" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Все HR</SelectItem>
                     {teamMembers.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
@@ -790,7 +790,7 @@ export function VacanciesView({ embedded = false }: { embedded?: boolean }) {
             {/* Table */}
             {!loading && filtered.length > 0 && view === "table" && (
               <TableCard>
-                <DataTable className="text-left">
+                <DataTable className="text-left min-w-[640px]">
                   <DataHead>
                     <DataSelectHeadCell checked={allSelected} onCheckedChange={toggleAll} />
                     <DataHeadCell style={{ minWidth: 450 }}>Вакансия</DataHeadCell>

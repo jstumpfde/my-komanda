@@ -2288,9 +2288,9 @@ export default function VacancyPage() {
                 </Button>
               </div>
             )}
-            <div ref={mainHeaderRef} className="flex flex-col sm:flex-row items-start justify-between gap-4 mb-4">
-              <div>
-                <div className="flex flex-wrap items-center gap-3 mb-1">
+            <div ref={mainHeaderRef} className="flex flex-col sm:flex-row items-start justify-between gap-3 mb-4">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2 mb-1">
                   {/* v2: стрелка «Назад» — только если известен источник перехода */}
                   {navV2 && (searchParams?.get("from") || (typeof document !== "undefined" && document.referrer && new URL(document.referrer).hostname === window.location.hostname && !document.referrer.includes(`/hr/vacancies/${id}`))) && (
                     <UITooltip>
@@ -2315,7 +2315,7 @@ export default function VacancyPage() {
                     <input
                       autoFocus
                       disabled={savingName}
-                      className="flex-1 min-w-[320px] w-full text-xl sm:text-2xl font-semibold text-foreground bg-transparent border-b-2 border-primary outline-none px-0 py-0.5"
+                      className="flex-1 min-w-0 w-full text-xl sm:text-2xl font-semibold text-foreground bg-transparent border-b-2 border-primary outline-none px-0 py-0.5"
                       value={internalName}
                       onChange={(e) => setInternalName(e.target.value)}
                       onBlur={async () => { await saveVacancyName(internalName); setIsEditingName(false) }}
@@ -2548,8 +2548,8 @@ export default function VacancyPage() {
 
             {/* ═══ ТАБЫ + ВИД в одной строке ══════════════════ */}
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <div className="mb-3 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-                <div className="flex items-center justify-between gap-3 min-w-max">
+              <div className={cn("mb-3 -mx-4 px-4 sm:mx-0 sm:px-0", !navV2 && "overflow-x-auto")}>
+                <div className={cn("flex items-center justify-between gap-3", navV2 ? "flex-wrap" : "min-w-max")}>
                 <TabsList className="shrink-0">
                   {/* B8: группируем по смыслу. Активная — сначала работа с людьми
                       (Кандидаты → Аналитика → Исходящий подбор), потом настройка
@@ -2571,14 +2571,16 @@ export default function VacancyPage() {
                         {workTabs.map((t) => (
                           isVacancyLive ? (
                             <TabsTrigger key={t.value} value={t.value} className="gap-1.5">
-                              <t.icon className="w-3.5 h-3.5" />{t.label}
+                              <t.icon className="w-3.5 h-3.5" />
+                              <span className="hidden xs:inline sm:inline">{t.label}</span>
                             </TabsTrigger>
                           ) : (
                             <UITooltip key={t.value}>
                               <TooltipTrigger asChild>
                                 <span className="inline-flex">
                                   <TabsTrigger value={t.value} className="gap-1.5 opacity-40 pointer-events-none" disabled>
-                                    <t.icon className="w-3.5 h-3.5" />{t.label}
+                                    <t.icon className="w-3.5 h-3.5" />
+                                    <span className="hidden xs:inline sm:inline">{t.label}</span>
                                   </TabsTrigger>
                                 </span>
                               </TooltipTrigger>
@@ -2596,7 +2598,8 @@ export default function VacancyPage() {
                             "data-[state=active]:bg-background data-[state=active]:border-primary dark:data-[state=active]:text-foreground dark:data-[state=active]:border-primary/70 dark:data-[state=active]:bg-input/30 text-foreground dark:text-muted-foreground inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-md border-2 border-transparent px-2 py-1 text-sm font-medium whitespace-nowrap transition-[color,box-shadow] disabled:pointer-events-none disabled:opacity-50 data-[state=active]:shadow-sm"
                           )}
                         >
-                          <Settings className="w-3.5 h-3.5" />Настройки
+                          <Settings className="w-3.5 h-3.5" />
+                          <span className="hidden xs:inline sm:inline">Настройки</span>
                         </button>
                       </>
                     )
@@ -2630,7 +2633,7 @@ export default function VacancyPage() {
                 </TabsList>
 
                 {activeTab === "candidates" && (
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                     {activeTab === "candidates" && hhConnected === true && apiVacancy?.hhVacancyId && hhSyncMeta && (
                       <HhAutoProcess
                         vacancyId={id}
@@ -2753,57 +2756,129 @@ export default function VacancyPage() {
               </div>
 
               {/* v2: плоский ряд из 10 под-табов — виден когда активна группа «Настройки» */}
-              {navV2 && ["anketa", "content", "queue", "outbound", "settings"].includes(activeTab) && (
-                <div className="mb-4 border-b overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-                  <div className="flex items-center gap-1 min-w-max">
-                    {([
-                      /* Порядок по ТЗ #26: Вакансия · Контент · Исходящий подбор · Портрет · Воронка · Источники · Расписание · Интеграции · Брендинг · Очередь */
-                      { kind: "tab",     value: "anketa"         , label: "Вакансия",          icon: ClipboardList, section: null },
-                      { kind: "tab",     value: "content"        , label: "Контент",            icon: BookOpen,      section: null },
-                      { kind: "tab",     value: "outbound"       , label: "Исходящий подбор",   icon: UserSearch,    section: null },
-                      { kind: "section", value: "settings"       , label: "Портрет",            icon: Target,        section: "spec"          },
-                      { kind: "section", value: "settings"       , label: "Воронка",            icon: Workflow,      section: "funnel-builder" },
-                      { kind: "section", value: "settings"       , label: "Источники",          icon: Link2,         section: "sources"        },
-                      { kind: "section", value: "settings"       , label: "Расписание",         icon: Clock,         section: "ai"             },
-                      { kind: "section", value: "settings"       , label: "Интеграции",         icon: Settings,      section: "integrations"   },
-                      { kind: "section", value: "settings"       , label: "Брендинг",           icon: Globe,         section: "page"           },
-                      { kind: "tab",     value: "queue"          , label: "Очередь",            icon: Inbox,         section: null },
-                    ] as const).map((s) => {
-                      const isActive = s.kind === "tab"
-                        ? activeTab === s.value
-                        : activeTab === "settings" && settingsSection === s.section
-                      return (
+              {navV2 && ["anketa", "content", "queue", "outbound", "settings"].includes(activeTab) && (() => {
+                const settingsSubTabs = [
+                  /* Порядок по ТЗ #26: Вакансия · Контент · Исходящий подбор · Портрет · Воронка · Источники · Расписание · Интеграции · Брендинг · Очередь */
+                  { kind: "tab",     value: "anketa"  , label: "Вакансия",        icon: ClipboardList, section: null             },
+                  { kind: "tab",     value: "content" , label: "Контент",          icon: BookOpen,      section: null             },
+                  { kind: "tab",     value: "outbound", label: "Исходящий подбор", icon: UserSearch,    section: null             },
+                  { kind: "section", value: "settings", label: "Портрет",          icon: Target,        section: "spec"           },
+                  { kind: "section", value: "settings", label: "Воронка",          icon: Workflow,      section: "funnel-builder" },
+                  { kind: "section", value: "settings", label: "Источники",        icon: Link2,         section: "sources"        },
+                  { kind: "section", value: "settings", label: "Расписание",       icon: Clock,         section: "ai"             },
+                  { kind: "section", value: "settings", label: "Интеграции",       icon: Settings,      section: "integrations"   },
+                  { kind: "section", value: "settings", label: "Брендинг",         icon: Globe,         section: "page"           },
+                  { kind: "tab",     value: "queue"   , label: "Очередь",          icon: Inbox,         section: null             },
+                ] as const
+                const handleSubTabClick = (s: typeof settingsSubTabs[number]) => {
+                  if (s.kind === "section") {
+                    setActiveTab("settings")
+                    setSettingsSection(s.section as SettingsSectionId)
+                    const sp = new URLSearchParams(window.location.search)
+                    sp.set("tab", "settings")
+                    sp.set("section", s.section as string)
+                    router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+                  } else {
+                    setV2SettingsSub(s.value as typeof v2SettingsSub)
+                    setActiveTab(s.value)
+                  }
+                }
+                const getIsActive = (s: typeof settingsSubTabs[number]) =>
+                  s.kind === "tab" ? activeTab === s.value : activeTab === "settings" && settingsSection === s.section
+                // Разбиваем: на lg+ все 10 в строке; на <lg первые 5 видны, 6-10 в «Ещё»
+                // Если активный пункт попал в «скрытые» — добавляем его перед «Ещё» (на мобильных)
+                const VISIBLE_COUNT_SM = 5
+                const visibleTabs = settingsSubTabs.slice(0, VISIBLE_COUNT_SM)
+                const overflowTabs = settingsSubTabs.slice(VISIBLE_COUNT_SM)
+                const activeOverflow = overflowTabs.find(getIsActive)
+                return (
+                  <div className="mb-4 border-b -mx-4 px-4 sm:mx-0 sm:px-0">
+                    {/* lg+: все 10 в одной строке (overflow-x-auto как запасной) */}
+                    <div className="hidden lg:flex items-center gap-1 overflow-x-auto">
+                      {settingsSubTabs.map((s) => {
+                        const isActive = getIsActive(s)
+                        return (
+                          <button
+                            key={s.kind === "section" ? `section-${s.section}` : s.value}
+                            type="button"
+                            onClick={() => handleSubTabClick(s)}
+                            className={cn(
+                              "inline-flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0",
+                              isActive ? "border-primary text-foreground font-medium" : "border-transparent text-muted-foreground hover:text-foreground"
+                            )}
+                          >
+                            <s.icon className="w-3.5 h-3.5" />{s.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {/* <lg: первые 5 + активный из «скрытых» + бургер «Ещё» */}
+                    <div className="flex lg:hidden items-center gap-0.5 overflow-x-auto">
+                      {visibleTabs.map((s) => {
+                        const isActive = getIsActive(s)
+                        return (
+                          <button
+                            key={s.kind === "section" ? `section-${s.section}` : s.value}
+                            type="button"
+                            onClick={() => handleSubTabClick(s)}
+                            className={cn(
+                              "inline-flex items-center gap-1.5 px-2.5 py-2 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0",
+                              isActive ? "border-primary text-foreground font-medium" : "border-transparent text-muted-foreground hover:text-foreground"
+                            )}
+                          >
+                            <s.icon className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">{s.label}</span>
+                          </button>
+                        )
+                      })}
+                      {/* Если активный пункт в «скрытых» — показать его отдельно */}
+                      {activeOverflow && (
                         <button
-                          key={s.kind === "section" ? `section-${s.section}` : s.value}
+                          key={`active-overflow-${activeOverflow.kind === "section" ? activeOverflow.section : activeOverflow.value}`}
                           type="button"
-                          onClick={() => {
-                            if (s.kind === "section") {
-                              setActiveTab("settings")
-                              setSettingsSection(s.section as SettingsSectionId)
-                              const sp = new URLSearchParams(window.location.search)
-                              sp.set("tab", "settings")
-                              sp.set("section", s.section as string)
-                              router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
-                            } else {
-                              setV2SettingsSub(s.value)
-                              setActiveTab(s.value)
-                            }
-                          }}
-                          className={cn(
-                            "inline-flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0",
-                            isActive
-                              ? "border-primary text-foreground font-medium"
-                              : "border-transparent text-muted-foreground hover:text-foreground"
-                          )}
+                          onClick={() => handleSubTabClick(activeOverflow)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-2 text-sm border-b-2 -mb-px border-primary text-foreground font-medium whitespace-nowrap shrink-0"
                         >
-                          <s.icon className="w-3.5 h-3.5" />
-                          {s.label}
+                          <activeOverflow.icon className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">{activeOverflow.label}</span>
                         </button>
-                      )
-                    })}
+                      )}
+                      {/* Бургер «Ещё» для скрытых пунктов */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            className={cn(
+                              "inline-flex items-center gap-1 px-2.5 py-2 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0",
+                              activeOverflow
+                                ? "border-primary text-foreground font-medium"
+                                : "border-transparent text-muted-foreground hover:text-foreground"
+                            )}
+                          >
+                            <span className="hidden sm:inline">Ещё</span>
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          {overflowTabs.map((s) => {
+                            const isActive = getIsActive(s)
+                            return (
+                              <DropdownMenuItem
+                                key={s.kind === "section" ? `section-${s.section}` : s.value}
+                                onClick={() => handleSubTabClick(s)}
+                                className={cn("gap-2", isActive && "font-medium text-primary")}
+                              >
+                                <s.icon className="w-3.5 h-3.5 shrink-0" />{s.label}
+                                {isActive && <Check className="w-3.5 h-3.5 ml-auto" />}
+                              </DropdownMenuItem>
+                            )
+                          })}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </div>
-                </div>
-              )}
+                )
+              })()}
 
               <TabsContent value="anketa">
                 <AnketaTab

@@ -26,6 +26,8 @@ export { PLATFORM_ROLES, CLIENT_ROLES, COMPANY_OWNER_ROLES, isPlatformRole, isCo
 export interface User {
   id: string
   name: string
+  firstName?: string | null
+  lastName?: string | null
   email: string
   role: UserRole
   companyId?: string | null
@@ -75,6 +77,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ? {
         id: session.user.id,
         name: session.user.name ?? "",
+        firstName: session.user.firstName ?? null,
+        lastName: session.user.lastName ?? null,
         email: session.user.email ?? "",
         role,
         companyId: session.user.companyId ?? null,
