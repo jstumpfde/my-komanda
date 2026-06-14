@@ -2,6 +2,7 @@
 
 import { useMemo } from "react"
 import type { Candidate } from "./candidate-card"
+import { CandidateAvatar } from "./candidate-avatar"
 import type { CardDisplaySettings } from "./card-settings"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -168,12 +169,13 @@ export function TilesView({
             <div className="p-4">
               {/* Header: avatar + name + score + menu */}
               <div className="flex items-start gap-2 mb-2">
-                <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
-                  style={{ background: `linear-gradient(135deg, ${candidate.colorFrom}, ${candidate.colorTo})` }}
-                >
-                  {candidate.name.charAt(0)}
-                </div>
+                <CandidateAvatar
+                  candidateId={candidate.id}
+                  name={candidate.name}
+                  photoUrl={candidate.photoUrl}
+                  colorFrom={candidate.colorFrom}
+                  colorTo={candidate.colorTo}
+                />
                 <div className="min-w-0 flex-1">
                   <h4 className="font-semibold text-foreground text-sm leading-tight truncate">{candidate.name}</h4>
                   {/* Demo progress bar (тонкая 4px шкала по логике HR-003) */}

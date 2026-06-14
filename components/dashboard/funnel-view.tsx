@@ -151,35 +151,36 @@ export function FunnelView({ columns, settings, onOpenProfile, onAction }: Funne
         )}
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      {/* Stats Grid — все этапы в один ряд (узкие карточки), число сверху, без ФИО */}
+      <div className="flex gap-2 overflow-x-auto pb-1">
         {columns.map((col, i) => {
           const rate = conversionRates[i]
           const isCardExpanded = expandedCardId === col.id
           return (
             <div
               key={col.id}
-              className="bg-card border border-border rounded-xl overflow-hidden cursor-pointer"
+              className="flex-1 min-w-[104px] bg-card border border-border rounded-xl overflow-hidden cursor-pointer"
               onClick={() => setExpandedCardId(isCardExpanded ? null : col.id)}
             >
               <div
                 className="h-1"
                 style={{ background: `linear-gradient(90deg, ${col.colorFrom}, ${col.colorTo})` }}
               />
-              <div className="p-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-[11px] text-muted-foreground mb-1 truncate">{col.title}</p>
-                  <ChevronDown
-                    className="size-3.5 text-muted-foreground transition-transform duration-200"
-                    style={{ transform: isCardExpanded ? "rotate(180deg)" : "rotate(0deg)" }}
-                  />
-                </div>
+              <div className="p-2.5">
+                {/* Число — в верхней части */}
                 <p
-                  className="text-2xl font-bold"
+                  className="text-2xl font-bold leading-none"
                   style={{ backgroundImage: `linear-gradient(135deg, ${col.colorFrom}, ${col.colorTo})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}
                 >
                   {col.count}
                 </p>
+                <div className="flex items-center justify-between gap-1 mt-1">
+                  <p className="text-[10px] text-muted-foreground truncate">{col.title}</p>
+                  <ChevronDown
+                    className="size-3 text-muted-foreground shrink-0 transition-transform duration-200"
+                    style={{ transform: isCardExpanded ? "rotate(180deg)" : "rotate(0deg)" }}
+                  />
+                </div>
                 <div className="mt-2 flex items-center gap-1.5">
                   <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
                     <div
@@ -192,16 +193,6 @@ export function FunnelView({ columns, settings, onOpenProfile, onAction }: Funne
                   </div>
                   <span className="text-[10px] text-muted-foreground">{rate}%</span>
                 </div>
-                {col.candidates.length > 0 && (
-                  <div className="mt-2 space-y-1">
-                    {col.candidates.slice(0, 2).map((c) => (
-                      <p key={c.id} className="text-[10px] text-muted-foreground truncate">• {c.name}</p>
-                    ))}
-                    {col.candidates.length > 2 && (
-                      <p className="text-[10px] text-muted-foreground">+{col.candidates.length - 2} ещё</p>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
           )

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Calendar, Check, X, Star } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { CandidateAvatar } from "./candidate-avatar"
 import type { CardDisplaySettings } from "./card-settings"
 import type { CandidateAction } from "@/lib/column-config"
 import { DemoProgressBar, calcDemoPercent } from "@/components/hr/demo-progress-bar"
@@ -167,10 +168,17 @@ export function CandidateCard({ candidate, settings, columnId, isLastColumn, onO
         )}
       </div>
 
-      {/* Row 1: ФИО */}
-      <p className={cn(
-        "font-medium text-base text-foreground pr-24"
-      )}>{candidate.name}</p>
+      {/* Row 1: аватар + ФИО */}
+      <div className="flex items-center gap-2 pr-24">
+        <CandidateAvatar
+          candidateId={candidate.id}
+          name={candidate.name}
+          photoUrl={candidate.photoUrl}
+          colorFrom="#a78bfa"
+          colorTo="#8b5cf6"
+        />
+        <p className="font-medium text-base text-foreground truncate">{candidate.name}</p>
+      </div>
 
       {/* Demo progress bar — always visible */}
       {(() => {
