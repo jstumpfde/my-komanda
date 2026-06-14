@@ -12,21 +12,23 @@ import { checkPasswordAttempts } from "@/lib/rate-limit"
 
 // Expose a stable ref so the JWT callback can read the DB
 // (needed when updateSession() is called after onboarding saves companyId)
-const getFreshUserFields = async (userId: string): Promise<{ companyId: string | null; name: string | null; avatarUrl: string | null; permissions: Record<string, boolean> | null }> => {
+const getFreshUserFields = async (userId: string): Promise<{ companyId: string | null; name: string | null; firstName: string | null; lastName: string | null; avatarUrl: string | null; permissions: Record<string, boolean> | null }> => {
   try {
     const [row] = await db
-      .select({ companyId: users.companyId, name: users.name, avatarUrl: users.avatarUrl, permissions: users.permissions })
+      .select({ companyId: users.companyId, name: users.name, firstName: users.firstName, lastName: users.lastName, avatarUrl: users.avatarUrl, permissions: users.permissions })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1)
     return {
       companyId: row?.companyId ?? null,
       name: row?.name ?? null,
+      firstName: row?.firstName ?? null,
+      lastName: row?.lastName ?? null,
       avatarUrl: row?.avatarUrl ?? null,
       permissions: (row?.permissions as Record<string, boolean> | null) ?? null,
     }
   } catch {
-    return { companyId: null, name: null, avatarUrl: null, permissions: null }
+    return { companyId: null, name: null, firstName: null, lastName: null, avatarUrl: null, permissions: null }
   }
 }
 
@@ -38,6 +40,8 @@ declare module "next-auth" {
       id: string
       email: string
       name: string
+      firstName: string | null
+      lastName: string | null
       role: UserRole
       companyId: string | null
       avatarUrl: string | null
@@ -156,10 +160,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.id = user.id as string
         token.role = ((user.role as UserRole) ?? "client") as string
         token.companyId = (user.companyId ?? null) as string | null
-        // Load permissions on first sign-in
+        // Load permissions + firstName/lastName on first sign-in
         if (user.id) {
           const fresh = await getFreshUserFields(user.id)
           token.permissions = fresh.permissions
+          token.firstName = fresh.firstName
+          token.lastName = fresh.lastName
         }
       }
       // updateSession() fires with trigger === "update".
@@ -171,6 +177,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const fresh = await getFreshUserFields(token.id as string)
         token.companyId = fresh.companyId
         if (fresh.name && !updateData?.name) token.name = fresh.name
+        token.firstName = fresh.firstName
+        token.lastName = fresh.lastName
         token.avatarUrl = fresh.avatarUrl
         token.permissions = fresh.permissions
       }
@@ -179,6 +187,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       session.user.id = token.id as string
       session.user.name = (token.name as string) ?? session.user.name
+      session.user.firstName = (token.firstName as string | null) ?? null
+      session.user.lastName = (token.lastName as string | null) ?? null
       session.user.role = token.role as UserRole
       session.user.companyId = (token.companyId as string | null) ?? null
       session.user.avatarUrl = (token.avatarUrl as string | null) ?? null

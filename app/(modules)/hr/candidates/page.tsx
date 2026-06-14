@@ -566,9 +566,9 @@ export default function CandidatesPage() {
             </div>
 
             {/* Toolbar — поиск + фильтр-поповер + избранные + вид (как в странице вакансии) */}
-            <div className="flex items-center gap-2 mb-4 flex-wrap">
-              {/* Поиск ФИО — уже (≈половина), прижат влево */}
-              <div className="relative flex-none w-[340px] min-w-[180px]">
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              {/* Поиск ФИО — на мобильных full-width, на sm+ фиксированная ширина */}
+              <div className="relative w-full sm:w-[340px] sm:flex-none min-w-0">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
                 <Input
                   placeholder="Поиск по имени..."
@@ -577,9 +577,9 @@ export default function CandidatesPage() {
                   className={cn("pl-9", FILTER_INPUT)}
                 />
               </div>
-              {/* Главный фильтр — по вакансии (рядом с поиском, слева) */}
+              {/* Главный фильтр — по вакансии (на мобильных full-width, на sm+ фиксированная) */}
               <Select value={vacancyFilter} onValueChange={(v) => { setVacancyFilter(v); setPage(1) }}>
-                <SelectTrigger className={cn("flex-none w-[220px]", FILTER_INPUT)}>
+                <SelectTrigger className={cn("w-full sm:w-[220px] sm:flex-none", FILTER_INPUT)}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -588,8 +588,8 @@ export default function CandidatesPage() {
                   ))}
                 </SelectContent>
               </Select>
-              {/* Правая группа — Фильтр / Интервью / Вид (остаются справа) */}
-              <div className="ml-auto flex items-center gap-2">
+              {/* Правая группа — Фильтр / Интервью / Вид (на мобильных тоже flex-wrap) */}
+              <div className="flex items-center gap-2 sm:ml-auto flex-wrap">
                 {/* Полный фильтр — те же опции, что внутри вакансии (передаём кандидатов) */}
                 <CandidateFilters
                   filters={filters}

@@ -16,6 +16,8 @@ export async function GET() {
         id: users.id,
         email: users.email,
         name: users.name,
+        firstName: users.firstName,
+        lastName: users.lastName,
         role: users.role,
         companyId: users.companyId,
         avatarUrl: users.avatarUrl,
@@ -47,6 +49,8 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json() as {
       companyId?: unknown
       name?: unknown
+      firstName?: unknown
+      lastName?: unknown
       newEmail?: unknown
       currentPassword?: unknown
       newPassword?: unknown
@@ -79,6 +83,31 @@ export async function PATCH(req: NextRequest) {
       if (!name) return apiError("Имя не может быть пустым", 400)
       if (name.length > 100) return apiError("Имя слишком длинное", 400)
       updates.name = name
+    }
+
+    // ── firstName / lastName (миграция 0209) ───────────────
+    // Принимаем раздельно; если заданы оба — синхронизируем name = "Имя Фамилия".
+    if (body.firstName !== undefined) {
+      const first = typeof body.firstName === "string" ? body.firstName.trim() : ""
+      if (first.length > 100) return apiError("Имя слишком длинное", 400)
+      updates.firstName = first || null
+    }
+    if (body.lastName !== undefined) {
+      const last = typeof body.lastName === "string" ? body.lastName.trim() : ""
+      if (last.length > 100) return apiError("Фамилия слишком длинная", 400)
+      updates.lastName = last || null
+    }
+    // Если оба поля заданы в этом запросе — обновляем name для совместимости.
+    {
+      const first = updates.firstName !== undefined
+        ? (updates.firstName as string | null)
+        : undefined
+      const last = updates.lastName !== undefined
+        ? (updates.lastName as string | null)
+        : undefined
+      if (first !== undefined && last !== undefined && (first || last)) {
+        updates.name = [first, last].filter(Boolean).join(" ")
+      }
     }
 
     // ── newEmail ───────────────────────────────────────────

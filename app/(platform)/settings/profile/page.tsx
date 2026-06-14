@@ -52,6 +52,8 @@ interface UserProfile {
   id: string
   email: string
   name: string
+  firstName?: string | null
+  lastName?: string | null
   role: string
   companyId: string | null
   avatarUrl: string | null
@@ -69,6 +71,8 @@ export default function ProfileSettingsPage() {
 
   // Name form
   const [name, setName] = useState("")
+  const [firstName, setFirstName] = useState("")
+  const [lastName, setLastName] = useState("")
   const [savingName, setSavingName] = useState(false)
 
   // Password form
@@ -145,6 +149,8 @@ export default function ProfileSettingsPage() {
         const p = data.data ?? (data as unknown as UserProfile)
         setProfile(p)
         setName(p.name ?? "")
+        setFirstName(p.firstName ?? "")
+        setLastName(p.lastName ?? "")
         setAvatarUrl((p as unknown as { avatarUrl?: string }).avatarUrl ?? null)
         if (p.customSchedule?.days) {
           setScheduleDays({ ...DEFAULT_DAYS, ...p.customSchedule.days })
@@ -162,7 +168,11 @@ export default function ProfileSettingsPage() {
 
   // ── Save name ────────────────────────────────────────────────
   const handleSaveName = async () => {
-    if (!name.trim()) {
+    const first = firstName.trim()
+    const last = lastName.trim()
+    // Если заданы оба — вычисляем name автоматически; иначе берём поле name
+    const computedName = (first && last) ? `${first} ${last}` : (first || last || name.trim())
+    if (!computedName) {
       toast.error("Имя не может быть пустым")
       return
     }
@@ -171,15 +181,16 @@ export default function ProfileSettingsPage() {
       const res = await fetch("/api/auth/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim() }),
+        body: JSON.stringify({ firstName: first || null, lastName: last || null }),
       })
       const json = await res.json()
       if (!res.ok) {
         toast.error(json.error ?? "Ошибка сохранения")
         return
       }
-      setProfile(prev => prev ? { ...prev, name: name.trim() } : prev)
-      await updateSession({ name: name.trim() })
+      setProfile(prev => prev ? { ...prev, name: computedName, firstName: first || null, lastName: last || null } : prev)
+      setName(computedName)
+      await updateSession({})
       toast.success("Имя обновлено")
     } catch {
       toast.error("Ошибка сети")
@@ -331,14 +342,22 @@ export default function ProfileSettingsPage() {
                       </div>
 
                       <div className="flex-1 min-w-0 space-y-2.5">
-                        {/* Имя — inline edit + Save inline */}
+                        {/* Имя + Фамилия — два раздельных поля (#33) */}
                         <div>
-                          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Имя</Label>
-                          <div className="flex items-center gap-2 mt-1">
+                          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Имя и фамилия</Label>
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mt-1">
                             <Input
-                              value={name}
-                              onChange={e => setName(e.target.value)}
-                              placeholder="Иван Иванов"
+                              value={firstName}
+                              onChange={e => setFirstName(e.target.value)}
+                              placeholder="Иван"
+                              onKeyDown={e => { if (e.key === "Enter") handleSaveName() }}
+                              maxLength={100}
+                              className="h-8 text-sm"
+                            />
+                            <Input
+                              value={lastName}
+                              onChange={e => setLastName(e.target.value)}
+                              placeholder="Иванов"
                               onKeyDown={e => { if (e.key === "Enter") handleSaveName() }}
                               maxLength={100}
                               className="h-8 text-sm"
@@ -347,7 +366,11 @@ export default function ProfileSettingsPage() {
                               size="sm"
                               className="h-8 gap-1.5 shrink-0"
                               onClick={handleSaveName}
-                              disabled={savingName || !name.trim() || name.trim() === (profile?.name ?? "")}
+                              disabled={
+                                savingName ||
+                                (firstName.trim() === (profile?.firstName ?? "") &&
+                                  lastName.trim() === (profile?.lastName ?? ""))
+                              }
                             >
                               {savingName
                                 ? <Loader2 className="w-3.5 h-3.5 animate-spin" />

@@ -208,6 +208,8 @@ export function DashboardView({ embedded = false }: { embedded?: boolean }) {
 
   // #47: эффективное имя — реальное user.name из сессии, иначе из кеша.
   const effectiveName = user.name || cachedName
+  // #33: для приветствия берём firstName, если задан; иначе первое слово из name/кеша.
+  const greetingFirst = user.firstName || effectiveName.split(" ")[0] || ""
 
   const kpi = stats?.kpi
   const vacancies = stats?.vacancies ?? []
@@ -272,8 +274,8 @@ export function DashboardView({ embedded = false }: { embedded?: boolean }) {
               {!embedded && (
               <div>
                 <h1 className="text-lg font-semibold">
-                  {effectiveName
-                    ? `${getGreeting()}, ${effectiveName.split(" ")[0]}!`
+                  {greetingFirst
+                    ? `${getGreeting()}, ${greetingFirst}!`
                     : `${getGreeting()}!`}
                 </h1>
                 <p className="text-sm text-muted-foreground" suppressHydrationWarning>{getDateString()}</p>
