@@ -568,9 +568,10 @@ export default function VacancyPage() {
       .then(d => setIsPlatformAdmin(!!(d?.data ?? d)?.isPlatformAdmin)).catch(() => {})
   }, [])
   const tabFromUrl = searchParams?.get("tab") ?? "candidates"
-  // v2-навигация (параллельный вариант, ?nav=v2): сжатый таб-бар + переключатель
-  // вакансий. Дефолт (без параметра) — текущая раскладка, не меняется.
-  const navV2 = searchParams?.get("nav") === "v2"
+  // v2-навигация теперь ДЕФОЛТ: сжатый таб-бар + плоский ряд настроек +
+  // переключатель вакансий + контекст по статусу. Старый legacy-вид остаётся
+  // фолбэком за ?nav=legacy (на случай отката). ?nav=v2 — синоним дефолта.
+  const navV2 = searchParams?.get("nav") !== "legacy"
   const [v2Vacancies, setV2Vacancies] = useState<{ id: string; title: string }[]>([])
   // v2: текущий под-раздел вкладки «Настройки» (второй ряд табов)
   const [v2SettingsSub, setV2SettingsSub] = useState<"anketa" | "content" | "queue" | "outbound" | "settings">("anketa")
