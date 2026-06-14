@@ -293,9 +293,13 @@ function VacancyTile({ v, selected, onToggle, team, actions, trashRetentionDays 
   )
 }
 
-// ─── Page ────────────────────────────────────────────────────────────────────
+// ─── VacanciesView ───────────────────────────────────────────────────────────
 
-export default function VacanciesPage() {
+// Именованный export намеренно убран: Next.js App Router не допускает
+// именованных экспортов в page.tsx. Для встраивания в другой таб —
+// перенести этот компонент в components/vacancies/vacancies-view.tsx
+// и экспортировать оттуда.
+export function VacanciesView({ embedded = false }: { embedded?: boolean }) {
   const router = useRouter()
   const { role } = useAuth()
   // Таб «Активные» (active+paused) / «Архив» (закрытые). Скоуп уходит на
@@ -599,14 +603,12 @@ export default function VacanciesPage() {
   const toggleAll = () => { allSelected ? setSelected(new Set()) : setSelected(new Set(filtered.map((v) => v.id))) }
 
   return (
-    <SidebarProvider defaultOpen={true}>
-      <DashboardSidebar />
-      <SidebarInset>
-        <DashboardHeader />
-        <div className="flex-1 overflow-auto bg-background min-w-0">
-          <div className="pt-6 pb-36 md:pb-6 px-4 sm:px-14">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-5">
+    <>
+      <div className="flex-1 overflow-auto bg-background min-w-0">
+        <div className="pt-6 pb-36 md:pb-6 px-4 sm:px-14">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-5">
+            {!embedded && (
               <div>
                 <div className="flex items-center gap-2">
                   <Briefcase className="h-5 w-5 text-violet-600" />
@@ -614,6 +616,7 @@ export default function VacanciesPage() {
                 </div>
                 {!loading && <p className="text-sm text-muted-foreground mt-0.5">{total} вакансий</p>}
               </div>
+            )}
               <div className="flex items-center gap-2">
                 <div className="flex items-center rounded-lg border border-border bg-card p-0.5">
                   {VIEW_MODES.map((m) => (
@@ -830,7 +833,6 @@ export default function VacanciesPage() {
             )}
           </div>
         </div>
-      </SidebarInset>
 
       {/* Soft delete confirmation */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
@@ -898,6 +900,20 @@ export default function VacanciesPage() {
         />
       )}
 
+    </>
+  )
+}
+
+// ─── Page ────────────────────────────────────────────────────────────────────
+
+export default function VacanciesPage() {
+  return (
+    <SidebarProvider defaultOpen={true}>
+      <DashboardSidebar />
+      <SidebarInset>
+        <DashboardHeader />
+        <VacanciesView />
+      </SidebarInset>
     </SidebarProvider>
   )
 }

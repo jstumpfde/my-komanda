@@ -1,65 +1,92 @@
 "use client"
 
-import { useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { Loader2 } from "lucide-react"
+import { Suspense, useState, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
+import { DashboardSidebar } from "@/components/dashboard/sidebar"
+import { DashboardHeader } from "@/components/dashboard/header"
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { cn } from "@/lib/utils"
+import { LayoutGrid, Briefcase, Users } from "lucide-react"
+import { DashboardView } from "../dashboard/page"
+import { VacanciesView } from "../vacancies/page"
+import { TalentPoolView } from "../talent-pool/page"
 
-// «Рабочий стол» — быстрый вход: открывает последнюю открытую вакансию
-// (localStorage "hr:last-vacancy"), либо первую активную, минуя «Все вакансии».
-// Редирект устроен максимально надёжно: если есть запомненная вакансия —
-// уходим в неё мгновенно (без ожидания сети); иначе тянем первую активную;
-// плюс жёсткая страховка через 4 сек на случай зависшего fetch.
-export default function HrWorkspaceRedirect() {
+// «Рабочий стол» — единый экран-обзор HR с тремя табами:
+//   Обзор (дашборд по всем вакансиям) / Вакансии (список) / Резерв.
+// Встраивает существующие View-компоненты (embedded=true — без своих
+// заголовков-дублей). Активный таб монтируется по одному и хранится в ?ws=.
+
+const TABS = [
+  { key: "overview",  label: "Обзор",    icon: LayoutGrid },
+  { key: "vacancies", label: "Вакансии", icon: Briefcase },
+  { key: "reserve",   label: "Резерв",   icon: Users },
+] as const
+
+type TabKey = (typeof TABS)[number]["key"]
+const VALID = new Set<TabKey>(TABS.map((t) => t.key))
+
+function WorkspaceInner() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const [tab, setTab] = useState<TabKey>(() => {
+    const t = searchParams?.get("ws") as TabKey | null
+    return t && VALID.has(t) ? t : "overview"
+  })
 
+  // Синхронизируем выбранный таб с ?ws= (без скролла), чтобы ссылка/обновление
+  // сохраняли позицию.
   useEffect(() => {
-    let navigated = false
-    const goVacancy = (vacId: string) => {
-      navigated = true
-      router.replace(`/hr/vacancies/${vacId}?nav=v2&tab=candidates`)
-    }
-
-    // 1. Оптимистично: запомненная вакансия → открываем сразу.
-    let lastId: string | null = null
-    try {
-      lastId = localStorage.getItem("hr:last-vacancy")
-    } catch {}
-    if (lastId) {
-      goVacancy(lastId)
-      return
-    }
-
-    // 2. Иначе — первая активная вакансия.
-    fetch("/api/modules/hr/vacancies?scope=active&limit=100", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((data) => {
-        if (navigated) return
-        const list: Array<{ id: string }> = Array.isArray(data?.vacancies) ? data.vacancies : []
-        if (list[0]?.id) {
-          goVacancy(list[0].id)
-        } else {
-          navigated = true
-          router.replace("/hr/vacancies")
-        }
-      })
-      .catch(() => {
-        if (!navigated) {
-          navigated = true
-          router.replace("/hr/vacancies")
-        }
-      })
-
-    // 3. Страховка: если за 4 сек так и не ушли — жёсткий переход на список.
-    const safety = setTimeout(() => {
-      if (!navigated) window.location.assign("/hr/vacancies")
-    }, 4000)
-    return () => clearTimeout(safety)
-  }, [router])
+    const sp = new URLSearchParams(window.location.search)
+    if (sp.get("ws") === tab) return
+    sp.set("ws", tab)
+    router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab])
 
   return (
-    <div className="flex h-[60vh] items-center justify-center text-muted-foreground">
-      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-      Открываем рабочий стол…
-    </div>
+    <SidebarProvider defaultOpen={true}>
+      <DashboardSidebar />
+      <SidebarInset>
+        <DashboardHeader />
+        {/* Шапка рабочего стола + таб-бар */}
+        <div className="border-b bg-background px-4 sm:px-14 pt-5 pb-0">
+          <h1 className="text-lg font-semibold mb-3">Рабочий стол</h1>
+          <div className="flex items-center gap-1">
+            {TABS.map(({ key, label, icon: Icon }) => {
+              const active = tab === key
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setTab(key)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+                    active
+                      ? "border-primary text-foreground"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Icon className="w-4 h-4" />
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Контент активного таба — монтируется по одному */}
+        {tab === "overview" && <DashboardView embedded />}
+        {tab === "vacancies" && <VacanciesView embedded />}
+        {tab === "reserve" && <TalentPoolView embedded />}
+      </SidebarInset>
+    </SidebarProvider>
+  )
+}
+
+export default function HrWorkspacePage() {
+  return (
+    <Suspense fallback={null}>
+      <WorkspaceInner />
+    </Suspense>
   )
 }

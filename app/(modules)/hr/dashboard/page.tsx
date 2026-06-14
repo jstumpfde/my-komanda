@@ -147,7 +147,7 @@ function readHrUserCache(): HrUserCache | null {
   return null
 }
 
-function DashboardContent() {
+export function DashboardView({ embedded = false }: { embedded?: boolean }) {
   const router = useRouter()
   const { user } = useAuth()
   const [stats, setStats] = useState<DashboardStats | null>(null)
@@ -257,10 +257,6 @@ function DashboardContent() {
   })()
 
   return (
-    <SidebarProvider defaultOpen={true}>
-      <DashboardSidebar />
-      <SidebarInset>
-        <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-6 space-y-5 px-4 sm:px-14">
 
@@ -273,6 +269,7 @@ function DashboardContent() {
                 он фильтрует. Фильтр «Все вакансии» теперь стоит в правом
                 верхнем углу один, как просили. */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              {!embedded && (
               <div>
                 <h1 className="text-lg font-semibold">
                   {effectiveName
@@ -284,6 +281,7 @@ function DashboardContent() {
                   <p className="text-sm text-muted-foreground mt-0.5">{headerSubtitle}</p>
                 )}
               </div>
+              )}
               <div className="flex items-center gap-2">
                 {/* #30: активирован фильтр вакансий. По умолчанию "all" —
                     показываем все. При выборе одной — фильтруем клиентскую
@@ -500,8 +498,6 @@ function DashboardContent() {
 
           </div>
         </main>
-      </SidebarInset>
-    </SidebarProvider>
   )
 }
 
@@ -623,7 +619,15 @@ function UpcomingInterviews({ selectedVacancyId }: { selectedVacancyId: string }
 }
 
 export default function HRDashboardPage() {
-  return <DashboardContent />
+  return (
+    <SidebarProvider defaultOpen={true}>
+      <DashboardSidebar />
+      <SidebarInset>
+        <DashboardHeader />
+        <DashboardView />
+      </SidebarInset>
+    </SidebarProvider>
+  )
 }
 
 // ─── Прогресс кандидатов сейчас — #52 ─────────────────────────────────────

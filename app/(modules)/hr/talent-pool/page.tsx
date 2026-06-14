@@ -95,7 +95,7 @@ const CHANNEL_LABELS: Record<string, string> = { tg: "Telegram", whatsapp: "What
 type TalentTabKey = "base" | "campaigns" | "referrals" | "analytics" | "forms"
 const VALID_TALENT_TABS: TalentTabKey[] = ["base", "campaigns", "referrals", "analytics", "forms"]
 
-function TalentPoolContent() {
+export function TalentPoolView({ embedded = false }: { embedded?: boolean }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState<TalentTabKey>(() => {
@@ -303,21 +303,19 @@ function TalentPoolContent() {
   const formatDate = (d: Date) => d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" })
 
   return (
-    <SidebarProvider defaultOpen={true}>
-      <DashboardSidebar />
-      <SidebarInset>
-        <DashboardHeader />
-        <div className="flex-1 overflow-auto bg-background min-w-0">
-          <div className="py-6 px-4 sm:px-14">
-            <div className="flex items-center justify-between mb-5">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Users className="h-5 w-5 text-violet-600" />
-                  <h1 className="text-lg font-semibold">Резерв</h1>
-                </div>
-                <p className="text-sm text-muted-foreground">База пассивных кандидатов и кампании прогрева</p>
+    <main className="flex-1 overflow-auto bg-background min-w-0">
+      <div className="py-6 px-4 sm:px-14">
+        {!embedded && (
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <div className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-violet-600" />
+                <h1 className="text-lg font-semibold">Резерв</h1>
               </div>
+              <p className="text-sm text-muted-foreground">База пассивных кандидатов и кампании прогрева</p>
             </div>
+          </div>
+        )}
 
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TalentTabKey)}>
               <TabsList className="mb-4">
@@ -491,8 +489,6 @@ function TalentPoolContent() {
               </TabsContent>
             </Tabs>
           </div>
-        </div>
-      </SidebarInset>
 
       {/* Add candidate dialog */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
@@ -580,15 +576,20 @@ function TalentPoolContent() {
           </div>
         </DialogContent>
       </Dialog>
-
-    </SidebarProvider>
+    </main>
   )
 }
 
 export default function TalentPoolPage() {
   return (
     <Suspense fallback={null}>
-      <TalentPoolContent />
+      <SidebarProvider defaultOpen={true}>
+        <DashboardSidebar />
+        <SidebarInset>
+          <DashboardHeader />
+          <TalentPoolView />
+        </SidebarInset>
+      </SidebarProvider>
     </Suspense>
   )
 }
