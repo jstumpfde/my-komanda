@@ -369,22 +369,6 @@ export default function ProfileSettingsPage() {
                               />
                             </div>
                           </div>
-                          <Button
-                            size="sm"
-                            className="h-8 gap-1.5 shrink-0 mt-2.5"
-                            onClick={handleSaveName}
-                            disabled={
-                              savingName ||
-                              (firstName.trim() === (profile?.firstName ?? "") &&
-                                lastName.trim() === (profile?.lastName ?? ""))
-                            }
-                          >
-                            {savingName
-                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              : <Save className="w-3.5 h-3.5" />
-                            }
-                            {savingName ? "..." : "Сохранить"}
-                          </Button>
                         </div>
 
                         {/* Email + роль в одной строке */}
@@ -407,6 +391,26 @@ export default function ProfileSettingsPage() {
                             <Shield className="w-3 h-3 mr-1" />
                             {(ROLE_LABELS as Record<string, string>)[displayRole] ?? displayRole}
                           </Badge>
+                        </div>
+
+                        {/* Кнопка сохранения — в правом нижнем углу карточки */}
+                        <div className="flex justify-end pt-2">
+                          <Button
+                            size="sm"
+                            className="h-8 gap-1.5"
+                            onClick={handleSaveName}
+                            disabled={
+                              savingName ||
+                              (firstName.trim() === (profile?.firstName ?? "") &&
+                                lastName.trim() === (profile?.lastName ?? ""))
+                            }
+                          >
+                            {savingName
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <Save className="w-3.5 h-3.5" />
+                            }
+                            {savingName ? "..." : "Сохранить"}
+                          </Button>
                         </div>
                       </div>
                     </div>

@@ -37,6 +37,8 @@ interface HhAutoProcessProps {
   onSync?: () => Promise<void>
   /** Внешний флаг идущего синка (для спиннера на кнопке). */
   syncing?: boolean
+  /** Подпись «синх. N мин назад» — показывается рядом с кнопкой синхронизации. */
+  lastSyncLabel?: string
   /** "inline" — компактная кнопка с поповером (по умолчанию), "card" — большая карточка. */
   variant?: "inline" | "card"
 }
@@ -56,6 +58,7 @@ export function HhAutoProcess({
   onProcessed,
   onSync,
   syncing = false,
+  lastSyncLabel,
   variant = "inline",
 }: HhAutoProcessProps) {
   const [running, setRunning] = useState(false)
@@ -359,17 +362,22 @@ export function HhAutoProcess({
               <PopoverContent align="end" className="w-80 p-4">
                 {onSync && (
                   <>
-                    <Button
-                      onClick={syncAndRun}
-                      disabled={syncing || running}
-                      size="sm"
-                      variant="outline"
-                      className="w-full h-8 text-xs gap-1.5 mb-3"
-                      title="Подтянуть отклики с hh.ru, затем разобрать по этим настройкам"
-                    >
-                      {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                      Синхронизировать
-                    </Button>
+                    <div className="flex items-center gap-2 mb-3 min-w-0">
+                      <Button
+                        onClick={syncAndRun}
+                        disabled={syncing || running}
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs gap-1.5 shrink-0"
+                        title="Подтянуть отклики с hh.ru, затем разобрать по этим настройкам"
+                      >
+                        {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                        Синхронизировать
+                      </Button>
+                      {lastSyncLabel && (
+                        <span className="text-[11px] text-muted-foreground truncate">{lastSyncLabel}</span>
+                      )}
+                    </div>
                     <div className="border-t -mx-4 mb-3" />
                   </>
                 )}
