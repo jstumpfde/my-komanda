@@ -2787,10 +2787,20 @@ export const positions = pgTable("positions", {
   grade:        text("grade"),
   salaryMin:    integer("salary_min"),
   salaryMax:    integer("salary_max"),
+  // Legacy: одиночный сотрудник. Источник правды теперь positionEmployees
+  // (many-to-many). userId держим синхронизированным с «первым» сотрудником
+  // для обратной совместимости старых читателей.
   userId:       uuid("user_id").references(() => users.id, { onDelete: "set null" }),
   createdAt:    timestamp("created_at").defaultNow(),
   updatedAt:    timestamp("updated_at").defaultNow(),
 })
+
+// Сотрудники на должности (вариант B: много сотрудников на одну должность).
+export const positionEmployees = pgTable("position_employees", {
+  positionId: uuid("position_id").references(() => positions.id, { onDelete: "cascade" }).notNull(),
+  userId:     uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  createdAt:  timestamp("created_at").defaultNow(),
+}, (t) => [unique().on(t.positionId, t.userId)])
 
 // ─── User Module Roles ───────────────────────────────────────────────────────
 
