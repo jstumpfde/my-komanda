@@ -554,6 +554,9 @@ export default function BrandingPage() {
               />
               <p className="text-xs text-muted-foreground">Короткая фраза под логотипом</p>
             </div>
+          </div>
+
+          {/* Сайт компании — на всю ширину */}
             <div className="space-y-1.5">
               <Label className="text-sm">Сайт компании</Label>
               <Input
@@ -572,6 +575,9 @@ export default function BrandingPage() {
                 Ссылка на сайт вашей компании — <code>https://</code> добавим автоматически
               </p>
             </div>
+
+          {/* Цвета: бренд + нейросеть — симметрично, в один ряд */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label className="text-sm">Цвет бренда</Label>
               <div className="flex items-center gap-2">

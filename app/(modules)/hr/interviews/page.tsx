@@ -629,7 +629,7 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
                   </div>
                   <div className="overflow-x-auto -mx-4 sm:mx-0">
                   <div className="min-w-[560px] px-4 sm:px-0">
-                  <div className="grid grid-cols-7 gap-px bg-border rounded-lg overflow-hidden">
+                  <div className="grid grid-cols-7 gap-px bg-border rounded-lg overflow-hidden border-b">
                     {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map(wd => (
                       <div key={wd} className="bg-muted/50 text-center text-[10px] font-semibold text-muted-foreground py-2">{wd}</div>
                     ))}
@@ -681,7 +681,7 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
                     <div className="text-center"><span className="text-sm font-semibold capitalize">{formatDayFull(viewDay)}</span>{dayOffset !== 0 && <Button variant="ghost" size="sm" className="ml-2 h-6 text-xs" onClick={() => setDayOffset(0)}>Сегодня</Button>}</div>
                     <Button variant="ghost" size="sm" className="gap-1" onClick={() => setDayOffset(dayOffset + 1)}>Завтра <ChevronRight className="w-4 h-4" /></Button>
                   </div>
-                  <div className="space-y-0">
+                  <div className="space-y-0 border-b">
                     {dayHours.map(h => {
                       const hourIvs = dayInterviews.filter(iv => parseInt(iv.time) === h)
                       const isDropHere = dropTargetHour === h && dragIvId !== null
