@@ -1,7 +1,7 @@
 "use client"
 
 import { Suspense } from "react"
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, type CSSProperties } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
@@ -19,11 +19,13 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Slider } from "@/components/ui/slider"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import {
   Building2, Briefcase, Network, Plus, Pencil, Trash2, ChevronRight,
-  Users, Crown, Loader2, UserPlus, ArrowLeft, ArrowRight,
+  Users, Crown, Loader2, UserPlus, ArrowLeft, ArrowRight, SlidersHorizontal,
 } from "lucide-react"
 
 // ─── Types ───────────────────────────────────────────────
@@ -221,12 +223,14 @@ function ChildrenRow({ children: kids }: { children: React.ReactNode[] }) {
   )
 }
 
+// Ширина берётся из CSS-переменной --org-card-w (задаётся на контейнере схемы,
+// настраивается кнопкой «Настройки»); дефолт 230px.
 function DeptCard({ node, cb }: { node: OrgTreeNode; cb: OrgCallbacks }) {
   const head = node.dept.headUserName
   const isDropTarget = cb.dropTarget === node.dept.id
   return (
     <div className="flex flex-col items-center">
-      <div className="w-[230px]">
+      <div className="w-[var(--org-card-w,230px)]">
         <div
           className={cn(
             "rounded-xl border bg-card group relative transition-all hover:shadow-md hover:border-primary/50 overflow-hidden",
@@ -420,6 +424,30 @@ function CompanyStructureInner() {
   const [posForm, setPosForm] = useState({ name: "", departmentId: "", description: "", grade: "", salaryMin: "", salaryMax: "", userId: "" })
   const [posDeleteId, setPosDeleteId] = useState<string | null>(null)
   const [posSaving, setPosSaving] = useState(false)
+
+  // Сортировка таблицы должностей (референсные иконки DataHeadCell)
+  type PosSortCol = "name" | "department" | "grade" | "salary"
+  const [posSort, setPosSort] = useState<{ column: PosSortCol; dir: "asc" | "desc" } | null>(null)
+  const togglePosSort = (column: PosSortCol) =>
+    setPosSort((p) => (!p || p.column !== column ? { column, dir: "asc" } : p.dir === "asc" ? { column, dir: "desc" } : null))
+
+  // Сортировка таблицы отделов. При активной сортировке показываем плоский
+  // отсортированный список (без дерева-отступов), иначе — иерархию.
+  type DeptSortCol = "name" | "head" | "parent"
+  const [deptSort, setDeptSort] = useState<{ column: DeptSortCol; dir: "asc" | "desc" } | null>(null)
+  const toggleDeptSort = (column: DeptSortCol) =>
+    setDeptSort((p) => (!p || p.column !== column ? { column, dir: "asc" } : p.dir === "asc" ? { column, dir: "desc" } : null))
+
+  // Схема: настраиваемая ширина карточек отделов (px), сохраняется локально
+  const [cardWidth, setCardWidth] = useState(230)
+  useEffect(() => {
+    const saved = typeof window !== "undefined" ? window.localStorage.getItem("orgCardWidth") : null
+    if (saved) setCardWidth(Math.min(360, Math.max(180, parseInt(saved) || 230)))
+  }, [])
+  const applyCardWidth = (w: number) => {
+    setCardWidth(w)
+    if (typeof window !== "undefined") window.localStorage.setItem("orgCardWidth", String(w))
+  }
 
   // ── Org scheme drag state ───────────────────────────────
   const [dropTarget, setDropTarget] = useState<string | null>(null)
@@ -690,6 +718,21 @@ function CompanyStructureInner() {
   // ── Render ──────────────────────────────────────────────
 
   const deptFlat = buildDeptFlat(departments)
+  // При активной сортировке — плоский отсортированный список (depth=0, без дерева).
+  const deptRows = deptSort
+    ? [...deptFlat]
+        .map((d) => ({ ...d, depth: 0 }))
+        .sort((a, b) => {
+          const mul = deptSort.dir === "asc" ? 1 : -1
+          switch (deptSort.column) {
+            case "name":   return mul * a.name.localeCompare(b.name, "ru")
+            case "head":   return mul * (a.headUserName ?? "").localeCompare(b.headUserName ?? "", "ru")
+            case "parent": return mul * (a.parentName ?? "").localeCompare(b.parentName ?? "", "ru")
+            default:       return 0
+          }
+        })
+    : deptFlat
+  const deptDir = (c: "name" | "head" | "parent") => (deptSort?.column === c ? deptSort.dir : null)
   const { roots, unassigned } = buildOrgTree(departments, positions)
 
   const orgCb: OrgCallbacks = {
@@ -709,7 +752,7 @@ function CompanyStructureInner() {
     <div
       className={cn(
         "rounded-xl border-2 border-primary/30 bg-card shadow-md group relative transition-all hover:shadow-lg hover:border-primary/50 overflow-hidden",
-        mobile ? "w-full" : "w-[260px]",
+        mobile ? "w-full" : "w-[var(--org-card-w,260px)]",
         isRootDropTarget && "border-dashed !border-primary bg-primary/5 shadow-lg",
       )}
       onDragOver={canEdit ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropTarget("__root__") } : undefined}
@@ -768,26 +811,47 @@ function CompanyStructureInner() {
         {/* Шапка + таб-бар — стиль Рабочего стола */}
         <div className="border-b bg-background px-4 sm:px-14 pt-5 pb-0">
           <h1 className="text-lg font-semibold mb-3">Структура компании</h1>
-          <div className="flex items-center gap-1">
-            {TABS_DEF.map(({ key, label, icon: Icon }) => {
-              const active = activeTab === key
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setTab(key)}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
-                    active
-                      ? "border-primary text-foreground"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <Icon className="w-4 h-4" />
-                  {label}
-                </button>
-              )
-            })}
+          <div className="flex items-end justify-between gap-3">
+            <div className="flex items-center gap-1">
+              {TABS_DEF.map(({ key, label, icon: Icon }) => {
+                const active = activeTab === key
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setTab(key)}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+                      active
+                        ? "border-primary text-foreground"
+                        : "border-transparent text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+            {activeTab === "scheme" && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="sm" className="gap-1.5 mb-1.5 text-muted-foreground shrink-0">
+                    <SlidersHorizontal className="w-4 h-4" /> Настройки
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-64">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm">Ширина карточек</Label>
+                      <span className="text-xs text-muted-foreground tabular-nums">{cardWidth}px</span>
+                    </div>
+                    <Slider min={180} max={360} step={10} value={[cardWidth]} onValueChange={(v) => applyCardWidth(v[0])} />
+                    <p className="text-xs text-muted-foreground">Регулирует ширину блоков отделов на схеме.</p>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
           </div>
         </div>
 
@@ -808,19 +872,19 @@ function CompanyStructureInner() {
                 <TableCard>
                   <DataTable>
                     <DataHead>
-                      <DataHeadCell>Название</DataHeadCell>
+                      <DataHeadCell sortable sortDir={deptDir("name")} onSort={() => toggleDeptSort("name")}>Название</DataHeadCell>
                       <DataHeadCell>Описание</DataHeadCell>
-                      <DataHeadCell>Руководитель</DataHeadCell>
-                      <DataHeadCell>Родительский отдел</DataHeadCell>
+                      <DataHeadCell sortable sortDir={deptDir("head")} onSort={() => toggleDeptSort("head")}>Руководитель</DataHeadCell>
+                      <DataHeadCell sortable sortDir={deptDir("parent")} onSort={() => toggleDeptSort("parent")}>Родительский отдел</DataHeadCell>
                       {canEdit && <DataHeadCell align="right">Действия</DataHeadCell>}
                     </DataHead>
                     <tbody>
                       {loading ? (
                         <tr><td colSpan={canEdit ? 5 : 4} className="text-center py-12 text-muted-foreground">Загрузка...</td></tr>
-                      ) : deptFlat.length === 0 ? (
+                      ) : deptRows.length === 0 ? (
                         <tr><td colSpan={canEdit ? 5 : 4} className="text-center py-12 text-muted-foreground">Нет отделов</td></tr>
                       ) : (
-                        deptFlat.map((dept) => (
+                        deptRows.map((dept) => (
                           <DataRow key={dept.id}>
                             <DataCell>
                               <div className="flex items-center" style={{ marginLeft: dept.depth * 24 }}>
@@ -902,23 +966,37 @@ function CompanyStructureInner() {
                       ? positions.filter((p) => !p.departmentId)
                       : positions.filter((p) => p.departmentId === filterDept)
 
+                  const sorted = posSort
+                    ? [...filtered].sort((a, b) => {
+                        const mul = posSort.dir === "asc" ? 1 : -1
+                        switch (posSort.column) {
+                          case "name":       return mul * a.name.localeCompare(b.name, "ru")
+                          case "department": return mul * (a.departmentName ?? "").localeCompare(b.departmentName ?? "", "ru")
+                          case "grade":      return mul * (a.grade ?? "").localeCompare(b.grade ?? "", "ru")
+                          case "salary":     return mul * ((a.salaryMin ?? a.salaryMax ?? 0) - (b.salaryMin ?? b.salaryMax ?? 0))
+                          default:           return 0
+                        }
+                      })
+                    : filtered
+                  const posDir = (c: PosSortCol) => (posSort?.column === c ? posSort.dir : null)
+
                   return (
                     <TableCard>
                       <DataTable>
                         <DataHead>
-                          <DataHeadCell>Название</DataHeadCell>
-                          <DataHeadCell>Отдел</DataHeadCell>
-                          <DataHeadCell>Грейд</DataHeadCell>
-                          <DataHeadCell>Зарплата</DataHeadCell>
+                          <DataHeadCell sortable sortDir={posDir("name")} onSort={() => togglePosSort("name")}>Название</DataHeadCell>
+                          <DataHeadCell sortable sortDir={posDir("department")} onSort={() => togglePosSort("department")}>Отдел</DataHeadCell>
+                          <DataHeadCell sortable sortDir={posDir("grade")} onSort={() => togglePosSort("grade")}>Грейд</DataHeadCell>
+                          <DataHeadCell sortable sortDir={posDir("salary")} onSort={() => togglePosSort("salary")}>Зарплата</DataHeadCell>
                           {canEdit && <DataHeadCell align="right">Действия</DataHeadCell>}
                         </DataHead>
                         <tbody>
                           {loading ? (
                             <tr><td colSpan={canEdit ? 5 : 4} className="text-center py-12 text-muted-foreground">Загрузка...</td></tr>
-                          ) : filtered.length === 0 ? (
+                          ) : sorted.length === 0 ? (
                             <tr><td colSpan={canEdit ? 5 : 4} className="text-center py-12 text-muted-foreground">Нет должностей</td></tr>
                           ) : (
-                            filtered.map((pos) => (
+                            sorted.map((pos) => (
                               <DataRow key={pos.id}>
                                 <DataCell>
                                   <div className="flex items-center gap-2">
@@ -980,7 +1058,7 @@ function CompanyStructureInner() {
                   </Card>
                 ) : (
                   <>
-                    <div className="hidden md:block overflow-x-auto pb-8">
+                    <div className="hidden md:block overflow-x-auto pb-8" style={{ "--org-card-w": `${cardWidth}px` } as CSSProperties}>
                       <div className="min-w-fit flex flex-col items-center">
                         {rootBlock(false)}
                         {roots.length > 0 && (
