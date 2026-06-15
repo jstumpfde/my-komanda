@@ -9,7 +9,8 @@ const MODULE_GROUP_DEFS: Partial<Record<ModuleId, { label: string; hrefs: string
     // «Стройнее» (14.06): убраны дубли с Рабочим столом. Дашборд/Интервью/Резерв/
     // Вакансии/Библиотека — табы /hr/workspace; Отделы/Должности/Оргструктура —
     // табы /hr/company-structure. Сами роуты доступны напрямую.
-    { label: 'Найм',       hrefs: ['/hr/workspace', '/hr/candidates', '/hr/calendar', '/hr/report', '/hr/hiring-settings'] },
+    // «Календарь» вынесен из «Найм» в отдельный пункт меню после CRM (см. sidebar.tsx).
+    { label: 'Найм',       hrefs: ['/hr/workspace', '/hr/candidates', '/hr/report', '/hr/hiring-settings'] },
     // Без label → пункты рендерятся плоско (без сворачиваемого под-заголовка):
     // «Структура компании» и «Обучение» вынесены из под-меню Оргструктура/В разработке.
     { label: '', hrefs: ['/hr/company-structure', '/hr/courses'] },

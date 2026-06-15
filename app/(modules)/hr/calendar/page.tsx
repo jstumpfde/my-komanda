@@ -1,19 +1,15 @@
-import { redirect } from "next/navigation"
+import { Suspense } from "react"
+import { InterviewsView } from "../interviews/page"
 
 /**
- * /hr/calendar → /hr/interviews?tab=calendar
- *
- * Пробрасываем исходные query-параметры view и filter в CalendarView.
- * Next.js 16: searchParams — Promise, await обязателен.
+ * /hr/calendar — отдельный пункт меню «Календарь».
+ * Чистый календарь компании (без интервью-интерфейса: списки/канбан/фильтры).
+ * Управление интервью живёт в Рабочем столе → таб «Интервью».
  */
-export default async function CalendarRedirectPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ view?: string; filter?: string }>
-}) {
-  const sp = await searchParams
-  const params = new URLSearchParams({ tab: "calendar" })
-  if (sp.view) params.set("view", sp.view)
-  if (sp.filter) params.set("filter", sp.filter)
-  redirect(`/hr/interviews?${params.toString()}`)
+export default function CalendarPage() {
+  return (
+    <Suspense fallback={null}>
+      <InterviewsView calendarOnly />
+    </Suspense>
+  )
 }

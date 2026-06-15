@@ -593,6 +593,17 @@ export function DashboardSidebar() {
               </SidebarMenuButton>
             )
           })}
+          {/* «Календарь» — отдельный пункт после модулей */}
+          {vis.hiring && (
+            <SidebarMenuButton
+              tooltip="Календарь"
+              isActive={pathname.startsWith('/hr/calendar')}
+              onClick={() => router.push('/hr/calendar')}
+              className="justify-center h-10 w-10"
+            >
+              <Calendar className="size-5" />
+            </SidebarMenuButton>
+          )}
           <div className="my-1 w-6 border-t border-sidebar-border" />
 
           {/* Active module GROUP icons (one per group) */}
@@ -875,6 +886,24 @@ export function DashboardSidebar() {
               </Collapsible>
             )
           })}
+
+          {/* «Календарь» — отдельный пункт меню после модулей (вынесен из «Найм») */}
+          {vis.hiring && (() => {
+            const calActive = pathname === '/hr/calendar' || pathname.startsWith('/hr/calendar/')
+            return (
+              <Link
+                href="/hr/calendar"
+                style={calActive ? { borderLeft: '3px solid #a78bfa' } : { borderLeft: '3px solid transparent' }}
+                className={cn(
+                  "flex items-center gap-2.5 w-full px-3 py-2.5 text-sm font-semibold transition-all duration-150 rounded-none rounded-r-lg hover:bg-sidebar-accent",
+                  calActive ? "bg-sidebar-accent text-sidebar-foreground" : "text-sidebar-foreground/70",
+                )}
+              >
+                <Calendar className="size-4 shrink-0" />
+                <span className="flex-1 text-left">Календарь</span>
+              </Link>
+            )
+          })()}
         </div>
 
       </SidebarContent>
