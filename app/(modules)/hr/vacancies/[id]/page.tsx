@@ -45,7 +45,7 @@ import { InterviewsView } from "@/app/(modules)/hr/interviews/page"
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-factors-settings"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
@@ -2690,30 +2690,27 @@ export default function VacancyPage() {
                           {bulkScreening ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 mr-2" />}
                           {bulkScreening ? "Скрининг..." : "AI-оценить новых"}
                         </DropdownMenuItem>
-                        <DropdownMenuSub>
-                          <DropdownMenuSubTrigger disabled={!!rescoring}>
-                            {rescoring ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-2" />}
-                            {rescoring ? "Переоценка..." : "Переоценить"}
-                          </DropdownMenuSubTrigger>
-                          <DropdownMenuSubContent>
-                            <DropdownMenuItem onClick={() => rescoreSelected("all")}>
-                              <Sparkles className="w-3.5 h-3.5 mr-2" /> Все параметры
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => rescoreSelected("resume")}>
-                              <ClipboardList className="w-3.5 h-3.5 mr-2" /> AI-резюме
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => rescoreSelected("ai")}>
-                              <BarChart3 className="w-3.5 h-3.5 mr-2" /> AI-оценка
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => rescoreSelected("rubric")}>
-                              <Target className="w-3.5 h-3.5 mr-2" /> AI-рубрика
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => rescoreSelected("test")}>
-                              <Check className="w-3.5 h-3.5 mr-2" /> AI-тест
-                            </DropdownMenuItem>
-                          </DropdownMenuSubContent>
-                        </DropdownMenuSub>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel className="flex items-center gap-2 py-1 text-xs font-medium text-muted-foreground">
+                          {rescoring ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                          {rescoring ? "Переоценка…" : "Переоценить выделенных"}
+                        </DropdownMenuLabel>
+                        <DropdownMenuItem onClick={() => rescoreSelected("all")} disabled={!!rescoring}>
+                          <Sparkles className="w-3.5 h-3.5 mr-2" /> Все параметры
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => rescoreSelected("resume")} disabled={!!rescoring}>
+                          <ClipboardList className="w-3.5 h-3.5 mr-2" /> AI-резюме
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => rescoreSelected("ai")} disabled={!!rescoring}>
+                          <BarChart3 className="w-3.5 h-3.5 mr-2" /> AI-оценка
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => rescoreSelected("rubric")} disabled={!!rescoring}>
+                          <Target className="w-3.5 h-3.5 mr-2" /> AI-рубрика
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => rescoreSelected("test")} disabled={!!rescoring}>
+                          <Check className="w-3.5 h-3.5 mr-2" /> AI-тест
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={handleCompare}>
                           <BarChart3 className="w-3.5 h-3.5 mr-2" />
                           Сравнить топ
