@@ -37,7 +37,12 @@ BEGIN
   DELETE FROM knowledge_articles WHERE tenant_id = v_tenant AND 'demo_knowledge' = ANY(tags);
   -- 3) Категория демо
   DELETE FROM knowledge_categories WHERE tenant_id = v_tenant AND name = 'Демо: Онбординг';
-  -- 4) Демо-пользователи (маркер — префикс "Демо:" в position)
+  -- 4) Демо-пользователи (маркер — префикс "Демо:" в position).
+  -- Сначала чистим зависимые строки, иначе FK (notifications и пр.) блокируют delete
+  -- при повторном запуске (кнопка «Пересоздать демо»).
+  DELETE FROM notifications WHERE user_id IN (
+    SELECT id FROM users WHERE company_id = v_tenant AND position LIKE 'Демо:%'
+  );
   DELETE FROM users WHERE company_id = v_tenant AND position LIKE 'Демо:%';
 
   -- ── Автор статей: любой реальный активный пользователь tenant'а ─────────
