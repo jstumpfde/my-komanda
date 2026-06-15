@@ -33,7 +33,7 @@ import {
 import { toast } from "sonner"
 import {
   Target, Plus, X, Loader2, ShieldAlert, FileText, Gauge,
-  ArrowRightLeft, AlertTriangle, Sparkles,
+  ArrowRightLeft, AlertTriangle, Sparkles, Save,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -184,6 +184,7 @@ export function SpecEditor({ vacancyId, onSaved }: SpecEditorProps) {
   const [spec, setSpec]     = useState<CandidateSpec | null>(null)
   const [source, setSource] = useState<"spec" | "legacy" | null>(null)
   const [loaded, setLoaded] = useState(false)
+  const [saving, setSaving] = useState(false)
   // Излишки при переносе v1→v2 (то, что не влезло в лимиты must=5/nice=5/deal=3)
   const [overflow, setOverflow] = useState<{ must: string[]; nice: string[]; deal: string[] } | null>(null)
 
@@ -770,13 +771,20 @@ export function SpecEditor({ vacancyId, onSaved }: SpecEditorProps) {
         </CardContent>
       </Card>
 
-      {/* Сохранение — через общую кнопку «Сохранить настройки» внизу страницы
-          (sticky-бар, зарегистрирован выше). Отдельная кнопка убрана, чтобы не
-          дублировать действие. */}
-      <p className="text-xs text-muted-foreground">
-        Заполненный Портрет используется для AI-оценки откликов (новый контур).
-        У вакансий с пустым Портретом действуют прежние настройки воронки.
-      </p>
+      <div className="flex items-end justify-between gap-3 pt-1">
+        <p className="text-xs text-muted-foreground max-w-[70%]">
+          Заполненный Портрет используется для AI-оценки откликов (новый контур).
+          У вакансий с пустым Портретом действуют прежние настройки воронки.
+        </p>
+        {/* Явная кнопка сохранения (дублирует sticky-бар настроек — чтобы её было видно). */}
+        <Button
+          onClick={async () => { setSaving(true); try { await save() } catch { /* toast в save */ } finally { setSaving(false) } }}
+          disabled={saving || !spec}
+        >
+          {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+          Сохранить
+        </Button>
+      </div>
     </div>
   )
 }
