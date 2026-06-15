@@ -20,7 +20,7 @@
 
 import fs from "fs"
 import path from "path"
-import { eq, inArray, and, like } from "drizzle-orm"
+import { eq, inArray, and, like, ilike } from "drizzle-orm"
 import bcrypt from "bcryptjs"
 import { db, pgClient } from "@/lib/db"
 import {
@@ -134,6 +134,24 @@ function avatar(name: string, i: number): string {
   return `https://api.dicebear.com/9.x/avataaars/png?seed=${encodeURIComponent(name + "-" + i)}&size=240`
 }
 
+// Эвристика пола по русскому ФИО (для раскладки реальных hh-фото по полу демо-имён).
+const FEM_FIRST = new Set([
+  "анна", "мария", "екатерина", "ольга", "наталья", "татьяна", "юлия", "елена",
+  "светлана", "дарья", "ирина", "полина", "виктория", "ксения", "алина", "валентина",
+  "елизавета", "вилена", "анастасия", "ангелина", "вероника", "галина", "евгения",
+  "жанна", "инна", "кристина", "лариса", "любовь", "людмила", "маргарита", "надежда",
+  "оксана", "яна", "алёна", "алена", "диана", "милана", "нина", "софья", "софия", "вера",
+])
+function isFemaleNameRu(name: string): boolean {
+  const tokens = name.toLowerCase().split(/[\s,]+/).filter(Boolean)
+  for (const t of tokens) {
+    if (/(вна|чна)$/.test(t)) return true                       // отчество женское
+    if (/(ова|ева|ёва|ина|ына|ская|цкая)$/.test(t)) return true // фамилия женская
+    if (FEM_FIRST.has(t)) return true
+  }
+  return false
+}
+
 export async function seedDemoShowcase(): Promise<Record<string, number>> {
   console.log(`[demo-showcase] старт — компания ${DEMO_COMPANY_ID}`)
 
@@ -193,6 +211,29 @@ export async function seedDemoShowcase(): Promise<Record<string, number>> {
   const interviewCandidates: { id: string; name: string; vacId: string; stage: string }[] = []
   const contactCandidates: { id: string; name: string; vacId: string; stage: string }[] = []
 
+  // Реальные hh-фото из маркетинговых вакансий — раскладываем по полу,
+  // чтобы заменить синтетические аватары. Fallback на DiceBear, если пул пуст.
+  const photoRows = await db.select({ name: candidates.name, photo: candidates.photoUrl })
+    .from(candidates)
+    .innerJoin(vacancies, eq(vacancies.id, candidates.vacancyId))
+    .where(and(ilike(vacancies.title, "%маркет%"), like(candidates.photoUrl, "https://img.hhcdn.ru/%")))
+  const femalePhotos: string[] = [], malePhotos: string[] = []
+  const seenPhoto = new Set<string>()
+  for (const r of photoRows) {
+    if (!r.photo || seenPhoto.has(r.photo)) continue
+    seenPhoto.add(r.photo)
+    ;(isFemaleNameRu(r.name) ? femalePhotos : malePhotos).push(r.photo)
+  }
+  let fIdx = 0, mIdx = 0
+  const nextPhoto = (female: boolean, nm: string, seq: number): string => {
+    const primary = female ? femalePhotos : malePhotos
+    const secondary = female ? malePhotos : femalePhotos
+    if (primary.length) return primary[(female ? fIdx++ : mIdx++) % primary.length]
+    if (secondary.length) return secondary[(female ? fIdx++ : mIdx++) % secondary.length]
+    return avatar(nm, seq)
+  }
+  console.log(`[demo-showcase] реальных фото: жен=${femalePhotos.length} муж=${malePhotos.length}`)
+
   for (const plan of STAGE_PLAN) {
     for (let k = 0; k < plan.count; k++) {
       globalSeq++
@@ -234,7 +275,7 @@ export async function seedDemoShowcase(): Promise<Record<string, number>> {
         educationLevel: pick(EDU),
         languages: chance(0.5) ? ["russian", "english"] : ["russian"],
         relocationReady: chance(0.4),
-        photoUrl: avatar(name, globalSeq),
+        photoUrl: nextPhoto(female, name, globalSeq),
         token: `demo-tok-${vac.shortCode}-${globalSeq}`,
         shortId: `${vac.shortCode}${String(globalSeq).padStart(4, "0")}`,
         sequenceNumber: globalSeq,
