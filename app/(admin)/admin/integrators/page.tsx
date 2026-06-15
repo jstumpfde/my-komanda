@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetHeader, SheetBody, SheetTitle } from "@/components/ui/sheet"
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { toast } from "sonner"
 import { Handshake, Plus, Loader2, ExternalLink, Users } from "lucide-react"
@@ -206,7 +206,7 @@ export default function AdminIntegratorsPage() {
           <SheetHeader>
             <SheetTitle>Добавить интегратора</SheetTitle>
           </SheetHeader>
-          <div className="space-y-4 mt-6">
+          <SheetBody className="space-y-4 pt-2">
             <div className="space-y-1.5">
               <Label className="text-sm">ID компании *</Label>
               <Input value={newCompanyId} onChange={e => setNewCompanyId(e.target.value)} placeholder="uuid..." />
@@ -250,7 +250,7 @@ export default function AdminIntegratorsPage() {
               {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
               {creating ? "Добавление..." : "Добавить"}
             </Button>
-          </div>
+          </SheetBody>
         </SheetContent>
       </Sheet>
     </AdminPageLayout>

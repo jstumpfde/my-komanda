@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetHeader, SheetBody, SheetTitle } from "@/components/ui/sheet"
 import { Loader2, Users, Wallet, Percent, Building2, Plus, UserPlus, CheckCircle2, Copy } from "lucide-react"
 import { toast } from "sonner"
 
@@ -220,7 +220,7 @@ function OnboardSheet({ open, onOpenChange, products, onDone }: {
         </SheetHeader>
 
         {result ? (
-          <div className="space-y-4 mt-6">
+          <SheetBody className="space-y-4 pt-2">
             <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
               <CheckCircle2 className="size-5" /><span className="font-medium">Клиент создан</span>
             </div>
@@ -240,9 +240,9 @@ function OnboardSheet({ open, onOpenChange, products, onDone }: {
             </div>
             <Button className="w-full" onClick={() => { onOpenChange(false); reset() }}>Готово</Button>
             <Button variant="outline" className="w-full" onClick={reset}>Подключить ещё клиента</Button>
-          </div>
+          </SheetBody>
         ) : (
-          <div className="space-y-4 mt-6">
+          <SheetBody className="space-y-4 pt-2">
             <div className="space-y-1.5">
               <Label className="text-sm">Название компании-клиента *</Label>
               <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="ООО «Ромашка»" />
@@ -272,7 +272,7 @@ function OnboardSheet({ open, onOpenChange, products, onDone }: {
               {submitting ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
               Создать клиента
             </Button>
-          </div>
+          </SheetBody>
         )}
       </SheetContent>
     </Sheet>
