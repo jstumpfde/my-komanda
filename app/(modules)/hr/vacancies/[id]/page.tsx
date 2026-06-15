@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback, useMemo, Suspense } from "rea
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth, isPlatformRole } from "@/lib/auth"
+import { isOwnerEmail } from "@/lib/owner"
 import { useVacancy } from "@/hooks/use-vacancies"
 import { useCandidates, usePaginatedCandidates, type ApiCandidate, type PaginatedSortKey } from "@/hooks/use-candidates"
 import { Pagination } from "@/components/dashboard/pagination"
@@ -229,7 +230,7 @@ export default function VacancyPage() {
   const router = useRouter()
   const id = params.id as string
   // B5: роль поднята наверх — нужна в setCardSettings и useEffect для user-prefs
-  const { role } = useAuth()
+  const { role, user } = useAuth()
 
   // «Рабочий стол» (/hr/workspace) открывает последнюю посещённую вакансию.
   useEffect(() => {
@@ -767,7 +768,8 @@ export default function VacancyPage() {
     // Все режимы доступны админу платформы и директору (см. ViewSettings).
     // Остальным — только «Список»; сохранённый kanban/funnel не гидратируем,
     // иначе застрянут без переключателя режимов.
-    const canAllViews = ["platform_admin", "admin", "director", "client"].includes(role)
+    // Виды Канбан/Плитки/Воронка пока обкатываются — только владелец-полигон (email).
+    const canAllViews = isOwnerEmail(user?.email)
     setViewModeLocal((canAllViews ? userPrefs.viewMode : "list") as ViewMode)
     // B5: колонки теперь per-company (hiring-defaults), не per-user.
     // userPrefs.columns намеренно НЕ гидратируем в cardSettings.

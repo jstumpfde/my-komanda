@@ -11,6 +11,7 @@ import {
 import { Eye, ChevronDown, RotateCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth"
+import { isOwnerEmail } from "@/lib/owner"
 import { CANDIDATE_COLUMN_TOGGLES, type CardDisplaySettings } from "./card-settings"
 import type { ViewMode } from "./kanban-board"
 
@@ -38,10 +39,10 @@ const VIEW_MODES: Array<{ value: ViewMode; label: string }> = [
 const DISPLAY_TOGGLES = CANDIDATE_COLUMN_TOGGLES
 
 export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeChange, testTableHref, onReset }: ViewSettingsProps) {
-  const { role } = useAuth()
-  // Все режимы (Воронка/Канбан/Плитки) — администратору платформы и директору
-  // компании (он же владелец аккаунта). Остальные HR-роли видят только «Список».
-  const showAllViews = ["platform_admin", "admin", "director", "client"].includes(role)
+  const { role, user } = useAuth()
+  // Виды Воронка/Канбан/Плитки пока обкатываются — показываем только владельцу-
+  // полигону (по email). Остальным — только «Список».
+  const showAllViews = isOwnerEmail(user?.email)
   // B5: колонки настраивает только директор/platform_admin; остальные HR — read-only.
   const canEditColumns = ["director", "client", "platform_admin", "admin"].includes(role)
 
