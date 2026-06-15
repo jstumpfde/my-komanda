@@ -55,6 +55,10 @@ export async function PATCH(
     contactEmail?: string
     contactPhone?: string
     status?: string
+    kind?: "partner" | "sub_partner" | "referral"
+    commissionPercent?: string | number | null
+    billingMode?: "platform" | "partner"
+    parentIntegratorId?: string | null
   }
 
   const [updated] = await db
@@ -65,6 +69,13 @@ export async function PATCH(
       ...(body.contactEmail !== undefined && { contactEmail: body.contactEmail }),
       ...(body.contactPhone !== undefined && { contactPhone: body.contactPhone }),
       ...(body.status       !== undefined && { status:       body.status }),
+      ...(body.kind         !== undefined && { kind:         body.kind }),
+      ...(body.billingMode  !== undefined && { billingMode:  body.billingMode }),
+      ...(body.parentIntegratorId !== undefined && { parentIntegratorId: body.parentIntegratorId || null }),
+      ...(body.commissionPercent !== undefined && {
+        commissionPercent: body.commissionPercent === "" || body.commissionPercent === null
+          ? null : String(body.commissionPercent),
+      }),
     })
     .where(eq(integrators.id, id))
     .returning()

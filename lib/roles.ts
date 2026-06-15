@@ -15,8 +15,16 @@ export type UserRole =
   | "observer"
   | "tester_hr"
   | "employee"
+  | "partner"        // внешний партнёр (партнёр/суб-партнёр/реферал — тип в integrators.kind)
 
 export const PLATFORM_ROLES: UserRole[] = ["platform_admin", "platform_manager", "admin"]
+
+// Внешние партнёры — отдельный «Партнёрский кабинет» (/partner). Тип партнёра
+// (партнёр/суб-партнёр/реферал) хранится в integrators.kind, а не в роли.
+export const PARTNER_ROLES: UserRole[] = ["partner"]
+export function isPartnerRole(role: UserRole): boolean {
+  return PARTNER_ROLES.includes(role)
+}
 export const CLIENT_ROLES: UserRole[] = ["director", "client", "hr_lead", "hr_manager", "department_head", "observer", "tester_hr"]
 
 // Владелец компании / уровень директора — полный доступ к компанийским настройкам.
