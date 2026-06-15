@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils"
 import { ALL_STAGE_SLUGS, PLATFORM_STAGES, getStageLabel, type StageSlug } from "@/lib/stages"
 import { useAuth } from "@/lib/auth"
+import { isRestrictedWorkspace } from "@/lib/owner"
 import {
   Briefcase, Users, UserCheck, Plus, ChevronRight,
   Sparkles, Activity, Calendar, CalendarDays, CheckCircle2, XCircle,
@@ -289,7 +290,9 @@ export function DashboardView({ embedded = false }: { embedded?: boolean }) {
                     показываем все. При выборе одной — фильтруем клиентскую
                     voronku/active-vacancies по vacancyId. */}
                 <Select value={selectedVacancyId} onValueChange={setSelectedVacancyId}>
-                  <SelectTrigger className="h-8 w-full sm:w-[200px] text-xs min-w-0">
+                  {/* Ширина по тексту вакансии + 10мм правого поля; потолок,
+                      чтобы очень длинные названия не растягивали шапку. */}
+                  <SelectTrigger className="h-8 w-fit min-w-[180px] max-w-[min(480px,80vw)] pr-[10mm] text-xs">
                     <SelectValue placeholder="Все вакансии" />
                   </SelectTrigger>
                   <SelectContent>
@@ -682,8 +685,12 @@ interface AiInsight {
 }
 
 function AiInsights({ selectedVacancyId }: { selectedVacancyId: string }) {
+  const { user } = useAuth()
+  // Скрыто для урезанных пользователей (Ксения Сафронова / Орлинк).
+  const hidden = isRestrictedWorkspace(user?.email)
   const [insights, setInsights] = useState<AiInsight[] | null>(null)
   useEffect(() => {
+    if (hidden) return
     let cancelled = false
     // #49: фильтр инсайтов по выбранной вакансии
     const qs = selectedVacancyId !== "all" ? `?vacancyId=${encodeURIComponent(selectedVacancyId)}` : ""
@@ -696,7 +703,9 @@ function AiInsights({ selectedVacancyId }: { selectedVacancyId: string }) {
       })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [selectedVacancyId])
+  }, [selectedVacancyId, hidden])
+
+  if (hidden) return null
 
   return (
     <div className="rounded-lg border bg-gradient-to-br from-[#EEEDFE] to-[#E6F1FB] dark:from-[#1a1830] dark:to-[#172030] p-5">

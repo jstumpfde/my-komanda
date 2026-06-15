@@ -6,6 +6,8 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/lib/auth"
+import { isRestrictedWorkspace } from "@/lib/owner"
 import { LayoutGrid, Briefcase, CalendarDays, Users, Library } from "lucide-react"
 import { DashboardView } from "../dashboard/page"
 import { VacanciesView } from "../vacancies/page"
@@ -32,10 +34,18 @@ const VALID = new Set<TabKey>(TABS.map((t) => t.key))
 function WorkspaceInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { user } = useAuth()
+  // Урезанные пользователи (Ксения Сафронова / Орлинк): вкладка «Резерв» неактивна.
+  const reserveDisabled = isRestrictedWorkspace(user?.email)
   const [tab, setTab] = useState<TabKey>(() => {
     const t = searchParams?.get("ws") as TabKey | null
     return t && VALID.has(t) ? t : "overview"
   })
+
+  // Если «Резерв» недоступен, а в ссылке оказался ?ws=reserve — уводим на «Обзор».
+  useEffect(() => {
+    if (reserveDisabled && tab === "reserve") setTab("overview")
+  }, [reserveDisabled, tab])
 
   // Синхронизируем выбранный таб с ?ws= (без скролла), чтобы ссылка/обновление
   // сохраняли позицию.
@@ -58,16 +68,21 @@ function WorkspaceInner() {
           <div className="flex items-center gap-1 overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
             {TABS.map(({ key, label, icon: Icon }) => {
               const active = tab === key
+              const disabled = key === "reserve" && reserveDisabled
               return (
                 <button
                   key={key}
                   type="button"
-                  onClick={() => setTab(key)}
+                  disabled={disabled}
+                  onClick={() => !disabled && setTab(key)}
+                  title={disabled ? "Раздел недоступен" : undefined}
                   className={cn(
                     "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
-                    active
-                      ? "border-primary text-foreground"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
+                    disabled
+                      ? "border-transparent text-muted-foreground/40 cursor-not-allowed"
+                      : active
+                        ? "border-primary text-foreground"
+                        : "border-transparent text-muted-foreground hover:text-foreground"
                   )}
                 >
                   <Icon className="w-4 h-4 shrink-0" />
