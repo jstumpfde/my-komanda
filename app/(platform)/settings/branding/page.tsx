@@ -223,8 +223,9 @@ export default function BrandingPage() {
       setLogoPreview(data.logoUrl)
       toast.success("Логотип загружен")
 
-      // Авто-квадрат 256×256 для превью ссылок (og:image) — сжимаем в браузере (canvas),
-      // чтобы клиент не искал внешний сервис. Кладём в custom_theme.ogLogoUrl при сохранении.
+      // Один логотип → заполняем всё автоматически: квадрат 256×256 (canvas, в браузере)
+      // идёт и в превью ссылок (og:image), и в иконку свёрнутого сайдбара (favicon),
+      // если та ещё не задана. Клиент не грузит логотип несколько раз.
       try {
         const sq = await makeSquareLogoBlob(file, 256)
         if (sq) {
@@ -232,7 +233,12 @@ export default function BrandingPage() {
           fd2.append("file", new File([sq], "og-logo.png", { type: "image/png" }))
           const r2 = await fetch("/api/upload/logo", { method: "POST", body: fd2 })
           const d2 = (await r2.json().catch(() => ({}))) as { logoUrl?: string }
-          if (r2.ok && d2.logoUrl) setOgLogoPreview(d2.logoUrl)
+          if (r2.ok && d2.logoUrl) {
+            setOgLogoPreview(d2.logoUrl)
+            // Иконку (свёрн. сайдбар / favicon) автозаполняем тем же квадратом,
+            // только если HR не загрузил свою отдельно.
+            if (!faviconPreview) setFaviconPreview(d2.logoUrl)
+          }
         }
       } catch (e) {
         console.warn("[uploadLogoFile] og-square skip", e)
