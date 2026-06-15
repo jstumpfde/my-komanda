@@ -91,6 +91,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
                 aiStopFactors: (anketa?.aiStopFactors as string[] | undefined) ?? null,
                 screeningQuestions: (anketa?.screeningQuestions as string[] | undefined) ?? null,
                 aiWeights: (anketa?.aiWeights as Record<string, string> | undefined) ?? null,
+                customCriteria: (anketa?.aiCustomCriteria as { label: string; weight: string }[] | undefined) ?? null,
               },
             })
             if (r) {

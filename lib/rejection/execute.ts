@@ -13,6 +13,7 @@
 
 import { and, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
+import { sanitizeRejectionText } from "@/lib/rejection/legal-guard"
 import { candidates, followUpMessages } from "@/lib/db/schema"
 import type { VacancyAiProcessSettings } from "@/lib/db/schema"
 import { trySyncRejectToHh } from "@/lib/hh/sync-stage"
@@ -57,7 +58,7 @@ export async function scheduleRejection(args: {
     pendingRejectionAt:      at,
     pendingRejectionReason:  reason,
     pendingRejectionSetAt:   now,
-    pendingRejectionMessage: typeof message === "string" && message.trim().length > 0 ? message : null,
+    pendingRejectionMessage: sanitizeRejectionText(typeof message === "string" && message.trim().length > 0 ? message : null),
     updatedAt:               now,
   }).where(eq(candidates.id, candidateId))
 
@@ -134,7 +135,7 @@ export async function executeRejection(args: {
 
   // Сообщение об отказе + discard в hh. Если на момент планирования был
   // сохранён кастомный текст (стоп-фактор) — шлём его; иначе generic из вакансии.
-  await trySyncRejectToHh(candidateId, prev.message).catch(() => false)
+  await trySyncRejectToHh(candidateId, sanitizeRejectionText(prev.message)).catch(() => false)
 
   return { rejected: true }
 }
