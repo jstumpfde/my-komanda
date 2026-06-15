@@ -96,6 +96,20 @@ export default function AdminIntegratorsPage() {
     }
   }
 
+  // Изменить фикс-комиссию партнёра (override ступеней). Пусто = по объёму продаж.
+  const editCommission = async (integratorId: string) => {
+    const v = window.prompt("Фикс-комиссия партнёра, % (пусто = считать по объёму продаж):")
+    if (v === null) return
+    try {
+      const res = await fetch(`/api/admin/integrators/${integratorId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commissionPercent: v.trim() }),
+      })
+      if (res.ok) { toast.success("Комиссия обновлена"); setIntegrators(prev => prev.map(x => x.id === integratorId ? { ...x } : x)); }
+      else toast.error((await res.json().catch(() => ({}))).error || "Ошибка")
+    } catch { toast.error("Ошибка сети") }
+  }
+
   // Выдать пользователю партнёрский доступ: роль 'partner' + привязка к компании-партнёру.
   const grantPartner = async (integratorId: string) => {
     const email = window.prompt("Email пользователя, которому выдать партнёрский доступ к этому кабинету:")
@@ -183,6 +197,10 @@ export default function AdminIntegratorsPage() {
                         </DataCell>
                         <DataCell align="right">
                           <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="sm" className="h-8 text-xs gap-1" title="Изменить фикс-комиссию (пусто = по объёму)"
+                              onClick={e => { e.stopPropagation(); void editCommission(int.id) }}>
+                              % комиссия
+                            </Button>
                             <Button variant="ghost" size="sm" className="h-8 text-xs gap-1" title="Выдать пользователю партнёрский доступ"
                               onClick={e => { e.stopPropagation(); void grantPartner(int.id) }}>
                               <Users className="w-3.5 h-3.5" />Доступ
