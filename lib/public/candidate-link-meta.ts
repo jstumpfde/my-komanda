@@ -28,6 +28,7 @@ export async function candidateLinkMetadata(token: string): Promise<Metadata> {
           brandName: companies.brandName,
           brandSlogan: companies.brandSlogan,
           logoUrl: companies.logoUrl,
+          customTheme: companies.customTheme,
         })
         .from(vacancies)
         .innerJoin(companies, eq(vacancies.companyId, companies.id))
@@ -37,7 +38,11 @@ export async function candidateLinkMetadata(token: string): Promise<Metadata> {
         vacancyTitle = v.title?.trim() || vacancyTitle
         companyName = (v.brandName || v.name || "").trim()
         slogan = (v.brandSlogan || "").trim()
-        logoUrl = v.logoUrl
+        // Приоритет — авто-квадрат 256×256 (custom_theme.ogLogoUrl), чтобы превью
+        // показывалось маленьким значком, а не баннером. Иначе — обычный логотип.
+        const ct = v.customTheme as Record<string, unknown> | null
+        const ogLogo = ct && typeof ct.ogLogoUrl === "string" ? ct.ogLogoUrl : ""
+        logoUrl = ogLogo || v.logoUrl
       }
     }
   } catch {
@@ -60,8 +65,8 @@ export async function candidateLinkMetadata(token: string): Promise<Metadata> {
       description,
       ...(companyName ? { siteName: companyName } : {}),
       // Пустой массив гасит платформенный og:image из layout; если у работодателя
-      // есть логотип — показываем его.
-      images: logoUrl ? [{ url: logoUrl }] : [],
+      // есть логотип — показываем квадрат 256×256 (маленьким значком, не баннером).
+      images: logoUrl ? [{ url: logoUrl, width: 256, height: 256 }] : [],
     },
     twitter: {
       card: "summary",
