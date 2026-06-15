@@ -33,6 +33,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { useAuth, getVisibleSections, getVisibleSettings, ROLE_LABELS } from "@/lib/auth"
+import { isOwnerEmail } from "@/lib/owner"
 import { PlatformBadge } from "@/components/platform-badge"
 import { MODULE_REGISTRY } from "@/lib/modules/registry"
 import type { ModuleId } from "@/lib/modules/types"
@@ -160,6 +161,8 @@ export function DashboardSidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { role, user, logout } = useAuth()
+  // Owner-only фичи (Календарь и пр.) — пока обкатываются, видны только владельцу-полигону.
+  const isOwner = isOwnerEmail(user?.email)
 
   const vis = getVisibleSections(role) ?? { main: true, hiring: false, tools: false, settings: false, admin: false }
   const isAdminOrManager = role === 'platform_admin' || role === 'platform_manager' 
@@ -235,7 +238,10 @@ export function DashboardSidebar() {
     .filter(Boolean)
   const pilotCompanyFull =
     !isAdminOrManager && !!user?.companyId && pilotCompanyIds.includes(user.companyId)
-  const hrLite = !isAdminOrManager && !stagingFullAccess && !pilotCompanyFull
+  // Директор/владелец компании видят ПОЛНОЕ HR-меню (Рабочий стол, Кандидаты,
+  // Отчёт, Настройки HR), а не урезанное «только Вакансии». Урезанное — для
+  // прочих HR-ролей (hr_lead/hr_manager/observer и т.п.).
+  const hrLite = !isAdminOrManager && !stagingFullAccess && !pilotCompanyFull && role !== 'director' && role !== 'client'
 
   // Пересчёт модулей при изменении роли (когда useSession догружает данные)
   useEffect(() => {
@@ -593,8 +599,8 @@ export function DashboardSidebar() {
               </SidebarMenuButton>
             )
           })}
-          {/* «Календарь» — отдельный пункт после модулей */}
-          {vis.hiring && (
+          {/* «Календарь» — отдельный пункт после модулей (owner-only, обкатка) */}
+          {isOwner && (
             <SidebarMenuButton
               tooltip="Календарь"
               isActive={pathname.startsWith('/hr/calendar')}
@@ -887,8 +893,8 @@ export function DashboardSidebar() {
             )
           })}
 
-          {/* «Календарь» — отдельный пункт меню после модулей (вынесен из «Найм») */}
-          {vis.hiring && (() => {
+          {/* «Календарь» — отдельный пункт меню после модулей (owner-only, обкатка) */}
+          {isOwner && (() => {
             const calActive = pathname === '/hr/calendar' || pathname.startsWith('/hr/calendar/')
             return (
               <Link

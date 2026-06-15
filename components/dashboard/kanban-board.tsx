@@ -130,7 +130,7 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
         <div className="pb-4 -mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto">
           <div
             className="grid gap-3 w-full"
-            style={{ gridTemplateColumns: `repeat(${columns.length || 1}, minmax(150px, 1fr))` }}
+            style={{ gridTemplateColumns: `repeat(${columns.length || 1}, minmax(210px, 1fr))` }}
           >
             {columns.map((column, colIndex) => {
               const isFirst = colIndex === 0
