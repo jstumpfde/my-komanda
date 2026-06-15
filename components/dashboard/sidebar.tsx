@@ -33,7 +33,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { useAuth, getVisibleSections, getVisibleSettings, ROLE_LABELS } from "@/lib/auth"
-import { isOwnerEmail } from "@/lib/owner"
+import { isOwnerEmail, isRestrictedWorkspace } from "@/lib/owner"
 import { PlatformBadge } from "@/components/platform-badge"
 import { MODULE_REGISTRY } from "@/lib/modules/registry"
 import type { ModuleId } from "@/lib/modules/types"
@@ -163,6 +163,8 @@ export function DashboardSidebar() {
   const { role, user, logout } = useAuth()
   // Owner-only фичи (Календарь и пр.) — пока обкатываются, видны только владельцу-полигону.
   const isOwner = isOwnerEmail(user?.email)
+  // Урезанный сайдбар (Ксения Сафронова / Орлинк): скрыт пункт «Кандидаты».
+  const isRestricted = isRestrictedWorkspace(user?.email)
 
   const vis = getVisibleSections(role) ?? { main: true, hiring: false, tools: false, settings: false, admin: false }
   const isAdminOrManager = role === 'platform_admin' || role === 'platform_manager' 
@@ -770,7 +772,7 @@ export function DashboardSidebar() {
                       if (!group.label) {
                         return (
                           <SidebarMenu key="__root" className="gap-0.5 mt-1">
-                            {group.items.filter((item) => isItemVisible(id, item.href)).map((item) => {
+                            {group.items.filter((item) => isItemVisible(id, item.href) && !(isRestricted && item.href === '/hr/candidates')).map((item) => {
                               if (item.divider) {
                                 return (
                                   <div key={item.href} className="px-4 py-1.5 text-[10px] text-sidebar-foreground/30 font-medium tracking-wide select-none">
@@ -846,7 +848,7 @@ export function DashboardSidebar() {
 
                           <CollapsibleContent forceMount className="data-[state=closed]:hidden">
                             <SidebarMenu className="gap-0.5 mt-1">
-                              {group.items.filter((item) => isItemVisible(id, item.href)).map((item) => {
+                              {group.items.filter((item) => isItemVisible(id, item.href) && !(isRestricted && item.href === '/hr/candidates')).map((item) => {
                                 if (item.divider) {
                                   return (
                                     <div key={item.href} className="px-6 py-1.5 text-[10px] text-sidebar-foreground/30 font-medium tracking-wide select-none">

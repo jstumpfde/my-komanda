@@ -28,6 +28,8 @@ import {
 } from "@/components/ui/dialog"
 import { StageMessageControl } from "@/components/candidates/stage-message-control"
 import { getStageLabel, ALL_STAGE_SLUGS, PLATFORM_STAGES, type StageSlug } from "@/lib/stages"
+import { BulkActionsBar, type BulkAction } from "@/components/dashboard/bulk-actions-bar"
+import { useAuth } from "@/lib/auth"
 
 interface FacetsData {
   cities: { city: string; count: number }[]
@@ -189,6 +191,12 @@ function ColumnToggles({
 
 export default function CandidatesPage() {
   const router = useRouter()
+  const { role } = useAuth()
+  // Кто может удалять кандидатов (как в карточке вакансии).
+  const canDeleteCandidates = (["platform_admin", "platform_manager", "director"] as string[]).includes(role)
+  // Тик для принудительного рефетча списка после массового действия.
+  const [reloadTick, setReloadTick] = useState(0)
+  const [bulkBusy, setBulkBusy] = useState(false)
   const [candidates, setCandidates] = useState<GlobalCandidate[]>([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
@@ -387,7 +395,7 @@ export default function CandidatesPage() {
       })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [filterParams]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [filterParams, reloadTick]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadMore = async () => {
     if (loadingMore || !hasMore) return
@@ -540,6 +548,94 @@ export default function CandidatesPage() {
   const handleDrawerStageChange = useCallback((candidateId: string, newStage: string) => {
     setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, stage: newStage } : c))
   }, [])
+
+  // ─── Массовые действия (BulkActionsBar) ───────────────────────────────────
+  // Список стадий для «Сменить стадию» — платформенные нетерминальные этапы.
+  const bulkStages = useMemo(
+    () => ALL_STAGE_SLUGS
+      .filter(s => !PLATFORM_STAGES[s].isTerminal)
+      .map(s => ({ id: s, title: getStageLabel(s) })),
+    [],
+  )
+
+  // Общий vacancyId, если все выделенные из одной вакансии — иначе null.
+  // Нужен для действий, привязанных к вакансии (сравнение/тест/рассылка hh).
+  const selectedVacancyId = useMemo(() => {
+    let vid: string | null = null
+    for (const c of candidates) {
+      if (!selected.has(c.id)) continue
+      if (vid === null) vid = c.vacancyId
+      else if (vid !== c.vacancyId) return null
+    }
+    return vid
+  }, [candidates, selected])
+
+  // Все выделенные сейчас в «Отказ» → показываем «Вернуть в воронку».
+  const allSelectedRejected = useMemo(() => {
+    if (selected.size === 0) return false
+    for (const c of candidates) {
+      if (selected.has(c.id) && c.stage !== "rejected") return false
+    }
+    return true
+  }, [candidates, selected])
+
+  const handleBulkAction = useCallback(
+    async (action: BulkAction, payload?: { stage?: string }) => {
+      if (selected.size === 0 || bulkBusy) return
+      const ids = Array.from(selected)
+
+      // Сравнение — только в пределах одной вакансии (страница сравнения per-вакансия).
+      if (action === "compare") {
+        if (ids.length < 2) { toast.error("Выделите минимум двух кандидатов для сравнения"); return }
+        if (!selectedVacancyId) { toast.error("Сравнение доступно только для кандидатов одной вакансии"); return }
+        window.location.href = `/hr/vacancies/${selectedVacancyId}/compare?ids=${ids.join(",")}`
+        return
+      }
+      // Тест и рассылка через hh привязаны к вакансии (шаблон/hh-чат). Если все
+      // выделенные из одной вакансии — уводим в её карточку, иначе подсказываем.
+      if (action === "send_test" || action === "hh_broadcast") {
+        if (!selectedVacancyId) {
+          toast.error("Действие привязано к вакансии — выделите кандидатов одной вакансии")
+          return
+        }
+        router.push(`/hr/vacancies/${selectedVacancyId}?tab=candidates`)
+        return
+      }
+
+      setBulkBusy(true)
+      try {
+        const res = await fetch("/api/modules/hr/candidates/bulk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ candidateIds: ids, action, payload }),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({})) as { error?: string }
+          toast.error(err.error || "Не удалось выполнить массовое действие")
+          return
+        }
+        const data = (await res.json()) as { affected?: number; isFavorite?: boolean }
+        const n = data.affected ?? ids.length
+        switch (action) {
+          case "reject": toast.success(`Отказано: ${n}`); break
+          case "invite": toast.success(`Приглашено на интервью: ${n}`); break
+          case "talent_pool": toast.success(`В резерв: ${n}`); break
+          case "set_stage": toast.success(`Перемещено: ${n}`); break
+          case "toggle_favorite": toast.success(data.isFavorite ? `В избранном: ${n}` : `Снято с избранного: ${n}`); break
+          case "restore": toast.success(`Возвращено в воронку: ${n}`); break
+          case "trash": toast.success(`Удалено в корзину: ${n}`); break
+          case "hard_delete": toast.success(`Удалено навсегда: ${n}`); break
+        }
+        setSelected(new Set())
+        setReloadTick(t => t + 1)
+      } catch {
+        toast.error("Ошибка сети")
+      } finally {
+        setBulkBusy(false)
+      }
+    },
+    [selected, bulkBusy, selectedVacancyId, router],
+  )
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -768,6 +864,17 @@ export default function CandidatesPage() {
           </div>
         </div>
       </SidebarInset>
+
+      {/* Массовые действия по выделенным — sibling SidebarInset, чтобы
+          панель центрировалась по области контента (peer-data сайдбара). */}
+      <BulkActionsBar
+        count={selected.size}
+        stages={bulkStages}
+        allRejected={allSelectedRejected}
+        canDelete={canDeleteCandidates}
+        onClear={() => setSelected(new Set())}
+        onAction={handleBulkAction}
+      />
 
       {/* Drawer кандидата — тот же, что и внутри вакансии.
           initialCandidate — снапшот из списка: рисует шапку мгновенно

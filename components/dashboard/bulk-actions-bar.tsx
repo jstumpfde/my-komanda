@@ -101,9 +101,18 @@ export function BulkActionsBar({ count, stages, onClear, onAction, allRejected =
     <>
       <div
         className={cn(
-          "fixed bottom-4 left-1/2 -translate-x-1/2 z-40",
-          // Ширина по контенту (кап — почти весь экран), чтобы кнопки влезали в одну строку.
-          "w-fit max-w-[calc(100%-2rem)] overflow-x-auto",
+          "fixed bottom-4 z-40 -translate-x-1/2",
+          // Центрируем по ОБЛАСТИ КОНТЕНТА (правее сайдбара), а не по вьюпорту.
+          // Бар — sibling после сайдбара-peer, поэтому читаем его состояние через peer-data.
+          // Моб.: сайдбар — оверлей, контент на всю ширину → центр вьюпорта.
+          "left-1/2",
+          "md:left-[calc(50%+var(--sidebar-width)/2)]",
+          "md:peer-data-[state=collapsed]:left-[calc(50%+var(--sidebar-width-icon)/2)]",
+          // Ширина по контенту, кап — в пределах области контента (чтобы не вылезал за правый край).
+          "w-fit overflow-x-auto",
+          "max-w-[calc(100%-2rem)]",
+          "md:max-w-[calc(100%-var(--sidebar-width)-2rem)]",
+          "md:peer-data-[state=collapsed]:max-w-[calc(100%-var(--sidebar-width-icon)-2rem)]",
           // Колонка: «Выделено N · Снять» сверху-слева, кнопки одной строкой под.
           "flex flex-col items-start gap-2 px-3 py-2.5",
           "rounded-xl border border-border shadow-lg",
