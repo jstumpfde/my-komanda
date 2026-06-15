@@ -180,12 +180,20 @@ export function HhBroadcastDialog({
 
   const markSent = useCallback(() => {
     if (!current) return
-    setSentIds((prev) => new Set([...prev, current.id]))
+    const sentId = current.id
+    setSentIds((prev) => new Set([...prev, sentId]))
+    // Помечаем стадию кандидата «тест отправлен» сразу (fire-and-forget) — в колонке
+    // «Тест» появится «отп.». Рассылка ручная, иначе платформа не знает факт отправки.
+    void fetch(`/api/modules/hr/vacancies/${vacancyId}/hh-broadcast-mark-sent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ candidateIds: [sentId] }),
+    }).catch(() => {})
     const next = currentIdx + 1
     if (next >= total) { setPhase("done"); return }
     setCurrentIdx(next)
     startCooldown() // следующий чат откроется не раньше интервала
-  }, [current, currentIdx, total, startCooldown])
+  }, [current, currentIdx, total, startCooldown, vacancyId])
 
   const skipCurrent = useCallback(() => {
     if (!current) return

@@ -18,7 +18,8 @@ import { useTheme } from "next-themes"
 const PUBLIC_PATHS = [
   "/candidate/", "/schedule/", "/vacancy/", "/ref/", "/v/", "/join/",
   "/register", "/login", "/dev-login", "/landing", "/hr/onboarding",
-  "/demo/", "/intake/", "/vacancy-view/", "/candidate-update/",
+  "/demo/", "/intake/", "/test/", "/compare/", "/report/",
+  "/vacancy-view/", "/candidate-update/",
   "/ask/", "/politicahr2026",
 ]
 
