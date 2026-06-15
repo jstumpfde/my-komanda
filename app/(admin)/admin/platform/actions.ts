@@ -50,6 +50,17 @@ export async function actionRunMigrations() {
   return report
 }
 
+// Пересоздать показательные демо-данные на тенанте COMPANY24.PRO (идемпотентно,
+// трогает только демо-компанию). Динамический импорт — чтобы тяжёлый сидер не
+// грузился при обычном рендере админки.
+export async function actionSeedDemo() {
+  await requireAdminEmail()
+  const { seedDemoShowcase } = await import("@/scripts/seed-demo-showcase")
+  const stats = await seedDemoShowcase()
+  revalidatePath("/admin/platform")
+  return stats
+}
+
 export async function actionKillAllChatbots() {
   const email = await requireAdminEmail()
   const result = await emergencyKillAllAiChatbots()

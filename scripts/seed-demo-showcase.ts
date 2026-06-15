@@ -18,12 +18,15 @@
  *   npx tsx scripts/seed-demo-showcase.ts
  */
 
-import { eq, inArray } from "drizzle-orm"
+import fs from "fs"
+import path from "path"
+import { eq, inArray, and, like } from "drizzle-orm"
 import bcrypt from "bcryptjs"
 import { db, pgClient } from "@/lib/db"
 import {
   companies, users, vacancies, candidates,
   calendarEvents, candidateContacts, talentPoolEntries,
+  departments, positions, positionEmployees, salesDeals,
 } from "@/lib/db/schema"
 
 const DEMO_COMPANY_ID = "ae75117f-a3b7-49f5-abf3-8b3fbd9e3de9"
@@ -131,7 +134,7 @@ function avatar(name: string, i: number): string {
   return `https://api.dicebear.com/9.x/avataaars/png?seed=${encodeURIComponent(name + "-" + i)}&size=240`
 }
 
-async function main() {
+export async function seedDemoShowcase(): Promise<Record<string, number>> {
   console.log(`[demo-showcase] старт — компания ${DEMO_COMPANY_ID}`)
 
   // ── 0. Демо-директор: пароль + изоляция компании ──────────────────────────
@@ -336,7 +339,101 @@ async function main() {
   }
   console.log(`[demo-showcase] создано в резерве: ${tpCount}`)
 
-  console.log(`[demo-showcase] ГОТОВО ✅  вакансий=${VACANCIES.length} кандидатов=${candCount} интервью=${evCount} контактов=${ctCount} резерв=${tpCount}`)
+  // ── 7. Оргструктура (departments + positions + position_employees) ─────────
+  await db.delete(positions).where(eq(positions.tenantId, DEMO_COMPANY_ID))   // cascade → position_employees
+  await db.delete(departments).where(eq(departments.tenantId, DEMO_COMPANY_ID))
+  const DEPTS = [
+    { key: "mgmt", name: "Руководство", desc: "Топ-менеджмент компании" },
+    { key: "sales", name: "Продажи", desc: "Отдел продаж и работы с клиентами" },
+    { key: "hr", name: "HR", desc: "Управление персоналом и найм" },
+    { key: "dev", name: "Разработка", desc: "Отдел разработки продукта" },
+    { key: "mkt", name: "Маркетинг", desc: "Продвижение и контент" },
+  ]
+  const deptId: Record<string, string> = {}
+  for (let i = 0; i < DEPTS.length; i++) {
+    const [d] = await db.insert(departments).values({
+      tenantId: DEMO_COMPANY_ID, name: DEPTS[i].name, description: DEPTS[i].desc, sortOrder: i,
+    }).returning({ id: departments.id })
+    deptId[DEPTS[i].key] = d.id
+  }
+  const POSITIONS = [
+    { dep: "mgmt", name: "Генеральный директор", grade: "C-level", min: 30000000, max: 50000000 },
+    { dep: "mgmt", name: "Финансовый директор", grade: "C-level", min: 25000000, max: 40000000 },
+    { dep: "sales", name: "Руководитель отдела продаж", grade: "Senior", min: 15000000, max: 25000000 },
+    { dep: "sales", name: "Менеджер по продажам", grade: "Middle", min: 8000000, max: 15000000 },
+    { dep: "sales", name: "Менеджер по продажам", grade: "Junior", min: 5000000, max: 9000000 },
+    { dep: "hr", name: "HR-директор", grade: "Senior", min: 15000000, max: 22000000 },
+    { dep: "hr", name: "Рекрутер", grade: "Middle", min: 7000000, max: 12000000 },
+    { dep: "dev", name: "Тимлид разработки", grade: "Lead", min: 20000000, max: 30000000 },
+    { dep: "dev", name: "Frontend-разработчик", grade: "Middle", min: 15000000, max: 25000000 },
+    { dep: "dev", name: "Backend-разработчик", grade: "Middle", min: 15000000, max: 25000000 },
+    { dep: "dev", name: "QA-инженер", grade: "Middle", min: 10000000, max: 18000000 },
+    { dep: "mkt", name: "Руководитель маркетинга", grade: "Senior", min: 14000000, max: 22000000 },
+    { dep: "mkt", name: "SMM-менеджер", grade: "Junior", min: 7000000, max: 12000000 },
+    { dep: "mkt", name: "Дизайнер", grade: "Middle", min: 8000000, max: 14000000 },
+  ]
+  const demoEmployees = await db.select({ id: users.id }).from(users)
+    .where(and(eq(users.companyId, DEMO_COMPANY_ID), like(users.email, "demo-%@company24.pro")))
+  let empCursor = 0, posCount = 0, linkCount = 0
+  for (const p of POSITIONS) {
+    const take = demoEmployees.length ? Math.min(int(1, 2), demoEmployees.length) : 0
+    const assigned: string[] = []
+    for (let i = 0; i < take; i++) { assigned.push(demoEmployees[empCursor % demoEmployees.length].id); empCursor++ }
+    const [pos] = await db.insert(positions).values({
+      tenantId: DEMO_COMPANY_ID, departmentId: deptId[p.dep], name: p.name,
+      grade: p.grade, salaryMin: p.min, salaryMax: p.max, userId: assigned[0] ?? null,
+    }).returning({ id: positions.id })
+    posCount++
+    for (const uid of assigned) {
+      await db.insert(positionEmployees).values({ positionId: pos.id, userId: uid }).onConflictDoNothing()
+      linkCount++
+    }
+  }
+  console.log(`[demo-showcase] оргструктура: отделов=${DEPTS.length} должностей=${posCount} назначений=${linkCount}`)
+
+  // ── 8. CRM — сделки (sales_deals); amount в копейках ──────────────────────
+  await db.delete(salesDeals).where(eq(salesDeals.tenantId, DEMO_COMPANY_ID))
+  const DEALS = [
+    { title: "Внедрение CRM — Альфа-Строй", amount: 15000000, stage: "new", priority: "high", prob: 10, source: "Сайт", close: 30 },
+    { title: "Подписка HR-модуль — сеть кофеен «Бодрое утро»", amount: 7500000, stage: "new", priority: "medium", prob: 15, source: "Реферал", close: 21 },
+    { title: "ATS для массового найма — ГК Логистик", amount: 12000000, stage: "proposal", priority: "high", prob: 40, source: "hh.ru", close: 18 },
+    { title: "Автоматизация продаж — ООО Вектор", amount: 9800000, stage: "proposal", priority: "medium", prob: 45, source: "Звонок", close: 25 },
+    { title: "Корп. портал + Знания — ПромТех", amount: 22000000, stage: "negotiation", priority: "high", prob: 70, source: "Сайт", close: 12 },
+    { title: "Модуль обучения — сеть клиник «Здоровье»", amount: 6400000, stage: "negotiation", priority: "medium", prob: 65, source: "Реферал", close: 14 },
+    { title: "Полный пакет — завод «Метпром»", amount: 31000000, stage: "won", priority: "high", prob: 100, source: "Партнёр", close: -3 },
+    { title: "HR + CRM — ритейл «Магнолия»", amount: 18500000, stage: "won", priority: "high", prob: 100, source: "Сайт", close: -7 },
+    { title: "Пилот — стартап FinFlow", amount: 4200000, stage: "lost", priority: "low", prob: 0, source: "Звонок", close: -10 },
+    { title: "Внедрение — ТД «Восток»", amount: 8800000, stage: "lost", priority: "medium", prob: 0, source: "hh.ru", close: -5 },
+  ]
+  for (const d of DEALS) {
+    await db.insert(salesDeals).values({
+      tenantId: DEMO_COMPANY_ID, title: d.title, amount: d.amount, currency: "RUB",
+      stage: d.stage, priority: d.priority, probability: d.prob, source: d.source, assignedToId: dir.id,
+      expectedCloseDate: d.close >= 0 ? daysFromNow(d.close) : daysAgo(-d.close),
+      closedAt: (d.stage === "won" || d.stage === "lost") ? daysAgo(-d.close) : null,
+      createdAt: daysAgo(int(5, 40)),
+    })
+  }
+  console.log(`[demo-showcase] CRM-сделок: ${DEALS.length}`)
+
+  // ── 9. База знаний + Обучение (корректно таргетированный SQL, best-effort) ──
+  let knowledgeOk = false
+  try {
+    const sqlText = fs.readFileSync(path.join(process.cwd(), "scripts", "seed-knowledge-demo.sql"), "utf8")
+    await pgClient.unsafe(sqlText)
+    knowledgeOk = true
+    console.log(`[demo-showcase] База знаний + Обучение: засеяно`)
+  } catch (e) {
+    console.warn(`[demo-showcase] knowledge SQL пропущен (не критично):`, (e as Error).message)
+  }
+
+  console.log(`[demo-showcase] ГОТОВО ✅  вакансий=${VACANCIES.length} кандидатов=${candCount} интервью=${evCount} контактов=${ctCount} резерв=${tpCount} отделов=${DEPTS.length} должностей=${posCount} сделок=${DEALS.length} знания=${knowledgeOk ? "да" : "нет"}`)
+
+  return {
+    vacancies: VACANCIES.length, candidates: candCount, interviews: evCount, contacts: ctCount,
+    talentPool: tpCount, departments: DEPTS.length, positions: posCount, deals: DEALS.length,
+    knowledge: knowledgeOk ? 1 : 0,
+  }
 }
 
 function buildHistory(stage: string, createdDays: number): { stage: string; date: string; note?: string }[] {
@@ -366,6 +463,10 @@ function translit(s: string): string {
   return s.toLowerCase().split("").map(ch => TR[ch] ?? ch).join("")
 }
 
-main()
-  .then(async () => { await pgClient.end(); process.exit(0) })
-  .catch(async (e) => { console.error("[demo-showcase] ОШИБКА:", e); await pgClient.end(); process.exit(1) })
+// Автозапуск ТОЛЬКО при прямом вызове скрипта (npx tsx). При импорте функции
+// seedDemoShowcase в API-роут (Фаза 3) этот блок не выполняется.
+if (process.argv[1]?.includes("seed-demo-showcase")) {
+  seedDemoShowcase()
+    .then(async () => { await pgClient.end(); process.exit(0) })
+    .catch(async (e) => { console.error("[demo-showcase] ОШИБКА:", e); await pgClient.end(); process.exit(1) })
+}

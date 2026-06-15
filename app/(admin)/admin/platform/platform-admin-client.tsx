@@ -24,9 +24,10 @@ import {
   actionUpdatePlatformBranding,
   actionUpdatePlatformFavicon,
   actionUpdatePublicSeoDefaults,
+  actionSeedDemo,
 } from "./actions"
 import {
-  AlertTriangle, Bot, Loader2, ShieldAlert, LibraryBig, Plus, Pencil, Trash2,
+  AlertTriangle, Bot, Loader2, ShieldAlert, LibraryBig, Plus, Pencil, Trash2, Sparkles,
 } from "lucide-react"
 import {
   Select as SelectPrimitive,
@@ -204,6 +205,7 @@ export function PlatformAdminClient({
           <TabsTrigger value="companies">Companies ({companiesTotal})</TabsTrigger>
           <TabsTrigger value="vacancies">AI vacancies ({vacancies.length})</TabsTrigger>
           <TabsTrigger value="templates">Templates ({templates.length})</TabsTrigger>
+          <TabsTrigger value="demo">Демо</TabsTrigger>
           <TabsTrigger value="yulia">Yulia ({yulia.metrics.total})</TabsTrigger>
           <TabsTrigger value="cron">Cron</TabsTrigger>
           <TabsTrigger value="deadlines">Сроки</TabsTrigger>
@@ -241,6 +243,9 @@ export function PlatformAdminClient({
         </TabsContent>
         <TabsContent value="emergency" className="mt-4">
           <EmergencyTab />
+        </TabsContent>
+        <TabsContent value="demo" className="mt-4">
+          <DemoTab />
         </TabsContent>
         <TabsContent value="logs" className="mt-4">
           <LogsTab items={recentActions} />
@@ -323,6 +328,74 @@ function MigrationsTab({ items }: { items: MigrationItem[] }) {
             )}
           </TableBody>
         </Table>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ─── Демо-данные ─────────────────────────────────────────────────────────────
+
+function DemoTab() {
+  const [pending, startTransition] = useTransition()
+  const [confirm, setConfirm] = useState("")
+  const [result, setResult] = useState<Record<string, number> | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  function run() {
+    setError(null); setResult(null)
+    startTransition(async () => {
+      try {
+        const stats = await actionSeedDemo()
+        setResult(stats)
+        setConfirm("")
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+      }
+    })
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Sparkles className="w-5 h-5 text-violet-500" /> Демо-данные · COMPANY24.PRO
+        </CardTitle>
+        <p className="text-sm text-muted-foreground mt-1">
+          Пересоздаёт показательные данные на демо-тенанте: 4 вакансии, ~77 кандидатов
+          по всем стадиям, интервью, резерв, оргструктуру, CRM-сделки, базу знаний и
+          обучение. <strong>Идемпотентно</strong> — прежние демо-данные стираются и
+          создаются заново. Трогает только компанию COMPANY24.PRO; реальные тенанты
+          не задеваются. Логин показа: <code className="text-xs">director@company24.pro</code>.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {result && (
+          <div className="p-3 rounded border bg-green-50 text-green-800 text-sm dark:bg-green-950/30 dark:text-green-300">
+            Готово ✅ — вакансий {result.vacancies}, кандидатов {result.candidates},
+            интервью {result.interviews}, резерв {result.talentPool}, отделов {result.departments},
+            должностей {result.positions}, сделок {result.deals}, знания {result.knowledge ? "да" : "—"}.
+          </div>
+        )}
+        {error && (
+          <div className="p-3 rounded border bg-red-50 text-red-700 text-sm dark:bg-red-950/30">{error}</div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Для подтверждения введите <strong>CONFIRM</strong> — данные демо будут пересозданы.
+        </p>
+        <div className="flex items-center gap-2">
+          <Input
+            placeholder="CONFIRM"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            className="max-w-[200px]"
+            disabled={pending}
+          />
+          <Button onClick={run} disabled={pending || confirm !== "CONFIRM"}>
+            {pending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            Пересоздать демо
+          </Button>
+        </div>
+        <p className="text-[11px] text-muted-foreground">Занимает ~15–30 секунд.</p>
       </CardContent>
     </Card>
   )
