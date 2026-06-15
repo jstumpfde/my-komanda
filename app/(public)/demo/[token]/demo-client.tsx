@@ -431,7 +431,7 @@ function QuestionInput({
   if (type === "single") {
     return (
       <div className="space-y-2">
-        <p className="font-medium text-gray-800">{question.text}{question.required && <span className="text-red-500"> *</span>}</p>
+        <p className="text-base sm:text-[17px] font-semibold leading-snug text-gray-900">{question.text}{question.required && <span className="text-red-500"> *</span>}</p>
         <RadioGroup value={value} onValueChange={onChange}>
           {question.options.map((opt, i) => {
             const isSelected = value === opt
@@ -465,7 +465,7 @@ function QuestionInput({
     }
     return (
       <div className="space-y-2">
-        <p className="font-medium text-gray-800">{question.text}{question.required && <span className="text-red-500"> *</span>}</p>
+        <p className="text-base sm:text-[17px] font-semibold leading-snug text-gray-900">{question.text}{question.required && <span className="text-red-500"> *</span>}</p>
         <div className="space-y-2">
           {question.options.map((opt, i) => {
             const checked = selected.includes(opt)
@@ -506,7 +506,7 @@ function QuestionInput({
 
     return (
       <div className="space-y-2">
-        <p className="font-medium text-gray-800">{question.text}{question.required && <span className="text-red-500"> *</span>}</p>
+        <p className="text-base sm:text-[17px] font-semibold leading-snug text-gray-900">{question.text}{question.required && <span className="text-red-500"> *</span>}</p>
         <p className="text-xs text-gray-500">Расставьте в правильном порядке</p>
         <div className="space-y-2">
           {order.map((opt, i) => (
@@ -543,7 +543,7 @@ function QuestionInput({
     const noSelected = value === "no"
     return (
       <div className="space-y-2">
-        <p className="font-medium text-gray-800">{question.text}{question.required && <span className="text-red-500"> *</span>}</p>
+        <p className="text-base sm:text-[17px] font-semibold leading-snug text-gray-900">{question.text}{question.required && <span className="text-red-500"> *</span>}</p>
         <RadioGroup value={value} onValueChange={onChange}>
           <Label
             htmlFor={`${question.id}-yes`}
@@ -575,7 +575,7 @@ function QuestionInput({
   // short, long, text
   return (
     <div className="space-y-2">
-      <p className="font-medium text-gray-800">{question.text}{question.required && <span className="text-red-500"> *</span>}</p>
+      <p className="text-base sm:text-[17px] font-semibold leading-snug text-gray-900">{question.text}{question.required && <span className="text-red-500"> *</span>}</p>
       <Textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -606,7 +606,7 @@ function TaskBlock({
       {block.taskDescription && (
         <p className="text-gray-600">{replaceVars(block.taskDescription, data)}</p>
       )}
-      <div className="space-y-5">
+      <div className="space-y-8">
         {block.questions.map((q) => (
           <QuestionInput
             key={q.id}

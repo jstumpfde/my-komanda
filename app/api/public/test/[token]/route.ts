@@ -29,6 +29,7 @@ export async function GET(
         title: vacancies.title,
         companyName: companies.name,
         companyBrandName: companies.brandName,
+        companyLogo: companies.logoUrl,
         brandPrimaryColor: companies.brandPrimaryColor,
         brandBgColor: companies.brandBgColor,
         brandTextColor: companies.brandTextColor,
@@ -86,6 +87,7 @@ export async function GET(
       candidateName: candidate.name,
       vacancyTitle: vacancy.title,
       companyName: vacancy.companyBrandName || vacancy.companyName,
+      companyLogo: vacancy.companyLogo || null,
       brand: {
         primary: vacancy.brandPrimaryColor,
         bg: vacancy.brandBgColor,

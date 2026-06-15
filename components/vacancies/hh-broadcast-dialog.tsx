@@ -20,6 +20,8 @@ import {
   AlertCircle,
   Loader2,
   MessageSquare,
+  Paperclip,
+  Save,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -28,11 +30,13 @@ import { cn } from "@/lib/utils"
 export interface HhBroadcastItem {
   id: string
   name: string
+  firstName: string
   chatId: string | null
   chatUrl: string | null
   resumeUrl: string | null
   hasNoChat: boolean
   personalMessage: string
+  testLink: string
 }
 
 interface HhBroadcastDialogProps {
@@ -68,6 +72,9 @@ export function HhBroadcastDialog({
   const [skippedIds, setSkippedIds] = useState<Set<string>>(new Set())
   const [copied, setCopied] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [vacancyTitle, setVacancyTitle] = useState("")
+  const [savingTpl, setSavingTpl] = useState(false)
+  const [savedTpl, setSavedTpl] = useState(false)
   // Темп рассылки: интервал между открытиями чатов (анти-бан) + авто-открытие.
   const [intervalSec, setIntervalSec] = useState(20)
   const [autoOpen, setAutoOpen] = useState(false)
@@ -97,8 +104,9 @@ export function HhBroadcastDialog({
         const err = (await res.json().catch(() => ({}))) as { error?: string }
         throw new Error(err.error || "Ошибка загрузки данных")
       }
-      const data = (await res.json()) as { items: HhBroadcastItem[] }
+      const data = (await res.json()) as { items: HhBroadcastItem[]; vacancyTitle?: string }
       setItems(data.items)
+      setVacancyTitle(data.vacancyTitle ?? "")
       // Предзаполняем тексты сообщений
       const msgs: Record<string, string> = {}
       for (const item of data.items) msgs[item.id] = item.personalMessage
@@ -204,6 +212,37 @@ export function HhBroadcastDialog({
     startCooldown()
   }, [current, currentIdx, total, startCooldown])
 
+  // Сохранить текущий текст как шаблон по умолчанию (тот же, что у «Отправить тест»).
+  // Обратная подстановка: видимые значения текущего кандидата → плейсхолдеры,
+  // чтобы шаблон остался переиспользуемым (не зашить имя/ссылку конкретного человека).
+  const saveTemplate = useCallback(async () => {
+    if (!current) return
+    let tpl = messages[current.id] ?? current.personalMessage
+    if (current.testLink) tpl = tpl.split(current.testLink).join("{{test_link}}")
+    if (vacancyTitle) tpl = tpl.split(vacancyTitle).join("{{vacancy}}")
+    if (current.firstName) tpl = tpl.split(current.firstName).join("{{name}}")
+    setSavingTpl(true)
+    setSavedTpl(false)
+    try {
+      const res = await fetch(
+        `/api/modules/hr/vacancies/${vacancyId}/save-test-invite-template`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: tpl }),
+        },
+      )
+      if (res.ok) {
+        setSavedTpl(true)
+        setTimeout(() => setSavedTpl(false), 2500)
+      }
+    } catch {
+      // тихо — кнопка останется доступной для повтора
+    } finally {
+      setSavingTpl(false)
+    }
+  }, [current, messages, vacancyTitle, vacancyId])
+
   // ─── Рендер ───────────────────────────────────────────────────────────────
 
   return (
@@ -294,9 +333,36 @@ export function HhBroadcastDialog({
 
             {/* Редактируемое сообщение */}
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">
-                Персональное сообщение (можно отредактировать)
-              </label>
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs text-muted-foreground">
+                  Персональное сообщение (можно отредактировать)
+                </label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => void saveTemplate()}
+                  disabled={savingTpl}
+                  title="Сохранить как шаблон по умолчанию — он подставится в будущих рассылках и в кнопке «Отправить тест». Имя, вакансия и ссылка на тест сохранятся как подстановки."
+                >
+                  {savedTpl ? (
+                    <>
+                      <CheckCircle2 className="size-3.5 text-emerald-500" />
+                      Сохранено
+                    </>
+                  ) : savingTpl ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin" />
+                      Сохранение…
+                    </>
+                  ) : (
+                    <>
+                      <Save className="size-3.5" />
+                      Сохранить шаблон
+                    </>
+                  )}
+                </Button>
+              </div>
               <Textarea
                 value={currentMessage}
                 onChange={(e) =>
@@ -308,6 +374,25 @@ export function HhBroadcastDialog({
                 rows={6}
                 className="text-sm resize-none"
               />
+              {/* Что прикреплено — чтобы HR видел ссылку, которую получит кандидат */}
+              {current.testLink ? (
+                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <Paperclip className="size-3 shrink-0" />
+                  <span className="shrink-0">Ссылка кандидату (тест):</span>
+                  <span className="font-mono text-foreground truncate" title={current.testLink}>
+                    {current.testLink}
+                  </span>
+                </div>
+              ) : (
+                <p className="text-[11px] text-destructive">
+                  У кандидата нет ссылки на тест.
+                </p>
+              )}
+              {current.testLink && !currentMessage.includes(current.testLink) && (
+                <p className="text-[11px] text-destructive">
+                  ⚠ Ссылки на тест нет в тексте — кандидат не получит задание. Проверьте сообщение.
+                </p>
+              )}
             </div>
 
             {/* Кнопки действий */}

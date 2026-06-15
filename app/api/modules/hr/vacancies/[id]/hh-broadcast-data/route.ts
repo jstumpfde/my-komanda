@@ -143,11 +143,16 @@ export async function POST(
       return {
         id: c.id,
         name: fullName,
+        firstName,
         chatId,
         chatUrl,
         resumeUrl,
         hasNoChat,
         personalMessage,
+        // Ссылка на тест, которую получит кандидат — показываем отдельной строкой
+        // (чтобы HR видел, что прикреплено) и используем для обратной подстановки
+        // {{test_link}} при сохранении шаблона.
+        testLink,
       }
     })
 
