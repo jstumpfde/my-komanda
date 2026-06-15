@@ -69,7 +69,7 @@ function QuestionInput({
       return idx >= 0 ? value.slice(idx + 1).trim() : ""
     }
     return (
-      <div className="space-y-[3.5px] sm:space-y-1.5">
+      <div className="space-y-[2.5px] sm:space-y-1.5">
         {question.options.map((opt, i) => (
           <div key={i} className="space-y-1.5">
             <label className="flex items-center gap-2 cursor-pointer text-sm">
@@ -121,7 +121,7 @@ function QuestionInput({
       commit([...without, txt.trim() ? `${opt}: ${txt}` : opt])
     }
     return (
-      <div className="space-y-[3.5px] sm:space-y-1.5">
+      <div className="space-y-[2.5px] sm:space-y-1.5">
         {question.options.map((opt, i) => (
           <div key={i} className="space-y-1.5">
             <label className="flex items-center gap-2 cursor-pointer text-sm">
@@ -164,7 +164,7 @@ function QuestionInput({
       onChange(next.join(SEP))
     }
     return (
-      <div className="space-y-[3.5px] sm:space-y-1.5">
+      <div className="space-y-[2.5px] sm:space-y-1.5">
         <p className="text-xs opacity-60">Расставьте в правильном порядке</p>
         {order.map((opt, i) => (
           <div key={opt} className="flex items-center gap-2 rounded-lg border border-black/15 bg-white p-2 text-sm text-slate-900">
