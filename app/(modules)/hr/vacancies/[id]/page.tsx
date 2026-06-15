@@ -4546,7 +4546,11 @@ export default function VacancyPage() {
       {/* Диалог-мастер «Рассылка через hh»: полу-ручная отправка по одному. */}
       <HhBroadcastDialog
         open={hhBroadcastOpen}
-        onOpenChange={setHhBroadcastOpen}
+        onOpenChange={(o) => {
+          setHhBroadcastOpen(o)
+          // После рассылки обновляем список — чтобы в колонке «Тест» появилось «отп.».
+          if (!o) void (useListPaginated ? paginated.refetch() : refetchCandidates())
+        }}
         vacancyId={id}
         candidateIds={hhBroadcastIds}
       />
