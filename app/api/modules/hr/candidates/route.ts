@@ -114,6 +114,21 @@ const TEST_SCORE_SQL = sql`(
   LIMIT 1
 )`
 
+// Ранг для сортировки по колонке «Тест»: тест-активные кандидаты — наверх, даже
+// без числового балла. Тиры повторяют логику testStatus (сдан с баллом → сдан →
+// заполняет → открыл → отправлен → ошибка → ничего). NULL (нет активности) — в конец.
+const TEST_RANK_SQL = sql`(
+  CASE
+    WHEN ${TEST_SCORE_SQL} IS NOT NULL THEN 1000 + ${TEST_SCORE_SQL}
+    WHEN EXISTS (SELECT 1 FROM test_submissions ts WHERE ts.candidate_id = ${candidates.id} AND ts.submitted_at IS NOT NULL) THEN 900
+    WHEN EXISTS (SELECT 1 FROM test_submissions ts WHERE ts.candidate_id = ${candidates.id}) THEN 800
+    WHEN ${candidates.testInviteSentAt} IS NOT NULL THEN 500
+    WHEN ${candidates.stage} IN ('test_task_sent','test_task_done','test_passed','test_failed') THEN 500
+    WHEN EXISTS (SELECT 1 FROM follow_up_messages f WHERE f.candidate_id = ${candidates.id} AND f.branch = 'test_invite' AND f.status IN ('sent','pending')) THEN 500
+    ELSE NULL
+  END
+)`
+
 function buildOrderBy(key: SortKey | null, dir: "asc" | "desc"): SQL[] {
   const wrap = (col: Parameters<typeof asc>[0]) => (dir === "asc" ? asc(col) : desc(col))
   // id DESC — secondary tiebreaker для стабильной пагинации при равных значениях
@@ -146,10 +161,11 @@ function buildOrderBy(key: SortKey | null, dir: "asc" | "desc"): SQL[] {
       tiebreak,
     ]
     case "testScore": return [
-      // Балл теста из подзапроса; NULL (теста нет) — всегда в конец.
+      // Ранг тест-активности (балл + статус); NULL (теста не было) — всегда в конец,
+      // чтобы «отп./пер./сдан» поднимались наверх, а не падали вниз вместе с «—».
       dir === "asc"
-        ? sql`${TEST_SCORE_SQL} ASC NULLS LAST`
-        : sql`${TEST_SCORE_SQL} DESC NULLS LAST`,
+        ? sql`${TEST_RANK_SQL} ASC NULLS LAST`
+        : sql`${TEST_RANK_SQL} DESC NULLS LAST`,
       desc(candidates.createdAt),
       tiebreak,
     ]
