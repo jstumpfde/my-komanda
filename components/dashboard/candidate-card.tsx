@@ -224,9 +224,9 @@ export function CandidateCard({ candidate, settings, columnId, isLastColumn, onO
 
       {/* Навыки */}
       {settings.showSkills && candidate.skills?.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-1.5">
+        <div className="flex flex-wrap gap-1 mt-1.5 min-w-0">
           {candidate.skills.slice(0, 3).map((skill) => (
-            <Badge key={skill} variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-normal">
+            <Badge key={skill} variant="secondary" className="text-[10px] px-1.5 py-0.5 h-auto font-normal max-w-full whitespace-normal break-words text-left leading-tight">
               {skill}
             </Badge>
           ))}
@@ -278,37 +278,40 @@ export function CandidateCard({ candidate, settings, columnId, isLastColumn, onO
         </div>
       )}
 
-      {/* Action buttons row */}
-      <div className="flex items-center gap-2 w-full pt-2 mt-2 border-t" onClick={(e) => e.stopPropagation()}>
+      {/* Action buttons row — узко (карточка ужата): остаются только иконки */}
+      <div className="@container flex items-center gap-2 w-full pt-2 mt-2 border-t" onClick={(e) => e.stopPropagation()}>
         {columnId === "final_decision" ? (
           <Button
             variant="ghost"
             size="sm"
-            className="flex-1 gap-1.5 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-500/10"
+            className="flex-1 min-w-0 gap-1.5 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-500/10"
+            title="Нанять"
             onClick={() => onAction?.(candidate.id, columnId, "hire")}
           >
-            <Check className="w-4 h-4" />
-            Нанять
+            <Check className="w-4 h-4 shrink-0" />
+            <span className="@max-[210px]:hidden">Нанять</span>
           </Button>
         ) : !isLastColumn && (
           <Button
             variant="ghost"
             size="sm"
-            className="flex-1 gap-1.5 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-500/10"
+            className="flex-1 min-w-0 gap-1.5 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-500/10"
+            title="Далее"
             onClick={() => onAction?.(candidate.id, columnId, "advance")}
           >
-            <Check className="w-4 h-4" />
-            Далее
+            <Check className="w-4 h-4 shrink-0" />
+            <span className="@max-[210px]:hidden">Далее</span>
           </Button>
         )}
         <Button
           variant="ghost"
           size="sm"
-          className="flex-1 gap-1.5 text-red-500 hover:text-red-600 hover:bg-red-500/10"
+          className="flex-1 min-w-0 gap-1.5 text-red-500 hover:text-red-600 hover:bg-red-500/10"
+          title="Отказать"
           onClick={() => onAction?.(candidate.id, columnId, "reject")}
         >
-          <X className="w-4 h-4" />
-          Отказать
+          <X className="w-4 h-4 shrink-0" />
+          <span className="@max-[210px]:hidden">Отказать</span>
         </Button>
       </div>
     </div>
