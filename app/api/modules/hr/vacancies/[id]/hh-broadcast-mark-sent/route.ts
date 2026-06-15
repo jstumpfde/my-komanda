@@ -3,25 +3,17 @@
 //
 // Полу-ручная рассылка через hh-чат (hh-broadcast-dialog) отправляет приглашение
 // к тесту вручную (HR вставляет текст в чат hh). Платформа не знает факт отправки,
-// поэтому фронт после «Отправлено → следующий» зовёт этот эндпоинт, чтобы стадия
-// кандидата стала test_task_sent → в колонке «Тест» появляется «отп.» (отправлен).
+// поэтому фронт после копирования/«Отправлено» зовёт этот эндпоинт.
 //
-// Зеркалит логику scheduleTestInvitesForCandidates: двигаем стадию только вперёд
-// (NO_DOWNGRADE), синкаем стадию в воронку hh.
+// ВАЖНО: НЕ двигаем стадию кандидата (иначе в колонке «Статус» появлялось бы
+// «Тест отправлен» — Юрий это не хочет). Ставим только маркер test_invite_sent_at,
+// который драйвит ТОЛЬКО колонку «Тест» (= «отп.»).
 
 import { NextRequest } from "next/server"
-import { and, eq, inArray } from "drizzle-orm"
+import { and, eq, inArray, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
-import { trySyncTestStageToHh } from "@/lib/hh/sync-stage"
-
-// Стадии, которые НЕ откатываем назад к test_task_sent (кандидат уже дальше).
-const NO_DOWNGRADE = new Set<string>([
-  "test_task_sent", "test_task_done", "test_passed", "test_failed",
-  "scheduled", "interview", "interviewed", "reference_check",
-  "decision", "final_decision", "offer_sent", "offer", "hired", "rejected",
-])
 
 export async function POST(
   req: NextRequest,
@@ -45,25 +37,18 @@ export async function POST(
       : []
     if (candidateIds.length === 0) return apiError("Не выбраны кандидаты", 400)
 
-    // Берём только кандидатов этой вакансии (доп. tenant-изоляция) + их текущую стадию
-    const rows = await db
-      .select({ id: candidates.id, stage: candidates.stage })
-      .from(candidates)
-      .where(and(eq(candidates.vacancyId, id), inArray(candidates.id, candidateIds)))
+    // Ставим маркер только тем, у кого его ещё нет (не перетираем дату повторно).
+    // Стадию НЕ трогаем.
+    const updated = await db.update(candidates)
+      .set({ testInviteSentAt: new Date() })
+      .where(and(
+        eq(candidates.vacancyId, id),
+        inArray(candidates.id, candidateIds),
+        isNull(candidates.testInviteSentAt),
+      ))
+      .returning({ id: candidates.id })
 
-    const toAdvance = rows
-      .filter((r) => !NO_DOWNGRADE.has(r.stage ?? "new"))
-      .map((r) => r.id)
-
-    if (toAdvance.length > 0) {
-      await db.update(candidates)
-        .set({ stage: "test_task_sent", updatedAt: new Date() })
-        .where(inArray(candidates.id, toAdvance))
-      // Зеркалим стадию в воронку hh (fire-and-forget — не блокируем ответ).
-      for (const cid of toAdvance) void trySyncTestStageToHh(cid).catch(() => {})
-    }
-
-    return apiSuccess({ marked: toAdvance.length, skipped: rows.length - toAdvance.length })
+    return apiSuccess({ marked: updated.length })
   } catch (err) {
     if (err instanceof Response) return err
     console.error("[hh-broadcast-mark-sent]", err instanceof Error ? err.message : err)
