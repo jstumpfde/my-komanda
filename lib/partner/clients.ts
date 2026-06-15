@@ -32,6 +32,41 @@ export interface PartnerSummary {
   totalEarningsRub: number
 }
 
+// ─── Управление продуктами клиента (карточка клиента у партнёра) ──────────────
+
+export interface ClientProduct { slug: string; name: string; enabled: boolean }
+
+// Все продукты платформы + флаг, включён ли каждый у клиента.
+export async function getClientProducts(companyId: string): Promise<ClientProduct[]> {
+  const all = await db
+    .select({ id: modules.id, slug: modules.slug, name: modules.name })
+    .from(modules)
+    .where(eq(modules.isActive, true))
+    .orderBy(asc(modules.sortOrder))
+  const active = await db
+    .select({ moduleId: tenantModules.moduleId, isActive: tenantModules.isActive })
+    .from(tenantModules)
+    .where(eq(tenantModules.tenantId, companyId))
+  const activeIds = new Set(active.filter((a) => a.isActive !== false).map((a) => a.moduleId))
+  return all.map((m) => ({ slug: m.slug, name: m.name, enabled: activeIds.has(m.id) }))
+}
+
+// Привести набор активных модулей клиента к переданным slug (вкл новые, выкл лишние).
+export async function setClientModules(companyId: string, slugs: string[]): Promise<void> {
+  const wanted = new Set(slugs)
+  const all = await db.select({ id: modules.id, slug: modules.slug }).from(modules).where(eq(modules.isActive, true))
+  for (const m of all) {
+    const shouldOn = wanted.has(m.slug)
+    // upsert tenant_modules с нужным isActive
+    await db.insert(tenantModules)
+      .values({ tenantId: companyId, moduleId: m.id, isActive: shouldOn, enabledAt: shouldOn ? new Date() : null })
+      .onConflictDoUpdate({
+        target: [tenantModules.tenantId, tenantModules.moduleId],
+        set: { isActive: shouldOn, disabledAt: shouldOn ? null : new Date() },
+      })
+  }
+}
+
 interface Tier { minMrrKopecks: number; pct: number }
 
 async function getTiers(): Promise<Tier[]> {
@@ -57,10 +92,12 @@ function monthlyKopecks(price: number, interval: string | null): number {
 }
 
 export async function getPartnerSummary(integrator: Integrator): Promise<PartnerSummary> {
-  const links = await db
+  const allLinks = await db
     .select({ companyId: integratorClients.clientCompanyId, status: integratorClients.status })
     .from(integratorClients)
     .where(eq(integratorClients.integratorId, integrator.id))
+  // Отвязанные клиенты (status='cancelled') в кабинете не показываем.
+  const links = allLinks.filter((l) => l.status !== "cancelled")
   const ids = links.map((l) => l.companyId)
   const statusByCompany = new Map(links.map((l) => [l.companyId, l.status]))
 

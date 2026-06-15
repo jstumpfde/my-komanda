@@ -59,6 +59,7 @@ export default function PartnerDashboardPage() {
   // Онбординг клиента
   const [products, setProducts] = useState<Product[]>([])
   const [onbOpen, setOnbOpen] = useState(false)
+  const [manageId, setManageId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -109,6 +110,7 @@ export default function PartnerDashboardPage() {
       </div>
 
       <OnboardSheet open={onbOpen} onOpenChange={setOnbOpen} products={products} onDone={load} />
+      <ClientManageSheet companyId={manageId} onOpenChange={(o) => { if (!o) setManageId(null) }} onChanged={load} />
 
       {/* Сводка */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -144,7 +146,7 @@ export default function PartnerDashboardPage() {
                 </thead>
                 <tbody>
                   {clients.map((c) => (
-                    <tr key={c.companyId} className="border-b last:border-0 hover:bg-muted/30">
+                    <tr key={c.companyId} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => setManageId(c.companyId)} title="Настроить продукты клиента">
                       <td className="px-4 py-2.5 font-medium">{c.name || "—"}</td>
                       <td className="px-4 py-2.5">
                         <Badge variant="outline" className="text-[11px]">
@@ -274,6 +276,84 @@ function OnboardSheet({ open, onOpenChange, products, onDone }: {
             </Button>
           </SheetBody>
         )}
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+function ClientManageSheet({ companyId, onOpenChange, onChanged }: {
+  companyId: string | null; onOpenChange: (o: boolean) => void; onChanged: () => void
+}) {
+  const [name, setName] = useState("")
+  const [products, setProducts] = useState<{ slug: string; name: string; enabled: boolean }[]>([])
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!companyId) return
+    setLoading(true)
+    fetch(`/api/partner/clients/${companyId}`).then((r) => r.ok ? r.json() : Promise.reject(r))
+      .then((d) => { setName(d.name || ""); setProducts(d.products ?? []); setSelected(new Set((d.products ?? []).filter((p: { enabled: boolean }) => p.enabled).map((p: { slug: string }) => p.slug))) })
+      .catch(() => toast.error("Не удалось загрузить клиента"))
+      .finally(() => setLoading(false))
+  }, [companyId])
+
+  const toggle = (slug: string) => setSelected((prev) => { const n = new Set(prev); n.has(slug) ? n.delete(slug) : n.add(slug); return n })
+
+  const save = async () => {
+    if (!companyId) return
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/partner/clients/${companyId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ moduleSlugs: [...selected] }),
+      })
+      if (res.ok) { toast.success("Продукты сохранены"); onChanged() } else toast.error("Ошибка")
+    } finally { setSaving(false) }
+  }
+
+  const unassign = async () => {
+    if (!companyId || !window.confirm("Отвязать клиента от вас? Компания клиента останется, но пропадёт из вашего списка.")) return
+    const res = await fetch(`/api/partner/clients/${companyId}`, { method: "DELETE" })
+    if (res.ok) { toast.success("Клиент отвязан"); onChanged(); onOpenChange(false) } else toast.error("Ошибка")
+  }
+
+  return (
+    <Sheet open={!!companyId} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2"><Building2 className="size-4" />{name || "Клиент"}</SheetTitle>
+        </SheetHeader>
+        <SheetBody className="space-y-4 pt-2">
+          {loading ? (
+            <div className="flex justify-center py-8"><Loader2 className="size-5 animate-spin text-muted-foreground" /></div>
+          ) : (
+            <>
+              <div className="space-y-1.5">
+                <Label className="text-sm">Подключённые продукты</Label>
+                <div className="grid grid-cols-1 gap-1.5 rounded-lg border p-2">
+                  {products.map((p) => (
+                    <label key={p.slug} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-muted/50 cursor-pointer text-sm">
+                      <input type="checkbox" checked={selected.has(p.slug)} onChange={() => toggle(p.slug)} className="accent-primary size-4" />
+                      {p.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <Button className="w-full gap-1.5" onClick={() => void save()} disabled={saving}>
+                {saving ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                Сохранить продукты
+              </Button>
+              <Button variant="outline" className="w-full" disabled title="Скоро: вход в кабинет клиента для полной настройки">
+                Войти как клиент (скоро)
+              </Button>
+              <Button variant="ghost" className="w-full text-destructive hover:text-destructive" onClick={() => void unassign()}>
+                Отвязать клиента
+              </Button>
+            </>
+          )}
+        </SheetBody>
       </SheetContent>
     </Sheet>
   )
