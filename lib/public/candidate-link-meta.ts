@@ -49,10 +49,11 @@ export async function candidateLinkMetadata(token: string): Promise<Metadata> {
     // Фолбэк на нейтральное превью без обращения к БД.
   }
 
-  // Заголовок = вакансия + бренд. Описание превью = только слоган компании
-  // (Настройки → Брендинг). CTA не добавляем — он уже есть в тексте сообщения HR.
+  // Заголовок = вакансия + бренд (оба — редактируемые поля). Описание превью =
+  // ТОЛЬКО слоган компании (видимое редактируемое поле Настройки → Брендинг).
+  // Никаких вшитых фраз («Отклик на вакансию…», CTA) — см. правило no-hidden-hardcoded-text.
   const title = companyName ? `${vacancyTitle} — ${companyName}` : vacancyTitle
-  const description = slogan || companyName || vacancyTitle
+  const description = slogan
 
   return {
     title,
