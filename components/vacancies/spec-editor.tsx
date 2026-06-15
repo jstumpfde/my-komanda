@@ -271,13 +271,13 @@ export function SpecEditor({ vacancyId, onSaved }: SpecEditorProps) {
 
   const transferFromPortrait = () => {
     if (!spec) return
-    const must = spec.portraitRequiredSkills.slice(0, 5)
-    const nice = spec.portraitNiceSkills.slice(0, 5)
-    const deal = spec.portraitKnockouts.slice(0, 3)
+    const must = spec.portraitRequiredSkills.slice(0, 10)
+    const nice = spec.portraitNiceSkills.slice(0, 10)
+    const deal = spec.portraitKnockouts.slice(0, 6)
     const over = {
-      must: spec.portraitRequiredSkills.slice(5),
-      nice: spec.portraitNiceSkills.slice(5),
-      deal: spec.portraitKnockouts.slice(3),
+      must: spec.portraitRequiredSkills.slice(10),
+      nice: spec.portraitNiceSkills.slice(10),
+      deal: spec.portraitKnockouts.slice(6),
     }
     patch({
       mustHave:     must,
@@ -407,24 +407,24 @@ export function SpecEditor({ vacancyId, onSaved }: SpecEditorProps) {
         <CardContent className="space-y-5">
           <ListEditor
             label="Обязательные (must-have)"
-            hint="Без этого кандидат не подходит. 3–5 конкретных пунктов."
-            maxItems={5}
+            hint="Без этого кандидат не подходит. Можно целой фразой, напр.: «Опыт руководителем проектов в промышленном строительстве ≥ 5 лет». Enter или + — добавить."
+            maxItems={10}
             items={spec.mustHave}
             setItems={v => patch({ mustHave: v })}
             placeholders={LIST_PLACEHOLDERS.must}
           />
           <ListEditor
             label="Желательные (nice-to-have)"
-            hint="Повышают оценку, но не дисквалифицируют."
-            maxItems={5}
+            hint="Повышают оценку, но не дисквалифицируют. Можно фразой."
+            maxItems={10}
             items={spec.niceToHave}
             setItems={v => patch({ niceToHave: v })}
             placeholders={LIST_PLACEHOLDERS.nice}
           />
           <ListEditor
             label="Неприемлемо (deal-breakers)"
-            hint="При совпадении — отказ, даже если общий балл высокий."
-            maxItems={3}
+            hint="При совпадении — отказ, даже если общий балл высокий. Можно фразой."
+            maxItems={6}
             items={spec.dealBreakers}
             setItems={v => patch({ dealBreakers: v })}
             placeholders={LIST_PLACEHOLDERS.deal}
