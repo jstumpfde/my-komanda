@@ -15,6 +15,8 @@ import { scoreCandidateById } from "@/lib/ai-score-candidate"
 import { scoreResumeRubric } from "@/lib/scoring/rubric"
 import { buildSpecFromAnketa, buildResumeText } from "@/lib/scoring/vacancy-spec"
 import { scoreTestSubmission } from "@/lib/ai-score-test"
+import { isSpecScoringEnabled, buildSpecResumeInput } from "@/lib/core/spec/resume-input"
+import { getSpec } from "@/lib/core/spec/store"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
@@ -72,28 +74,41 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const dims = dimension === "all" ? ALL_DIMS : [dimension]
     const result = { resume: 0, ai: 0, rubric: 0, test: 0, skipped: 0, errors: 0 }
 
+    // Портрет (spec) для переоценки резюме — тот же путь, что у живого пайплайна:
+    // если заполнен и включён, оцениваем ПО НЕМУ (а не по legacy-анкете).
+    const specForResume = (dims.includes("resume") && isSpecScoringEnabled(vacancyId))
+      ? await getSpec(vacancyId)
+      : null
+    const useSpecForResume = !!specForResume
+      && (specForResume.mustHave.length > 0 || specForResume.portraitRequiredSkills.length > 0)
+
     for (const c of cands) {
       for (const d of dims) {
         try {
           if (d === "resume") {
-            const r = await screenResume({
-              resume: {
-                name: c.name, city: c.city, salaryMin: c.salaryMin,
-                experienceYears: c.experienceYears, keySkills: c.keySkills, skills: c.skills,
-                educationLevel: c.educationLevel, workFormat: c.workFormat, languages: c.languages,
-                relocationReady: c.relocationReady, professionalRoles: c.professionalRoles,
-                citizenshipNames: c.citizenshipNames,
-              },
-              vacancy: {
-                title: vac.title, city: vac.city,
-                aiIdealProfile: (anketa?.aiIdealProfile as string | undefined) ?? null,
-                aiRequiredHardSkills: (anketa?.aiRequiredHardSkills as string[] | undefined) ?? null,
-                aiStopFactors: (anketa?.aiStopFactors as string[] | undefined) ?? null,
-                screeningQuestions: (anketa?.screeningQuestions as string[] | undefined) ?? null,
-                aiWeights: (anketa?.aiWeights as Record<string, string> | undefined) ?? null,
-                customCriteria: (anketa?.aiCustomCriteria as { label: string; weight: string }[] | undefined) ?? null,
-              },
-            })
+            const resumeForScreen = {
+              name: c.name, city: c.city, salaryMin: c.salaryMin,
+              experienceYears: c.experienceYears, keySkills: c.keySkills, skills: c.skills,
+              educationLevel: c.educationLevel, workFormat: c.workFormat, languages: c.languages,
+              relocationReady: c.relocationReady, professionalRoles: c.professionalRoles,
+              citizenshipNames: c.citizenshipNames,
+            }
+            const r = await screenResume(
+              useSpecForResume && specForResume
+                ? buildSpecResumeInput(resumeForScreen, { title: vac.title, city: vac.city }, specForResume)
+                : {
+                    resume: resumeForScreen,
+                    vacancy: {
+                      title: vac.title, city: vac.city,
+                      aiIdealProfile: (anketa?.aiIdealProfile as string | undefined) ?? null,
+                      aiRequiredHardSkills: (anketa?.aiRequiredHardSkills as string[] | undefined) ?? null,
+                      aiStopFactors: (anketa?.aiStopFactors as string[] | undefined) ?? null,
+                      screeningQuestions: (anketa?.screeningQuestions as string[] | undefined) ?? null,
+                      aiWeights: (anketa?.aiWeights as Record<string, string> | undefined) ?? null,
+                      customCriteria: (anketa?.aiCustomCriteria as { label: string; weight: string }[] | undefined) ?? null,
+                    },
+                  },
+            )
             if (r) {
               await db.update(candidates).set({ resumeScore: r.score }).where(eq(candidates.id, c.id))
               result.resume++
