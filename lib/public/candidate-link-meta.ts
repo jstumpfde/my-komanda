@@ -49,11 +49,10 @@ export async function candidateLinkMetadata(token: string): Promise<Metadata> {
     // Фолбэк на нейтральное превью без обращения к БД.
   }
 
-  // Заголовок = вакансия + бренд. Описание НЕ повторяет название вакансии (оно уже
-  // в заголовке): ведём слоганом компании (Настройки → Брендинг) + короткий CTA.
+  // Заголовок = вакансия + бренд. Описание превью = только слоган компании
+  // (Настройки → Брендинг). CTA не добавляем — он уже есть в тексте сообщения HR.
   const title = companyName ? `${vacancyTitle} — ${companyName}` : vacancyTitle
-  const cta = "Заполните короткую анкету по ссылке, чтобы продолжить отклик."
-  const description = slogan ? `${slogan}. ${cta}` : cta
+  const description = slogan || companyName || vacancyTitle
 
   return {
     title,
