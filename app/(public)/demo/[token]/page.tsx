@@ -1,10 +1,18 @@
+import type { Metadata } from "next"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates } from "@/lib/db/schema"
 import { isShortId } from "@/lib/short-id"
+import { candidateLinkMetadata } from "@/lib/public/candidate-link-meta"
 import DemoClient from "./demo-client"
+
+// OG-превью для кандидата: вакансия работодателя, без платформенного логотипа.
+export async function generateMetadata({ params }: { params: Promise<{ token: string }> }): Promise<Metadata> {
+  const { token } = await params
+  return candidateLinkMetadata(token)
+}
 
 const COOKIE_NAME = "myk_candidate_uuid"
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
