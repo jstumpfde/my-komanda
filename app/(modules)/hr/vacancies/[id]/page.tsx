@@ -24,7 +24,6 @@ import type { CandidateSortMode } from "@/lib/candidate-sort"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
 import { CandidateTrashSheet } from "@/components/candidates/candidate-trash-sheet"
 import { RediscoverySheet } from "@/components/candidates/rediscovery-sheet"
-import { RubricRankPanel } from "@/components/candidates/rubric-rank-panel"
 import { BulkActionsBar, type BulkAction } from "@/components/dashboard/bulk-actions-bar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
@@ -2947,11 +2946,8 @@ export default function VacancyPage() {
               </TabsContent>
 
               <TabsContent value="candidates">
-                {/* Рубричное ранжирование (shadow) */}
-                <RubricRankPanel
-                  vacancyId={id}
-                  onOpenCandidate={(cid) => { setDrawerCandidateId(cid); setDrawerOpen(true) }}
-                />
+                {/* Рубричный балл — в колонке «Рубрика»; запуск оценки — меню
+                    «Ещё → Переоценить → AI-рубрика». Отдельный баннер убран. */}
 
                 {/* Talent Pool radar */}
                 {talentMatches.length > 0 && !talentRadarHidden && (
