@@ -44,6 +44,9 @@ interface HhBroadcastDialogProps {
   onOpenChange: (open: boolean) => void
   vacancyId: string
   candidateIds: string[]
+  // Вызывается ПОСЛЕ успешной отметки «тест отправлен» (маркер записан в БД) —
+  // родитель обновляет список, чтобы в колонке «Тест» сразу появилось «отп.».
+  onSent?: () => void
 }
 
 // ─── Вспомогательные ──────────────────────────────────────────────────────────
@@ -71,6 +74,7 @@ export function HhBroadcastDialog({
   onOpenChange,
   vacancyId,
   candidateIds,
+  onSent,
 }: HhBroadcastDialogProps) {
   const [phase, setPhase] = useState<"loading" | "wizard" | "done">("loading")
   const [items, setItems] = useState<HhBroadcastItem[]>([])
@@ -181,8 +185,10 @@ export function HhBroadcastDialog({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ candidateIds: [id] }),
-    }).catch(() => {})
-  }, [vacancyId])
+    })
+      .then((r) => { if (r.ok) onSent?.() }) // обновляем список ПОСЛЕ записи маркера (без гонки)
+      .catch(() => {})
+  }, [vacancyId, onSent])
 
   // Сменить тип прикреплённой ссылки (тест/демо) и заменить её прямо в тексте.
   const changeLinkKind = useCallback((newKind: "test" | "demo") => {
