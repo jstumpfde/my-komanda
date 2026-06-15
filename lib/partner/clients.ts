@@ -68,15 +68,34 @@ export async function getPartnerSummary(integrator: Integrator): Promise<Partner
   const base: Omit<PartnerClientRow, "commissionPercent" | "earningsRub">[] = []
   let totalKopecks = 0
   if (ids.length > 0) {
-    const comps = await db
+    // ВНИМАНИЕ: companies.plan_id на проде имеет тип text (дрейф схемы), а plans.id —
+    // uuid, поэтому JOIN по колонкам падает (text = uuid). Тянем планы отдельным
+    // запросом по id (параметр приводится к uuid корректно).
+    const compRows = await db
       .select({
         id: companies.id, name: companies.name, brandName: companies.brandName,
-        subscriptionStatus: companies.subscriptionStatus,
-        planName: plans.name, planPrice: plans.price, planInterval: plans.interval,
+        subscriptionStatus: companies.subscriptionStatus, planId: companies.planId,
       })
       .from(companies)
-      .leftJoin(plans, eq(companies.planId, plans.id))
       .where(inArray(companies.id, ids))
+
+    const planIds = [...new Set(compRows.map((c) => c.planId).filter((p): p is string => !!p))]
+    const planById = new Map<string, { name: string; price: number; interval: string | null }>()
+    if (planIds.length > 0) {
+      const planRows = await db
+        .select({ id: plans.id, name: plans.name, price: plans.price, interval: plans.interval })
+        .from(plans)
+        .where(inArray(plans.id, planIds))
+      for (const p of planRows) planById.set(p.id, { name: p.name, price: p.price, interval: p.interval })
+    }
+    const comps = compRows.map((c) => {
+      const plan = c.planId ? planById.get(c.planId) : undefined
+      return {
+        id: c.id, name: c.name, brandName: c.brandName,
+        subscriptionStatus: c.subscriptionStatus,
+        planName: plan?.name ?? null, planPrice: plan?.price ?? null, planInterval: plan?.interval ?? null,
+      }
+    })
 
     const modRows = await db
       .select({ tenantId: tenantModules.tenantId, slug: modules.slug, name: modules.name, isActive: tenantModules.isActive })
