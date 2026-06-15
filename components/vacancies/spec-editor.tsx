@@ -617,12 +617,23 @@ export function SpecEditor({ vacancyId, onSaved }: SpecEditorProps) {
         {/* Оценка резюме */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Gauge className="w-4 h-4" /> Оценка резюме
-            </CardTitle>
+            <div className="flex items-start justify-between gap-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Gauge className="w-4 h-4" /> Оценка резюме
+              </CardTitle>
+              <Switch
+                checked={spec.resumeThresholds.enabled ?? true}
+                onCheckedChange={v => patch({ resumeThresholds: { ...spec.resumeThresholds, enabled: v } })}
+              />
+            </div>
             <CardDescription>Пороги AI-скоринга резюме и действие между ними.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {!(spec.resumeThresholds.enabled ?? true) ? (
+              <p className="text-[11px] text-muted-foreground bg-muted/40 rounded-md px-3 py-2 border">
+                Оценка резюме отключена — скоринг резюме не применяется, кандидаты идут в ручной разбор.
+              </p>
+            ) : (<>
             <div className="space-y-1.5">
               <div className="flex items-baseline justify-between">
                 <Label className="text-xs">Зелёная зона (приглашение)</Label>
@@ -680,18 +691,30 @@ export function SpecEditor({ vacancyId, onSaved }: SpecEditorProps) {
                 className="w-24 h-8 text-sm"
               />
             </div>
+            </>)}
           </CardContent>
         </Card>
 
         {/* Оценка анкеты */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <FileText className="w-4 h-4" /> Оценка анкеты
-            </CardTitle>
+            <div className="flex items-start justify-between gap-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileText className="w-4 h-4" /> Оценка анкеты
+              </CardTitle>
+              <Switch
+                checked={spec.anketaThresholds.enabled ?? true}
+                onCheckedChange={v => patch({ anketaThresholds: { ...spec.anketaThresholds, enabled: v } })}
+              />
+            </div>
             <CardDescription>Пороги AI-скрининга ответов анкеты (после демо).</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {!(spec.anketaThresholds.enabled ?? true) ? (
+              <p className="text-[11px] text-muted-foreground bg-muted/40 rounded-md px-3 py-2 border">
+                Оценка анкеты отключена — скрининг ответов не применяется.
+              </p>
+            ) : (<>
             <div className="space-y-1.5">
               <div className="flex items-baseline justify-between">
                 <Label className="text-xs">Зелёный уровень (на встречу)</Label>
@@ -718,6 +741,7 @@ export function SpecEditor({ vacancyId, onSaved }: SpecEditorProps) {
               Жёлтая зона (между порогами) — кандидат получает «мы свяжемся»,
               решение за HR. Тексты уровней — в блоке «AI-скрининг анкеты».
             </p>
+            </>)}
           </CardContent>
         </Card>
       </div>
