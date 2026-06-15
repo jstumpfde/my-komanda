@@ -19,7 +19,7 @@
 //      уходят, даже если это РАЗНЫЕ candidate_id (B3: дубль-двойник человека)
 //      или повторный запуск рассылки. Считается как alreadyQueued.
 
-import { eq, and, inArray, sql } from "drizzle-orm"
+import { eq, and, inArray, isNull, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import {
   demos,
@@ -34,7 +34,6 @@ import { adjustToWorkingWindow } from "@/lib/schedule/can-send-now"
 import { generateTouchSchedule, mergeMessagesWithDefaults } from "@/lib/followup/schedule"
 import { isFollowUpPreset } from "@/lib/followup/presets"
 import { DEFAULT_TEST_NOT_OPENED } from "@/lib/followup/default-messages"
-import { trySyncTestStageToHh } from "@/lib/hh/sync-stage"
 
 export const DEFAULT_TEST_INVITE_TEXT =
   "{{name}}, спасибо за интерес к вакансии «{{vacancy}}»! Предлагаем пройти короткий тест — пройдите по ссылке:\n\n{{test_link}}"
@@ -48,15 +47,6 @@ export const DEFAULT_TEST_REMINDER_MESSAGES: string[] = [
   "{{name}}, тест по «{{vacancy}}» ещё ждёт вас 🙂 Ссылка та же:\n\n{{test_link}}\n\nЕсли возникли вопросы — напишите здесь, помогу.",
   "{{name}}, последнее напоминание про тест по «{{vacancy}}». Если позиция интересна — пройдите, пожалуйста:\n\n{{test_link}}",
 ]
-
-// Стадии, с которых НЕ откатываем назад в test_task_sent: кандидат уже сдал
-// тест / прошёл дальше / терминальный. Приглашение всё равно поставим (HR мог
-// осознанно переслать), но стадию не трогаем, чтобы не сбить воронку.
-const NO_DOWNGRADE = new Set<string>([
-  "test_task_done", "test_passed", "test_failed",
-  "scheduled", "interview", "interviewed", "reference_check",
-  "decision", "final_decision", "offer_sent", "offer", "hired", "rejected",
-])
 
 async function ensureCampaign(vacancyId: string): Promise<string | null> {
   const [existing] = await db
@@ -162,7 +152,6 @@ export async function scheduleTestInvitesForCandidates(args: {
       inArray(candidates.id, args.candidateIds),
     ))
   if (!cands.length) return { ...result, error: "no_candidates" }
-  const stageById = new Map(cands.map(c => [c.id, c.stage ?? "new"]))
   const validIds = cands.map(c => c.id)
 
   // 5. Дедуп: уже есть pending|sent приглашение.
@@ -294,15 +283,12 @@ export async function scheduleTestInvitesForCandidates(args: {
         if (notOpenedTouches.length > 0) await db.insert(followUpMessages).values(notOpenedTouches)
       }
 
-      // Стадию двигаем только вперёд → «Тест отправлен» в колонке «Статус».
-      if (!NO_DOWNGRADE.has(stageById.get(id) ?? "new")) {
-        await db.update(candidates)
-          .set({ stage: "test_task_sent", updatedAt: new Date() })
-          .where(eq(candidates.id, id))
-        // Зеркалим в воронку hh: переводим отклик в стадию «Тестовое задание»
-        // (коллекция assessment). Fire-and-forget — не блокируем рассылку.
-        void trySyncTestStageToHh(id).catch(() => {})
-      }
+      // Факт отправки теста — только маркер (колонка «Тест» = «отп.»), стадию НЕ
+      // двигаем: раньше двигали в test_task_sent → «Тест отправлен» в «Статусе»,
+      // Юрий это отключил (статус должен отражать воронку, не факт отправки теста).
+      await db.update(candidates)
+        .set({ testInviteSentAt: new Date() })
+        .where(and(eq(candidates.id, id), isNull(candidates.testInviteSentAt)))
       scheduledChats.add(chat)
       result.scheduled++
     } catch (err) {
