@@ -34,7 +34,7 @@ function BrandHeader({ logo, name, center }: { logo?: string | null; name?: stri
         <img src={logo} alt="" className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg object-contain shrink-0" />
       )}
       {name && (
-        <p className="text-base sm:text-lg font-bold tracking-wide opacity-90">{name}</p>
+        <p className="text-xl sm:text-[22px] font-bold tracking-wide opacity-90">{name}</p>
       )}
     </div>
   )
@@ -69,7 +69,7 @@ function QuestionInput({
       return idx >= 0 ? value.slice(idx + 1).trim() : ""
     }
     return (
-      <div className="space-y-1.5">
+      <div className="space-y-[3.5px] sm:space-y-1.5">
         {question.options.map((opt, i) => (
           <div key={i} className="space-y-1.5">
             <label className="flex items-center gap-2 cursor-pointer text-sm">
@@ -121,7 +121,7 @@ function QuestionInput({
       commit([...without, txt.trim() ? `${opt}: ${txt}` : opt])
     }
     return (
-      <div className="space-y-1.5">
+      <div className="space-y-[3.5px] sm:space-y-1.5">
         {question.options.map((opt, i) => (
           <div key={i} className="space-y-1.5">
             <label className="flex items-center gap-2 cursor-pointer text-sm">
@@ -164,7 +164,7 @@ function QuestionInput({
       onChange(next.join(SEP))
     }
     return (
-      <div className="space-y-1.5">
+      <div className="space-y-[3.5px] sm:space-y-1.5">
         <p className="text-xs opacity-60">Расставьте в правильном порядке</p>
         {order.map((opt, i) => (
           <div key={opt} className="flex items-center gap-2 rounded-lg border border-black/15 bg-white p-2 text-sm text-slate-900">
@@ -505,7 +505,7 @@ export function TestClient({ token }: { token: string }) {
               if (b.type === "task" && Array.isArray(b.questions) && b.questions.length > 0) {
                 return (
                   <div key={b.id ?? bi} className="space-y-6 rounded-lg border border-black/10 bg-white/60 p-4">
-                    {b.taskTitle?.trim() && <h3 className="font-semibold">{tpl(b.taskTitle)}</h3>}
+                    {b.taskTitle?.trim() && <h3 className="text-[19px] font-semibold leading-snug">{tpl(b.taskTitle)}</h3>}
                     {b.taskDescription?.trim() && (
                       <p className="text-sm opacity-80 whitespace-pre-wrap">{tpl(b.taskDescription)}</p>
                     )}
