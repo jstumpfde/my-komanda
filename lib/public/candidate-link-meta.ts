@@ -11,6 +11,7 @@ import { isShortId } from "@/lib/short-id"
 export async function candidateLinkMetadata(token: string): Promise<Metadata> {
   let vacancyTitle = "Анкета кандидата"
   let companyName = ""
+  let slogan = ""
   let logoUrl: string | null = null
 
   try {
@@ -25,6 +26,7 @@ export async function candidateLinkMetadata(token: string): Promise<Metadata> {
           title: vacancies.title,
           name: companies.name,
           brandName: companies.brandName,
+          brandSlogan: companies.brandSlogan,
           logoUrl: companies.logoUrl,
         })
         .from(vacancies)
@@ -34,6 +36,7 @@ export async function candidateLinkMetadata(token: string): Promise<Metadata> {
       if (v) {
         vacancyTitle = v.title?.trim() || vacancyTitle
         companyName = (v.brandName || v.name || "").trim()
+        slogan = (v.brandSlogan || "").trim()
         logoUrl = v.logoUrl
       }
     }
@@ -42,9 +45,10 @@ export async function candidateLinkMetadata(token: string): Promise<Metadata> {
   }
 
   const title = companyName ? `${vacancyTitle} — ${companyName}` : vacancyTitle
-  const description = companyName
-    ? `Отклик на вакансию «${vacancyTitle}» (${companyName}). Заполните короткую анкету по ссылке.`
-    : "Заполните короткую анкету, чтобы продолжить отклик."
+  // Описание превью: ведём слоганом компании (его HR задаёт в Настройки → Брендинг),
+  // затем нейтральный CTA. Если слогана нет — описание без него.
+  const cta = `Отклик на вакансию «${vacancyTitle}». Заполните короткую анкету по ссылке.`
+  const description = slogan ? `${slogan} · ${cta}` : cta
 
   return {
     title,

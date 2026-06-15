@@ -545,14 +545,16 @@ export default function BrandingPage() {
               <p className="text-xs text-muted-foreground">Отображается на публичных страницах</p>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-sm">Слоган</Label>
+              <Label className="text-sm">Слоган / описание компании</Label>
               <Input
                 value={brandSlogan}
                 onChange={e => setBrandSlogan(e.target.value)}
-                placeholder="Нанимаем лучших"
+                placeholder="Напр.: ГК Орлинк — металлоконструкции и промышленное строительство"
                 className="h-9 text-sm"
               />
-              <p className="text-xs text-muted-foreground">Короткая фраза под логотипом</p>
+              <p className="text-xs text-muted-foreground">
+                Короткая фраза под логотипом. Также показывается кандидату в превью ссылок (hh-чат, мессенджеры).
+              </p>
             </div>
           </div>
 
