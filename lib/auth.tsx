@@ -134,6 +134,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   observer: "Наблюдатель",
   tester_hr: "Тестировщик HR",
   employee: "Сотрудник",
+  partner: "Партнёр",
 }
 
 export const ROLE_ICONS: Record<UserRole, string> = {
@@ -148,6 +149,7 @@ export const ROLE_ICONS: Record<UserRole, string> = {
   observer: "👁️",
   tester_hr: "🧪",
   employee: "👤",
+  partner: "🤝",
 }
 
 // Sidebar visibility per role

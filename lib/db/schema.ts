@@ -2019,6 +2019,14 @@ export const integrators = pgTable("integrators", {
   id:           uuid("id").primaryKey().defaultRandom(),
   companyId:    uuid("company_id").references(() => companies.id, { onDelete: "cascade" }).unique().notNull(),
   levelId:      uuid("level_id").references(() => integratorLevels.id),
+  // 'partner' | 'sub_partner' | 'referral' — тип партнёра.
+  kind:         text("kind").notNull().default("partner"),
+  // Старший партнёр для суб-партнёра (двухуровневая иерархия). NULL у обычного партнёра.
+  parentIntegratorId: uuid("parent_integrator_id"),
+  // Фикс-% именно этого партнёра (override уровня). NULL → берём из integratorLevels.
+  commissionPercent:  text("commission_percent"),
+  // 'platform' (мы биллим клиента, партнёру начисляем %) | 'partner' (партнёр сам биллит).
+  billingMode:  text("billing_mode").notNull().default("platform"),
   contactName:  text("contact_name"),
   contactEmail: text("contact_email"),
   contactPhone: text("contact_phone"),
@@ -2031,6 +2039,10 @@ export const integratorClients = pgTable("integrator_clients", {
   id:              uuid("id").primaryKey().defaultRandom(),
   integratorId:    uuid("integrator_id").references(() => integrators.id, { onDelete: "cascade" }).notNull(),
   clientCompanyId: uuid("client_company_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  // Кто из пользователей партнёра завёл клиента (для аудита).
+  onboardedByUserId: uuid("onboarded_by_user_id"),
+  // 'onboarding' | 'active' | 'cancelled'
+  status:          text("status").notNull().default("active"),
   referredAt:      timestamp("referred_at").defaultNow(),
 }, (t) => [unique().on(t.integratorId, t.clientCompanyId)])
 
