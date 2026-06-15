@@ -37,8 +37,9 @@ BEGIN
   DELETE FROM knowledge_articles WHERE tenant_id = v_tenant AND 'demo_knowledge' = ANY(tags);
   -- 3) Категория демо
   DELETE FROM knowledge_categories WHERE tenant_id = v_tenant AND name = 'Демо: Онбординг';
-  -- 4) Демо-пользователи (маркер — префикс "Демо:" в position)
-  DELETE FROM users WHERE company_id = v_tenant AND position LIKE 'Демо:%';
+  -- 4) Демо-пользователей НЕ удаляем: их переиспользует оргструктура (positions.user_id),
+  -- а удаление блокируют FK (positions/notifications). Недостающих добиваем ниже
+  -- идемпотентно (ON CONFLICT email DO NOTHING); при ≥18 активных блок просто пропустится.
 
   -- ── Автор статей: любой реальный активный пользователь tenant'а ─────────
   SELECT id INTO v_author
