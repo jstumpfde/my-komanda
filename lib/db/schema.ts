@@ -1323,6 +1323,9 @@ export const candidates = pgTable("candidates", {
   // URL фото из hh-резюме (medium ≈ 240×240). Кешируется в БД при импорте,
   // чтобы фронт не запрашивал hh API на каждый рендер карточки кандидата.
   photoUrl: text("photo_url"),
+  // Момент отправки тестового задания кандидату (рассылка hh / «Отправить тест»).
+  // Драйвит ТОЛЬКО колонку «Тест» (= «отп.»), НЕ двигает воронку/стадию кандидата.
+  testInviteSentAt: timestamp("test_invite_sent_at", { withTimezone: true }),
   token: text("token").unique().notNull(),
   shortId: text("short_id").unique(),                 // "2604V0010042" — vacancy.short_code + LPAD(seq,4)
   sequenceNumber: integer("sequence_number"),         // порядковый номер в рамках вакансии (0 = preview)

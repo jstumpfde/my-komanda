@@ -413,6 +413,7 @@ export async function GET(req: NextRequest) {
           referredByShortId: candidates.referredByShortId,
           hhCandidateName: hhResponses.candidateName,
           photoUrl: candidates.photoUrl,
+          testInviteSentAt: candidates.testInviteSentAt,
         })
         .from(candidates)
         .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
@@ -570,7 +571,8 @@ export async function GET(req: NextRequest) {
           testStatus = "sent"
         } else if (gTestFailedInvited.has(r.id)) {
           testStatus = "failed"
-        } else if (TEST_SENT_STAGES.has(r.stage ?? "")) {
+        } else if (r.testInviteSentAt != null || TEST_SENT_STAGES.has(r.stage ?? "")) {
+          // Маркер ручной отправки (не двигает стадию) ИЛИ legacy тест-стадия.
           testStatus = "sent"
         } else {
           testStatus = null
