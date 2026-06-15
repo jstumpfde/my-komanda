@@ -200,7 +200,16 @@ export function ListView({
           return mul * ((a.rubricScore ?? -1) - (b.rubricScore ?? -1))
         }
         case "testScore": {
-          return mul * ((a.testScore ?? -1) - (b.testScore ?? -1))
+          // Ранг тест-активности: сдан с баллом (по баллу) → сдан → заполняет →
+          // открыл → отправлен → ошибка → ничего. Чтобы «отп./пер.» шли наверх.
+          const testRank = (c: Candidate) =>
+            c.testScore != null ? 1000 + c.testScore
+            : c.testStatus === "submitted" ? 900
+            : c.testStatus === "in_progress" ? 800
+            : c.testStatus === "opened" ? 700
+            : c.testStatus === "sent" ? 500
+            : -1
+          return mul * (testRank(a) - testRank(b))
         }
         case "progress": {
           return mul * ((progressPercentOf(a) ?? -1) - (progressPercentOf(b) ?? -1))
