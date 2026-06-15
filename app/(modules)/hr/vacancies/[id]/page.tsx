@@ -46,7 +46,7 @@ import { InterviewsView } from "@/app/(modules)/hr/interviews/page"
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-factors-settings"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
@@ -1937,6 +1937,7 @@ export default function VacancyPage() {
   // ── AI Screening ──
   const [screeningIds, setScreeningIds] = useState<Set<string>>(new Set())
   const [bulkScreening, setBulkScreening] = useState(false)
+  const [rescoring, setRescoring] = useState<string | null>(null)   // активный параметр переоценки
 
   const screenCandidate = async (candidateId: string) => {
     const candidate = apiCandidates.find(c => c.id === candidateId)
@@ -1999,6 +2000,43 @@ export default function VacancyPage() {
     }
     setBulkScreening(false)
     toast.success(`AI-скрининг завершён: ${newCandidates.length} кандидатов`)
+  }
+
+  // Переоценить выделенных кандидатов по параметру (или всем сразу). Реальные
+  // AI-вызовы → только по выделенным (selectedCandidateIds).
+  const RESCORE_LABELS: Record<string, string> = {
+    resume: "AI-резюме", ai: "AI-оценка", rubric: "AI-рубрика", test: "AI-тест", all: "все параметры",
+  }
+  const rescoreSelected = async (dimension: "resume" | "ai" | "rubric" | "test" | "all") => {
+    if (rescoring) return
+    const ids = Array.from(selectedCandidateIds)
+    if (ids.length === 0) { toast.info("Выделите кандидатов галочками — переоценка идёт по выделенным"); return }
+    setRescoring(dimension)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${id}/rescore`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidateIds: ids, dimension }),
+      })
+      const j = await res.json().catch(() => null)
+      if (!res.ok) { toast.error(j?.error || "Не удалось переоценить"); return }
+      const r = (j?.data ?? j) as { resume: number; ai: number; rubric: number; test: number; skipped: number; errors: number }
+      const parts: string[] = []
+      if (r.resume) parts.push(`резюме ${r.resume}`)
+      if (r.ai) parts.push(`оценка ${r.ai}`)
+      if (r.rubric) parts.push(`рубрика ${r.rubric}`)
+      if (r.test) parts.push(`тест ${r.test}`)
+      toast.success(
+        `Переоценка (${RESCORE_LABELS[dimension]}): ${parts.join(", ") || "0"}` +
+        (r.skipped ? ` · пропущено ${r.skipped}` : "") +
+        (r.errors ? ` · ошибок ${r.errors}` : ""),
+      )
+      await (useListPaginated ? paginated.refetch() : refetchCandidates())
+    } catch {
+      toast.error("Ошибка сети")
+    } finally {
+      setRescoring(null)
+    }
   }
 
   // ── Talent Pool Radar ──
@@ -2653,6 +2691,30 @@ export default function VacancyPage() {
                           {bulkScreening ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 mr-2" />}
                           {bulkScreening ? "Скрининг..." : "AI-оценить новых"}
                         </DropdownMenuItem>
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger disabled={!!rescoring}>
+                            {rescoring ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-2" />}
+                            {rescoring ? "Переоценка..." : "Переоценить"}
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent>
+                            <DropdownMenuItem onClick={() => rescoreSelected("all")}>
+                              <Sparkles className="w-3.5 h-3.5 mr-2" /> Все параметры
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => rescoreSelected("resume")}>
+                              <ClipboardList className="w-3.5 h-3.5 mr-2" /> AI-резюме
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => rescoreSelected("ai")}>
+                              <BarChart3 className="w-3.5 h-3.5 mr-2" /> AI-оценка
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => rescoreSelected("rubric")}>
+                              <Target className="w-3.5 h-3.5 mr-2" /> AI-рубрика
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => rescoreSelected("test")}>
+                              <Check className="w-3.5 h-3.5 mr-2" /> AI-тест
+                            </DropdownMenuItem>
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
                         <DropdownMenuItem onClick={handleCompare}>
                           <BarChart3 className="w-3.5 h-3.5 mr-2" />
                           Сравнить топ
