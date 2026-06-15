@@ -89,6 +89,7 @@ export function HhBroadcastDialog({
   const [savedTpl, setSavedTpl] = useState(false)
   // Тип ссылки, прикреплённой кандидату (тест/демо) — per кандидат.
   const [linkKindById, setLinkKindById] = useState<Record<string, "test" | "demo">>({})
+  const [markingAll, setMarkingAll] = useState(false)
   // Темп рассылки: интервал между открытиями чатов (анти-бан) + авто-открытие.
   const [intervalSec, setIntervalSec] = useState(20)
   const [autoOpen, setAutoOpen] = useState(false)
@@ -253,6 +254,32 @@ export function HhBroadcastDialog({
     setCurrentIdx(next)
     startCooldown()
   }, [current, currentIdx, total, startCooldown])
+
+  // Отметить ВСЕХ кандидатов рассылки «тест отправлен» разом (без поштучного клика).
+  const markAllSent = useCallback(async () => {
+    const ids = items.map((i) => i.id)
+    if (ids.length === 0) return
+    setMarkingAll(true)
+    try {
+      const res = await fetch(
+        `/api/modules/hr/vacancies/${vacancyId}/hh-broadcast-mark-sent`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ candidateIds: ids }),
+        },
+      )
+      if (res.ok) {
+        onSent?.()
+        setSentIds(new Set(ids))
+        setPhase("done")
+      }
+    } catch {
+      // тихо — кнопка снова доступна
+    } finally {
+      setMarkingAll(false)
+    }
+  }, [items, vacancyId, onSent])
 
   // Сохранить текущий текст как шаблон по умолчанию (тот же, что у «Отправить тест»).
   // Обратная подстановка: видимые значения текущего кандидата → плейсхолдеры,
@@ -542,6 +569,25 @@ export function HhBroadcastDialog({
                 Пропустить
               </Button>
             </div>
+
+            {/* Массовая отметка: пометить всех «отправлено» разом, без поштучного клика */}
+            {total > 1 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => void markAllSent()}
+                disabled={markingAll}
+                title="Поставить «отп.» в колонке «Тест» всем кандидатам рассылки сразу"
+              >
+                {markingAll ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="size-3.5" />
+                )}
+                Отметить всех отправленными ({total})
+              </Button>
+            )}
           </div>
         )}
 
