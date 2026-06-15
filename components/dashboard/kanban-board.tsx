@@ -39,7 +39,7 @@ interface KanbanBoardProps {
   onViewModeChange: (mode: ViewMode) => void
   columns: ColumnData[]
   onColumnsChange: (columns: ColumnData[]) => void
-  onOpenProfile?: (candidate: Candidate, columnId: string) => void
+  onOpenProfile?: (candidate: Candidate, columnId: string, initialTab?: string) => void
   onAction?: (candidateId: string, columnId: string, action: CandidateAction) => void
   onToggleFavorite?: (candidateId: string, isFavorite: boolean) => void
   hideViewSwitcher?: boolean

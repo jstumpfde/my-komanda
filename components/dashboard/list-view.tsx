@@ -32,7 +32,7 @@ interface Column {
 interface ListViewProps {
   columns: Column[]
   settings: CardDisplaySettings
-  onOpenProfile?: (candidate: Candidate, columnId: string) => void
+  onOpenProfile?: (candidate: Candidate, columnId: string, initialTab?: string) => void
   onAction?: (candidateId: string, columnId: string, action: CandidateAction) => void
   /** Клик по названию вакансии в строке → переход в эту вакансию. */
   onVacancyClick?: (vacancyId: string) => void
@@ -606,7 +606,22 @@ export function ListView({
                   «пишет» (заполняет, черновик) → «пер.» (открыл) → «отп.»
                   (отправлен) → «—» (не было). */}
               {showTestScore && (
-                <div className="flex items-center justify-center" title="Результат теста">
+                <div
+                  className={cn(
+                    "flex items-center justify-center",
+                    (candidate.testScore != null || candidate.testStatus === "submitted" || candidate.testStatus === "in_progress")
+                      && "cursor-pointer hover:opacity-70",
+                  )}
+                  title={(candidate.testScore != null || candidate.testStatus === "submitted" || candidate.testStatus === "in_progress")
+                    ? "Открыть результат теста"
+                    : "Результат теста"}
+                  onClick={(e) => {
+                    if (candidate.testScore != null || candidate.testStatus === "submitted" || candidate.testStatus === "in_progress") {
+                      e.stopPropagation()
+                      onOpenProfile?.(candidate, candidate.columnId, "test")
+                    }
+                  }}
+                >
                   {candidate.testScore != null ? (
                     <Badge
                       variant="outline"
