@@ -190,13 +190,13 @@ function MiniCard({ iv, compact }: { iv: Interview; compact?: boolean }) {
 
 // ─── Внутренний компонент (читает searchParams) ──────────────
 
-export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; embedded?: boolean } = {}) {
+export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyId?: string; embedded?: boolean; calendarOnly?: boolean } = {}) {
   const router = useRouter()
 
   // Список интервью можно свернуть/развернуть под основным CalendarView
   // Верхний переключатель раздела: богатый вид интервью (стадии/канбан/список)
   // vs полный календарь компании. По умолчанию — «Интервью» (как было до мерджа).
-  const [topTab, setTopTab] = useState<"interviews" | "calendar">("interviews")
+  const [topTab, setTopTab] = useState<"interviews" | "calendar">(calendarOnly ? "calendar" : "interviews")
 
   const [view, setView] = useState<ViewMode>("list")
   const [interviews, setInterviews] = useState<Interview[]>([])
@@ -471,14 +471,18 @@ export function InterviewsView({ vacancyId, embedded }: { vacancyId?: string; em
           <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-14 pt-5 pb-3 border-b">
             <div className="flex items-center">
               <CalendarDays className="h-5 w-5 text-violet-600 mr-2" />
-              <h1 className="text-lg font-semibold">Интервью</h1>
+              <h1 className="text-lg font-semibold">{calendarOnly ? "Календарь" : "Интервью"}</h1>
             </div>
+            {/* В режиме «только календарь» (пункт меню «Календарь») переключатель
+                Интервью/Календарь скрыт — управление интервью живёт в Рабочем столе. */}
+            {!calendarOnly && (
             <Tabs value={topTab} onValueChange={(v) => setTopTab(v as "interviews" | "calendar")}>
               <TabsList>
                 <TabsTrigger value="interviews" className="gap-1.5 text-xs"><List className="w-3.5 h-3.5" />Интервью</TabsTrigger>
                 <TabsTrigger value="calendar" className="gap-1.5 text-xs"><CalendarDays className="w-3.5 h-3.5" />Календарь</TabsTrigger>
               </TabsList>
             </Tabs>
+            )}
           </div>
           )}
 
