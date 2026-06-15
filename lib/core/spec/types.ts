@@ -62,6 +62,9 @@ export type MidRangeAction = z.infer<typeof MidRangeActionSchema>
 
 /** Пороги ОЦЕНКИ РЕЗЮМЕ + маршрутизация. Legacy-источник: vacancies.ai_process_settings. */
 export const ResumeThresholdsSchema = z.object({
+  /** Включён ли блок оценки резюме. Выкл — скоринг резюме не применяется
+   *  (HR может отключить, чтобы не пользоваться). По умолчанию ВКЛ. */
+  enabled:           z.boolean().default(true),
   /** Верхний порог: score >= upper → invite */
   upperThreshold:    z.number().int().min(0).max(100).default(75),
   /** Нижний порог: score < lower → reject/keep_new */
@@ -89,6 +92,8 @@ export type ResumeThresholds = z.infer<typeof ResumeThresholdsSchema>
  * в Spec только сами пороги.
  */
 export const AnketaThresholdsSchema = z.object({
+  /** Включён ли блок оценки анкеты. Выкл — скрининг ответов не применяется. ВКЛ по умолчанию. */
+  enabled:        z.boolean().default(true),
   /** Верхний порог: score >= upper → зелёный уровень (приглашение на встречу) */
   upperThreshold: z.number().int().min(0).max(100).default(75),
   /** Нижний порог: score < lower → красный уровень */
