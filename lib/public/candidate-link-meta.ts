@@ -11,6 +11,7 @@ import { isShortId } from "@/lib/short-id"
 export async function candidateLinkMetadata(token: string): Promise<Metadata> {
   let vacancyTitle = "Анкета кандидата"
   let companyName = ""
+  let slogan = ""
   let logoUrl: string | null = null
 
   try {
@@ -25,7 +26,9 @@ export async function candidateLinkMetadata(token: string): Promise<Metadata> {
           title: vacancies.title,
           name: companies.name,
           brandName: companies.brandName,
+          brandSlogan: companies.brandSlogan,
           logoUrl: companies.logoUrl,
+          customTheme: companies.customTheme,
         })
         .from(vacancies)
         .innerJoin(companies, eq(vacancies.companyId, companies.id))
@@ -34,7 +37,12 @@ export async function candidateLinkMetadata(token: string): Promise<Metadata> {
       if (v) {
         vacancyTitle = v.title?.trim() || vacancyTitle
         companyName = (v.brandName || v.name || "").trim()
-        logoUrl = v.logoUrl
+        slogan = (v.brandSlogan || "").trim()
+        // Приоритет — авто-квадрат 256×256 (custom_theme.ogLogoUrl), чтобы превью
+        // показывалось маленьким значком, а не баннером. Иначе — обычный логотип.
+        const ct = v.customTheme as Record<string, unknown> | null
+        const ogLogo = ct && typeof ct.ogLogoUrl === "string" ? ct.ogLogoUrl : ""
+        logoUrl = ogLogo || v.logoUrl
       }
     }
   } catch {
@@ -42,9 +50,10 @@ export async function candidateLinkMetadata(token: string): Promise<Metadata> {
   }
 
   const title = companyName ? `${vacancyTitle} — ${companyName}` : vacancyTitle
-  const description = companyName
-    ? `Отклик на вакансию «${vacancyTitle}» (${companyName}). Заполните короткую анкету по ссылке.`
-    : "Заполните короткую анкету, чтобы продолжить отклик."
+  // Описание превью: ведём слоганом компании (его HR задаёт в Настройки → Брендинг),
+  // затем нейтральный CTA. Если слогана нет — описание без него.
+  const cta = `Отклик на вакансию «${vacancyTitle}». Заполните короткую анкету по ссылке.`
+  const description = slogan ? `${slogan} · ${cta}` : cta
 
   return {
     title,
@@ -56,8 +65,8 @@ export async function candidateLinkMetadata(token: string): Promise<Metadata> {
       description,
       ...(companyName ? { siteName: companyName } : {}),
       // Пустой массив гасит платформенный og:image из layout; если у работодателя
-      // есть логотип — показываем его.
-      images: logoUrl ? [{ url: logoUrl }] : [],
+      // есть логотип — показываем квадрат 256×256 (маленьким значком, не баннером).
+      images: logoUrl ? [{ url: logoUrl, width: 256, height: 256 }] : [],
     },
     twitter: {
       card: "summary",

@@ -55,6 +55,40 @@ const BRAND_PRESETS: { name: string; hex: string }[] = [
   { name: "Красный",    hex: "#ef4444" },
 ]
 
+// Браузерный ресайз логотипа в квадрат size×size (contain на белом фоне) для
+// og:image превью кандидатских ссылок. Без серверных пакетов (canvas).
+async function makeSquareLogoBlob(file: File, size = 256): Promise<Blob | null> {
+  if (typeof document === "undefined") return null
+  try {
+    const dataUrl: string = await new Promise((resolve, reject) => {
+      const r = new FileReader()
+      r.onload = () => resolve(r.result as string)
+      r.onerror = reject
+      r.readAsDataURL(file)
+    })
+    const img: HTMLImageElement = await new Promise((resolve, reject) => {
+      const i = new Image()
+      i.onload = () => resolve(i)
+      i.onerror = reject
+      i.src = dataUrl
+    })
+    const canvas = document.createElement("canvas")
+    canvas.width = size
+    canvas.height = size
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return null
+    ctx.fillStyle = "#ffffff"
+    ctx.fillRect(0, 0, size, size)
+    const scale = Math.min(size / (img.width || size), size / (img.height || size))
+    const w = (img.width || size) * scale
+    const h = (img.height || size) * scale
+    ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h)
+    return await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/png"))
+  } catch {
+    return null
+  }
+}
+
 export default function BrandingPage() {
   const { setTheme: applyTheme, theme: currentTheme } = useTheme()
   const [brandPlan] = useState<BrandConfig["plan"]>("business")
@@ -66,6 +100,8 @@ export default function BrandingPage() {
   }, [])
   const canBrand = canCustomizeBrand(brandPlan)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
+  // Квадрат 256×256 для превью ссылок (og:image), авто-генерится из лого в браузере.
+  const [ogLogoPreview, setOgLogoPreview] = useState<string | null>(null)
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [faviconPreview, setFaviconPreview] = useState<string | null>(null)
   const [uploadingFavicon, setUploadingFavicon] = useState(false)
@@ -139,6 +175,8 @@ export default function BrandingPage() {
         const favicon = ct.faviconUrl
         if (typeof favicon === "string" && favicon) setFaviconPreview(favicon)
         else setFaviconPreview(null)
+        const ogLogo = ct.ogLogoUrl
+        if (typeof ogLogo === "string" && ogLogo) setOgLogoPreview(ogLogo)
         // #28 ч.2: тема по умолчанию компании
         const dt = ct.defaultTheme
         if (typeof dt === "string" && THEME_KEYS.includes(dt as typeof THEME_KEYS[number])) setDefaultTheme(dt)
@@ -184,6 +222,21 @@ export default function BrandingPage() {
 
       setLogoPreview(data.logoUrl)
       toast.success("Логотип загружен")
+
+      // Авто-квадрат 256×256 для превью ссылок (og:image) — сжимаем в браузере (canvas),
+      // чтобы клиент не искал внешний сервис. Кладём в custom_theme.ogLogoUrl при сохранении.
+      try {
+        const sq = await makeSquareLogoBlob(file, 256)
+        if (sq) {
+          const fd2 = new FormData()
+          fd2.append("file", new File([sq], "og-logo.png", { type: "image/png" }))
+          const r2 = await fetch("/api/upload/logo", { method: "POST", body: fd2 })
+          const d2 = (await r2.json().catch(() => ({}))) as { logoUrl?: string }
+          if (r2.ok && d2.logoUrl) setOgLogoPreview(d2.logoUrl)
+        }
+      } catch (e) {
+        console.warn("[uploadLogoFile] og-square skip", e)
+      }
 
       if (typeof window !== "undefined") {
         window.dispatchEvent(new Event("company-updated"))
@@ -264,6 +317,7 @@ export default function BrandingPage() {
         defaultTheme,
         aiColor,
         ...(faviconPreview ? { faviconUrl: faviconPreview } : {}),
+        ...(ogLogoPreview ? { ogLogoUrl: ogLogoPreview } : {}),
       }
       await updateCompanyApi({
         logo_url: logoPreview ?? "",
@@ -322,6 +376,7 @@ export default function BrandingPage() {
         defaultTheme,
         aiColor,
         ...(faviconPreview ? { faviconUrl: faviconPreview } : {}),
+        ...(ogLogoPreview ? { ogLogoUrl: ogLogoPreview } : {}),
       }
       await updateCompanyApi({
         logo_url: logoPreview ?? "",
@@ -545,14 +600,16 @@ export default function BrandingPage() {
               <p className="text-xs text-muted-foreground">Отображается на публичных страницах</p>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-sm">Слоган</Label>
+              <Label className="text-sm">Слоган / описание компании</Label>
               <Input
                 value={brandSlogan}
                 onChange={e => setBrandSlogan(e.target.value)}
-                placeholder="Нанимаем лучших"
+                placeholder="Напр.: ГК Орлинк — металлоконструкции и промышленное строительство"
                 className="h-9 text-sm"
               />
-              <p className="text-xs text-muted-foreground">Короткая фраза под логотипом</p>
+              <p className="text-xs text-muted-foreground">
+                Короткая фраза под логотипом. Также показывается кандидату в превью ссылок (hh-чат, мессенджеры).
+              </p>
             </div>
           </div>
 
