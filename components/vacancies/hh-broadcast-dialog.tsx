@@ -56,6 +56,14 @@ function pluralize(n: number, one: string, few: string, many: string): string {
   return many
 }
 
+// Ссылка кандидату по типу шага. Демо/тест используют один и тот же slug
+// (публичные роуты /test и /demo резолвят shortId/token одинаково), поэтому
+// переключение — простая замена сегмента пути.
+function linkForKind(testLink: string, kind: "test" | "demo"): string {
+  if (!testLink) return ""
+  return kind === "demo" ? testLink.replace("/test/", "/demo/") : testLink
+}
+
 // ─── Основной компонент ───────────────────────────────────────────────────────
 
 export function HhBroadcastDialog({
@@ -75,6 +83,8 @@ export function HhBroadcastDialog({
   const [vacancyTitle, setVacancyTitle] = useState("")
   const [savingTpl, setSavingTpl] = useState(false)
   const [savedTpl, setSavedTpl] = useState(false)
+  // Тип ссылки, прикреплённой кандидату (тест/демо) — per кандидат.
+  const [linkKindById, setLinkKindById] = useState<Record<string, "test" | "demo">>({})
   // Темп рассылки: интервал между открытиями чатов (анти-бан) + авто-открытие.
   const [intervalSec, setIntervalSec] = useState(20)
   const [autoOpen, setAutoOpen] = useState(false)
@@ -90,6 +100,7 @@ export function HhBroadcastDialog({
     setCurrentIdx(0)
     setSentIds(new Set())
     setSkippedIds(new Set())
+    setLinkKindById({})
     setCopied(false)
     try {
       const res = await fetch(
@@ -142,6 +153,8 @@ export function HhBroadcastDialog({
 
   const current = items[currentIdx] ?? null
   const currentMessage = current ? (messages[current.id] ?? current.personalMessage) : ""
+  const currentKind: "test" | "demo" = current ? (linkKindById[current.id] ?? "test") : "test"
+  const currentLink = current ? linkForKind(current.testLink, currentKind) : ""
   const total = items.length
   const processed = sentIds.size + skippedIds.size
 
@@ -160,6 +173,33 @@ export function HhBroadcastDialog({
     }, 1000)
   }, [intervalSec])
 
+  // Отметить кандидата «тест отправлен» (стадия → test_task_sent, колонка «Тест» = «отп.»).
+  // Только если прикреплён ТЕСТ (для демо-ссылки стадию теста не двигаем).
+  const markCandidateSent = useCallback((id: string, kind: "test" | "demo") => {
+    if (kind !== "test") return
+    void fetch(`/api/modules/hr/vacancies/${vacancyId}/hh-broadcast-mark-sent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ candidateIds: [id] }),
+    }).catch(() => {})
+  }, [vacancyId])
+
+  // Сменить тип прикреплённой ссылки (тест/демо) и заменить её прямо в тексте.
+  const changeLinkKind = useCallback((newKind: "test" | "demo") => {
+    if (!current) return
+    const oldKind = linkKindById[current.id] ?? "test"
+    if (oldKind === newKind) return
+    const oldLink = linkForKind(current.testLink, oldKind)
+    const newLink = linkForKind(current.testLink, newKind)
+    if (oldLink && newLink) {
+      setMessages((prev) => {
+        const msg = prev[current.id] ?? current.personalMessage
+        return { ...prev, [current.id]: msg.split(oldLink).join(newLink) }
+      })
+    }
+    setLinkKindById((prev) => ({ ...prev, [current.id]: newKind }))
+  }, [current, linkKindById])
+
   const copyAndOpen = useCallback(async () => {
     if (!current) return
     const text = messages[current.id] ?? current.personalMessage
@@ -172,7 +212,9 @@ export function HhBroadcastDialog({
       // clipboard может быть недоступен в некоторых браузерах — тихо игнорируем
     }
     if (url) window.open(url, "_blank", "noopener,noreferrer")
-  }, [current, messages])
+    // Скопировал = отправляет вручную → сразу отмечаем «тест отправлен».
+    markCandidateSent(current.id, linkKindById[current.id] ?? "test")
+  }, [current, messages, markCandidateSent, linkKindById])
 
   // Авто-открытие: когда замок дошёл до 0 и включён авто-режим — открыть чат.
   // window.open после паузы может быть заблокирован попап-блокером браузера —
@@ -190,18 +232,12 @@ export function HhBroadcastDialog({
     if (!current) return
     const sentId = current.id
     setSentIds((prev) => new Set([...prev, sentId]))
-    // Помечаем стадию кандидата «тест отправлен» сразу (fire-and-forget) — в колонке
-    // «Тест» появится «отп.». Рассылка ручная, иначе платформа не знает факт отправки.
-    void fetch(`/api/modules/hr/vacancies/${vacancyId}/hh-broadcast-mark-sent`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ candidateIds: [sentId] }),
-    }).catch(() => {})
+    markCandidateSent(sentId, linkKindById[sentId] ?? "test")
     const next = currentIdx + 1
     if (next >= total) { setPhase("done"); return }
     setCurrentIdx(next)
     startCooldown() // следующий чат откроется не раньше интервала
-  }, [current, currentIdx, total, startCooldown, vacancyId])
+  }, [current, currentIdx, total, startCooldown, markCandidateSent, linkKindById])
 
   const skipCurrent = useCallback(() => {
     if (!current) return
@@ -218,7 +254,8 @@ export function HhBroadcastDialog({
   const saveTemplate = useCallback(async () => {
     if (!current) return
     let tpl = messages[current.id] ?? current.personalMessage
-    if (current.testLink) tpl = tpl.split(current.testLink).join("{{test_link}}")
+    const insertedLink = linkForKind(current.testLink, linkKindById[current.id] ?? "test")
+    if (insertedLink) tpl = tpl.split(insertedLink).join("{{test_link}}")
     if (vacancyTitle) tpl = tpl.split(vacancyTitle).join("{{vacancy}}")
     if (current.firstName) tpl = tpl.split(current.firstName).join("{{name}}")
     setSavingTpl(true)
@@ -241,7 +278,7 @@ export function HhBroadcastDialog({
     } finally {
       setSavingTpl(false)
     }
-  }, [current, messages, vacancyTitle, vacancyId])
+  }, [current, messages, vacancyTitle, vacancyId, linkKindById])
 
   // ─── Рендер ───────────────────────────────────────────────────────────────
 
@@ -374,23 +411,41 @@ export function HhBroadcastDialog({
                 rows={6}
                 className="text-sm resize-none"
               />
-              {/* Что прикреплено — чтобы HR видел ссылку, которую получит кандидат */}
+              {/* Что прикреплено: тип ссылки (тест/демо) можно переключить — она
+                  заменится прямо в тексте. HR видит, что именно уйдёт кандидату. */}
               {current.testLink ? (
-                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <Paperclip className="size-3 shrink-0" />
-                  <span className="shrink-0">Ссылка кандидату (тест):</span>
-                  <span className="font-mono text-foreground truncate" title={current.testLink}>
-                    {current.testLink}
-                  </span>
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <Paperclip className="size-3 shrink-0" />
+                    <span className="shrink-0">Ссылка кандидату:</span>
+                    <div className="inline-flex items-center gap-0.5">
+                      {([["test", "Тест"], ["demo", "Демо"]] as const).map(([k, label]) => (
+                        <button
+                          key={k}
+                          type="button"
+                          onClick={() => changeLinkKind(k)}
+                          className={
+                            "rounded px-1.5 py-0.5 transition-colors " +
+                            (currentKind === k
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-background hover:bg-muted text-muted-foreground")
+                          }
+                        >{label}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="font-mono text-[11px] text-foreground break-all" title={currentLink}>
+                    {currentLink}
+                  </p>
                 </div>
               ) : (
                 <p className="text-[11px] text-destructive">
-                  У кандидата нет ссылки на тест.
+                  У кандидата нет ссылки.
                 </p>
               )}
-              {current.testLink && !currentMessage.includes(current.testLink) && (
+              {current.testLink && !currentMessage.includes(currentLink) && (
                 <p className="text-[11px] text-destructive">
-                  ⚠ Ссылки на тест нет в тексте — кандидат не получит задание. Проверьте сообщение.
+                  ⚠ Ссылки нет в тексте — кандидат её не получит. Проверьте сообщение.
                 </p>
               )}
             </div>

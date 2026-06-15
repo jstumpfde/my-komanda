@@ -794,6 +794,7 @@ export default function VacancyPage() {
 // filters перемещён выше — см. строку перед useCandidates
   const [drawerCandidateId, setDrawerCandidateId] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [drawerInitialTab, setDrawerInitialTab] = useState<string | null>(null)
   const drawerAnketa = useMemo(() => {
     const a = (apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.anketa as Record<string, unknown> | undefined
     if (!a) return null
@@ -2974,9 +2975,10 @@ export default function VacancyPage() {
                   onViewModeChange={setViewMode}
                   columns={paginatedColumns ?? filteredColumns}
                   onColumnsChange={setColumns}
-                  onOpenProfile={(c, colId) => {
+                  onOpenProfile={(c, colId, initialTab) => {
                     // Open the candidate drawer with real API data
                     setDrawerCandidateId(c.id)
+                    setDrawerInitialTab(initialTab ?? null)
                     setDrawerOpen(true)
                   }}
                   onAction={handleAction}
@@ -4470,6 +4472,7 @@ export default function VacancyPage() {
           setDrawerOpen(open)
           if (!open) setDrawerCandidateId(null)
         }}
+        initialTab={drawerInitialTab}
         onToggleFavorite={handleToggleFavorite}
         vacancyAnketa={drawerAnketa}
         onStageChange={(candidateId, newStage) => {

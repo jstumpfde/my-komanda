@@ -571,6 +571,8 @@ export interface CandidateDrawerProps {
    * пока загружаются полные данные. Необязательный, обратная совместимость.
    */
   initialCandidate?: InitialCandidateSnapshot | null
+  /** Вкладка, на которой открыть карточку (напр. "test" — сразу к результату теста). */
+  initialTab?: string | null
 }
 
 // Ищем URL видео-визитки в anketaAnswers. Структура такая же, как
@@ -604,6 +606,7 @@ export function CandidateDrawer({
   vacancyPipeline,
   vacancyAnketa,
   initialCandidate,
+  initialTab,
 }: CandidateDrawerProps) {
   const [sheetExpanded, setSheetExpanded] = useState(false)
   const [candidate, setCandidate] = useState<ApiCandidate | null>(null)
@@ -664,6 +667,10 @@ export function CandidateDrawer({
   const [contactComment, setContactComment] = useState("")
   const [savingContact, setSavingContact] = useState(false)
   const [activeTab, setActiveTab] = useState("contacts")
+  // Открыть карточку на заданной вкладке (напр. клик по колонке «Тест» → результат теста).
+  useEffect(() => {
+    if (open && initialTab) setActiveTab(initialTab)
+  }, [open, initialTab])
   const [hhMessages, setHhMessages] = useState<HhMessage[]>([])
   const [hhLoading, setHhLoading] = useState(false)
   const [hhError, setHhError] = useState<string | null>(null)

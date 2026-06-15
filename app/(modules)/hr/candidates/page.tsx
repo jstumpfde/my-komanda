@@ -262,6 +262,7 @@ export default function CandidatesPage() {
   // Drawer
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerCandidateId, setDrawerCandidateId] = useState<string | null>(null)
+  const [drawerInitialTab, setDrawerInitialTab] = useState<string | null>(null)
   // Снапшот из списка — рендерится в шапке drawer мгновенно до полного fetch
   const [drawerInitialCandidate, setDrawerInitialCandidate] = useState<InitialCandidateSnapshot | null>(null)
 
@@ -526,7 +527,8 @@ export default function CandidatesPage() {
 
   // ─── Drawer ───────────────────────────────────────────────────────────────
 
-  const handleOpenProfile = useCallback((candidate: Candidate) => {
+  const handleOpenProfile = useCallback((candidate: Candidate, _columnId?: string, initialTab?: string) => {
+    setDrawerInitialTab(initialTab ?? null)
     // Находим полную запись в нашем локальном списке, чтобы передать снапшот
     const gc = candidates.find(c => c.id === candidate.id)
     setDrawerInitialCandidate(gc ? {
@@ -890,6 +892,7 @@ export default function CandidatesPage() {
           }
         }}
         initialCandidate={drawerInitialCandidate}
+        initialTab={drawerInitialTab}
         onToggleFavorite={handleToggleFavorite}
         onStageChange={handleDrawerStageChange}
       />
