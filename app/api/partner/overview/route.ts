@@ -1,26 +1,22 @@
 // GET /api/partner/overview — сводка партнёрского кабинета: число клиентов,
-// суммарный MRR, моя комиссия (% и ₽), тип партнёра, режим биллинга.
+// суммарный MRR, моя комиссия (% по ступени или override, ₽), тип, режим биллинга.
 import { requirePartner } from "@/lib/partner/access"
-import { getPartnerClients, getPartnerCommissionPercent } from "@/lib/partner/clients"
+import { getPartnerSummary } from "@/lib/partner/clients"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 
 export async function GET() {
   try {
     const { integrator } = await requirePartner()
-    const [clients, commissionPercent] = await Promise.all([
-      getPartnerClients(integrator),
-      getPartnerCommissionPercent(integrator),
-    ])
-    const totalMrrRub = clients.reduce((s, c) => s + c.mrrRub, 0)
-    const totalEarningsRub = clients.reduce((s, c) => s + c.earningsRub, 0)
+    const s = await getPartnerSummary(integrator)
     return apiSuccess({
       kind: integrator.kind,
       billingMode: integrator.billingMode,
-      commissionPercent,
-      totalClients: clients.length,
-      activeClients: clients.filter((c) => c.subscriptionStatus === "active").length,
-      totalMrrRub,
-      totalEarningsRub,
+      commissionPercent: s.effectivePercent,
+      isOverride: s.isOverride,
+      totalClients: s.clients.length,
+      activeClients: s.clients.filter((c) => c.subscriptionStatus === "active").length,
+      totalMrrRub: s.totalMrrRub,
+      totalEarningsRub: s.totalEarningsRub,
     })
   } catch (err) {
     if (err instanceof Response) return err

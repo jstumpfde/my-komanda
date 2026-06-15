@@ -52,7 +52,7 @@ export default function AdminIntegratorsPage() {
   const [creating, setCreating] = useState(false)
   const [newCompanyId, setNewCompanyId] = useState("")
   const [newKind, setNewKind] = useState("partner")
-  const [newPct, setNewPct] = useState("20")
+  const [newPct, setNewPct] = useState("")
   const [newBilling, setNewBilling] = useState("platform")
   const [newContactName, setNewContactName] = useState("")
   const [newContactEmail, setNewContactEmail] = useState("")
@@ -222,8 +222,9 @@ export default function AdminIntegratorsPage() {
               </select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-sm">Комиссия, %</Label>
-              <Input type="number" min={0} max={100} value={newPct} onChange={e => setNewPct(e.target.value)} placeholder="20" />
+              <Label className="text-sm">Комиссия % (фикс)</Label>
+              <Input type="number" min={0} max={100} value={newPct} onChange={e => setNewPct(e.target.value)} placeholder="по объёму продаж" />
+              <p className="text-[11px] text-muted-foreground">Пусто = ступени по обороту (20/30/40/50%). Заполнить = фикс-% (напр. сразу 50).</p>
             </div>
             <div className="space-y-1.5">
               <Label className="text-sm">Биллинг</Label>

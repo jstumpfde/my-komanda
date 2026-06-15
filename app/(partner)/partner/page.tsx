@@ -9,6 +9,7 @@ interface Overview {
   kind: string
   billingMode: string
   commissionPercent: number
+  isOverride: boolean
   totalClients: number
   activeClients: number
   totalMrrRub: number
@@ -79,7 +80,7 @@ export default function PartnerDashboardPage() {
         </div>
         {ov && (
           <Badge variant="outline" className="text-xs">
-            {KIND_LABEL[ov.kind] ?? ov.kind} · комиссия {ov.commissionPercent}%
+            {KIND_LABEL[ov.kind] ?? ov.kind} · комиссия {ov.commissionPercent}% {ov.isOverride ? "(фикс)" : "(по объёму)"}
           </Badge>
         )}
       </div>
