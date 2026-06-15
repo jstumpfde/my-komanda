@@ -18,10 +18,26 @@ interface TestData {
   candidateName: string
   vacancyTitle: string
   companyName: string
+  companyLogo?: string | null
   brand: { primary?: string | null; bg?: string | null; text?: string | null }
   lessons: Lesson[]
   settings: { instructions: string; deadlineDays: number | null; responseFormat: string }
   alreadySubmitted: boolean
+}
+
+// Брендовая шапка кандидатской страницы: логотип компании + название.
+function BrandHeader({ logo, name, center }: { logo?: string | null; name?: string; center?: boolean }) {
+  if (!logo && !name) return null
+  return (
+    <div className={`flex items-center gap-2.5 ${center ? "justify-center" : ""}`}>
+      {logo && (
+        <img src={logo} alt="" className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg object-contain shrink-0" />
+      )}
+      {name && (
+        <p className="text-base sm:text-lg font-bold tracking-wide opacity-90">{name}</p>
+      )}
+    </div>
+  )
 }
 
 // ─── Рендер одного вопроса (порт QuestionInput из demo-client) ─────────────
@@ -393,7 +409,7 @@ export function TestClient({ token }: { token: string }) {
       return (
         <div className="min-h-screen" style={{ backgroundColor: bg, color: text }}>
           <div className="max-w-2xl mx-auto px-4 py-10 space-y-3">
-            {data?.companyName && <p className="text-xs uppercase tracking-wider opacity-60">{data.companyName}</p>}
+            <BrandHeader logo={data?.companyLogo} name={data?.companyName} />
             {/* Заголовок-название урока НЕ показываем: это внутреннее имя
                 («Благодарю»), а текст благодарности HR пишет в блоке ниже. */}
             {((thankYouLesson.blocks ?? []) as Block[]).map((b, bi) => {
@@ -427,9 +443,7 @@ export function TestClient({ token }: { token: string }) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-6" style={{ backgroundColor: bg, color: text }}>
         <div className="w-full max-w-sm space-y-5">
-          {data?.companyName && (
-            <p className="text-xs uppercase tracking-wider opacity-60 text-center">{data.companyName}</p>
-          )}
+          <BrandHeader logo={data?.companyLogo} name={data?.companyName} center />
           <div className="text-center space-y-1">
             <h2 className="text-xl font-bold">Представьтесь</h2>
             <p className="text-sm opacity-70">Укажите ваши данные перед началом теста</p>
@@ -481,9 +495,7 @@ export function TestClient({ token }: { token: string }) {
             Системную «обёртку» (авто-заголовок «Тестовое задание — вакансия»,
             срок, отдельный блок инструкций) не показываем — её просили убрать.
             Оставляем лишь брендовую строку с названием компании. */}
-        {data?.companyName && (
-          <p className="text-xs uppercase tracking-wider opacity-60">{data.companyName}</p>
-        )}
+        <BrandHeader logo={data?.companyLogo} name={data?.companyName} />
 
         {/* Уроки теста: текст/HTML контент + интерактивные task-блоки */}
         {formLessons.map((lesson, li) => (
@@ -492,14 +504,14 @@ export function TestClient({ token }: { token: string }) {
             {((lesson.blocks ?? []) as Block[]).map((b, bi) => {
               if (b.type === "task" && Array.isArray(b.questions) && b.questions.length > 0) {
                 return (
-                  <div key={b.id ?? bi} className="space-y-4 rounded-lg border border-black/10 bg-white/60 p-4">
+                  <div key={b.id ?? bi} className="space-y-6 rounded-lg border border-black/10 bg-white/60 p-4">
                     {b.taskTitle?.trim() && <h3 className="font-semibold">{tpl(b.taskTitle)}</h3>}
                     {b.taskDescription?.trim() && (
                       <p className="text-sm opacity-80 whitespace-pre-wrap">{tpl(b.taskDescription)}</p>
                     )}
                     {b.questions.map((q) => (
-                      <div key={q.id} className="space-y-1.5">
-                        <label className="text-sm font-medium block">
+                      <div key={q.id} className="space-y-2">
+                        <label className="text-base sm:text-[17px] font-semibold leading-snug block">
                           {q.text}{q.required && <span className="text-red-500"> *</span>}
                         </label>
                         <QuestionInput
