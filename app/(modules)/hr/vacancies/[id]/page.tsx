@@ -4551,6 +4551,9 @@ export default function VacancyPage() {
           // После рассылки обновляем список — чтобы в колонке «Тест» появилось «отп.».
           if (!o) void (useListPaginated ? paginated.refetch() : refetchCandidates())
         }}
+        // Сразу после отметки «тест отправлен» (маркер уже в БД) — обновляем список,
+        // чтобы «отп.» появилось без ожидания закрытия окна.
+        onSent={() => { void (useListPaginated ? paginated.refetch() : refetchCandidates()) }}
         vacancyId={id}
         candidateIds={hhBroadcastIds}
       />
