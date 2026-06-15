@@ -243,7 +243,7 @@ export function DashboardSidebar() {
   // Директор/владелец компании видят ПОЛНОЕ HR-меню (Рабочий стол, Кандидаты,
   // Отчёт, Настройки HR), а не урезанное «только Вакансии». Урезанное — для
   // прочих HR-ролей (hr_lead/hr_manager/observer и т.п.).
-  const hrLite = !isAdminOrManager && !stagingFullAccess && !pilotCompanyFull && role !== 'director' && role !== 'client'
+  const hrLite = !isOwner && !isAdminOrManager && !stagingFullAccess && !pilotCompanyFull && role !== 'director' && role !== 'client'
 
   // Пересчёт модулей при изменении роли (когда useSession догружает данные)
   useEffect(() => {
@@ -414,7 +414,7 @@ export function DashboardSidebar() {
 
   const filteredSettings = SETTINGS_MENU.filter((item) => {
     const key = item.href.split('/settings/')[1]
-    return !key || visSettings.includes(key)
+    return isOwner || !key || visSettings.includes(key)
   })
 
   // ── Flyout state (positioned UPWARD — fixes cut-off bug) ────────────────
@@ -580,7 +580,7 @@ export function DashboardSidebar() {
 
           {/* Module switcher icons */}
           {(Object.keys(MODULE_REGISTRY) as ModuleId[])
-            .filter((id) => (id !== 'hr' || vis.hiring || stagingFullAccess) && isModuleVisible(id) && activeModules.includes(id))
+            .filter((id) => isOwner || ((id !== 'hr' || vis.hiring || stagingFullAccess) && isModuleVisible(id) && activeModules.includes(id)))
             .map((id) => {
             const mod = MODULE_REGISTRY[id]
             const Icon = getIcon(mod.icon)
@@ -683,9 +683,9 @@ export function DashboardSidebar() {
           <div className="my-1.5 mx-3 border-t border-sidebar-border/60" />
 
           {(Object.keys(MODULE_REGISTRY) as ModuleId[])
-            .filter((id) => (id !== 'hr' || vis.hiring || stagingFullAccess) && isModuleVisible(id) && activeModules.includes(id))
+            .filter((id) => isOwner || ((id !== 'hr' || vis.hiring || stagingFullAccess) && isModuleVisible(id) && activeModules.includes(id)))
             .map((id) => {
-            const isModuleEnabled = activeModules.includes(id)
+            const isModuleEnabled = isOwner || activeModules.includes(id)
             const mod = MODULE_REGISTRY[id]
             const ModIcon = getIcon(mod.icon)
             const isExpanded = expandedModules.has(id)
@@ -772,7 +772,7 @@ export function DashboardSidebar() {
                       if (!group.label) {
                         return (
                           <SidebarMenu key="__root" className="gap-0.5 mt-1">
-                            {group.items.filter((item) => isItemVisible(id, item.href) && !(isRestricted && item.href === '/hr/candidates')).map((item) => {
+                            {group.items.filter((item) => isOwner || (isItemVisible(id, item.href) && !(isRestricted && item.href === '/hr/candidates'))).map((item) => {
                               if (item.divider) {
                                 return (
                                   <div key={item.href} className="px-4 py-1.5 text-[10px] text-sidebar-foreground/30 font-medium tracking-wide select-none">
@@ -848,7 +848,7 @@ export function DashboardSidebar() {
 
                           <CollapsibleContent forceMount className="data-[state=closed]:hidden">
                             <SidebarMenu className="gap-0.5 mt-1">
-                              {group.items.filter((item) => isItemVisible(id, item.href) && !(isRestricted && item.href === '/hr/candidates')).map((item) => {
+                              {group.items.filter((item) => isOwner || (isItemVisible(id, item.href) && !(isRestricted && item.href === '/hr/candidates'))).map((item) => {
                                 if (item.divider) {
                                   return (
                                     <div key={item.href} className="px-6 py-1.5 text-[10px] text-sidebar-foreground/30 font-medium tracking-wide select-none">
