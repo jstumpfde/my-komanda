@@ -40,6 +40,8 @@ export async function GET(
         // Слоган и сайт компании для публичной страницы вакансии.
         _companyWebsite:   companies.website,
         _companySlogan:    companies.brandSlogan,
+        // Описание компании (блок «О компании») для публичной страницы.
+        _companyDescription: companies.companyDescription,
       })
       .from(vacancies)
       .innerJoin(companies, eq(vacancies.companyId, companies.id))
@@ -59,17 +61,19 @@ export async function GET(
     // O1 мультикомпанийность: если на вакансии выбран бренд (№2+), кандидат
     // видит название/логотип/слоган/сайт бренд-компании вместо основной.
     // brandCompanyId="" / отсутствует → основная компания, ничего не меняем.
-    type BrandCompany = { id: string; name: string; logo?: string; slogan?: string; website?: string }
-    const { hiringDefaultsJson, _companyWebsite, _companySlogan, ...row } = result[0] as Record<string, unknown> & {
+    type BrandCompany = { id: string; name: string; logo?: string; slogan?: string; website?: string; description?: string }
+    const { hiringDefaultsJson, _companyWebsite, _companySlogan, _companyDescription, ...row } = result[0] as Record<string, unknown> & {
       hiringDefaultsJson?: { brandCompanies?: BrandCompany[] } | null
       _companyWebsite?: string | null
       _companySlogan?: string | null
+      _companyDescription?: string | null
     }
 
     // Начальные значения — из основной компании.
-    let resolvedLogo    = row.companyLogo as string | null ?? null
-    let resolvedSlogan  = _companySlogan ?? null
-    let resolvedWebsite = _companyWebsite ?? null
+    let resolvedLogo        = row.companyLogo as string | null ?? null
+    let resolvedSlogan      = _companySlogan ?? null
+    let resolvedWebsite     = _companyWebsite ?? null
+    let resolvedDescription = _companyDescription ?? null
 
     const anketa = (row.descriptionJson as { anketa?: { brandCompanyId?: string } } | null)?.anketa
     const brandId = anketa?.brandCompanyId
@@ -80,24 +84,27 @@ export async function GET(
         if (brand.logo?.trim())  resolvedLogo    = brand.logo
         if (brand.slogan?.trim()) resolvedSlogan  = brand.slogan
         if (brand.website?.trim()) resolvedWebsite = brand.website
+        if (brand.description?.trim()) resolvedDescription = brand.description
       }
     }
 
     // Учитываем vacancy-level override: если включён и в descriptionJson.branding
-    // заданы logo/slogan/website — они приоритетнее всего.
+    // заданы logo/slogan/website/description — они приоритетнее всего.
     const overrideOn = row.brandingOverrideEnabled === true
     if (overrideOn) {
       const vb = ((row.descriptionJson as Record<string, unknown> | null)?.branding ?? {}) as {
-        logo?: string; slogan?: string; website?: string
+        logo?: string; slogan?: string; website?: string; description?: string
       }
       if (vb.logo?.trim())    resolvedLogo    = vb.logo
       if (vb.slogan?.trim())  resolvedSlogan  = vb.slogan
       if (vb.website?.trim()) resolvedWebsite = vb.website
+      if (vb.description?.trim()) resolvedDescription = vb.description
     }
 
-    row.companyLogo    = resolvedLogo
-    row.companySlogan  = resolvedSlogan
-    row.companyWebsite = resolvedWebsite
+    row.companyLogo        = resolvedLogo
+    row.companySlogan      = resolvedSlogan
+    row.companyWebsite     = resolvedWebsite
+    row.companyDescription = resolvedDescription
 
     return apiSuccess(row)
   } catch (err) {

@@ -24,6 +24,7 @@ import { type Question, type QuestionAnswerType, defaultQuestion } from "@/lib/c
 import { CompanySelector } from "@/components/vacancies/company-selector"
 import { type ParsedVacancy } from "@/components/vacancies/anketa-wizard"
 import { VacancyAdvisor } from "@/components/vacancies/vacancy-advisor"
+import { AnketaTemplateControls } from "@/components/vacancies/anketa-template-controls"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1033,6 +1034,8 @@ export interface AnketaTabHandle {
   save: () => Promise<void>
   /** Открыть предпросмотр описания вакансии на весь экран (верхняя кнопка тулбара). */
   openPreview: () => void
+  /** Открыть диалог «Сохранить анкету в библиотеку» (триггер из дропдауна «Действия»). */
+  saveToLibrary: () => void
 }
 
 interface AnketaTabProps {
@@ -1108,6 +1111,8 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
   // Полноэкранный режим предпросмотра (верхняя кнопка тулбара). Нижняя кнопка
   // «Предпросмотр вакансии» открывает то же, но обычным окошком.
   const [previewFullscreen, setPreviewFullscreen] = useState(false)
+  // Диалог «Сохранить анкету в библиотеку» — открывается из дропдауна «Действия» (page.tsx).
+  const [libSaveOpen, setLibSaveOpen] = useState(false)
   const [advisorFocusedField, setAdvisorFocusedField] = useState("")
   const [aiLoading, setAiLoading] = useState(false)
   const [aiLoadingStep, setAiLoadingStep] = useState(0)
@@ -1305,6 +1310,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
     registerHandle?.({
       save,
       openPreview: () => { setPreviewFullscreen(true); setPreviewOpen(true) },
+      saveToLibrary: () => setLibSaveOpen(true),
     })
   }, [registerHandle, save])
 
@@ -2473,6 +2479,17 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
             <Plus className="w-3 h-3" /> Добавить вопрос
           </Button>
         </div>
+
+        {/* Скрытый контрол: диалог «Сохранить анкету в библиотеку» (questionnaire_templates).
+            Кнопок не рендерит — открывается из дропдауна «Действия» через AnketaTabHandle.saveToLibrary().
+            Сохраняем текущие вопросы скрининга как переиспользуемый шаблон анкеты. */}
+        <AnketaTemplateControls
+          hideButtons
+          saveOpen={libSaveOpen}
+          onSaveOpenChange={setLibSaveOpen}
+          questions={data.screeningQuestions.filter((t) => t.trim()).map((text) => ({ ...defaultQuestion(), text }))}
+          onChange={(qs) => set("screeningQuestions", qs.map((q) => q.text).filter((t) => t.trim()))}
+        />
 
         {/* hh.ru description — generate / preview / edit */}
         <div className="space-y-3 mt-4">

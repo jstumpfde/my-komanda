@@ -327,8 +327,12 @@ export async function POST(
       return apiError("Vacancy not found", 404)
     }
 
-    const body = await req.json() as { hhUrl?: string }
+    const body = await req.json() as { hhUrl?: string; bind?: boolean }
     const hhUrl = body.hhUrl?.trim()
+    // Привязка вакансии (запись hh_vacancy_id + апсерт hh_vacancies → платформа
+    // начинает получать отклики) — отдельный шаг. По умолчанию true (обратная
+    // совместимость). Если HR снял галочку «Привязать», только заполняем поля.
+    const shouldBind = body.bind !== false
     if (!hhUrl) {
       return apiError("hhUrl is required", 400)
     }
@@ -471,11 +475,14 @@ export async function POST(
 
     const now = new Date()
     const updates: Record<string, unknown> = {
-      hhVacancyId,
-      hhUrl,
-      hhSyncedAt: now,
       updatedAt: now,
       descriptionJson: { ...existingDescJson, anketa: newAnketa },
+    }
+    // Поля привязки пишем только когда HR оставил галочку «Привязать вакансию».
+    if (shouldBind) {
+      updates.hhVacancyId = hhVacancyId
+      updates.hhUrl = hhUrl
+      updates.hhSyncedAt = now
     }
 
     if (mappedData.title) updates.title = mappedData.title
@@ -497,42 +504,46 @@ export async function POST(
       .returning()
 
     // ─── Sync hh_vacancies (upsert) so UI считает вакансию подключённой ────
+    // ТОЛЬКО при привязке (shouldBind). Без привязки это «Заполнить из hh.ru» —
+    // поля заполнили, но источник откликов не подключаем.
     // Для черновиков (status=draft) НЕ проставляем localVacancyId:
     // черновик ещё не готов, HR подключит источник сам когда вакансия будет готова.
     // Для уже опубликованных/активных вакансий — связываем как раньше.
-    const isDraft = existing.status === "draft"
-    const hhValues = {
-      companyId:       user.companyId,
-      hhVacancyId,
-      title:           mappedData.title || updated.title,
-      areaName:        mappedData.city || null,
-      salaryFrom:      mappedData.salaryFrom,
-      salaryTo:        mappedData.salaryTo,
-      salaryCurrency:  mappedData.salaryCurrency || null,
-      status:          "active",
-      url:             hhUrl,
-      localVacancyId:  isDraft ? null : id,
-      rawData:         mappedData as unknown as Record<string, unknown>,
-      syncedAt:        now,
+    if (shouldBind) {
+      const isDraft = existing.status === "draft"
+      const hhValues = {
+        companyId:       user.companyId,
+        hhVacancyId,
+        title:           mappedData.title || updated.title,
+        areaName:        mappedData.city || null,
+        salaryFrom:      mappedData.salaryFrom,
+        salaryTo:        mappedData.salaryTo,
+        salaryCurrency:  mappedData.salaryCurrency || null,
+        status:          "active",
+        url:             hhUrl,
+        localVacancyId:  isDraft ? null : id,
+        rawData:         mappedData as unknown as Record<string, unknown>,
+        syncedAt:        now,
+      }
+      await db
+        .insert(hhVacancies)
+        .values(hhValues)
+        .onConflictDoUpdate({
+          target: [hhVacancies.companyId, hhVacancies.hhVacancyId],
+          set: {
+            title:          hhValues.title,
+            areaName:       hhValues.areaName,
+            salaryFrom:     hhValues.salaryFrom,
+            salaryTo:       hhValues.salaryTo,
+            salaryCurrency: hhValues.salaryCurrency,
+            status:         hhValues.status,
+            url:            hhValues.url,
+            localVacancyId: hhValues.localVacancyId,
+            rawData:        hhValues.rawData,
+            syncedAt:       hhValues.syncedAt,
+          },
+        })
     }
-    await db
-      .insert(hhVacancies)
-      .values(hhValues)
-      .onConflictDoUpdate({
-        target: [hhVacancies.companyId, hhVacancies.hhVacancyId],
-        set: {
-          title:          hhValues.title,
-          areaName:       hhValues.areaName,
-          salaryFrom:     hhValues.salaryFrom,
-          salaryTo:       hhValues.salaryTo,
-          salaryCurrency: hhValues.salaryCurrency,
-          status:         hhValues.status,
-          url:            hhValues.url,
-          localVacancyId: hhValues.localVacancyId,
-          rawData:        hhValues.rawData,
-          syncedAt:       hhValues.syncedAt,
-        },
-      })
 
     logActivity({
       companyId: user.companyId,
@@ -542,7 +553,7 @@ export async function POST(
       entityId: id,
       entityTitle: updated.title,
       module: "hr",
-      details: { source: "hh_import", hhVacancyId },
+      details: { source: "hh_import", hhVacancyId, bound: shouldBind },
       request: req,
     })
 
