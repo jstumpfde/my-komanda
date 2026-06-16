@@ -29,7 +29,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import type { Demo, Block, BlockType, Lesson, StoriesCard } from "@/lib/course-types"
-import {BLOCK_TYPE_META, createBlock} from "@/lib/course-types"
+import {BLOCK_TYPE_META, createBlock, STORIES_CTA_DEFAULT_TEXT} from "@/lib/course-types"
 import { StoriesPlayer } from "@/components/vacancies/stories-player"
 import { resolveOptionPoints } from "@/lib/score-test-objective"
 import { TEMPLATE_VARIABLES } from "@/lib/templates/demo-templates"
@@ -3081,6 +3081,50 @@ function StoriesEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patc
           ))}
         </div>
       )}
+
+      {/* Финальный CTA-слайд: после последней карточки — экран с призывом откликнуться */}
+      <div className="rounded-lg border border-border bg-background p-3 space-y-3">
+        <label className="flex items-start gap-2.5 cursor-pointer select-none">
+          <Switch
+            checked={block.storiesCtaEnabled ?? false}
+            onCheckedChange={(v) => onUpdate({ storiesCtaEnabled: v })}
+            className="mt-0.5"
+          />
+          <span className="text-sm font-medium leading-tight">
+            Показать финальный слайд с призывом откликнуться
+            <span className="block text-xs font-normal text-muted-foreground mt-0.5">
+              После последней карточки — экран с крупной кнопкой
+            </span>
+          </span>
+        </label>
+
+        {block.storiesCtaEnabled && (
+          <div className="space-y-2 pl-1">
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Текст кнопки</label>
+              <input
+                type="text"
+                value={block.storiesCtaText ?? ""}
+                onChange={(e) => onUpdate({ storiesCtaText: e.target.value })}
+                placeholder={STORIES_CTA_DEFAULT_TEXT}
+                maxLength={40}
+                className="w-full text-sm border border-border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-primary/50"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Подпись над кнопкой (необязательно)</label>
+              <input
+                type="text"
+                value={block.storiesCtaCaption ?? ""}
+                onChange={(e) => onUpdate({ storiesCtaCaption: e.target.value })}
+                placeholder="Например: Понравилось — откликнись!"
+                maxLength={120}
+                className="w-full text-sm border border-border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-primary/50"
+              />
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -4785,7 +4829,14 @@ function SimplePreviewBlock({ block, onNext }: { block: Block; onNext?: () => vo
       )
     }
     case "stories":
-      return <StoriesPlayer cards={block.storiesCards ?? []} />
+      return (
+        <StoriesPlayer
+          cards={block.storiesCards ?? []}
+          ctaEnabled={block.storiesCtaEnabled}
+          ctaText={block.storiesCtaText}
+          ctaCaption={block.storiesCtaCaption}
+        />
+      )
     default:
       return null
   }

@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { Loader2, Plus, Pencil, Trash2, Sparkles, FileText, AlertCircle, Save, BookOpen, Eye, Check, Download, ChevronDown, FilePlus, Zap } from "lucide-react"
+import { Loader2, Plus, Pencil, Trash2, Sparkles, FileText, AlertCircle, Save, BookOpen, Eye, Check, Download, ChevronDown, FilePlus, Zap, Clapperboard } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { useContentBlocks, type ContentBlock, type ContentType } from "@/hooks/use-content-blocks"
@@ -143,11 +143,22 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
     setTypePickerOpen(true)
   }, [])
 
-  const doCreateBlock = useCallback(async (contentType: ContentType) => {
+  const doCreateBlock = useCallback(async (choice: PickerChoice) => {
     setTypePickerOpen(false)
     setCreating(true)
-    const title = contentType === "test" || contentType === "task" ? "Новый тест" : "Новый блок"
+    // «Сторис» — это блок-демонстрация, СРАЗУ заполненный одним уроком с пустым
+    // stories-блоком, чтобы HR попал прямо в редактор сторис (StoriesEditorBlock),
+    // а не искал его внутри урока. contentType остаётся "presentation".
+    const isStories = choice === "stories"
+    const contentType: ContentType = isStories ? "presentation" : choice
+    const title = isStories ? "Сторис" : (contentType === "test" || contentType === "task" ? "Новый тест" : "Новый блок")
     const block = await apiCreateBlock(contentType, title)
+    if (block && isStories) {
+      const storiesBlock = { ...createBlock("stories"), id: `blk-stories-${Date.now()}` }
+      updateBlock(block.id, {
+        lessons: [{ id: `les-${Date.now()}`, emoji: "▶", title: "Сторис", blocks: [storiesBlock] }],
+      })
+    }
     setCreating(false)
     if (block) {
       setSelectedId(block.id)
@@ -163,7 +174,7 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
     } else {
       toast.error("Не удалось создать блок")
     }
-  }, [apiCreateBlock, blocks, setLiveBattle])
+  }, [apiCreateBlock, blocks, setLiveBattle, updateBlock])
 
   const startRenaming = useCallback((block: ContentBlock) => {
     setRenamingId(block.id)
@@ -669,26 +680,30 @@ function LiveBattleToggle({ block, allBlocks, onToggle }: LiveBattleToggleProps)
 
 // ─── Диалог выбора типа блока ─────────────────────────────────────────────────
 
+/** Выбор в диалоге типа блока: contentType ИЛИ псевдо-тип «сторис»
+ *  (создаётся как presentation с пред-засеянным stories-блоком). */
+type PickerChoice = ContentType | "stories"
+
 interface BlockTypePickerDialogProps {
   open: boolean
   onClose: () => void
-  onCreate: (contentType: ContentType) => void
+  onCreate: (choice: PickerChoice) => void
 }
 
 function BlockTypePickerDialog({ open, onClose, onCreate }: BlockTypePickerDialogProps) {
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose() }}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Тип блока</DialogTitle>
           <DialogDescription>
             Выберите тип нового блока контента
           </DialogDescription>
         </DialogHeader>
-        <div className="grid grid-cols-2 gap-3 pt-2">
+        <div className="grid grid-cols-3 gap-3 pt-2">
           <button
             onClick={() => onCreate("presentation")}
-            className="flex flex-col items-center gap-2 rounded-xl border border-border p-4 hover:bg-blue-50 dark:hover:bg-blue-950/20 hover:border-blue-300 dark:hover:border-blue-700 transition-colors text-left"
+            className="flex flex-col items-center gap-2 rounded-xl border border-border p-4 hover:bg-blue-50 dark:hover:bg-blue-950/20 hover:border-blue-300 dark:hover:border-blue-700 transition-colors text-center"
           >
             <span className="text-2xl">🎯</span>
             <div>
@@ -698,12 +713,22 @@ function BlockTypePickerDialog({ open, onClose, onCreate }: BlockTypePickerDialo
           </button>
           <button
             onClick={() => onCreate("test")}
-            className="flex flex-col items-center gap-2 rounded-xl border border-border p-4 hover:bg-amber-50 dark:hover:bg-amber-950/20 hover:border-amber-300 dark:hover:border-amber-700 transition-colors text-left"
+            className="flex flex-col items-center gap-2 rounded-xl border border-border p-4 hover:bg-amber-50 dark:hover:bg-amber-950/20 hover:border-amber-300 dark:hover:border-amber-700 transition-colors text-center"
           >
             <span className="text-2xl">📝</span>
             <div>
               <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Тест</p>
               <p className="text-xs text-muted-foreground mt-0.5">Задания и вопросы для кандидата</p>
+            </div>
+          </button>
+          <button
+            onClick={() => onCreate("stories")}
+            className="flex flex-col items-center gap-2 rounded-xl border border-border p-4 hover:bg-fuchsia-50 dark:hover:bg-fuchsia-950/20 hover:border-fuchsia-300 dark:hover:border-fuchsia-700 transition-colors text-center"
+          >
+            <Clapperboard className="w-6 h-6 text-fuchsia-600 dark:text-fuchsia-400" />
+            <div>
+              <p className="text-sm font-semibold text-fuchsia-700 dark:text-fuchsia-400">Сторис</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Короткие вертикальные видео/фото на весь экран, как в соцсетях</p>
             </div>
           </button>
         </div>
