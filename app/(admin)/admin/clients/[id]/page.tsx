@@ -27,7 +27,7 @@ import {
 import {
   ArrowLeft, Building2, Loader2, Save, Plus, CalendarDays, RotateCcw,
   CheckCircle, Lock, Unlock, Trash2, Users, Receipt, Activity, LayoutGrid,
-  UserX, UserCheck, Shield,
+  UserX, UserCheck, Shield, Handshake, Unlink,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -51,6 +51,13 @@ interface Company {
   planId: string | null; currentPlanId: string | null; trialEndsAt: string | null
   createdAt: string | null; userCount: number
   plan: { id: string; name: string; price: number; slug: string; priceFormatted: number } | null
+  partnerName: string | null; partnerIntegratorId: string | null; linkStatus: string | null
+}
+
+// Партнёр (integrator) — для селекта назначения партнёра компании.
+interface PartnerOption {
+  id: string
+  companyName: string | null
 }
 
 // Поля-реквизиты, редактируемые в форме «Информация о компании».
@@ -357,6 +364,11 @@ export default function AdminClientPage() {
   const [infoSaving, setInfoSaving] = useState(false)
   const [infoSaved, setInfoSaved] = useState(false)
 
+  // Партнёр компании
+  const [partners, setPartners] = useState<PartnerOption[]>([])
+  const [partnerSelect, setPartnerSelect] = useState<string>("none")
+  const [partnerSaving, setPartnerSaving] = useState(false)
+
   // Загружаем компанию
   useEffect(() => {
     fetch(`/api/admin/clients/${clientId}`)
@@ -364,12 +376,27 @@ export default function AdminClientPage() {
       .then(data => {
         setCompany(data)
         setForm(companyToForm(data))
+        setPartnerSelect(data?.partnerIntegratorId ?? "none")
         if (data?.trialEndsAt) {
           setTrialEndsAt(new Date(data.trialEndsAt).toISOString().split("T")[0])
         }
       })
       .catch(() => {})
   }, [clientId])
+
+  // Загружаем партнёров платформы (для назначения).
+  useEffect(() => {
+    fetch(`/api/admin/integrators`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.integrators) {
+          setPartners(data.integrators.map((i: { id: string; companyName: string | null }) => ({
+            id: i.id, companyName: i.companyName,
+          })))
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   // Загружаем планы и модули через существующий endpoint
   useEffect(() => {
@@ -603,6 +630,75 @@ export default function AdminClientPage() {
       setError("Ошибка сохранения")
     } finally {
       setInfoSaving(false)
+    }
+  }
+
+  // Назначить / сменить партнёра компании. reassign=true отменяет связь с
+  // предыдущим партнёром (POST с reassign:true на новом партнёре).
+  async function handleAssignPartner(reassign = false) {
+    if (partnerSelect === "none") return
+    setPartnerSaving(true)
+    setError("")
+    try {
+      const res = await fetch(`/api/admin/integrators/${partnerSelect}/clients`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientCompanyId: clientId, reassign }),
+      })
+      if (res.status === 409 && !reassign) {
+        if (window.confirm("Компания уже привязана к другому партнёру. Перепривязать к выбранному?")) {
+          setPartnerSaving(false)
+          await handleAssignPartner(true)
+          return
+        }
+        return
+      }
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        setError(d.error ?? "Не удалось назначить партнёра")
+        return
+      }
+      const sel = partners.find(p => p.id === partnerSelect)
+      setCompany(prev => prev ? {
+        ...prev,
+        partnerIntegratorId: partnerSelect,
+        partnerName: sel?.companyName ?? prev.partnerName,
+        linkStatus: "active",
+      } : prev)
+    } catch {
+      setError("Ошибка сети")
+    } finally {
+      setPartnerSaving(false)
+    }
+  }
+
+  // Отвязать текущего партнёра компании (status='cancelled').
+  async function handleUnlinkPartner() {
+    if (!company?.partnerIntegratorId) return
+    setPartnerSaving(true)
+    setError("")
+    try {
+      // У админ-роута отвязки нужен linkId; берём его из списка клиентов партнёра.
+      const list = await fetch(`/api/admin/integrators/${company.partnerIntegratorId}/clients`).then(r => r.json())
+      const link = (list.clients ?? []).find(
+        (c: { id: string; clientCompanyId: string; status: string | null }) =>
+          c.clientCompanyId === clientId && c.status === "active",
+      )
+      if (!link) { setError("Активная связь не найдена"); return }
+      const res = await fetch(`/api/admin/integrators/${company.partnerIntegratorId}/clients/${link.id}`, {
+        method: "DELETE",
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        setError(d.error ?? "Не удалось отвязать")
+        return
+      }
+      setCompany(prev => prev ? { ...prev, partnerIntegratorId: null, partnerName: null, linkStatus: null } : prev)
+      setPartnerSelect("none")
+    } catch {
+      setError("Ошибка сети")
+    } finally {
+      setPartnerSaving(false)
     }
   }
 
@@ -876,6 +972,60 @@ export default function AdminClientPage() {
                         </div>
                       </>
                     )}
+                  </CardContent>
+                </Card>
+
+                {/* Партнёр */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Handshake className="w-4 h-4" /> Партнёр
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center gap-3 flex-wrap text-sm">
+                      <span className="text-muted-foreground">Текущий партнёр:</span>
+                      {company?.partnerName
+                        ? <Badge variant="outline" className="text-xs bg-violet-500/10 text-violet-700 border-violet-200">{company.partnerName}</Badge>
+                        : <span className="text-muted-foreground">— не привязан —</span>}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">
+                        {company?.partnerIntegratorId ? "Сменить партнёра" : "Назначить партнёра"}
+                      </Label>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Select value={partnerSelect} onValueChange={setPartnerSelect}>
+                          <SelectTrigger className="h-8 text-sm flex-1 min-w-[220px] max-w-sm">
+                            <SelectValue placeholder="Выберите партнёра" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">— Не выбран —</SelectItem>
+                            {partners.map(p => (
+                              <SelectItem key={p.id} value={p.id}>{p.companyName ?? p.id}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          size="sm" variant="outline" className="gap-1.5 h-8"
+                          disabled={partnerSaving || partnerSelect === "none" || partnerSelect === company?.partnerIntegratorId}
+                          onClick={() => handleAssignPartner(false)}
+                        >
+                          {partnerSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                          {company?.partnerIntegratorId ? "Сменить" : "Назначить"}
+                        </Button>
+                        {company?.partnerIntegratorId && (
+                          <Button
+                            size="sm" variant="ghost"
+                            className="gap-1.5 h-8 text-destructive hover:text-destructive"
+                            disabled={partnerSaving}
+                            onClick={handleUnlinkPartner}
+                          >
+                            <Unlink className="w-3.5 h-3.5" /> Отвязать
+                          </Button>
+                        )}
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
 

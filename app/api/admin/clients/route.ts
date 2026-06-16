@@ -1,8 +1,12 @@
 import { NextRequest } from "next/server"
 import { db } from "@/lib/db"
-import { companies, users, plans } from "@/lib/db/schema"
-import {ilike, or, inArray, count, asc, desc, and, isNull, isNotNull} from "drizzle-orm"
+import { companies, users, plans, integratorClients, integrators } from "@/lib/db/schema"
+import {ilike, or, inArray, count, asc, desc, and, eq, isNull, isNotNull} from "drizzle-orm"
 import {requirePlatformAdmin, apiSuccess} from "@/lib/api-helpers"
+
+// Алиас companies для компании-партнёра (отдельный join, чтобы не конфликтовать
+// с основной выборкой клиентских компаний).
+import { alias } from "drizzle-orm/pg-core"
 
 // GET /api/admin/clients
 // Query params:
@@ -138,9 +142,27 @@ export async function GET(req: NextRequest) {
     : []
   const planMap = new Map(planRows.map(p => [p.id, p]))
 
+  // Партнёр компании (активная связь integrator_clients) → название и id партнёра.
+  const partnerCompanies = alias(companies, "partner_companies")
+  const partnerRows = await db
+    .select({
+      clientCompanyId:    integratorClients.clientCompanyId,
+      partnerIntegratorId: integrators.id,
+      partnerName:        partnerCompanies.name,
+    })
+    .from(integratorClients)
+    .innerJoin(integrators, eq(integratorClients.integratorId, integrators.id))
+    .leftJoin(partnerCompanies, eq(integrators.companyId, partnerCompanies.id))
+    .where(and(
+      inArray(integratorClients.clientCompanyId, companyIds),
+      eq(integratorClients.status, "active"),
+    ))
+  const partnerMap = new Map(partnerRows.map(r => [r.clientCompanyId, r]))
+
   const data = rows.map(row => {
     const planId = row.currentPlanId ?? row.planId
     const plan = planId ? planMap.get(planId) : null
+    const partner = partnerMap.get(row.id)
     return {
       ...row,
       userCount: Number(userCountMap.get(row.id) ?? 0),
@@ -148,6 +170,9 @@ export async function GET(req: NextRequest) {
       planName: plan?.name ?? null,
       planPrice: plan ? Math.round(plan.price / 100) : null,
       mrr: plan && row.subscriptionStatus === "active" ? Math.round(plan.price / 100) : 0,
+      partnerName: partner?.partnerName ?? null,
+      partnerIntegratorId: partner?.partnerIntegratorId ?? null,
+      linkStatus: partner ? "active" : null,
     }
   })
 

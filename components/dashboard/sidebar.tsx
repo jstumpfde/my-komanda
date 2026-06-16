@@ -242,10 +242,22 @@ export function DashboardSidebar() {
     .filter(Boolean)
   const pilotCompanyFull =
     !isAdminOrManager && !!user?.companyId && pilotCompanyIds.includes(user.companyId)
+  // ПОЛНЫЙ сайдбар (ВСЕ модули) для отдельных компаний: демо-витрина и компании из
+  // NEXT_PUBLIC_FULL_MODULE_COMPANY_IDS. Нужно, чтобы партнёр, зайдя «как клиент»,
+  // видел всю платформу, и чтобы демо показывало все модули — БЕЗ повышения роли
+  // до platform_admin (роль остаётся director — это «как у клиента»).
+  const fullModuleCompanyIds = (process.env.NEXT_PUBLIC_FULL_MODULE_COMPANY_IDS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const DEMO_SHOWCASE_COMPANY_ID = "ae75117f-a3b7-49f5-abf3-8b3fbd9e3de9"
+  const fullModulesCompany =
+    !isAdminOrManager && !!user?.companyId &&
+    (user.companyId === DEMO_SHOWCASE_COMPANY_ID || fullModuleCompanyIds.includes(user.companyId))
   // Директор/владелец компании видят ПОЛНОЕ HR-меню (Рабочий стол, Кандидаты,
   // Отчёт, Настройки HR), а не урезанное «только Вакансии». Урезанное — для
   // прочих HR-ролей (hr_lead/hr_manager/observer и т.п.).
-  const hrLite = !isOwner && !isAdminOrManager && !stagingFullAccess && !pilotCompanyFull && role !== 'director' && role !== 'client'
+  const hrLite = !isOwner && !isAdminOrManager && !stagingFullAccess && !pilotCompanyFull && !fullModulesCompany && role !== 'director' && role !== 'client'
 
   // Пересчёт модулей при изменении роли (когда useSession догружает данные)
   useEffect(() => {
@@ -256,11 +268,15 @@ export function DashboardSidebar() {
     if (stagingFullAccess) { add('knowledge' as ModuleId); add('sales' as ModuleId) }
     // PROD-пилот (по NEXT_PUBLIC_PILOT_COMPANY_IDS): открываем Продажи указанным компаниям.
     if (pilotCompanyFull) add('sales' as ModuleId)
+    // Демо-витрина / полнодоступные компании: открываем ВСЕ модули сайдбара.
+    if (fullModulesCompany) {
+      for (const m of (['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'logistics', 'booking', 'dialer', 'qc', 'b2b'] as ModuleId[])) add(m)
+    }
     setActiveModules(prev => {
       if (prev.length === newModules.length && prev.every((m, i) => m === newModules[i])) return prev
       return newModules
     })
-  }, [vis.modules, stagingFullAccess, pilotCompanyFull])
+  }, [vis.modules, stagingFullAccess, pilotCompanyFull, fullModulesCompany])
 
   // ── Sidebar visibility customization ──
   const { visibility: sidebarVis, setVisibility: setSidebarVis, isModuleVisible, isItemVisible, resetToDefault: resetSidebarVis } = useSidebarVisibility()

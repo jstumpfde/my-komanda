@@ -12,9 +12,9 @@
 // UI оперирует «типом доступа» (accessType). Здесь раскладываем его на
 // users.role + (опционально) integrators.kind.
 
-import { eq } from "drizzle-orm"
+import { and, eq, ne } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { integrators } from "@/lib/db/schema"
+import { integrators, integratorClients } from "@/lib/db/schema"
 
 // Тип доступа, как его выбирает админ в UI.
 // Клиентские роли совпадают со значением users.role; партнёрские — это
@@ -56,8 +56,12 @@ export function accessTypeToUserRole(accessType: AccessType): string {
 
 // Если назначен партнёрский тип — создаём/обновляем integrators для companyId
 // пользователя с нужным kind. companyId у integrators уникален (один integrator
-// на компанию): если запись есть — обновляем kind, иначе создаём (status='active').
-// При возврате к клиентской роли integrator НЕ удаляем (это допустимо).
+// на компанию): если запись есть — обновляем kind (и возвращаем в active), иначе
+// создаём (status='active').
+//
+// При возврате пользователя в КЛИЕНТСКУЮ роль деактивируем его integrator
+// (status='terminated') и отменяем его integrator_clients (status='cancelled'),
+// чтобы не оставался «призрачный кабинет» партнёра с доступом к клиентам.
 //
 // Возвращает применённый users.role (для записи в БД вызывающим кодом).
 export async function syncIntegratorForAccessType(
@@ -65,7 +69,31 @@ export async function syncIntegratorForAccessType(
   companyId: string | null,
 ): Promise<void> {
   const kind = PARTNER_KIND[accessType]
-  if (!kind) return // клиентская роль — integrator не трогаем
+
+  // Клиентская роль — гасим партнёрский кабинет (если он был у компании).
+  if (!kind) {
+    if (!companyId) return
+    const [existing] = await db
+      .select({ id: integrators.id })
+      .from(integrators)
+      .where(eq(integrators.companyId, companyId))
+      .limit(1)
+    if (!existing) return
+    await db.transaction(async (tx) => {
+      await tx
+        .update(integrators)
+        .set({ status: "terminated" })
+        .where(eq(integrators.id, existing.id))
+      await tx
+        .update(integratorClients)
+        .set({ status: "cancelled" })
+        .where(and(
+          eq(integratorClients.integratorId, existing.id),
+          ne(integratorClients.status, "cancelled"),
+        ))
+    })
+    return
+  }
 
   if (!companyId) {
     // Партнёрство привязано к компании; без неё integrator создать нельзя.
@@ -79,7 +107,8 @@ export async function syncIntegratorForAccessType(
     .limit(1)
 
   if (existing) {
-    await db.update(integrators).set({ kind }).where(eq(integrators.id, existing.id))
+    // Возвращаем партнёра в строй: kind + status='active' (мог быть terminated).
+    await db.update(integrators).set({ kind, status: "active" }).where(eq(integrators.id, existing.id))
   } else {
     await db.insert(integrators).values({
       companyId,

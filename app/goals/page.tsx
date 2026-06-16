@@ -421,7 +421,7 @@ function ProgressDialog({
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={onClose} disabled={saving}>Отмена</Button>
-          <Button onClick={() => save()} disabled={saving} className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white border-0">
+          <Button onClick={() => save()} disabled={saving}>
             {saving ? "Сохраняю…" : "Сохранить"}
           </Button>
         </DialogFooter>

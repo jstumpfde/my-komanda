@@ -430,7 +430,7 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
             </label>
           ))}
           <div className="flex justify-end pt-2">
-            <Button size="sm" variant="outline" onClick={() => save()} disabled={saving} className="gap-1.5 h-8 text-xs">
+            <Button size="sm" onClick={() => save()} disabled={saving} className="gap-1.5 h-8 text-xs">
               {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
               Сохранить
             </Button>
@@ -514,7 +514,7 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
             </AlertDescription>
           </Alert>
           <div className="flex justify-end">
-            <Button size="sm" variant="outline" onClick={() => save()} disabled={saving} className="gap-1.5 h-8 text-xs">
+            <Button size="sm" onClick={() => save()} disabled={saving} className="gap-1.5 h-8 text-xs">
               {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
               Сохранить
             </Button>
@@ -657,7 +657,6 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
           <div className="flex justify-end">
             <Button
               size="sm"
-              variant="outline"
               onClick={() => save()}
               disabled={saving}
               className="gap-1.5 h-8 text-xs"
@@ -817,7 +816,6 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
           <div className="flex justify-end">
             <Button
               size="sm"
-              variant="outline"
               onClick={() => save()}
               disabled={saving}
               className="gap-1.5 h-8 text-xs"
@@ -869,7 +867,7 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
             ⚠ Это живые сообщения кандидатам в hh. Включайте по одной возможности и следите за диалогами первое время.
           </p>
           <div className="flex justify-end">
-            <Button size="sm" variant="outline" onClick={() => save()} disabled={saving} className="gap-1.5 h-8 text-xs">
+            <Button size="sm" onClick={() => save()} disabled={saving} className="gap-1.5 h-8 text-xs">
               {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
               Сохранить
             </Button>

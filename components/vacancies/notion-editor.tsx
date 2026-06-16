@@ -573,7 +573,7 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
             <span className={cn("text-[11px] mr-1 transition-colors", saveStatus === "saving" ? "text-amber-500" : "text-muted-foreground/40")}>
               {saveStatus === "saving" ? "Сохранение..." : "✓ Сохранено"}
             </span>
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={saveNow}>
+            <Button size="sm" className="gap-1.5 text-xs h-8" onClick={saveNow}>
               <Save className="w-3.5 h-3.5" />Сохранить
             </Button>
             <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => { if (onOpenLibrary) onOpenLibrary(); else setLibraryOpen(true) }}>

@@ -565,7 +565,7 @@ export function CalendarView({ vacancyId }: { vacancyId?: string } = {}) {
                   )
                 })}
                 <div className="flex justify-end mt-2">
-                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={saveCalendarSettings} disabled={savingSchedule}>
+                  <Button size="sm" className="h-7 text-xs gap-1.5" onClick={saveCalendarSettings} disabled={savingSchedule}>
                     <Check className="size-3" />
                     {savingSchedule ? "Сохранение…" : "Сохранить расписание"}
                   </Button>
@@ -629,7 +629,7 @@ export function CalendarView({ vacancyId }: { vacancyId?: string } = {}) {
                     </div>
                   )}
                   <div className="flex justify-end">
-                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={saveHolidays} disabled={savingHolidays}>
+                    <Button size="sm" className="h-7 text-xs gap-1.5" onClick={saveHolidays} disabled={savingHolidays}>
                       <Check className="size-3" />
                       {savingHolidays ? "Сохранение…" : "Сохранить праздники"}
                     </Button>

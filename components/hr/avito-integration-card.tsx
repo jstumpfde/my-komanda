@@ -318,7 +318,7 @@ export function AvitoIntegrationCard() {
           <div className="flex items-center gap-2">
             <Button
               size="sm"
-              className="gap-1.5 bg-primary hover:bg-primary/90"
+              className="gap-1.5"
               onClick={handleSave}
               disabled={saving}
             >
