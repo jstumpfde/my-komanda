@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/lib/auth"
+import { isOwnerEmail } from "@/lib/owner"
 import { hasSkill, dedupeSkills } from "@/lib/skills/normalize"
 import { Progress } from "@/components/ui/progress"
 import { Input } from "@/components/ui/input"
@@ -1097,6 +1099,10 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
     const saved = (descriptionJson as Record<string, unknown>)?.anketa as Record<string, unknown> | undefined
     return saved ? migrateAnketa(saved) : emptyAnketa()
   })
+  // Legacy-блоки скоринга (навыки-«запасной вариант» + «Портрет: AI-оценка») дублируют
+  // таб «Портрет» — временно показываем только владельцу, пока строим единую панель.
+  const { user } = useAuth()
+  const showLegacyScoring = isOwnerEmail(user?.email)
   const [saving, setSaving] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   // Полноэкранный режим предпросмотра (верхняя кнопка тулбара). Нижняя кнопка
@@ -1934,7 +1940,8 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
 
       {/* ── 5. Портрет кандидата (бывшая 6) ── */}
       <Section title="Портрет кандидата" number={5} filled={sectionFilled(5)} id="section-5">
-        {/* Skills */}
+        {/* Skills (legacy «запасной вариант» — дублирует таб «Портрет», скрыт кроме владельца) */}
+        {showLegacyScoring && (<>
         <div className="space-y-1.5" onFocus={() => setAdvisorFocusedField("skills")}>
           <div className="flex items-center gap-2">
             <Label className="text-xs">Обязательные навыки</Label>
@@ -1954,6 +1961,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
         <p className="text-[11px] text-muted-foreground leading-snug">
           Основные настройки AI-оценки — в блоке «Портрет: AI-оценка» ниже; эти поля используются как запасной вариант.
         </p>
+        </>)}
 
         {/* Образование и языки — используются в «Исходящем подборе» (hh-фильтры) */}
         <div className="space-y-3 pt-2 border-t">
@@ -2583,8 +2591,9 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
         </div>
       </Section>
 
-      {/* ── 8. AI-профиль кандидата ── */}
-      <AiProfileSection data={data} set={set} />
+      {/* ── 8. AI-профиль кандидата (legacy «Портрет: AI-оценка») — дублирует таб «Портрет»,
+            временно показываем только владельцу, пока строим единую панель ── */}
+      {showLegacyScoring && <AiProfileSection data={data} set={set} />}
 
       {/* Actions */}
       <div className="flex items-center gap-3 justify-end mt-4">
