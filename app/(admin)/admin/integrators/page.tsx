@@ -85,7 +85,7 @@ export default function AdminIntegratorsPage() {
       })
       if (!res.ok) throw new Error()
       const { integrator } = await res.json()
-      toast.success("Интегратор добавлен")
+      toast.success("Партнёр добавлен")
       setSheetOpen(false)
       setNewCompanyId(""); setNewContactName(""); setNewContactEmail(""); setNewContactPhone("")
       setIntegrators(prev => [...prev, { ...integrator, companyName: null, levelName: null }])
@@ -131,7 +131,7 @@ export default function AdminIntegratorsPage() {
               <div>
                 <div className="flex items-center gap-2 pt-3 pb-2">
                   <Users className="h-5 w-5 text-violet-600" />
-                  <h1 className="text-lg font-semibold">Интеграторы</h1>
+                  <h1 className="text-lg font-semibold">Партнёры</h1>
                 </div>
                 <p className="text-muted-foreground text-sm">Партнёры и реселлеры платформы</p>
               </div>
@@ -160,7 +160,7 @@ export default function AdminIntegratorsPage() {
                     {integrators.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="text-center py-12 text-sm text-muted-foreground">
-                          Нет интеграторов
+                          Нет партнёров
                         </td>
                       </tr>
                     ) : integrators.map(int => (
@@ -222,7 +222,7 @@ export default function AdminIntegratorsPage() {
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent className="w-full sm:max-w-md overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>Добавить интегратора</SheetTitle>
+            <SheetTitle>Добавить партнёра</SheetTitle>
           </SheetHeader>
           <SheetBody className="space-y-4 pt-2">
             <div className="space-y-1.5">
