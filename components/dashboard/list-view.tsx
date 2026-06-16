@@ -29,7 +29,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils"
 import type { CandidateAction } from "@/lib/column-config"
 import { applySortMode, type CandidateSortMode } from "@/lib/candidate-sort"
-import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ListFilter, ArrowUp, ArrowDown, Star, CalendarClock, CalendarPlus, MessageSquare, GripVertical, RotateCcw } from "lucide-react"
+import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ListFilter, ArrowUp, ArrowDown, Star, CalendarClock, CalendarPlus, MessageSquare, RotateCcw } from "lucide-react"
 import { DemoProgressBar, calcDemoPercent, calcDemoFraction } from "@/components/hr/demo-progress-bar"
 import { getStageLabel, getStageColorClasses } from "@/lib/stages"
 
@@ -214,12 +214,11 @@ function SortableHeaderCell({ id, children }: { id: string; children: React.Reac
     <div
       ref={setNodeRef}
       style={style}
-      className={cn("relative flex items-center gap-1 cursor-grab active:cursor-grabbing touch-none", isDragging && "rounded-md ring-1 ring-primary/40 bg-card")}
+      className={cn("relative flex items-center min-w-0 overflow-hidden cursor-grab active:cursor-grabbing touch-none", isDragging && "rounded-md ring-1 ring-primary/40 bg-card")}
       {...attributes}
       {...listeners}
       title="Перетащите, чтобы изменить порядок колонок"
     >
-      <GripVertical className="size-3 text-muted-foreground/30 shrink-0" aria-hidden />
       {children}
     </div>
   )
@@ -674,7 +673,7 @@ export function ListView({
       // Источник — фикс (значки "hh"/"av" короткие)
       list.push({
         id: "source",
-        gridWidth: "48px",
+        gridWidth: "72px",
         header: <SortHeader label="Источник" sortKey="source" sort={sort} onToggle={handleSort} align="center" />,
         renderCell: (candidate) => (
           <div className="text-center">
