@@ -7,6 +7,7 @@ import { auth } from "@/auth"
 import { db } from "@/lib/db"
 import { integrators, users } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
+import { isPlatformAdminEmail } from "@/lib/platform/auth"
 
 function isAdmin(role?: string): boolean {
   return !!role && ["platform_admin", "platform_manager", "admin"].includes(role)
@@ -15,7 +16,7 @@ function isAdmin(role?: string): boolean {
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (!isAdmin(session.user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  if (!isAdmin(session.user.role) && !isPlatformAdminEmail(session.user.email)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   const { id } = await params
 
   const { email } = await req.json() as { email?: string }

@@ -3,6 +3,7 @@ import { auth } from "@/auth"
 import { db } from "@/lib/db"
 import { integrators, integratorLevels, companies } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
+import { isPlatformAdminEmail } from "@/lib/platform/auth"
 
 export async function GET(
   _req: NextRequest,
@@ -10,7 +11,7 @@ export async function GET(
 ) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (!["platform_admin", "platform_manager"].includes(session.user.role)) {
+  if (!["platform_admin", "platform_manager"].includes(session.user.role) && !isPlatformAdminEmail(session.user.email)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
@@ -44,7 +45,7 @@ export async function PATCH(
 ) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (!["platform_admin", "platform_manager"].includes(session.user.role)) {
+  if (!["platform_admin", "platform_manager"].includes(session.user.role) && !isPlatformAdminEmail(session.user.email)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
