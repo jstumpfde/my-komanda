@@ -1431,7 +1431,13 @@ export default function DemoPage() {
                   </a>
                 )}
                 {block.type === "stories" && (
-                  <StoriesPlayer cards={block.storiesCards ?? []} />
+                  <StoriesPlayer
+                    cards={block.storiesCards ?? []}
+                    ctaEnabled={block.storiesCtaEnabled}
+                    ctaText={block.storiesCtaText}
+                    ctaCaption={block.storiesCtaCaption}
+                    onCta={handleNext}
+                  />
                 )}
                 {block.type === "media" && viQuestions.length > 0 && (
                   // F4: режим видео-интервью — вопросы по одному с прогрессом

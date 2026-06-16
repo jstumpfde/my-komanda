@@ -109,7 +109,16 @@ export interface Block {
   mediaInstruction?: string
   // stories-блок — карусель карточек (фото + видео)
   storiesCards?: StoriesCard[]
+  // Финальный CTA-слайд сторис: после последней карточки — экран с кнопкой
+  // «Откликнуться». Текст кнопки и подпись — редактируемые поля (не хардкод).
+  storiesCtaEnabled?: boolean
+  storiesCtaText?: string     // текст кнопки (дефолт — STORIES_CTA_DEFAULT_TEXT)
+  storiesCtaCaption?: string  // подпись над кнопкой (необязательно)
 }
+
+/** Дефолт текста кнопки финального CTA-слайда сторис. Значение поля, не вшитая
+ *  в рендер строка — HR может изменить его в редакторе сторис. */
+export const STORIES_CTA_DEFAULT_TEXT = "Откликнуться"
 
 export interface Lesson {
   id: string
