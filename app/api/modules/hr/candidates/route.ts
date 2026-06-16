@@ -1096,7 +1096,11 @@ export async function GET(req: NextRequest) {
         // Только провалившиеся попытки — ничего не ушло, стадия осталась
         // test_task_sent ложно. Показываем «ошибка», чтобы HR это видел.
         testStatus = "failed"
-      } else if (TEST_SENT_STAGES.has(r.stage ?? "")) {
+      } else if (r.testInviteSentAt != null || TEST_SENT_STAGES.has(r.stage ?? "")) {
+        // Маркер ручной отправки — рассылка через hh И «Отправить тест» оба
+        // ставят testInviteSentAt. Зеркалит глобальный список (см. ~590); раньше
+        // пер-вакансионный список игнорировал маркер → «отп.» не появлялось
+        // после рассылки, хотя маркер в БД был.
         testStatus = "sent"
       } else {
         testStatus = null
