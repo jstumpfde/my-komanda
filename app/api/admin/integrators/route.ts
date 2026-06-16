@@ -3,6 +3,7 @@ import { auth } from "@/auth"
 import { db } from "@/lib/db"
 import { integrators, integratorLevels, integratorClients, companies } from "@/lib/db/schema"
 import { eq, sql } from "drizzle-orm"
+import { isPlatformAdminEmail } from "@/lib/platform/auth"
 
 function isAdmin(role?: string): boolean {
   return !!role && ["platform_admin", "platform_manager", "admin"].includes(role)
@@ -11,7 +12,7 @@ function isAdmin(role?: string): boolean {
 export async function GET() {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (!isAdmin(session.user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  if (!isAdmin(session.user.role) && !isPlatformAdminEmail(session.user.email)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   const clientCount = db
     .select({ integratorId: integratorClients.integratorId, n: sql<number>`count(*)::int`.as("n") })
@@ -49,7 +50,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (!isAdmin(session.user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  if (!isAdmin(session.user.role) && !isPlatformAdminEmail(session.user.email)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   const body = await req.json() as {
     companyId: string

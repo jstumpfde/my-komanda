@@ -3,11 +3,12 @@ import { auth } from "@/auth"
 import { db } from "@/lib/db"
 import { integratorLevels } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
+import { isPlatformAdminEmail } from "@/lib/platform/auth"
 
 export async function GET() {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (!["platform_admin", "platform_manager"].includes(session.user.role)) {
+  if (!["platform_admin", "platform_manager"].includes(session.user.role) && !isPlatformAdminEmail(session.user.email)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
@@ -18,7 +19,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (session.user.role !== "platform_admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  if (session.user.role !== "platform_admin" && !isPlatformAdminEmail(session.user.email)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   const body = await req.json() as {
     name: string
@@ -45,7 +46,7 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (session.user.role !== "platform_admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  if (session.user.role !== "platform_admin" && !isPlatformAdminEmail(session.user.email)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   const { searchParams } = new URL(req.url)
   const id = searchParams.get("id")
@@ -80,7 +81,7 @@ export async function PUT(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (session.user.role !== "platform_admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  if (session.user.role !== "platform_admin" && !isPlatformAdminEmail(session.user.email)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   const { searchParams } = new URL(req.url)
   const id = searchParams.get("id")
