@@ -494,13 +494,13 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
           <div className="flex items-center gap-1.5 shrink-0">
             {/* Сохранить (split): Сохранить + ▼ (В библиотеку / Скачать) */}
             <div className="flex items-center">
-              <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 rounded-r-none border-r-0" onClick={() => editorRef.current?.save()}>
+              <Button size="sm" className="gap-1.5 text-xs h-8 rounded-r-none border-r-0" onClick={() => editorRef.current?.save()}>
                 {saveStatus === "saving" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                 Сохранить
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-8 px-2 rounded-l-none">
+                  <Button size="sm" className="h-8 px-2 rounded-l-none">
                     <ChevronDown className="w-3 h-3 opacity-50" />
                   </Button>
                 </DropdownMenuTrigger>

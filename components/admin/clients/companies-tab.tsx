@@ -37,6 +37,9 @@ interface ClientRow {
   mrr: number
   userCount: number
   directorEmail: string | null
+  partnerName: string | null
+  partnerIntegratorId: string | null
+  linkStatus: string | null
 }
 
 interface ApiResponse {
@@ -283,6 +286,7 @@ export function CompaniesTab({ trashed = false }: { trashed?: boolean }) {
             <DataHeadCell sortable sortDir={sort === "name" ? "desc" : null} onSort={() => setSort("name")} width="44ch">Компания</DataHeadCell>
             <DataHeadCell>ИНН</DataHeadCell>
             <DataHeadCell>Тариф</DataHeadCell>
+            <DataHeadCell>Партнёр</DataHeadCell>
             <DataHeadCell align="center">Статус</DataHeadCell>
             <DataHeadCell align="right">Польз.</DataHeadCell>
             <DataHeadCell sortable sortDir={sort === "created_at" ? "desc" : null} onSort={() => setSort("created_at")}>Дата</DataHeadCell>
@@ -291,10 +295,10 @@ export function CompaniesTab({ trashed = false }: { trashed?: boolean }) {
           </DataHead>
           <tbody>
             {loading && (
-              <tr><td colSpan={9} className="text-center py-8"><Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" /></td></tr>
+              <tr><td colSpan={10} className="text-center py-8"><Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" /></td></tr>
             )}
             {!loading && data.data.length === 0 && (
-              <tr><td colSpan={9} className="text-center py-8 text-sm text-muted-foreground">
+              <tr><td colSpan={10} className="text-center py-8 text-sm text-muted-foreground">
                 {isTrash ? "Корзина пуста" : "Нет клиентов по выбранным фильтрам"}
               </td></tr>
             )}
@@ -320,6 +324,11 @@ export function CompaniesTab({ trashed = false }: { trashed?: boolean }) {
                           <p className="font-medium text-foreground">{client.planName}</p>
                           <p className="text-xs text-muted-foreground">{formatPrice(client.planPrice)}</p>
                         </div>
+                      : <span className="text-muted-foreground">—</span>}
+                  </DataCell>
+                  <DataCell className="whitespace-nowrap">
+                    {client.partnerName
+                      ? <span className="text-foreground">{client.partnerName}</span>
                       : <span className="text-muted-foreground">—</span>}
                   </DataCell>
                   <DataCell align="center">

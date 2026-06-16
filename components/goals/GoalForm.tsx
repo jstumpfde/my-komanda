@@ -574,7 +574,6 @@ export function GoalForm({
           <Button
             onClick={save}
             disabled={saving}
-            className="bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:hover:bg-slate-200 dark:text-slate-900 border-0"
           >
             {saving ? "Сохраняю…" : initial ? "Сохранить изменения" : "Создать цель"}
           </Button>

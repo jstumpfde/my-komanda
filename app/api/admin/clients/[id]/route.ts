@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server"
 import { db } from "@/lib/db"
-import { companies, users, plans } from "@/lib/db/schema"
-import {eq, count} from "drizzle-orm"
+import { companies, users, plans, integratorClients, integrators } from "@/lib/db/schema"
+import {and, eq, count} from "drizzle-orm"
+import { alias } from "drizzle-orm/pg-core"
 import {requirePlatformAdmin, apiError, apiSuccess} from "@/lib/api-helpers"
 import { requireAdminPanelAccess } from "@/lib/platform/auth"
 
@@ -65,12 +66,31 @@ export async function GET(_req: NextRequest, { params }: Params) {
         .from(plans).where(eq(plans.id, planId)).limit(1))[0] ?? null
     : null
 
+  // Партнёр компании (активная связь integrator_clients).
+  const partnerCompanies = alias(companies, "partner_companies")
+  const [partner] = await db
+    .select({
+      partnerIntegratorId: integrators.id,
+      partnerName:         partnerCompanies.name,
+    })
+    .from(integratorClients)
+    .innerJoin(integrators, eq(integratorClients.integratorId, integrators.id))
+    .leftJoin(partnerCompanies, eq(integrators.companyId, partnerCompanies.id))
+    .where(and(
+      eq(integratorClients.clientCompanyId, id),
+      eq(integratorClients.status, "active"),
+    ))
+    .limit(1)
+
   return apiSuccess({
     ...company,
     userCount: Number(userCount),
     plan: plan
       ? { ...plan, priceFormatted: Math.round(plan.price / 100) }
       : null,
+    partnerName: partner?.partnerName ?? null,
+    partnerIntegratorId: partner?.partnerIntegratorId ?? null,
+    linkStatus: partner ? "active" : null,
   })
 }
 

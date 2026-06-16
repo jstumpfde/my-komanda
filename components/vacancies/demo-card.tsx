@@ -364,7 +364,7 @@ export function DemoCard({ demo, onBack, onUpdate }: DemoCardProps) {
           <span className={cn("text-[11px] mr-1 transition-colors", saveStatus === "saving" ? "text-amber-500" : saveStatus === "saved" ? "text-muted-foreground/50" : "text-muted-foreground/30")}>
             {saveStatus === "saving" ? "Сохранение..." : saveStatus === "saved" ? "✓ Сохранено" : ""}
           </span>
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={saveNow}><Save className="w-3.5 h-3.5" />Сохранить</Button>
+          <Button size="sm" className="gap-1.5 text-xs" onClick={saveNow}><Save className="w-3.5 h-3.5" />Сохранить</Button>
           <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setTemplateOpen(true)}><BookOpen className="w-3.5 h-3.5" />Библиотека</Button>
           <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setSaveTemplateDialog(true)}><Save className="w-3.5 h-3.5" />Шаблон</Button>
           <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setAiModalOpen(true)}><Sparkles className="w-3.5 h-3.5" />AI</Button>

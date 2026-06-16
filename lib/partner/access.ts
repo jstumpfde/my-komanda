@@ -59,15 +59,21 @@ export function assertPartnerCanManage(kind: string): void {
 }
 
 // ID компаний-клиентов данного партнёра (для scoping любых выборок).
+// SECURITY: учитываем только АКТИВНЫЕ связи — отменённая (status='cancelled')
+// не должна давать партнёру доступ к данным бывшего клиента.
 export async function getPartnerClientCompanyIds(integratorId: string): Promise<string[]> {
   const rows = await db
     .select({ clientCompanyId: integratorClients.clientCompanyId })
     .from(integratorClients)
-    .where(eq(integratorClients.integratorId, integratorId))
+    .where(and(
+      eq(integratorClients.integratorId, integratorId),
+      eq(integratorClients.status, "active"),
+    ))
   return rows.map((r) => r.clientCompanyId)
 }
 
 // Проверка, что компания-клиент действительно принадлежит партнёру (для роутов по [clientId]).
+// SECURITY: только активная связь — отменённая не даёт доступа.
 export async function assertPartnerOwnsClient(integratorId: string, clientCompanyId: string): Promise<void> {
   const [row] = await db
     .select({ id: integratorClients.id })
@@ -75,6 +81,7 @@ export async function assertPartnerOwnsClient(integratorId: string, clientCompan
     .where(and(
       eq(integratorClients.integratorId, integratorId),
       eq(integratorClients.clientCompanyId, clientCompanyId),
+      eq(integratorClients.status, "active"),
     ))
     .limit(1)
   if (!row) {

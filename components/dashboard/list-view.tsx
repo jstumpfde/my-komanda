@@ -1,16 +1,35 @@
 "use client"
 
 import { useMemo, useRef } from "react"
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type Modifier,
+} from "@dnd-kit/core"
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  horizontalListSortingStrategy,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 import type { Candidate } from "./candidate-card"
 import { CandidateAvatar } from "./candidate-avatar"
 import type { CardDisplaySettings } from "./card-settings"
+import { useColumnOrder } from "./use-column-order"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import type { CandidateAction } from "@/lib/column-config"
 import { applySortMode, type CandidateSortMode } from "@/lib/candidate-sort"
-import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ListFilter, ArrowUp, ArrowDown, Star, CalendarClock, CalendarPlus, MessageSquare } from "lucide-react"
+import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ListFilter, ArrowUp, ArrowDown, Star, CalendarClock, CalendarPlus, MessageSquare, GripVertical, RotateCcw } from "lucide-react"
 import { DemoProgressBar, calcDemoPercent, calcDemoFraction } from "@/components/hr/demo-progress-bar"
 import { getStageLabel, getStageColorClasses } from "@/lib/stages"
 
@@ -60,6 +79,34 @@ interface ListViewProps {
    *  после optimistic-апдейта isFavorite, и кандидат «пропадает» из текущей
    *  позиции (на самом деле — едет в favorites-группу). */
   serverSorted?: boolean
+}
+
+// Тип строки-кандидата после обогащения columnId/columnTitle/цветами.
+type RowCandidate = Candidate & {
+  columnId: string
+  columnTitle: string
+  colorFrom: string
+  colorTo: string
+}
+
+// Дескриптор перетаскиваемой колонки данных. Закреплённые колонки
+// (чекбокс/звезда/имя слева и «Действия» справа) дескрипторами НЕ являются —
+// они рендерятся напрямую и не двигаются.
+interface ColumnDescriptor {
+  id: string
+  /** Ширина для gridTemplateColumns (px или minmax(...)). */
+  gridWidth: string
+  /** Содержимое ячейки заголовка (обычно SortHeader). */
+  header: React.ReactNode
+  /** Рендер ячейки тела для конкретного кандидата. */
+  renderCell: (c: RowCandidate, ctx: RenderCtx) => React.ReactNode
+}
+
+// Контекст, нужный ячейкам тела (вычисляется один раз на строку).
+interface RenderCtx {
+  demoFraction: { current: number; total: number; hasData: boolean }
+  dt: { short: string; full: string } | null
+  aiActuallyRan: boolean
 }
 
 // 3-state цикл сортировки: DEFAULT_DIR → reverse → null.
@@ -117,6 +164,9 @@ const STAGE_ORDER: Record<string, number> = {
   new: 0, demo: 1, scheduled: 2, interview: 3, interviewed: 3, decision: 4, offer: 5, final_decision: 6, hired: 7, talent_pool: 8, rejected: 9,
 }
 
+// Перетаскивание колонок — только по горизонтали (вертикальный сдвиг гасим).
+const restrictToHorizontalAxis: Modifier = ({ transform }) => ({ ...transform, y: 0 })
+
 function SortHeader({
   label, sortKey, sort, onToggle, align = "left",
 }: {
@@ -149,6 +199,32 @@ function SortHeader({
   )
 }
 
+// Перетаскиваемая ячейка заголовка движимой колонки. Drag — за всю ячейку
+// (cursor-grab), но внутри неё кнопка сортировки SortHeader продолжает работать
+// по клику (PointerSensor с distance:5 не начинает drag на простом клике).
+function SortableHeaderCell({ id, children }: { id: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    zIndex: isDragging ? 20 : undefined,
+  }
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn("relative flex items-center gap-1 cursor-grab active:cursor-grabbing touch-none", isDragging && "rounded-md ring-1 ring-primary/40 bg-card")}
+      {...attributes}
+      {...listeners}
+      title="Перетащите, чтобы изменить порядок колонок"
+    >
+      <GripVertical className="size-3 text-muted-foreground/30 shrink-0" aria-hidden />
+      {children}
+    </div>
+  )
+}
+
 export function ListView({
   columns, settings, onOpenProfile, onAction, onToggleFavorite, onVacancyClick, onScheduleInterview,
   hhBroadcastMode = false, onBroadcast,
@@ -171,7 +247,7 @@ export function ListView({
   const showSource       = settings.showSource
   const showActions      = settings.showActions
 
-  const rawCandidates = useMemo(() => columns.flatMap((col) =>
+  const rawCandidates = useMemo<RowCandidate[]>(() => columns.flatMap((col) =>
     col.candidates.map((c) => ({ ...c, columnId: col.id, columnTitle: col.title, colorFrom: col.colorFrom, colorTo: col.colorTo }))
   ), [columns])
 
@@ -299,34 +375,372 @@ export function ListView({
     return colors[source] || "bg-muted text-muted-foreground border-border"
   }
 
+  // ─── Дескрипторы перетаскиваемых колонок данных ───────────────────────────
+  // Каждый дескриптор хранит ширину (для gridTemplateColumns), JSX заголовка
+  // (обычно SortHeader) и рендер ячейки тела. ВАЖНО: заголовок и тело берут
+  // данные ТОЛЬКО отсюда, поэтому изменение порядка применяется к обоим сразу.
+  // Закреплённые колонки (чекбокс/звезда/Кандидат слева, Действия справа)
+  // дескрипторами НЕ являются — они отрисованы напрямую и не двигаются.
+  //
   // Пропорциональное растяжение: разные fr-коэффициенты задают доли свободного
-  // места. ★/Источник/Действия — фиксированной ширины (без fr), не растут.
-  // Балансировка после расширения воронки (drizzle/0083): новые badge'и
-  // длиннее («Первичный контакт» ~17 симв, «Анкета заполнена» ~16 симв),
-  // поэтому Статус получает больше места (min 140 / 1.8fr), а Кандидат —
-  // меньше избыточного простора. Кандидат: min 255px + 2.2fr — полное ФИО
-  // («Савватеев Дмитрий Викторович» ~28 симв + запас) помещается, длиннее —
-  // обрезается «…» (truncate на <p>); fr снижен с 3.45 → 2.2, чтобы колонка
-  // не забирала лишнее свободное место и пробел справа не был огромным.
+  // места. Источник — фиксированной ширины (без fr), не растёт.
+  const movableColumns = useMemo<ColumnDescriptor[]>(() => {
+    const list: ColumnDescriptor[] = []
+
+    if (showVacancyColumn) {
+      // Вакансия — капнута, чтобы длинное название не растягивало таблицу (обрезается «…»)
+      list.push({
+        id: "vacancy",
+        gridWidth: "minmax(112px, 0.9fr)",
+        header: <div className="text-muted-foreground">Вакансия</div>,
+        renderCell: (candidate) => {
+          const vc = candidate as { vacancyTitle?: string | null; vacancyId?: string | null }
+          const title = vc.vacancyTitle ?? "—"
+          if (vc.vacancyId && onVacancyClick) {
+            return (
+              <button
+                type="button"
+                title={`Открыть вакансию: ${title}`}
+                className="text-[13px] text-muted-foreground hover:text-primary hover:underline truncate min-w-0 text-left"
+                onClick={(e) => { e.stopPropagation(); onVacancyClick(vc.vacancyId!) }}
+              >
+                {title}
+              </button>
+            )
+          }
+          return (
+            <div className="text-[13px] text-muted-foreground truncate min-w-0" title={title}>{title}</div>
+          )
+        },
+      })
+    }
+
+    if (showProgress) {
+      // Демо — сегменты-«шаги»
+      list.push({
+        id: "progress",
+        gridWidth: "minmax(72px, 0.9fr)",
+        header: <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} align="center" />,
+        renderCell: (candidate, ctx) => (
+          <div className="flex items-center justify-center">
+            <DemoProgressBar
+              variant="list"
+              progressPercent={ctx.demoFraction.hasData && ctx.demoFraction.total > 0
+                ? Math.min(100, Math.round((ctx.demoFraction.current / ctx.demoFraction.total) * 100))
+                : null}
+              completedBlocks={ctx.demoFraction.hasData ? ctx.demoFraction.current : undefined}
+              totalBlocks={ctx.demoFraction.hasData ? ctx.demoFraction.total : undefined}
+              hasVideoVizitka={candidate.demoProgressJson?.hasVideoVizitka}
+              stage={candidate.stage}
+            />
+          </div>
+        ),
+      })
+    }
+
+    if (showResumeScore) {
+      // AI-резм. — AI-скор резюме (фикс, w-8 badge)
+      list.push({
+        id: "resumeScore",
+        gridWidth: "56px",
+        header: <SortHeader label="AI-резм." sortKey="resumeScore" sort={sort} onToggle={handleSort} align="center" />,
+        renderCell: (candidate) => (
+          <div className="flex items-center justify-center" title="AI-скор резюме (до демо)">
+            {candidate.resumeScore != null ? (
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
+                  getScoreColor(candidate.resumeScore),
+                )}
+              >
+                {candidate.resumeScore}
+              </Badge>
+            ) : (
+              <span className="text-muted-foreground/40 text-xs">—</span>
+            )}
+          </div>
+        ),
+      })
+    }
+
+    if (showScore) {
+      // AI-оцен.
+      list.push({
+        id: "aiScore",
+        gridWidth: "minmax(56px, 0.85fr)",
+        header: <SortHeader label="AI-оцен." sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />,
+        renderCell: (candidate, ctx) => (
+          <div className="text-center">
+            <Badge
+              variant="outline"
+              className={cn(
+                "text-[14px] border font-semibold",
+                ctx.aiActuallyRan ? getScoreColor(candidate.aiScore!) : "text-muted-foreground/50 bg-muted/30 border-muted"
+              )}
+            >
+              {ctx.aiActuallyRan ? candidate.aiScore : "—"}
+            </Badge>
+          </div>
+        ),
+      })
+    }
+
+    if (showRubricScore) {
+      // Рубрика — новый shadow-движок соответствия
+      list.push({
+        id: "rubricScore",
+        gridWidth: "60px",
+        header: <SortHeader label="Рубрика" sortKey="rubricScore" sort={sort} onToggle={handleSort} align="center" />,
+        renderCell: (candidate) => (
+          <div className="flex items-center justify-center" title="Соответствие по рубрике (тест)">
+            {candidate.rubricScore != null ? (
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
+                  getScoreColor(candidate.rubricScore),
+                )}
+              >
+                {candidate.rubricScore}
+              </Badge>
+            ) : (
+              <span className="text-muted-foreground/40 text-xs">—</span>
+            )}
+          </div>
+        ),
+      })
+    }
+
+    if (showTestScore) {
+      // Тест — лесенка: балл (бейдж) → «сдан» (отправил, балла ещё нет) →
+      // «пишет» (заполняет, черновик) → «пер.» (открыл) → «отп.»
+      // (отправлен) → «—» (не было).
+      list.push({
+        id: "testScore",
+        gridWidth: "56px",
+        header: <SortHeader label="Тест" sortKey="testScore" sort={sort} onToggle={handleSort} align="center" />,
+        renderCell: (candidate) => (
+          <div
+            className={cn(
+              "flex items-center justify-center",
+              (candidate.testScore != null || candidate.testStatus === "submitted" || candidate.testStatus === "in_progress")
+                && "cursor-pointer hover:opacity-70",
+            )}
+            title={(candidate.testScore != null || candidate.testStatus === "submitted" || candidate.testStatus === "in_progress")
+              ? "Открыть результат теста"
+              : "Результат теста"}
+            onClick={(e) => {
+              if (candidate.testScore != null || candidate.testStatus === "submitted" || candidate.testStatus === "in_progress") {
+                e.stopPropagation()
+                onOpenProfile?.(candidate, candidate.columnId, "test")
+              }
+            }}
+          >
+            {candidate.testScore != null ? (
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
+                  getScoreColor(candidate.testScore),
+                )}
+              >
+                {candidate.testScore}
+              </Badge>
+            ) : candidate.testStatus === "submitted" ? (
+              <span className="text-success text-[11px] font-medium">сдан</span>
+            ) : candidate.testStatus === "in_progress" ? (
+              <span className="text-blue-600 dark:text-blue-500 text-[11px] font-medium">заб</span>
+            ) : candidate.testStatus === "opened" ? (
+              <span className="text-muted-foreground text-[11px]">пер.</span>
+            ) : candidate.testStatus === "sent" ? (
+              <span className="text-muted-foreground text-[11px]">отп.</span>
+            ) : candidate.testStatus === "failed" ? (
+              <span className="text-destructive text-[11px] font-medium" title="Отправка теста не прошла (нет hh-чата / hh отклонил)">ошибка</span>
+            ) : (
+              <span className="text-muted-foreground/40 text-xs">—</span>
+            )}
+          </div>
+        ),
+      })
+    }
+
+    if (showNextInterview) {
+      // Интервью — ближайшее (дата/время)
+      list.push({
+        id: "nextInterview",
+        gridWidth: "minmax(92px, 0.9fr)",
+        header: <SortHeader label="Интервью" sortKey="nextInterview" sort={sort} onToggle={handleSort} align="center" />,
+        renderCell: (candidate) => {
+          const iso = candidate.nextInterviewAt
+          if (!iso) return <div className="text-center text-muted-foreground/40 text-xs">—</div>
+          const d = new Date(iso)
+          const day = d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })
+          const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+          return (
+            <div className="flex items-center justify-center gap-1 text-[13px] whitespace-nowrap" title="Ближайшее интервью">
+              <CalendarClock className="w-3.5 h-3.5 text-primary/70 shrink-0" />
+              <span className="font-medium text-foreground">{day}</span>
+              <span className="text-muted-foreground">{time}</span>
+            </div>
+          )
+        },
+      })
+    }
+
+    if (showSalary) {
+      // Зарплата — ужата (длинных чисел редко > 7 симв)
+      list.push({
+        id: "salary",
+        gridWidth: "minmax(88px, 1fr)",
+        header: <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} align="center" />,
+        renderCell: (candidate) => {
+          // Salary — single expected value (валюта берётся из
+          // candidate.salaryCurrency, fallback ₽)
+          const salary = candidate.salaryMax || candidate.salaryMin
+          const sym = currencySymbol(candidate.salaryCurrency)
+          return (
+            <div className="text-center text-[14px] font-medium text-foreground whitespace-nowrap">
+              {salary ? `${salary.toLocaleString("ru-RU")} ${sym}` : "—"}
+            </div>
+          )
+        },
+      })
+    }
+
+    if (showCity) {
+      // Город — сужен
+      list.push({
+        id: "city",
+        gridWidth: "minmax(84px, 1.2fr)",
+        header: <SortHeader label="Город" sortKey="city" sort={sort} onToggle={handleSort} align="left" />,
+        renderCell: (candidate) => (
+          <div className="flex items-center gap-1 text-[14px] text-muted-foreground min-w-0">
+            <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+            <span className="truncate">{candidate.city}</span>
+          </div>
+        ),
+      })
+    }
+
+    if (showResponseDate) {
+      // Дата — "DD.MM.YY"
+      list.push({
+        id: "responseDate",
+        gridWidth: "minmax(62px, 0.7fr)",
+        header: <SortHeader label="Дата" sortKey="responseDate" sort={sort} onToggle={handleSort} align="center" />,
+        renderCell: (_candidate, ctx) => (
+          <div className="text-center text-sm text-muted-foreground tabular-nums whitespace-nowrap">
+            {ctx.dt ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>{ctx.dt.short}</span>
+                </TooltipTrigger>
+                <TooltipContent>{ctx.dt.full}</TooltipContent>
+              </Tooltip>
+            ) : "—"}
+          </div>
+        ),
+      })
+    }
+
+    // Статус — сужен (всегда показывается)
+    list.push({
+      id: "status",
+      gridWidth: "minmax(104px, 1.1fr)",
+      header: <SortHeader label="Статус" sortKey="status" sort={sort} onToggle={handleSort} align="center" />,
+      renderCell: (candidate) => (
+        <div className="text-center">
+          {/* В paginated-режиме все кандидаты завёрнуты в одну
+              синтетическую колонку {title:"Кандидаты"}; columnTitle
+              одинаков у всех. Поэтому лейбл/цвет статуса берём из
+              реального candidate.stage через PLATFORM_STAGES. */}
+          <span
+            className={cn(
+              "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap",
+              candidate.stage ? getStageColorClasses(candidate.stage) : "",
+            )}
+            style={candidate.stage ? undefined : { background: `linear-gradient(135deg, ${candidate.colorFrom}, ${candidate.colorTo})`, color: "#fff" }}
+          >
+            {candidate.stage
+              ? getStageLabel(candidate.stage)
+              : (candidate.columnTitle === "Демонстрация" ? "Демо" : candidate.columnTitle)}
+          </span>
+        </div>
+      ),
+    })
+
+    if (showSource) {
+      // Источник — фикс (значки "hh"/"av" короткие)
+      list.push({
+        id: "source",
+        gridWidth: "48px",
+        header: <SortHeader label="Источник" sortKey="source" sort={sort} onToggle={handleSort} align="center" />,
+        renderCell: (candidate) => (
+          <div className="text-center">
+            <Badge variant="outline" className={cn("text-[10px] border", getSourceColor(candidate.source))}>
+              {candidate.source}
+            </Badge>
+          </div>
+        ),
+      })
+    }
+
+    return list
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    showVacancyColumn, showProgress, showResumeScore, showScore, showRubricScore,
+    showTestScore, showNextInterview, showSalary, showCity, showResponseDate, showSource,
+    sort, onVacancyClick, onOpenProfile,
+  ])
+
+  // ─── Порядок перетаскиваемых колонок (per-user, localStorage) ─────────────
+  const defaultOrder = useMemo(() => movableColumns.map((c) => c.id), [movableColumns])
+  const { order, setOrder, reset, isCustom } = useColumnOrder(defaultOrder)
+
+  // Упорядоченные дескрипторы: проходим по сохранённому порядку, мапим в descriptor.
+  // Любой id из order, которого нет среди доступных (выключен настройками) —
+  // отфильтровывается; descriptor lookup по Map.
+  const orderedColumns = useMemo<ColumnDescriptor[]>(() => {
+    const byId = new Map(movableColumns.map((c) => [c.id, c]))
+    const result: ColumnDescriptor[] = []
+    for (const id of order) {
+      const c = byId.get(id)
+      if (c) { result.push(c); byId.delete(id) }
+    }
+    // На случай рассинхрона (order ещё не подхватил новый id) — добиваем хвостом.
+    for (const c of byId.values()) result.push(c)
+    return result
+  }, [movableColumns, order])
+
+  // Можно ли реально перетаскивать (нужно ≥2 движимых колонки).
+  const dndEnabled = orderedColumns.length >= 2
+
+  const sensors = useSensors(
+    // distance:5 — простой клик по кнопке сортировки внутри заголовка не
+    // запускает drag; перетаскивание начинается только после сдвига курсора.
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = order.indexOf(String(active.id))
+    const newIndex = order.indexOf(String(over.id))
+    if (oldIndex === -1 || newIndex === -1) return
+    setOrder(arrayMove(order, oldIndex, newIndex))
+  }
+
+  // ─── gridTemplateColumns из закреплённых + упорядоченных движимых ──────────
+  // ☐ — 24px, justify-end. ★ — 28px, justify-center.
+  // -ml-3 на ★ и Кандидате схлопывает gap до ~4px edge-to-edge.
+  // Кандидат: minmax(200px, 2fr) — вмещает ФИО, длиннее → «…».
   const cols: string[] = []
-  // ☐ — 28px, justify-end. ★ — 32px (w-8), justify-center, чтобы звёздочка
-  // визуально была по центру ячейки с равным воздухом слева/справа.
-  // -ml-3 на ★ и Кандидате схлопывает gap-4 до 4px edge-to-edge.
   if (selectionEnabled) cols.push("24px")               // ☐ — фикс (компактнее)
   cols.push("28px")                                     // ★ — фикс (w-7, ужато)
-  cols.push("minmax(200px, 2fr)")                       // Кандидат — вмещает ФИО, длиннее → «…» (сужено, чтобы таблица влезала по ширине)
-  if (showVacancyColumn) cols.push("minmax(112px, 0.9fr)") // Вакансия — капнута, чтобы длинное название не растягивало таблицу (обрезается «…»)
-  if (showProgress) cols.push("minmax(72px, 0.9fr)")    // Демо — сегменты-«шаги»
-  if (showResumeScore) cols.push("56px")                // AI-резм. — AI-скор резюме (фикс, w-8 badge)
-  if (showScore) cols.push("minmax(56px, 0.85fr)")      // AI-оцен.
-  if (showRubricScore) cols.push("60px")                // Рубрика — новый shadow-движок
-  if (showTestScore) cols.push("56px")                  // Тест — балл/«отп.»/«сдан»
-  if (showNextInterview) cols.push("minmax(92px, 0.9fr)") // Интервью — ближайшее (дата/время)
-  if (showSalary) cols.push("minmax(88px, 1fr)")        // Зарплата — ужата (длинных чисел редко > 7 симв)
-  if (showCity) cols.push("minmax(84px, 1.2fr)")        // Город — сужен
-  if (showResponseDate) cols.push("minmax(62px, 0.7fr)") // Дата — "DD.MM.YY"
-  cols.push("minmax(104px, 1.1fr)")                     // Статус — сужен
-  if (showSource) cols.push("48px")                     // Источник — фикс (значки "hh"/"av" короткие)
+  cols.push("minmax(200px, 2fr)")                       // Кандидат — закреплён
+  for (const c of orderedColumns) cols.push(c.gridWidth)
   if (showActions) {
     // База: 3 иконки (advance/reject/open) = 80px, +28px на «Запланировать интервью».
     // В режиме рассылки hh добавляем ещё иконку чата → +28px.
@@ -393,67 +807,90 @@ export function ListView({
 
   return (
     <div className="rounded-xl border border-border overflow-x-auto bg-card">
-      {/* Table Header */}
-      <div
-        className="grid gap-3 pl-1 pr-4 py-2.5 bg-muted/60 border-b border-border text-[13px] font-medium text-muted-foreground tracking-normal items-center"
-        style={gridStyle}
-      >
-        {selectionEnabled && (
-          <div className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
-            <Checkbox
-              checked={headerState}
-              onCheckedChange={() => toggleAllVisible()}
-              aria-label={selectedCount === visibleIds.length && visibleIds.length > 0 ? "Снять выделение со всех" : "Выделить всех на странице"}
-            />
-          </div>
-        )}
-        <div className="flex items-center justify-center -ml-3">
+      {/* Кнопка сброса порядка колонок — видна только когда порядок изменён */}
+      {isCustom && dndEnabled && (
+        <div className="flex justify-end px-4 pt-2">
           <button
             type="button"
-            onClick={() => handleSort("favorite")}
-            aria-sort={sort?.key === "favorite" ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
-            aria-label="Сортировать по избранному"
-            className={cn(
-              "inline-flex items-center gap-0.5 rounded-md px-1 py-0.5 hover:bg-accent/60 transition-colors",
-              sort?.key === "favorite" ? "text-primary bg-primary/10" : "text-muted-foreground/60",
-            )}
+            onClick={reset}
+            className="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
+            title="Вернуть колонки в исходный порядок"
           >
-            <Star className={cn("size-4", sort?.key === "favorite" && "fill-yellow-400 text-yellow-400")} />
-            {sort?.key === "favorite" && (sort.dir === "asc" ? (
-              <ArrowUp className="size-3" strokeWidth={2.5} />
-            ) : (
-              <ArrowDown className="size-3" strokeWidth={2.5} />
-            ))}
+            <RotateCcw className="size-3" />
+            Сбросить порядок
           </button>
         </div>
-        <div className="-ml-3">
-          {onSortChange ? (
-            <SortHeader label="Кандидат" sortKey="name" sort={sort} onToggle={handleSort} align="left" />
-          ) : (
-            <span>Кандидат</span>
+      )}
+
+      {/* Table Header */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        modifiers={[restrictToHorizontalAxis]}
+        onDragEnd={handleDragEnd}
+      >
+        <div
+          className="grid gap-3 pl-1 pr-4 py-2.5 bg-muted/60 border-b border-border text-[13px] font-medium text-muted-foreground tracking-normal items-center"
+          style={gridStyle}
+        >
+          {selectionEnabled && (
+            <div className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
+              <Checkbox
+                checked={headerState}
+                onCheckedChange={() => toggleAllVisible()}
+                aria-label={selectedCount === visibleIds.length && visibleIds.length > 0 ? "Снять выделение со всех" : "Выделить всех на странице"}
+              />
+            </div>
           )}
+          <div className="flex items-center justify-center -ml-3">
+            <button
+              type="button"
+              onClick={() => handleSort("favorite")}
+              aria-sort={sort?.key === "favorite" ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
+              aria-label="Сортировать по избранному"
+              className={cn(
+                "inline-flex items-center gap-0.5 rounded-md px-1 py-0.5 hover:bg-accent/60 transition-colors",
+                sort?.key === "favorite" ? "text-primary bg-primary/10" : "text-muted-foreground/60",
+              )}
+            >
+              <Star className={cn("size-4", sort?.key === "favorite" && "fill-yellow-400 text-yellow-400")} />
+              {sort?.key === "favorite" && (sort.dir === "asc" ? (
+                <ArrowUp className="size-3" strokeWidth={2.5} />
+              ) : (
+                <ArrowDown className="size-3" strokeWidth={2.5} />
+              ))}
+            </button>
+          </div>
+          <div className="-ml-3">
+            {onSortChange ? (
+              <SortHeader label="Кандидат" sortKey="name" sort={sort} onToggle={handleSort} align="left" />
+            ) : (
+              <span>Кандидат</span>
+            )}
+          </div>
+
+          {/* Перетаскиваемые заголовки движимых колонок */}
+          <SortableContext items={order} strategy={horizontalListSortingStrategy}>
+            {orderedColumns.map((col) => (
+              dndEnabled ? (
+                <SortableHeaderCell key={col.id} id={col.id}>
+                  {col.header}
+                </SortableHeaderCell>
+              ) : (
+                <div key={col.id} className="flex items-center">{col.header}</div>
+              )
+            ))}
+          </SortableContext>
+
+          {showActions && <div className="text-center">Действия</div>}
         </div>
-        {showVacancyColumn && <div className="text-muted-foreground">Вакансия</div>}
-        {showProgress && <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} align="center" />}
-        {showResumeScore && <SortHeader label="AI-резм." sortKey="resumeScore" sort={sort} onToggle={handleSort} align="center" />}
-        {showScore && <SortHeader label="AI-оцен." sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />}
-        {showRubricScore && <SortHeader label="Рубрика" sortKey="rubricScore" sort={sort} onToggle={handleSort} align="center" />}
-        {showTestScore && <SortHeader label="Тест" sortKey="testScore" sort={sort} onToggle={handleSort} align="center" />}
-        {showNextInterview && <SortHeader label="Интервью" sortKey="nextInterview" sort={sort} onToggle={handleSort} align="center" />}
-        {showSalary && <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} align="center" />}
-        {showCity && <SortHeader label="Город" sortKey="city" sort={sort} onToggle={handleSort} align="left" />}
-        {showResponseDate && <SortHeader label="Дата" sortKey="responseDate" sort={sort} onToggle={handleSort} align="center" />}
-        <SortHeader label="Статус" sortKey="status" sort={sort} onToggle={handleSort} align="center" />
-        {showSource && <SortHeader label="Источник" sortKey="source" sort={sort} onToggle={handleSort} align="center" />}
-        {showActions && <div className="text-center">Действия</div>}
-      </div>
+      </DndContext>
 
       {/* Rows */}
       <div className="divide-y divide-border">
         {allCandidates.map((candidate, i) => {
           const isDecisionStage = candidate.columnId === "interview" || candidate.columnId === "offer"
           const aiActuallyRan = candidate.aiScore != null && !!candidate.aiSummary
-          const progress = progressPercentOf(candidate)
           // Источник истины — поля demoTotalBlocks/demoCompletedBlocks из API
           // (см. /api/modules/hr/candidates), где total = lessons.length + 2,
           // а completed = страницы пройденные хотя бы 1 блоком + анкета + спасибо.
@@ -465,6 +902,7 @@ export function ListView({
             : calcDemoFraction(candidate.demoProgressJson)
           const dt = formatResponseDate(candidate.createdAt ?? candidate.addedAt)
           const isSelected = !!selectedIds?.has(candidate.id)
+          const ctx: RenderCtx = { demoFraction, dt, aiActuallyRan }
           return (
             <div
               key={candidate.id}
@@ -532,219 +970,10 @@ export function ListView({
                 </div>
               </div>
 
-              {/* Vacancy title — глобальный список кандидатов */}
-              {showVacancyColumn && (() => {
-                const vc = candidate as { vacancyTitle?: string | null; vacancyId?: string | null }
-                const title = vc.vacancyTitle ?? "—"
-                if (vc.vacancyId && onVacancyClick) {
-                  return (
-                    <button
-                      type="button"
-                      title={`Открыть вакансию: ${title}`}
-                      className="text-[13px] text-muted-foreground hover:text-primary hover:underline truncate min-w-0 text-left"
-                      onClick={(e) => { e.stopPropagation(); onVacancyClick(vc.vacancyId!) }}
-                    >
-                      {title}
-                    </button>
-                  )
-                }
-                return (
-                  <div className="text-[13px] text-muted-foreground truncate min-w-0" title={title}>{title}</div>
-                )
-              })()}
-
-              {/* Demo progress */}
-              {showProgress && (
-                <div className="flex items-center justify-center">
-                  <DemoProgressBar
-                    variant="list"
-                    progressPercent={demoFraction.hasData && demoFraction.total > 0
-                      ? Math.min(100, Math.round((demoFraction.current / demoFraction.total) * 100))
-                      : null}
-                    completedBlocks={demoFraction.hasData ? demoFraction.current : undefined}
-                    totalBlocks={demoFraction.hasData ? demoFraction.total : undefined}
-                    hasVideoVizitka={candidate.demoProgressJson?.hasVideoVizitka}
-                    stage={candidate.stage}
-                  />
-                </div>
-              )}
-
-              {/* AI score резюме — выставлен в process-queue.ts при приёме отклика. */}
-              {showResumeScore && (
-                <div className="flex items-center justify-center" title="AI-скор резюме (до демо)">
-                  {candidate.resumeScore != null ? (
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
-                        getScoreColor(candidate.resumeScore),
-                      )}
-                    >
-                      {candidate.resumeScore}
-                    </Badge>
-                  ) : (
-                    <span className="text-muted-foreground/40 text-xs">—</span>
-                  )}
-                </div>
-              )}
-
-              {/* AI score */}
-              {showScore && (
-                <div className="text-center">
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-[14px] border font-semibold",
-                      aiActuallyRan ? getScoreColor(candidate.aiScore!) : "text-muted-foreground/50 bg-muted/30 border-muted"
-                    )}
-                  >
-                    {aiActuallyRan ? candidate.aiScore : "—"}
-                  </Badge>
-                </div>
-              )}
-
-              {/* Рубрика — новый shadow-движок соответствия */}
-              {showRubricScore && (
-                <div className="flex items-center justify-center" title="Соответствие по рубрике (тест)">
-                  {candidate.rubricScore != null ? (
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
-                        getScoreColor(candidate.rubricScore),
-                      )}
-                    >
-                      {candidate.rubricScore}
-                    </Badge>
-                  ) : (
-                    <span className="text-muted-foreground/40 text-xs">—</span>
-                  )}
-                </div>
-              )}
-
-              {/* Тест — лесенка: балл (бейдж) → «сдан» (отправил, балла ещё нет) →
-                  «пишет» (заполняет, черновик) → «пер.» (открыл) → «отп.»
-                  (отправлен) → «—» (не было). */}
-              {showTestScore && (
-                <div
-                  className={cn(
-                    "flex items-center justify-center",
-                    (candidate.testScore != null || candidate.testStatus === "submitted" || candidate.testStatus === "in_progress")
-                      && "cursor-pointer hover:opacity-70",
-                  )}
-                  title={(candidate.testScore != null || candidate.testStatus === "submitted" || candidate.testStatus === "in_progress")
-                    ? "Открыть результат теста"
-                    : "Результат теста"}
-                  onClick={(e) => {
-                    if (candidate.testScore != null || candidate.testStatus === "submitted" || candidate.testStatus === "in_progress") {
-                      e.stopPropagation()
-                      onOpenProfile?.(candidate, candidate.columnId, "test")
-                    }
-                  }}
-                >
-                  {candidate.testScore != null ? (
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
-                        getScoreColor(candidate.testScore),
-                      )}
-                    >
-                      {candidate.testScore}
-                    </Badge>
-                  ) : candidate.testStatus === "submitted" ? (
-                    <span className="text-success text-[11px] font-medium">сдан</span>
-                  ) : candidate.testStatus === "in_progress" ? (
-                    <span className="text-blue-600 dark:text-blue-500 text-[11px] font-medium">заб</span>
-                  ) : candidate.testStatus === "opened" ? (
-                    <span className="text-muted-foreground text-[11px]">пер.</span>
-                  ) : candidate.testStatus === "sent" ? (
-                    <span className="text-muted-foreground text-[11px]">отп.</span>
-                  ) : candidate.testStatus === "failed" ? (
-                    <span className="text-destructive text-[11px] font-medium" title="Отправка теста не прошла (нет hh-чата / hh отклонил)">ошибка</span>
-                  ) : (
-                    <span className="text-muted-foreground/40 text-xs">—</span>
-                  )}
-                </div>
-              )}
-
-              {/* Ближайшее интервью — дата + время, или «—» */}
-              {showNextInterview && (() => {
-                const iso = candidate.nextInterviewAt
-                if (!iso) return <div className="text-center text-muted-foreground/40 text-xs">—</div>
-                const d = new Date(iso)
-                const day = d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })
-                const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
-                return (
-                  <div className="flex items-center justify-center gap-1 text-[13px] whitespace-nowrap" title="Ближайшее интервью">
-                    <CalendarClock className="w-3.5 h-3.5 text-primary/70 shrink-0" />
-                    <span className="font-medium text-foreground">{day}</span>
-                    <span className="text-muted-foreground">{time}</span>
-                  </div>
-                )
-              })()}
-
-              {/* Salary — single expected value (валюта берётся из
-                  candidate.salaryCurrency, fallback ₽) */}
-              {showSalary && (() => {
-                const salary = candidate.salaryMax || candidate.salaryMin
-                const sym = currencySymbol(candidate.salaryCurrency)
-                return (
-                  <div className="text-center text-[14px] font-medium text-foreground whitespace-nowrap">
-                    {salary ? `${salary.toLocaleString("ru-RU")} ${sym}` : "—"}
-                  </div>
-                )
-              })()}
-
-              {/* City */}
-              {showCity && (
-                <div className="flex items-center gap-1 text-[14px] text-muted-foreground min-w-0">
-                  <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span className="truncate">{candidate.city}</span>
-                </div>
-              )}
-
-              {/* Date */}
-              {showResponseDate && (
-                <div className="text-center text-sm text-muted-foreground tabular-nums whitespace-nowrap">
-                  {dt ? (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>{dt.short}</span>
-                      </TooltipTrigger>
-                      <TooltipContent>{dt.full}</TooltipContent>
-                    </Tooltip>
-                  ) : "—"}
-                </div>
-              )}
-
-              {/* Stage badge */}
-              <div className="text-center">
-                {/* В paginated-режиме все кандидаты завёрнуты в одну
-                    синтетическую колонку {title:"Кандидаты"}; columnTitle
-                    одинаков у всех. Поэтому лейбл/цвет статуса берём из
-                    реального candidate.stage через PLATFORM_STAGES. */}
-                <span
-                  className={cn(
-                    "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap",
-                    candidate.stage ? getStageColorClasses(candidate.stage) : "",
-                  )}
-                  style={candidate.stage ? undefined : { background: `linear-gradient(135deg, ${candidate.colorFrom}, ${candidate.colorTo})`, color: "#fff" }}
-                >
-                  {candidate.stage
-                    ? getStageLabel(candidate.stage)
-                    : (candidate.columnTitle === "Демонстрация" ? "Демо" : candidate.columnTitle)}
-                </span>
-              </div>
-
-              {/* Source */}
-              {showSource && (
-                <div className="text-center">
-                  <Badge variant="outline" className={cn("text-[10px] border", getSourceColor(candidate.source))}>
-                    {candidate.source}
-                  </Badge>
-                </div>
-              )}
+              {/* Перетаскиваемые ячейки данных — порядок строго совпадает с заголовком */}
+              {orderedColumns.map((col) => (
+                <div key={col.id} className="contents">{col.renderCell(candidate, ctx)}</div>
+              ))}
 
               {/* Actions — компактные иконки, full-height клик-зоны */}
               {showActions && (

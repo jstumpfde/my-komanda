@@ -9,9 +9,15 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from "@/components/ui/command"
 import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { toast } from "sonner"
-import { Handshake, ArrowLeft, Users, Wallet, Plus, Loader2 } from "lucide-react"
+import { Handshake, ArrowLeft, Users, Wallet, Plus, Loader2, Unlink, Check } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 
@@ -31,7 +37,19 @@ interface Client {
   id: string
   clientCompanyId: string
   companyName: string | null
+  status: string | null
   referredAt: string | null
+}
+
+interface CompanyOption {
+  id: string
+  name: string
+}
+
+const LINK_STATUS: Record<string, { label: string; color: string }> = {
+  active:      { label: "Активна",   color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+  onboarding:  { label: "Онбординг", color: "bg-blue-100 text-blue-700 border-blue-200" },
+  cancelled:   { label: "Отменена",  color: "bg-muted text-muted-foreground border-border" },
 }
 
 interface Payout {
@@ -76,6 +94,13 @@ export default function IntegratorDetailPage({ params }: { params: Promise<{ id:
   const [newTotalMrr, setNewTotalMrr] = useState("")
   const [newCommission, setNewCommission] = useState("10")
 
+  // Добавление клиента
+  const [addOpen, setAddOpen] = useState(false)
+  const [companyOptions, setCompanyOptions] = useState<CompanyOption[]>([])
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
+  const [linking, setLinking] = useState(false)
+  const [unlinkingId, setUnlinkingId] = useState<string | null>(null)
+
   useEffect(() => {
     Promise.all([
       fetch(`/api/admin/integrators/${id}`).then(r => r.json()),
@@ -117,6 +142,80 @@ export default function IntegratorDetailPage({ params }: { params: Promise<{ id:
       setCreatingPayout(false)
     }
   }
+
+  // Список компаний для селекта (грузим при первом открытии диалога).
+  const openAddDialog = () => {
+    setSelectedCompanyId(null)
+    setAddOpen(true)
+    if (companyOptions.length === 0) {
+      fetch("/api/admin/users?companiesList=true")
+        .then(r => r.ok ? r.json() : null)
+        .then(b => { if (b?.companies) setCompanyOptions(b.companies) })
+        .catch(() => toast.error("Не удалось загрузить компании"))
+    }
+  }
+
+  // Привязать выбранную компанию (reassign — при 409 переспрашиваем).
+  const linkCompany = async (reassign = false) => {
+    if (!selectedCompanyId) { toast.error("Выберите компанию"); return }
+    setLinking(true)
+    try {
+      const res = await fetch(`/api/admin/integrators/${id}/clients`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientCompanyId: selectedCompanyId, reassign }),
+      })
+      if (res.status === 409 && !reassign) {
+        if (window.confirm("Компания уже привязана к другому партнёру. Перепривязать к этому?")) {
+          setLinking(false)
+          await linkCompany(true)
+          return
+        }
+        return
+      }
+      if (!res.ok) {
+        const b = await res.json().catch(() => ({}))
+        toast.error(b.error || "Не удалось привязать")
+        return
+      }
+      // Перезагружаем список клиентов.
+      const data = await fetch(`/api/admin/integrators/${id}/clients`).then(r => r.json())
+      setClients(data.clients ?? [])
+      setAddOpen(false)
+      setSelectedCompanyId(null)
+      toast.success("Клиент привязан")
+    } catch {
+      toast.error("Ошибка сети")
+    } finally {
+      setLinking(false)
+    }
+  }
+
+  // Отвязать клиента (status='cancelled').
+  const unlinkClient = async (linkId: string) => {
+    if (!window.confirm("Отвязать клиента от партнёра? Связь будет отменена.")) return
+    setUnlinkingId(linkId)
+    try {
+      const res = await fetch(`/api/admin/integrators/${id}/clients/${linkId}`, { method: "DELETE" })
+      if (!res.ok) {
+        const b = await res.json().catch(() => ({}))
+        toast.error(b.error || "Не удалось отвязать")
+        return
+      }
+      setClients(prev => prev.map(c => c.id === linkId ? { ...c, status: "cancelled" } : c))
+      toast.success("Клиент отвязан")
+    } catch {
+      toast.error("Ошибка сети")
+    } finally {
+      setUnlinkingId(null)
+    }
+  }
+
+  // Компании, уже привязанные активно — прячем из списка выбора.
+  const activeClientCompanyIds = new Set(
+    clients.filter(c => c.status === "active").map(c => c.clientCompanyId)
+  )
+  const availableCompanies = companyOptions.filter(c => !activeClientCompanyIds.has(c.id))
 
   if (loading) {
     return (
@@ -215,37 +314,68 @@ export default function IntegratorDetailPage({ params }: { params: Promise<{ id:
 
             {/* Клиенты */}
             {tab === "clients" && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Users className="w-4 h-4" /> Клиенты партнёра
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  {clients.length === 0 ? (
-                    <p className="text-center py-10 text-sm text-muted-foreground">Нет привязанных клиентов</p>
-                  ) : (
-                    <DataTable>
-                      <DataHead>
-                        <DataHeadCell>Компания</DataHeadCell>
-                        <DataHeadCell>ID компании</DataHeadCell>
-                        <DataHeadCell>Дата привязки</DataHeadCell>
-                      </DataHead>
-                      <tbody>
-                        {clients.map(c => (
-                          <DataRow key={c.id}>
-                            <DataCell className="font-medium">{c.companyName || "—"}</DataCell>
-                            <DataCell className="text-xs text-muted-foreground font-mono">{c.clientCompanyId}</DataCell>
-                            <DataCell className="text-xs text-muted-foreground">
-                              {c.referredAt ? new Date(c.referredAt).toLocaleDateString("ru-RU") : "—"}
-                            </DataCell>
-                          </DataRow>
-                        ))}
-                      </tbody>
-                    </DataTable>
-                  )}
-                </CardContent>
-              </Card>
+              <div className="space-y-3">
+                <div className="flex justify-end">
+                  <Button size="sm" className="gap-1.5" onClick={openAddDialog}>
+                    <Plus className="w-3.5 h-3.5" /> Добавить клиента
+                  </Button>
+                </div>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Users className="w-4 h-4" /> Клиенты партнёра
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {clients.length === 0 ? (
+                      <p className="text-center py-10 text-sm text-muted-foreground">Нет привязанных клиентов</p>
+                    ) : (
+                      <DataTable>
+                        <DataHead>
+                          <DataHeadCell>Компания</DataHeadCell>
+                          <DataHeadCell>ID компании</DataHeadCell>
+                          <DataHeadCell align="center">Статус связи</DataHeadCell>
+                          <DataHeadCell>Дата привязки</DataHeadCell>
+                          <DataHeadCell align="right">Действия</DataHeadCell>
+                        </DataHead>
+                        <tbody>
+                          {clients.map(c => {
+                            const st = LINK_STATUS[c.status ?? "active"] ?? LINK_STATUS.active
+                            const isCancelled = c.status === "cancelled"
+                            return (
+                              <DataRow key={c.id} className={cn(isCancelled && "opacity-60")}>
+                                <DataCell className="font-medium">{c.companyName || "—"}</DataCell>
+                                <DataCell className="text-xs text-muted-foreground font-mono">{c.clientCompanyId}</DataCell>
+                                <DataCell align="center">
+                                  <Badge className={cn("text-xs border", st.color)}>{st.label}</Badge>
+                                </DataCell>
+                                <DataCell className="text-xs text-muted-foreground">
+                                  {c.referredAt ? new Date(c.referredAt).toLocaleDateString("ru-RU") : "—"}
+                                </DataCell>
+                                <DataCell align="right">
+                                  {!isCancelled && (
+                                    <Button
+                                      size="sm" variant="ghost"
+                                      className="h-8 gap-1.5 text-destructive hover:text-destructive"
+                                      disabled={unlinkingId === c.id}
+                                      onClick={() => unlinkClient(c.id)}
+                                    >
+                                      {unlinkingId === c.id
+                                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        : <Unlink className="w-3.5 h-3.5" />}
+                                      Отвязать
+                                    </Button>
+                                  )}
+                                </DataCell>
+                              </DataRow>
+                            )
+                          })}
+                        </tbody>
+                      </DataTable>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
             )}
 
             {/* Выплаты */}
@@ -343,6 +473,46 @@ export default function IntegratorDetailPage({ params }: { params: Promise<{ id:
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* Диалог: добавить клиента */}
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Добавить клиента</DialogTitle>
+            <DialogDescription>
+              Выберите компанию, чтобы привязать её к этому партнёру.
+            </DialogDescription>
+          </DialogHeader>
+          <Command className="rounded-lg border">
+            <CommandInput placeholder="Поиск компании по названию..." />
+            <CommandList>
+              <CommandEmpty>Компании не найдены</CommandEmpty>
+              <CommandGroup>
+                {availableCompanies.map(c => (
+                  <CommandItem
+                    key={c.id}
+                    value={c.name}
+                    onSelect={() => setSelectedCompanyId(c.id)}
+                    className="cursor-pointer"
+                  >
+                    <Check className={cn("mr-2 h-4 w-4", selectedCompanyId === c.id ? "opacity-100" : "opacity-0")} />
+                    <span className="truncate">{c.name}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setAddOpen(false)} disabled={linking}>
+              Отмена
+            </Button>
+            <Button size="sm" className="gap-1.5" onClick={() => linkCompany(false)} disabled={linking || !selectedCompanyId}>
+              {linking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+              Привязать
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminPageLayout>
   )
 }
