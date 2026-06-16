@@ -5,9 +5,10 @@ import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup,
@@ -16,9 +17,15 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell, DataSelectHeadCell, DataSelectCell } from "@/components/ui/data-table"
 import { cn } from "@/lib/utils"
-import { Search, Building2, Lock, Unlock, MoreHorizontal, Loader2, UserCog, Trash2, RotateCcw, Eraser } from "lucide-react"
+import {
+  Search, Building2, Lock, Unlock, MoreHorizontal, Loader2, UserCog, Trash2, RotateCcw, Eraser,
+  UserPlus, KeyRound, Copy, Check, RefreshCw,
+} from "lucide-react"
 import { toast } from "sonner"
-import { formatDate, useDebounce, ROLE_LABELS, CLIENT_ROLES, TableFooter } from "./shared"
+import {
+  formatDate, useDebounce, ROLE_LABELS, CLIENT_ROLES, TableFooter,
+  ACCESS_TYPE_OPTIONS, ACCESS_TYPE_LABELS,
+} from "./shared"
 
 interface UserRow {
   id: string
@@ -39,9 +46,15 @@ interface ApiResponse {
   totalPages: number
 }
 
+interface CompanyOption {
+  id: string
+  name: string
+}
+
 const ROLE_FILTER = [
   { value: "all", label: "Все роли" },
   ...CLIENT_ROLES.map(r => ({ value: r, label: ROLE_LABELS[r] ?? r })),
+  { value: "partner", label: ROLE_LABELS.partner },
 ]
 
 const STATUS_FILTER = [
@@ -49,6 +62,47 @@ const STATUS_FILTER = [
   { value: "active", label: "Активные" },
   { value: "blocked", label: "Заблокированные" },
 ]
+
+const NO_COMPANY = "__none__"
+
+// Пароль без неоднозначных символов (0/O, 1/l) — как в lib/partner/onboard.ts.
+function genPassword(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"
+  let s = ""
+  for (let i = 0; i < 12; i++) s += chars[Math.floor(Math.random() * chars.length)]
+  return s
+}
+
+// Блок «копировать креды» — показываем владельцу после создания/смены пароля.
+function CredsBox({ email, password }: { email?: string; password: string }) {
+  const [copied, setCopied] = useState(false)
+  const text = email ? `Логин: ${email}\nПароль: ${password}` : password
+  return (
+    <div className="rounded-lg border border-border bg-muted/40 p-3 space-y-2">
+      {email && (
+        <div className="flex items-center justify-between gap-2 text-sm">
+          <span className="text-muted-foreground">Логин</span>
+          <span className="font-mono">{email}</span>
+        </div>
+      )}
+      <div className="flex items-center justify-between gap-2 text-sm">
+        <span className="text-muted-foreground">Пароль</span>
+        <span className="font-mono font-medium">{password}</span>
+      </div>
+      <Button
+        size="sm" variant="outline" className="w-full gap-1.5 mt-1"
+        onClick={() => {
+          navigator.clipboard?.writeText(text).then(() => {
+            setCopied(true); setTimeout(() => setCopied(false), 1500)
+          })
+        }}
+      >
+        {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+        {copied ? "Скопировано" : "Скопировать"}
+      </Button>
+    </div>
+  )
+}
 
 export function UsersTab({ trashed = false }: { trashed?: boolean }) {
   const [search, setSearch] = useState("")
@@ -66,6 +120,23 @@ export function UsersTab({ trashed = false }: { trashed?: boolean }) {
   const [cleaning, setCleaning] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
+
+  // Список компаний для селектов (создание/смена компании).
+  const [companies, setCompanies] = useState<CompanyOption[]>([])
+
+  // Диалог «Создать пользователя».
+  const [createOpen, setCreateOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [createForm, setCreateForm] = useState({
+    email: "", name: "", password: genPassword(), role: "director", companyId: NO_COMPANY,
+  })
+  const [createdCreds, setCreatedCreds] = useState<{ email: string; password: string } | null>(null)
+
+  // Диалог «Задать пароль».
+  const [pwTarget, setPwTarget] = useState<UserRow | null>(null)
+  const [pwValue, setPwValue] = useState("")
+  const [pwSaving, setPwSaving] = useState(false)
+  const [pwSetCreds, setPwSetCreds] = useState<{ email: string; password: string } | null>(null)
 
   const pageIds = data.data.map(u => u.id)
   const allSelected = pageIds.length > 0 && pageIds.every(id => selected.has(id))
@@ -107,7 +178,15 @@ export function UsersTab({ trashed = false }: { trashed?: boolean }) {
   useEffect(() => { fetchData() }, [fetchData])
   useEffect(() => { setPage(1); setSelected(new Set()) }, [debouncedSearch, roleFilter, statusFilter, pageSize, trashed])
 
-  async function patchUser(user: UserRow, payload: { role?: string; isActive?: boolean }) {
+  // Список компаний грузим один раз (для селектов).
+  useEffect(() => {
+    fetch("/api/admin/users?companiesList=true")
+      .then(r => r.ok ? r.json() : null)
+      .then(b => { if (b?.companies) setCompanies(b.companies) })
+      .catch(() => {})
+  }, [])
+
+  async function patchUser(user: UserRow, payload: { role?: string; isActive?: boolean; companyId?: string | null }) {
     setBusyId(user.id)
     try {
       const res = await fetch(`/api/admin/users/${user.id}`, {
@@ -117,7 +196,8 @@ export function UsersTab({ trashed = false }: { trashed?: boolean }) {
       if (res.ok) {
         if (payload.isActive === false) toast.success("Пользователь заблокирован")
         else if (payload.isActive === true) toast.success("Пользователь разблокирован")
-        else if (payload.role) toast.success(`Роль изменена: ${ROLE_LABELS[payload.role] ?? payload.role}`)
+        else if (payload.companyId !== undefined) toast.success("Компания изменена")
+        else if (payload.role) toast.success(`Тип доступа изменён: ${ACCESS_TYPE_LABELS[payload.role] ?? ROLE_LABELS[payload.role] ?? payload.role}`)
         fetchData()
       } else {
         const b = await res.json().catch(() => ({}))
@@ -161,6 +241,66 @@ export function UsersTab({ trashed = false }: { trashed?: boolean }) {
     } catch { toast.error("Ошибка сети") } finally { setCleaning(false) }
   }
 
+  function openCreate() {
+    setCreateForm({ email: "", name: "", password: genPassword(), role: "director", companyId: NO_COMPANY })
+    setCreatedCreds(null)
+    setCreateOpen(true)
+  }
+
+  async function submitCreate() {
+    const email = createForm.email.trim()
+    const name = createForm.name.trim()
+    if (!email || !email.includes("@")) { toast.error("Укажите корректный email"); return }
+    if (!name) { toast.error("Укажите имя"); return }
+    if (createForm.password.length < 6) { toast.error("Пароль не короче 6 символов"); return }
+    setCreating(true)
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email, name, password: createForm.password, role: createForm.role,
+          companyId: createForm.companyId === NO_COMPANY ? null : createForm.companyId,
+        }),
+      })
+      const b = await res.json().catch(() => ({}))
+      if (res.ok) {
+        setCreatedCreds({ email, password: createForm.password })
+        toast.success("Пользователь создан")
+        fetchData()
+      } else {
+        toast.error(b.error || "Не удалось создать")
+      }
+    } catch { toast.error("Ошибка сети") } finally { setCreating(false) }
+  }
+
+  function openSetPassword(user: UserRow) {
+    setPwTarget(user)
+    setPwValue(genPassword())
+    setPwSetCreds(null)
+  }
+
+  async function submitSetPassword() {
+    if (!pwTarget) return
+    if (pwValue.length < 6) { toast.error("Пароль не короче 6 символов"); return }
+    setPwSaving(true)
+    try {
+      const res = await fetch(`/api/admin/users/${pwTarget.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pwValue }),
+      })
+      const b = await res.json().catch(() => ({}))
+      if (res.ok) {
+        setPwSetCreds({ email: pwTarget.email, password: pwValue })
+        toast.success("Пароль установлен")
+      } else {
+        toast.error(b.error || "Не удалось")
+      }
+    } catch { toast.error("Ошибка сети") } finally { setPwSaving(false) }
+  }
+
+  const clientOptions = ACCESS_TYPE_OPTIONS.filter(o => o.group === "client")
+  const partnerOptions = ACCESS_TYPE_OPTIONS.filter(o => o.group === "partner")
+
   return (
     <>
       {/* Поиск и фильтры */}
@@ -187,9 +327,14 @@ export function UsersTab({ trashed = false }: { trashed?: boolean }) {
           </SelectContent>
         </Select>
         {!trashed && (
-          <Button variant="outline" size="sm" className="h-9 gap-1.5 ml-auto" onClick={() => setCleanupOpen(true)}>
-            <Eraser className="w-3.5 h-3.5" />Очистить
-          </Button>
+          <div className="flex items-center gap-2 ml-auto">
+            <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => setCleanupOpen(true)}>
+              <Eraser className="w-3.5 h-3.5" />Очистить
+            </Button>
+            <Button size="sm" className="h-9 gap-1.5" onClick={openCreate}>
+              <UserPlus className="w-4 h-4" />Создать пользователя
+            </Button>
+          </div>
         )}
       </div>
 
@@ -297,16 +442,24 @@ export function UsersTab({ trashed = false }: { trashed?: boolean }) {
                             <>
                               <DropdownMenuSeparator />
                               <DropdownMenuSub>
-                                <DropdownMenuSubTrigger className="gap-2"><UserCog className="h-3.5 w-3.5" />Сменить роль</DropdownMenuSubTrigger>
+                                <DropdownMenuSubTrigger className="gap-2"><UserCog className="h-3.5 w-3.5" />Тип доступа</DropdownMenuSubTrigger>
                                 <DropdownMenuSubContent>
-                                  <DropdownMenuLabel className="text-xs">Роль пользователя</DropdownMenuLabel>
-                                  <DropdownMenuRadioGroup value={user.role} onValueChange={(v) => { if (v !== user.role) patchUser(user, { role: v }) }}>
-                                    {CLIENT_ROLES.map(r => (
-                                      <DropdownMenuRadioItem key={r} value={r} className="cursor-pointer">{ROLE_LABELS[r] ?? r}</DropdownMenuRadioItem>
+                                  <DropdownMenuRadioGroup value={user.role === "partner" ? "" : user.role} onValueChange={(v) => { if (v && v !== user.role) patchUser(user, { role: v }) }}>
+                                    <DropdownMenuLabel className="text-xs">Клиент</DropdownMenuLabel>
+                                    {clientOptions.map(o => (
+                                      <DropdownMenuRadioItem key={o.value} value={o.value} className="cursor-pointer">{o.label}</DropdownMenuRadioItem>
+                                    ))}
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuLabel className="text-xs">Партнёрство</DropdownMenuLabel>
+                                    {partnerOptions.map(o => (
+                                      <DropdownMenuRadioItem key={o.value} value={o.value} className="cursor-pointer" disabled={!user.companyId}>{o.label}</DropdownMenuRadioItem>
                                     ))}
                                   </DropdownMenuRadioGroup>
                                 </DropdownMenuSubContent>
                               </DropdownMenuSub>
+                              <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => openSetPassword(user)}>
+                                <KeyRound className="h-3.5 w-3.5" />Задать пароль
+                              </DropdownMenuItem>
                               <DropdownMenuItem
                                 className={cn("gap-2 cursor-pointer", !isBlocked && "text-destructive focus:text-destructive")}
                                 onClick={() => patchUser(user, { isActive: isBlocked })}
@@ -352,6 +505,121 @@ export function UsersTab({ trashed = false }: { trashed?: boolean }) {
               {cleaning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eraser className="w-3.5 h-3.5" />}В корзину
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Создание пользователя */}
+      <Dialog open={createOpen} onOpenChange={(o) => { setCreateOpen(o); if (!o) setCreatedCreds(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Создать пользователя</DialogTitle>
+            <DialogDescription>
+              {createdCreds
+                ? "Пользователь создан. Передайте эти данные для входа — пароль больше не показывается."
+                : "Логин и пароль для доступа в систему. Тип доступа определяет права."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {createdCreds ? (
+            <div className="space-y-3">
+              <CredsBox email={createdCreds.email} password={createdCreds.password} />
+              <DialogFooter>
+                <Button onClick={() => { setCreateOpen(false); setCreatedCreds(null) }}>Готово</Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="cu-email">Email (логин)</Label>
+                <Input id="cu-email" type="email" value={createForm.email} onChange={e => setCreateForm(f => ({ ...f, email: e.target.value }))} placeholder="user@company.ru" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="cu-name">Имя</Label>
+                <Input id="cu-name" value={createForm.name} onChange={e => setCreateForm(f => ({ ...f, name: e.target.value }))} placeholder="Иван Петров" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="cu-pw">Пароль</Label>
+                <div className="flex gap-2">
+                  <Input id="cu-pw" value={createForm.password} onChange={e => setCreateForm(f => ({ ...f, password: e.target.value }))} className="font-mono" />
+                  <Button type="button" variant="outline" size="icon" className="shrink-0" title="Сгенерировать" onClick={() => setCreateForm(f => ({ ...f, password: genPassword() }))}>
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Тип доступа</Label>
+                <Select value={createForm.role} onValueChange={v => setCreateForm(f => ({ ...f, role: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {clientOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                    {partnerOptions.map(o => (
+                      <SelectItem key={o.value} value={o.value} disabled={createForm.companyId === NO_COMPANY}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {partnerOptions.some(o => o.value === createForm.role) && createForm.companyId === NO_COMPANY && (
+                  <p className="text-xs text-destructive">Для партнёрского доступа выберите компанию.</p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label>Компания</Label>
+                <Select value={createForm.companyId} onValueChange={v => setCreateForm(f => ({ ...f, companyId: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_COMPANY}>— без компании</SelectItem>
+                    {companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={creating}>Отмена</Button>
+                <Button onClick={submitCreate} disabled={creating} className="gap-1.5">
+                  {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}Создать
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Задать пароль */}
+      <Dialog open={!!pwTarget} onOpenChange={(o) => { if (!o) { setPwTarget(null); setPwSetCreds(null) } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Задать пароль</DialogTitle>
+            <DialogDescription>
+              {pwSetCreds
+                ? "Пароль установлен. Передайте данные для входа — пароль больше не показывается."
+                : <>Новый пароль для <span className="font-medium text-foreground">{pwTarget?.email}</span>. Старый перестанет работать.</>}
+            </DialogDescription>
+          </DialogHeader>
+
+          {pwSetCreds ? (
+            <div className="space-y-3">
+              <CredsBox email={pwSetCreds.email} password={pwSetCreds.password} />
+              <DialogFooter>
+                <Button onClick={() => { setPwTarget(null); setPwSetCreds(null) }}>Готово</Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="pw-value">Новый пароль</Label>
+                <div className="flex gap-2">
+                  <Input id="pw-value" value={pwValue} onChange={e => setPwValue(e.target.value)} className="font-mono" />
+                  <Button type="button" variant="outline" size="icon" className="shrink-0" title="Сгенерировать" onClick={() => setPwValue(genPassword())}>
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setPwTarget(null)} disabled={pwSaving}>Отмена</Button>
+                <Button onClick={submitSetPassword} disabled={pwSaving} className="gap-1.5">
+                  {pwSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}Установить
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </>

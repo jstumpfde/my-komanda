@@ -1,31 +1,38 @@
 import { NextRequest } from "next/server"
+import bcrypt from "bcryptjs"
 import { db } from "@/lib/db"
-import { users } from "@/lib/db/schema"
+import { users, companies } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
-import { requirePlatformAdmin, apiError, apiSuccess } from "@/lib/api-helpers"
+import { apiError, apiSuccess } from "@/lib/api-helpers"
+import { requireAdminPanelAccess } from "@/lib/platform/auth"
+import {
+  accessTypeToUserRole, isAccessType, syncIntegratorForAccessType,
+} from "@/lib/admin/assign-role"
 
 type Params = { params: Promise<{ id: string }> }
 
-const ALLOWED_ROLES = [
-  "director", "hr_lead", "hr_manager", "department_head", "observer",
-  "platform_admin", "platform_manager", "admin", "manager",
-]
-
-// PATCH /api/admin/users/[id] — cross-tenant: изменить роль или заблокировать.
+// PATCH /api/admin/users/[id] — cross-tenant: сменить тип доступа (роль/партнёрство),
+// задать пароль, перенести в другую компанию, заблокировать/разблокировать.
+// Body: { role? (accessType), password?, companyId?, isActive? }
 export async function PATCH(req: NextRequest, { params }: Params) {
   let currentUser
   try {
-    currentUser = await requirePlatformAdmin()
+    currentUser = await requireAdminPanelAccess()
   } catch (e) {
     return e as Response
   }
 
   const { id } = await params
   const body = await req.json().catch(() => ({}))
-  const { role, isActive } = body as { role?: string; isActive?: boolean }
+  const { role: accessType, isActive, password, companyId: rawCompanyId } = body as {
+    role?: string; isActive?: boolean; password?: string; companyId?: string | null
+  }
 
-  if (role !== undefined && !ALLOWED_ROLES.includes(role)) {
-    return apiError("Недопустимая роль", 400)
+  if (accessType !== undefined && !isAccessType(accessType)) {
+    return apiError("Недопустимый тип доступа", 400)
+  }
+  if (password !== undefined && (typeof password !== "string" || password.length < 6)) {
+    return apiError("Пароль не короче 6 символов", 400)
   }
 
   // Нельзя заблокировать собственный аккаунт
@@ -33,9 +40,37 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return apiError("Нельзя заблокировать собственный аккаунт", 400)
   }
 
+  // Текущее состояние пользователя (нужно companyId для integrator-sync).
+  const [target] = await db
+    .select({ id: users.id, companyId: users.companyId })
+    .from(users)
+    .where(eq(users.id, id))
+    .limit(1)
+  if (!target) return apiError("Пользователь не найден", 404)
+
+  // Смена компании.
+  const companyChange = rawCompanyId !== undefined
+  const newCompanyId = companyChange ? ((rawCompanyId ?? "") || null) : target.companyId
+  if (companyChange && newCompanyId) {
+    const [c] = await db.select({ id: companies.id }).from(companies).where(eq(companies.id, newCompanyId)).limit(1)
+    if (!c) return apiError("Компания не найдена", 404)
+  }
+
   const updateData: Record<string, unknown> = {}
-  if (role !== undefined) updateData.role = role
   if (isActive !== undefined) updateData.isActive = isActive
+  if (companyChange) updateData.companyId = newCompanyId
+  if (password !== undefined) updateData.passwordHash = bcrypt.hashSync(password, 10)
+
+  if (accessType !== undefined) {
+    updateData.role = accessTypeToUserRole(accessType)
+    // Партнёрский тип — создать/обновить integrator для companyId пользователя
+    // (используем новую компанию, если её меняем этим же запросом).
+    try {
+      await syncIntegratorForAccessType(accessType, newCompanyId)
+    } catch (e) {
+      return apiError(e instanceof Error ? e.message : "Не удалось назначить партнёрский доступ", 400)
+    }
+  }
 
   if (Object.keys(updateData).length === 0) {
     return apiError("Нет данных для обновления", 400)
@@ -45,7 +80,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     .update(users)
     .set(updateData)
     .where(eq(users.id, id))
-    .returning({ id: users.id, role: users.role, isActive: users.isActive })
+    .returning({ id: users.id, role: users.role, isActive: users.isActive, companyId: users.companyId })
 
   if (!updated) return apiError("Пользователь не найден", 404)
 
@@ -56,7 +91,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 export async function DELETE(_req: NextRequest, { params }: Params) {
   let currentUser
   try {
-    currentUser = await requirePlatformAdmin()
+    currentUser = await requireAdminPanelAccess()
   } catch (e) {
     return e as Response
   }

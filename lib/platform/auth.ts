@@ -44,3 +44,18 @@ export async function requirePlatformOperator() {
   if (isPlatformAdminEmail(user.email)) return user
   throw apiError("Forbidden", 403)
 }
+
+// Гард для админ-эндпоинтов, ВКЛЮЧАЯ platform_manager.
+// Пускаем по любой платформенной роли (platform_admin/platform_manager/admin)
+// ИЛИ по email из PLATFORM_ADMIN_EMAILS — так же, как /admin layout
+// ((role && isPlatformRole(role)) || isPlatformAdminEmail(email)).
+// Это важно: владелец-директор с whitelisted-email НЕ должен получать 403.
+// Бросает Response (401/403), как requireAuth/requireCompany.
+const ADMIN_PLATFORM_ROLES = new Set<string>(["platform_admin", "platform_manager", "admin"])
+export async function requireAdminPanelAccess() {
+  const user = await requireAuth()
+  const role = user.role as string
+  if (ADMIN_PLATFORM_ROLES.has(role)) return user
+  if (isPlatformAdminEmail(user.email)) return user
+  throw apiError("Forbidden", 403)
+}

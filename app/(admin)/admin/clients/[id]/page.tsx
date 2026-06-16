@@ -43,12 +43,48 @@ interface ModuleItem {
 }
 interface Plan { id: string; name: string; slug: string }
 interface Company {
-  id: string; name: string; inn: string | null; kpp: string | null
-  legalAddress: string | null; city: string | null; industry: string | null
+  id: string; name: string; fullName: string | null
+  inn: string | null; kpp: string | null; ogrn: string | null
+  legalAddress: string | null; officeAddress: string | null; postalAddress: string | null
+  city: string | null; industry: string | null
   billingEmail: string | null; subscriptionStatus: string | null
   planId: string | null; currentPlanId: string | null; trialEndsAt: string | null
   createdAt: string | null; userCount: number
   plan: { id: string; name: string; price: number; slug: string; priceFormatted: number } | null
+}
+
+// Поля-реквизиты, редактируемые в форме «Информация о компании».
+interface CompanyForm {
+  name: string; fullName: string; inn: string; kpp: string; ogrn: string
+  legalAddress: string; officeAddress: string; postalAddress: string
+  city: string; industry: string; billingEmail: string
+  subscriptionStatus: string; planId: string
+}
+
+const SUBSCRIPTION_OPTIONS: { value: string; label: string }[] = [
+  { value: "trial",     label: "Trial" },
+  { value: "active",    label: "Активен" },
+  { value: "paused",    label: "Пауза" },
+  { value: "cancelled", label: "Отменён" },
+  { value: "expired",   label: "Истёк" },
+]
+
+function companyToForm(c: Company): CompanyForm {
+  return {
+    name:               c.name ?? "",
+    fullName:           c.fullName ?? "",
+    inn:                c.inn ?? "",
+    kpp:                c.kpp ?? "",
+    ogrn:               c.ogrn ?? "",
+    legalAddress:       c.legalAddress ?? "",
+    officeAddress:      c.officeAddress ?? "",
+    postalAddress:      c.postalAddress ?? "",
+    city:               c.city ?? "",
+    industry:           c.industry ?? "",
+    billingEmail:       c.billingEmail ?? "",
+    subscriptionStatus: c.subscriptionStatus ?? "trial",
+    planId:             c.currentPlanId ?? c.planId ?? "none",
+  }
 }
 interface UserRow {
   id: string; name: string; email: string; role: string
@@ -316,12 +352,18 @@ export default function AdminClientPage() {
   const [trialEndsAt, setTrialEndsAt] = useState<string>("")
   const [activeTab, setActiveTab] = useState("overview")
 
+  // Форма реквизитов компании
+  const [form, setForm] = useState<CompanyForm | null>(null)
+  const [infoSaving, setInfoSaving] = useState(false)
+  const [infoSaved, setInfoSaved] = useState(false)
+
   // Загружаем компанию
   useEffect(() => {
     fetch(`/api/admin/clients/${clientId}`)
       .then(r => r.json())
       .then(data => {
         setCompany(data)
+        setForm(companyToForm(data))
         if (data?.trialEndsAt) {
           setTrialEndsAt(new Date(data.trialEndsAt).toISOString().split("T")[0])
         }
@@ -509,10 +551,58 @@ export default function AdminClientPage() {
         trialEndsAt: updated.trialEndsAt ?? prev.trialEndsAt,
         planId: updated.currentPlanId ?? prev.planId,
       } : prev)
+      // Держим селект статуса в форме реквизитов в синхроне.
+      if (updated.subscriptionStatus) {
+        setForm(prev => prev ? { ...prev, subscriptionStatus: updated.subscriptionStatus } : prev)
+      }
     } catch {
       setError("Ошибка сохранения")
     } finally {
       setSubSaving(false)
+    }
+  }
+
+  function setFormField(field: keyof CompanyForm, value: string) {
+    setForm(prev => prev ? { ...prev, [field]: value } : prev)
+  }
+
+  async function handleSaveInfo() {
+    if (!form) return
+    setInfoSaving(true)
+    setError("")
+    try {
+      const res = await fetch(`/api/admin/clients/${clientId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name:               form.name,
+          fullName:           form.fullName,
+          inn:                form.inn,
+          kpp:                form.kpp,
+          ogrn:               form.ogrn,
+          legalAddress:       form.legalAddress,
+          officeAddress:      form.officeAddress,
+          postalAddress:      form.postalAddress,
+          city:               form.city,
+          industry:           form.industry,
+          billingEmail:       form.billingEmail,
+          subscriptionStatus: form.subscriptionStatus,
+          planId:             form.planId === "none" ? null : form.planId,
+        }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        setError(d.error ?? "Ошибка сохранения")
+        return
+      }
+      const updated = await res.json()
+      setCompany(prev => prev ? { ...prev, ...updated } : prev)
+      setInfoSaved(true)
+      setTimeout(() => setInfoSaved(false), 2500)
+    } catch {
+      setError("Ошибка сохранения")
+    } finally {
+      setInfoSaving(false)
     }
   }
 
@@ -524,7 +614,9 @@ export default function AdminClientPage() {
       body: JSON.stringify({ subscriptionStatus: isBlocked ? "active" : "paused" }),
     })
     if (res.ok) {
-      setCompany(prev => prev ? { ...prev, subscriptionStatus: isBlocked ? "active" : "paused" } : prev)
+      const next = isBlocked ? "active" : "paused"
+      setCompany(prev => prev ? { ...prev, subscriptionStatus: next } : prev)
+      setForm(prev => prev ? { ...prev, subscriptionStatus: next } : prev)
     }
   }
 
@@ -680,27 +772,110 @@ export default function AdminClientPage() {
                   <CardHeader>
                     <CardTitle className="text-base">Информация о компании</CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-                      {[
-                        { label: "Название",    value: company?.name },
-                        { label: "ИНН",         value: company?.inn ?? "—" },
-                        { label: "КПП",         value: company?.kpp ?? "—" },
-                        { label: "Город",       value: company?.city ?? "—" },
-                        { label: "Отрасль",     value: company?.industry ?? "—" },
-                        { label: "Email",       value: company?.billingEmail ?? "—" },
-                        { label: "Адрес",       value: company?.legalAddress ?? "—" },
-                        { label: "Пользователей", value: company?.userCount },
-                        { label: "Дата создания", value: company?.createdAt
-                            ? new Date(company.createdAt).toLocaleDateString("ru-RU")
-                            : "—" },
-                      ].map(({ label, value }) => (
-                        <div key={label}>
-                          <dt className="text-muted-foreground">{label}</dt>
-                          <dd className="font-medium text-foreground mt-0.5">{String(value ?? "—")}</dd>
+                  <CardContent className="space-y-4">
+                    {form && (
+                      <>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                          {([
+                            { field: "name",          label: "Название",          ph: "Короткое название" },
+                            { field: "fullName",      label: "Полное наименование", ph: "ООО «…»" },
+                            { field: "inn",           label: "ИНН",               ph: "" },
+                            { field: "kpp",           label: "КПП",               ph: "" },
+                            { field: "ogrn",          label: "ОГРН",              ph: "" },
+                            { field: "city",          label: "Город",             ph: "" },
+                            { field: "industry",      label: "Отрасль",           ph: "" },
+                            { field: "billingEmail",  label: "Email для счетов",  ph: "billing@…" },
+                          ] as { field: keyof CompanyForm; label: string; ph: string }[]).map(({ field, label, ph }) => (
+                            <div key={field} className="space-y-1.5">
+                              <Label htmlFor={`f-${field}`} className="text-xs text-muted-foreground">{label}</Label>
+                              <Input
+                                id={`f-${field}`}
+                                className="h-8 text-sm"
+                                placeholder={ph}
+                                value={form[field]}
+                                onChange={e => setFormField(field, e.target.value)}
+                              />
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </dl>
+
+                        <div className="grid grid-cols-1 gap-y-3">
+                          {([
+                            { field: "legalAddress",  label: "Юридический адрес" },
+                            { field: "officeAddress", label: "Адрес офиса" },
+                            { field: "postalAddress", label: "Почтовый адрес" },
+                          ] as { field: keyof CompanyForm; label: string }[]).map(({ field, label }) => (
+                            <div key={field} className="space-y-1.5">
+                              <Label htmlFor={`f-${field}`} className="text-xs text-muted-foreground">{label}</Label>
+                              <Input
+                                id={`f-${field}`}
+                                className="h-8 text-sm"
+                                value={form[field]}
+                                onChange={e => setFormField(field, e.target.value)}
+                              />
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground">Статус подписки</Label>
+                            <Select
+                              value={form.subscriptionStatus}
+                              onValueChange={v => setFormField("subscriptionStatus", v)}
+                            >
+                              <SelectTrigger className="h-8 text-sm">
+                                <SelectValue placeholder="Статус" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {SUBSCRIPTION_OPTIONS.map(o => (
+                                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground">Тариф</Label>
+                            <Select
+                              value={form.planId}
+                              onValueChange={v => setFormField("planId", v)}
+                            >
+                              <SelectTrigger className="h-8 text-sm">
+                                <SelectValue placeholder="Выберите тариф" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">— Без тарифа —</SelectItem>
+                                {allPlans.map(p => (
+                                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        {/* Только для чтения */}
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm pt-1 border-t">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Пользователей</p>
+                            <p className="font-medium text-foreground mt-0.5">{company?.userCount ?? "—"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Дата создания</p>
+                            <p className="font-medium text-foreground mt-0.5">
+                              {company?.createdAt ? new Date(company.createdAt).toLocaleDateString("ru-RU") : "—"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 pt-1">
+                          <Button onClick={handleSaveInfo} disabled={infoSaving || !form.name.trim()} className="gap-2">
+                            {infoSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                            Сохранить
+                          </Button>
+                          {infoSaved && <span className="text-xs text-emerald-600 font-medium">Сохранено</span>}
+                        </div>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
 
