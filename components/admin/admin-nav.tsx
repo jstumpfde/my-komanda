@@ -35,7 +35,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Компании",           href: "/admin/clients",              icon: Building2  },
       { label: "Запросы на email",   href: "/admin/requests",             icon: Inbox      },
-      { label: "Интеграторы",        href: "/admin/integrators",          icon: Handshake  },
+      { label: "Партнёры",           href: "/admin/integrators",          icon: Handshake  },
     ],
   },
   {

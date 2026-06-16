@@ -140,7 +140,7 @@ export default function IntegratorDetailPage({ params }: { params: Promise<{ id:
                 <div className="flex items-center gap-2 pt-3 pb-2">
                   <Users className="h-5 w-5 text-violet-600" />
                   <h1 className="text-lg font-semibold">
-                    {integrator?.companyName || "Интегратор"}
+                    {integrator?.companyName || "Партнёр"}
                   </h1>
                   {integrator?.levelName && (
                     <Badge className={cn("text-xs border", LEVEL_COLORS[integrator.levelName] ?? "bg-muted")}>
@@ -218,7 +218,7 @@ export default function IntegratorDetailPage({ params }: { params: Promise<{ id:
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
-                    <Users className="w-4 h-4" /> Клиенты интегратора
+                    <Users className="w-4 h-4" /> Клиенты партнёра
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
