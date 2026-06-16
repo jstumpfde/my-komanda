@@ -29,7 +29,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import type { Demo, Block, BlockType, Lesson, StoriesCard } from "@/lib/course-types"
-import {BLOCK_TYPE_META, createBlock, STORIES_CTA_DEFAULT_TEXT} from "@/lib/course-types"
+import {BLOCK_TYPE_META, createBlock, STORIES_CTA_DEFAULT_TEXT, STORIES_CARD_DEFAULT_DURATION_SEC} from "@/lib/course-types"
 import { StoriesPlayer } from "@/components/vacancies/stories-player"
 import { resolveOptionPoints } from "@/lib/score-test-objective"
 import { TEMPLATE_VARIABLES } from "@/lib/templates/demo-templates"
@@ -2930,6 +2930,14 @@ function MediaEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch:
 
 // ─── Stories editor block ──────────────────────────────────────────────────
 
+// Правильная плюрализация «карточка/карточки/карточек».
+function pluralCards(n: number): string {
+  const m10 = n % 10, m100 = n % 100
+  if (m10 === 1 && m100 !== 11) return "карточка"
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return "карточки"
+  return "карточек"
+}
+
 function StoriesEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partial<Block>) => void }) {
   const cards: StoriesCard[] = block.storiesCards ?? []
   const [uploading, setUploading] = useState(false)
@@ -2998,41 +3006,31 @@ function StoriesEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patc
           <Clapperboard className="w-4 h-4" />
           <span>Сторис</span>
           {cards.length > 0 && (
-            <span className="text-xs bg-primary/10 text-primary rounded px-1.5 py-0.5">{cards.length} карточек</span>
+            <span className="text-xs bg-primary/10 text-primary rounded px-1.5 py-0.5">{cards.length} {pluralCards(cards.length)}</span>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          {uploading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border hover:border-primary/50 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-          >
-            <Plus className="w-3.5 h-3.5" />Добавить карточку
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*,video/*"
-            className="hidden"
-            onChange={handleAddFile}
-          />
-        </div>
+        {uploading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,video/*"
+          className="hidden"
+          onChange={handleAddFile}
+        />
       </div>
 
-      {cards.length === 0 ? (
-        <div className="text-xs text-muted-foreground text-center py-3">
-          Нажмите «Добавить карточку» — поддерживаются фото и видео (вертикальные и горизонтальные)
-        </div>
-      ) : (
-        <div className="space-y-2">
+      {cards.length > 0 && (
+        <div className="flex flex-wrap justify-center gap-3">
           {cards.map((card, idx) => (
-            <div key={card.id} className="flex items-center gap-3 p-2 rounded-lg border border-border bg-background">
-              {/* Миниатюра */}
-              <div className="w-12 h-16 rounded-md overflow-hidden bg-muted shrink-0 flex items-center justify-center">
+            <div key={card.id} className="w-36 rounded-lg border border-border bg-background p-2.5 flex flex-col items-center gap-2">
+              {/* Превью по центру (вертикальный формат сторис 9:16) */}
+              <div className="relative w-full aspect-[9/16] rounded-md overflow-hidden bg-muted flex items-center justify-center">
+                <span className="absolute top-1 left-1 z-10 text-[10px] bg-black/60 text-white rounded px-1.5 py-0.5">{idx + 1}</span>
                 {card.mediaType === "image" ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={card.url} alt="" className="w-full h-full object-cover" />
+                ) : card.url ? (
+                  <video src={card.url} className="w-full h-full object-cover" muted playsInline preload="metadata" />
                 ) : (
                   <div className="flex flex-col items-center gap-0.5 text-muted-foreground">
                     <Video className="w-5 h-5" />
@@ -3040,40 +3038,41 @@ function StoriesEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patc
                   </div>
                 )}
               </div>
-              {/* Подпись */}
-              <div className="flex-1 min-w-0">
-                <input
-                  type="text"
-                  value={card.caption || ""}
-                  onChange={(e) => updateCard(card.id, { caption: e.target.value })}
-                  placeholder="Подпись (необязательно)"
-                  maxLength={120}
-                  className="w-full text-xs border border-border rounded-md px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-primary/50"
-                />
-              </div>
+              {/* Компактная подпись под карточкой */}
+              <input
+                type="text"
+                value={card.caption || ""}
+                onChange={(e) => updateCard(card.id, { caption: e.target.value })}
+                placeholder="Подпись"
+                maxLength={120}
+                className="w-full text-xs text-center border border-border rounded-md px-2 py-1 bg-background focus:outline-none focus:ring-1 focus:ring-primary/50"
+              />
+              {/* Длительность (фото) / по длине видео */}
+              {card.mediaType === "image" ? (
+                <label className="flex items-center justify-center gap-1 text-[11px] text-muted-foreground">
+                  Длит.
+                  <input
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={card.durationSec ?? STORIES_CARD_DEFAULT_DURATION_SEC}
+                    onChange={(e) => updateCard(card.id, { durationSec: Math.max(1, Math.min(60, Math.round(Number(e.target.value) || STORIES_CARD_DEFAULT_DURATION_SEC))) })}
+                    className="w-11 text-center border border-border rounded px-1 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-primary/50"
+                  />
+                  с
+                </label>
+              ) : (
+                <span className="text-[11px] text-muted-foreground">по длине видео</span>
+              )}
               {/* Действия */}
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  onClick={() => moveCard(card.id, -1)}
-                  disabled={idx === 0}
-                  className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 hover:bg-muted transition-colors"
-                  title="Выше"
-                >
+              <div className="flex items-center justify-center gap-1">
+                <button onClick={() => moveCard(card.id, -1)} disabled={idx === 0} className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 hover:bg-muted transition-colors" title="Раньше">
                   <ArrowUp className="w-3.5 h-3.5" />
                 </button>
-                <button
-                  onClick={() => moveCard(card.id, 1)}
-                  disabled={idx === cards.length - 1}
-                  className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 hover:bg-muted transition-colors"
-                  title="Ниже"
-                >
+                <button onClick={() => moveCard(card.id, 1)} disabled={idx === cards.length - 1} className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 hover:bg-muted transition-colors" title="Позже">
                   <ArrowDown className="w-3.5 h-3.5" />
                 </button>
-                <button
-                  onClick={() => removeCard(card.id)}
-                  className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                  title="Удалить"
-                >
+                <button onClick={() => removeCard(card.id)} className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors" title="Удалить">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -3081,6 +3080,17 @@ function StoriesEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patc
           ))}
         </div>
       )}
+
+      {/* Центральная зона загрузки «+ фото/видео» */}
+      <button
+        onClick={() => fileInputRef.current?.click()}
+        disabled={uploading}
+        className="w-full rounded-lg border border-dashed border-border hover:border-primary/50 py-6 flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+      >
+        {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
+        <span className="text-sm font-medium">Добавить фото / видео</span>
+        <span className="text-[11px]">вертикальные и горизонтальные</span>
+      </button>
 
       {/* Финальный CTA-слайд: после последней карточки — экран с призывом откликнуться */}
       <div className="rounded-lg border border-border bg-background p-3 space-y-3">
