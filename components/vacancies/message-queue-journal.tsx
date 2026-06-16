@@ -1,11 +1,20 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2, Pencil, Check, X, Trash2, AlertTriangle, Search } from "lucide-react"
+import {
+  TableCard, DataTable, DataHead, DataHeadCell, DataSelectHeadCell,
+  DataRow, DataCell,
+} from "@/components/ui/data-table"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Loader2, Pencil, Check, X, Trash2, AlertTriangle, Search,
+  ChevronRight, ChevronDown, Users,
+} from "lucide-react"
+import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 
 interface QueueItem {
@@ -22,18 +31,6 @@ interface QueueItem {
   branch: string
   touchNumber: number
   preview: string
-}
-
-interface Group {
-  candidateId: string
-  candidateName: string
-  hhFirst: string | null
-  hhLast: string | null
-  override: string | null
-  resolvedName: string
-  nameSource: string
-  needsCheck: boolean
-  messages: QueueItem[]
 }
 
 const BRANCH_LABELS: Record<string, string> = {
@@ -65,17 +62,24 @@ interface Props {
   onChanged?: () => void   // дёрнуть при отмене сообщения (обновить счётчики секции)
 }
 
-/** Инлайн-журнал очереди рассылки: список сообщений, сгруппированных по
- *  кандидату, с фильтрами (поиск по имени, тип касания, «только проверить»),
- *  правкой обращения и отменой отдельных сообщений. Не в Sheet — прямо на вкладке. */
+/** Инлайн-журнал очереди рассылки в виде таблицы-списка (как список кандидатов):
+ *  одна строка — одно отложенное сообщение. Фильтры (поиск по имени, тип касания,
+ *  «только проверить»), правка обращения, раскрытие полного текста по клику,
+ *  одиночное и массовое удаление сообщений. Не в Sheet — прямо на вкладке. */
 export function MessageQueueJournal({ vacancyId, onChanged }: Props) {
   const [loading, setLoading] = useState(true)
-  const [groups, setGroups] = useState<Group[]>([])
+  const [items, setItems] = useState<QueueItem[]>([])
   const [needsCheck, setNeedsCheck] = useState(0)
   const [editId, setEditId] = useState<string | null>(null)
   const [editVal, setEditVal] = useState("")
   const [savingId, setSavingId] = useState<string | null>(null)
   const [cancelingId, setCancelingId] = useState<string | null>(null)
+  const [bulkBusy, setBulkBusy] = useState(false)
+
+  // Раскрытые строки (полный текст сообщения) и выбор для массовых действий.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const lastSelectedIdRef = useRef<string | null>(null)
 
   // Фильтры
   const [search, setSearch] = useState("")
@@ -88,23 +92,9 @@ export function MessageQueueJournal({ vacancyId, onChanged }: Props) {
       const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/message-queue/items`)
       if (!res.ok) throw new Error()
       const json = await res.json()
-      const items: QueueItem[] = (json.data ?? json).items ?? []
-      setNeedsCheck((json.data ?? json).needsCheck ?? 0)
-      const map = new Map<string, Group>()
-      for (const it of items) {
-        let g = map.get(it.candidateId)
-        if (!g) {
-          g = {
-            candidateId: it.candidateId, candidateName: it.candidateName,
-            hhFirst: it.hhFirst, hhLast: it.hhLast, override: it.override,
-            resolvedName: it.resolvedName, nameSource: it.nameSource,
-            needsCheck: it.needsCheck, messages: [],
-          }
-          map.set(it.candidateId, g)
-        }
-        g.messages.push(it)
-      }
-      setGroups([...map.values()])
+      const data = json.data ?? json
+      setItems(data.items ?? [])
+      setNeedsCheck(data.needsCheck ?? 0)
     } catch {
       toast.error("Не удалось загрузить очередь")
     } finally {
@@ -114,26 +104,93 @@ export function MessageQueueJournal({ vacancyId, onChanged }: Props) {
 
   useEffect(() => { fetchItems() }, [fetchItems])
 
+  // Сколько сообщений у каждого кандидата (для бейджа «группа из N»).
+  const countByCandidate = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const it of items) m.set(it.candidateId, (m.get(it.candidateId) ?? 0) + 1)
+    return m
+  }, [items])
+
   // Список веток, реально присутствующих в очереди — для дропдауна
   const branches = useMemo(() => {
     const set = new Set<string>()
-    groups.forEach(g => g.messages.forEach(m => set.add(m.branch)))
+    items.forEach((m) => set.add(m.branch))
     return [...set]
-  }, [groups])
+  }, [items])
 
-  // Применяем фильтры: поиск по имени (группа), тип касания (сообщения), «проверить» (группа)
+  // Применяем фильтры: поиск по имени, тип касания, «проверить».
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return groups
-      .filter(g => !onlyCheck || g.needsCheck)
-      .filter(g => !q || g.candidateName.toLowerCase().includes(q) || (g.resolvedName ?? "").toLowerCase().includes(q))
-      .map(g => branchFilter === "all" ? g : { ...g, messages: g.messages.filter(m => m.branch === branchFilter) })
-      .filter(g => g.messages.length > 0)
-  }, [groups, search, branchFilter, onlyCheck])
+    return items
+      .filter((m) => !onlyCheck || m.needsCheck)
+      .filter((m) => branchFilter === "all" || m.branch === branchFilter)
+      .filter((m) =>
+        !q ||
+        m.candidateName.toLowerCase().includes(q) ||
+        (m.resolvedName ?? "").toLowerCase().includes(q),
+      )
+  }, [items, search, branchFilter, onlyCheck])
 
-  function startEdit(g: Group) {
-    setEditId(g.candidateId)
-    setEditVal(g.override ?? g.resolvedName)
+  const visibleIds = useMemo(() => filtered.map((m) => m.messageId), [filtered])
+
+  // ─── Selection helpers (паттерн из list-view.tsx) ────────────────────────
+  const selectedVisibleCount = useMemo(() => {
+    let n = 0
+    for (const id of visibleIds) if (selected.has(id)) n++
+    return n
+  }, [selected, visibleIds])
+  const headerState: boolean | "indeterminate" =
+    selectedVisibleCount === 0 ? false
+    : selectedVisibleCount === visibleIds.length ? true
+    : "indeterminate"
+
+  const toggleAllVisible = () => {
+    const next = new Set(selected)
+    if (selectedVisibleCount === visibleIds.length) {
+      for (const id of visibleIds) next.delete(id)
+    } else {
+      for (const id of visibleIds) next.add(id)
+    }
+    setSelected(next)
+  }
+
+  const toggleOne = (id: string, e?: React.MouseEvent) => {
+    const next = new Set(selected)
+    const isShift = !!(e && e.shiftKey)
+    if (isShift && lastSelectedIdRef.current && lastSelectedIdRef.current !== id) {
+      const fromIdx = visibleIds.indexOf(lastSelectedIdRef.current)
+      const toIdx = visibleIds.indexOf(id)
+      if (fromIdx !== -1 && toIdx !== -1) {
+        const [lo, hi] = fromIdx < toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx]
+        const shouldSelect = !next.has(id)
+        for (let i = lo; i <= hi; i++) {
+          if (shouldSelect) next.add(visibleIds[i])
+          else next.delete(visibleIds[i])
+        }
+        lastSelectedIdRef.current = id
+        setSelected(next)
+        return
+      }
+    }
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    lastSelectedIdRef.current = id
+    setSelected(next)
+  }
+
+  const toggleExpand = (id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  // ─── Inline rename ────────────────────────────────────────────────────────
+  function startEdit(m: QueueItem) {
+    setEditId(m.messageId)
+    setEditVal(m.override ?? m.resolvedName)
   }
 
   async function saveName(candidateId: string) {
@@ -155,6 +212,21 @@ export function MessageQueueJournal({ vacancyId, onChanged }: Props) {
     }
   }
 
+  // ─── Cancellation (optimistic) ───────────────────────────────────────────
+  function dropMessages(ids: Set<string>) {
+    setItems((prev) => prev.filter((m) => !ids.has(m.messageId)))
+    setSelected((prev) => {
+      const next = new Set(prev)
+      for (const id of ids) next.delete(id)
+      return next
+    })
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      for (const id of ids) next.delete(id)
+      return next
+    })
+  }
+
   async function cancelMessage(messageId: string) {
     setCancelingId(messageId)
     try {
@@ -164,11 +236,7 @@ export function MessageQueueJournal({ vacancyId, onChanged }: Props) {
         body: JSON.stringify({ action: "cancel", messageId }),
       })
       if (!res.ok) throw new Error()
-      setGroups((prev) =>
-        prev
-          .map((g) => ({ ...g, messages: g.messages.filter((m) => m.messageId !== messageId) }))
-          .filter((g) => g.messages.length > 0),
-      )
+      dropMessages(new Set([messageId]))
       toast.success("Сообщение удалено из очереди")
       onChanged?.()
     } catch {
@@ -178,8 +246,49 @@ export function MessageQueueJournal({ vacancyId, onChanged }: Props) {
     }
   }
 
-  const totalMsgs = groups.reduce((n, g) => n + g.messages.length, 0)
-  const shownMsgs = filtered.reduce((n, g) => n + g.messages.length, 0)
+  async function cancelForCandidate(candidateId: string) {
+    setBulkBusy(true)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/message-queue/items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel_for_candidate", candidateId }),
+      })
+      if (!res.ok) throw new Error()
+      const json = await res.json()
+      const ids: string[] = (json.data ?? json).cancelled ?? []
+      dropMessages(new Set(ids.length ? ids : items.filter((m) => m.candidateId === candidateId).map((m) => m.messageId)))
+      toast.success(`Удалено ${ids.length || ""} сообщений кандидата`.trim())
+      onChanged?.()
+    } catch {
+      toast.error("Не удалось удалить сообщения кандидата")
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  async function cancelSelected() {
+    const ids = [...selected].filter((id) => visibleIds.includes(id))
+    if (ids.length === 0) return
+    setBulkBusy(true)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/message-queue/items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel_batch", messageIds: ids }),
+      })
+      if (!res.ok) throw new Error()
+      const json = await res.json()
+      const cancelled: string[] = (json.data ?? json).cancelled ?? ids
+      dropMessages(new Set(cancelled))
+      toast.success(`Удалено ${cancelled.length} сообщений`)
+      onChanged?.()
+    } catch {
+      toast.error("Не удалось удалить выбранные сообщения")
+    } finally {
+      setBulkBusy(false)
+    }
+  }
 
   return (
     <div className="space-y-3">
@@ -198,7 +307,7 @@ export function MessageQueueJournal({ vacancyId, onChanged }: Props) {
           <SelectTrigger className="h-8 w-auto min-w-[160px] text-xs"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all" className="text-xs">Все типы касаний</SelectItem>
-            {branches.map(b => (
+            {branches.map((b) => (
               <SelectItem key={b} value={b} className="text-xs">{BRANCH_LABELS[b] ?? b}</SelectItem>
             ))}
           </SelectContent>
@@ -207,22 +316,22 @@ export function MessageQueueJournal({ vacancyId, onChanged }: Props) {
           variant={onlyCheck ? "default" : "outline"}
           size="sm"
           className="h-8 text-xs gap-1.5"
-          onClick={() => setOnlyCheck(v => !v)}
+          onClick={() => setOnlyCheck((v) => !v)}
         >
           <AlertTriangle className="w-3.5 h-3.5" />
           Только проверить{needsCheck > 0 ? ` · ${needsCheck}` : ""}
         </Button>
         <span className="text-xs text-muted-foreground ml-auto">
-          {shownMsgs === totalMsgs ? `${totalMsgs} сообщений` : `${shownMsgs} из ${totalMsgs}`}
+          {filtered.length === items.length ? `${items.length} сообщений` : `${filtered.length} из ${items.length}`}
         </span>
       </div>
 
-      {/* Журнал */}
+      {/* Таблица */}
       {loading ? (
         <div className="flex items-center justify-center py-16">
           <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
         </div>
-      ) : groups.length === 0 ? (
+      ) : items.length === 0 ? (
         <div className="text-center text-sm text-muted-foreground py-16">
           Очередь пуста — отложенных сообщений нет.
         </div>
@@ -231,101 +340,204 @@ export function MessageQueueJournal({ vacancyId, onChanged }: Props) {
           Ничего не найдено по заданным фильтрам.
         </div>
       ) : (
-        <div className="rounded-lg border divide-y">
-          {filtered.map((g) => {
-            const note = SOURCE_NOTE[g.nameSource]
-            const isEditing = editId === g.candidateId
-            return (
-              <div key={g.candidateId} className="px-4 py-3.5 space-y-3">
-                {/* Шапка кандидата */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-semibold">{g.candidateName}</span>
-                    <Badge variant="secondary" className="text-[10px] h-5">{g.messages.length}</Badge>
-                    {g.needsCheck && (
-                      <Badge variant="outline" className="text-[10px] h-5 text-amber-600 border-amber-300">
-                        <AlertTriangle className="w-3 h-3 mr-0.5" />проверить
-                      </Badge>
-                    )}
-                    {g.override && (
-                      <Badge variant="outline" className="text-[10px] h-5 text-primary border-primary/40">
-                        имя задано вручную
-                      </Badge>
-                    )}
-                  </div>
-
-                  <div className="text-[11px] text-muted-foreground">
-                    hh: имя «{g.hhFirst ?? "—"}» · фамилия «{g.hhLast ?? "—"}»
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Обращение:</span>
-                    {isEditing ? (
-                      <div className="flex items-center gap-1.5">
-                        <Input
-                          value={editVal}
-                          onChange={(e) => setEditVal(e.target.value)}
-                          className="h-7 w-40 text-sm"
-                          autoFocus
-                          onKeyDown={(e) => { if (e.key === "Enter") saveName(g.candidateId) }}
-                        />
-                        <Button size="icon" variant="ghost" className="h-7 w-7"
-                          onClick={() => saveName(g.candidateId)} disabled={savingId === g.candidateId}>
-                          {savingId === g.candidateId
-                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            : <Check className="w-3.5 h-3.5 text-green-600" />}
-                        </Button>
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditId(null)}>
-                          <X className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <button
-                        className="flex items-center gap-1 text-sm font-medium hover:text-primary group"
-                        onClick={() => startEdit(g)}
-                      >
-                        {g.resolvedName}
-                        <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-60" />
-                      </button>
-                    )}
-                  </div>
-
-                  {note && !g.override && (
-                    <div className="text-[11px] text-amber-600">⚠ {note}</div>
-                  )}
-                </div>
-
-                {/* Сообщения кандидата */}
-                <div className="space-y-2">
-                  {g.messages.map((m) => (
-                    <div key={m.messageId} className="rounded-md border bg-muted/30 p-2.5 flex gap-2">
-                      <div className="flex-1 min-w-0 space-y-1">
-                        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                          <span>{fmtTime(m.scheduledAt)}</span>
-                          <span>·</span>
-                          <span>{BRANCH_LABELS[m.branch] ?? m.branch}</span>
+        <TableCard>
+          <DataTable>
+            <DataHead>
+              <DataSelectHeadCell
+                checked={headerState === true}
+                indeterminate={headerState === "indeterminate"}
+                onCheckedChange={toggleAllVisible}
+              />
+              <DataHeadCell>Кандидат</DataHeadCell>
+              <DataHeadCell>Обращение</DataHeadCell>
+              <DataHeadCell>Превью</DataHeadCell>
+              <DataHeadCell width="120px">Дата</DataHeadCell>
+              <DataHeadCell width="160px">Статус</DataHeadCell>
+              <DataHeadCell align="center" width="72px">Касание</DataHeadCell>
+              <DataHeadCell align="right" width="84px">Действия</DataHeadCell>
+            </DataHead>
+            <tbody>
+              {filtered.map((m) => {
+                const isExpanded = expanded.has(m.messageId)
+                const isEditing = editId === m.messageId
+                const isSelected = selected.has(m.messageId)
+                const groupCount = countByCandidate.get(m.candidateId) ?? 1
+                const note = SOURCE_NOTE[m.nameSource]
+                return (
+                  <DataRow
+                    key={m.messageId}
+                    className={cn("cursor-pointer align-top", isSelected && "bg-primary/5 hover:bg-primary/10")}
+                    onClick={() => toggleExpand(m.messageId)}
+                  >
+                    {/* Чекбокс: клик по ячейке несёт shiftKey для диапазона
+                        (как в list-view). stopPropagation, чтобы не раскрыть строку. */}
+                    <td
+                      className="pl-5 pr-2 py-3 w-10 align-top"
+                      onClick={(e) => { e.stopPropagation(); toggleOne(m.messageId, e) }}
+                    >
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => { /* handled by cell onClick */ }}
+                        aria-label={isSelected ? "Снять выделение" : "Выделить сообщение"}
+                      />
+                    </td>
+                    {/* Кандидат */}
+                    <DataCell className="align-top">
+                      <div className="flex items-start gap-1.5">
+                        <button
+                          type="button"
+                          className="mt-0.5 text-muted-foreground hover:text-foreground shrink-0"
+                          onClick={(e) => { e.stopPropagation(); toggleExpand(m.messageId) }}
+                          aria-label={isExpanded ? "Свернуть" : "Развернуть"}
+                        >
+                          {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                        </button>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-medium truncate">{m.candidateName}</span>
+                            {groupCount > 1 && (
+                              <Badge variant="secondary" className="text-[10px] h-5 gap-0.5" title={`Всего сообщений в очереди: ${groupCount}`}>
+                                <Users className="w-3 h-3" />{groupCount}
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground mt-0.5">
+                            hh: «{m.hhFirst ?? "—"}» · «{m.hhLast ?? "—"}»
+                          </div>
                         </div>
-                        <p className="text-xs text-foreground/90 whitespace-pre-wrap line-clamp-3">
-                          {m.preview}
-                        </p>
                       </div>
-                      <Button
-                        size="icon" variant="ghost"
-                        className="h-7 w-7 shrink-0 text-destructive hover:bg-destructive/10"
-                        title="Удалить из очереди"
-                        onClick={() => cancelMessage(m.messageId)}
-                        disabled={cancelingId === m.messageId}
-                      >
-                        {cancelingId === m.messageId
-                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          : <Trash2 className="w-3.5 h-3.5" />}
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )
-          })}
+                    </DataCell>
+                    {/* Обращение (инлайн-переименование) */}
+                    <DataCell className="align-top" onClick={(e) => e.stopPropagation()}>
+                      {isEditing ? (
+                        <div className="flex items-center gap-1">
+                          <Input
+                            value={editVal}
+                            onChange={(e) => setEditVal(e.target.value)}
+                            className="h-7 w-32 text-sm"
+                            autoFocus
+                            onKeyDown={(e) => { if (e.key === "Enter") saveName(m.candidateId); if (e.key === "Escape") setEditId(null) }}
+                          />
+                          <Button size="icon" variant="ghost" className="h-7 w-7"
+                            onClick={() => saveName(m.candidateId)} disabled={savingId === m.candidateId}>
+                            {savingId === m.candidateId
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <Check className="w-3.5 h-3.5 text-green-600" />}
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditId(null)}>
+                            <X className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          <button
+                            className="flex items-center gap-1 text-sm font-medium hover:text-primary group"
+                            onClick={() => startEdit(m)}
+                          >
+                            {m.resolvedName}
+                            <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-60" />
+                          </button>
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {m.needsCheck && (
+                              <Badge variant="outline" className="text-[10px] h-5 text-amber-600 border-amber-300">
+                                <AlertTriangle className="w-3 h-3 mr-0.5" />проверить
+                              </Badge>
+                            )}
+                            {m.override && (
+                              <Badge variant="outline" className="text-[10px] h-5 text-primary border-primary/40">
+                                вручную
+                              </Badge>
+                            )}
+                          </div>
+                          {note && !m.override && (
+                            <div className="text-[11px] text-amber-600 max-w-[200px]">⚠ {note}</div>
+                          )}
+                        </div>
+                      )}
+                    </DataCell>
+                    {/* Превью / полный текст */}
+                    <DataCell className="align-top">
+                      <p className={cn(
+                        "text-xs text-foreground/90 whitespace-pre-wrap",
+                        isExpanded ? "" : "line-clamp-1",
+                      )}>
+                        {m.preview}
+                      </p>
+                      {!isExpanded && (
+                        <span className="text-[11px] text-muted-foreground/70">нажмите, чтобы развернуть</span>
+                      )}
+                    </DataCell>
+                    {/* Дата */}
+                    <DataCell className="align-top text-muted-foreground whitespace-nowrap tabular-nums text-xs">
+                      {fmtTime(m.scheduledAt)}
+                    </DataCell>
+                    {/* Статус (тип касания) */}
+                    <DataCell className="align-top text-xs">
+                      {BRANCH_LABELS[m.branch] ?? m.branch}
+                    </DataCell>
+                    {/* Касание */}
+                    <DataCell align="center" className="align-top text-muted-foreground tabular-nums">
+                      {m.touchNumber}
+                    </DataCell>
+                    {/* Действия */}
+                    <DataCell align="right" className="align-top" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-0.5">
+                        <Button
+                          size="icon" variant="ghost"
+                          className="h-7 w-7 shrink-0 text-destructive hover:bg-destructive/10"
+                          title="Удалить это сообщение"
+                          onClick={() => cancelMessage(m.messageId)}
+                          disabled={cancelingId === m.messageId || bulkBusy}
+                        >
+                          {cancelingId === m.messageId
+                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            : <Trash2 className="w-3.5 h-3.5" />}
+                        </Button>
+                        {groupCount > 1 && (
+                          <Button
+                            size="icon" variant="ghost"
+                            className="h-7 w-7 shrink-0 text-destructive/80 hover:bg-destructive/10"
+                            title={`Удалить все ${groupCount} сообщений этого кандидата`}
+                            onClick={() => cancelForCandidate(m.candidateId)}
+                            disabled={bulkBusy}
+                          >
+                            <Users className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    </DataCell>
+                  </DataRow>
+                )
+              })}
+            </tbody>
+          </DataTable>
+        </TableCard>
+      )}
+
+      {/* Sticky-футер массовых действий */}
+      {selectedVisibleCount > 0 && (
+        <div className="sticky bottom-3 z-10 flex items-center justify-between gap-3 rounded-lg border bg-card shadow-lg px-4 py-2.5">
+          <span className="text-sm font-medium">
+            Выбрано {selectedVisibleCount}
+            <button
+              type="button"
+              className="ml-2 text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+              onClick={() => setSelected(new Set())}
+            >
+              сбросить
+            </button>
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs text-destructive border-destructive/40 hover:bg-destructive/5 hover:text-destructive"
+            onClick={cancelSelected}
+            disabled={bulkBusy}
+          >
+            {bulkBusy
+              ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Удаляю…</>
+              : <><Trash2 className="w-3.5 h-3.5 mr-1.5" />Удалить выбранные</>}
+          </Button>
         </div>
       )}
     </div>

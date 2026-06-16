@@ -10,7 +10,10 @@ import { resolveGivenNameMeta } from "@/lib/messaging/candidate-name"
 // подставлено), что hh отдал как имя/фамилию, флаг «проверить» и действия.
 //
 // GET  — список pending-сообщений вакансии (кандидат, имя, источник, превью, время)
-// POST — { action: 'cancel', messageId } | { action: 'rename', candidateId, firstName }
+// POST — { action: 'cancel', messageId }
+//      | { action: 'cancel_batch', messageIds: string[] }
+//      | { action: 'cancel_for_candidate', candidateId }
+//      | { action: 'rename', candidateId, firstName }
 
 const MAX_ITEMS = 500
 
@@ -146,7 +149,7 @@ export async function POST(
     if (!vac) return apiError("Вакансия не найдена", 404)
 
     const body = (await req.json().catch(() => ({}))) as {
-      action?: string; messageId?: string; candidateId?: string; firstName?: string
+      action?: string; messageId?: string; messageIds?: string[]; candidateId?: string; firstName?: string
     }
 
     // Множество campaignId вакансии — для tenant-проверки сообщений
@@ -171,6 +174,40 @@ export async function POST(
         .returning({ id: followUpMessages.id })
       if (res.length === 0) return apiError("Сообщение не найдено или уже обработано", 404)
       return apiSuccess({ cancelled: body.messageId })
+    }
+
+    // Массовая отмена по списку id — один UPDATE, без N+1. Tenant-проверка
+    // через inArray(campaignId) — отменятся только сообщения этой вакансии.
+    if (body.action === "cancel_batch") {
+      const ids = Array.isArray(body.messageIds) ? body.messageIds.filter((x) => typeof x === "string") : []
+      if (ids.length === 0) return apiError("messageIds обязателен", 400)
+      if (campaignIds.length === 0) return apiSuccess({ cancelled: [] as string[], count: 0 })
+      const res = await db
+        .update(followUpMessages)
+        .set({ status: "cancelled", errorMessage: "cancelled_by_hr_review" })
+        .where(and(
+          inArray(followUpMessages.id, ids),
+          eq(followUpMessages.status, "pending"),
+          inArray(followUpMessages.campaignId, campaignIds),
+        ))
+        .returning({ id: followUpMessages.id })
+      return apiSuccess({ cancelled: res.map((r) => r.id), count: res.length })
+    }
+
+    // Отмена всех pending-сообщений одного кандидата в рамках этой вакансии.
+    if (body.action === "cancel_for_candidate") {
+      if (!body.candidateId) return apiError("candidateId обязателен", 400)
+      if (campaignIds.length === 0) return apiSuccess({ cancelled: [] as string[], count: 0 })
+      const res = await db
+        .update(followUpMessages)
+        .set({ status: "cancelled", errorMessage: "cancelled_by_hr_review" })
+        .where(and(
+          eq(followUpMessages.candidateId, body.candidateId),
+          eq(followUpMessages.status, "pending"),
+          inArray(followUpMessages.campaignId, campaignIds),
+        ))
+        .returning({ id: followUpMessages.id })
+      return apiSuccess({ cancelled: res.map((r) => r.id), count: res.length })
     }
 
     if (body.action === "rename") {
