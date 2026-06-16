@@ -10,7 +10,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils"
 import type { CandidateAction } from "@/lib/column-config"
 import { applySortMode, type CandidateSortMode } from "@/lib/candidate-sort"
-import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ListFilter, ArrowUp, ArrowDown, Star, CalendarClock, CalendarPlus } from "lucide-react"
+import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ListFilter, ArrowUp, ArrowDown, Star, CalendarClock, CalendarPlus, MessageSquare } from "lucide-react"
 import { DemoProgressBar, calcDemoPercent, calcDemoFraction } from "@/components/hr/demo-progress-bar"
 import { getStageLabel, getStageColorClasses } from "@/lib/stages"
 
@@ -38,6 +38,11 @@ interface ListViewProps {
   onVacancyClick?: (vacancyId: string) => void
   /** Если задан — в колонке «Действия» появляется кнопка «Запланировать интервью». */
   onScheduleInterview?: (candidate: Candidate & { vacancyId?: string | null }) => void
+  /** Режим «Рассылка через hh»: в каждой строке появляется иконка чата для
+   *  одиночной полу-ручной рассылки (актуально для архивных hh-вакансий). */
+  hhBroadcastMode?: boolean
+  /** Колбэк одиночной рассылки через hh по конкретному кандидату. */
+  onBroadcast?: (candidateId: string) => void
   onToggleFavorite?: (candidateId: string, isFavorite: boolean) => void
   sortMode?: CandidateSortMode
   /** Если задан — сортировка по колонке управляется снаружи (URL/сервер). */
@@ -146,6 +151,7 @@ function SortHeader({
 
 export function ListView({
   columns, settings, onOpenProfile, onAction, onToggleFavorite, onVacancyClick, onScheduleInterview,
+  hhBroadcastMode = false, onBroadcast,
   sortMode = "date_desc", sort = null, onSortChange,
   selectedIds, onSelectionChange,
   serverSorted = false,
@@ -321,7 +327,12 @@ export function ListView({
   if (showResponseDate) cols.push("minmax(62px, 0.7fr)") // Дата — "DD.MM.YY"
   cols.push("minmax(104px, 1.1fr)")                     // Статус — сужен
   if (showSource) cols.push("48px")                     // Источник — фикс (значки "hh"/"av" короткие)
-  if (showActions) cols.push(onScheduleInterview ? "108px" : "80px") // Действия (4 иконки если есть планирование)
+  if (showActions) {
+    // База: 3 иконки (advance/reject/open) = 80px, +28px на «Запланировать интервью».
+    // В режиме рассылки hh добавляем ещё иконку чата → +28px.
+    const baseActionsW = onScheduleInterview ? 108 : 80
+    cols.push(`${baseActionsW + (hhBroadcastMode ? 28 : 0)}px`)
+  }
 
   // Минимальная ширина таблицы = сумма минимумов колонок (px из фикс-ширин и
   // из minmax(Npx, …)). Нужна, чтобы при узком экране сетка ПЕРЕПОЛНЯЛА контейнер
@@ -741,6 +752,16 @@ export function ListView({
                   className="self-stretch flex gap-1 justify-center items-center h-full"
                   onClick={(e) => e.stopPropagation()}
                 >
+                  {hhBroadcastMode && (
+                    <button
+                      type="button"
+                      title="Рассылка через hh"
+                      className="w-7 h-full flex items-center justify-center rounded text-orange-600 dark:text-orange-400 hover:bg-orange-500/10 transition-colors"
+                      onClick={(e) => { e.stopPropagation(); onBroadcast?.(candidate.id) }}
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   {isDecisionStage ? (
                     <>
                       <button
