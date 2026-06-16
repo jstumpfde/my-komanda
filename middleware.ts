@@ -6,6 +6,7 @@ import { tenantModules } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 import { isPartnerRole } from "@/lib/roles"
 import type { UserRole } from "@/lib/roles"
+import { ACTING_AS_COOKIE, verifyAndDecodeActingAs } from "@/lib/partner/impersonation-cookie"
 
 // Хосты платформы — НЕ поддомены компаний.
 const PLATFORM_HOSTS = new Set(["company24.pro", "www.company24.pro", "new.company24.pro", "localhost"])
@@ -135,8 +136,16 @@ export default auth(async (req) => {
   // ── Партнёр видит ТОЛЬКО свой кабинет /partner ─────────────────────────────
   // Роль partner не должна попадать в HR/админку/основной дашборд. Любой
   // непубличный путь вне /partner → редирект на /partner (API уже пропущены выше).
+  // ИСКЛЮЧЕНИЕ: режим «Войти как клиент» — при ВАЛИДНОЙ подписи куки mk_acting_as
+  // пускаем партнёра в /hr/* (и др.) клиента. Полная проверка владения (БД) — в
+  // session callback; здесь только дешёвая проверка HMAC (БД не трогаем).
   if (isPartnerRole(session.user.role as UserRole) && !pathname.startsWith("/partner")) {
-    return Response.redirect(new URL("/partner", req.url))
+    const actingRaw = req.cookies.get(ACTING_AS_COOKIE)?.value
+    const acting = verifyAndDecodeActingAs(actingRaw)
+    if (!acting) {
+      return Response.redirect(new URL("/partner", req.url))
+    }
+    // Подпись валидна — не редиректим (пускаем в кабинет клиента).
   }
 
   // ── Проверка доступа к модулям ──────────────────────────────────────────────

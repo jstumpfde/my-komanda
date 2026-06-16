@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Sheet, SheetContent, SheetHeader, SheetBody, SheetTitle } from "@/components/ui/sheet"
-import { Loader2, Users, Wallet, Percent, Building2, Plus, UserPlus, CheckCircle2, Copy } from "lucide-react"
+import { Loader2, Users, Wallet, Percent, Building2, Plus, UserPlus, CheckCircle2, Copy, LogIn } from "lucide-react"
 import { toast } from "sonner"
+import { useSession } from "next-auth/react"
+import { enterClientImpersonation } from "./impersonation-actions"
 
 interface Overview {
   kind: string
@@ -284,11 +286,13 @@ function OnboardSheet({ open, onOpenChange, products, onDone }: {
 function ClientManageSheet({ companyId, onOpenChange, onChanged }: {
   companyId: string | null; onOpenChange: (o: boolean) => void; onChanged: () => void
 }) {
+  const { update: updateSession } = useSession()
   const [name, setName] = useState("")
   const [products, setProducts] = useState<{ slug: string; name: string; enabled: boolean }[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [entering, setEntering] = useState(false)
 
   useEffect(() => {
     if (!companyId) return
@@ -319,6 +323,29 @@ function ClientManageSheet({ companyId, onOpenChange, onChanged }: {
     if (res.ok) { toast.success("Клиент отвязан"); onChanged(); onOpenChange(false) } else toast.error("Ошибка")
   }
 
+  // «Войти как клиент»: server-action ставит подписанную куку + аудит и
+  // редиректит на «/». updateSession() — чтобы клиентская сессия перечитала
+  // session callback (эффективный companyId/effectiveRole) до навигации.
+  const enter = async () => {
+    if (!companyId || entering) return
+    setEntering(true)
+    try {
+      await enterClientImpersonation(companyId)
+      // redirect() в action прерывает выполнение — код ниже не достигается при
+      // успехе. updateSession ставим перед на случай, если навигация мягкая.
+      await updateSession({})
+    } catch (e) {
+      // NEXT_REDIRECT — штатный сигнал редиректа из server-action, не ошибка.
+      const digest = (e as { digest?: string } | null)?.digest
+      if (typeof digest === "string" && digest.startsWith("NEXT_REDIRECT")) {
+        await updateSession({}).catch(() => {})
+        throw e
+      }
+      setEntering(false)
+      toast.error("Не удалось войти как клиент")
+    }
+  }
+
   return (
     <Sheet open={!!companyId} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-md">
@@ -345,8 +372,9 @@ function ClientManageSheet({ companyId, onOpenChange, onChanged }: {
                 {saving ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
                 Сохранить продукты
               </Button>
-              <Button variant="outline" className="w-full" disabled title="Скоро: вход в кабинет клиента для полной настройки">
-                Войти как клиент (скоро)
+              <Button variant="outline" className="w-full gap-1.5" onClick={() => void enter()} disabled={entering} title="Войти в кабинет клиента с полным доступом (директор). Действие фиксируется в аудите.">
+                {entering ? <Loader2 className="size-4 animate-spin" /> : <LogIn className="size-4" />}
+                Войти как клиент
               </Button>
               <Button variant="ghost" className="w-full text-destructive hover:text-destructive" onClick={() => void unassign()}>
                 Отвязать клиента
