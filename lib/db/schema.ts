@@ -2030,6 +2030,8 @@ export const integrators = pgTable("integrators", {
   contactName:  text("contact_name"),
   contactEmail: text("contact_email"),
   contactPhone: text("contact_phone"),
+  // Внешний человекочитаемый номер/реф-код партнёра (напр. "1101"). NULL у старых.
+  externalId:   text("external_id"),
   status:       text("status").default("active"), // active, suspended, terminated
   joinedAt:     timestamp("joined_at").defaultNow(),
   createdAt:    timestamp("created_at").defaultNow(),
