@@ -160,42 +160,43 @@ export function IntegrationsContent() {
       {/* Площадки найма */}
       {/* hh.ru card */}
       <Card className="rounded-xl border border-border p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex items-start gap-4 min-w-0">
-            <div className="w-12 h-12 rounded-xl bg-red-500/10 flex items-center justify-center shrink-0">
-              <span className="text-red-600 font-bold text-lg">hh</span>
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-semibold text-foreground">hh.ru</h3>
-                {loading ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
-                ) : status?.connected ? (
-                  <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-700 border-emerald-200">
-                    <CheckCircle2 className="w-3 h-3 mr-1" />Подключено
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="text-xs text-muted-foreground">Не подключено</Badge>
-                )}
-              </div>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Импорт вакансий и откликов с HeadHunter
-              </p>
-              {status?.connected && (
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-muted-foreground">
-                  {status.employerName && (
-                    <span className="flex items-center gap-1"><Building2 className="w-3 h-3" />{status.employerName}</span>
-                  )}
-                  <span className="flex items-center gap-1"><Clock className="w-3 h-3" />Подключён {formatDate(status.connectedAt)}</span>
-                  {status.lastSyncedAt && (
-                    <span className="flex items-center gap-1"><RefreshCw className="w-3 h-3" />Синхр. {formatDate(status.lastSyncedAt)}</span>
+        <div className="flex items-start gap-4">
+          <div className="w-12 h-12 rounded-xl bg-red-500/10 flex items-center justify-center shrink-0">
+            <span className="text-red-600 font-bold text-lg">hh</span>
+          </div>
+          {/* Правая колонка: текст + мета + кнопки выровнены по тексту (не под логотип) */}
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-semibold text-foreground">hh.ru</h3>
+                  {loading ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                  ) : status?.connected ? (
+                    <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-700 border-emerald-200">
+                      <CheckCircle2 className="w-3 h-3 mr-1" />Подключено
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-xs text-muted-foreground">Не подключено</Badge>
                   )}
                 </div>
-              )}
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {status?.connected ? (
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Импорт вакансий и откликов с HeadHunter
+                </p>
+                {status?.connected && (
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-muted-foreground">
+                    {status.employerName && (
+                      <span className="flex items-center gap-1"><Building2 className="w-3 h-3" />{status.employerName}</span>
+                    )}
+                    <span className="flex items-center gap-1"><Clock className="w-3 h-3" />Подключён {formatDate(status.connectedAt)}</span>
+                    {status.lastSyncedAt && (
+                      <span className="flex items-center gap-1"><RefreshCw className="w-3 h-3" />Синхр. {formatDate(status.lastSyncedAt)}</span>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                {status?.connected ? (
               <>
                 <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={handleSync} disabled={syncing}>
                   {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
@@ -222,6 +223,8 @@ export function IntegrationsContent() {
                 </a>
               </Button>
             )}
+              </div>
+            </div>
           </div>
         </div>
 
