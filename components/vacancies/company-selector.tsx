@@ -33,33 +33,16 @@ interface CompanySelectorProps {
   onContactChange: (id: string | null) => void
 }
 
-// Mock data — in real implementation, this would fetch from API
+// Mock data — заглушка-пример (реальные компании-клиенты ещё не подключены к БD).
+// Оставлена ОДНА компания как образец; реальный список должен тянуться из таблицы companies.
 const MOCK_COMPANIES: CompanyOption[] = [
   { id: "1", name: 'ООО "Ромашка"', inn: "7701234567", city: "Москва" },
-  { id: "2", name: 'ЗАО "Альфа Групп"', inn: "7709876543", city: "Москва" },
-  { id: "3", name: "ИП Петров", inn: "771234567890", city: "Санкт-Петербург" },
-  { id: "4", name: 'ООО "ТехноПлюс"', inn: "5001234567", city: "Казань" },
-  { id: "5", name: 'ООО "СтройМастер"', inn: "6601234567", city: "Екатеринбург" },
 ]
 
 const MOCK_CONTACTS: Record<string, ContactOption[]> = {
   "1": [
     { id: "1", firstName: "Иван", lastName: "Петров", position: "Генеральный директор" },
     { id: "2", firstName: "Мария", lastName: "Сидорова", position: "HR-директор" },
-    { id: "3", firstName: "Алексей", lastName: "Козлов", position: "CTO" },
-  ],
-  "2": [
-    { id: "4", firstName: "Елена", lastName: "Волкова", position: "Финансовый директор" },
-    { id: "5", firstName: "Дмитрий", lastName: "Новиков", position: "Руководитель отдела продаж" },
-  ],
-  "3": [
-    { id: "6", firstName: "Сергей", lastName: "Петров", position: "ИП" },
-  ],
-  "4": [
-    { id: "7", firstName: "Ольга", lastName: "Смирнова", position: "Директор по персоналу" },
-  ],
-  "5": [
-    { id: "8", firstName: "Андрей", lastName: "Кузнецов", position: "Прораб" },
   ],
 }
 

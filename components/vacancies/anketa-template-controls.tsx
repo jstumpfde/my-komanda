@@ -31,12 +31,24 @@ const TYPE_LABEL: Record<string, string> = {
   candidate: "Кандидат", client: "Заказчик", post_demo: "После демо",
 }
 
-export function AnketaTemplateControls({ questions, onChange }: {
+export function AnketaTemplateControls({
+  questions, onChange,
+  hideButtons = false,
+  saveOpen: saveOpenProp,
+  onSaveOpenChange,
+}: {
   questions: Question[]
   onChange: (q: Question[]) => void
+  /** Скрыть инлайн-кнопки — например, когда триггер сохранения снаружи (дропдаун «Действия»). */
+  hideButtons?: boolean
+  /** Управляемое открытие диалога «Сохранить как шаблон» (если триггерим снаружи). */
+  saveOpen?: boolean
+  onSaveOpenChange?: (open: boolean) => void
 }) {
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [saveOpen, setSaveOpen] = useState(false)
+  const [saveOpenInternal, setSaveOpenInternal] = useState(false)
+  const saveOpen = saveOpenProp ?? saveOpenInternal
+  const setSaveOpen = onSaveOpenChange ?? setSaveOpenInternal
   const [list, setList] = useState<QTemplate[]>([])
   const [loading, setLoading] = useState(false)
   const [saveName, setSaveName] = useState("")
@@ -87,23 +99,28 @@ export function AnketaTemplateControls({ questions, onChange }: {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Button type="button" variant="outline" size="sm" className="gap-1.5 h-8" onClick={openPicker}>
-        <Download className="h-3.5 w-3.5" />Загрузить из шаблона
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="gap-1.5 h-8"
-        onClick={() => setSaveOpen(true)}
-        disabled={questions.length === 0}
-        title={questions.length === 0 ? "Сначала добавьте вопросы" : "Сохранить текущие вопросы как шаблон"}
-      >
-        <Save className="h-3.5 w-3.5" />Сохранить как шаблон
-      </Button>
+    <div className={hideButtons ? "contents" : "flex flex-wrap items-center gap-2"}>
+      {!hideButtons && (
+        <>
+          <Button type="button" variant="outline" size="sm" className="gap-1.5 h-8" onClick={openPicker}>
+            <Download className="h-3.5 w-3.5" />Загрузить из шаблона
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5 h-8"
+            onClick={() => setSaveOpen(true)}
+            disabled={questions.length === 0}
+            title={questions.length === 0 ? "Сначала добавьте вопросы" : "Сохранить текущие вопросы как шаблон"}
+          >
+            <Save className="h-3.5 w-3.5" />Сохранить как шаблон
+          </Button>
+        </>
+      )}
 
-      {/* Picker */}
+      {/* Picker (только в инлайн-режиме) */}
+      {!hideButtons && (
       <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -147,6 +164,7 @@ export function AnketaTemplateControls({ questions, onChange }: {
           )}
         </DialogContent>
       </Dialog>
+      )}
 
       {/* Save as template */}
       <Dialog open={saveOpen} onOpenChange={setSaveOpen}>

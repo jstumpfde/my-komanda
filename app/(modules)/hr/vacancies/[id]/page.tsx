@@ -253,7 +253,7 @@ export default function VacancyPage() {
       }
       // Загружаем список бренд-компаний для брендинг-секции
       if (hd && Array.isArray(hd.brandCompanies)) {
-        setBrandCompaniesData(hd.brandCompanies.filter((c: { id: string; name: string }) => c?.name?.trim()))
+        setBrandCompaniesData(hd.brandCompanies.filter((c: { id: string; name: string; description?: string }) => c?.name?.trim()))
       }
       // B5: колонки списка кандидатов единые для компании
       if (hd?.candidateColumns && typeof hd.candidateColumns === "object" && Object.keys(hd.candidateColumns).length > 0) {
@@ -277,6 +277,7 @@ export default function VacancyPage() {
         brandSlogan: c.brandSlogan || "",
         website: c.website || "",
         subdomain: c.subdomain || "",
+        description: c.companyDescription || "",
       })
     }).catch(() => {})
   }, [])
@@ -294,6 +295,8 @@ export default function VacancyPage() {
   const [hhImportDialogOpen, setHhImportDialogOpen] = useState(false)
   const [hhImportUrl, setHhImportUrl] = useState("")
   const [hhImportBusy, setHhImportBusy] = useState(false)
+  // Привязывать ли вакансию к hh (получать отклики) — отдельный шаг, по умолчанию вкл.
+  const [hhImportBind, setHhImportBind] = useState(true)
   const anketaFileInputRef = useRef<HTMLInputElement>(null)
 
   const parseTextAndFillAnketa = async (text: string) => {
@@ -410,12 +413,12 @@ export default function VacancyPage() {
       const res = await fetch(`/api/vacancies/${id}/hh-import`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hhUrl: url }),
+        body: JSON.stringify({ hhUrl: url, bind: hhImportBind }),
       })
       const data = await res.json().catch(() => ({})) as { error?: string }
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
       await refetchVacancy()
-      toast.success("✅ Данные импортированы с hh.ru")
+      toast.success(hhImportBind ? "✅ Заполнено и привязано к hh.ru" : "✅ Поля заполнены из hh.ru")
       setHhImportDialogOpen(false)
       setHhImportUrl("")
     } catch (err) {
@@ -722,6 +725,7 @@ export default function VacancyPage() {
       if (branding.companySlug) setBrandCompanySlug(branding.companySlug)
       if (branding.customDomain) setBrandCustomDomain(branding.customDomain)
       if (branding.website) setBrandWebsite(branding.website)
+      if (branding.description) setBrandDescription(branding.description)
     }
     // Читаем brandCompanyId из anketa (источник правды — AnketaTab)
     const anketa = desc?.anketa as Record<string, unknown> | undefined
@@ -915,6 +919,8 @@ export default function VacancyPage() {
   const [brandCompanySlug, setBrandCompanySlug] = useState("")
   const [brandCustomDomain, setBrandCustomDomain] = useState("")
   const [brandWebsite, setBrandWebsite] = useState("")
+  // Зона 3: per-vacancy override описания компании (descriptionJson.branding.description).
+  const [brandDescription, setBrandDescription] = useState("")
   const [editingSlug, setEditingSlug] = useState(false)
   const [brandSaving, setBrandSaving] = useState(false)
   // Уровень 3 интеграций: per-vacancy override
@@ -929,10 +935,10 @@ export default function VacancyPage() {
   const [companyWebhookUrl, setCompanyWebhookUrl] = useState("")
   // Данные основной компании (для дефолтов брендинга)
   const [mainCompanyData, setMainCompanyData] = useState<{
-    brandName: string; logoUrl: string; brandSlogan: string; website: string; subdomain: string
-  }>({ brandName: "", logoUrl: "", brandSlogan: "", website: "", subdomain: "" })
+    brandName: string; logoUrl: string; brandSlogan: string; website: string; subdomain: string; description: string
+  }>({ brandName: "", logoUrl: "", brandSlogan: "", website: "", subdomain: "", description: "" })
   const [brandCompaniesData, setBrandCompaniesData] = useState<Array<{
-    id: string; name: string; slogan?: string; logo?: string; website?: string
+    id: string; name: string; slogan?: string; logo?: string; website?: string; description?: string
   }>>([])
   // brandCompanyId вакансии (берём из descriptionJson.anketa — источник правды в AnketaTab)
   const [vacancyBrandCompanyId, setVacancyBrandCompanyId] = useState("")
@@ -1058,6 +1064,16 @@ export default function VacancyPage() {
   const [anketaHandle, setAnketaHandle] = useState<AnketaTabHandle | null>(null)
   const [anketaSaving, setAnketaSaving] = useState(false)
   const registerAnketaHandle = useCallback((h: AnketaTabHandle) => setAnketaHandle(h), [])
+  // «Сохранить анкету в библиотеку» из дропдауна «Действия» доступно с любой вкладки:
+  // если AnketaTab ещё не смонтирован (другая вкладка) — переключаемся на «anketa»
+  // и открываем диалог, как только handle зарегистрируется.
+  const [pendingLibSave, setPendingLibSave] = useState(false)
+  useEffect(() => {
+    if (pendingLibSave && anketaHandle) {
+      anketaHandle.saveToLibrary()
+      setPendingLibSave(false)
+    }
+  }, [pendingLibSave, anketaHandle])
 
   // HH.ru integration state
   const [hhConnected, setHhConnected] = useState<boolean | null>(null)
@@ -1470,7 +1486,7 @@ export default function VacancyPage() {
 
   const totalCandidates = columns.reduce((acc, col) => acc + col.candidates.length, 0)
 
-  const saveBranding = async (updates?: { companyName?: string; color?: string; slogan?: string; logo?: string; website?: string }) => {
+  const saveBranding = async (updates?: { companyName?: string; color?: string; slogan?: string; logo?: string; website?: string; description?: string }) => {
     setBrandSaving(true)
     const branding = {
       companyName: updates?.companyName ?? brandCompanyName,
@@ -1478,6 +1494,8 @@ export default function VacancyPage() {
       slogan: updates?.slogan ?? brandSlogan,
       logo: updates?.logo ?? brandLogo,
       website: updates?.website ?? brandWebsite,
+      // Зона 3: описание компании — per-vacancy override публичного блока «О компании».
+      description: updates?.description ?? brandDescription,
       domainLevel: brandDomainLevel,
       companySlug: brandCompanySlug,
       customDomain: brandCustomDomain,
@@ -2492,6 +2510,19 @@ export default function VacancyPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
+                    {/* Сохранить текущие вопросы анкеты в библиотеку шаблонов
+                        (questionnaire_templates). Доступно с любой вкладки —
+                        если AnketaTab не смонтирован, переключаемся на «Конструктор». */}
+                    <DropdownMenuItem
+                      className="gap-2 cursor-pointer"
+                      onClick={() => {
+                        if (anketaHandle) anketaHandle.saveToLibrary()
+                        else { setActiveTab("anketa"); setPendingLibSave(true) }
+                      }}
+                    >
+                      <Save className="size-3.5" />Сохранить анкету в библиотеку
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
                     {/* Унифицированное меню действий — общий компонент
                         VacancyActionsMenuItems (тот же в строке списка). */}
                     <VacancyActionsMenuItems
@@ -2780,8 +2811,8 @@ export default function VacancyPage() {
                         <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => anketaFileInputRef.current?.click()}>
                           <Upload className="size-3.5" />Загрузить файл
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => setHhImportDialogOpen(true)}>
-                          <Globe className="size-3.5" />Импорт с hh.ru
+                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { setHhImportBind(true); setHhImportDialogOpen(true) }}>
+                          <Globe className="size-3.5" />Заполнить из hh.ru
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -3372,6 +3403,7 @@ export default function VacancyPage() {
                         color: brandColor,
                         slogan: brandSlogan,
                         website: brandWebsite,
+                        description: brandDescription,
                         logo: "",
                         domainLevel: brandDomainLevel,
                         companySlug: brandCompanySlug,
@@ -3416,11 +3448,13 @@ export default function VacancyPage() {
                         {/* Название компании — плейсхолдер из выбранного бренда */}
                         {(() => {
                           const selectedBrand = !vacancyBrandCompanyId || vacancyBrandCompanyId === "__main__"
-                            ? { name: mainCompanyData.brandName, logo: mainCompanyData.logoUrl, slogan: mainCompanyData.brandSlogan, website: mainCompanyData.website }
+                            ? { name: mainCompanyData.brandName, logo: mainCompanyData.logoUrl, slogan: mainCompanyData.brandSlogan, website: mainCompanyData.website, description: mainCompanyData.description }
                             : brandCompaniesData.find(c => c.id === vacancyBrandCompanyId) ?? null
                           const defaultName = selectedBrand?.name || ""
                           const defaultSlogan = selectedBrand?.slogan || ""
                           const defaultWebsite = selectedBrand?.website || ""
+                          // Зона 3: дефолт описания — из выбранного бренда (или основной компании).
+                          const defaultDescription = selectedBrand?.description || ""
                           return (
                             <>
                               <div className="space-y-1.5">
@@ -3564,6 +3598,35 @@ export default function VacancyPage() {
                                 />
                                 {defaultWebsite && !brandWebsite && (
                                   <p className="text-[10px] text-muted-foreground">Из профиля компании: {defaultWebsite}</p>
+                                )}
+                              </div>
+                              {/* Зона 3: описание компании — подтягивается из выбранного бренда,
+                                  можно переопределить per-вакансия (блок «О компании» на странице). */}
+                              <div className="space-y-1.5">
+                                <div className="flex items-center justify-between gap-2">
+                                  <Label className="text-xs">Описание компании</Label>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-[11px] gap-1 px-2"
+                                    disabled={!defaultDescription}
+                                    onClick={() => { setBrandDescription(defaultDescription); saveBranding({ description: defaultDescription }) }}
+                                  >
+                                    <RefreshCw className="w-3 h-3" /> Подтянуть из компании
+                                  </Button>
+                                </div>
+                                <Textarea
+                                  value={brandDescription}
+                                  onChange={(e) => setBrandDescription(e.target.value)}
+                                  placeholder={defaultDescription || "Краткое описание компании для блока «О компании»…"}
+                                  rows={5}
+                                  className="text-sm"
+                                />
+                                {defaultDescription && !brandDescription && (
+                                  <p className="text-[10px] text-muted-foreground">
+                                    Будет показано описание компании из профиля. Заполните поле, чтобы переопределить для этой вакансии.
+                                  </p>
                                 )}
                               </div>
                             </>
@@ -4143,10 +4206,10 @@ export default function VacancyPage() {
       <Dialog open={hhImportDialogOpen} onOpenChange={(o) => { if (!hhImportBusy) { setHhImportDialogOpen(o); if (!o) setHhImportUrl("") } }}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Привязать вакансию с hh.ru</DialogTitle>
+            <DialogTitle>Заполнить из hh.ru</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <p className="text-xs text-muted-foreground">Вставьте ссылку на вакансию с hh.ru — она будет привязана, данные подтянутся, и платформа начнёт получать отклики.</p>
+            <p className="text-xs text-muted-foreground">Вставьте ссылку на вакансию с hh.ru — данные подтянутся и заполнят поля вакансии.</p>
             <Input
               value={hhImportUrl}
               onChange={(e) => setHhImportUrl(e.target.value)}
@@ -4156,8 +4219,20 @@ export default function VacancyPage() {
               disabled={hhImportBusy}
               onKeyDown={(e) => { if (e.key === "Enter" && hhImportUrl.trim() && !hhImportBusy) handleHhVacancyImport() }}
             />
+            <label className="flex items-start gap-2.5 rounded-md border p-3 cursor-pointer select-none">
+              <Checkbox
+                checked={hhImportBind}
+                onCheckedChange={(v) => setHhImportBind(v === true)}
+                disabled={hhImportBusy}
+                className="mt-0.5"
+              />
+              <span className="text-xs">
+                <span className="font-medium">Привязать вакансию</span>
+                <span className="block text-muted-foreground">Платформа начнёт получать отклики с этой вакансии hh.ru. Если снять — поля просто заполнятся, привязать можно позже вручную.</span>
+              </span>
+            </label>
             <Button className="w-full h-10" onClick={handleHhVacancyImport} disabled={hhImportBusy || !hhImportUrl.trim()}>
-              {hhImportBusy ? <><Loader2 className="size-4 mr-1.5 animate-spin" />Привязка...</> : <><Globe className="size-4 mr-1.5" />Привязать вакансию</>}
+              {hhImportBusy ? <><Loader2 className="size-4 mr-1.5 animate-spin" />Заполнение...</> : <><Globe className="size-4 mr-1.5" />Заполнить</>}
             </Button>
           </div>
         </DialogContent>
@@ -4675,6 +4750,7 @@ function BrandingStickyRegister({
   loaded: boolean
   branding: {
     companyName: string; color: string; slogan: string; website: string; logo: string
+    description: string
     domainLevel: "free" | "subdomain" | "custom"
     companySlug: string; customDomain: string
   }

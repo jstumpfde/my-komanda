@@ -47,6 +47,9 @@ interface VacancyData {
   // Слоган и сайт компании (с учётом бренд-компании и override).
   companySlogan?: string | null
   companyWebsite?: string | null
+  // Зона 3: описание компании (блок «О компании»), уже резолвнутое API:
+  // per-вакансия override → выбранный бренд → основная компания.
+  companyDescription?: string | null
 }
 
 type ScreenState = "loading" | "landing" | "form" | "done" | "error"
@@ -77,9 +80,17 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
   // vacancies.description (text). Берём первый непустой источник.
   // Считаем текст HTML только если в нём ЕСТЬ структурные теги
   // (<p>, <br>, <ul>, <li>, <h2>, …). Иначе — plain text для formatDescription.
-  const companyDescriptionText = typeof descriptionJson?.companyDescription === "string"
+  // Зона 3: приоритет — резолвнутое API описание (per-вакансия override →
+  // выбранный бренд → основная компания), затем legacy descriptionJson.companyDescription.
+  const resolvedCompanyDescription = typeof vacancy?.companyDescription === "string"
+    ? vacancy.companyDescription
+    : ""
+  const legacyCompanyDescription = typeof descriptionJson?.companyDescription === "string"
     ? (descriptionJson!.companyDescription as string)
     : ""
+  const companyDescriptionText = resolvedCompanyDescription.trim()
+    ? resolvedCompanyDescription
+    : legacyCompanyDescription
 
   useEffect(() => {
     fetch(`/api/public/vacancy/${slug}`)
