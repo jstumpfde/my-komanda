@@ -133,6 +133,8 @@ const defaultSettings: CardDisplaySettings = {
   showSalary: false, showSalaryFull: true, showScore: true, showAge: false,
   showSource: true, showCity: true, showExperience: true, showSkills: true, showActions: true,
   showProgress: true, showResponseDate: true,
+  // Все колонки списка ВКЛЮЧЕНЫ по умолчанию (решение Юрия) — пишем явно, без undefined.
+  showResumeScore: true, showRubricScore: true, showTestScore: true, showNextInterview: true,
 }
 
 
