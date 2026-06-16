@@ -6,7 +6,7 @@ import { NextRequest } from "next/server"
 import { and, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { companies, integratorClients } from "@/lib/db/schema"
-import { requirePartner, assertPartnerOwnsClient } from "@/lib/partner/access"
+import { requirePartner, assertPartnerOwnsClient, assertPartnerCanManage } from "@/lib/partner/access"
 import { getClientProducts, setClientModules } from "@/lib/partner/clients"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 
@@ -28,6 +28,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ com
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ companyId: string }> }) {
   try {
     const { integrator } = await requirePartner()
+    assertPartnerCanManage(integrator.kind) // реферал не меняет продукты клиента
     const { companyId } = await params
     await assertPartnerOwnsClient(integrator.id, companyId)
     const body = (await req.json().catch(() => ({}))) as { moduleSlugs?: unknown }
@@ -44,6 +45,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ co
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ companyId: string }> }) {
   try {
     const { integrator } = await requirePartner()
+    assertPartnerCanManage(integrator.kind) // реферал не отвязывает клиентов
     const { companyId } = await params
     await assertPartnerOwnsClient(integrator.id, companyId)
     await db.update(integratorClients)

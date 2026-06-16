@@ -19,6 +19,13 @@ export async function enterClientImpersonation(clientCompanyId: string): Promise
   if (!clientCompanyId) throw new Error("Не указан клиент")
 
   const { user, integrator } = await requirePartner()
+
+  // SECURITY: реферал — view-only. НЕ может входить в кабинет клиента даже
+  // прямым вызовом server-action (UI-кнопка скрыта, но гейт обязателен здесь).
+  if (integrator.kind === "referral") {
+    throw new Error("Реферал не может входить в кабинет клиента")
+  }
+
   // Перепроверка владения + active (бросает при осечке).
   await assertPartnerOwnsClientActive(integrator.id, clientCompanyId)
 

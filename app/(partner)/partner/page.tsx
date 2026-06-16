@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Sheet, SheetContent, SheetHeader, SheetBody, SheetTitle } from "@/components/ui/sheet"
-import { Loader2, Users, Wallet, Percent, Building2, Plus, UserPlus, CheckCircle2, Copy, LogIn } from "lucide-react"
+import { Loader2, Users, Wallet, Percent, Building2, Plus, UserPlus, CheckCircle2, Copy, LogIn, TrendingUp } from "lucide-react"
 import { toast } from "sonner"
 import { useSession } from "next-auth/react"
 import { enterClientImpersonation } from "./impersonation-actions"
@@ -21,6 +21,12 @@ interface Overview {
   activeClients: number
   totalMrrRub: number
   totalEarningsRub: number
+  currentTierName: string | null
+  currentTierMinMrrRub: number
+  nextTierName: string | null
+  nextTierMinMrrRub: number | null
+  nextTierCommissionPercent: number | null
+  progressToNextPercent: number
 }
 interface ClientRow {
   companyId: string
@@ -90,12 +96,17 @@ export default function PartnerDashboardPage() {
     return <div className="p-6 text-sm text-destructive">{error}</div>
   }
 
+  // Реферал — view-only: видит финансы (клиенты/оплаты/%/уровни), но не управляет.
+  const isReferral = ov?.kind === "referral"
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 space-y-6">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
-          <h1 className="text-xl font-bold">Партнёрский кабинет</h1>
-          <p className="text-sm text-muted-foreground">Ваши клиенты и доход с платформы</p>
+          <h1 className="text-xl font-bold">{isReferral ? "Реферальный кабинет" : "Партнёрский кабинет"}</h1>
+          <p className="text-sm text-muted-foreground">
+            {isReferral ? "Ваши клиенты и доход — только просмотр финансов" : "Ваши клиенты и доход с платформы"}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           {ov && (
@@ -112,7 +123,7 @@ export default function PartnerDashboardPage() {
       </div>
 
       <OnboardSheet open={onbOpen} onOpenChange={setOnbOpen} products={products} onDone={load} />
-      <ClientManageSheet companyId={manageId} onOpenChange={(o) => { if (!o) setManageId(null) }} onChanged={load} />
+      <ClientManageSheet companyId={manageId} readOnly={isReferral} onOpenChange={(o) => { if (!o) setManageId(null) }} onChanged={load} />
 
       {/* Сводка */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -121,6 +132,9 @@ export default function PartnerDashboardPage() {
         <StatCard icon={<Percent className="size-4" />} label="Моя комиссия" value={`${ov?.commissionPercent ?? 0}%`} />
         <StatCard icon={<Wallet className="size-4" />} label="Мой доход / мес" value={rub(ov?.totalEarningsRub ?? 0)} accent />
       </div>
+
+      {/* Прогресс по уровням — скрываем при фикс-override (ступени не действуют). */}
+      {ov && !ov.isOverride && <TierProgress ov={ov} />}
 
       {/* Мои клиенты */}
       <Card>
@@ -148,7 +162,7 @@ export default function PartnerDashboardPage() {
                 </thead>
                 <tbody>
                   {clients.map((c) => (
-                    <tr key={c.companyId} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => setManageId(c.companyId)} title="Настроить продукты клиента">
+                    <tr key={c.companyId} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => setManageId(c.companyId)} title={isReferral ? "Просмотр клиента" : "Настроить продукты клиента"}>
                       <td className="px-4 py-2.5 font-medium">{c.name || "—"}</td>
                       <td className="px-4 py-2.5">
                         <Badge variant="outline" className="text-[11px]">
@@ -283,8 +297,8 @@ function OnboardSheet({ open, onOpenChange, products, onDone }: {
   )
 }
 
-function ClientManageSheet({ companyId, onOpenChange, onChanged }: {
-  companyId: string | null; onOpenChange: (o: boolean) => void; onChanged: () => void
+function ClientManageSheet({ companyId, readOnly = false, onOpenChange, onChanged }: {
+  companyId: string | null; readOnly?: boolean; onOpenChange: (o: boolean) => void; onChanged: () => void
 }) {
   const { update: updateSession } = useSession()
   const [name, setName] = useState("")
@@ -358,32 +372,71 @@ function ClientManageSheet({ companyId, onOpenChange, onChanged }: {
           ) : (
             <>
               <div className="space-y-1.5">
-                <Label className="text-sm">Подключённые продукты</Label>
+                <Label className="text-sm">{readOnly ? "Продукты клиента" : "Подключённые продукты"}</Label>
                 <div className="grid grid-cols-1 gap-1.5 rounded-lg border p-2">
                   {products.map((p) => (
-                    <label key={p.slug} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-muted/50 cursor-pointer text-sm">
-                      <input type="checkbox" checked={selected.has(p.slug)} onChange={() => toggle(p.slug)} className="accent-primary size-4" />
+                    <label key={p.slug} className={"flex items-center gap-2 rounded px-2 py-1.5 text-sm " + (readOnly ? "" : "hover:bg-muted/50 cursor-pointer")}>
+                      <input type="checkbox" checked={selected.has(p.slug)} onChange={() => { if (!readOnly) toggle(p.slug) }} disabled={readOnly} className="accent-primary size-4" />
                       {p.name}
                     </label>
                   ))}
                 </div>
               </div>
-              <Button className="w-full gap-1.5" onClick={() => void save()} disabled={saving}>
-                {saving ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
-                Сохранить продукты
-              </Button>
-              <Button variant="outline" className="w-full gap-1.5" onClick={() => void enter()} disabled={entering} title="Войти в кабинет клиента с полным доступом (директор). Действие фиксируется в аудите.">
-                {entering ? <Loader2 className="size-4 animate-spin" /> : <LogIn className="size-4" />}
-                Войти как клиент
-              </Button>
-              <Button variant="ghost" className="w-full text-destructive hover:text-destructive" onClick={() => void unassign()}>
-                Отвязать клиента
-              </Button>
+              {readOnly ? (
+                <p className="text-xs text-muted-foreground">
+                  Как реферал — только просмотр финансов. Управление клиентом недоступно.
+                </p>
+              ) : (
+                <>
+                  <Button className="w-full gap-1.5" onClick={() => void save()} disabled={saving}>
+                    {saving ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                    Сохранить продукты
+                  </Button>
+                  <Button variant="outline" className="w-full gap-1.5" onClick={() => void enter()} disabled={entering} title="Войти в кабинет клиента с полным доступом (директор). Действие фиксируется в аудите.">
+                    {entering ? <Loader2 className="size-4 animate-spin" /> : <LogIn className="size-4" />}
+                    Войти как клиент
+                  </Button>
+                  <Button variant="ghost" className="w-full text-destructive hover:text-destructive" onClick={() => void unassign()}>
+                    Отвязать клиента
+                  </Button>
+                </>
+              )}
             </>
           )}
         </SheetBody>
       </SheetContent>
     </Sheet>
+  )
+}
+
+// Виджет прогресса по уровням: текущий уровень + полоса до следующего.
+function TierProgress({ ov }: { ov: Overview }) {
+  const atMax = !ov.nextTierName
+  const remainingRub = ov.nextTierMinMrrRub != null ? Math.max(0, ov.nextTierMinMrrRub - ov.totalMrrRub) : 0
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center justify-between gap-2 flex-wrap text-sm">
+          <span className="flex items-center gap-1.5 font-medium">
+            <TrendingUp className="size-4 text-primary" />
+            Текущий уровень: {ov.currentTierName ?? "Базовый"} ({ov.commissionPercent}%)
+          </span>
+          {atMax ? (
+            <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Максимальный уровень</span>
+          ) : (
+            <span className="text-xs text-muted-foreground">
+              до «{ov.nextTierName}» ({ov.nextTierCommissionPercent}%): ещё {rub(remainingRub)}
+            </span>
+          )}
+        </div>
+        <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+          <div
+            className={"h-full rounded-full transition-all " + (atMax ? "bg-emerald-500" : "bg-primary")}
+            style={{ width: `${atMax ? 100 : ov.progressToNextPercent}%` }}
+          />
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 

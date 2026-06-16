@@ -16,12 +16,25 @@ import { cn } from "@/lib/utils"
 interface Integrator {
   id: string
   companyName: string | null
+  kind: string | null
   levelName: string | null
   status: string | null
   joinedAt: string | null
   contactName: string | null
   contactEmail: string | null
   companyId: string
+}
+
+const KIND_LABELS: Record<string, string> = {
+  partner:     "Партнёр",
+  sub_partner: "Суб-партнёр",
+  referral:    "Реферал",
+}
+
+const KIND_COLORS: Record<string, string> = {
+  partner:     "bg-violet-100 text-violet-700 border-violet-200",
+  sub_partner: "bg-sky-100 text-sky-700 border-sky-200",
+  referral:    "bg-teal-100 text-teal-700 border-teal-200",
 }
 
 const LEVEL_COLORS: Record<string, string> = {
@@ -150,6 +163,7 @@ export default function AdminIntegratorsPage() {
                 <DataTable>
                   <DataHead>
                     <DataHeadCell>Компания</DataHeadCell>
+                    <DataHeadCell>Тип</DataHeadCell>
                     <DataHeadCell>Уровень</DataHeadCell>
                     <DataHeadCell>Контакт</DataHeadCell>
                     <DataHeadCell align="center">Статус</DataHeadCell>
@@ -159,7 +173,7 @@ export default function AdminIntegratorsPage() {
                   <tbody>
                     {integrators.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="text-center py-12 text-sm text-muted-foreground">
+                        <td colSpan={7} className="text-center py-12 text-sm text-muted-foreground">
                           Нет партнёров
                         </td>
                       </tr>
@@ -171,6 +185,11 @@ export default function AdminIntegratorsPage() {
                       >
                         <DataCell>
                           <span className="font-medium text-foreground">{int.companyName || int.companyId}</span>
+                        </DataCell>
+                        <DataCell>
+                          <Badge className={cn("text-xs border", KIND_COLORS[int.kind ?? "partner"] ?? "bg-muted text-muted-foreground")}>
+                            {KIND_LABELS[int.kind ?? "partner"] ?? int.kind}
+                          </Badge>
                         </DataCell>
                         <DataCell>
                           {int.levelName ? (
