@@ -22,7 +22,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { ChevronDown, Clock3, GripVertical, Loader2, Maximize2, Minimize2, Plus, RotateCcw, Save, Settings, Settings2, Star } from "lucide-react"
+import { Bookmark, ChevronDown, Clock3, GripVertical, Loader2, Maximize2, Minimize2, Plus, RotateCcw, Save, Settings, Settings2, Star } from "lucide-react"
 
 import {
   AlertDialog,
@@ -525,6 +525,26 @@ export function FunnelBuilder({ vacancyId }: FunnelBuilderProps) {
           ) : (
             <div className="text-sm text-muted-foreground py-6 text-center">
               Загрузка блоков…
+            </div>
+          )}
+
+          {/* Нижняя системная кнопка — сохранить текущую воронку в библиотеку
+              компании. Открывает тот же диалог, что и кнопка «Сохранить как
+              шаблон» в шапке (общий SaveFunnelTemplateDialog). */}
+          {blocks.length > 0 && (
+            <div className="border-t mt-4 pt-4 flex flex-col items-end gap-1.5 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-muted-foreground order-2 sm:order-1">
+                Сохраните текущий набор и порядок блоков в библиотеку воронок компании, чтобы переиспользовать на других вакансиях.
+              </p>
+              <Button
+                size="sm"
+                disabled={saving || enabled === null}
+                onClick={() => setSaveDialogOpen(true)}
+                className="gap-1.5 order-1 sm:order-2 shrink-0"
+              >
+                <Bookmark className="h-4 w-4" />
+                Сохранить в воронки
+              </Button>
             </div>
           )}
         </div>
