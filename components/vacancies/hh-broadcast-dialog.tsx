@@ -156,6 +156,9 @@ export function HhBroadcastDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
+  // Одиночный режим (вызов на одного кандидата из строки списка): прячем
+  // элементы пакетной рассылки и закрываем окно сразу после копирования.
+  const isSingle = candidateIds.length === 1
   const current = items[currentIdx] ?? null
   const currentMessage = current ? (messages[current.id] ?? current.personalMessage) : ""
   const currentKind: "test" | "demo" = current ? (linkKindById[current.id] ?? "test") : "test"
@@ -221,7 +224,10 @@ export function HhBroadcastDialog({
     if (url) window.open(url, "_blank", "noopener,noreferrer")
     // Скопировал = отправляет вручную → сразу отмечаем «тест отправлен».
     markCandidateSent(current.id, linkKindById[current.id] ?? "test")
-  }, [current, messages, markCandidateSent, linkKindById])
+    // Одиночный режим: закрываем окно сразу — HR возвращается к списку и
+    // кликает иконку чата у следующего кандидата.
+    if (isSingle) onOpenChange(false)
+  }, [current, messages, markCandidateSent, linkKindById, isSingle, onOpenChange])
 
   // Авто-открытие: когда замок дошёл до 0 и включён авто-режим — открыть чат.
   // window.open после паузы может быть заблокирован попап-блокером браузера —
@@ -355,19 +361,21 @@ export function HhBroadcastDialog({
               в буфер. Вставьте (Ctrl/Cmd+V) и отправьте вручную.
             </div>
 
-            {/* Прогресс */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>
-                  Кандидат {currentIdx + 1} из {total}
-                </span>
-                <span>
-                  {processed} {pluralize(processed, "обработан", "обработано", "обработано")} ·{" "}
-                  {sentIds.size} {pluralize(sentIds.size, "отправлено", "отправлено", "отправлено")}
-                </span>
+            {/* Прогресс — только в пакетном режиме */}
+            {!isSingle && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>
+                    Кандидат {currentIdx + 1} из {total}
+                  </span>
+                  <span>
+                    {processed} {pluralize(processed, "обработан", "обработано", "обработано")} ·{" "}
+                    {sentIds.size} {pluralize(sentIds.size, "отправлено", "отправлено", "отправлено")}
+                  </span>
+                </div>
+                <Progress value={((currentIdx) / total) * 100} className="h-1.5" />
               </div>
-              <Progress value={((currentIdx) / total) * 100} className="h-1.5" />
-            </div>
+            )}
 
             {/* Кандидат */}
             <div className="rounded-lg border bg-muted/30 px-3 py-2.5 space-y-1">
@@ -520,58 +528,63 @@ export function HhBroadcastDialog({
               </Button>
             </div>
 
-            {/* Темп рассылки — анти-бан: равномерный интервал между открытиями */}
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md bg-muted/50 px-3 py-2 text-xs">
-              <span className="text-muted-foreground">Интервал между чатами:</span>
-              <div className="flex items-center gap-1">
-                {[10, 20, 30, 60].map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setIntervalSec(s)}
-                    className={
-                      "rounded px-2 py-0.5 transition-colors " +
-                      (intervalSec === s
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-background hover:bg-muted text-muted-foreground")
-                    }
-                  >{s}с</button>
-                ))}
+            {/* Темп рассылки — анти-бан: равномерный интервал между открытиями.
+                Только в пакетном режиме (для одиночного не нужен). */}
+            {!isSingle && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md bg-muted/50 px-3 py-2 text-xs">
+                <span className="text-muted-foreground">Интервал между чатами:</span>
+                <div className="flex items-center gap-1">
+                  {[10, 20, 30, 60].map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setIntervalSec(s)}
+                      className={
+                        "rounded px-2 py-0.5 transition-colors " +
+                        (intervalSec === s
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-background hover:bg-muted text-muted-foreground")
+                      }
+                    >{s}с</button>
+                  ))}
+                </div>
+                <label className="flex items-center gap-1.5 ml-auto cursor-pointer select-none">
+                  <input type="checkbox" checked={autoOpen} onChange={(e) => setAutoOpen(e.target.checked)} className="accent-primary" />
+                  <span className="text-muted-foreground">Авто-открытие</span>
+                </label>
               </div>
-              <label className="flex items-center gap-1.5 ml-auto cursor-pointer select-none">
-                <input type="checkbox" checked={autoOpen} onChange={(e) => setAutoOpen(e.target.checked)} className="accent-primary" />
-                <span className="text-muted-foreground">Авто-открытие</span>
-              </label>
-            </div>
-            {autoOpen && (
+            )}
+            {!isSingle && autoOpen && (
               <p className="text-[11px] text-muted-foreground/70 -mt-1">
                 Чат следующего откроется сам через интервал. Если браузер заблокирует
                 всплывающее окно — разрешите попапы для company24.pro или жмите кнопку вручную.
               </p>
             )}
 
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                className="flex-1 gap-1.5 text-emerald-700 border-emerald-300 hover:bg-emerald-500/10 hover:text-emerald-800 dark:text-emerald-300 dark:border-emerald-700"
-                onClick={markSent}
-              >
-                <ChevronRight className="size-4" />
-                Отправлено → следующий
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-1.5 text-muted-foreground hover:text-foreground"
-                onClick={skipCurrent}
-              >
-                <SkipForward className="size-4" />
-                Пропустить
-              </Button>
-            </div>
+            {!isSingle && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1 gap-1.5 text-emerald-700 border-emerald-300 hover:bg-emerald-500/10 hover:text-emerald-800 dark:text-emerald-300 dark:border-emerald-700"
+                  onClick={markSent}
+                >
+                  <ChevronRight className="size-4" />
+                  Отправлено → следующий
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-muted-foreground hover:text-foreground"
+                  onClick={skipCurrent}
+                >
+                  <SkipForward className="size-4" />
+                  Пропустить
+                </Button>
+              </div>
+            )}
 
             {/* Массовая отметка: пометить всех «отправлено» разом, без поштучного клика */}
-            {total > 1 && (
+            {!isSingle && total > 1 && (
               <Button
                 variant="ghost"
                 size="sm"

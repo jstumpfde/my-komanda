@@ -40,7 +40,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, RefreshCw, Bot, Workflow, FilePlus, UserSearch, Trash2, Target, Inbox, CalendarDays} from "lucide-react"
+import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquare, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, RefreshCw, Bot, Workflow, FilePlus, UserSearch, Trash2, Target, Inbox, CalendarDays} from "lucide-react"
 import { InterviewsView } from "@/app/(modules)/hr/interviews/page"
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-factors-settings"
@@ -814,6 +814,14 @@ export default function VacancyPage() {
   // Окно «Рассылка через hh»: полу-ручной мастер прохода по кандидатам.
   const [hhBroadcastOpen, setHhBroadcastOpen] = useState(false)
   const [hhBroadcastIds, setHhBroadcastIds] = useState<string[]>([])
+  // Режим «Рассылка через hh»: в списке появляется иконка чата в каждой строке
+  // для одиночной полу-ручной рассылки (актуально для архивных hh-вакансий).
+  const [hhBroadcastMode, setHhBroadcastMode] = useState(false)
+  // Открыть мастер рассылки на ОДНОГО кандидата (клик по иконке в строке).
+  const openHhBroadcastForCandidate = useCallback((candidateId: string) => {
+    setHhBroadcastIds([candidateId])
+    setHhBroadcastOpen(true)
+  }, [])
 
   // Окно «Отправить тест»: показывает/редактирует текст приглашения перед отправкой.
   const [testInviteOpen, setTestInviteOpen] = useState(false)
@@ -2755,6 +2763,18 @@ export default function VacancyPage() {
                           <Users className="w-3.5 h-3.5 mr-2" />
                           Поискать в базе
                         </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        {/* Режим рассылки hh: показывает иконку чата в каждой строке
+                            списка для одиночной полу-ручной рассылки (архивные hh-вакансии).
+                            onSelect+preventDefault — чтобы клик не закрывал меню. */}
+                        <DropdownMenuItem
+                          onSelect={(e) => { e.preventDefault(); setHhBroadcastMode((v) => !v) }}
+                          title="Показывает иконку чата в каждой строке списка для одиночной рассылки через hh"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5 mr-2" />
+                          {hhBroadcastMode ? "Рассылка hh: выкл." : "Рассылка hh: вкл."}
+                          {hhBroadcastMode && <Check className="w-3.5 h-3.5 ml-auto" />}
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                     <ViewSettings
@@ -3024,6 +3044,8 @@ export default function VacancyPage() {
                   onSelectionChange={setSelectedCandidateIds}
                   listStartIndex={useListPaginated ? (paginated.page - 1) * paginated.pageSize : undefined}
                   listServerSorted={useListPaginated}
+                  hhBroadcastMode={hhBroadcastMode}
+                  onBroadcast={openHhBroadcastForCandidate}
                 />
                 {useListPaginated && (
                   <div className="mt-3">
