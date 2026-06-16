@@ -4,6 +4,8 @@ import { HR_MODULE_SLUGS, hasAnyModule } from "@/lib/modules/access"
 import { db } from "@/lib/db"
 import { tenantModules } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
+import { isPartnerRole } from "@/lib/roles"
+import type { UserRole } from "@/lib/roles"
 
 // Хосты платформы — НЕ поддомены компаний.
 const PLATFORM_HOSTS = new Set(["company24.pro", "www.company24.pro", "new.company24.pro", "localhost"])
@@ -128,6 +130,13 @@ export default auth(async (req) => {
   const onboardingDone = req.cookies.get("mk_onboarded")?.value === "1"
   if (!session.user.companyId && !pathname.startsWith("/register") && !onboardingDone) {
     return Response.redirect(new URL("/register", req.url))
+  }
+
+  // ── Партнёр видит ТОЛЬКО свой кабинет /partner ─────────────────────────────
+  // Роль partner не должна попадать в HR/админку/основной дашборд. Любой
+  // непубличный путь вне /partner → редирект на /partner (API уже пропущены выше).
+  if (isPartnerRole(session.user.role as UserRole) && !pathname.startsWith("/partner")) {
+    return Response.redirect(new URL("/partner", req.url))
   }
 
   // ── Проверка доступа к модулям ──────────────────────────────────────────────
