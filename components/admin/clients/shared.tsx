@@ -16,10 +16,13 @@ export const PAGE_SIZES = [20, 50, 100]
 // app/(admin)/admin/clients/[id]/page.tsx).
 export const ROLE_LABELS: Record<string, string> = {
   director:         "Директор",
+  client:           "Директор",
   hr_lead:          "Главный HR",
   hr_manager:       "HR-менеджер",
   department_head:  "Рук. отдела",
   observer:         "Наблюдатель",
+  tester_hr:        "Тестировщик HR",
+  partner:          "Партнёр",
   platform_admin:   "Адм. платформы",
   platform_manager: "Менеджер платформы",
   admin:            "Администратор",
@@ -28,6 +31,22 @@ export const ROLE_LABELS: Record<string, string> = {
 
 // Роли, доступные для назначения клиентскому пользователю.
 export const CLIENT_ROLES = ["director", "hr_lead", "hr_manager", "department_head", "observer"]
+
+// Тип доступа в UI создания/смены. Клиентские значения = users.role;
+// партнёрские (partner/sub_partner/referral) раскладываются API в
+// users.role='partner' + integrators.kind (см. lib/admin/assign-role.ts).
+export const ACCESS_TYPE_OPTIONS: { value: string; label: string; group: "client" | "partner" }[] = [
+  { value: "director",        label: "Директор",       group: "client" },
+  { value: "hr_lead",         label: "Главный HR",     group: "client" },
+  { value: "hr_manager",      label: "HR-менеджер",    group: "client" },
+  { value: "department_head", label: "Рук. отдела",    group: "client" },
+  { value: "observer",        label: "Наблюдатель",    group: "client" },
+  { value: "partner",         label: "Партнёр",        group: "partner" },
+  { value: "sub_partner",     label: "Суб-партнёр",    group: "partner" },
+  { value: "referral",        label: "Реферал",        group: "partner" },
+]
+export const ACCESS_TYPE_LABELS: Record<string, string> =
+  Object.fromEntries(ACCESS_TYPE_OPTIONS.map(o => [o.value, o.label]))
 
 export function formatPrice(price: number | null | undefined) {
   if (price === null || price === undefined) return "—"

@@ -28,6 +28,7 @@ interface RoleData {
   description: string
   isPlatform: boolean
   isLocked: boolean
+  isPartner?: boolean
   userCount: number
   permissions: RolePermissions
 }
@@ -202,7 +203,12 @@ function RoleCard({
                     Платформа
                   </Badge>
                 )}
-                {role.isLocked && (
+                {role.isPartner && (
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-300 text-amber-700 dark:text-amber-400">
+                    Партнёрский
+                  </Badge>
+                )}
+                {role.isLocked && !role.isPartner && (
                   <Lock className="w-3 h-3 text-muted-foreground" />
                 )}
               </div>
@@ -218,27 +224,38 @@ function RoleCard({
           {role.description}
         </p>
 
-        <div className="space-y-1 border-t pt-3">
-          {preview.map(f => (
-            <div key={f.id} className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground truncate mr-2">{f.label}</span>
-              <AccessBadge level={role.permissions[f.id] ?? "none"} />
+        {role.isPartner ? (
+          <div className="border-t pt-3 mt-auto">
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Доступ — через партнёрский кабинет <span className="font-mono">/partner</span> (не HR-права).
+              Комиссия настраивается в разделе «Уровни комиссии».
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="space-y-1 border-t pt-3">
+              {preview.map(f => (
+                <div key={f.id} className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground truncate mr-2">{f.label}</span>
+                  <AccessBadge level={role.permissions[f.id] ?? "none"} />
+                </div>
+              ))}
+              <p className="text-[10px] text-muted-foreground/60 pt-0.5">
+                +{features.length - 3} функций…
+              </p>
             </div>
-          ))}
-          <p className="text-[10px] text-muted-foreground/60 pt-0.5">
-            +{features.length - 3} функций…
-          </p>
-        </div>
 
-        <Button
-          size="sm"
-          variant="outline"
-          className="w-full gap-1.5 mt-auto"
-          onClick={onEdit}
-        >
-          <Pencil className="w-3.5 h-3.5" />
-          {role.isLocked ? "Просмотреть права" : "Редактировать"}
-        </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full gap-1.5 mt-auto"
+              onClick={onEdit}
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              {role.isLocked ? "Просмотреть права" : "Редактировать"}
+            </Button>
+          </>
+        )}
       </CardContent>
     </Card>
   )
@@ -274,7 +291,8 @@ export default function AdminRolesPage() {
   }
 
   const platformRoles = data?.roles.filter(r => r.isPlatform) ?? []
-  const clientRoles = data?.roles.filter(r => !r.isPlatform) ?? []
+  const partnerRoles = data?.roles.filter(r => r.isPartner) ?? []
+  const clientRoles = data?.roles.filter(r => !r.isPlatform && !r.isPartner) ?? []
 
   return (
     <AdminPageLayout>
@@ -335,6 +353,30 @@ export default function AdminRolesPage() {
                     ))}
                   </div>
                 </section>
+
+                {/* Partner roles */}
+                {partnerRoles.length > 0 && (
+                  <section>
+                    <div className="flex items-center gap-2 mb-4">
+                      <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                        Партнёрские роли
+                      </h2>
+                      <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 dark:text-amber-400">
+                        Доступ — кабинет /partner
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {partnerRoles.map(role => (
+                        <RoleCard
+                          key={role.id}
+                          role={role}
+                          features={data?.features ?? []}
+                          onEdit={() => setEditingRole(role)}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )}
               </>
             )}
       </div>

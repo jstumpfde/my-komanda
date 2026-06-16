@@ -3,8 +3,11 @@ import { db } from "@/lib/db"
 import { companies, users, plans } from "@/lib/db/schema"
 import {eq, count} from "drizzle-orm"
 import {requirePlatformAdmin, apiError, apiSuccess} from "@/lib/api-helpers"
+import { requireAdminPanelAccess } from "@/lib/platform/auth"
 
 type Params = { params: Promise<{ id: string }> }
+
+const SUBSCRIPTION_STATUSES = ["trial", "active", "paused", "cancelled", "expired"]
 
 // GET /api/admin/clients/[id] — полная информация о компании
 export async function GET(_req: NextRequest, { params }: Params) {
@@ -71,10 +74,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
   })
 }
 
-// PATCH /api/admin/clients/[id] — обновить компанию (блокировка, название и т.п.)
+// PATCH /api/admin/clients/[id] — обновить компанию: реквизиты, статус подписки,
+// смена тарифа (currentPlanId).
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
-    await requirePlatformAdmin()
+    await requireAdminPanelAccess()
   } catch (e) {
     return e as Response
   }
@@ -82,10 +86,49 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const { id } = await params
   const body = await req.json().catch(() => ({}))
 
-  const allowed = ["name", "subscriptionStatus", "billingEmail", "industry", "city"]
+  // Текстовые реквизиты — пустую строку трактуем как очистку (null).
+  const allowed = [
+    "name", "fullName", "inn", "kpp", "ogrn",
+    "legalAddress", "officeAddress", "postalAddress",
+    "city", "industry", "billingEmail", "subscriptionStatus",
+  ]
   const updateData: Record<string, unknown> = { updatedAt: new Date() }
   for (const key of allowed) {
-    if (key in body) updateData[key] = body[key]
+    if (key in body) {
+      const v = body[key]
+      // name обязателен — не позволяем стереть в null.
+      if (typeof v === "string" && v.trim() === "") {
+        updateData[key] = key === "name" ? undefined : null
+      } else {
+        updateData[key] = v
+      }
+      if (updateData[key] === undefined) delete updateData[key]
+    }
+  }
+
+  // Валидация статуса подписки по enum.
+  if ("subscriptionStatus" in updateData
+    && updateData.subscriptionStatus != null
+    && !SUBSCRIPTION_STATUSES.includes(updateData.subscriptionStatus as string)) {
+    return apiError("Недопустимый статус подписки", 400)
+  }
+
+  // Смена тарифа: companies.currentPlanId (uuid FK → plans.id). Пусто = снять тариф.
+  if ("planId" in body) {
+    const planId = body.planId
+    if (planId == null || planId === "" || planId === "none") {
+      updateData.currentPlanId = null
+    } else if (typeof planId === "string") {
+      const [plan] = await db
+        .select({ id: plans.id })
+        .from(plans)
+        .where(eq(plans.id, planId))
+        .limit(1)
+      if (!plan) return apiError("Тариф не найден", 400)
+      updateData.currentPlanId = planId
+    } else {
+      return apiError("Некорректный тариф", 400)
+    }
   }
 
   const [updated] = await db
@@ -96,7 +139,22 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   if (!updated) return apiError("Компания не найдена", 404)
 
-  return apiSuccess({ id: updated.id, subscriptionStatus: updated.subscriptionStatus, name: updated.name })
+  return apiSuccess({
+    id: updated.id,
+    name: updated.name,
+    fullName: updated.fullName,
+    inn: updated.inn,
+    kpp: updated.kpp,
+    ogrn: updated.ogrn,
+    legalAddress: updated.legalAddress,
+    officeAddress: updated.officeAddress,
+    postalAddress: updated.postalAddress,
+    city: updated.city,
+    industry: updated.industry,
+    billingEmail: updated.billingEmail,
+    subscriptionStatus: updated.subscriptionStatus,
+    currentPlanId: updated.currentPlanId,
+  })
 }
 
 // DELETE /api/admin/clients/[id] — в корзину (soft-delete). Обратимо, поэтому

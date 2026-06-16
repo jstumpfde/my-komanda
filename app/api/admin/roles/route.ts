@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import { sql } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { users } from "@/lib/db/schema"
+import { users, integrators } from "@/lib/db/schema"
 import { requirePlatformAdmin, apiError, apiSuccess } from "@/lib/api-helpers"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -82,7 +82,7 @@ function getMatrix(): Record<string, RolePermissions> {
 
 // ─── Role metadata ────────────────────────────────────────────────────────────
 
-const ROLE_META: Record<string, { label: string; description: string; isPlatform: boolean; isLocked: boolean }> = {
+const ROLE_META: Record<string, { label: string; description: string; isPlatform: boolean; isLocked: boolean; isPartner?: boolean }> = {
   platform_admin: {
     label: "Администратор платформы",
     description: "Полный доступ ко всем функциям платформы и администрированию",
@@ -125,6 +125,30 @@ const ROLE_META: Record<string, { label: string; description: string; isPlatform
     isPlatform: false,
     isLocked: false,
   },
+  // Партнёрские роли (тип в integrators.kind; роль пользователя — 'partner').
+  // Доступ — партнёрский кабинет /partner, не HR-права, поэтому HR-матрица к ним
+  // не применяется (isLocked + isPartner). Счётчики считаются по integrators.kind.
+  partner: {
+    label: "Партнёр",
+    description: "Партнёрский кабинет: свои клиенты, вход в платформу клиента, комиссия по уровням",
+    isPlatform: false,
+    isLocked: true,
+    isPartner: true,
+  },
+  sub_partner: {
+    label: "Суб-партнёр",
+    description: "Партнёр под старшим партнёром, своя комиссия по уровням",
+    isPlatform: false,
+    isLocked: true,
+    isPartner: true,
+  },
+  referral: {
+    label: "Реферал",
+    description: "Только просмотр финансов своих клиентов — без входа к клиенту и управления",
+    isPlatform: false,
+    isLocked: true,
+    isPartner: true,
+  },
 }
 
 // DB legacy role → new role mapping
@@ -154,12 +178,20 @@ export async function GET() {
       countByRole[normalised] = (countByRole[normalised] ?? 0) + row.count
     }
 
+    // Счётчики партнёрских ролей — по integrators.kind (роль у всех 'partner').
+    const kindRows = await db
+      .select({ kind: integrators.kind, count: sql<number>`count(*)::int` })
+      .from(integrators)
+      .groupBy(integrators.kind)
+    const countByKind: Record<string, number> = {}
+    for (const r of kindRows) countByKind[r.kind] = r.count
+
     const matrix = getMatrix()
 
     const roles = Object.entries(ROLE_META).map(([id, meta]) => ({
       id,
       ...meta,
-      userCount: countByRole[id] ?? 0,
+      userCount: meta.isPartner ? (countByKind[id] ?? 0) : (countByRole[id] ?? 0),
       permissions: matrix[id] ?? DEFAULT_MATRIX[id] ?? {},
     }))
 
