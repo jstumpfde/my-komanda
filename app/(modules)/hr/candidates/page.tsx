@@ -85,6 +85,9 @@ const DEFAULT_SETTINGS: CardDisplaySettings = {
   showActions: true,
   showProgress: true,
   showResponseDate: true,
+  showResumeScore: true,
+  showTestScore: true,
+  showNextInterview: true,
 }
 
 const PAGE_SIZE = 50

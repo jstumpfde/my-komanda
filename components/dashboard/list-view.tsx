@@ -674,7 +674,7 @@ export function ListView({
       list.push({
         id: "source",
         gridWidth: "72px",
-        header: <SortHeader label="Источник" sortKey="source" sort={sort} onToggle={handleSort} align="center" />,
+        header: <SortHeader label="Источн." sortKey="source" sort={sort} onToggle={handleSort} align="center" />,
         renderCell: (candidate) => (
           <div className="text-center">
             <Badge variant="outline" className={cn("text-[10px] border", getSourceColor(candidate.source))}>
