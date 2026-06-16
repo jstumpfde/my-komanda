@@ -12,14 +12,22 @@ import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from 
 import { toast } from "sonner"
 import { Layers, Plus, Pencil, Loader2, Check, X } from "lucide-react"
 
+type Audience = "partner" | "referral"
+
 interface Level {
   id: string
   name: string
+  audience: Audience
   minClients: number | null
   minMrrKopecks: number | null
   commissionPercent: string
   sortOrder: number | null
   isActive: boolean | null
+}
+
+const AUDIENCE_LABEL: Record<Audience, string> = {
+  partner: "Партнёрские уровни",
+  referral: "Реферальные уровни",
 }
 
 export default function IntegratorLevelsPage() {
@@ -29,9 +37,10 @@ export default function IntegratorLevelsPage() {
   const [saving, setSaving] = useState(false)
   const [editing, setEditing] = useState<Level | null>(null)
 
-  const emptyLevel = (): Level => ({
+  const emptyLevel = (audience: Audience): Level => ({
     id: "",
     name: "",
+    audience,
     minClients: 0,
     minMrrKopecks: 0,
     commissionPercent: "10",
@@ -48,7 +57,7 @@ export default function IntegratorLevelsPage() {
   }, [])
 
   const openEdit = (level: Level) => { setEditing({ ...level }); setSheetOpen(true) }
-  const openNew = () => { setEditing(emptyLevel()); setSheetOpen(true) }
+  const openNew = (audience: Audience) => { setEditing(emptyLevel(audience)); setSheetOpen(true) }
 
   const handleSave = async () => {
     if (!editing || !editing.name) { toast.error("Укажите название"); return }
@@ -100,21 +109,77 @@ export default function IntegratorLevelsPage() {
     }
   }
 
+  const renderGroup = (audience: Audience) => {
+    const groupLevels = levels.filter(l => (l.audience ?? "partner") === audience)
+    return (
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-semibold">{AUDIENCE_LABEL[audience]}</h2>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openNew(audience)}>
+            <Plus className="w-4 h-4" />
+            Добавить уровень
+          </Button>
+        </div>
+        <TableCard>
+          <DataTable>
+            <DataHead>
+              <DataHeadCell>Название</DataHeadCell>
+              <DataHeadCell align="right">Мин. клиентов</DataHeadCell>
+              <DataHeadCell align="right">Мин. MRR</DataHeadCell>
+              <DataHeadCell align="right">Комиссия</DataHeadCell>
+              <DataHeadCell align="center">Активен</DataHeadCell>
+              <DataHeadCell align="right" />
+            </DataHead>
+            <tbody>
+              {groupLevels.length === 0 ? (
+                <DataRow>
+                  <DataCell className="text-muted-foreground text-sm" >
+                    Уровней пока нет
+                  </DataCell>
+                  <DataCell /><DataCell /><DataCell /><DataCell /><DataCell />
+                </DataRow>
+              ) : groupLevels.map(level => (
+                <DataRow key={level.id}>
+                  <DataCell>
+                    <Badge variant="outline" className="text-xs font-medium">{level.name}</Badge>
+                  </DataCell>
+                  <DataCell align="right" className="text-muted-foreground">{level.minClients ?? 0}</DataCell>
+                  <DataCell align="right" className="text-muted-foreground">
+                    {((level.minMrrKopecks ?? 0) / 100).toLocaleString("ru-RU")} ₽
+                  </DataCell>
+                  <DataCell align="right" className="font-semibold text-emerald-600">{level.commissionPercent}%</DataCell>
+                  <DataCell align="center">
+                    {level.isActive ? (
+                      <Check className="w-4 h-4 text-emerald-600 mx-auto" />
+                    ) : (
+                      <X className="w-4 h-4 text-muted-foreground/40 mx-auto" />
+                    )}
+                  </DataCell>
+                  <DataCell align="right">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(level)}>
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Button>
+                  </DataCell>
+                </DataRow>
+              ))}
+            </tbody>
+          </DataTable>
+        </TableCard>
+      </div>
+    )
+  }
+
   return (
     <AdminPageLayout>
           <div className="py-6 px-8">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <div className="flex items-center gap-2 pt-3 pb-2">
-                  <Layers className="h-5 w-5 text-violet-600" />
-                  <h1 className="text-lg font-semibold">Партнёрские уровни</h1>
-                </div>
-                <p className="text-muted-foreground text-sm">Партнёрские уровни и комиссии</p>
+            <div className="mb-6">
+              <div className="flex items-center gap-2 pt-3 pb-2">
+                <Layers className="h-5 w-5 text-violet-600" />
+                <h1 className="text-lg font-semibold">Уровни комиссии</h1>
               </div>
-              <Button className="gap-1.5" onClick={openNew}>
-                <Plus className="w-4 h-4" />
-                Добавить уровень
-              </Button>
+              <p className="text-muted-foreground text-sm">
+                Раздельные уровни для партнёров (и суб-партнёров) и для рефералов
+              </p>
             </div>
 
             {loading ? (
@@ -122,44 +187,10 @@ export default function IntegratorLevelsPage() {
                 <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
               </div>
             ) : (
-              <TableCard>
-                <DataTable>
-                  <DataHead>
-                    <DataHeadCell>Название</DataHeadCell>
-                    <DataHeadCell align="right">Мин. клиентов</DataHeadCell>
-                    <DataHeadCell align="right">Мин. MRR</DataHeadCell>
-                    <DataHeadCell align="right">Комиссия</DataHeadCell>
-                    <DataHeadCell align="center">Активен</DataHeadCell>
-                    <DataHeadCell align="right" />
-                  </DataHead>
-                  <tbody>
-                    {levels.map(level => (
-                      <DataRow key={level.id}>
-                        <DataCell>
-                          <Badge variant="outline" className="text-xs font-medium">{level.name}</Badge>
-                        </DataCell>
-                        <DataCell align="right" className="text-muted-foreground">{level.minClients ?? 0}</DataCell>
-                        <DataCell align="right" className="text-muted-foreground">
-                          {((level.minMrrKopecks ?? 0) / 100).toLocaleString("ru-RU")} ₽
-                        </DataCell>
-                        <DataCell align="right" className="font-semibold text-emerald-600">{level.commissionPercent}%</DataCell>
-                        <DataCell align="center">
-                          {level.isActive ? (
-                            <Check className="w-4 h-4 text-emerald-600 mx-auto" />
-                          ) : (
-                            <X className="w-4 h-4 text-muted-foreground/40 mx-auto" />
-                          )}
-                        </DataCell>
-                        <DataCell align="right">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(level)}>
-                            <Pencil className="w-3.5 h-3.5" />
-                          </Button>
-                        </DataCell>
-                      </DataRow>
-                    ))}
-                  </tbody>
-                </DataTable>
-              </TableCard>
+              <>
+                {renderGroup("partner")}
+                {renderGroup("referral")}
+              </>
             )}
           </div>
 
@@ -171,6 +202,23 @@ export default function IntegratorLevelsPage() {
           </SheetHeader>
           {editing && (
             <div className="space-y-4 mt-6">
+              <div className="space-y-1.5">
+                <Label className="text-sm">Аудитория</Label>
+                <div className="flex gap-2">
+                  {(["partner", "referral"] as Audience[]).map(a => (
+                    <Button
+                      key={a}
+                      type="button"
+                      variant={editing.audience === a ? "default" : "outline"}
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => setEditing(p => p ? { ...p, audience: a } : null)}
+                    >
+                      {a === "partner" ? "Партнёрские" : "Реферальные"}
+                    </Button>
+                  ))}
+                </div>
+              </div>
               <div className="space-y-1.5">
                 <Label className="text-sm">Название</Label>
                 <Input value={editing.name} onChange={e => setEditing(p => p ? { ...p, name: e.target.value } : null)} placeholder="Bronze" />

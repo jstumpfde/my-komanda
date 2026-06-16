@@ -2007,6 +2007,8 @@ export const notificationPreferences = pgTable("notification_preferences", {
 export const integratorLevels = pgTable("integrator_levels", {
   id:               uuid("id").primaryKey().defaultRandom(),
   name:             text("name").notNull(),
+  // 'partner' (для kind in 'partner'|'sub_partner') | 'referral' (для kind='referral').
+  audience:         text("audience").notNull().default("partner"),
   minClients:       integer("min_clients").default(0),
   minMrrKopecks:    integer("min_mrr_kopecks").default(0),
   commissionPercent:text("commission_percent").notNull(), // numeric as text
