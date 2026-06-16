@@ -5,7 +5,13 @@ export interface StoriesCard {
   mediaType: "image" | "video"
   url: string
   caption?: string
+  // Длительность показа карточки в сторис-плеере, сек (1–60). Для фото; видео
+  // играет по своей длине. По умолчанию STORIES_CARD_DEFAULT_DURATION_SEC.
+  durationSec?: number
 }
+
+// Дефолтная длительность фото-карточки сторис (сек).
+export const STORIES_CARD_DEFAULT_DURATION_SEC = 15
 
 export type ImageLayout = "full" | "image-left" | "image-right"
 export type AudioLayout = "full" | "audio-left" | "audio-right"

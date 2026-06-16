@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react"
 import { X, Volume2, VolumeX, Play } from "lucide-react"
 import type { StoriesCard } from "@/lib/course-types"
+import { STORIES_CARD_DEFAULT_DURATION_SEC } from "@/lib/course-types"
 
 interface StoriesPlayerProps {
   cards: StoriesCard[]
@@ -16,8 +17,6 @@ interface StoriesPlayerProps {
    *  переход на анкету/отклик). Если НЕ задан (превью HR) — просто закрываем. */
   onCta?: () => void
 }
-
-const PHOTO_DURATION_MS = 5000
 
 const DEFAULT_CTA_TEXT = "Откликнуться"
 
@@ -71,10 +70,12 @@ export function StoriesPlayer({ cards, ctaEnabled = false, ctaText, ctaCaption, 
   const startPhotoTimer = useCallback(() => {
     stopTimers()
     setProgress(0)
+    // Длительность фото-карточки из card.durationSec (1–60с), деф. 15с.
+    const durMs = Math.max(1, Math.min(60, current?.durationSec ?? STORIES_CARD_DEFAULT_DURATION_SEC)) * 1000
     startTimeRef.current = performance.now()
     const tick = (now: number) => {
       const elapsed = now - startTimeRef.current
-      const p = Math.min(elapsed / PHOTO_DURATION_MS, 1)
+      const p = Math.min(elapsed / durMs, 1)
       setProgress(p)
       if (p < 1) {
         rafRef.current = requestAnimationFrame(tick)
@@ -83,7 +84,7 @@ export function StoriesPlayer({ cards, ctaEnabled = false, ctaText, ctaCaption, 
       }
     }
     rafRef.current = requestAnimationFrame(tick)
-  }, [stopTimers, goNext])
+  }, [stopTimers, goNext, current])
 
   // При смене карточки
   useEffect(() => {
