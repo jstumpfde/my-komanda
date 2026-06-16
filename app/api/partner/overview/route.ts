@@ -17,6 +17,13 @@ export async function GET() {
       activeClients: s.clients.filter((c) => c.subscriptionStatus === "active").length,
       totalMrrRub: s.totalMrrRub,
       totalEarningsRub: s.totalEarningsRub,
+      // Прогресс по уровням (виджет в кабинете).
+      currentTierName: s.currentTierName,
+      currentTierMinMrrRub: s.currentTierMinMrrRub,
+      nextTierName: s.nextTierName,
+      nextTierMinMrrRub: s.nextTierMinMrrRub,
+      nextTierCommissionPercent: s.nextTierCommissionPercent,
+      progressToNextPercent: s.progressToNextPercent,
     })
   } catch (err) {
     if (err instanceof Response) return err

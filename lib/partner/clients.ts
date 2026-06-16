@@ -30,6 +30,14 @@ export interface PartnerSummary {
   isOverride: boolean        // true = фикс-% задан вручную, ступени не применяются
   totalMrrRub: number
   totalEarningsRub: number
+  // Прогресс по уровням (для виджета в кабинете). Имена/пороги — из integratorLevels
+  // (редактируются админом). Если override активен или ступени не заданы — null/100%.
+  currentTierName: string | null
+  currentTierMinMrrRub: number
+  nextTierName: string | null
+  nextTierMinMrrRub: number | null
+  nextTierCommissionPercent: number | null
+  progressToNextPercent: number   // 0-100; 100 = достигнут максимум
 }
 
 // ─── Управление продуктами клиента (карточка клиента у партнёра) ──────────────
@@ -67,16 +75,16 @@ export async function setClientModules(companyId: string, slugs: string[]): Prom
   }
 }
 
-interface Tier { minMrrKopecks: number; pct: number }
+interface Tier { name: string; minMrrKopecks: number; pct: number }
 
 async function getTiers(): Promise<Tier[]> {
   const rows = await db
-    .select({ m: integratorLevels.minMrrKopecks, c: integratorLevels.commissionPercent })
+    .select({ name: integratorLevels.name, m: integratorLevels.minMrrKopecks, c: integratorLevels.commissionPercent })
     .from(integratorLevels)
     .where(eq(integratorLevels.isActive, true))
     .orderBy(asc(integratorLevels.minMrrKopecks))
   return rows
-    .map((r) => ({ minMrrKopecks: r.m ?? 0, pct: parseFloat(r.c) }))
+    .map((r) => ({ name: r.name, minMrrKopecks: r.m ?? 0, pct: parseFloat(r.c) }))
     .filter((t) => !Number.isNaN(t.pct))
 }
 
@@ -85,6 +93,43 @@ function tierPercent(tiers: Tier[], totalKopecks: number): number {
   let pct = 0
   for (const t of tiers) if (totalKopecks >= t.minMrrKopecks) pct = t.pct
   return pct
+}
+
+// Прогресс по ступеням: текущая (высшая достигнутая), следующая (по порядку
+// порога) и % до неё. tiers должны быть отсортированы по minMrrKopecks asc.
+interface TierProgress {
+  currentTierName: string | null
+  currentTierMinMrrRub: number
+  nextTierName: string | null
+  nextTierMinMrrRub: number | null
+  nextTierCommissionPercent: number | null
+  progressToNextPercent: number
+}
+function computeTierProgress(tiers: Tier[], totalKopecks: number): TierProgress {
+  let currentIdx = -1
+  for (let i = 0; i < tiers.length; i++) {
+    if (totalKopecks >= tiers[i].minMrrKopecks) currentIdx = i
+  }
+  const current = currentIdx >= 0 ? tiers[currentIdx] : null
+  const next = currentIdx + 1 < tiers.length ? tiers[currentIdx + 1] : null
+
+  let progress = 100
+  if (next) {
+    const currentMin = current ? current.minMrrKopecks : 0
+    const span = next.minMrrKopecks - currentMin
+    progress = span > 0
+      ? Math.max(0, Math.min(100, Math.round(((totalKopecks - currentMin) / span) * 100)))
+      : 100
+  }
+
+  return {
+    currentTierName: current?.name ?? null,
+    currentTierMinMrrRub: Math.round((current?.minMrrKopecks ?? 0) / 100),
+    nextTierName: next?.name ?? null,
+    nextTierMinMrrRub: next ? Math.round(next.minMrrKopecks / 100) : null,
+    nextTierCommissionPercent: next?.pct ?? null,
+    progressToNextPercent: progress,
+  }
 }
 
 function monthlyKopecks(price: number, interval: string | null): number {
@@ -163,9 +208,10 @@ export async function getPartnerSummary(integrator: Integrator): Promise<Partner
   }
 
   // Итоговая комиссия: override или ступень по суммарному обороту.
+  const tiers = await getTiers()
   const override = integrator.commissionPercent ? parseFloat(integrator.commissionPercent) : NaN
   const isOverride = !Number.isNaN(override)
-  const effectivePercent = isOverride ? override : tierPercent(await getTiers(), totalKopecks)
+  const effectivePercent = isOverride ? override : tierPercent(tiers, totalKopecks)
 
   const clients: PartnerClientRow[] = base.map((b) => ({
     ...b,
@@ -173,11 +219,14 @@ export async function getPartnerSummary(integrator: Integrator): Promise<Partner
     earningsRub: Math.round((b.mrrRub * effectivePercent) / 100),
   }))
 
+  const progress = computeTierProgress(tiers, totalKopecks)
+
   return {
     clients,
     effectivePercent,
     isOverride,
     totalMrrRub: Math.round(totalKopecks / 100),
     totalEarningsRub: clients.reduce((s, c) => s + c.earningsRub, 0),
+    ...progress,
   }
 }

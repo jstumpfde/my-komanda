@@ -15,6 +15,9 @@ import type { UserRole } from "@/lib/roles"
 export interface PartnerContext {
   user: Awaited<ReturnType<typeof requireAuth>>
   integrator: typeof integrators.$inferSelect
+  // Тип партнёра: 'partner' | 'sub_partner' | 'referral'. Дубль integrator.kind
+  // для удобных гейтов (реферал — view-only). Источник правды — integrators.kind.
+  kind: string
 }
 
 // Требует роль partner + наличие записи integrators у его компании.
@@ -43,7 +46,16 @@ export async function requirePartner(): Promise<PartnerContext> {
   if (integrator.status !== "active") {
     throw apiError("Партнёрский аккаунт неактивен", 403)
   }
-  return { user, integrator }
+  return { user, integrator, kind: integrator.kind }
+}
+
+// SECURITY: гейт мутаций кабинета. Реферал — view-only (видит финансы, но НЕ
+// управляет: не онбордит, не меняет продукты, не отвязывает, не входит в клиента).
+// Бросает 403 для kind='referral'. Вызывать в начале всех мутирующих partner-роутов.
+export function assertPartnerCanManage(kind: string): void {
+  if (kind === "referral") {
+    throw apiError("Реферал не может управлять клиентами — только просмотр финансов", 403)
+  }
 }
 
 // ID компаний-клиентов данного партнёра (для scoping любых выборок).
