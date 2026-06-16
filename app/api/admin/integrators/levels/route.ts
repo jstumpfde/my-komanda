@@ -5,6 +5,12 @@ import { integratorLevels } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 import { isPlatformAdminEmail } from "@/lib/platform/auth"
 
+const AUDIENCES = ["partner", "referral"] as const
+type Audience = (typeof AUDIENCES)[number]
+function isAudience(v: unknown): v is Audience {
+  return typeof v === "string" && (AUDIENCES as readonly string[]).includes(v)
+}
+
 export async function GET() {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -23,16 +29,23 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json() as {
     name: string
+    audience?: string
     minClients?: number
     minMrrKopecks?: number
     commissionPercent: string
     sortOrder?: number
   }
 
+  if (body.audience !== undefined && !isAudience(body.audience)) {
+    return NextResponse.json({ error: "audience must be 'partner' or 'referral'" }, { status: 400 })
+  }
+  const audience: Audience = isAudience(body.audience) ? body.audience : "partner"
+
   const [created] = await db
     .insert(integratorLevels)
     .values({
       name:              body.name,
+      audience,
       minClients:        body.minClients ?? 0,
       minMrrKopecks:     body.minMrrKopecks ?? 0,
       commissionPercent: body.commissionPercent,
@@ -54,6 +67,7 @@ export async function PUT(req: NextRequest) {
 
   const body = await req.json() as {
     name?: string
+    audience?: string
     minClients?: number
     minMrrKopecks?: number
     commissionPercent?: string
@@ -61,10 +75,15 @@ export async function PUT(req: NextRequest) {
     isActive?: boolean
   }
 
+  if (body.audience !== undefined && !isAudience(body.audience)) {
+    return NextResponse.json({ error: "audience must be 'partner' or 'referral'" }, { status: 400 })
+  }
+
   const [updated] = await db
     .update(integratorLevels)
     .set({
       ...(body.name              !== undefined && { name:              body.name }),
+      ...(isAudience(body.audience)             && { audience:          body.audience }),
       ...(body.minClients        !== undefined && { minClients:        body.minClients }),
       ...(body.minMrrKopecks     !== undefined && { minMrrKopecks:     body.minMrrKopecks }),
       ...(body.commissionPercent !== undefined && { commissionPercent: body.commissionPercent }),

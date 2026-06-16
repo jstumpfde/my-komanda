@@ -4,7 +4,7 @@
 // min_mrr_kopecks → commission_percent), берём высшую ступень, чей порог достигнут.
 // Если у партнёра задан фикс-override (integrators.commission_percent) — он
 // перекрывает ступени (напр. сразу 50%). Пороги настраиваются в /admin/integrators/levels.
-import { eq, inArray, asc } from "drizzle-orm"
+import { eq, and, inArray, asc } from "drizzle-orm"
 import { db } from "@/lib/db"
 import {
   companies, plans, tenantModules, modules, integratorLevels, integrators, integratorClients,
@@ -77,11 +77,15 @@ export async function setClientModules(companyId: string, slugs: string[]): Prom
 
 interface Tier { name: string; minMrrKopecks: number; pct: number }
 
-async function getTiers(): Promise<Tier[]> {
+export type LevelAudience = "partner" | "referral"
+
+// Активные уровни нужной аудитории, отсортированы по порогу MRR.
+// Партнёр (kind in 'partner'|'sub_partner') → 'partner', реферал → 'referral'.
+async function getTiers(audience: LevelAudience): Promise<Tier[]> {
   const rows = await db
     .select({ name: integratorLevels.name, m: integratorLevels.minMrrKopecks, c: integratorLevels.commissionPercent })
     .from(integratorLevels)
-    .where(eq(integratorLevels.isActive, true))
+    .where(and(eq(integratorLevels.isActive, true), eq(integratorLevels.audience, audience)))
     .orderBy(asc(integratorLevels.minMrrKopecks))
   return rows
     .map((r) => ({ name: r.name, minMrrKopecks: r.m ?? 0, pct: parseFloat(r.c) }))
@@ -207,8 +211,12 @@ export async function getPartnerSummary(integrator: Integrator): Promise<Partner
     }
   }
 
+  // Аудитория уровней по типу партнёра: реферал считается по реферальным
+  // уровням, обычный/суб-партнёр — по партнёрским.
+  const audience: LevelAudience = integrator.kind === "referral" ? "referral" : "partner"
+
   // Итоговая комиссия: override или ступень по суммарному обороту.
-  const tiers = await getTiers()
+  const tiers = await getTiers(audience)
   const override = integrator.commissionPercent ? parseFloat(integrator.commissionPercent) : NaN
   const isOverride = !Number.isNaN(override)
   const effectivePercent = isOverride ? override : tierPercent(tiers, totalKopecks)
