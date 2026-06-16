@@ -23,13 +23,19 @@ export async function requirePartner(): Promise<PartnerContext> {
   if (!isPartnerRole(user.role as UserRole)) {
     throw apiError("Доступ только для партнёров", 403)
   }
-  if (!user.companyId) {
+  // Под impersonation session.companyId подменён на клиентскую компанию, поэтому
+  // ищем integrator по РЕАЛЬНОЙ компании партнёра (realCompanyId), а в обычном
+  // режиме — по companyId. Иначе /partner/* и server-actions входа/выхода
+  // сломались бы, когда acting-as активна.
+  const partnerCompanyId =
+    (user.realCompanyId as string | null | undefined) ?? user.companyId
+  if (!partnerCompanyId) {
     throw apiError("Партнёрский аккаунт не привязан к компании", 403)
   }
   const [integrator] = await db
     .select()
     .from(integrators)
-    .where(eq(integrators.companyId, user.companyId))
+    .where(eq(integrators.companyId, partnerCompanyId))
     .limit(1)
   if (!integrator) {
     throw apiError("Партнёрский аккаунт не найден", 404)

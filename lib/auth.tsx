@@ -39,6 +39,11 @@ interface AuthContextValue {
   user: User
   role: UserRole
   realRole: UserRole
+  // Эффективная роль с учётом impersonation (партнёр «Войти как клиент» = director).
+  // null = обычный режим. Сайдбар/секции используют effectiveRole ?? role.
+  effectiveRole: UserRole | null
+  // Активная impersonation-сессия партнёра (плашка возврата).
+  actingAs: { clientCompanyId: string; clientName: string } | null
   isLoggedIn: boolean
   isViewingAs: boolean
   setRole: (role: UserRole) => void
@@ -70,6 +75,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const rawDbRole = session?.user?.role ?? "platform_admin"
   const realRole = (ROLE_MIGRATION[rawDbRole] ?? rawDbRole) as UserRole
   const role: UserRole = (viewRole ?? realRole)
+
+  // Impersonation (партнёр «Войти как клиент») — приходит из session callback.
+  const effectiveRole: UserRole | null = (session?.user?.effectiveRole as UserRole | undefined) ?? null
+  const actingAs = session?.user?.actingAs ?? null
 
   const isLoggedIn = status === "authenticated" && !!session?.user
 
@@ -108,7 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      user, role, realRole, isLoggedIn, isViewingAs,
+      user, role, realRole, effectiveRole, actingAs, isLoggedIn, isViewingAs,
       setRole, hasAccess, returnToAdmin, login, logout,
     }}>
       {children}

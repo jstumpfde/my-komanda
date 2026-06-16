@@ -9,6 +9,7 @@ import type { UserRole } from "@/lib/auth"
 import { VKProvider } from "@/lib/auth/vk-provider"
 import { isPlatformAdminEmail } from "@/lib/platform/auth"
 import { checkPasswordAttempts } from "@/lib/rate-limit"
+import { getActingAs } from "@/lib/partner/impersonation"
 
 // Expose a stable ref so the JWT callback can read the DB
 // (needed when updateSession() is called after onboarding saves companyId)
@@ -47,6 +48,13 @@ declare module "next-auth" {
       avatarUrl: string | null
       isPlatformAdmin: boolean
       permissions: Record<string, boolean> | null
+      // ── Impersonation (партнёр «Войти как клиент») ──
+      // Реальная компания-партнёр (когда companyId подменён на клиентскую).
+      realCompanyId?: string | null
+      // Активная impersonation-сессия (null/undefined = обычный режим).
+      actingAs?: { clientCompanyId: string; clientName: string } | null
+      // Эффективная роль при impersonation = "director" (полный доступ как клиент).
+      effectiveRole?: UserRole
     }
   }
 
@@ -194,6 +202,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       session.user.avatarUrl = (token.avatarUrl as string | null) ?? null
       session.user.isPlatformAdmin = isPlatformAdminEmail(session.user.email)
       session.user.permissions = (token.permissions as Record<string, boolean> | null) ?? null
+
+      // ── Impersonation: партнёр «Войти как клиент» ──────────────────────────
+      // Ранний выход для НЕ-партнёров — нулевая стоимость для остального трафика.
+      // Реальная личность партнёра остаётся в token; эффективный companyId —
+      // только в session. Любая осечка валидации (подпись/БД/владение) →
+      // getActingAs() вернёт null и acting-as НЕ применяется (companyId
+      // остаётся партнёрским) — fail-safe.
+      if (token.role === "partner") {
+        const acting = await getActingAs()
+        // Сверка: кука принадлежит ИМЕННО текущему пользователю сессии
+        // (defense-in-depth против реплея украденной чужой acting-as куки).
+        if (acting && acting.realUserId === (token.id as string)) {
+          session.user.realCompanyId = (token.companyId as string | null) ?? null
+          session.user.companyId = acting.clientCompanyId // ЭФФЕКТИВНЫЙ
+          session.user.actingAs = {
+            clientCompanyId: acting.clientCompanyId,
+            clientName: acting.clientName,
+          }
+          session.user.effectiveRole = "director"
+        }
+      }
       return session
     },
   },

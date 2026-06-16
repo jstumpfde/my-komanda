@@ -160,14 +160,16 @@ const GROUP_COLORS: Record<string, { text: string; bg: string }> = {
 export function DashboardSidebar() {
   const pathname = usePathname()
   const router = useRouter()
-  const { role, user, logout } = useAuth()
+  const { role: rawRole, effectiveRole, user, logout } = useAuth()
+  // Под impersonation (партнёр «Войти как клиент») роль для меню/секций = director.
+  const role = effectiveRole ?? rawRole
   // Owner-only фичи (Календарь и пр.) — пока обкатываются, видны только владельцу-полигону.
   const isOwner = isOwnerEmail(user?.email)
   // Урезанный сайдбар (Ксения Сафронова / Орлинк): скрыт пункт «Кандидаты».
   const isRestricted = isRestrictedWorkspace(user?.email)
 
   const vis = getVisibleSections(role) ?? { main: true, hiring: false, tools: false, settings: false, admin: false }
-  const isAdminOrManager = role === 'platform_admin' || role === 'platform_manager' 
+  const isAdminOrManager = role === 'platform_admin' || role === 'platform_manager'
   const visSettings = getVisibleSettings(role) ?? ['profile']
 
   // Company branding — предпочитаем brandName (короткий бренд), fallback на name.
