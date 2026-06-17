@@ -7,6 +7,7 @@
 // Spec переводятся в скоринг эквивалентно legacy.
 
 import type { CandidateSpec } from "@/lib/core/spec/types"
+import { mustHaveTexts } from "@/lib/core/spec/types"
 import type { ResumeScreenInput } from "@/lib/ai-screen-resume"
 
 /**
@@ -22,8 +23,12 @@ export function buildSpecResumeInput(
   vacancy: { title: string; city?: string | null },
   spec: CandidateSpec,
 ): ResumeScreenInput {
-  const mustHave = spec.mustHave.length > 0
-    ? spec.mustHave
+  // mustHave может быть в обоих форматах (string | { text, hard }) —
+  // нормализуем в тексты. Поведение прежнее: все пункты передаются AI как
+  // обязательные навыки (реальный hard/soft-нокаут — этап 2).
+  const mustHaveList = mustHaveTexts(spec.mustHave)
+  const mustHave = mustHaveList.length > 0
+    ? mustHaveList
     : spec.portraitRequiredSkills
 
   const niceToHave = spec.niceToHave.length > 0

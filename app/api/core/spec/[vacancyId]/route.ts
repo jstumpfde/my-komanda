@@ -19,7 +19,13 @@ import { demos, vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { CandidateSpecSchema, type SpecApiResponse } from "@/lib/core/spec/types"
 import { buildSpecFromLegacy, type LegacyVacancyInput } from "@/lib/core/spec/from-legacy"
+import { specToLegacy } from "@/lib/core/spec/to-legacy"
 import { getSpec, saveSpec } from "@/lib/core/spec/store"
+import type {
+  VacancyRequirements,
+  VacancyAiProcessSettings,
+  VacancyStopFactors,
+} from "@/lib/db/schema"
 
 // Набор legacy-полей, которые нужны buildSpecFromLegacy
 const LEGACY_SELECT = {
@@ -30,6 +36,53 @@ const LEGACY_SELECT = {
   stopFactorsJson:    vacancies.stopFactorsJson,
   descriptionJson:    vacancies.descriptionJson,
 } as const
+
+/**
+ * Dual-write: зеркалирует CandidateSpec в legacy-поля вакансии (MERGE).
+ * Вызывается только при SPEC_MIRROR_TO_LEGACY === 'true'. Читает текущие
+ * requirements_json / ai_process_settings / stop_factors_json, накладывает
+ * патчи specToLegacy() (сохраняя остальные поля) и записывает обратно.
+ */
+async function mirrorSpecToLegacy(
+  vacancyId: string,
+  spec: Parameters<typeof specToLegacy>[0],
+): Promise<void> {
+  const [cur] = await db
+    .select({
+      requirementsJson:  vacancies.requirementsJson,
+      aiProcessSettings: vacancies.aiProcessSettings,
+      stopFactorsJson:   vacancies.stopFactorsJson,
+    })
+    .from(vacancies)
+    .where(eq(vacancies.id, vacancyId))
+    .limit(1)
+
+  if (!cur) return
+
+  const patches = specToLegacy(spec)
+
+  const mergedRequirements: VacancyRequirements = {
+    ...((cur.requirementsJson ?? {}) as VacancyRequirements),
+    ...patches.requirementsJson,
+  }
+  const mergedAiSettings: VacancyAiProcessSettings = {
+    ...((cur.aiProcessSettings ?? {}) as VacancyAiProcessSettings),
+    ...patches.aiProcessSettings,
+  }
+  const mergedStopFactors: VacancyStopFactors = {
+    ...((cur.stopFactorsJson ?? {}) as VacancyStopFactors),
+    ...patches.stopFactorsJson,
+  }
+
+  await db
+    .update(vacancies)
+    .set({
+      requirementsJson:  mergedRequirements,
+      aiProcessSettings: mergedAiSettings,
+      stopFactorsJson:   mergedStopFactors,
+    })
+    .where(eq(vacancies.id, vacancyId))
+}
 
 export async function GET(
   _req: NextRequest,
@@ -115,6 +168,17 @@ export async function PUT(
     }
 
     await saveSpec(vacancyId, parsed.data, user.id)
+
+    // Dual-write Spec → legacy ЗА ФЛАГОМ. По умолчанию SPEC_MIRROR_TO_LEGACY
+    // не задан/не 'true' → НИЧЕГО не зеркалим (боевое поведение не меняется).
+    if (process.env.SPEC_MIRROR_TO_LEGACY === "true") {
+      try {
+        await mirrorSpecToLegacy(vacancyId, parsed.data)
+      } catch (mirrorErr) {
+        // Зеркалирование не должно ронять сохранение Spec — логируем и идём дальше.
+        console.warn(`[spec-mirror] vacancy=${vacancyId} — ошибка dual-write в legacy:`, mirrorErr)
+      }
+    }
 
     return apiSuccess<SpecApiResponse>({ spec: parsed.data, source: "spec" })
   } catch (err) {

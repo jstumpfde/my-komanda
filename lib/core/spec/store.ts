@@ -4,14 +4,16 @@
  * CRUD для таблицы vacancy_specs.
  * Серверный модуль — только для App Router route handlers.
  *
- * СТАТУС: СПЯЩИЙ КОД. Вызывается только из /api/core/spec/[vacancyId].
- * Не подключён к рантайму скоринга/чат-бота.
+ * СТАТУС: БОЕВОЙ КОНТУР. getSpec() читается рантаймом скоринга резюме
+ * (lib/hh/process-queue.ts, rescore- и rediscovery-роуты). saveSpec()
+ * нормализует mustHave к формату { text, hard } этапа 2.
  */
 
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancySpecs } from "@/lib/db/schema"
 import type { CandidateSpec } from "./types"
+import { normalizeMustHave } from "./types"
 
 // ─── Чтение ──────────────────────────────────────────────────────────────────
 
@@ -41,8 +43,12 @@ export async function saveSpec(
   spec:      CandidateSpec,
   userId?:   string,
 ): Promise<void> {
+  // Нормализуем mustHave к единому формату { text, hard } этапа 2:
+  // строки (legacy / старые сохранённые Spec) → { text, hard: true }.
+  // Хранение в одном формате упрощает рантайм-читатели.
   const specWithTs: CandidateSpec = {
     ...spec,
+    mustHave:  normalizeMustHave(spec.mustHave),
     updatedAt: new Date().toISOString(),
   }
 

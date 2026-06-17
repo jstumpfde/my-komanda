@@ -18,6 +18,7 @@ import { getSpec } from "@/lib/core/spec/store"
 import { buildSpecFromLegacy, type LegacyVacancyInput } from "@/lib/core/spec/from-legacy"
 import { generateCandidateShortId } from "@/lib/short-id"
 import type { CandidateSpec } from "@/lib/core/spec/types"
+import { mustHaveTexts } from "@/lib/core/spec/types"
 import type { VacancyAiProcessSettings } from "@/lib/db/schema"
 
 // ─── Константы ───────────────────────────────────────────────────────────────
@@ -66,7 +67,7 @@ interface RediscoveryLastRun {
 /** Строим список ключевых слов из Spec для текстового матчинга */
 function buildKeywords(spec: CandidateSpec): string[] {
   const words: string[] = [
-    ...spec.mustHave,
+    ...mustHaveTexts(spec.mustHave),
     ...spec.niceToHave,
     ...spec.portraitRequiredSkills,
     ...spec.portraitNiceSkills,
@@ -104,7 +105,7 @@ function formatCandidateForAI(c: RediscoveryCandidate): string {
 /** Форматируем критерии Spec для промпта AI */
 function formatSpecForAI(spec: CandidateSpec): string {
   const parts: string[] = []
-  if (spec.mustHave.length)          parts.push(`Обязательно: ${spec.mustHave.join(", ")}`)
+  if (spec.mustHave.length)          parts.push(`Обязательно: ${mustHaveTexts(spec.mustHave).join(", ")}`)
   if (spec.niceToHave.length)        parts.push(`Желательно: ${spec.niceToHave.join(", ")}`)
   if (spec.dealBreakers.length)      parts.push(`Стоп-факторы: ${spec.dealBreakers.join(", ")}`)
   if (spec.portraitRequiredSkills.length) parts.push(`Ключевые навыки: ${spec.portraitRequiredSkills.join(", ")}`)

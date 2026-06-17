@@ -3,8 +3,12 @@
  *
  * R4 «Candidate Spec» — единый реестр «кого ищем» для вакансии.
  *
- * СТАТУС: СПЯЩИЙ КОД. Новый контур, не подключён к рантайму скоринга и чат-бота.
- * Активация — через флаг useNewCore на вакансии-полигоне.
+ * СТАТУС: БОЕВОЙ КОНТУР. Spec читается рантаймом скоринга резюме —
+ * lib/hh/process-queue.ts (живая очередь hh), rescore- и rediscovery-роуты —
+ * через getSpec()+buildSpecResumeInput() (гейт SPEC_SCORING_LEGACY_VACANCY_IDS,
+ * по умолчанию Spec включён для всех вакансий с заполненным «Кого ищем»).
+ * НЕ подключён к чат-боту. Запись/зеркалирование в legacy — за флагом
+ * SPEC_MIRROR_TO_LEGACY (по умолчанию OFF, см. to-legacy.ts и API-роут PUT).
  *
  * Зависит только от zod (уже в проекте). Никаких серверных/DB-импортов.
  */
@@ -32,10 +36,28 @@ export const CriterionSchema = z.object({
   key:    z.string().min(1).max(80),
   /** Отображаемое имя критерия */
   label:  z.string().min(1).max(120),
-  /** Вес критерия */
+  /** Вес критерия (legacy-шкала). Этап 2 заменит на importance (0-100). */
   weight: WeightLevelSchema,
   /** Подсказка AI: что именно проверять в резюме/анкете */
   hint:   z.string().max(300).optional(),
+  /**
+   * Этап 2 («Портрет»): жёсткость критерия.
+   * hard = нокаут при несоответствии, soft = только влияет на балл.
+   * Опц. с дефолтом — старые сохранённые критерии читаются как soft.
+   */
+  hardness: z.enum(["hard", "soft"]).default("soft"),
+  /**
+   * Этап 2: важность критерия 0-100 (новая непрерывная шкала «Портрета»
+   * вместо строковых уровней weight). Опц. с дефолтом 50.
+   */
+  importance: z.number().int().min(0).max(100).default(50),
+  /**
+   * Этап 2: как критерий подаётся AI.
+   * instruction = жёсткая инструкция, context = справочный контекст,
+   * hidden = не передаётся AI (только для UI/ручной оценки).
+   * Опц. с дефолтом context.
+   */
+  aiMode: z.enum(["instruction", "context", "hidden"]).default("context"),
 })
 export type Criterion = z.infer<typeof CriterionSchema>
 
@@ -170,7 +192,12 @@ export type StopFactors = z.infer<typeof StopFactorsSchema>
 /**
  * Веса девяти фиксированных осей v2-скоринга.
  * Полностью соответствует ScoringWeights в schema.ts.
- * Сумма = 100, каждый в [0, 100].
+ * Каждая ось в [0, 100].
+ *
+ * Этап 2 («Портрет»): жёсткое требование Σ=100 СНЯТО. Движок
+ * (computeWeightedScore в lib/scoring) нормирует баллы на ФАКТИЧЕСКУЮ сумму
+ * весов, поэтому любая валидная сумма не ломает скоринг. Σ=100 теперь
+ * не более чем удобный ориентир для HR, а не инвариант хранения.
  */
 export const ScoringWeightsSchema = z.object({
   relevant_experience: z.number().int().min(0).max(100),
@@ -182,10 +209,7 @@ export const ScoringWeightsSchema = z.object({
   managerial_match:    z.number().int().min(0).max(100),
   education:           z.number().int().min(0).max(100),
   location_readiness:  z.number().int().min(0).max(100),
-}).refine(
-  (w) => Object.values(w).reduce((s, v) => s + v, 0) === 100,
-  { message: "Сумма scoring_weights должна равняться 100" },
-)
+})
 export type ScoringWeights = z.infer<typeof ScoringWeightsSchema>
 
 export const DEFAULT_SCORING_WEIGHTS: ScoringWeights = {
@@ -198,6 +222,61 @@ export const DEFAULT_SCORING_WEIGHTS: ScoringWeights = {
   managerial_match:    5,
   education:           3,
   location_readiness:  2,
+}
+
+// ─── Must-have пункт (этап 2: hard/soft) ─────────────────────────────────────
+
+/**
+ * Один must-have пункт нового формата «Портрета».
+ * Этап 2 добавляет признак hard: hard=true → нокаут при несоответствии,
+ * hard=false → пункт лишь влияет на балл (soft).
+ *
+ * ОБРАТНАЯ СОВМЕСТИМОСТЬ: старые Spec хранили mustHave как массив строк.
+ * Поэтому CandidateSpec.mustHave принимает union(string | MustHaveItem).
+ * Реальный hard/soft-нокаут включится на этапе 2 — сейчас рантайм трактует
+ * все пункты одинаково (как и раньше). При чтении строку нормализуем
+ * в { text, hard: true } через normalizeMustHave().
+ */
+export const MustHaveItemSchema = z.object({
+  text: z.string().min(1).max(200),
+  hard: z.boolean().default(true),
+})
+export type MustHaveItem = z.infer<typeof MustHaveItemSchema>
+
+/** Тип элемента mustHave: строка (legacy) ИЛИ объект (этап 2). */
+export type MustHaveEntry = string | MustHaveItem
+
+/** Текст одного must-have пункта независимо от формата (string|{text}). */
+export function mustHaveText(entry: MustHaveEntry): string {
+  return typeof entry === "string" ? entry : entry.text
+}
+
+/**
+ * Нормализует mustHave любого формата в массив { text, hard }.
+ * Строка → { text, hard: true } (поведение прежнее: пока все пункты hard-нейтральны).
+ * Пустые/битые пункты отбрасываются.
+ */
+export function normalizeMustHave(items: ReadonlyArray<MustHaveEntry> | null | undefined): MustHaveItem[] {
+  if (!Array.isArray(items)) return []
+  const out: MustHaveItem[] = []
+  for (const it of items) {
+    if (typeof it === "string") {
+      const t = it.trim()
+      if (t) out.push({ text: t, hard: true })
+    } else if (it && typeof it === "object" && typeof it.text === "string") {
+      const t = it.text.trim()
+      if (t) out.push({ text: t, hard: typeof it.hard === "boolean" ? it.hard : true })
+    }
+  }
+  return out
+}
+
+/**
+ * Возвращает только тексты must-have пунктов (для legacy-потребителей,
+ * ожидающих string[]: resume-input, rediscovery, dual-write to-legacy).
+ */
+export function mustHaveTexts(items: ReadonlyArray<MustHaveEntry> | null | undefined): string[] {
+  return normalizeMustHave(items).map(i => i.text)
 }
 
 // ─── Главная модель CandidateSpec ────────────────────────────────────────────
@@ -215,20 +294,25 @@ export const DEFAULT_SCORING_WEIGHTS: ScoringWeights = {
 export const CandidateSpecSchema = z.object({
   // ── (a) Оценочные критерии ───────────────────────────────────────────────
   /**
-   * Must-have критерии (3-5 штук). Если >=1 — включает v2-скоринг.
+   * Must-have критерии (до 10). Если >=1 — включает v2-скоринг.
    * Соответствует requirementsJson.must_have.
+   *
+   * Формат элемента: строка (legacy, старые сохранённые Spec) ИЛИ объект
+   * { text, hard } (этап 2 «Портрет», hard/soft). Union обеспечивает
+   * обратную совместимость; для legacy-потребителей нормализуйте через
+   * mustHaveTexts()/normalizeMustHave().
    */
-  mustHave:      z.array(z.string().min(1).max(200)).max(5).default([]),
+  mustHave:      z.array(z.union([z.string().min(1).max(200), MustHaveItemSchema])).max(10).default([]),
   /**
-   * Желательные критерии (до 5 штук). Повышают скор, но не дисквалифицируют.
+   * Желательные критерии (до 10). Повышают скор, но не дисквалифицируют.
    * Соответствует requirementsJson.nice_to_have.
    */
-  niceToHave:    z.array(z.string().min(1).max(200)).max(5).default([]),
+  niceToHave:    z.array(z.string().min(1).max(200)).max(10).default([]),
   /**
-   * Дисквалификаторы (до 3). Presence → reject, даже если скор высокий.
+   * Дисквалификаторы (до 10). Presence → reject, даже если скор высокий.
    * Соответствует requirementsJson.deal_breakers.
    */
-  dealBreakers:  z.array(z.string().min(1).max(200)).max(3).default([]),
+  dealBreakers:  z.array(z.string().min(1).max(200)).max(10).default([]),
   /**
    * Взвешенные критерии для v2-скоринга (9 осей Σ=100).
    * Соответствует requirementsJson.scoring_weights.
@@ -283,6 +367,13 @@ export const CandidateSpecSchema = z.object({
   outboundSoftCriteria:    z.string().max(1000).default(""),
 
   // ── Метаданные ────────────────────────────────────────────────────────────
+  /**
+   * Этап 2 («Портрет»): режим задания весов критериев.
+   * level   — строковые уровни (legacy WeightLevel, critical/important/...).
+   * percent — непрерывная важность 0-100 (новая шкала «Портрета»).
+   * Опц. с дефолтом level — поведение прежнее, пока этап-2 UI не активирован.
+   */
+  weightMode:    z.enum(["level", "percent"]).default("level"),
   /** Версия Spec — для будущих миграций формата */
   version:       z.literal(1).default(1),
   /** Отметка времени последнего изменения Spec через новый контур */

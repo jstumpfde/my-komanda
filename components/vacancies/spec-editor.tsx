@@ -30,18 +30,24 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog"
 import { toast } from "sonner"
 import {
   Target, Plus, X, Loader2, ShieldAlert, FileText, Gauge,
-  ArrowRightLeft, AlertTriangle, Sparkles, Save,
+  ArrowRightLeft, AlertTriangle, Sparkles, Wand2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   DEFAULT_SCORING_WEIGHTS,
+  normalizeMustHave,
   type CandidateSpec,
+  type MustHaveItem,
   type ScoringWeights,
   type MidRangeAction,
 } from "@/lib/core/spec/types"
+import { importanceLabel, computeRealism, REALISM_TONE_CLASS } from "./spec-editor-helpers"
 import { useVacancySectionRegister } from "./vacancy-settings-context"
 
 // ─── Константы ───────────────────────────────────────────────────────────────
@@ -76,11 +82,50 @@ const LIST_PLACEHOLDERS = {
   deal: ["Только B2C опыт", "Меньше 1 года в роли"],
 }
 
+const IDEAL_PLACEHOLDER =
+  "Опытный B2B продавец из стройиндустрии, готовый к длинным сделкам с крупными клиентами. Самостоятельный, ориентирован на результат."
+
 function csvToList(s: string): string[] {
   return s.split(",").map(x => x.trim()).filter(x => x.length > 0)
 }
 
+/** Ответ POST /api/modules/hr/vacancies/[id]/requirements/suggest. */
+interface SuggestionResult {
+  must_have:     string[]
+  nice_to_have:  string[]
+  deal_breakers: string[]
+  ideal_profile: string
+}
+
 // ─── Теги-редактор списков (must/nice/deal) ──────────────────────────────────
+
+/** Рекомендуемое число критериев в списке (мягкий ориентир, не лимит). */
+const RECOMMENDED_ITEMS = 5
+
+/**
+ * Счётчик списка с мягкой рекомендацией: при превышении RECOMMENDED_ITEMS
+ * счётчик становится янтарным + появляется подсказка. Запрета нет (лимит = maxItems).
+ */
+function ListCounter({ count, max }: { count: number; max: number }) {
+  const over = count > RECOMMENDED_ITEMS
+  return (
+    <span className={cn(
+      "text-xs tabular-nums",
+      over ? "text-amber-600 dark:text-amber-400 font-medium" : "text-muted-foreground",
+    )}>
+      {count}/{max}
+    </span>
+  )
+}
+
+function OverRecommendedHint({ count }: { count: number }) {
+  if (count <= RECOMMENDED_ITEMS) return null
+  return (
+    <p className="text-[11px] text-amber-600 dark:text-amber-400">
+      Рекомендуем до {RECOMMENDED_ITEMS} — больше критериев размывают оценку.
+    </p>
+  )
+}
 
 function ListEditor({
   label, hint, maxItems, items, setItems, placeholders,
@@ -111,9 +156,10 @@ function ListEditor({
     <div className="space-y-2">
       <div className="flex items-baseline justify-between">
         <Label className="text-sm font-medium">{label}</Label>
-        <span className="text-xs text-muted-foreground">{items.length}/{maxItems}</span>
+        <ListCounter count={items.length} max={maxItems} />
       </div>
       <p className="text-xs text-muted-foreground">{hint}</p>
+      <OverRecommendedHint count={items.length} />
       <div className="flex flex-wrap gap-1.5">
         {items.map((it, i) => (
           <Badge key={i} variant="secondary" className="gap-1 pr-1 font-normal">
@@ -148,6 +194,116 @@ function ListEditor({
   )
 }
 
+// ─── Редактор must-have с per-пункт hard/soft (Этап 1b, решение #3) ───────────
+
+function MustHaveEditor({
+  items, setItems, maxItems, placeholders,
+}: {
+  items:        MustHaveItem[]
+  setItems:     (next: MustHaveItem[]) => void
+  maxItems:     number
+  placeholders: string[]
+}) {
+  const [draft, setDraft] = useState("")
+  const add = () => {
+    const t = draft.trim()
+    if (!t) return
+    if (items.some(x => x.text.toLowerCase() === t.toLowerCase())) {
+      toast.error("Уже есть такой пункт"); return
+    }
+    if (items.length >= maxItems) {
+      toast.error(`Максимум ${maxItems}`); return
+    }
+    setItems([...items, { text: t, hard: true }])
+    setDraft("")
+  }
+  const setHard = (i: number, hard: boolean) =>
+    setItems(items.map((it, idx) => idx === i ? { ...it, hard } : it))
+  const remove = (i: number) => setItems(items.filter((_, idx) => idx !== i))
+  const ph = placeholders[items.length % placeholders.length] || ""
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-baseline justify-between">
+        <Label className="text-sm font-medium">Обязательные (must-have)</Label>
+        <ListCounter count={items.length} max={maxItems} />
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Без этого кандидат не подходит. Можно целой фразой, напр.: «Опыт руководителем проектов
+        в промышленном строительстве ≥ 5 лет». Enter или + — добавить.
+      </p>
+      <OverRecommendedHint count={items.length} />
+
+      {items.length > 0 && (
+        <div className="space-y-1.5">
+          {items.map((it, i) => (
+            <div key={i} className="flex items-center gap-2 rounded-md border bg-card px-2.5 py-1.5">
+              <span className="flex-1 text-sm break-words">{it.text}</span>
+              {/* Переключатель жёсткий / мягкий */}
+              <div className="flex shrink-0 rounded-md border p-0.5 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setHard(i, true)}
+                  className={cn(
+                    "rounded px-2 py-0.5 transition-colors",
+                    it.hard
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                  title="Несоответствие → отсев кандидата"
+                >
+                  Жёсткий
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHard(i, false)}
+                  className={cn(
+                    "rounded px-2 py-0.5 transition-colors",
+                    !it.hard
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                  title="Несоответствие → только снижает балл"
+                >
+                  Мягкий
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => remove(i)}
+                className="shrink-0 rounded-full hover:bg-muted-foreground/20 p-1"
+                aria-label={`Убрать «${it.text}»`}
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        <Input
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); add() } }}
+          placeholder={ph}
+          maxLength={200}
+          disabled={items.length >= maxItems}
+          className="h-9"
+        />
+        <Button type="button" size="icon" variant="outline" onClick={add}
+          disabled={items.length >= maxItems || !draft.trim()}>
+          <Plus className="w-4 h-4" />
+        </Button>
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        <b>Жёсткий</b> — несоответствие отсеивает кандидата (нокаут). <b>Мягкий</b> — только
+        влияет на балл. Все пункты учитываются вместе (И).
+      </p>
+    </div>
+  )
+}
+
 // ─── Строка стоп-фактора (тумблер + параметры) ───────────────────────────────
 
 function FactorRow({
@@ -173,6 +329,77 @@ function FactorRow({
   )
 }
 
+// ─── Диалог подтверждения AI-предложения (паттерн VacancyRequirementsSettings) ─
+
+function SuggestionDialog({
+  open, onOpenChange, edited, onEdited, onApply,
+}: {
+  open:         boolean
+  onOpenChange: (v: boolean) => void
+  edited:       SuggestionResult | null
+  onEdited:     (v: SuggestionResult) => void
+  onApply:      () => void
+}) {
+  if (!edited) return null
+  const setField = (field: keyof SuggestionResult, value: string[] | string) => {
+    onEdited({ ...edited, [field]: value } as SuggestionResult)
+  }
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Wand2 className="w-4 h-4 text-primary" /> AI собрал портрет из вакансии
+          </DialogTitle>
+          <DialogDescription>
+            Проверьте и при необходимости отредактируйте. После «Применить» поля Портрета
+            заполнятся — не забудьте сохранить.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <ListEditor
+            label="Обязательные (must-have)"
+            hint="Жёсткие требования"
+            maxItems={10}
+            items={edited.must_have}
+            setItems={v => setField("must_have", v)}
+            placeholders={LIST_PLACEHOLDERS.must}
+          />
+          <ListEditor
+            label="Желательные (nice-to-have)"
+            hint="Повышают оценку, не дисквалифицируют"
+            maxItems={10}
+            items={edited.nice_to_have}
+            setItems={v => setField("nice_to_have", v)}
+            placeholders={LIST_PLACEHOLDERS.nice}
+          />
+          <ListEditor
+            label="Неприемлемо (deal-breakers)"
+            hint="При совпадении — отказ"
+            maxItems={10}
+            items={edited.deal_breakers}
+            setItems={v => setField("deal_breakers", v)}
+            placeholders={LIST_PLACEHOLDERS.deal}
+          />
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Идеальный профиль</Label>
+            <Textarea
+              value={edited.ideal_profile}
+              onChange={e => setField("ideal_profile", e.target.value.slice(0, 500))}
+              rows={3}
+              maxLength={500}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Отмена</Button>
+          <Button onClick={onApply}>Применить</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // ─── Главный компонент ───────────────────────────────────────────────────────
 
 interface SpecEditorProps {
@@ -184,9 +411,14 @@ export function SpecEditor({ vacancyId, onSaved }: SpecEditorProps) {
   const [spec, setSpec]     = useState<CandidateSpec | null>(null)
   const [source, setSource] = useState<"spec" | "legacy" | null>(null)
   const [loaded, setLoaded] = useState(false)
-  const [saving, setSaving] = useState(false)
-  // Излишки при переносе v1→v2 (то, что не влезло в лимиты must=5/nice=5/deal=3)
+  // Излишки при переносе v1→v2 (то, что не влезло в лимиты must=10/nice=10/deal=6)
   const [overflow, setOverflow] = useState<{ must: string[]; nice: string[]; deal: string[] } | null>(null)
+
+  // AI «Собрать из вакансии» (POST /requirements/suggest → подтверждающий диалог)
+  const [suggesting, setSuggesting]         = useState(false)
+  const [suggestionOpen, setSuggestionOpen] = useState(false)
+  const [editedSuggestion, setEditedSuggestion] = useState<SuggestionResult | null>(null)
+  const [suggestUnavailable, setSuggestUnavailable] = useState(false)
 
   // CSV-строки для списочных стоп-факторов (как в VacancyStopFactorsSettings)
   const [cityCsv, setCityCsv]               = useState("")
@@ -213,19 +445,16 @@ export function SpecEditor({ vacancyId, onSaved }: SpecEditorProps) {
   // Универсальный апдейтер
   const patch = (p: Partial<CandidateSpec>) => setSpec(prev => prev ? { ...prev, ...p } : prev)
 
+  // Веса теперь независимы (Σ=100 снято, решение #4). Сумма нужна лишь для
+  // отображения доли каждой оси «%». Движок нормирует на фактическую сумму.
   const weightSum = spec
     ? (Object.keys(spec.scoringWeights) as (keyof ScoringWeights)[])
         .reduce((s, k) => s + (spec.scoringWeights[k] ?? 0), 0)
     : 0
-  const weightsValid = weightSum === 100
 
   // ── Сохранение ─────────────────────────────────────────────────────────────
   const save = async () => {
     if (!spec) return
-    if (!weightsValid) {
-      toast.error("Сумма весов должна быть равна 100")
-      throw new Error("weights sum != 100")
-    }
     // CSV → массивы перед отправкой
     const payload: CandidateSpec = {
       ...spec,
@@ -292,6 +521,49 @@ export function SpecEditor({ vacancyId, onSaved }: SpecEditorProps) {
     toast.success(hasOverflow
       ? "Перенесено с обрезкой по лимитам — проверьте излишки ниже"
       : "Перенесено из Портрета — проверьте и сохраните")
+  }
+
+  // ── AI «Собрать из вакансии» ─────────────────────────────────────────────────
+  const requestSuggestion = async () => {
+    setSuggesting(true)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/requirements/suggest`, {
+        method: "POST",
+      })
+      if (!res.ok) {
+        if (res.status === 404 || res.status === 501) {
+          setSuggestUnavailable(true)
+          toast.error("AI-предложение недоступно")
+          return
+        }
+        const err = await res.json().catch(() => null) as { error?: string } | null
+        throw new Error(err?.error || "suggest failed")
+      }
+      const json = await res.json() as { suggestion?: SuggestionResult }
+      if (!json.suggestion) {
+        toast.error("AI вернул пустой ответ")
+        return
+      }
+      setEditedSuggestion(json.suggestion)
+      setSuggestionOpen(true)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ошибка предложения")
+    } finally {
+      setSuggesting(false)
+    }
+  }
+
+  const applySuggestion = () => {
+    if (!editedSuggestion || !spec) return
+    patch({
+      idealProfile: editedSuggestion.ideal_profile.slice(0, 500),
+      // must-have → объекты {text, hard:true} (по умолчанию жёсткие)
+      mustHave:     editedSuggestion.must_have.slice(0, 10).map(text => ({ text, hard: true })),
+      niceToHave:   editedSuggestion.nice_to_have.slice(0, 10),
+      dealBreakers: editedSuggestion.deal_breakers.slice(0, 10),
+    })
+    setSuggestionOpen(false)
+    toast.success("Портрет заполнен из вакансии — проверьте и сохраните")
   }
 
   // ── Рендер ─────────────────────────────────────────────────────────────────
@@ -379,13 +651,13 @@ export function SpecEditor({ vacancyId, onSaved }: SpecEditorProps) {
           <AlertTitle>Не всё влезло в лимиты</AlertTitle>
           <AlertDescription className="text-sm space-y-1">
             {overflow.must.length > 0 && (
-              <p>Обязательные (лимит 5): не перенесено — {overflow.must.join("; ")}</p>
+              <p>Обязательные (лимит 10): не перенесено — {overflow.must.join("; ")}</p>
             )}
             {overflow.nice.length > 0 && (
-              <p>Желательные (лимит 5): не перенесено — {overflow.nice.join("; ")}</p>
+              <p>Желательные (лимит 10): не перенесено — {overflow.nice.join("; ")}</p>
             )}
             {overflow.deal.length > 0 && (
-              <p>Неприемлемо (лимит 3): не перенесено — {overflow.deal.join("; ")}</p>
+              <p>Неприемлемо (лимит 6): не перенесено — {overflow.deal.join("; ")}</p>
             )}
             <p className="text-muted-foreground">
               Сократите формулировки или объедините пункты, чтобы уложиться в лимиты.
@@ -393,6 +665,45 @@ export function SpecEditor({ vacancyId, onSaved }: SpecEditorProps) {
           </AlertDescription>
         </Alert>
       )}
+
+      {/* ── (0) Идеальный профиль — наверху + «Собрать из вакансии» ── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Target className="w-4 h-4" /> Идеальный профиль
+              </CardTitle>
+              <CardDescription>
+                1–2 предложения для AI: кто идеально подходит на эту позицию. С него
+                удобно начать — затем уточнить критерии и пороги ниже.
+              </CardDescription>
+            </div>
+            {!suggestUnavailable && (
+              <Button
+                type="button" variant="outline" size="sm" className="shrink-0"
+                onClick={requestSuggestion} disabled={suggesting}
+              >
+                {suggesting
+                  ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Анализ…</>
+                  : <><Sparkles className="w-4 h-4 mr-1.5" /> Собрать из вакансии</>}
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Textarea
+            value={spec.idealProfile}
+            onChange={e => patch({ idealProfile: e.target.value.slice(0, 500) })}
+            placeholder={IDEAL_PLACEHOLDER}
+            rows={3}
+            maxLength={500}
+          />
+          <p className="text-[11px] text-muted-foreground mt-1.5 text-right">
+            {spec.idealProfile.length}/500
+          </p>
+        </CardContent>
+      </Card>
 
       {/* ── (а) Критерии оценки ── */}
       <Card>
@@ -402,16 +713,14 @@ export function SpecEditor({ vacancyId, onSaved }: SpecEditorProps) {
           </CardTitle>
           <CardDescription>
             Что AI проверяет в резюме и анкете. Must-have активирует
-            структурированный скоринг v2.
+            структурированный скоринг v2. Все списки учитываются вместе (И).
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          <ListEditor
-            label="Обязательные (must-have)"
-            hint="Без этого кандидат не подходит. Можно целой фразой, напр.: «Опыт руководителем проектов в промышленном строительстве ≥ 5 лет». Enter или + — добавить."
-            maxItems={10}
-            items={spec.mustHave}
+          <MustHaveEditor
+            items={normalizeMustHave(spec.mustHave)}
             setItems={v => patch({ mustHave: v })}
+            maxItems={10}
             placeholders={LIST_PLACEHOLDERS.must}
           />
           <ListEditor
@@ -425,52 +734,84 @@ export function SpecEditor({ vacancyId, onSaved }: SpecEditorProps) {
           <ListEditor
             label="Неприемлемо (deal-breakers)"
             hint="При совпадении — отказ, даже если общий балл высокий. Можно фразой."
-            maxItems={6}
+            maxItems={10}
             items={spec.dealBreakers}
             setItems={v => patch({ dealBreakers: v })}
             placeholders={LIST_PLACEHOLDERS.deal}
           />
 
-          {/* Веса */}
+          {/* Веса критериев — независимые оси 0–100 (Σ=100 снято) */}
           <div className="space-y-3 pt-2 border-t">
             <div className="flex items-baseline justify-between">
-              <Label className="text-sm font-medium">Веса критериев</Label>
-              <span className={cn(
-                "text-xs font-semibold",
-                weightsValid ? "text-emerald-600" : "text-destructive",
-              )}>
-                Σ = {weightSum} / 100
+              <Label className="text-sm font-medium">Важность критериев</Label>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                Σ = {weightSum}
               </span>
             </div>
-            {/* Прогресс-бар суммы */}
-            <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-              <div
-                className={cn(
-                  "h-full transition-all",
-                  weightsValid ? "bg-primary" : weightSum > 100 ? "bg-destructive" : "bg-amber-500",
-                )}
-                style={{ width: `${Math.min(100, weightSum)}%` }}
-              />
+            <p className="text-[11px] text-muted-foreground">
+              Оси независимы 0–100 — суммировать к 100 не нужно. AI взвешивает
+              относительно: доля каждой оси = вес ÷ сумма всех весов.
+            </p>
+
+            {/* Режим подачи важности AI */}
+            <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2">
+              <div>
+                <Label className="text-xs font-medium">Передавать важность AI</Label>
+                <p className="text-[11px] text-muted-foreground">
+                  {spec.weightMode === "percent"
+                    ? "Числом/процентом — точная относительная доля каждой оси"
+                    : "Тремя уровнями — «Важно / Критично / Обязательно» (грубее, стабильнее)"}
+                </p>
+              </div>
+              <div className="flex shrink-0 rounded-md border p-0.5 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => patch({ weightMode: "percent" })}
+                  className={cn(
+                    "rounded px-2 py-1 transition-colors",
+                    spec.weightMode === "percent"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Число/процент
+                </button>
+                <button
+                  type="button"
+                  onClick={() => patch({ weightMode: "level" })}
+                  className={cn(
+                    "rounded px-2 py-1 transition-colors",
+                    spec.weightMode === "level"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  3 уровня
+                </button>
+              </div>
             </div>
-            {!weightsValid && (
-              <p className="text-xs text-destructive">
-                Сумма весов должна быть ровно 100 — иначе сохранение заблокировано.
-              </p>
-            )}
+
             <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3">
-              {(Object.keys(WEIGHT_LABELS) as (keyof ScoringWeights)[]).map(k => (
-                <div key={k} className="space-y-1">
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-xs">{WEIGHT_LABELS[k]}</span>
-                    <span className="text-xs font-semibold tabular-nums">{spec.scoringWeights[k]}</span>
+              {(Object.keys(WEIGHT_LABELS) as (keyof ScoringWeights)[]).map(k => {
+                const v = spec.scoringWeights[k]
+                const share = weightSum > 0 ? Math.round((v / weightSum) * 100) : 0
+                return (
+                  <div key={k} className="space-y-1">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-xs">{WEIGHT_LABELS[k]}</span>
+                      <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+                        {v} · {share}%
+                      </span>
+                    </div>
+                    <Slider
+                      value={[v]}
+                      onValueChange={([nv]) => patch({ scoringWeights: { ...spec.scoringWeights, [k]: nv } })}
+                      min={0} max={100} step={1}
+                    />
+                    <span className="text-[11px] text-muted-foreground">{importanceLabel(v)}</span>
                   </div>
-                  <Slider
-                    value={[spec.scoringWeights[k]]}
-                    onValueChange={([v]) => patch({ scoringWeights: { ...spec.scoringWeights, [k]: v } })}
-                    min={0} max={100} step={1}
-                  />
-                </div>
-              ))}
+                )
+              })}
             </div>
             <Button type="button" size="sm" variant="ghost" className="text-xs"
               onClick={() => patch({ scoringWeights: DEFAULT_SCORING_WEIGHTS })}>
@@ -747,44 +1088,45 @@ export function SpecEditor({ vacancyId, onSaved }: SpecEditorProps) {
         </Card>
       </div>
 
-      {/* ── (г) Идеальный профиль ── */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Target className="w-4 h-4" /> Идеальный профиль
-          </CardTitle>
-          <CardDescription>
-            1–2 предложения для AI: кто идеально подходит на эту позицию.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Textarea
-            value={spec.idealProfile}
-            onChange={e => patch({ idealProfile: e.target.value.slice(0, 500) })}
-            placeholder="Опытный B2B продавец из стройиндустрии, готовый к длинным сделкам с крупными клиентами. Самостоятельный, ориентирован на результат."
-            rows={3}
-            maxLength={500}
-          />
-          <p className="text-[11px] text-muted-foreground mt-1.5 text-right">
-            {spec.idealProfile.length}/500
-          </p>
-        </CardContent>
-      </Card>
+      {/* ── (г) Реалистичность портрета ── */}
+      <RealismIndicator spec={spec} />
 
-      <div className="flex items-end justify-between gap-3 pt-1">
-        <p className="text-xs text-muted-foreground max-w-[70%]">
-          Заполненный Портрет используется для AI-оценки откликов (новый контур).
-          У вакансий с пустым Портретом действуют прежние настройки воронки.
-        </p>
-        {/* Явная кнопка сохранения (дублирует sticky-бар настроек — чтобы её было видно). */}
-        <Button
-          onClick={async () => { setSaving(true); try { await save() } catch { /* toast в save */ } finally { setSaving(false) } }}
-          disabled={saving || !spec}
-        >
-          {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-          Сохранить
-        </Button>
+      <p className="text-xs text-muted-foreground pt-1">
+        Заполненный Портрет используется для AI-оценки откликов (новый контур).
+        У вакансий с пустым Портретом действуют прежние настройки воронки.
+        Изменения сохраняются общей кнопкой «Сохранить настройки» внизу.
+      </p>
+
+      {/* Диалог подтверждения AI-предложения */}
+      <SuggestionDialog
+        open={suggestionOpen}
+        onOpenChange={setSuggestionOpen}
+        edited={editedSuggestion}
+        onEdited={setEditedSuggestion}
+        onApply={applySuggestion}
+      />
+    </div>
+  )
+}
+
+// ─── Индикатор «Реалистичность портрета» (Этап 1b, решение #7) ────────────────
+
+function RealismIndicator({ spec }: { spec: CandidateSpec }) {
+  const { level, tone, warn } = computeRealism(spec)
+  return (
+    <div className={cn("rounded-md border px-3 py-2 text-xs space-y-1", REALISM_TONE_CLASS[tone])}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-semibold">Реалистичность портрета: {level}</span>
+        <span className="opacity-70" title="Ориентир, не строгий показатель">
+          сколько кандидатов подойдёт
+        </span>
       </div>
+      {warn && (
+        <p className="leading-snug">
+          ⚠️ Слишком много жёстких условий — подходящих кандидатов будет мало.
+          Смягчите часть must-have, отключите лишние стоп-факторы или снизьте верхний порог.
+        </p>
+      )}
     </div>
   )
 }

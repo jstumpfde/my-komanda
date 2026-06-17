@@ -118,7 +118,7 @@ test("Кейс 3: только v2-поля (requirementsJson, новые клю�
     },
   })
 
-  assert.deepEqual(spec.mustHave,     ["опыт B2B", "английский B2"])
+  assert.deepEqual(spec.mustHave,     [{ text: "опыт B2B", hard: true }, { text: "английский B2", hard: true }])
   assert.deepEqual(spec.niceToHave,   ["опыт в SaaS"])
   assert.deepEqual(spec.dealBreakers, ["нет опыта продаж"])
   assert.deepEqual(spec.scoringWeights, weights)
@@ -168,7 +168,7 @@ test("Кейс 4: v1 + v2 + stopFactors → v2 имеет приоритет", (
   })
 
   // v2 must_have
-  assert.deepEqual(spec.mustHave, ["опыт B2B"])
+  assert.deepEqual(spec.mustHave, [{ text: "опыт B2B", hard: true }])
 
   // v2-профиль приоритет
   assert.equal(spec.idealProfile, "v2-профиль", "v2 ideal_profile должен перекрыть v1")
