@@ -7,6 +7,8 @@ export type UserRole =
   | "platform_admin"
   | "platform_manager"
   | "admin"          // legacy супер-админ (admin@test.ru) — есть в БД
+  | "sales_manager"    // менеджер продаж платформы (ведёт сделки, % с продажи + сопровождения)
+  | "account_manager"  // клиентский менеджер платформы (сопровождение клиента, % с сопровождения)
   | "director"
   | "client"         // legacy роль владельца компании — есть в БД (наравне с director)
   | "hr_lead"
@@ -18,6 +20,15 @@ export type UserRole =
   | "partner"        // внешний партнёр (партнёр/суб-партнёр/реферал — тип в integrators.kind)
 
 export const PLATFORM_ROLES: UserRole[] = ["platform_admin", "platform_manager", "admin"]
+
+// Менеджеры платформы — наши сотрудники, которых назначают ответственными за
+// клиентов и партнёров и которые получают % с оплат (ставки настраиваются).
+// Это НЕ владельцы платформы: доступ ограничен своими клиентами (гейтинг — позже),
+// поэтому в PLATFORM_ROLES их не включаем.
+export const MANAGER_ROLES: UserRole[] = ["sales_manager", "account_manager"]
+export function isManagerRole(role: UserRole): boolean {
+  return MANAGER_ROLES.includes(role)
+}
 
 // Внешние партнёры — отдельный «Партнёрский кабинет» (/partner). Тип партнёра
 // (партнёр/суб-партнёр/реферал) хранится в integrators.kind, а не в роли.

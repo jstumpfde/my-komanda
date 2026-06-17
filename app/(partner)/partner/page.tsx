@@ -32,11 +32,8 @@ interface Overview {
   progressToNextPercent: number
 }
 
-const KIND_LABEL: Record<string, string> = {
-  partner: "Партнёр",
-  sub_partner: "Суб-партнёр",
-  referral: "Реферал",
-}
+import { partnerKindLabel, isReferralKind } from "@/lib/partner-kinds"
+
 function rub(n: number): string {
   return n.toLocaleString("ru-RU") + " ₽"
 }
@@ -81,7 +78,7 @@ export default function PartnerDashboardPage() {
   }
 
   // Реферал — view-only: видит финансы (клиенты/оплаты/%/уровни), но не управляет.
-  const isReferral = ov?.kind === "referral"
+  const isReferral = isReferralKind(ov?.kind)
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 space-y-6">
@@ -95,10 +92,10 @@ export default function PartnerDashboardPage() {
         <div className="flex items-center gap-2">
           {ov && (
             <Badge variant="outline" className="text-xs">
-              {KIND_LABEL[ov.kind] ?? ov.kind} · комиссия {ov.commissionPercent}% {ov.isOverride ? "(фикс)" : "(по объёму)"}
+              {partnerKindLabel(ov.kind)} · комиссия {ov.commissionPercent}% {ov.isOverride ? "(фикс)" : "(по объёму)"}
             </Badge>
           )}
-          {ov?.kind !== "referral" && (
+          {!isReferralKind(ov?.kind) && (
             <Button size="sm" className="gap-1.5" onClick={() => setOnbOpen(true)}>
               <Plus className="size-4" /> Подключить клиента
             </Button>

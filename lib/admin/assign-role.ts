@@ -27,14 +27,15 @@ export type AccessType =
   | "department_head"
   | "observer"
   | "tester_hr"
-  | "partner"      // Партнёр
-  | "sub_partner"  // Суб-партнёр
-  | "referral"     // Реферал
+  | "partner"       // Ген. Партнёр
+  | "sub_partner"   // Партнёр
+  | "referral"      // Ген. Реферал
+  | "sub_referral"  // Реферал
 
 export const CLIENT_ACCESS_TYPES: AccessType[] = [
   "director", "client", "hr_lead", "hr_manager", "department_head", "observer", "tester_hr",
 ]
-export const PARTNER_ACCESS_TYPES: AccessType[] = ["partner", "sub_partner", "referral"]
+export const PARTNER_ACCESS_TYPES: AccessType[] = ["partner", "sub_partner", "referral", "sub_referral"]
 
 export const ALL_ACCESS_TYPES: AccessType[] = [...CLIENT_ACCESS_TYPES, ...PARTNER_ACCESS_TYPES]
 
@@ -42,10 +43,11 @@ export function isAccessType(v: unknown): v is AccessType {
   return typeof v === "string" && (ALL_ACCESS_TYPES as string[]).includes(v)
 }
 
-const PARTNER_KIND: Record<string, "partner" | "sub_partner" | "referral"> = {
+const PARTNER_KIND: Record<string, "partner" | "sub_partner" | "referral" | "sub_referral"> = {
   partner: "partner",
   sub_partner: "sub_partner",
   referral: "referral",
+  sub_referral: "sub_referral",
 }
 
 // Раскладываем тип доступа в users.role.

@@ -8,6 +8,17 @@ import { apiError } from "@/lib/api-helpers"
 
 type Integrator = typeof integrators.$inferSelect
 
+// Если у партнёрской компании назначен salesManagerId — наследуем его клиенту.
+// Иначе «кто завёл» (onboardedByUserId партнёра) становится менеджером продаж.
+async function resolveSalesManagerId(integrator: Integrator, onboardedByUserId: string): Promise<string> {
+  const [partnerCompany] = await db
+    .select({ salesManagerId: companies.salesManagerId })
+    .from(companies)
+    .where(eq(companies.id, integrator.companyId))
+    .limit(1)
+  return partnerCompany?.salesManagerId ?? onboardedByUserId
+}
+
 export interface OnboardInput {
   companyName: string
   directorEmail: string
@@ -43,7 +54,10 @@ export async function createClientForPartner(
   if (existingUser) throw apiError("Пользователь с таким email уже существует", 409)
 
   // 1. Компания клиента (NOT NULL-поля берут дефолты схемы).
-  const [company] = await db.insert(companies).values({ name }).returning({ id: companies.id })
+  // Авто-назначение: если у партнёра есть salesManagerId — наследуем,
+  // иначе «кто завёл» (onboardedByUserId) становится менеджером продаж.
+  const salesManagerId = await resolveSalesManagerId(integrator, onboardedByUserId)
+  const [company] = await db.insert(companies).values({ name, salesManagerId }).returning({ id: companies.id })
 
   // 2. Директор-логин.
   const tempPassword = genPassword()

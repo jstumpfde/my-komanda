@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from "react"
 import { AdminPageLayout } from "@/components/admin/admin-page-layout"
-import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Loader2, ShieldCheck, Users, Lock, Pencil, Shield } from "lucide-react"
+import {
+  TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell,
+} from "@/components/ui/data-table"
+import { Loader2, ShieldCheck, Users, Lock, Pencil, Shield, Eye, Briefcase, Handshake } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import type { AccessLevel, RolePermissions } from "@/app/api/admin/roles/route"
@@ -29,13 +30,21 @@ interface RoleData {
   isPlatform: boolean
   isLocked: boolean
   isPartner?: boolean
+  isManager?: boolean
   userCount: number
   permissions: RolePermissions
+}
+
+interface ManagerRate {
+  role: string
+  salePercent: string
+  accompanimentPercent: string
 }
 
 interface ApiResponse {
   roles: RoleData[]
   features: Feature[]
+  managerRates: ManagerRate[]
 }
 
 // ─── Access level config ──────────────────────────────────────────────────────
@@ -173,91 +182,190 @@ function MatrixDialog({
   )
 }
 
-// ─── Role card ────────────────────────────────────────────────────────────────
+// ─── Права-превью для клиентских ролей ───────────────────────────────────────
 
-function RoleCard({
-  role,
+function PermissionsPreview({ role, features }: { role: RoleData; features: Feature[] }) {
+  const preview = features.slice(0, 3)
+  const rest = features.length - 3
+  return (
+    <div className="space-y-0.5">
+      {preview.map(f => (
+        <div key={f.id} className="flex items-center gap-1.5 text-xs">
+          <span className="text-muted-foreground truncate max-w-[160px]">{f.label}</span>
+          <span className="shrink-0">—</span>
+          <AccessBadge level={role.permissions[f.id] ?? "none"} />
+        </div>
+      ))}
+      {rest > 0 && (
+        <p className="text-[10px] text-muted-foreground/60 pt-0.5">+{rest} функций…</p>
+      )}
+    </div>
+  )
+}
+
+// ─── Группа ролей (подзаголовок + таблица) ───────────────────────────────────
+
+function RoleGroupSection({
+  title,
+  badge,
+  roles,
   features,
   onEdit,
 }: {
-  role: RoleData
+  title: string
+  badge?: React.ReactNode
+  roles: RoleData[]
   features: Feature[]
-  onEdit: () => void
+  onEdit: (role: RoleData) => void
 }) {
-  // Show top-3 permissions as a preview
-  const preview = features.slice(0, 3)
+  if (roles.length === 0) return null
 
   return (
-    <Card className="flex flex-col">
-      <CardContent className="p-4 flex flex-col gap-3 flex-1">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
-              <ShieldCheck className="w-4 h-4 text-primary" />
-            </div>
-            <div className="min-w-0">
-              <p className="font-semibold text-sm leading-tight truncate">{role.label}</p>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                {role.isPlatform && (
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-violet-300 text-violet-700 dark:text-violet-400">
-                    Платформа
-                  </Badge>
-                )}
-                {role.isPartner && (
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-300 text-amber-700 dark:text-amber-400">
-                    Партнёрский
-                  </Badge>
-                )}
-                {role.isLocked && !role.isPartner && (
-                  <Lock className="w-3 h-3 text-muted-foreground" />
-                )}
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
-            <Users className="w-3.5 h-3.5" />
-            {role.userCount}
-          </div>
-        </div>
+    <section>
+      <div className="flex items-center gap-2 mb-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          {title}
+        </h2>
+        {badge}
+      </div>
+      <TableCard>
+        <DataTable>
+          <DataHead>
+            <DataHeadCell>Роль</DataHeadCell>
+            <DataHeadCell>Пользователей</DataHeadCell>
+            <DataHeadCell>Права / Описание</DataHeadCell>
+            <DataHeadCell align="right" width="160px" />
+          </DataHead>
+          <tbody>
+            {roles.map(role => (
+              <DataRow key={role.id}>
+                {/* Роль */}
+                <DataCell>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                      {role.isPlatform ? (
+                        <Shield className="w-3.5 h-3.5 text-primary" />
+                      ) : role.isPartner ? (
+                        <Handshake className="w-3.5 h-3.5 text-primary" />
+                      ) : role.isManager ? (
+                        <Briefcase className="w-3.5 h-3.5 text-primary" />
+                      ) : (
+                        <ShieldCheck className="w-3.5 h-3.5 text-primary" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm leading-tight">{role.label}</p>
+                      {role.isLocked && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <Lock className="w-3 h-3 text-muted-foreground" />
+                          <span className="text-[10px] text-muted-foreground">Зафиксировано</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </DataCell>
 
-        <p className="text-xs text-muted-foreground leading-relaxed flex-1">
-          {role.description}
-        </p>
+                {/* Пользователей */}
+                <DataCell>
+                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <Users className="w-3.5 h-3.5" />
+                    {role.userCount}
+                  </div>
+                </DataCell>
 
-        {role.isPartner ? (
-          <div className="border-t pt-3 mt-auto">
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Доступ — через партнёрский кабинет <span className="font-mono">/partner</span> (не HR-права).
-              Комиссия настраивается в разделе «Уровни комиссии».
-            </p>
-          </div>
-        ) : (
-          <>
-            <div className="space-y-1 border-t pt-3">
-              {preview.map(f => (
-                <div key={f.id} className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground truncate mr-2">{f.label}</span>
-                  <AccessBadge level={role.permissions[f.id] ?? "none"} />
-                </div>
-              ))}
-              <p className="text-[10px] text-muted-foreground/60 pt-0.5">
-                +{features.length - 3} функций…
-              </p>
-            </div>
+                {/* Права / Описание */}
+                <DataCell>
+                  {(role.isPartner || role.isManager) ? (
+                    <p className="text-xs text-muted-foreground leading-relaxed max-w-sm">
+                      {role.description}
+                    </p>
+                  ) : (
+                    <PermissionsPreview role={role} features={features} />
+                  )}
+                </DataCell>
 
-            <Button
-              size="sm"
-              variant="outline"
-              className="w-full gap-1.5 mt-auto"
-              onClick={onEdit}
-            >
-              <Pencil className="w-3.5 h-3.5" />
-              {role.isLocked ? "Просмотреть права" : "Редактировать"}
-            </Button>
-          </>
-        )}
-      </CardContent>
-    </Card>
+                {/* Действие */}
+                <DataCell align="right">
+                  {!role.isPartner && !role.isManager && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 h-8 text-xs"
+                      onClick={() => onEdit(role)}
+                    >
+                      {role.isLocked ? (
+                        <><Eye className="w-3.5 h-3.5" />Просмотреть</>
+                      ) : (
+                        <><Pencil className="w-3.5 h-3.5" />Редактировать</>
+                      )}
+                    </Button>
+                  )}
+                </DataCell>
+              </DataRow>
+            ))}
+          </tbody>
+        </DataTable>
+      </TableCard>
+    </section>
+  )
+}
+
+// ─── Секция «Менеджеры и комиссии» ───────────────────────────────────────────
+
+function ManagerRatesSection({ rates }: { rates: ManagerRate[] }) {
+  const ROLE_LABELS: Record<string, string> = {
+    sales_manager: "Менеджер продаж",
+    account_manager: "Клиентский менеджер",
+  }
+
+  return (
+    <section>
+      <div className="flex items-center gap-2 mb-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          Менеджеры и комиссии
+        </h2>
+      </div>
+      <TableCard>
+        <DataTable>
+          <DataHead>
+            <DataHeadCell>Роль</DataHeadCell>
+            <DataHeadCell align="center">% при продаже</DataHeadCell>
+            <DataHeadCell align="center">% сопровождения</DataHeadCell>
+          </DataHead>
+          <tbody>
+            {rates.length === 0 ? (
+              <tr>
+                <td colSpan={3} className="text-center py-8 text-sm text-muted-foreground">
+                  Ставки не настроены (миграция 0218 ещё не применена)
+                </td>
+              </tr>
+            ) : rates.map(r => (
+              <DataRow key={r.role}>
+                <DataCell>
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                      <Briefcase className="w-3.5 h-3.5 text-primary" />
+                    </div>
+                    <span className="font-medium text-sm">
+                      {ROLE_LABELS[r.role] ?? r.role}
+                    </span>
+                  </div>
+                </DataCell>
+                <DataCell align="center">
+                  <span className="text-sm font-medium">{r.salePercent}%</span>
+                </DataCell>
+                <DataCell align="center">
+                  <span className="text-sm font-medium">{r.accompanimentPercent}%</span>
+                </DataCell>
+              </DataRow>
+            ))}
+          </tbody>
+        </DataTable>
+      </TableCard>
+      <p className="text-xs text-muted-foreground mt-2 px-1">
+        Ставки настраиваются — редактор появится в этом разделе
+      </p>
+    </section>
   )
 }
 
@@ -291,94 +399,77 @@ export default function AdminRolesPage() {
   }
 
   const platformRoles = data?.roles.filter(r => r.isPlatform) ?? []
-  const partnerRoles = data?.roles.filter(r => r.isPartner) ?? []
-  const clientRoles = data?.roles.filter(r => !r.isPlatform && !r.isPartner) ?? []
+  const clientRoles   = data?.roles.filter(r => !r.isPlatform && !r.isPartner && !r.isManager) ?? []
+  const partnerRoles  = data?.roles.filter(r => r.isPartner) ?? []
+  const managerRoles  = data?.roles.filter(r => r.isManager) ?? []
 
   return (
     <AdminPageLayout>
       <div className="py-6 space-y-8 px-8">
 
-            {/* Header */}
-            <div>
-              <div className="flex items-center gap-2 pt-3 pb-2">
-                <Shield className="h-5 w-5 text-violet-600" />
-                <h1 className="text-lg font-semibold">Роли и доступ</h1>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Управление правами доступа по ролям для всех пользователей платформы
-              </p>
-            </div>
+        {/* Header */}
+        <div>
+          <div className="flex items-center gap-2 pt-3 pb-2">
+            <Shield className="h-5 w-5 text-violet-600" />
+            <h1 className="text-lg font-semibold">Роли и доступ</h1>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Управление правами доступа по ролям для всех пользователей платформы
+          </p>
+        </div>
 
-            {loading ? (
-              <div className="flex items-center justify-center h-48">
-                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : (
-              <>
-                {/* Platform roles */}
-                <section>
-                  <div className="flex items-center gap-2 mb-4">
-                    <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                      Платформенные роли
-                    </h2>
-                    <Badge variant="outline" className="text-[10px] border-violet-300 text-violet-700 dark:text-violet-400">
-                      Скрыты от клиентов
-                    </Badge>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {platformRoles.map(role => (
-                      <RoleCard
-                        key={role.id}
-                        role={role}
-                        features={data?.features ?? []}
-                        onEdit={() => setEditingRole(role)}
-                      />
-                    ))}
-                  </div>
-                </section>
+        {loading ? (
+          <div className="flex items-center justify-center h-48">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <>
+            <RoleGroupSection
+              title="Платформенные роли"
+              badge={
+                <Badge variant="outline" className="text-[10px] border-violet-300 text-violet-700 dark:text-violet-400">
+                  Скрыты от клиентов
+                </Badge>
+              }
+              roles={platformRoles}
+              features={data?.features ?? []}
+              onEdit={setEditingRole}
+            />
 
-                {/* Client roles */}
-                <section>
-                  <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-4">
-                    Клиентские роли
-                  </h2>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {clientRoles.map(role => (
-                      <RoleCard
-                        key={role.id}
-                        role={role}
-                        features={data?.features ?? []}
-                        onEdit={() => setEditingRole(role)}
-                      />
-                    ))}
-                  </div>
-                </section>
+            <RoleGroupSection
+              title="Клиентские роли"
+              roles={clientRoles}
+              features={data?.features ?? []}
+              onEdit={setEditingRole}
+            />
 
-                {/* Partner roles */}
-                {partnerRoles.length > 0 && (
-                  <section>
-                    <div className="flex items-center gap-2 mb-4">
-                      <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                        Партнёрские роли
-                      </h2>
-                      <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 dark:text-amber-400">
-                        Доступ — кабинет /partner
-                      </Badge>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {partnerRoles.map(role => (
-                        <RoleCard
-                          key={role.id}
-                          role={role}
-                          features={data?.features ?? []}
-                          onEdit={() => setEditingRole(role)}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                )}
-              </>
-            )}
+            <RoleGroupSection
+              title="Партнёрские роли"
+              badge={
+                <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 dark:text-amber-400">
+                  Кабинет /partner
+                </Badge>
+              }
+              roles={partnerRoles}
+              features={data?.features ?? []}
+              onEdit={setEditingRole}
+            />
+
+            <RoleGroupSection
+              title="Менеджеры платформы"
+              badge={
+                <Badge variant="outline" className="text-[10px] border-sky-300 text-sky-700 dark:text-sky-400">
+                  Комиссионные
+                </Badge>
+              }
+              roles={managerRoles}
+              features={data?.features ?? []}
+              onEdit={setEditingRole}
+            />
+
+            <ManagerRatesSection rates={data?.managerRates ?? []} />
+          </>
+        )}
       </div>
 
       {editingRole && (

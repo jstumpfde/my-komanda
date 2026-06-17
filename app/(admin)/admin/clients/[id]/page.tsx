@@ -56,6 +56,9 @@ interface Company {
   // Per-company оверрайд видимых модулей сайдбара (companies.enabled_modules).
   // null = grandfather (модули по роли); непустой массив = ровно эти модули.
   enabledModules: string[] | null
+  // Ответственные менеджеры (drizzle/0218).
+  salesManagerId: string | null
+  accountManagerId: string | null
 }
 
 // Ключи и русские лейблы модулей для секции «Модули в меню (сайдбар)».
@@ -354,6 +357,134 @@ function UsageBar({ label, used, limit }: { label: string; used: number; limit: 
         />
       )}
     </div>
+  )
+}
+
+// ─── Компонент: Ответственные менеджеры ──────────────────────────────────────
+
+interface ManagerOption { id: string; name: string; email: string; role: string }
+interface CommissionRate { role: string; salePercent: string; accompanimentPercent: string }
+
+function ManagersCard({ clientId, company }: { clientId: string; company: Company | null }) {
+  const [managers, setManagers] = useState<ManagerOption[]>([])
+  const [rates, setRates] = useState<CommissionRate[]>([])
+  const [salesId, setSalesId] = useState<string>("")
+  const [accountId, setAccountId] = useState<string>("")
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState("")
+
+  // Загрузка списка менеджеров и ставок параллельно
+  useEffect(() => {
+    fetch("/api/admin/managers")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.managers) setManagers(data.managers) })
+      .catch(() => {})
+    fetch("/api/admin/manager-rates")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.rates) setRates(data.rates) })
+      .catch(() => {})
+  }, [])
+
+  // Инициализируем селекты из данных компании
+  useEffect(() => {
+    setSalesId(company?.salesManagerId ?? "")
+    setAccountId(company?.accountManagerId ?? "")
+  }, [company?.salesManagerId, company?.accountManagerId])
+
+  async function handleSave() {
+    setSaving(true)
+    setSaved(false)
+    setError("")
+    try {
+      const res = await fetch(`/api/admin/clients/${clientId}/assign-manager`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          salesManagerId:   salesId || null,
+          accountManagerId: accountId || null,
+        }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        setError(d.error ?? "Ошибка сохранения")
+        return
+      }
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    } catch {
+      setError("Ошибка сети")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Подсказка со ставками
+  const salesRate   = rates.find(r => r.role === "sales_manager")
+  const accountRate = rates.find(r => r.role === "account_manager")
+  const ratesHint = [
+    salesRate   ? `Менеджер продаж: ${salesRate.salePercent}% продажа + ${salesRate.accompanimentPercent}% сопровождение` : null,
+    accountRate ? `Клиентский: ${accountRate.accompanimentPercent}% сопровождение` : null,
+  ].filter(Boolean).join("; ")
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <Shield className="w-4 h-4" /> Ответственные менеджеры
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {ratesHint && (
+          <p className="text-xs text-muted-foreground">{ratesHint}</p>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Менеджер продаж</Label>
+            <Select value={salesId || "none"} onValueChange={v => setSalesId(v === "none" ? "" : v)}>
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue placeholder="— не назначен —" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">— не назначен —</SelectItem>
+                {managers.map(m => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.name} <span className="text-muted-foreground text-xs">({m.email})</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Клиентский менеджер</Label>
+            <Select value={accountId || "none"} onValueChange={v => setAccountId(v === "none" ? "" : v)}>
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue placeholder="— не назначен —" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">— не назначен —</SelectItem>
+                {managers.map(m => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.name} <span className="text-muted-foreground text-xs">({m.email})</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 pt-1">
+          <Button onClick={handleSave} disabled={saving} className="gap-2">
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            Сохранить
+          </Button>
+          {saved  && <span className="text-xs text-emerald-600 font-medium">Сохранено</span>}
+          {error  && <span className="text-xs text-destructive">{error}</span>}
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -1102,6 +1233,9 @@ export default function AdminClientPage() {
                     </div>
                   </CardContent>
                 </Card>
+
+                {/* Ответственные менеджеры */}
+                <ManagersCard clientId={clientId} company={company} />
 
                 {/* Модули в меню (сайдбар) */}
                 <Card>
