@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Plus, Trash2, Clock, Calendar, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { RU_HOLIDAYS } from "@/lib/schedule/holidays"
+import { COUNTRY_LABELS, getHolidaysForCountry, type CountryCode } from "@/lib/holidays"
 import { useVacancySectionRegister } from "./vacancy-settings-context"
 
 interface CustomHoliday {
@@ -30,6 +31,10 @@ interface ScheduleData {
   scheduleWorkingDays:        number[]
   scheduleExcludedHolidayIds: string[]
   scheduleCustomHolidays:     CustomHoliday[]
+  scheduleLunchEnabled:       boolean
+  scheduleLunchFrom:          string
+  scheduleLunchTo:            string
+  scheduleCountry:            string
 }
 
 const WEEKDAYS = [
@@ -260,29 +265,66 @@ export function VacancyScheduleSettings({ vacancyId }: Props) {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
+          {/* Страна календаря праздников */}
           <div className="space-y-2">
-            <Label className="text-sm">Праздники РФ</Label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-1.5">
-              {RU_HOLIDAYS.map((h) => {
-                const active = data.scheduleExcludedHolidayIds.includes(h.id)
-                return (
-                  <label
-                    key={h.id}
-                    className="flex items-center gap-2 cursor-pointer text-sm"
-                  >
-                    <Checkbox
-                      checked={active}
-                      onCheckedChange={() => toggleHoliday(h.id)}
-                    />
-                    <span className="text-foreground">
-                      {String(h.day).padStart(2, "0")}.{String(h.month).padStart(2, "0")}
-                    </span>
-                    <span className="text-muted-foreground text-xs truncate">{h.label}</span>
-                  </label>
-                )
-              })}
-            </div>
+            <Label className="text-sm">Страна (календарь праздников)</Label>
+            <Select
+              value={data.scheduleCountry}
+              onValueChange={(v) => setData({ ...data, scheduleCountry: v })}
+            >
+              <SelectTrigger className="w-[220px] h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(COUNTRY_LABELS) as CountryCode[]).map((code) => (
+                  <SelectItem key={code} value={code}>
+                    {COUNTRY_LABELS[code]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+
+          {/* Праздники: RU — чекбоксы, остальные — read-only сводка */}
+          {data.scheduleCountry === "RU" || !data.scheduleCountry ? (
+            <div className="space-y-2">
+              <Label className="text-sm">Праздники РФ</Label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-1.5">
+                {RU_HOLIDAYS.map((h) => {
+                  const active = data.scheduleExcludedHolidayIds.includes(h.id)
+                  return (
+                    <label
+                      key={h.id}
+                      className="flex items-center gap-2 cursor-pointer text-sm"
+                    >
+                      <Checkbox
+                        checked={active}
+                        onCheckedChange={() => toggleHoliday(h.id)}
+                      />
+                      <span className="text-foreground">
+                        {String(h.day).padStart(2, "0")}.{String(h.month).padStart(2, "0")}
+                      </span>
+                      <span className="text-muted-foreground text-xs truncate">{h.label}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <Label className="text-sm">
+                Праздники {COUNTRY_LABELS[data.scheduleCountry as CountryCode] ?? data.scheduleCountry}
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {getHolidaysForCountry(data.scheduleCountry as CountryCode).length} дней — блокируются автоматически
+              </p>
+              <div className="text-xs text-muted-foreground space-y-0.5">
+                {getHolidaysForCountry(data.scheduleCountry as CountryCode).map((h) => (
+                  <div key={h.date}>{h.date} — {h.name}</div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -328,6 +370,47 @@ export function VacancyScheduleSettings({ vacancyId }: Props) {
               </div>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Обеденный перерыв */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Clock className="w-4 h-4" /> Обеденный перерыв
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">Блокировать отправку в обед</Label>
+              <p className="text-xs text-muted-foreground">
+                В указанный промежуток сообщения кандидатам не отправляются
+              </p>
+            </div>
+            <Switch
+              checked={data.scheduleLunchEnabled}
+              onCheckedChange={(v) => setData({ ...data, scheduleLunchEnabled: v })}
+            />
+          </div>
+          {data.scheduleLunchEnabled && (
+            <div className="flex items-center gap-2">
+              <Label className="text-sm text-muted-foreground">С</Label>
+              <Input
+                type="time"
+                value={data.scheduleLunchFrom}
+                onChange={(e) => setData({ ...data, scheduleLunchFrom: e.target.value })}
+                className="w-[120px] h-9"
+              />
+              <Label className="text-sm text-muted-foreground">до</Label>
+              <Input
+                type="time"
+                value={data.scheduleLunchTo}
+                onChange={(e) => setData({ ...data, scheduleLunchTo: e.target.value })}
+                className="w-[120px] h-9"
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
 

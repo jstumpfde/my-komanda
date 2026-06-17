@@ -1,4 +1,5 @@
 import { RU_HOLIDAYS } from "./holidays"
+import { getHolidaysForCountry } from "@/lib/holidays"
 
 // ─── Helpers для TZ-arithmetic ────────────────────────────────────────────
 // Возвращает поля даты в указанной IANA TZ.
@@ -47,12 +48,17 @@ export interface VacancySchedule {
   scheduleWorkingDays?:        number[] | null  // 1=Пн ... 7=Вс
   scheduleExcludedHolidayIds?: string[] | null  // совпадает с RU_HOLIDAYS[].id
   scheduleCustomHolidays?:     { from: string; to: string; label: string }[] | null
+  scheduleLunchEnabled?:       boolean | null
+  scheduleLunchFrom?:          string  | null   // "HH:MM"
+  scheduleLunchTo?:            string  | null   // "HH:MM"
+  scheduleCountry?:            string  | null   // "RU" | "KZ" | "UZ" | "BY"
 }
 
 export type CanSendReason =
   | "off_hours"
   | "non_working_day"
   | "custom_holiday"
+  | "lunch_break"
   | `holiday_${string}`
 
 export interface CanSendNowResult {
@@ -97,6 +103,17 @@ export function canSendNow(vacancy: VacancySchedule, now: Date = new Date()): Ca
     return { allowed: false, reason: "off_hours" }
   }
 
+  // 1b. Обеденный перерыв — проверяем сразу после часов, до дней недели.
+  if (
+    vacancy.scheduleLunchEnabled &&
+    vacancy.scheduleLunchFrom &&
+    vacancy.scheduleLunchTo &&
+    currentTime >= vacancy.scheduleLunchFrom &&
+    currentTime < vacancy.scheduleLunchTo
+  ) {
+    return { allowed: false, reason: "lunch_break" }
+  }
+
   // 2. Дни недели — Intl выдаёт "Mon"…"Sun".
   const weekdayMap: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 }
   const today = weekdayMap[parts.weekday]
@@ -107,15 +124,25 @@ export function canSendNow(vacancy: VacancySchedule, now: Date = new Date()): Ca
     return { allowed: false, reason: "non_working_day" }
   }
 
-  // 3. Стандартные праздники РФ — блокируем только те, что отмечены в excluded.
-  const month = Number.parseInt(parts.month, 10)
-  const day   = Number.parseInt(parts.day, 10)
-  const excludedIds = vacancy.scheduleExcludedHolidayIds && vacancy.scheduleExcludedHolidayIds.length > 0
-    ? vacancy.scheduleExcludedHolidayIds
-    : DEFAULT_EXCLUDED_HOLIDAY_IDS
-  const todayHoliday = RU_HOLIDAYS.find((h) => h.month === month && h.day === day)
-  if (todayHoliday && excludedIds.includes(todayHoliday.id)) {
-    return { allowed: false, reason: `holiday_${todayHoliday.id}` }
+  // 3. Праздники — ветвление по стране.
+  const country = vacancy.scheduleCountry || "RU"
+  if (country !== "RU") {
+    // Не-RU страна: используем getHolidaysForCountry (формат "DD.MM").
+    const ddmm = `${parts.day}.${parts.month}`
+    if (getHolidaysForCountry(country as Parameters<typeof getHolidaysForCountry>[0]).some((h) => h.date === ddmm)) {
+      return { allowed: false, reason: `holiday_${country.toLowerCase()}` as CanSendReason }
+    }
+  } else {
+    // RU (или пусто): старая логика RU_HOLIDAYS + excludedIds — без изменений.
+    const month = Number.parseInt(parts.month, 10)
+    const day   = Number.parseInt(parts.day, 10)
+    const excludedIds = vacancy.scheduleExcludedHolidayIds && vacancy.scheduleExcludedHolidayIds.length > 0
+      ? vacancy.scheduleExcludedHolidayIds
+      : DEFAULT_EXCLUDED_HOLIDAY_IDS
+    const todayHoliday = RU_HOLIDAYS.find((h) => h.month === month && h.day === day)
+    if (todayHoliday && excludedIds.includes(todayHoliday.id)) {
+      return { allowed: false, reason: `holiday_${todayHoliday.id}` }
+    }
   }
 
   // 4. Кастомные периоды (отпуска компании, корпоративы и т.п.).
@@ -154,6 +181,7 @@ export type AdjustReason =
   | "non_working_day_moved"
   | "holiday_moved"
   | "custom_holiday_moved"
+  | "lunch_moved"
 
 export interface AdjustResult {
   adjusted: Date
@@ -183,6 +211,7 @@ export function adjustToWorkingWindow(date: Date, vacancy: VacancySchedule): Adj
     ? vacancy.scheduleExcludedHolidayIds
     : DEFAULT_EXCLUDED_HOLIDAY_IDS
   const customHolidays = (!useDefaults && vacancy.scheduleCustomHolidays) ? vacancy.scheduleCustomHolidays : []
+  const country = (!useDefaults && vacancy.scheduleCountry) ? vacancy.scheduleCountry : "RU"
 
   // Минута к началу окна (например, "09:00" → 540) — для сравнения "HH:MM".
   const startTimeStr = start
@@ -205,14 +234,25 @@ export function adjustToWorkingWindow(date: Date, vacancy: VacancySchedule): Adj
       continue
     }
 
-    // 2. Стандартный праздник РФ → следующий день в start.
-    const month = Number(p.month)
-    const day   = Number(p.day)
-    const stdHoliday = RU_HOLIDAYS.find((h) => h.month === month && h.day === day)
-    if (stdHoliday && excludedIds.includes(stdHoliday.id)) {
-      firstReason ??= "holiday_moved"
-      current = nextDayStart(current, tz, startTimeStr)
-      continue
+    // 2. Праздник → следующий день в start.
+    if (country !== "RU") {
+      // Не-RU: сверяемся с getHolidaysForCountry (формат "DD.MM").
+      const ddmm = `${p.day}.${p.month}`
+      if (getHolidaysForCountry(country as Parameters<typeof getHolidaysForCountry>[0]).some((h) => h.date === ddmm)) {
+        firstReason ??= "holiday_moved"
+        current = nextDayStart(current, tz, startTimeStr)
+        continue
+      }
+    } else {
+      // RU: старая логика RU_HOLIDAYS + excludedIds — без изменений.
+      const month = Number(p.month)
+      const day   = Number(p.day)
+      const stdHoliday = RU_HOLIDAYS.find((h) => h.month === month && h.day === day)
+      if (stdHoliday && excludedIds.includes(stdHoliday.id)) {
+        firstReason ??= "holiday_moved"
+        current = nextDayStart(current, tz, startTimeStr)
+        continue
+      }
     }
 
     // 3. Кастомный период (отпуск компании) → день после окончания периода.
@@ -230,6 +270,14 @@ export function adjustToWorkingWindow(date: Date, vacancy: VacancySchedule): Adj
     if (currentTime < startTimeStr) {
       firstReason ??= "off_hours_moved"
       current = sameDayAt(current, tz, startTimeStr)
+      continue
+    }
+
+    // 4b. Обеденный перерыв — внутри рабочего окна → сдвигаем на конец обеда.
+    const lunchOn = !useDefaults && vacancy.scheduleLunchEnabled && vacancy.scheduleLunchFrom && vacancy.scheduleLunchTo
+    if (lunchOn && currentTime >= vacancy.scheduleLunchFrom! && currentTime < vacancy.scheduleLunchTo!) {
+      firstReason ??= "lunch_moved"
+      current = sameDayAt(current, tz, vacancy.scheduleLunchTo!)
       continue
     }
 
