@@ -7,11 +7,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Sheet, SheetContent, SheetHeader, SheetBody, SheetTitle } from "@/components/ui/sheet"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Loader2, Users, Wallet, Percent, Building2, Plus, UserPlus, CheckCircle2, Copy, LogIn, TrendingUp, Briefcase, UserSearch } from "lucide-react"
 import { toast } from "sonner"
 import { useSession } from "next-auth/react"
 import { enterClientImpersonation } from "./impersonation-actions"
 import { PartnerClientsTable, type PartnerClientRow as ClientRow } from "@/components/partner/clients-table"
+import { FUNNEL_TEMPLATES, DEFAULT_TEMPLATE_KEY } from "@/lib/funnel-builder/blocks"
 
 interface Overview {
   kind: string
@@ -140,12 +142,13 @@ function OnboardSheet({ open, onOpenChange, products, onDone }: {
   const [companyName, setCompanyName] = useState("")
   const [directorEmail, setDirectorEmail] = useState("")
   const [directorName, setDirectorName] = useState("")
+  const [funnelScenario, setFunnelScenario] = useState(DEFAULT_TEMPLATE_KEY)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState<{ directorEmail: string; tempPassword: string } | null>(null)
 
   const reset = () => {
-    setCompanyName(""); setDirectorEmail(""); setDirectorName(""); setSelected(new Set()); setResult(null)
+    setCompanyName(""); setDirectorEmail(""); setDirectorName(""); setFunnelScenario(DEFAULT_TEMPLATE_KEY); setSelected(new Set()); setResult(null)
   }
   const toggle = (slug: string) => {
     setSelected((prev) => { const n = new Set(prev); n.has(slug) ? n.delete(slug) : n.add(slug); return n })
@@ -161,6 +164,7 @@ function OnboardSheet({ open, onOpenChange, products, onDone }: {
         body: JSON.stringify({
           companyName: companyName.trim(), directorEmail: directorEmail.trim(),
           directorName: directorName.trim() || undefined, moduleSlugs: [...selected],
+          funnelScenario,
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -211,6 +215,22 @@ function OnboardSheet({ open, onOpenChange, products, onDone }: {
             <div className="space-y-1.5">
               <Label className="text-sm">Имя директора</Label>
               <Input value={directorName} onChange={(e) => setDirectorName(e.target.value)} placeholder="Иван Петров" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Сценарий обработки</Label>
+              <Select value={funnelScenario} onValueChange={setFunnelScenario}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(FUNNEL_TEMPLATES).map(([key, tpl]) => (
+                    <SelectItem key={key} value={key}>{tpl.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                {FUNNEL_TEMPLATES[funnelScenario]?.description ?? ""}
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label className="text-sm">Подключить продукты</Label>

@@ -23,11 +23,13 @@ export async function POST(req: NextRequest) {
     const { user, integrator } = await requirePartner()
     assertPartnerCanManage(integrator.kind) // реферал не онбордит клиентов
     const body = (await req.json().catch(() => ({}))) as Partial<OnboardInput>
+    const rawScenario = typeof body.funnelScenario === "string" ? body.funnelScenario.trim().slice(0, 64) : undefined
     const result = await createClientForPartner(integrator, user.id, {
       companyName: body.companyName ?? "",
       directorEmail: body.directorEmail ?? "",
       directorName: body.directorName,
       moduleSlugs: Array.isArray(body.moduleSlugs) ? body.moduleSlugs : [],
+      funnelScenario: rawScenario || undefined,
     })
     return apiSuccess(result, 201)
   } catch (err) {
