@@ -3409,3 +3409,87 @@ export const nancyFeedback = pgTable("nancy_feedback", {
   page:      text("page"),                      // /hr/vacancies, /hr/candidates, …
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 })
+
+// ─── Product Pricing (миграция 0217) ─────────────────────────────────────────
+// Цена модуля внутри конкретного тарифного плана. Используется для расчёта
+// стоимости набора модулей при назначении клиенту.
+
+export const productPricing = pgTable("product_pricing", {
+  id:            uuid("id").primaryKey().defaultRandom(),
+  planId:        uuid("plan_id").references(() => plans.id, { onDelete: "cascade" }).notNull(),
+  moduleId:      uuid("module_id").references(() => modules.id, { onDelete: "cascade" }).notNull(),
+  priceKopecks:  integer("price_kopecks").notNull().default(0),
+  currency:      text("currency").notNull().default("RUB"),
+  isActive:      boolean("is_active").notNull().default(true),
+  sortOrder:     integer("sort_order").notNull().default(0),
+  createdAt:     timestamp("created_at").defaultNow(),
+  updatedAt:     timestamp("updated_at").defaultNow(),
+}, (t) => [unique().on(t.planId, t.moduleId)])
+
+export type ProductPricing = typeof productPricing.$inferSelect
+export type NewProductPricing = typeof productPricing.$inferInsert
+
+// ─── Bundle Discounts (миграция 0217) ────────────────────────────────────────
+// Скидка за набор модулей: чем больше продуктов выбрал клиент, тем выше %.
+// Применяется к общей сумме: total = subtotal × (1 − discountPercent / 100).
+
+export const bundleDiscounts = pgTable("bundle_discounts", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  planId:          uuid("plan_id").references(() => plans.id, { onDelete: "cascade" }).notNull(),
+  minProducts:     integer("min_products").notNull(),
+  maxProducts:     integer("max_products"),   // null = без верхней границы
+  discountPercent: integer("discount_percent").notNull().default(0),
+  description:     text("description"),
+  isActive:        boolean("is_active").notNull().default(true),
+  createdAt:       timestamp("created_at").defaultNow(),
+}, (t) => [unique().on(t.planId, t.minProducts)])
+
+export type BundleDiscount = typeof bundleDiscounts.$inferSelect
+export type NewBundleDiscount = typeof bundleDiscounts.$inferInsert
+
+// ─── Platform Invite Links (миграция 0219) ────────────────────────────────────
+// Платформенные ссылки-приглашения: регистрация под роль + вид партнёра.
+// Отличаются от company-уровневых inviteLinks (строка 2021): нет companyId,
+// поддерживают партнёрские kind, usedCount вместо usesCount, maxUses=0=безлимит.
+// role — значение из CLIENT_ACCESS_TYPES или PARTNER_ACCESS_TYPES.
+// kind — только для партнёрских ролей (partner/sub_partner/referral/sub_referral).
+
+export const platformInviteLinks = pgTable("platform_invite_links", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  token:      text("token").unique().notNull(),
+  role:       text("role").notNull(),
+  kind:       text("kind"),
+  label:      text("label"),
+  maxUses:    integer("max_uses").notNull().default(0),
+  usedCount:  integer("used_count").notNull().default(0),
+  expiresAt:  timestamp("expires_at"),
+  isActive:   boolean("is_active").notNull().default(true),
+  createdBy:  uuid("created_by"),
+  createdAt:  timestamp("created_at").defaultNow(),
+})
+
+export type PlatformInviteLink = typeof platformInviteLinks.$inferSelect
+export type NewPlatformInviteLink = typeof platformInviteLinks.$inferInsert
+
+// ─── Promo Codes (миграция 0219) ─────────────────────────────────────────────
+// Платформенные промокоды для применения при регистрации (v2). Имя таблицы —
+// platform_promo_codes, т.к. в БД уже есть orphan-таблица promo_codes
+// (discount_percent/description, без Drizzle-схемы и без использования).
+// kind: 'discount_percent' | 'trial_days' | 'plan'
+// value: строка (например "20", "14", slug тарифа).
+// maxUses = 0 → безлимит.
+
+export const promoCodes = pgTable("platform_promo_codes", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  code:       text("code").unique().notNull(),
+  kind:       text("kind").notNull(),
+  value:      text("value").notNull(),
+  maxUses:    integer("max_uses").notNull().default(0),
+  usedCount:  integer("used_count").notNull().default(0),
+  expiresAt:  timestamp("expires_at"),
+  isActive:   boolean("is_active").notNull().default(true),
+  createdAt:  timestamp("created_at").defaultNow(),
+})
+
+export type PromoCode = typeof promoCodes.$inferSelect
+export type NewPromoCode = typeof promoCodes.$inferInsert

@@ -1,60 +1,21 @@
-// Назначение «типа доступа» пользователю из админки.
+// Назначение «типа доступа» пользователю из админки (СЕРВЕРНЫЙ модуль — тянет db).
 //
 // Модель ролей:
 //   - Клиентские роли (director/hr_lead/hr_manager/department_head/observer/client)
 //     хранятся прямо в users.role — без записи в integrators.
-//   - «Партнёр / Суб-партнёр / Реферал» — это users.role='partner' + запись в
-//     integrators для companyId пользователя с нужным kind:
-//       Партнёр      → role='partner' + integrator(kind='partner')
-//       Суб-партнёр  → role='partner' + integrator(kind='sub_partner')
-//       Реферал      → role='partner' + integrator(kind='referral')
+//   - «Партнёр / Суб-партнёр / Реферал / Суб-реферал» — это users.role='partner' +
+//     запись в integrators с нужным kind.
 //
-// UI оперирует «типом доступа» (accessType). Здесь раскладываем его на
-// users.role + (опционально) integrators.kind.
+// Чистые константы/типы (AccessType, *_ACCESS_TYPES, PARTNER_KIND, …) вынесены в
+// lib/admin/access-types.ts (client-safe) и реэкспортируются отсюда для серверных
+// потребителей, импортирующих из "@/lib/admin/assign-role".
 
 import { and, eq, ne } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { integrators, integratorClients } from "@/lib/db/schema"
+import { PARTNER_KIND, type AccessType } from "@/lib/admin/access-types"
 
-// Тип доступа, как его выбирает админ в UI.
-// Клиентские роли совпадают со значением users.role; партнёрские — это
-// разложение на role='partner' + integrators.kind.
-export type AccessType =
-  | "director"
-  | "client"
-  | "hr_lead"
-  | "hr_manager"
-  | "department_head"
-  | "observer"
-  | "tester_hr"
-  | "partner"       // Ген. Партнёр
-  | "sub_partner"   // Партнёр
-  | "referral"      // Ген. Реферал
-  | "sub_referral"  // Реферал
-
-export const CLIENT_ACCESS_TYPES: AccessType[] = [
-  "director", "client", "hr_lead", "hr_manager", "department_head", "observer", "tester_hr",
-]
-export const PARTNER_ACCESS_TYPES: AccessType[] = ["partner", "sub_partner", "referral", "sub_referral"]
-
-export const ALL_ACCESS_TYPES: AccessType[] = [...CLIENT_ACCESS_TYPES, ...PARTNER_ACCESS_TYPES]
-
-export function isAccessType(v: unknown): v is AccessType {
-  return typeof v === "string" && (ALL_ACCESS_TYPES as string[]).includes(v)
-}
-
-const PARTNER_KIND: Record<string, "partner" | "sub_partner" | "referral" | "sub_referral"> = {
-  partner: "partner",
-  sub_partner: "sub_partner",
-  referral: "referral",
-  sub_referral: "sub_referral",
-}
-
-// Раскладываем тип доступа в users.role.
-export function accessTypeToUserRole(accessType: AccessType): string {
-  if ((PARTNER_ACCESS_TYPES as string[]).includes(accessType)) return "partner"
-  return accessType
-}
+export * from "@/lib/admin/access-types"
 
 // Если назначен партнёрский тип — создаём/обновляем integrators для companyId
 // пользователя с нужным kind. companyId у integrators уникален (один integrator
@@ -64,8 +25,6 @@ export function accessTypeToUserRole(accessType: AccessType): string {
 // При возврате пользователя в КЛИЕНТСКУЮ роль деактивируем его integrator
 // (status='terminated') и отменяем его integrator_clients (status='cancelled'),
 // чтобы не оставался «призрачный кабинет» партнёра с доступом к клиентам.
-//
-// Возвращает применённый users.role (для записи в БД вызывающим кодом).
 export async function syncIntegratorForAccessType(
   accessType: AccessType,
   companyId: string | null,
