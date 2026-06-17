@@ -10,6 +10,13 @@ type Params = { params: Promise<{ id: string }> }
 
 const SUBSCRIPTION_STATUSES = ["trial", "active", "paused", "cancelled", "expired"]
 
+// Допустимые ключи модулей для companies.enabled_modules (per-company оверрайд
+// сайдбара). Должны совпадать с ModuleId (lib/modules/types.ts).
+const MODULE_KEYS = [
+  "hr", "knowledge", "learning", "tasks", "sales", "marketing",
+  "b2b", "warehouse", "logistics", "booking", "dialer", "qc",
+] as const
+
 // GET /api/admin/clients/[id] — полная информация о компании
 export async function GET(_req: NextRequest, { params }: Params) {
   try {
@@ -45,6 +52,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       trialEndsAt: companies.trialEndsAt,
       planId: companies.planId,
       currentPlanId: companies.currentPlanId,
+      enabledModules: companies.enabledModules,
       deletedAt: companies.deletedAt,
       createdAt: companies.createdAt,
       updatedAt: companies.updatedAt,
@@ -151,6 +159,26 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
   }
 
+  // Per-company оверрайд видимых модулей сайдбара (companies.enabled_modules).
+  //   null / [] / отсутствует пригодных ключей → grandfather (модули по роли);
+  //   непустой массив валидных ключей → компания видит ИМЕННО эти модули.
+  // НЕ лицензионный гейтинг — безопасный per-company переключатель видимости.
+  if ("enabledModules" in body) {
+    const raw = body.enabledModules
+    if (raw == null) {
+      updateData.enabledModules = null // сброс → grandfather
+    } else if (Array.isArray(raw)) {
+      // Дедуп + только валидные ключи; неизвестные ключи молча отбрасываем.
+      const cleaned = Array.from(
+        new Set(raw.filter((k): k is string => typeof k === "string" && (MODULE_KEYS as readonly string[]).includes(k))),
+      )
+      // Пустой выбор трактуем как сброс (null = grandfather).
+      updateData.enabledModules = cleaned.length > 0 ? cleaned : null
+    } else {
+      return apiError("Некорректный список модулей", 400)
+    }
+  }
+
   const [updated] = await db
     .update(companies)
     .set(updateData)
@@ -174,6 +202,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     billingEmail: updated.billingEmail,
     subscriptionStatus: updated.subscriptionStatus,
     currentPlanId: updated.currentPlanId,
+    enabledModules: updated.enabledModules,
   })
 }
 

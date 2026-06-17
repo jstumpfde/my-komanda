@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -52,7 +53,27 @@ interface Company {
   createdAt: string | null; userCount: number
   plan: { id: string; name: string; price: number; slug: string; priceFormatted: number } | null
   partnerName: string | null; partnerIntegratorId: string | null; linkStatus: string | null
+  // Per-company оверрайд видимых модулей сайдбара (companies.enabled_modules).
+  // null = grandfather (модули по роли); непустой массив = ровно эти модули.
+  enabledModules: string[] | null
 }
+
+// Ключи и русские лейблы модулей для секции «Модули в меню (сайдбар)».
+// Порядок и ключи должны совпадать с ModuleId (lib/modules/types.ts).
+const SIDEBAR_MODULES: { key: string; label: string }[] = [
+  { key: "hr",        label: "HR" },
+  { key: "sales",     label: "CRM" },
+  { key: "knowledge", label: "Знания" },
+  { key: "learning",  label: "Обучение" },
+  { key: "tasks",     label: "Задачи" },
+  { key: "marketing", label: "Маркетинг" },
+  { key: "b2b",       label: "B2B" },
+  { key: "warehouse", label: "Склад" },
+  { key: "logistics", label: "Логистика" },
+  { key: "booking",   label: "Бронирование" },
+  { key: "dialer",    label: "AI-агент" },
+  { key: "qc",        label: "ОКК" },
+]
 
 // Партнёр (integrator) — для селекта назначения партнёра компании.
 interface PartnerOption {
@@ -369,6 +390,13 @@ export default function AdminClientPage() {
   const [partnerSelect, setPartnerSelect] = useState<string>("none")
   const [partnerSaving, setPartnerSaving] = useState(false)
 
+  // Модули в меню (companies.enabled_modules). overrideOn=false → grandfather
+  // (NULL, модули по роли). overrideOn=true → показываем РОВНО selectedModules.
+  const [overrideOn, setOverrideOn] = useState(false)
+  const [selectedModules, setSelectedModules] = useState<Set<string>>(new Set())
+  const [modulesSaving, setModulesSaving] = useState(false)
+  const [modulesSaved, setModulesSaved] = useState(false)
+
   // Загружаем компанию
   useEffect(() => {
     fetch(`/api/admin/clients/${clientId}`)
@@ -377,6 +405,10 @@ export default function AdminClientPage() {
         setCompany(data)
         setForm(companyToForm(data))
         setPartnerSelect(data?.partnerIntegratorId ?? "none")
+        // Инициализация секции «Модули в меню»: непустой массив → оверрайд вкл.
+        const em: string[] | null = Array.isArray(data?.enabledModules) ? data.enabledModules : null
+        setOverrideOn(!!em && em.length > 0)
+        setSelectedModules(new Set(em && em.length > 0 ? em : SIDEBAR_MODULES.map(m => m.key)))
         if (data?.trialEndsAt) {
           setTrialEndsAt(new Date(data.trialEndsAt).toISOString().split("T")[0])
         }
@@ -630,6 +662,48 @@ export default function AdminClientPage() {
       setError("Ошибка сохранения")
     } finally {
       setInfoSaving(false)
+    }
+  }
+
+  function toggleModule(key: string, on: boolean) {
+    setSelectedModules(prev => {
+      const next = new Set(prev)
+      if (on) next.add(key); else next.delete(key)
+      return next
+    })
+  }
+
+  // Сохранить «Модули в меню» (companies.enabled_modules).
+  // overrideOn=false → null (grandfather). overrideOn=true → массив выбранных
+  // (пустой выбор API трактует как сброс в null). hr форсим всегда.
+  async function handleSaveModules() {
+    setModulesSaving(true)
+    setError("")
+    try {
+      const payload: string[] | null = overrideOn
+        ? Array.from(new Set<string>(["hr", ...selectedModules]))
+        : null
+      const res = await fetch(`/api/admin/clients/${clientId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabledModules: payload }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        setError(d.error ?? "Ошибка сохранения модулей")
+        return
+      }
+      const updated = await res.json()
+      const em: string[] | null = Array.isArray(updated?.enabledModules) ? updated.enabledModules : null
+      setCompany(prev => prev ? { ...prev, enabledModules: em } : prev)
+      setOverrideOn(!!em && em.length > 0)
+      setSelectedModules(new Set(em && em.length > 0 ? em : SIDEBAR_MODULES.map(m => m.key)))
+      setModulesSaved(true)
+      setTimeout(() => setModulesSaved(false), 2500)
+    } catch {
+      setError("Ошибка сохранения модулей")
+    } finally {
+      setModulesSaving(false)
     }
   }
 
@@ -1025,6 +1099,70 @@ export default function AdminClientPage() {
                           </Button>
                         )}
                       </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Модули в меню (сайдбар) */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <LayoutGrid className="w-4 h-4" /> Модули в меню
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <p className="text-sm text-muted-foreground">
+                      Управляет тем, какие модули видит клиент в боковом меню. Это
+                      видимость пунктов меню — отдельно от лимитов тарифа в блоке
+                      «Тариф и модули» ниже.
+                    </p>
+
+                    <div className="flex items-start gap-3">
+                      <Switch
+                        id="modules-override"
+                        checked={overrideOn}
+                        onCheckedChange={setOverrideOn}
+                      />
+                      <Label htmlFor="modules-override" className="cursor-pointer space-y-0.5">
+                        <span className="block text-sm font-medium">Переопределить набор модулей</span>
+                        <span className="block text-xs text-muted-foreground font-normal">
+                          Выключено — модули показываются по роли (как сейчас).
+                          Включено — клиент видит ровно отмеченные модули.
+                        </span>
+                      </Label>
+                    </div>
+
+                    {overrideOn && (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2.5 pt-1 border-t">
+                        {SIDEBAR_MODULES.map(({ key, label }) => {
+                          const isHr = key === "hr"
+                          const checked = isHr || selectedModules.has(key)
+                          return (
+                            <div key={key} className="flex items-center gap-2">
+                              <Checkbox
+                                id={`mod-${key}`}
+                                checked={checked}
+                                disabled={isHr}
+                                onCheckedChange={v => toggleModule(key, v === true)}
+                              />
+                              <Label
+                                htmlFor={`mod-${key}`}
+                                className={cn("text-sm cursor-pointer", isHr && "text-muted-foreground")}
+                              >
+                                {label}{isHr && " (всегда)"}
+                              </Label>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-3 pt-1">
+                      <Button onClick={handleSaveModules} disabled={modulesSaving} className="gap-2">
+                        {modulesSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                        Сохранить
+                      </Button>
+                      {modulesSaved && <span className="text-xs text-emerald-600 font-medium">Сохранено</span>}
                     </div>
                   </CardContent>
                 </Card>

@@ -4,10 +4,11 @@
 // min_mrr_kopecks → commission_percent), берём высшую ступень, чей порог достигнут.
 // Если у партнёра задан фикс-override (integrators.commission_percent) — он
 // перекрывает ступени (напр. сразу 50%). Пороги настраиваются в /admin/integrators/levels.
-import { eq, and, inArray, asc } from "drizzle-orm"
+import { eq, and, inArray, asc, count, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import {
   companies, plans, tenantModules, modules, integratorLevels, integrators, integratorClients,
+  vacancies, candidates,
 } from "@/lib/db/schema"
 
 type Integrator = typeof integrators.$inferSelect
@@ -22,6 +23,13 @@ export interface PartnerClientRow {
   modules: { slug: string; name: string }[]
   commissionPercent: number
   earningsRub: number
+  // Мини-статистика по клиенту (как в админ-панели): вакансии и кандидаты клиента.
+  // Считаются group by из vacancies/candidates по company_id (scoping — только
+  // активные клиенты партнёра). vacancyCount учитывает все вакансии компании,
+  // activeVacancyCount — только опубликованные/на паузе (status in published|paused).
+  vacancyCount: number
+  activeVacancyCount: number
+  candidateCount: number
 }
 
 export interface PartnerSummary {
@@ -30,6 +38,10 @@ export interface PartnerSummary {
   isOverride: boolean        // true = фикс-% задан вручную, ступени не применяются
   totalMrrRub: number
   totalEarningsRub: number
+  // Агрегаты по портфелю клиентов (для дашборда-мини-админки).
+  activeClients: number              // клиенты с активной подпиской
+  totalVacancies: number             // суммарно вакансий по всем клиентам
+  totalCandidates: number            // суммарно кандидатов по всем клиентам
   // Прогресс по уровням (для виджета в кабинете). Имена/пороги — из integratorLevels
   // (редактируются админом). Если override активен или ступени не заданы — null/100%.
   currentTierName: string | null
@@ -73,6 +85,48 @@ export async function setClientModules(companyId: string, slugs: string[]): Prom
         set: { isActive: shouldOn, disabledAt: shouldOn ? null : new Date() },
       })
   }
+}
+
+// ─── Мини-статистика по клиентам (вакансии / кандидаты) ───────────────────────
+
+export interface ClientStats { vacancyCount: number; activeVacancyCount: number; candidateCount: number }
+
+// Считает вакансии и кандидатов по каждой компании-клиенту одним проходом
+// (group by). companyIds ДОЛЖНЫ быть уже отскоплены под партнёра (активные
+// клиенты) — функция чужие компании не фильтрует, только агрегирует переданные.
+export async function getPartnerClientStats(companyIds: string[]): Promise<Map<string, ClientStats>> {
+  const stats = new Map<string, ClientStats>()
+  if (companyIds.length === 0) return stats
+  for (const id of companyIds) stats.set(id, { vacancyCount: 0, activeVacancyCount: 0, candidateCount: 0 })
+
+  // Вакансии: всего + активных (published|paused) на компанию.
+  const vacRows = await db
+    .select({
+      companyId: vacancies.companyId,
+      total: count(),
+      active: count(sql`case when ${vacancies.status} in ('published','paused') then 1 end`),
+    })
+    .from(vacancies)
+    .where(inArray(vacancies.companyId, companyIds))
+    .groupBy(vacancies.companyId)
+  for (const r of vacRows) {
+    const s = stats.get(r.companyId)
+    if (s) { s.vacancyCount = Number(r.total); s.activeVacancyCount = Number(r.active) }
+  }
+
+  // Кандидаты привязаны к вакансии, а не к компании напрямую → join через vacancies.
+  const candRows = await db
+    .select({ companyId: vacancies.companyId, total: count() })
+    .from(candidates)
+    .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
+    .where(inArray(vacancies.companyId, companyIds))
+    .groupBy(vacancies.companyId)
+  for (const r of candRows) {
+    const s = stats.get(r.companyId)
+    if (s) s.candidateCount = Number(r.total)
+  }
+
+  return stats
 }
 
 interface Tier { name: string; minMrrKopecks: number; pct: number }
@@ -151,7 +205,7 @@ export async function getPartnerSummary(integrator: Integrator): Promise<Partner
   const statusByCompany = new Map(links.map((l) => [l.companyId, l.status]))
 
   // Считаем MRR клиентов (в копейках) + собираем строки без % (его узнаем ниже).
-  const base: Omit<PartnerClientRow, "commissionPercent" | "earningsRub">[] = []
+  const base: Omit<PartnerClientRow, "commissionPercent" | "earningsRub" | "vacancyCount" | "activeVacancyCount" | "candidateCount">[] = []
   let totalKopecks = 0
   if (ids.length > 0) {
     // ВНИМАНИЕ: companies.plan_id на проде имеет тип text (дрейф схемы), а plans.id —
@@ -221,11 +275,20 @@ export async function getPartnerSummary(integrator: Integrator): Promise<Partner
   const isOverride = !Number.isNaN(override)
   const effectivePercent = isOverride ? override : tierPercent(tiers, totalKopecks)
 
-  const clients: PartnerClientRow[] = base.map((b) => ({
-    ...b,
-    commissionPercent: effectivePercent,
-    earningsRub: Math.round((b.mrrRub * effectivePercent) / 100),
-  }))
+  // Мини-статистика (вакансии/кандидаты) по тем же клиентам — один проход group by.
+  const statsByCompany = await getPartnerClientStats(ids)
+
+  const clients: PartnerClientRow[] = base.map((b) => {
+    const st = statsByCompany.get(b.companyId)
+    return {
+      ...b,
+      commissionPercent: effectivePercent,
+      earningsRub: Math.round((b.mrrRub * effectivePercent) / 100),
+      vacancyCount: st?.vacancyCount ?? 0,
+      activeVacancyCount: st?.activeVacancyCount ?? 0,
+      candidateCount: st?.candidateCount ?? 0,
+    }
+  })
 
   const progress = computeTierProgress(tiers, totalKopecks)
 
@@ -235,6 +298,9 @@ export async function getPartnerSummary(integrator: Integrator): Promise<Partner
     isOverride,
     totalMrrRub: Math.round(totalKopecks / 100),
     totalEarningsRub: clients.reduce((s, c) => s + c.earningsRub, 0),
+    activeClients: clients.filter((c) => c.subscriptionStatus === "active").length,
+    totalVacancies: clients.reduce((s, c) => s + c.vacancyCount, 0),
+    totalCandidates: clients.reduce((s, c) => s + c.candidateCount, 0),
     ...progress,
   }
 }

@@ -14,9 +14,12 @@ export async function GET() {
       commissionPercent: s.effectivePercent,
       isOverride: s.isOverride,
       totalClients: s.clients.length,
-      activeClients: s.clients.filter((c) => c.subscriptionStatus === "active").length,
+      activeClients: s.activeClients,
       totalMrrRub: s.totalMrrRub,
       totalEarningsRub: s.totalEarningsRub,
+      // Мини-админка: суммарно вакансий/кандидатов по всем клиентам партнёра.
+      totalVacancies: s.totalVacancies,
+      totalCandidates: s.totalCandidates,
       // Прогресс по уровням (виджет в кабинете).
       currentTierName: s.currentTierName,
       currentTierMinMrrRub: s.currentTierMinMrrRub,

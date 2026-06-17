@@ -181,10 +181,15 @@ export function DashboardSidebar() {
   // Вид логотипа: подложка-бейдж (padded, по умолчанию) или без неё (plain).
   // Выбирается в Настройки → Брендинг (customTheme.sidebarLogoMode).
   const [logoPadded, setLogoPadded] = useState(true)
+  // Per-company оверрайд модулей из companies.enabled_modules. Берём из живого
+  // ответа /api/companies (а не только из сессии), чтобы тумблеры в админке
+  // применялись БЕЗ релогина — событие `company-updated` ниже перезагружает.
+  // undefined = ещё не загружено (используем значение из сессии как fallback).
+  const [companyModulesLive, setCompanyModulesLive] = useState<string[] | null | undefined>(undefined)
   useEffect(() => {
     const loadCompany = () => {
       fetch('/api/companies').then(r => r.ok ? r.json() : null)
-        .then((d: { logoUrl?: string; name?: string; brandName?: string; brandSlogan?: string; customTheme?: Record<string, unknown> } | null) => {
+        .then((d: { logoUrl?: string; name?: string; brandName?: string; brandSlogan?: string; customTheme?: Record<string, unknown>; enabledModules?: string[] | null } | null) => {
           if (d) {
             setCompanyLogo(d.logoUrl ?? null)
             const display = d.brandName?.trim() || d.name?.trim() || null
@@ -193,6 +198,7 @@ export function DashboardSidebar() {
             const theme = d.customTheme as Record<string, unknown> | undefined
             setLogoPadded(theme?.sidebarLogoMode !== "plain")
             setCompanyFavicon((theme?.faviconUrl as string | undefined) ?? null)
+            setCompanyModulesLive(Array.isArray(d.enabledModules) && d.enabledModules.length > 0 ? d.enabledModules : null)
           }
         }).catch(() => {})
     }
@@ -259,6 +265,27 @@ export function DashboardSidebar() {
   // прочих HR-ролей (hr_lead/hr_manager/observer и т.п.).
   const hrLite = !isOwner && !isAdminOrManager && !stagingFullAccess && !pilotCompanyFull && !fullModulesCompany && role !== 'director' && role !== 'client'
 
+  // Per-company оверрайд модулей из админки (companies.enabled_modules → session).
+  //   null/пусто      → grandfather (модули по роли + существующие оверрайды);
+  //   непустой массив → компания видит ИМЕННО эти ключи модулей (с hr как минимум).
+  // НЕ применяется для платформенных ролей, owner-полигона и демо-витрины
+  // (fullModulesCompany) — они всегда видят всё.
+  const ALL_MODULE_KEYS = useRef(new Set<ModuleId>(['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'logistics', 'booking', 'dialer', 'qc', 'b2b'])).current
+  // Источник истины — живой ответ /api/companies (применяется без релогина);
+  // пока он не загружен (undefined) — fallback на значение из сессии.
+  const companyModulesRaw = companyModulesLive !== undefined ? companyModulesLive : (user?.enabledModules ?? null)
+  // Нормализация: оставляем только валидные ключи; всегда гарантируем hr.
+  const companyEnabledModules: ModuleId[] | null =
+    !isOwner && !isAdminOrManager && !fullModulesCompany &&
+    Array.isArray(companyModulesRaw) && companyModulesRaw.length > 0
+      ? (() => {
+          const set = new Set<ModuleId>(['hr'])
+          for (const k of companyModulesRaw) if (ALL_MODULE_KEYS.has(k as ModuleId)) set.add(k as ModuleId)
+          return Array.from(set)
+        })()
+      : null
+  const companyEnabledKey = companyEnabledModules ? companyEnabledModules.join(',') : ''
+
   // Пересчёт модулей при изменении роли (когда useSession догружает данные)
   useEffect(() => {
     const base = (vis.modules ?? ['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'logistics', 'booking', 'dialer', 'qc', 'b2b']) as ModuleId[]
@@ -272,11 +299,20 @@ export function DashboardSidebar() {
     if (fullModulesCompany) {
       for (const m of (['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'logistics', 'booking', 'dialer', 'qc', 'b2b'] as ModuleId[])) add(m)
     }
+    // Админ-оверрайд видимых модулей (companies.enabled_modules) — ПОСЛЕДНИЙ в
+    // цепочке. Непустой список → показываем РОВНО заданные модули (hr гарантирован
+    // нормализацией). Это ОВЕРРАЙД роли и стейджинг/пилот-расширений: например,
+    // если админ задал ['hr'], стейджинг-добавки knowledge/sales отбрасываются.
+    const finalModules = companyEnabledModules
+      ? newModules.filter((m) => companyEnabledModules.includes(m))
+      : newModules
+    // Защита: если фильтр случайно опустошил список — оставляем hr (никогда пусто).
+    const safeModules = finalModules.length > 0 ? finalModules : (['hr'] as ModuleId[])
     setActiveModules(prev => {
-      if (prev.length === newModules.length && prev.every((m, i) => m === newModules[i])) return prev
-      return newModules
+      if (prev.length === safeModules.length && prev.every((m, i) => m === safeModules[i])) return prev
+      return safeModules
     })
-  }, [vis.modules, stagingFullAccess, pilotCompanyFull, fullModulesCompany])
+  }, [vis.modules, stagingFullAccess, pilotCompanyFull, fullModulesCompany, companyEnabledKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Sidebar visibility customization ──
   const { visibility: sidebarVis, setVisibility: setSidebarVis, isModuleVisible, isItemVisible, resetToDefault: resetSidebarVis } = useSidebarVisibility()

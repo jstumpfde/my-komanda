@@ -98,6 +98,7 @@ const REQUEST_TYPE_LABEL: Record<string, string> = {
   access:        "Доступ",
   demo:          "Демо",
   tariff_change: "Смена тарифа",
+  partner:       "Партнёр",
 }
 
 interface ApprovedCreds {
@@ -142,13 +143,13 @@ function RegistrationRequests() {
     finally { setBusyId(null) }
   }
 
-  const approve = async (id: string) => {
+  const approve = async (id: string, isPartner = false) => {
     setBusyId(id)
     try {
       const res = await fetch(`/api/admin/access-requests/${id}/approve`, { method: "POST" })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) { toast.error(json.error ?? "Ошибка одобрения"); return }
-      toast.success("Компания и директор созданы")
+      toast.success(isPartner ? "Компания и партнёр созданы" : "Компания и директор созданы")
       setRows(prev => prev.filter(r => r.id !== id))
       setCreds({
         companyId: json.companyId,
@@ -211,6 +212,7 @@ function RegistrationRequests() {
               {rows.map(row => {
                 const meta = STATUS_META[row.status ?? "new"] ?? STATUS_META.new
                 const typeLabel = REQUEST_TYPE_LABEL[row.requestType ?? "access"] ?? (row.requestType ?? "—")
+                const isPartner = row.requestType === "partner"
                 return (
                   <DataRow key={row.id} className="align-top">
                     <DataCell>
@@ -236,7 +238,12 @@ function RegistrationRequests() {
                       </div>
                     </DataCell>
                     <DataCell>
-                      <Badge variant="outline" className="text-[10px]">{typeLabel}</Badge>
+                      <Badge
+                        variant={isPartner ? "default" : "outline"}
+                        className={`text-[10px] ${isPartner ? "bg-violet-600 hover:bg-violet-600 text-white" : ""}`}
+                      >
+                        {typeLabel}
+                      </Badge>
                     </DataCell>
                     <DataCell>
                       <Badge variant={meta.variant} className="text-[10px]">{meta.label}</Badge>
@@ -270,7 +277,7 @@ function RegistrationRequests() {
                           <Button
                             size="sm"
                             disabled={busyId === row.id}
-                            onClick={() => approve(row.id)}
+                            onClick={() => approve(row.id, isPartner)}
                           >
                             {busyId === row.id
                               ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />

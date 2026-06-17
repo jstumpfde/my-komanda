@@ -406,6 +406,16 @@ export const companies = pgTable("companies", {
   // Корзина компаний (миграция 0148): NULL — активна; не-NULL — в корзине,
   // cron trash-cleanup удалит навсегда через trash_retention_days. Признак
   // корзины — deleted_at (как у вакансий), отдельного статуса не вводим.
+  // Per-company оверрайд видимых модулей сайдбара (миграция 0215).
+  //   null            — grandfather: модули по роли + существующим оверрайдам
+  //                     (текущее поведение клиентов НЕ меняется).
+  //   непустой массив — компания видит ИМЕННО эти ключи модулей (оверрайд роли),
+  //                     hr всегда доступен как минимум (гарантируется в сайдбаре).
+  //   пустой массив   — трактуется как сброс (grandfather), нормализуется в null
+  //                     в API /admin/clients/[id].
+  // Управляется из админки /admin/clients/[id] → «Модули клиента».
+  // НЕ лицензионный гейтинг (tenant_modules) — отдельный безопасный переключатель.
+  enabledModules:     jsonb("enabled_modules").$type<string[] | null>(),
   deletedAt:          timestamp("deleted_at"),
   createdAt:          timestamp("created_at").defaultNow(),
   updatedAt:          timestamp("updated_at").defaultNow(),
