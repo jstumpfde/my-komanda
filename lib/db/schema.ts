@@ -1631,6 +1631,11 @@ export const tenantModules = pgTable("tenant_modules", {
   customLimits:  jsonb("custom_limits"),
   enabledAt:     timestamp("enabled_at", { withTimezone: true }),
   disabledAt:    timestamp("disabled_at", { withTimezone: true }),
+  // Биллинг-поля (миграция 0217): цена модуля на момент назначения,
+  // применённая скидка за набор, количество (зарезервировано для SaaS-unit).
+  priceKopecks:           integer("price_kopecks"),            // null = не задана
+  appliedDiscountPercent: integer("applied_discount_percent").notNull().default(0),
+  quantity:               integer("quantity").notNull().default(1),
 }, (t) => [unique().on(t.tenantId, t.moduleId)])
 
 // ─── LMS — Курсы ──────────────────────────────────────────────────────────────
@@ -3390,3 +3395,40 @@ export const nancyFeedback = pgTable("nancy_feedback", {
   page:      text("page"),                      // /hr/vacancies, /hr/candidates, …
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 })
+
+// ─── Product Pricing (миграция 0217) ─────────────────────────────────────────
+// Цена модуля внутри конкретного тарифного плана. Используется для расчёта
+// стоимости набора модулей при назначении клиенту.
+
+export const productPricing = pgTable("product_pricing", {
+  id:            uuid("id").primaryKey().defaultRandom(),
+  planId:        uuid("plan_id").references(() => plans.id, { onDelete: "cascade" }).notNull(),
+  moduleId:      uuid("module_id").references(() => modules.id, { onDelete: "cascade" }).notNull(),
+  priceKopecks:  integer("price_kopecks").notNull().default(0),
+  currency:      text("currency").notNull().default("RUB"),
+  isActive:      boolean("is_active").notNull().default(true),
+  sortOrder:     integer("sort_order").notNull().default(0),
+  createdAt:     timestamp("created_at").defaultNow(),
+  updatedAt:     timestamp("updated_at").defaultNow(),
+}, (t) => [unique().on(t.planId, t.moduleId)])
+
+export type ProductPricing = typeof productPricing.$inferSelect
+export type NewProductPricing = typeof productPricing.$inferInsert
+
+// ─── Bundle Discounts (миграция 0217) ────────────────────────────────────────
+// Скидка за набор модулей: чем больше продуктов выбрал клиент, тем выше %.
+// Применяется к общей сумме: total = subtotal × (1 − discountPercent / 100).
+
+export const bundleDiscounts = pgTable("bundle_discounts", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  planId:          uuid("plan_id").references(() => plans.id, { onDelete: "cascade" }).notNull(),
+  minProducts:     integer("min_products").notNull(),
+  maxProducts:     integer("max_products"),   // null = без верхней границы
+  discountPercent: integer("discount_percent").notNull().default(0),
+  description:     text("description"),
+  isActive:        boolean("is_active").notNull().default(true),
+  createdAt:       timestamp("created_at").defaultNow(),
+}, (t) => [unique().on(t.planId, t.minProducts)])
+
+export type BundleDiscount = typeof bundleDiscounts.$inferSelect
+export type NewBundleDiscount = typeof bundleDiscounts.$inferInsert

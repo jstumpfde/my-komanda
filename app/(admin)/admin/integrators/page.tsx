@@ -239,7 +239,7 @@ export default function AdminIntegratorsPage() {
 
       {/* Sheet добавления */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Добавить партнёра</SheetTitle>
           </SheetHeader>

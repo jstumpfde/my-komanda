@@ -8,6 +8,7 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { AdminNav } from "@/components/admin/admin-nav"
+import { AdminBreadcrumbs } from "@/components/admin/admin-breadcrumbs"
 
 interface AdminPageLayoutProps {
   children: React.ReactNode
@@ -22,6 +23,7 @@ export function AdminPageLayout({ children }: AdminPageLayoutProps) {
         <div className="flex flex-1 overflow-hidden min-h-0 h-full">
           <AdminNav />
           <main className="flex-1 overflow-auto bg-background">
+            <AdminBreadcrumbs />
             {children}
           </main>
         </div>

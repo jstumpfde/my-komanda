@@ -436,7 +436,7 @@ export default function IntegratorDetailPage({ params }: { params: Promise<{ id:
 
       {/* Sheet новой выплаты */}
       <Sheet open={payoutSheetOpen} onOpenChange={setPayoutSheetOpen}>
-        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Новая выплата</SheetTitle>
           </SheetHeader>

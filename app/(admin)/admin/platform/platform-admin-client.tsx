@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useTransition } from "react"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -199,21 +199,6 @@ export function PlatformAdminClient({
   return (
     <div className="p-6 max-w-7xl">
       <Tabs defaultValue={defaultTab}>
-        <TabsList>
-          <TabsTrigger value="presence">Присутствие</TabsTrigger>
-          <TabsTrigger value="migrations">Migrations</TabsTrigger>
-          <TabsTrigger value="companies">Companies ({companiesTotal})</TabsTrigger>
-          <TabsTrigger value="vacancies">AI vacancies ({vacancies.length})</TabsTrigger>
-          <TabsTrigger value="templates">Templates ({templates.length})</TabsTrigger>
-          <TabsTrigger value="demo">Демо</TabsTrigger>
-          <TabsTrigger value="yulia">Yulia ({yulia.metrics.total})</TabsTrigger>
-          <TabsTrigger value="cron">Cron</TabsTrigger>
-          <TabsTrigger value="deadlines">Сроки</TabsTrigger>
-          <TabsTrigger value="branding">Брендинг и SEO</TabsTrigger>
-          <TabsTrigger value="emergency" className="text-red-600">Emergency</TabsTrigger>
-          <TabsTrigger value="logs">Logs</TabsTrigger>
-        </TabsList>
-
         <TabsContent value="presence" className="mt-4">
           <PresenceTab />
         </TabsContent>
@@ -277,14 +262,14 @@ function MigrationsTab({ items }: { items: MigrationItem[] }) {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
-          <CardTitle>Settings migrations</CardTitle>
+          <CardTitle>Миграции настроек</CardTitle>
           <p className="text-sm text-muted-foreground mt-1">
-            Pending: <strong>{pendingCount}</strong> / Total: {items.length}
+            Ожидают: <strong>{pendingCount}</strong> / Всего: {items.length}
           </p>
         </div>
         <Button onClick={run} disabled={pending || pendingCount === 0}>
           {pending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-          Run pending migrations
+          Запустить ожидающие
         </Button>
       </CardHeader>
       <CardContent>
@@ -303,10 +288,10 @@ function MigrationsTab({ items }: { items: MigrationItem[] }) {
           <TableHeader>
             <TableRow>
               <TableHead>ID</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead>Applied at</TableHead>
-              <TableHead className="text-right">Affected</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>Описание</TableHead>
+              <TableHead>Применена</TableHead>
+              <TableHead className="text-right">Затронуто</TableHead>
+              <TableHead>Статус</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -412,18 +397,18 @@ function CompaniesTab({ items }: { items: CompanyItem[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Companies</CardTitle>
+        <CardTitle>Компании</CardTitle>
         <Input placeholder="Поиск по названию…" value={q} onChange={e => setQ(e.target.value)} className="max-w-sm mt-2" />
       </CardHeader>
       <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead className="text-right">Vacancies</TableHead>
-              <TableHead className="text-right">AI enabled</TableHead>
-              <TableHead>Kill switch</TableHead>
+              <TableHead>Название</TableHead>
+              <TableHead>Создана</TableHead>
+              <TableHead className="text-right">Вакансий</TableHead>
+              <TableHead className="text-right">AI вкл.</TableHead>
+              <TableHead>Выключатель</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -464,17 +449,17 @@ function VacanciesTab({ items }: { items: VacancyItem[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Active vacancies with AI chatbot</CardTitle>
+        <CardTitle>Вакансии с AI чат-ботом</CardTitle>
         <Input placeholder="Поиск по вакансии или компании…" value={q} onChange={e => setQ(e.target.value)} className="max-w-sm mt-2" />
       </CardHeader>
       <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Vacancy</TableHead>
-              <TableHead>Company</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Prompt length</TableHead>
+              <TableHead>Вакансия</TableHead>
+              <TableHead>Компания</TableHead>
+              <TableHead>Статус</TableHead>
+              <TableHead className="text-right">Длина промпта</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -662,7 +647,7 @@ function TemplatesTab({
           <div>
             <CardTitle className="flex items-center gap-2">
               <LibraryBig className="w-5 h-5" />
-              Platform funnel templates
+              Шаблоны воронок ({items.length})
             </CardTitle>
             <p className="text-sm text-muted-foreground mt-1">
               Шаблоны воронки, доступные всем компаниям (при is_published=true).
@@ -677,12 +662,12 @@ function TemplatesTab({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Industry</TableHead>
-                <TableHead>Source</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead>Published</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>Название</TableHead>
+                <TableHead>Отрасль</TableHead>
+                <TableHead>Источник</TableHead>
+                <TableHead>Создан</TableHead>
+                <TableHead>Опубликован</TableHead>
+                <TableHead className="text-right">Действия</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -970,34 +955,56 @@ function EditTemplateDialog({
 // ─── Logs ────────────────────────────────────────────────────────────────────
 
 function LogsTab({ items }: { items: ActionItem[] }) {
+  const [q, setQ] = useState("")
+  const [action, setAction] = useState<string>("all")
+  const actionTypes = Array.from(new Set(items.map(i => i.actionType))).sort()
+  const filtered = items.filter(a => {
+    if (action !== "all" && a.actionType !== action) return false
+    if (q.trim()) {
+      const hay = `${a.actionType} ${a.executedBy ?? ""} ${JSON.stringify(a.payload ?? "")} ${JSON.stringify(a.result ?? "")}`.toLowerCase()
+      if (!hay.includes(q.trim().toLowerCase())) return false
+    }
+    return true
+  })
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Emergency actions log (последние 50)</CardTitle>
+        <CardTitle>Журнал аварийных действий (последние 50)</CardTitle>
+        <div className="flex flex-wrap items-center gap-2 mt-2">
+          <Input placeholder="Поиск по действию, инициатору, данным…" value={q} onChange={e => setQ(e.target.value)} className="max-w-xs" />
+          <SelectPrimitive value={action} onValueChange={setAction}>
+            <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Все действия</SelectItem>
+              {actionTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+            </SelectContent>
+          </SelectPrimitive>
+          <span className="text-xs text-muted-foreground">{filtered.length} из {items.length}</span>
+        </div>
       </CardHeader>
       <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Time</TableHead>
-              <TableHead>Action</TableHead>
-              <TableHead>By</TableHead>
-              <TableHead>Payload</TableHead>
-              <TableHead>Result</TableHead>
+              <TableHead>Время</TableHead>
+              <TableHead>Действие</TableHead>
+              <TableHead>Инициатор</TableHead>
+              <TableHead>Параметры</TableHead>
+              <TableHead>Результат</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map(a => (
+            {filtered.map(a => (
               <TableRow key={a.id}>
                 <TableCell className="text-xs whitespace-nowrap">{fmtDate(a.executedAt)}</TableCell>
                 <TableCell><Badge variant="outline">{a.actionType}</Badge></TableCell>
                 <TableCell className="text-xs">{a.executedBy ?? "—"}</TableCell>
-                <TableCell className="font-mono text-xs">{a.payload ? JSON.stringify(a.payload) : "—"}</TableCell>
-                <TableCell className="font-mono text-xs">{a.result ? JSON.stringify(a.result) : "—"}</TableCell>
+                <TableCell className="font-mono text-xs max-w-[280px] truncate" title={a.payload ? JSON.stringify(a.payload) : ""}>{a.payload ? JSON.stringify(a.payload) : "—"}</TableCell>
+                <TableCell className="font-mono text-xs max-w-[280px] truncate" title={a.result ? JSON.stringify(a.result) : ""}>{a.result ? JSON.stringify(a.result) : "—"}</TableCell>
               </TableRow>
             ))}
-            {items.length === 0 && (
-              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Действий пока нет</TableCell></TableRow>
+            {filtered.length === 0 && (
+              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">{items.length === 0 ? "Действий пока нет" : "Ничего не найдено"}</TableCell></TableRow>
             )}
           </TableBody>
         </Table>

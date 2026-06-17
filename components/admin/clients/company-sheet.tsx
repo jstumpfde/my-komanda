@@ -9,7 +9,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
-  Sheet, SheetContent, SheetHeader, SheetTitle,
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody,
 } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
 import { formatPrice, formatDate, ROLE_LABELS } from "@/components/admin/clients/shared"
@@ -202,7 +202,7 @@ export function CompanySheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+      <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2 pr-6">
             {selectedUser
@@ -214,7 +214,7 @@ export function CompanySheet({
 
         {selectedUser ? (
           // ── Под-панель пользователя ──────────────────────────────────────
-          <div className="px-4 pb-4 space-y-5">
+          <SheetBody className="space-y-5">
             <button onClick={() => setSelectedUser(null)} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
               <ChevronLeft className="h-4 w-4" />Назад к компании
             </button>
@@ -233,17 +233,17 @@ export function CompanySheet({
             </dl>
             <div className="space-y-2">
               <Button
-                className={cn("w-full justify-start", (selectedUser.isActive ?? true) && "text-destructive hover:text-destructive")}
+                className={cn("w-full justify-start gap-2", (selectedUser.isActive ?? true) && "text-destructive hover:text-destructive")}
                 variant="outline" disabled={userBusy} onClick={() => toggleUserActive(selectedUser)}
               >
-                {userBusy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : (selectedUser.isActive ?? true) ? <Ban className="h-4 w-4 mr-2" /> : <Unlock className="h-4 w-4 mr-2" />}
+                {userBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : (selectedUser.isActive ?? true) ? <Ban className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
                 {(selectedUser.isActive ?? true) ? "Заблокировать" : "Разблокировать"}
               </Button>
             </div>
-          </div>
+          </SheetBody>
         ) : (
           // ── Карточка компании ────────────────────────────────────────────
-          <div className="px-4 pb-4 space-y-5">
+          <SheetBody className="space-y-5">
             {/* Подписка / тариф */}
             <dl className="divide-y divide-border/60">
               <Field label="Статус"><Badge variant="outline" className={cn("text-xs", statusCfg.color)}>{statusCfg.label}</Badge></Field>
@@ -333,23 +333,23 @@ export function CompanySheet({
 
             {/* Действия над компанией */}
             <div className="space-y-2 pt-1">
-              <Button className="w-full justify-start" variant="outline" onClick={() => router.push(`/admin/clients/${client.id}`)}>
-                <ExternalLink className="h-4 w-4 mr-2" />Открыть полную карточку
+              <Button className="w-full justify-start gap-2" variant="outline" onClick={() => router.push(`/admin/clients/${client.id}`)}>
+                <ExternalLink className="h-4 w-4" />Открыть полную карточку
               </Button>
               {isTrial && (
-                <Button className="w-full justify-start" variant="outline" disabled={busy === "extend"} onClick={extendTrial}>
-                  {busy === "extend" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CalendarPlus className="h-4 w-4 mr-2" />}Продлить trial на 14 дней
+                <Button className="w-full justify-start gap-2" variant="outline" disabled={busy === "extend"} onClick={extendTrial}>
+                  {busy === "extend" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarPlus className="h-4 w-4" />}Продлить trial на 14 дней
                 </Button>
               )}
-              <Button className={cn("w-full justify-start", !isBlocked && "text-destructive hover:text-destructive")} variant="outline" disabled={busy === "block"} onClick={() => patchStatus(isBlocked ? "active" : "paused")}>
-                {busy === "block" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : isBlocked ? <Unlock className="h-4 w-4 mr-2" /> : <Ban className="h-4 w-4 mr-2" />}
+              <Button className={cn("w-full justify-start gap-2", !isBlocked && "text-destructive hover:text-destructive")} variant="outline" disabled={busy === "block"} onClick={() => patchStatus(isBlocked ? "active" : "paused")}>
+                {busy === "block" ? <Loader2 className="h-4 w-4 animate-spin" /> : isBlocked ? <Unlock className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
                 {isBlocked ? "Разблокировать" : "Заблокировать"}
               </Button>
-              <Button className="w-full justify-start text-destructive hover:text-destructive" variant="outline" disabled={busy === "trash"} onClick={trash}>
-                {busy === "trash" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}В корзину
+              <Button className="w-full justify-start gap-2 text-destructive hover:text-destructive" variant="outline" disabled={busy === "trash"} onClick={trash}>
+                {busy === "trash" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}В корзину
               </Button>
             </div>
-          </div>
+          </SheetBody>
         )}
       </SheetContent>
     </Sheet>

@@ -2,14 +2,17 @@
 
 // Левое боковое меню единой платформенной панели администратора.
 // Встраивается ВНУТРИ main (не заменяет DashboardSidebar).
-// Группы: Обзор / Клиенты / Тарифы и модули / Шаблоны / Операции / Инфраструктура / Настройки.
+// Сворачивается в узкую иконочную полоску (состояние в localStorage).
+// Группы: Обзор / Клиенты / Тарифы и модули / Шаблоны / Платформа / Инфраструктура / Настройки.
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useEffect, useState } from "react"
 import { cn } from "@/lib/utils"
 import {
   LayoutDashboard, Building2, Package, Library, ShieldAlert, Shield, Handshake,
-  Inbox, Bot, BookOpen, Activity, Wrench, Palette, type LucideIcon,
+  Inbox, Bot, BookOpen, Activity, Wrench, Palette, Sparkles,
+  PanelLeftClose, PanelLeftOpen, type LucideIcon,
 } from "lucide-react"
 
 interface NavItem {
@@ -59,6 +62,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Emergency",        href: "/admin/platform/emergency",      icon: ShieldAlert },
       { label: "Логи действий",    href: "/admin/platform/logs",           icon: Activity   },
       { label: "Миграции",         href: "/admin/platform/migrations",     icon: Wrench     },
+      { label: "Демо-данные",      href: "/admin/platform/demo",           icon: Sparkles   },
     ],
   },
   {
@@ -85,29 +89,67 @@ function isActive(pathname: string, href: string): boolean {
 
 export function AdminNav() {
   const pathname = usePathname()
+  const [collapsed, setCollapsed] = useState(false)
+
+  // Восстанавливаем состояние сворачивания из localStorage.
+  useEffect(() => {
+    setCollapsed(localStorage.getItem("admin-nav-collapsed") === "1")
+  }, [])
+
+  function toggle() {
+    setCollapsed((c) => {
+      const next = !c
+      try { localStorage.setItem("admin-nav-collapsed", next ? "1" : "0") } catch {}
+      return next
+    })
+  }
 
   return (
-    <nav className="w-52 shrink-0 border-r border-border bg-background py-4 overflow-y-auto">
+    <nav
+      className={cn(
+        "shrink-0 border-r border-border bg-background py-3 overflow-y-auto overflow-x-hidden transition-[width] duration-200",
+        collapsed ? "w-14" : "w-52",
+      )}
+    >
+      {/* Кнопка сворачивания */}
+      <div className={cn("flex mb-2", collapsed ? "justify-center" : "justify-end px-3")}>
+        <button
+          type="button"
+          onClick={toggle}
+          title={collapsed ? "Развернуть меню" : "Свернуть меню"}
+          aria-label={collapsed ? "Развернуть меню" : "Свернуть меню"}
+          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+        >
+          {collapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+        </button>
+      </div>
+
       {NAV_GROUPS.map((group) => (
-        <div key={group.title} className="mb-4">
-          <p className="px-4 mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-            {group.title}
-          </p>
+        <div key={group.title} className="mb-3">
+          {collapsed ? (
+            <div className="mx-2 mb-1 border-t border-border/50" />
+          ) : (
+            <p className="px-4 mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+              {group.title}
+            </p>
+          )}
           {group.items.map((item) => {
             const active = isActive(pathname, item.href)
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                title={collapsed ? item.label : undefined}
                 className={cn(
                   "flex items-center gap-2.5 mx-2 px-2 py-1.5 rounded-md text-sm transition-colors",
+                  collapsed && "justify-center mx-1.5 px-0",
                   active
                     ? "bg-primary/10 text-primary font-medium"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
                 )}
               >
                 <item.icon className={cn("w-4 h-4 shrink-0", active ? "text-primary" : "")} />
-                <span className="truncate">{item.label}</span>
+                {!collapsed && <span className="truncate">{item.label}</span>}
               </Link>
             )
           })}
