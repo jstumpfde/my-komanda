@@ -23,6 +23,10 @@ interface ScheduleResponse {
   scheduleWorkingDays:        number[]
   scheduleExcludedHolidayIds: string[]
   scheduleCustomHolidays:     CustomHoliday[]
+  scheduleLunchEnabled:       boolean
+  scheduleLunchFrom:          string
+  scheduleLunchTo:            string
+  scheduleCountry:            string
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -37,6 +41,10 @@ function asScheduleResponse(row: {
   scheduleWorkingDays:        unknown
   scheduleExcludedHolidayIds: unknown
   scheduleCustomHolidays:     unknown
+  scheduleLunchEnabled:       boolean
+  scheduleLunchFrom:          string
+  scheduleLunchTo:            string
+  scheduleCountry:            string
 }): ScheduleResponse {
   const workingDays = Array.isArray(row.scheduleWorkingDays)
     ? row.scheduleWorkingDays.filter((n): n is number => typeof n === "number" && n >= 1 && n <= 7)
@@ -61,6 +69,10 @@ function asScheduleResponse(row: {
     scheduleWorkingDays:        workingDays,
     scheduleExcludedHolidayIds: excluded,
     scheduleCustomHolidays:     custom,
+    scheduleLunchEnabled:       row.scheduleLunchEnabled,
+    scheduleLunchFrom:          row.scheduleLunchFrom,
+    scheduleLunchTo:            row.scheduleLunchTo,
+    scheduleCountry:            row.scheduleCountry,
   }
 }
 
@@ -83,6 +95,10 @@ export async function GET(
           scheduleWorkingDays:        vacancies.scheduleWorkingDays,
           scheduleExcludedHolidayIds: vacancies.scheduleExcludedHolidayIds,
           scheduleCustomHolidays:     vacancies.scheduleCustomHolidays,
+          scheduleLunchEnabled:       vacancies.scheduleLunchEnabled,
+          scheduleLunchFrom:          vacancies.scheduleLunchFrom,
+          scheduleLunchTo:            vacancies.scheduleLunchTo,
+          scheduleCountry:            vacancies.scheduleCountry,
         })
         .from(vacancies)
         .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
@@ -178,6 +194,21 @@ export async function PATCH(
       })
       updates.scheduleCustomHolidays = cleaned
     }
+    // Обеденный перерыв.
+    if (typeof body.scheduleLunchEnabled === "boolean") {
+      updates.scheduleLunchEnabled = body.scheduleLunchEnabled
+    }
+    if (typeof body.scheduleLunchFrom === "string" && HHMM.test(body.scheduleLunchFrom)) {
+      updates.scheduleLunchFrom = body.scheduleLunchFrom
+    }
+    if (typeof body.scheduleLunchTo === "string" && HHMM.test(body.scheduleLunchTo)) {
+      updates.scheduleLunchTo = body.scheduleLunchTo
+    }
+    // Страна календаря праздников — принимаем только известные коды.
+    const VALID_COUNTRIES = ["RU", "KZ", "UZ", "BY"]
+    if (typeof body.scheduleCountry === "string" && VALID_COUNTRIES.includes(body.scheduleCountry)) {
+      updates.scheduleCountry = body.scheduleCountry
+    }
 
     const [updated] = await db
       .update(vacancies)
@@ -192,6 +223,10 @@ export async function PATCH(
         scheduleWorkingDays:        vacancies.scheduleWorkingDays,
         scheduleExcludedHolidayIds: vacancies.scheduleExcludedHolidayIds,
         scheduleCustomHolidays:     vacancies.scheduleCustomHolidays,
+        scheduleLunchEnabled:       vacancies.scheduleLunchEnabled,
+        scheduleLunchFrom:          vacancies.scheduleLunchFrom,
+        scheduleLunchTo:            vacancies.scheduleLunchTo,
+        scheduleCountry:            vacancies.scheduleCountry,
       })
 
     return apiSuccess(asScheduleResponse(updated))

@@ -191,6 +191,7 @@ export async function POST(req: NextRequest) {
     try {
       const [companyDefaults] = await db.select({
         hiringDefaultsJson: companies.hiringDefaultsJson,
+        workScheduleJson:   companies.workScheduleJson,
       })
         .from(companies)
         .where(eq(companies.id, user.companyId))
@@ -218,6 +219,10 @@ export async function POST(req: NextRequest) {
               insertValues.scheduleWorkingDays = Array.from(new Set(mapped)).sort((a, b) => a - b)
             }
           }
+          // Обеденный перерыв из дефолтов компании.
+          if (typeof sched.lunchEnabled === "boolean") insertValues.scheduleLunchEnabled = sched.lunchEnabled
+          if (sched.lunchFrom) insertValues.scheduleLunchFrom = sched.lunchFrom
+          if (sched.lunchTo)   insertValues.scheduleLunchTo   = sched.lunchTo
         }
 
         // 3) hd.automation (autoDemo/autoInvite/minScore/autoReject) — ОТЛОЖЕНО.
@@ -226,6 +231,12 @@ export async function POST(req: NextRequest) {
         //    autoProcessingEnabled — это совсем другое (авто-разбор hh-откликов
         //    cron'ом, не autoDemo/autoInvite). Чтобы не выдумывать соответствие
         //    и не менять поведение скоринга/автоматизации — не маппим.
+      }
+
+      // Страна календаря праздников из workScheduleJson компании.
+      const wsCountry = (companyDefaults?.workScheduleJson as Record<string, unknown> | null)?.country
+      if (typeof wsCountry === "string" && wsCountry) {
+        insertValues.scheduleCountry = wsCountry
       }
     } catch (err) {
       console.warn("[POST /api/modules/hr/vacancies] hiring defaults apply failed:", err)

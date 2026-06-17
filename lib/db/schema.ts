@@ -815,6 +815,14 @@ export const vacancies = pgTable("vacancies", {
   ]),
   // Кастомные периоды (например, корпоративные отпуска). { from: "YYYY-MM-DD", to, label }.
   scheduleCustomHolidays:     jsonb("schedule_custom_holidays").$type<{ from: string; to: string; label: string }[]>().notNull().default([]),
+  // Обеденный перерыв (миграция 0216): если включён — в указанный промежуток отправка блокируется.
+  // По умолчанию false → поведение существующих вакансий не меняется.
+  scheduleLunchEnabled:        boolean("schedule_lunch_enabled").notNull().default(false),
+  scheduleLunchFrom:           text("schedule_lunch_from").notNull().default("13:00"),
+  scheduleLunchTo:             text("schedule_lunch_to").notNull().default("14:00"),
+  // Страна для определения праздничного календаря (миграция 0216).
+  // "RU" — старая логика RU_HOLIDAYS+excludedIds. Остальные страны — getHolidaysForCountry().
+  scheduleCountry:             text("schedule_country").notNull().default("RU"),
   // Источники откликов на вакансию (миграция 0191).
   // Определяет, с каких площадок принимаются отклики.
   // Дефолт ['hh'] — существующие вакансии работают как раньше.
