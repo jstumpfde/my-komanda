@@ -9,6 +9,7 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { AdminNav } from "@/components/admin/admin-nav"
 import { AdminBreadcrumbs } from "@/components/admin/admin-breadcrumbs"
+import { AdminCategoryTabs } from "@/components/admin/admin-category-tabs"
 
 interface AdminPageLayoutProps {
   children: React.ReactNode
@@ -24,6 +25,7 @@ export function AdminPageLayout({ children }: AdminPageLayoutProps) {
           <AdminNav />
           <main className="flex-1 overflow-auto bg-background">
             <AdminBreadcrumbs />
+            <AdminCategoryTabs />
             {children}
           </main>
         </div>

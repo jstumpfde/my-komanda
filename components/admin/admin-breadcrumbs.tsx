@@ -17,7 +17,7 @@ const LABELS: Record<string, string> = {
   tariffs:      "Тарифы",
   roles:        "Роли и доступ",
   platform:     "Платформа",
-  companies:    "Компании (AI)",
+  companies:    "AI-мониторинг",
   vacancies:    "AI вакансии",
   templates:    "Шаблоны воронок",
   yulia:        "Юлия",

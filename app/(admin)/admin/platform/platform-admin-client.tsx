@@ -397,7 +397,8 @@ function CompaniesTab({ items }: { items: CompanyItem[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Компании</CardTitle>
+        <CardTitle>AI-мониторинг</CardTitle>
+        <p className="text-sm text-muted-foreground">Состояние AI-чат-ботов по компаниям (только просмотр). Управление общим выключателем — на вкладке «Emergency».</p>
         <Input placeholder="Поиск по названию…" value={q} onChange={e => setQ(e.target.value)} className="max-w-sm mt-2" />
       </CardHeader>
       <CardContent>
