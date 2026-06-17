@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetHeader, SheetBody, SheetTitle } from "@/components/ui/sheet"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ClipboardList, Plus } from "lucide-react"
@@ -173,7 +173,7 @@ export default function LogisticsPurchasesPage() {
               <Plus className="w-5 h-5" /> Создать закупку
             </SheetTitle>
           </SheetHeader>
-          <div className="space-y-4 mt-4">
+          <SheetBody className="space-y-4">
             <div className="space-y-1.5">
               <Label>Поставщик</Label>
               <Select value={form.supplier} onValueChange={v => setForm(f => ({ ...f, supplier: v }))}>
@@ -216,7 +216,7 @@ export default function LogisticsPurchasesPage() {
             </div>
 
             <Button className="w-full" onClick={handleAdd}>Создать закупку</Button>
-          </div>
+          </SheetBody>
         </SheetContent>
       </Sheet>
     </SidebarProvider>

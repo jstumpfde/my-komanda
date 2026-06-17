@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetHeader, SheetBody, SheetTitle } from "@/components/ui/sheet"
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { toast } from "sonner"
 import { Layers, Plus, Pencil, Loader2, Check, X } from "lucide-react"
@@ -201,7 +201,7 @@ export default function IntegratorLevelsPage() {
             <SheetTitle>{editing?.id ? `Редактировать: ${editing.name}` : "Новый уровень"}</SheetTitle>
           </SheetHeader>
           {editing && (
-            <div className="space-y-4 mt-6">
+            <SheetBody className="space-y-4">
               <div className="space-y-1.5">
                 <Label className="text-sm">Аудитория</Label>
                 <div className="flex gap-2">
@@ -258,7 +258,7 @@ export default function IntegratorLevelsPage() {
                   </Button>
                 )}
               </div>
-            </div>
+            </SheetBody>
           )}
         </SheetContent>
       </Sheet>

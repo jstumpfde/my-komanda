@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetHeader, SheetBody, SheetTitle } from "@/components/ui/sheet"
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
@@ -440,7 +440,7 @@ export default function IntegratorDetailPage({ params }: { params: Promise<{ id:
           <SheetHeader>
             <SheetTitle>Новая выплата</SheetTitle>
           </SheetHeader>
-          <div className="space-y-4 mt-6">
+          <SheetBody className="space-y-4">
             <div className="space-y-1.5">
               <Label className="text-sm">Начало периода</Label>
               <Input type="date" value={newPeriodStart} onChange={e => setNewPeriodStart(e.target.value)} />
@@ -470,7 +470,7 @@ export default function IntegratorDetailPage({ params }: { params: Promise<{ id:
               {creatingPayout ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
               Создать выплату
             </Button>
-          </div>
+          </SheetBody>
         </SheetContent>
       </Sheet>
 

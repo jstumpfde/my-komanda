@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetHeader, SheetBody, SheetTitle } from "@/components/ui/sheet"
 import { Users, Plus, Phone, Mail, Building2, Star, Search } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -184,7 +184,7 @@ export default function LogisticsSuppliersPage() {
               <Plus className="w-5 h-5" /> Добавить поставщика
             </SheetTitle>
           </SheetHeader>
-          <div className="space-y-4 mt-4">
+          <SheetBody className="space-y-4">
             <div className="space-y-1.5">
               <Label>Название *</Label>
               <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="ООО «Название»" />
@@ -225,7 +225,7 @@ export default function LogisticsSuppliersPage() {
               </Select>
             </div>
             <Button className="w-full" onClick={handleAdd} disabled={!form.name}>Добавить поставщика</Button>
-          </div>
+          </SheetBody>
         </SheetContent>
       </Sheet>
     </SidebarProvider>

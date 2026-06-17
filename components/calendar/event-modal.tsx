@@ -65,9 +65,13 @@ const INTERVIEW_FORMATS = ["Онлайн", "Офис"]
 
 const EVENT_TYPES = [
   { value: "meeting", label: "Встреча" },
+  { value: "call", label: "Звонок" },
+  { value: "visit", label: "Визит" },
   { value: "interview", label: "Интервью" },
   { value: "training", label: "Обучение" },
   { value: "booking", label: "Бронирование" },
+  { value: "task", label: "Задача" },
+  { value: "personal", label: "Личное" },
   { value: "other", label: "Другое" },
 ]
 

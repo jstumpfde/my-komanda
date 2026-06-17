@@ -259,28 +259,21 @@ function SortableStageRow({
         </Popover>
       </td>
 
-      {/* Стадия */}
-      <td className="px-3 py-1.5">
-        <div className="flex items-center gap-1">
-          <span className="text-xs text-muted-foreground truncate max-w-[90px]">
-            {def.defaultLabel}
-          </span>
+      {/* Стадия — название редактируется прямо здесь (плейсхолдер = системное имя стадии) */}
+      <td className="px-3 py-1.5 w-[260px]">
+        <div className="flex items-center gap-1.5">
+          <Input
+            value={label}
+            onChange={(e) => onLabelChange(slug, e.target.value)}
+            placeholder={def.defaultLabel}
+            className="h-7 text-xs flex-1 min-w-0"
+          />
           {isSystem && (
             <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0">
               сист.
             </Badge>
           )}
         </div>
-      </td>
-
-      {/* Название — компактное (уже в 2 раза) */}
-      <td className="px-2 py-1.5 w-[240px]">
-        <Input
-          value={label}
-          onChange={(e) => onLabelChange(slug, e.target.value)}
-          placeholder={def.defaultLabel}
-          className="h-7 text-xs w-full"
-        />
       </td>
 
       {/* Действие (hh-action: Пригласить/Тест/Отказать/Ничего) */}
@@ -693,11 +686,8 @@ export function FunnelAutomationSection({
                   <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[40px]">
                     Цвет
                   </th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground w-[110px]">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground w-[260px]">
                     Стадия
-                  </th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[240px]">
-                    Название
                   </th>
                   <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground w-[220px]">
                     Действие
