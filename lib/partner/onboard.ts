@@ -24,6 +24,7 @@ export interface OnboardInput {
   directorEmail: string
   directorName?: string
   moduleSlugs: string[]
+  funnelScenario?: string
 }
 export interface OnboardResult {
   companyId: string
@@ -57,7 +58,12 @@ export async function createClientForPartner(
   // Авто-назначение: если у партнёра есть salesManagerId — наследуем,
   // иначе «кто завёл» (onboardedByUserId) становится менеджером продаж.
   const salesManagerId = await resolveSalesManagerId(integrator, onboardedByUserId)
-  const [company] = await db.insert(companies).values({ name, salesManagerId }).returning({ id: companies.id })
+  const scenario = (input.funnelScenario ?? "").trim()
+  const [company] = await db.insert(companies).values({
+    name,
+    salesManagerId,
+    ...(scenario ? { hiringDefaultsJson: { funnelScenario: scenario } } : {}),
+  }).returning({ id: companies.id })
 
   // 2. Директор-логин.
   const tempPassword = genPassword()

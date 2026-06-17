@@ -9,8 +9,13 @@ import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from 
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog"
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { Mail, Loader2, Check, X, UserPlus, Copy, Phone, Building2, PhoneCall } from "lucide-react"
+import { FUNNEL_TEMPLATES, DEFAULT_TEMPLATE_KEY } from "@/lib/funnel-builder/blocks"
 
 // ─── Верхние разделы ─────────────────────────────────────────────────────────
 type Section = "registration" | "email"
@@ -107,12 +112,39 @@ interface ApprovedCreds {
   tempPassword: string
 }
 
+interface ManagerOption {
+  id: string
+  name: string | null
+  email: string
+  role: string
+}
+
+// Параметры диалога «Параметры заведения»
+interface SetupParams {
+  requestId: string
+  isPartner: boolean
+  funnelScenario: string
+  salesManagerId: string   // "" = не передавать (авто = текущий)
+  accountManagerId: string // "" = не назначен
+}
+
+// Список шаблонов воронки для Select
+const FUNNEL_TEMPLATE_OPTIONS = Object.entries(FUNNEL_TEMPLATES).map(([key, tpl]) => ({
+  value: key,
+  label: tpl.name,
+}))
+
 function RegistrationRequests() {
   const [status, setStatus] = useState("new")
   const [rows, setRows] = useState<AccessRequestRow[]>([])
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [creds, setCreds] = useState<ApprovedCreds | null>(null)
+
+  // Диалог «Параметры заведения»
+  const [setupParams, setSetupParams] = useState<SetupParams | null>(null)
+  const [managers, setManagers] = useState<ManagerOption[]>([])
+  const [managersLoading, setManagersLoading] = useState(false)
 
   const load = (st: string) => {
     setLoading(true)
@@ -124,6 +156,25 @@ function RegistrationRequests() {
   }
 
   useEffect(() => { load(status) }, [status])
+
+  // Загрузить список менеджеров один раз при открытии диалога параметров
+  const openSetupDialog = (row: AccessRequestRow) => {
+    setSetupParams({
+      requestId: row.id,
+      isPartner: row.requestType === "partner",
+      funnelScenario: DEFAULT_TEMPLATE_KEY,
+      salesManagerId: "",
+      accountManagerId: "",
+    })
+    if (managers.length === 0) {
+      setManagersLoading(true)
+      fetch("/api/admin/managers")
+        .then(r => r.json())
+        .then(d => setManagers(Array.isArray(d.managers) ? d.managers : []))
+        .catch(() => setManagers([]))
+        .finally(() => setManagersLoading(false))
+    }
+  }
 
   // Сменить статус: contacted / rejected
   const setStatusAction = async (id: string, next: "contacted" | "rejected") => {
@@ -137,20 +188,42 @@ function RegistrationRequests() {
       const json = await res.json().catch(() => ({}))
       if (!res.ok) { toast.error(json.error ?? "Ошибка"); return }
       toast.success(next === "contacted" ? "Помечено «связались»" : "Заявка отклонена")
-      // Если строка ушла в другой статус-таб — убираем её из текущего
       setRows(prev => prev.filter(r => r.id !== id))
     } catch { toast.error("Ошибка сети") }
     finally { setBusyId(null) }
   }
 
-  const approve = async (id: string, isPartner = false) => {
-    setBusyId(id)
+  // Отправить одобрение с параметрами из диалога
+  const approveWithParams = async () => {
+    if (!setupParams) return
+    const { requestId, isPartner, funnelScenario, salesManagerId, accountManagerId } = setupParams
+    setBusyId(requestId)
+    setSetupParams(null)
     try {
-      const res = await fetch(`/api/admin/access-requests/${id}/approve`, { method: "POST" })
+      const body: Record<string, unknown> = { funnelScenario }
+      // salesManagerId:
+      //   "" = не передаём → авто (одобряющий)
+      //   "__none__" = явно null (не назначен)
+      //   uuid = конкретный менеджер
+      if (salesManagerId === "__none__") {
+        body.salesManagerId = null
+      } else if (salesManagerId !== "") {
+        body.salesManagerId = salesManagerId
+      }
+      // accountManagerId: "" или "__none__" → не передаём (null по дефолту)
+      if (accountManagerId && accountManagerId !== "__none__") {
+        body.accountManagerId = accountManagerId
+      }
+
+      const res = await fetch(`/api/admin/access-requests/${requestId}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) { toast.error(json.error ?? "Ошибка одобрения"); return }
       toast.success(isPartner ? "Компания и партнёр созданы" : "Компания и директор созданы")
-      setRows(prev => prev.filter(r => r.id !== id))
+      setRows(prev => prev.filter(r => r.id !== requestId))
       setCreds({
         companyId: json.companyId,
         directorEmail: json.directorEmail,
@@ -277,7 +350,7 @@ function RegistrationRequests() {
                           <Button
                             size="sm"
                             disabled={busyId === row.id}
-                            onClick={() => approve(row.id, isPartner)}
+                            onClick={() => openSetupDialog(row)}
                           >
                             {busyId === row.id
                               ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
@@ -294,6 +367,100 @@ function RegistrationRequests() {
           </DataTable>
         </TableCard>
       )}
+
+      {/* Диалог «Параметры заведения» — появляется ПЕРЕД одобрением */}
+      <Dialog open={!!setupParams} onOpenChange={(o) => { if (!o) setSetupParams(null) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Параметры заведения</DialogTitle>
+            <DialogDescription>
+              Настройте сценарий и ответственных менеджеров перед созданием компании.
+            </DialogDescription>
+          </DialogHeader>
+          {setupParams && (
+            <div className="space-y-4 py-1">
+              {/* Сценарий обработки */}
+              <div className="space-y-1.5">
+                <Label>Сценарий обработки</Label>
+                <Select
+                  value={setupParams.funnelScenario}
+                  onValueChange={(v) => setSetupParams(p => p ? { ...p, funnelScenario: v } : p)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Выберите сценарий" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FUNNEL_TEMPLATE_OPTIONS.map(opt => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Менеджер продаж */}
+              <div className="space-y-1.5">
+                <Label>Менеджер продаж</Label>
+                <Select
+                  value={setupParams.salesManagerId}
+                  onValueChange={(v) => setSetupParams(p => p ? { ...p, salesManagerId: v } : p)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Я (по умолчанию)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Я (по умолчанию)</SelectItem>
+                    <SelectItem value="__none__">— не назначен —</SelectItem>
+                    {managersLoading ? (
+                      <SelectItem value="__loading__" disabled>Загрузка…</SelectItem>
+                    ) : managers.map(m => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.name || m.email}
+                        {m.role ? <span className="text-muted-foreground ml-1 text-xs">({m.role})</span> : null}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  «По умолчанию» — автоматически назначается одобряющий оператор.
+                </p>
+              </div>
+
+              {/* Клиентский менеджер */}
+              <div className="space-y-1.5">
+                <Label>Клиентский менеджер</Label>
+                <Select
+                  value={setupParams.accountManagerId}
+                  onValueChange={(v) => setSetupParams(p => p ? { ...p, accountManagerId: v } : p)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="— не назначен —" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">— не назначен —</SelectItem>
+                    {managersLoading ? (
+                      <SelectItem value="__loading__" disabled>Загрузка…</SelectItem>
+                    ) : managers.map(m => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.name || m.email}
+                        {m.role ? <span className="text-muted-foreground ml-1 text-xs">({m.role})</span> : null}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setSetupParams(null)}>Отмена</Button>
+            <Button onClick={approveWithParams} disabled={!!busyId}>
+              <UserPlus className="w-3.5 h-3.5 mr-1" />
+              Одобрить и завести
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Креды после одобрения */}
       <Dialog open={!!creds} onOpenChange={(o) => { if (!o) setCreds(null) }}>

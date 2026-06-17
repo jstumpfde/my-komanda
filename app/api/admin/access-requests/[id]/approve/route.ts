@@ -28,7 +28,7 @@ function genPassword(): string {
 // временный пароль) для выдачи. Идемпотентно по статусу: повтор после
 // approved → 400. Если email уже занят пользователем → 409, заявка НЕ
 // одобряется.
-export async function POST(_req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, { params }: Params) {
   let currentUser: Awaited<ReturnType<typeof requirePlatformOperator>> | null = null
   try {
     currentUser = await requirePlatformOperator()
@@ -38,6 +38,19 @@ export async function POST(_req: NextRequest, { params }: Params) {
   }
 
   const { id } = await params
+
+  // Опциональное тело запроса с параметрами заведения компании.
+  const body: {
+    funnelScenario?: string
+    salesManagerId?: string | null
+    accountManagerId?: string | null
+  } = await req.json().catch(() => ({}))
+
+  // Валидация funnelScenario: строка ≤64 симв (список не проверяем в API).
+  const funnelScenario =
+    typeof body.funnelScenario === "string" && body.funnelScenario.trim().length > 0
+      ? body.funnelScenario.trim().slice(0, 64)
+      : undefined
 
   try {
     const [reqRow] = await db
@@ -78,14 +91,24 @@ export async function POST(_req: NextRequest, { params }: Params) {
     const isPartner = reqRow.requestType === "partner"
     const userRole = isPartner ? accessTypeToUserRole("partner") : "director"
 
+    // salesManagerId: если явно передали (даже null) — берём его;
+    // иначе авто = кто одобрил заявку.
+    const resolvedSalesManagerId =
+      body.salesManagerId !== undefined
+        ? (body.salesManagerId || null)
+        : (currentUser?.id ?? null)
+
+    const resolvedAccountManagerId = body.accountManagerId || null
+
     const { companyId } = await db.transaction(async (tx) => {
       // 1. Компания (NOT NULL-поля берут дефолты схемы).
-      // Авто-назначение: кто одобрил заявку → менеджер продаж (salesManagerId).
       const [company] = await tx
         .insert(companies)
         .values({
           name: companyName,
-          salesManagerId: currentUser?.id ?? null,
+          salesManagerId: resolvedSalesManagerId,
+          accountManagerId: resolvedAccountManagerId,
+          ...(funnelScenario ? { hiringDefaultsJson: { funnelScenario } } : {}),
         })
         .returning({ id: companies.id })
 
