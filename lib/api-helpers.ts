@@ -56,8 +56,12 @@ export async function requirePlatformAdmin() {
   const user = await requireAuth()
   // DB role "admin" maps to platform_admin in the client migration
   const role = user.role as string
-  if (role !== "platform_admin" && role !== "admin") {
-    throw apiError("Forbidden", 403)
-  }
-  return user
+  if (role === "platform_admin" || role === "admin") return user
+  // Также пускаем по email из PLATFORM_ADMIN_EMAILS — согласовано с гейтом страниц
+  // /admin (layout) и requireAdminPanelAccess: владелец с whitelisted-email должен
+  // не только ВИДЕТЬ админку, но и редактировать/удалять (компании, юзеров, партнёров).
+  const whitelist = (process.env.PLATFORM_ADMIN_EMAILS ?? "")
+    .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
+  if (user.email && whitelist.includes(user.email.toLowerCase())) return user
+  throw apiError("Forbidden", 403)
 }
