@@ -9,10 +9,14 @@ import { Label } from "@/components/ui/label"
 import { Sheet, SheetContent, SheetHeader, SheetBody, SheetTitle } from "@/components/ui/sheet"
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { toast } from "sonner"
-import { Handshake, Plus, Loader2, ExternalLink, Users } from "lucide-react"
+import { Plus, Loader2, ExternalLink, Users } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { PARTNER_KIND_OPTIONS, partnerKindLabel } from "@/lib/partner-kinds"
+
+// Только партнёрская ветка (рефералы — на /admin/referrals)
+const PARTNER_KINDS_HERE = ["partner", "sub_partner"]
+const PARTNER_KIND_OPTIONS_HERE = PARTNER_KIND_OPTIONS.filter(o => PARTNER_KINDS_HERE.includes(o.value))
 
 interface Integrator {
   id: string
@@ -70,7 +74,11 @@ export default function AdminIntegratorsPage() {
   useEffect(() => {
     fetch("/api/admin/integrators")
       .then(r => r.json())
-      .then(data => setIntegrators(data.integrators ?? []))
+      .then(data => {
+        const all: Integrator[] = data.integrators ?? []
+        // Показываем только партнёрскую ветку; рефералы — на /admin/referrals
+        setIntegrators(all.filter(x => PARTNER_KINDS_HERE.includes(x.kind ?? "")))
+      })
       .catch(() => toast.error("Ошибка загрузки"))
       .finally(() => setLoading(false))
   }, [])
@@ -249,7 +257,7 @@ export default function AdminIntegratorsPage() {
               <Label className="text-sm">Тип</Label>
               <select value={newKind} onChange={e => setNewKind(e.target.value)}
                 className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm">
-                {PARTNER_KIND_OPTIONS.map(opt => (
+                {PARTNER_KIND_OPTIONS_HERE.map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>

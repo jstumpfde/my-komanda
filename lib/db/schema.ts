@@ -3451,3 +3451,50 @@ export const bundleDiscounts = pgTable("bundle_discounts", {
 
 export type BundleDiscount = typeof bundleDiscounts.$inferSelect
 export type NewBundleDiscount = typeof bundleDiscounts.$inferInsert
+
+// ─── Platform Invite Links (миграция 0219) ────────────────────────────────────
+// Платформенные ссылки-приглашения: регистрация под роль + вид партнёра.
+// Отличаются от company-уровневых inviteLinks (строка 2021): нет companyId,
+// поддерживают партнёрские kind, usedCount вместо usesCount, maxUses=0=безлимит.
+// role — значение из CLIENT_ACCESS_TYPES или PARTNER_ACCESS_TYPES.
+// kind — только для партнёрских ролей (partner/sub_partner/referral/sub_referral).
+
+export const platformInviteLinks = pgTable("platform_invite_links", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  token:      text("token").unique().notNull(),
+  role:       text("role").notNull(),
+  kind:       text("kind"),
+  label:      text("label"),
+  maxUses:    integer("max_uses").notNull().default(0),
+  usedCount:  integer("used_count").notNull().default(0),
+  expiresAt:  timestamp("expires_at"),
+  isActive:   boolean("is_active").notNull().default(true),
+  createdBy:  uuid("created_by"),
+  createdAt:  timestamp("created_at").defaultNow(),
+})
+
+export type PlatformInviteLink = typeof platformInviteLinks.$inferSelect
+export type NewPlatformInviteLink = typeof platformInviteLinks.$inferInsert
+
+// ─── Promo Codes (миграция 0219) ─────────────────────────────────────────────
+// Платформенные промокоды для применения при регистрации (v2). Имя таблицы —
+// platform_promo_codes, т.к. в БД уже есть orphan-таблица promo_codes
+// (discount_percent/description, без Drizzle-схемы и без использования).
+// kind: 'discount_percent' | 'trial_days' | 'plan'
+// value: строка (например "20", "14", slug тарифа).
+// maxUses = 0 → безлимит.
+
+export const promoCodes = pgTable("platform_promo_codes", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  code:       text("code").unique().notNull(),
+  kind:       text("kind").notNull(),
+  value:      text("value").notNull(),
+  maxUses:    integer("max_uses").notNull().default(0),
+  usedCount:  integer("used_count").notNull().default(0),
+  expiresAt:  timestamp("expires_at"),
+  isActive:   boolean("is_active").notNull().default(true),
+  createdAt:  timestamp("created_at").defaultNow(),
+})
+
+export type PromoCode = typeof promoCodes.$inferSelect
+export type NewPromoCode = typeof promoCodes.$inferInsert
