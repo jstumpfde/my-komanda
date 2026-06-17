@@ -1168,6 +1168,9 @@ export const testSubmissions = pgTable("test_submissions", {
 export interface PostDemoSettings {
   enabled?: boolean
   mode?: "auto" | "manual"
+  // Именованные шаблоны для рассылки через hh (менеджер шаблонов в hh-broadcast-dialog).
+  // Хранят текст С ПЛЕЙСХОЛДЕРАМИ ({{name}}/{{vacancy}}/{{test_link}}).
+  broadcastTemplates?: { id: string; name: string; text: string }[]
   // Thresholds
   upperThreshold?: number
   lowerThreshold?: number
