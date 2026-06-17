@@ -4,8 +4,9 @@
  * Мост: ЧТЕНИЕ CandidateSpec из legacy-полей вакансии.
  * Чистая функция без серверных зависимостей (DB, SDK, fs).
  *
- * СТАТУС: СПЯЩИЙ КОД. Используется только через /api/core/spec/[vacancyId] (GET).
- * Не вызывается из рантайма скоринга/чат-бота напрямую.
+ * СТАТУС: БОЕВОЙ КОНТУР (fallback). Вызывается из /api/core/spec (GET) и из
+ * боевого rediscovery-роута как fallback, когда сохранённого Spec ещё нет.
+ * Обратное преобразование (Spec → legacy) — см. to-legacy.ts.
  *
  * Маппинг legacy → CandidateSpec:
  *
@@ -45,7 +46,7 @@
  *    Разовый перенос v1→v2 — кнопкой в UI spec-editor (Этап 2, п.3).
  */
 
-import type { CandidateSpec } from "./types"
+import type { CandidateSpec, MustHaveItem } from "./types"
 import { DEFAULT_SCORING_WEIGHTS } from "./types"
 import type { VacancyRequirements, VacancyAiProcessSettings, VacancyStopFactors } from "@/lib/db/schema"
 
@@ -124,19 +125,25 @@ export function buildSpecFromLegacy(vacancy: LegacyVacancyInput): CandidateSpec 
 
   // ── (a) Оценочные критерии ───────────────────────────────────────────────
 
-  const mustHave     = strArr(req.must_have).slice(0, 5)
-  const niceToHave   = strArr(req.nice_to_have).slice(0, 5)
-  const dealBreakers = strArr(req.deal_breakers).slice(0, 3)
+  // mustHave: legacy-строки → объекты { text, hard:true } (этап 2 «Портрет»).
+  // Все из legacy трактуются как hard — поведение прежнее (нокаут включится
+  // в этапе 2; сейчас рантайм читает только текст).
+  const mustHave: MustHaveItem[] = strArr(req.must_have)
+    .slice(0, 10)
+    .map(text => ({ text, hard: true }))
+  const niceToHave   = strArr(req.nice_to_have).slice(0, 10)
+  const dealBreakers = strArr(req.deal_breakers).slice(0, 10)
 
-  // scoring_weights: берём из requirementsJson; если невалидны — DEFAULT
+  // scoring_weights: берём из requirementsJson; если невалидны — DEFAULT.
+  // Этап 2: требование Σ=100 СНЯТО — движок нормирует на фактическую сумму,
+  // поэтому принимаем любые валидные веса (все 9 осей — числа).
   const rawWeights = req.scoring_weights
   let scoringWeights = DEFAULT_SCORING_WEIGHTS
   if (rawWeights && typeof rawWeights === "object") {
     const keys = Object.keys(DEFAULT_SCORING_WEIGHTS) as (keyof typeof DEFAULT_SCORING_WEIGHTS)[]
     const weightsAsAny = rawWeights as unknown as Record<string, unknown>
     const allPresent = keys.every(k => typeof weightsAsAny[k] === "number")
-    const sum = allPresent ? keys.reduce((s, k) => s + ((weightsAsAny[k] as number) ?? 0), 0) : 0
-    if (allPresent && sum === 100) {
+    if (allPresent) {
       scoringWeights = rawWeights as unknown as typeof DEFAULT_SCORING_WEIGHTS
     }
   }
@@ -152,11 +159,21 @@ export function buildSpecFromLegacy(vacancy: LegacyVacancyInput): CandidateSpec 
       const weight = (["critical", "important", "nice", "irrelevant"].includes(str(item.weight))
         ? item.weight : "important") as CandidateSpec["customCriteria"][0]["weight"]
       if (weight === "irrelevant") continue
+      // Новые поля этапа 2 (hardness/importance/aiMode) читаем из legacy, если
+      // есть, иначе — дефолты схемы (soft / 50 / context). Поведение прежнее.
+      const hardness = item.hardness === "hard" ? "hard" : "soft"
+      const importance = typeof item.importance === "number" && Number.isFinite(item.importance)
+        ? Math.max(0, Math.min(100, Math.round(item.importance)))
+        : 50
+      const aiMode = item.aiMode === "instruction" || item.aiMode === "hidden" ? item.aiMode : "context"
       customCriteria.push({
         key:    str(item.key) || `custom_${customCriteria.length}`,
         label,
         weight,
         hint:   str(item.hint) || undefined,
+        hardness,
+        importance,
+        aiMode,
       })
     }
   }
@@ -183,6 +200,7 @@ export function buildSpecFromLegacy(vacancy: LegacyVacancyInput): CandidateSpec 
   const rejDelay   = num(ai.rejectionDelayMinutes, 300)
 
   const resumeThresholds: CandidateSpec["resumeThresholds"] = {
+    enabled:              true,   // legacy не имел тумблера — оценка резюме всегда активна
     upperThreshold:       Math.max(0, Math.min(100, upper)),
     lowerThreshold:       Math.max(0, Math.min(100, lower)),
     midRangeAction:       midRange,
@@ -194,6 +212,7 @@ export function buildSpecFromLegacy(vacancy: LegacyVacancyInput): CandidateSpec 
   // (как в UI PostDemoSettings, components/vacancies/post-demo-settings.tsx).
   const pds = vacancy.postDemoSettings ?? {}
   const anketaThresholds: CandidateSpec["anketaThresholds"] = {
+    enabled:        true,   // legacy не имел тумблера — скрининг анкеты всегда активен
     upperThreshold: Math.max(0, Math.min(100, num(pds.upperThreshold, 75))),
     lowerThreshold: Math.max(0, Math.min(100, num(pds.lowerThreshold, 50))),
   }
@@ -230,6 +249,9 @@ export function buildSpecFromLegacy(vacancy: LegacyVacancyInput): CandidateSpec 
     portraitKnockouts,
     outboundSoftCriteria,
     // метаданные
+    // weightMode: legacy всегда использует строковые уровни весов (WeightLevel),
+    // поэтому "level" — нейтральный дефолт этапа 2.
+    weightMode: "level",
     version: 1,
   }
 }

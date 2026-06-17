@@ -29,6 +29,7 @@ import { eq, and, isNotNull, desc, ilike } from "drizzle-orm"
 import { db, pgClient } from "@/lib/db"
 import { candidates, vacancies, hhResponses, vacancySpecs } from "@/lib/db/schema"
 import type { CandidateSpec } from "@/lib/core/spec/types"
+import { mustHaveTexts } from "@/lib/core/spec/types"
 import { buildSpecFromLegacy } from "@/lib/core/spec/from-legacy"
 import { screenResume, type ResumeScreenInput } from "@/lib/ai-screen-resume"
 import { extractHhResumeFields } from "@/lib/hh/extract-resume-fields"
@@ -149,7 +150,7 @@ function buildSpecResumeInput(
 ): ResumeScreenInput {
   // must-have: v2-критерии (mustHave) или v1-портрет (portraitRequiredSkills)
   const mustHave = spec.mustHave.length > 0
-    ? spec.mustHave
+    ? mustHaveTexts(spec.mustHave)
     : spec.portraitRequiredSkills
 
   // nice-to-have → screeningQuestions (не стоп-факторы, но учитываются в оценке)
@@ -419,7 +420,7 @@ async function main() {
       spec = result.spec
       specSource = "transferred"
       console.log(`  --transfer-from-portrait: перенесено из Портрета`)
-      console.log(`    mustHave:     ${spec.mustHave.join(", ") || "(пусто)"}`)
+      console.log(`    mustHave:     ${mustHaveTexts(spec.mustHave).join(", ") || "(пусто)"}`)
       console.log(`    niceToHave:   ${spec.niceToHave.join(", ") || "(пусто)"}`)
       console.log(`    dealBreakers: ${spec.dealBreakers.join(", ") || "(пусто)"}`)
 
@@ -450,7 +451,7 @@ async function main() {
   console.log(`\n  Spec-источник:  ${specSource}`)
   console.log(`  Spec-пороги:    upper=${specUpper}, lower=${specLower}`)
   console.log(`  Legacy-пороги:  upper=${legacyUpper}, lower=${legacyLower}`)
-  console.log(`  must-have:      ${spec.mustHave.join("; ") || "(нет)"}`)
+  console.log(`  must-have:      ${mustHaveTexts(spec.mustHave).join("; ") || "(нет)"}`)
   console.log(`  deal-breakers:  ${spec.dealBreakers.join("; ") || "(нет)"}`)
   console.log(`  idealProfile:   ${spec.idealProfile ? spec.idealProfile.slice(0, 80) + (spec.idealProfile.length > 80 ? "…" : "") : "(нет)"}`)
 
