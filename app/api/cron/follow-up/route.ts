@@ -6,8 +6,11 @@ import { getValidToken } from "@/lib/hh-helpers"
 import { shouldStopFollowUp } from "@/lib/followup/should-stop"
 import { canSendNow } from "@/lib/schedule/can-send-now"
 import { checkCronAuth } from "@/lib/cron/auth"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { renderTemplate } from "@/lib/template-renderer"
 import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
+
+const CRON_NAME = "follow-up"
 
 // POST /api/cron/follow-up
 // Отправляет очередную порцию касаний из follow_up_messages кандидатам
@@ -18,7 +21,7 @@ import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
 export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
-
+  const run = await startCronRun(CRON_NAME).catch(() => null)
   const now = new Date()
   const startedAt = Date.now()
   try {
@@ -26,9 +29,11 @@ export async function POST(req: NextRequest) {
     const durationMs = Date.now() - startedAt
     // Одна структурированная строка для logrotate/grep'а.
     console.log(JSON.stringify({ tag: "cron/follow-up", ...campaign, durationMs, ts: now.toISOString() }))
+    if (run) await finishCronRun(run.id, "ok", { sent: campaign.sent, cancelled: campaign.cancelled, failed: campaign.failed, skipped: campaign.skipped })
     return NextResponse.json({ ok: true, campaign: { ...campaign, durationMs }, ts: now.toISOString() })
   } catch (err) {
     console.error("[cron/follow-up]", err)
+    if (run) await finishCronRun(run.id, "error", null, err instanceof Error ? err.message : String(err))
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
