@@ -6,6 +6,7 @@ import {
   SheetContent,
   SheetHeader,
   SheetTitle,
+  SheetBody,
   SheetFooter,
 } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
@@ -262,7 +263,8 @@ export function EventModal({
           <SheetTitle>{event ? "Редактировать событие" : "Новое событие"}</SheetTitle>
         </SheetHeader>
 
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+        <form onSubmit={handleSubmit}>
+          <SheetBody className="space-y-4">
           <div className="space-y-1">
             <Label htmlFor="title">Название</Label>
             <Input
@@ -498,6 +500,7 @@ export function EventModal({
               rows={3}
             />
           </div>
+          </SheetBody>
 
           <SheetFooter className="flex justify-between pt-2">
             {event && onDelete && (
