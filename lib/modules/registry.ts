@@ -112,7 +112,6 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Прогнозы',  href: '/sales/forecasts',  icon: 'BarChart3' },
       { label: 'Аналитика', href: '/sales/analytics',  icon: 'PieChart' },
       { label: 'Задачи',    href: '/sales/tasks',      icon: 'ListChecks' },
-      { label: 'Журнал',    href: '/sales/visit-log',  icon: 'Activity' },
       { label: 'AI чат-бот', href: '/sales/chatbot',   icon: 'Bot' },
       { label: 'Настройки',  href: '/sales/settings',  icon: 'Settings' },
     ],

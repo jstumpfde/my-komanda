@@ -9,8 +9,16 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   ExternalLink,
   Copy,
@@ -22,6 +30,8 @@ import {
   MessageSquare,
   Paperclip,
   Save,
+  FilePlus2,
+  Trash2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -37,6 +47,13 @@ export interface HhBroadcastItem {
   hasNoChat: boolean
   personalMessage: string
   testLink: string
+}
+
+// Именованный шаблон рассылки (хранит ТЕКСТ С ПЛЕЙСХОЛДЕРАМИ).
+interface BroadcastTemplate {
+  id: string
+  name: string
+  text: string
 }
 
 interface HhBroadcastDialogProps {
@@ -67,6 +84,32 @@ function linkForKind(testLink: string, kind: "test" | "demo"): string {
   return kind === "demo" ? testLink.replace("/test/", "/demo/") : testLink
 }
 
+// Обратная подстановка: видимые значения текущего кандидата → плейсхолдеры,
+// чтобы шаблон остался переиспользуемым (не зашить имя/ссылку конкретного человека).
+function toTemplateText(
+  text: string,
+  opts: { link?: string; vacancy?: string; firstName?: string },
+): string {
+  let tpl = text
+  if (opts.link) tpl = tpl.split(opts.link).join("{{test_link}}")
+  if (opts.vacancy) tpl = tpl.split(opts.vacancy).join("{{vacancy}}")
+  if (opts.firstName) tpl = tpl.split(opts.firstName).join("{{name}}")
+  return tpl
+}
+
+// Прямая подстановка: плейсхолдеры шаблона → значения текущего кандидата,
+// чтобы при выборе шаблона в textarea подставился готовый персональный текст.
+function fromTemplateText(
+  text: string,
+  opts: { link?: string; vacancy?: string; firstName?: string },
+): string {
+  let out = text
+  if (opts.firstName) out = out.split("{{name}}").join(opts.firstName)
+  if (opts.vacancy) out = out.split("{{vacancy}}").join(opts.vacancy)
+  if (opts.link) out = out.split("{{test_link}}").join(opts.link)
+  return out
+}
+
 // ─── Основной компонент ───────────────────────────────────────────────────────
 
 export function HhBroadcastDialog({
@@ -87,6 +130,12 @@ export function HhBroadcastDialog({
   const [vacancyTitle, setVacancyTitle] = useState("")
   const [savingTpl, setSavingTpl] = useState(false)
   const [savedTpl, setSavedTpl] = useState(false)
+  // Менеджер именованных шаблонов рассылки.
+  const [templates, setTemplates] = useState<BroadcastTemplate[]>([])
+  const [selectedTplId, setSelectedTplId] = useState<string>("") // "" = «— Новый —»
+  const [tplName, setTplName] = useState("")
+  const [tplToast, setTplToast] = useState<string | null>(null) // короткое подтверждение под кнопками
+  const tplToastRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Тип ссылки, прикреплённой кандидату (тест/демо) — per кандидат.
   const [linkKindById, setLinkKindById] = useState<Record<string, "test" | "demo">>({})
   const [markingAll, setMarkingAll] = useState(false)
@@ -107,6 +156,8 @@ export function HhBroadcastDialog({
     setSkippedIds(new Set())
     setLinkKindById({})
     setCopied(false)
+    setSelectedTplId("")
+    setTplName("")
     try {
       const res = await fetch(
         `/api/modules/hr/vacancies/${vacancyId}/hh-broadcast-data`,
@@ -155,6 +206,33 @@ export function HhBroadcastDialog({
     if (open && candidateIds.length > 0) void loadData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
+
+  // Загрузить список именованных шаблонов при открытии диалога.
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/modules/hr/vacancies/${vacancyId}/broadcast-templates`,
+        )
+        if (!res.ok) return
+        const data = (await res.json()) as { templates?: BroadcastTemplate[] }
+        if (!cancelled) setTemplates(data.templates ?? [])
+      } catch {
+        // тихо — менеджер шаблонов не критичен для основного потока
+      }
+    })()
+    return () => { cancelled = true }
+  }, [open, vacancyId])
+
+  // Короткий тост-подтверждение под кнопками управления шаблонами.
+  const showTplToast = useCallback((msg: string) => {
+    setTplToast(msg)
+    if (tplToastRef.current) clearTimeout(tplToastRef.current)
+    tplToastRef.current = setTimeout(() => setTplToast(null), 2500)
+  }, [])
+  useEffect(() => () => { if (tplToastRef.current) clearTimeout(tplToastRef.current) }, [])
 
   // Одиночный режим (вызов на одного кандидата из строки списка): прячем
   // элементы пакетной рассылки и закрываем окно сразу после копирования.
@@ -287,37 +365,112 @@ export function HhBroadcastDialog({
     }
   }, [items, vacancyId, onSent])
 
-  // Сохранить текущий текст как шаблон по умолчанию (тот же, что у «Отправить тест»).
-  // Обратная подстановка: видимые значения текущего кандидата → плейсхолдеры,
-  // чтобы шаблон остался переиспользуемым (не зашить имя/ссылку конкретного человека).
-  const saveTemplate = useCallback(async () => {
-    if (!current) return
-    let tpl = messages[current.id] ?? current.personalMessage
-    const insertedLink = linkForKind(current.testLink, linkKindById[current.id] ?? "test")
-    if (insertedLink) tpl = tpl.split(insertedLink).join("{{test_link}}")
-    if (vacancyTitle) tpl = tpl.split(vacancyTitle).join("{{vacancy}}")
-    if (current.firstName) tpl = tpl.split(current.firstName).join("{{name}}")
-    setSavingTpl(true)
-    setSavedTpl(false)
+  // ─── Менеджер шаблонов ──────────────────────────────────────────────────
+  // Шаблон хранит ТЕКСТ С ПЛЕЙСХОЛДЕРАМИ. Перед записью — обратная подстановка
+  // (значения текущего кандидата → {{...}}), при выборе — прямая (→ значения).
+
+  // Шаблонизировать текущий текст textarea (значения кандидата → плейсхолдеры).
+  const currentAsTemplateText = useCallback((): string => {
+    if (!current) return ""
+    const text = messages[current.id] ?? current.personalMessage
+    return toTemplateText(text, {
+      link: linkForKind(current.testLink, linkKindById[current.id] ?? "test"),
+      vacancy: vacancyTitle,
+      firstName: current.firstName,
+    })
+  }, [current, messages, vacancyTitle, linkKindById])
+
+  // Выбор шаблона из списка — подставить его текст (с раскрытыми плейсхолдерами)
+  // в textarea и имя в поле названия. Пустое значение = «— Новый —».
+  const applyTemplate = useCallback((tplId: string) => {
+    setSelectedTplId(tplId)
+    if (!tplId) { setTplName(""); return }
+    const tpl = templates.find((t) => t.id === tplId)
+    if (!tpl || !current) return
+    setTplName(tpl.name)
+    const filled = fromTemplateText(tpl.text, {
+      link: linkForKind(current.testLink, linkKindById[current.id] ?? "test"),
+      vacancy: vacancyTitle,
+      firstName: current.firstName,
+    })
+    setMessages((prev) => ({ ...prev, [current.id]: filled }))
+  }, [templates, current, vacancyTitle, linkKindById])
+
+  // POST к менеджеру шаблонов; возвращает обновлённый список или null при ошибке.
+  const postTemplate = useCallback(async (
+    payload: { action: "create" | "update" | "delete"; id?: string; name?: string; text?: string },
+  ): Promise<BroadcastTemplate[] | null> => {
     try {
       const res = await fetch(
-        `/api/modules/hr/vacancies/${vacancyId}/save-test-invite-template`,
+        `/api/modules/hr/vacancies/${vacancyId}/broadcast-templates`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: tpl }),
+          body: JSON.stringify(payload),
         },
       )
-      if (res.ok) {
+      if (!res.ok) return null
+      const data = (await res.json()) as { templates?: BroadcastTemplate[] }
+      return data.templates ?? []
+    } catch {
+      return null
+    }
+  }, [vacancyId])
+
+  // «Сохранить»: update выбранного шаблона, либо create если шаблон не выбран.
+  const saveTemplate = useCallback(async () => {
+    if (!current) return
+    const name = tplName.trim()
+    if (!name) { showTplToast("Укажите название шаблона"); return }
+    const text = currentAsTemplateText()
+    setSavingTpl(true)
+    setSavedTpl(false)
+    try {
+      const next = selectedTplId
+        ? await postTemplate({ action: "update", id: selectedTplId, name, text })
+        : await postTemplate({ action: "create", name, text })
+      if (next) {
+        setTemplates(next)
+        // При create найти только что созданный (по имени+тексту) и выбрать его.
+        if (!selectedTplId) {
+          const created = next.find((t) => t.name === name && t.text === text)
+          if (created) setSelectedTplId(created.id)
+        }
         setSavedTpl(true)
         setTimeout(() => setSavedTpl(false), 2500)
+        showTplToast("Сохранено")
       }
-    } catch {
-      // тихо — кнопка останется доступной для повтора
     } finally {
       setSavingTpl(false)
     }
-  }, [current, messages, vacancyTitle, vacancyId, linkKindById])
+  }, [current, tplName, selectedTplId, currentAsTemplateText, postTemplate, showTplToast])
+
+  // «Сохранить как новое»: всегда create.
+  const saveTemplateAsNew = useCallback(async () => {
+    if (!current) return
+    const name = tplName.trim()
+    if (!name) { showTplToast("Укажите название шаблона"); return }
+    const text = currentAsTemplateText()
+    const next = await postTemplate({ action: "create", name, text })
+    if (next) {
+      setTemplates(next)
+      const created = next.find((t) => t.name === name && t.text === text)
+      if (created) setSelectedTplId(created.id)
+      showTplToast("Создан шаблон")
+    }
+  }, [current, tplName, currentAsTemplateText, postTemplate, showTplToast])
+
+  // Удалить выбранный шаблон.
+  const deleteTemplate = useCallback(async () => {
+    if (!selectedTplId) return
+    const next = await postTemplate({ action: "delete", id: selectedTplId })
+    if (next) {
+      setTemplates(next)
+      setSelectedTplId("")
+      setTplName("")
+      showTplToast("Шаблон удалён")
+    }
+  }, [selectedTplId, postTemplate, showTplToast])
 
   // ─── Рендер ───────────────────────────────────────────────────────────────
 
@@ -411,36 +564,9 @@ export function HhBroadcastDialog({
 
             {/* Редактируемое сообщение */}
             <div className="space-y-1">
-              <div className="flex items-center justify-between gap-2">
-                <label className="text-xs text-muted-foreground">
-                  Персональное сообщение (можно отредактировать)
-                </label>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
-                  onClick={() => void saveTemplate()}
-                  disabled={savingTpl}
-                  title="Сохранить как шаблон по умолчанию — он подставится в будущих рассылках и в кнопке «Отправить тест». Имя, вакансия и ссылка на тест сохранятся как подстановки."
-                >
-                  {savedTpl ? (
-                    <>
-                      <CheckCircle2 className="size-3.5 text-emerald-500" />
-                      Сохранено
-                    </>
-                  ) : savingTpl ? (
-                    <>
-                      <Loader2 className="size-3.5 animate-spin" />
-                      Сохранение…
-                    </>
-                  ) : (
-                    <>
-                      <Save className="size-3.5" />
-                      Сохранить шаблон
-                    </>
-                  )}
-                </Button>
-              </div>
+              <label className="text-xs text-muted-foreground">
+                Персональное сообщение (можно отредактировать)
+              </label>
               <Textarea
                 value={currentMessage}
                 onChange={(e) =>
@@ -489,6 +615,101 @@ export function HhBroadcastDialog({
                   ⚠ Ссылки нет в тексте — кандидат её не получит. Проверьте сообщение.
                 </p>
               )}
+            </div>
+
+            {/* Менеджер шаблонов: выбор из сохранённых, имя, сохранить/новый/удалить.
+                Шаблон хранит текст с плейсхолдерами; выбор подставляет персональный
+                текст текущего кандидата, сохранение — шаблонизирует обратно. */}
+            <div className="rounded-md border bg-muted/30 px-3 py-2.5 space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <Save className="size-3.5" />
+                Шаблоны
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Select value={selectedTplId} onValueChange={applyTemplate}>
+                  <SelectTrigger className="h-8 flex-1 min-w-[160px] text-xs">
+                    <SelectValue placeholder="— Новый —" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {templates.length === 0 ? (
+                      <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                        Пока нет сохранённых шаблонов
+                      </div>
+                    ) : (
+                      templates.map((t) => (
+                        <SelectItem key={t.id} value={t.id} className="text-xs">
+                          {t.name}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                {selectedTplId && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1 px-2 text-xs text-muted-foreground hover:text-destructive"
+                    onClick={() => void deleteTemplate()}
+                    title="Удалить выбранный шаблон"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                )}
+              </div>
+              <Input
+                value={tplName}
+                onChange={(e) => setTplName(e.target.value)}
+                placeholder="Название шаблона"
+                className="h-8 text-xs"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs"
+                  onClick={() => void saveTemplate()}
+                  disabled={savingTpl}
+                  title={selectedTplId
+                    ? "Сохранить изменения в выбранном шаблоне"
+                    : "Создать шаблон с этим названием и текстом"}
+                >
+                  {savedTpl ? (
+                    <>
+                      <CheckCircle2 className="size-3.5 text-emerald-500" />
+                      Сохранено
+                    </>
+                  ) : savingTpl ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin" />
+                      Сохранение…
+                    </>
+                  ) : (
+                    <>
+                      <Save className="size-3.5" />
+                      Сохранить
+                    </>
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => void saveTemplateAsNew()}
+                  title="Создать новый шаблон с текущими названием и текстом"
+                >
+                  <FilePlus2 className="size-3.5" />
+                  Сохранить как новое
+                </Button>
+                {tplToast && (
+                  <span className="text-[11px] text-emerald-600 dark:text-emerald-400">
+                    {tplToast}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-muted-foreground/70">
+                Шаблон хранит текст с подстановками (имя, вакансия, ссылка) — он
+                переиспользуется для других кандидатов.
+              </p>
             </div>
 
             {/* Кнопки действий */}
