@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetHeader, SheetBody, SheetTitle } from "@/components/ui/sheet"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Layers, Plus, Tag, Package, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -207,7 +207,7 @@ export default function SalesProductsPage() {
           <SheetHeader>
             <SheetTitle className="flex items-center gap-2"><Layers className="w-5 h-5" />Добавить продукт</SheetTitle>
           </SheetHeader>
-          <div className="space-y-4 mt-6">
+          <SheetBody className="space-y-4">
             <div className="space-y-1.5">
               <Label>Название *</Label>
               <Input placeholder="Название продукта или услуги" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
@@ -257,7 +257,7 @@ export default function SalesProductsPage() {
                 {saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}Добавить
               </Button>
             </div>
-          </div>
+          </SheetBody>
         </SheetContent>
       </Sheet>
     </SidebarProvider>

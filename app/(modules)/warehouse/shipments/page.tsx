@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetHeader, SheetBody, SheetTitle } from "@/components/ui/sheet"
 import { Truck, Plus } from "lucide-react"
 import { toast } from "sonner"
 
@@ -140,7 +140,7 @@ export default function LogisticsShipmentsPage() {
               <Plus className="w-5 h-5" /> Оформить отгрузку
             </SheetTitle>
           </SheetHeader>
-          <div className="space-y-4 mt-4">
+          <SheetBody className="space-y-4">
             <div className="space-y-1.5">
               <Label>Заказ</Label>
               <Select value={form.order} onValueChange={v => setForm(f => ({ ...f, order: v }))}>
@@ -181,7 +181,7 @@ export default function LogisticsShipmentsPage() {
               <Input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
             </div>
             <Button className="w-full" onClick={handleAdd}>Оформить отгрузку</Button>
-          </div>
+          </SheetBody>
         </SheetContent>
       </Sheet>
     </SidebarProvider>

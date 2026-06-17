@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetHeader, SheetBody, SheetTitle } from "@/components/ui/sheet"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Calendar, Plus, Clock, User, Scissors, Phone, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -273,7 +273,7 @@ export default function SalesMeetingsPage() {
           <SheetHeader>
             <SheetTitle className="flex items-center gap-2"><Calendar className="w-5 h-5" />Новая запись</SheetTitle>
           </SheetHeader>
-          <div className="space-y-4 mt-6">
+          <SheetBody className="space-y-4">
             <div className="space-y-1.5">
               <Label>Услуга *</Label>
               <Select value={form.serviceId} onValueChange={(v) => setForm((p) => ({ ...p, serviceId: v }))}>
@@ -322,7 +322,7 @@ export default function SalesMeetingsPage() {
                 {saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}Записать
               </Button>
             </div>
-          </div>
+          </SheetBody>
         </SheetContent>
       </Sheet>
 
@@ -342,7 +342,7 @@ export default function SalesMeetingsPage() {
                   </div>
                 </div>
               </SheetHeader>
-              <div className="space-y-3 text-sm">
+              <SheetBody className="space-y-3 text-sm">
                 <div className="flex items-center gap-2 text-muted-foreground"><Clock className="w-4 h-4" /><span>{shortDate(selected.date)} в {selected.startTime}–{selected.endTime}</span></div>
                 <div className="flex items-center gap-2 text-muted-foreground"><User className="w-4 h-4" /><span>{selected.clientName}</span></div>
                 {selected.clientPhone && <div className="flex items-center gap-2 text-muted-foreground"><Phone className="w-4 h-4" /><span>{selected.clientPhone}</span></div>}
@@ -354,7 +354,7 @@ export default function SalesMeetingsPage() {
                     <p className="text-sm text-foreground">{selected.notes}</p>
                   </div>
                 )}
-              </div>
+              </SheetBody>
             </>
           )}
         </SheetContent>

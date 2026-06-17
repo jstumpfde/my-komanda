@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetHeader, SheetBody, SheetTitle } from "@/components/ui/sheet"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { ShoppingCart, Plus, ChevronDown, ChevronUp, Check, Clock } from "lucide-react"
@@ -249,7 +249,7 @@ export default function LogisticsOrdersPage() {
               <Plus className="w-5 h-5" /> Новый заказ
             </SheetTitle>
           </SheetHeader>
-          <div className="space-y-4 mt-4">
+          <SheetBody className="space-y-4">
             <div className="space-y-1.5">
               <Label>Клиент *</Label>
               <Input value={form.client} onChange={e => setForm(f => ({ ...f, client: e.target.value }))} placeholder="ООО «Название»" />
@@ -296,7 +296,7 @@ export default function LogisticsOrdersPage() {
             </div>
 
             <Button className="w-full" onClick={handleAdd} disabled={!form.client}>Создать заказ</Button>
-          </div>
+          </SheetBody>
         </SheetContent>
       </Sheet>
     </SidebarProvider>

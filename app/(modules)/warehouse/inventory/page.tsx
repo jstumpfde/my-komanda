@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetHeader, SheetBody, SheetTitle } from "@/components/ui/sheet"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Package, Plus, Search, ClipboardList } from "lucide-react"
 import { toast } from "sonner"
@@ -221,7 +221,7 @@ export default function LogisticsInventoryPage() {
               <Plus className="w-5 h-5" /> Добавить товар
             </SheetTitle>
           </SheetHeader>
-          <div className="space-y-4 mt-4">
+          <SheetBody className="space-y-4">
             <div className="space-y-1.5">
               <Label>Артикул</Label>
               <Input value={form.sku} onChange={e => setForm(f => ({ ...f, sku: e.target.value }))} placeholder="TRK-0001" />
@@ -253,7 +253,7 @@ export default function LogisticsInventoryPage() {
               <Input value={form.supplier} onChange={e => setForm(f => ({ ...f, supplier: e.target.value }))} placeholder="Название поставщика" />
             </div>
             <Button className="w-full" onClick={handleAdd} disabled={!form.name}>Добавить товар</Button>
-          </div>
+          </SheetBody>
         </SheetContent>
       </Sheet>
 
