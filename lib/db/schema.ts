@@ -416,9 +416,28 @@ export const companies = pgTable("companies", {
   // Управляется из админки /admin/clients/[id] → «Модули клиента».
   // НЕ лицензионный гейтинг (tenant_modules) — отдельный безопасный переключатель.
   enabledModules:     jsonb("enabled_modules").$type<string[] | null>(),
+  // Ответственные менеджеры платформы (drizzle/0218). У КАЖДОГО клиента и
+  // партнёра (партнёр = компания + integrator) может быть назначен менеджер
+  // продаж и клиентский менеджер — они получают % с оплат (ставки настраиваются
+  // в manager_commission_rates). Авто-назначение: «кто завёл» → менеджер продаж.
+  salesManagerId:     uuid("sales_manager_id").references((): any => users.id, { onDelete: "set null" }),
+  accountManagerId:   uuid("account_manager_id").references((): any => users.id, { onDelete: "set null" }),
   deletedAt:          timestamp("deleted_at"),
   createdAt:          timestamp("created_at").defaultNow(),
   updatedAt:          timestamp("updated_at").defaultNow(),
+})
+
+// Ставки комиссий менеджеров платформы (drizzle/0218). Одна строка на роль:
+//   sales_manager   — salePercent (% при продаже) + accompanimentPercent (% сопровождение)
+//   account_manager — accompanimentPercent (% сопровождение); salePercent обычно 0
+// «Всё настраивается» — значения правит платформенный админ в /admin/roles
+// (раздел «Менеджеры и комиссии»). Дефолты сидятся миграцией.
+export const managerCommissionRates = pgTable("manager_commission_rates", {
+  id:                   uuid("id").primaryKey().defaultRandom(),
+  role:                 text("role").notNull().unique(), // 'sales_manager' | 'account_manager'
+  salePercent:          text("sale_percent").notNull().default("0"),          // numeric as text
+  accompanimentPercent: text("accompaniment_percent").notNull().default("0"), // numeric as text
+  updatedAt:            timestamp("updated_at").defaultNow(),
 })
 
 export const companyBankAccounts = pgTable("company_bank_accounts", {

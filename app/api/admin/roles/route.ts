@@ -1,8 +1,9 @@
 import { NextRequest } from "next/server"
 import { sql } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { users, integrators } from "@/lib/db/schema"
+import { users, integrators, managerCommissionRates } from "@/lib/db/schema"
 import { requirePlatformAdmin, apiError, apiSuccess } from "@/lib/api-helpers"
+import { PARTNER_KIND_LABELS, PARTNER_KIND_DESCRIPTIONS } from "@/lib/partner-kinds"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -82,7 +83,7 @@ function getMatrix(): Record<string, RolePermissions> {
 
 // ─── Role metadata ────────────────────────────────────────────────────────────
 
-const ROLE_META: Record<string, { label: string; description: string; isPlatform: boolean; isLocked: boolean; isPartner?: boolean }> = {
+const ROLE_META: Record<string, { label: string; description: string; isPlatform: boolean; isLocked: boolean; isPartner?: boolean; isManager?: boolean }> = {
   platform_admin: {
     label: "Администратор платформы",
     description: "Полный доступ ко всем функциям платформы и администрированию",
@@ -129,25 +130,48 @@ const ROLE_META: Record<string, { label: string; description: string; isPlatform
   // Доступ — партнёрский кабинет /partner, не HR-права, поэтому HR-матрица к ним
   // не применяется (isLocked + isPartner). Счётчики считаются по integrators.kind.
   partner: {
-    label: "Партнёр",
-    description: "Партнёрский кабинет: свои клиенты, вход в платформу клиента, комиссия по уровням",
+    label: PARTNER_KIND_LABELS.partner,
+    description: PARTNER_KIND_DESCRIPTIONS.partner,
     isPlatform: false,
     isLocked: true,
     isPartner: true,
   },
   sub_partner: {
-    label: "Суб-партнёр",
-    description: "Партнёр под старшим партнёром, своя комиссия по уровням",
+    label: PARTNER_KIND_LABELS.sub_partner,
+    description: PARTNER_KIND_DESCRIPTIONS.sub_partner,
     isPlatform: false,
     isLocked: true,
     isPartner: true,
   },
   referral: {
-    label: "Реферал",
-    description: "Только просмотр финансов своих клиентов — без входа к клиенту и управления",
+    label: PARTNER_KIND_LABELS.referral,
+    description: PARTNER_KIND_DESCRIPTIONS.referral,
     isPlatform: false,
     isLocked: true,
     isPartner: true,
+  },
+  sub_referral: {
+    label: PARTNER_KIND_LABELS.sub_referral,
+    description: PARTNER_KIND_DESCRIPTIONS.sub_referral,
+    isPlatform: false,
+    isLocked: true,
+    isPartner: true,
+  },
+  // Менеджеры платформы — сотрудники с % ставками (комиссии в manager_commission_rates).
+  // HR-матрица к ним не применяется (isLocked). Счётчики — по users.role (как обычные роли).
+  sales_manager: {
+    label: "Менеджер продаж",
+    description: "Ведёт продажи, получает % с продажи и сопровождения (ставки — раздел «Менеджеры и комиссии»)",
+    isPlatform: false,
+    isLocked: true,
+    isManager: true,
+  },
+  account_manager: {
+    label: "Клиентский менеджер",
+    description: "Сопровождает клиента, получает % с сопровождения",
+    isPlatform: false,
+    isLocked: true,
+    isManager: true,
   },
 }
 
@@ -195,7 +219,15 @@ export async function GET() {
       permissions: matrix[id] ?? DEFAULT_MATRIX[id] ?? {},
     }))
 
-    return apiSuccess({ roles, features: FEATURES })
+    // Ставки менеджеров — read-only для отображения в секции «Менеджеры и комиссии»
+    const rateRows = await db.select().from(managerCommissionRates)
+    const managerRates = rateRows.map(r => ({
+      role: r.role,
+      salePercent: r.salePercent,
+      accompanimentPercent: r.accompanimentPercent,
+    }))
+
+    return apiSuccess({ roles, features: FEATURES, managerRates })
   } catch (err) {
     if (err instanceof Response) return err
     console.error("[api/admin/roles GET]", err)

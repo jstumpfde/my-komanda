@@ -12,6 +12,7 @@ import { toast } from "sonner"
 import { Handshake, Plus, Loader2, ExternalLink, Users } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { PARTNER_KIND_OPTIONS, partnerKindLabel } from "@/lib/partner-kinds"
 
 interface Integrator {
   id: string
@@ -25,16 +26,11 @@ interface Integrator {
   companyId: string
 }
 
-const KIND_LABELS: Record<string, string> = {
-  partner:     "Партнёр",
-  sub_partner: "Суб-партнёр",
-  referral:    "Реферал",
-}
-
 const KIND_COLORS: Record<string, string> = {
-  partner:     "bg-violet-100 text-violet-700 border-violet-200",
-  sub_partner: "bg-sky-100 text-sky-700 border-sky-200",
-  referral:    "bg-teal-100 text-teal-700 border-teal-200",
+  partner:      "bg-violet-100 text-violet-700 border-violet-200",
+  sub_partner:  "bg-sky-100 text-sky-700 border-sky-200",
+  referral:     "bg-teal-100 text-teal-700 border-teal-200",
+  sub_referral: "bg-emerald-100 text-emerald-700 border-emerald-200",
 }
 
 const LEVEL_COLORS: Record<string, string> = {
@@ -188,7 +184,7 @@ export default function AdminIntegratorsPage() {
                         </DataCell>
                         <DataCell>
                           <Badge className={cn("text-xs border", KIND_COLORS[int.kind ?? "partner"] ?? "bg-muted text-muted-foreground")}>
-                            {KIND_LABELS[int.kind ?? "partner"] ?? int.kind}
+                            {partnerKindLabel(int.kind ?? "partner")}
                           </Badge>
                         </DataCell>
                         <DataCell>
@@ -253,9 +249,9 @@ export default function AdminIntegratorsPage() {
               <Label className="text-sm">Тип</Label>
               <select value={newKind} onChange={e => setNewKind(e.target.value)}
                 className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm">
-                <option value="partner">Партнёр</option>
-                <option value="sub_partner">Суб-партнёр</option>
-                <option value="referral">Реферал</option>
+                {PARTNER_KIND_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
               </select>
             </div>
             <div className="space-y-1.5">

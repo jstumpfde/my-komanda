@@ -52,10 +52,12 @@ export async function GET(_req: NextRequest, { params }: Params) {
       trialEndsAt: companies.trialEndsAt,
       planId: companies.planId,
       currentPlanId: companies.currentPlanId,
-      enabledModules: companies.enabledModules,
-      deletedAt: companies.deletedAt,
-      createdAt: companies.createdAt,
-      updatedAt: companies.updatedAt,
+      enabledModules:   companies.enabledModules,
+      salesManagerId:   companies.salesManagerId,
+      accountManagerId: companies.accountManagerId,
+      deletedAt:        companies.deletedAt,
+      createdAt:        companies.createdAt,
+      updatedAt:        companies.updatedAt,
     })
     .from(companies)
     .where(eq(companies.id, id))

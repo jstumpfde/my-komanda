@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ChevronLeft, ChevronRight } from "lucide-react"
+import { PARTNER_KIND_LABELS } from "@/lib/partner-kinds"
 
 export const PAGE_SIZES = [20, 50, 100]
 
@@ -33,17 +34,18 @@ export const ROLE_LABELS: Record<string, string> = {
 export const CLIENT_ROLES = ["director", "hr_lead", "hr_manager", "department_head", "observer"]
 
 // Тип доступа в UI создания/смены. Клиентские значения = users.role;
-// партнёрские (partner/sub_partner/referral) раскладываются API в
+// партнёрские (partner/sub_partner/referral/sub_referral) раскладываются API в
 // users.role='partner' + integrators.kind (см. lib/admin/assign-role.ts).
 export const ACCESS_TYPE_OPTIONS: { value: string; label: string; group: "client" | "partner" }[] = [
-  { value: "director",        label: "Директор",       group: "client" },
-  { value: "hr_lead",         label: "Главный HR",     group: "client" },
-  { value: "hr_manager",      label: "HR-менеджер",    group: "client" },
-  { value: "department_head", label: "Рук. отдела",    group: "client" },
-  { value: "observer",        label: "Наблюдатель",    group: "client" },
-  { value: "partner",         label: "Партнёр",        group: "partner" },
-  { value: "sub_partner",     label: "Суб-партнёр",    group: "partner" },
-  { value: "referral",        label: "Реферал",        group: "partner" },
+  { value: "director",        label: "Директор",                          group: "client" },
+  { value: "hr_lead",         label: "Главный HR",                        group: "client" },
+  { value: "hr_manager",      label: "HR-менеджер",                       group: "client" },
+  { value: "department_head", label: "Рук. отдела",                       group: "client" },
+  { value: "observer",        label: "Наблюдатель",                       group: "client" },
+  { value: "partner",         label: PARTNER_KIND_LABELS.partner,         group: "partner" },
+  { value: "sub_partner",     label: PARTNER_KIND_LABELS.sub_partner,     group: "partner" },
+  { value: "referral",        label: PARTNER_KIND_LABELS.referral,        group: "partner" },
+  { value: "sub_referral",    label: PARTNER_KIND_LABELS.sub_referral,    group: "partner" },
 ]
 export const ACCESS_TYPE_LABELS: Record<string, string> =
   Object.fromEntries(ACCESS_TYPE_OPTIONS.map(o => [o.value, o.label]))

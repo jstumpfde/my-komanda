@@ -29,8 +29,9 @@ function genPassword(): string {
 // approved → 400. Если email уже занят пользователем → 409, заявка НЕ
 // одобряется.
 export async function POST(_req: NextRequest, { params }: Params) {
+  let currentUser: Awaited<ReturnType<typeof requirePlatformOperator>> | null = null
   try {
-    await requirePlatformOperator()
+    currentUser = await requirePlatformOperator()
   } catch (e) {
     if (e instanceof Response) return e
     return apiError("Unauthorized", 401)
@@ -79,9 +80,13 @@ export async function POST(_req: NextRequest, { params }: Params) {
 
     const { companyId } = await db.transaction(async (tx) => {
       // 1. Компания (NOT NULL-поля берут дефолты схемы).
+      // Авто-назначение: кто одобрил заявку → менеджер продаж (salesManagerId).
       const [company] = await tx
         .insert(companies)
-        .values({ name: companyName })
+        .values({
+          name: companyName,
+          salesManagerId: currentUser?.id ?? null,
+        })
         .returning({ id: companies.id })
 
       // 2. Логин (директор или партнёр).
