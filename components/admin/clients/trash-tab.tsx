@@ -58,6 +58,12 @@ function CountdownCell({ since, retentionDays }: { since: string | null; retenti
   return <span className="text-muted-foreground whitespace-nowrap" title={`Дата: ${formatDate(new Date(dueMs).toISOString())}`}>через {label}</span>
 }
 
+// Email удалённого юзера часто анонимизирован при удалении
+// (deleted__<uuid>@deleted.local) — это мусор, показываем чистую пометку.
+function isAnonymizedEmail(email: string): boolean {
+  return /^deleted__.+@deleted\.local$/i.test(email)
+}
+
 const RETENTION_OPTIONS = [1, 3, 7, 14, 30, 60, 90]
 
 export function TrashTab({ onChanged }: { onChanged?: () => void }) {
@@ -212,16 +218,16 @@ export function TrashTab({ onChanged }: { onChanged?: () => void }) {
             <DataTable containerClassName="overflow-x-auto">
               <DataHead>
                 <DataHeadCell>Компания</DataHeadCell>
-                <DataHeadCell>ИНН</DataHeadCell>
-                <DataHeadCell>Удалена</DataHeadCell>
-                <DataHeadCell>Удалится</DataHeadCell>
+                <DataHeadCell width="150px">ИНН</DataHeadCell>
+                <DataHeadCell width="130px">Удалена</DataHeadCell>
+                <DataHeadCell width="150px">Удалится</DataHeadCell>
                 <DataHeadCell align="right" width="220px">Действия</DataHeadCell>
               </DataHead>
               <tbody>
                 {data.companies.map(c => (
                   <DataRow key={c.id} className="group">
-                    <DataCell className="font-medium text-foreground">{c.name}</DataCell>
-                    <DataCell className="text-muted-foreground">{c.inn ?? "—"}</DataCell>
+                    <DataCell className="font-medium text-foreground"><div className="max-w-[360px] truncate" title={c.name}>{c.name}</div></DataCell>
+                    <DataCell className="text-muted-foreground whitespace-nowrap">{c.inn ?? "—"}</DataCell>
                     <DataCell className="text-muted-foreground whitespace-nowrap">{formatDate(c.deletedAt)}</DataCell>
                     <DataCell><CountdownCell since={c.deletedAt} retentionDays={retentionDays} /></DataCell>
                     <DataCell align="right">
@@ -249,23 +255,27 @@ export function TrashTab({ onChanged }: { onChanged?: () => void }) {
           <TableCard>
             <DataTable containerClassName="overflow-x-auto">
               <DataHead>
-                <DataHeadCell>Имя</DataHeadCell>
+                <DataHeadCell width="170px">Имя</DataHeadCell>
                 <DataHeadCell>Email</DataHeadCell>
-                <DataHeadCell>Роль</DataHeadCell>
+                <DataHeadCell width="130px">Роль</DataHeadCell>
                 <DataHeadCell>Компания</DataHeadCell>
-                <DataHeadCell>Удалён</DataHeadCell>
-                <DataHeadCell>Удалится</DataHeadCell>
-                <DataHeadCell align="right" width="150px">Действия</DataHeadCell>
+                <DataHeadCell width="130px">Удалён</DataHeadCell>
+                <DataHeadCell width="150px">Удалится</DataHeadCell>
+                <DataHeadCell align="right" width="160px">Действия</DataHeadCell>
               </DataHead>
               <tbody>
                 {data.users.map(u => (
                   <DataRow key={u.id} className="group">
-                    <DataCell className="font-medium text-foreground">{u.name ?? "—"}</DataCell>
-                    <DataCell className="text-muted-foreground">{u.email}</DataCell>
-                    <DataCell className="text-muted-foreground">{ROLE_LABELS[u.role] ?? u.role}</DataCell>
+                    <DataCell className="font-medium text-foreground"><div className="max-w-[160px] truncate" title={u.name ?? undefined}>{u.name ?? "—"}</div></DataCell>
+                    <DataCell className="text-muted-foreground">
+                      {isAnonymizedEmail(u.email)
+                        ? <span className="italic text-muted-foreground/60 whitespace-nowrap">освобождён при удалении</span>
+                        : <div className="max-w-[260px] truncate" title={u.email}>{u.email}</div>}
+                    </DataCell>
+                    <DataCell className="text-muted-foreground whitespace-nowrap">{ROLE_LABELS[u.role] ?? u.role}</DataCell>
                     <DataCell className="text-muted-foreground">
                       {u.companyName
-                        ? <Link href={`/admin/clients/${u.companyId}`} className="hover:text-primary hover:underline">{u.companyName}</Link>
+                        ? <Link href={`/admin/clients/${u.companyId}`} className="block max-w-[200px] truncate hover:text-primary hover:underline" title={u.companyName}>{u.companyName}</Link>
                         : "—"}
                     </DataCell>
                     <DataCell className="text-muted-foreground whitespace-nowrap">{formatDate(u.deletedAt)}</DataCell>
@@ -292,12 +302,12 @@ export function TrashTab({ onChanged }: { onChanged?: () => void }) {
           <TableCard>
             <DataTable containerClassName="overflow-x-auto">
               <DataHead>
-                <DataHeadCell>Номер</DataHeadCell>
+                <DataHeadCell width="150px">Номер</DataHeadCell>
                 <DataHeadCell>Компания</DataHeadCell>
-                <DataHeadCell align="right">Сумма</DataHeadCell>
-                <DataHeadCell>Создан</DataHeadCell>
-                <DataHeadCell>Удалится</DataHeadCell>
-                <DataHeadCell align="right" width="150px">Действия</DataHeadCell>
+                <DataHeadCell align="right" width="140px">Сумма</DataHeadCell>
+                <DataHeadCell width="130px">Создан</DataHeadCell>
+                <DataHeadCell width="150px">Удалится</DataHeadCell>
+                <DataHeadCell align="right" width="160px">Действия</DataHeadCell>
               </DataHead>
               <tbody>
                 {data.invoices.map(inv => (
@@ -305,7 +315,7 @@ export function TrashTab({ onChanged }: { onChanged?: () => void }) {
                     <DataCell className="font-medium text-foreground whitespace-nowrap">{inv.invoiceNumber}</DataCell>
                     <DataCell className="text-muted-foreground">
                       {inv.companyName
-                        ? <Link href={`/admin/clients/${inv.companyId}`} className="hover:text-primary hover:underline">{inv.companyName}</Link>
+                        ? <Link href={`/admin/clients/${inv.companyId}`} className="block max-w-[260px] truncate hover:text-primary hover:underline" title={inv.companyName}>{inv.companyName}</Link>
                         : "—"}
                     </DataCell>
                     <DataCell align="right" className="font-medium text-foreground whitespace-nowrap">{inv.amountRub != null ? formatPrice(inv.amountRub) : "—"}</DataCell>
