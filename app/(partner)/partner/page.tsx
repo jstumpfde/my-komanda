@@ -7,10 +7,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Sheet, SheetContent, SheetHeader, SheetBody, SheetTitle } from "@/components/ui/sheet"
-import { Loader2, Users, Wallet, Percent, Building2, Plus, UserPlus, CheckCircle2, Copy, LogIn, TrendingUp } from "lucide-react"
+import { Loader2, Users, Wallet, Percent, Building2, Plus, UserPlus, CheckCircle2, Copy, LogIn, TrendingUp, Briefcase, UserSearch } from "lucide-react"
 import { toast } from "sonner"
 import { useSession } from "next-auth/react"
 import { enterClientImpersonation } from "./impersonation-actions"
+import { PartnerClientsTable, type PartnerClientRow as ClientRow } from "@/components/partner/clients-table"
 
 interface Overview {
   kind: string
@@ -21,6 +22,8 @@ interface Overview {
   activeClients: number
   totalMrrRub: number
   totalEarningsRub: number
+  totalVacancies: number
+  totalCandidates: number
   currentTierName: string | null
   currentTierMinMrrRub: number
   nextTierName: string | null
@@ -28,31 +31,12 @@ interface Overview {
   nextTierCommissionPercent: number | null
   progressToNextPercent: number
 }
-interface ClientRow {
-  companyId: string
-  name: string
-  status: string | null
-  subscriptionStatus: string | null
-  planName: string | null
-  mrrRub: number
-  modules: { slug: string; name: string }[]
-  commissionPercent: number
-  earningsRub: number
-}
 
 const KIND_LABEL: Record<string, string> = {
   partner: "Партнёр",
   sub_partner: "Суб-партнёр",
   referral: "Реферал",
 }
-const SUB_LABEL: Record<string, string> = {
-  active: "Активна",
-  trial: "Триал",
-  paused: "Пауза",
-  cancelled: "Отменена",
-  expired: "Истекла",
-}
-
 function rub(n: number): string {
   return n.toLocaleString("ru-RU") + " ₽"
 }
@@ -125,11 +109,13 @@ export default function PartnerDashboardPage() {
       <OnboardSheet open={onbOpen} onOpenChange={setOnbOpen} products={products} onDone={load} />
       <ClientManageSheet companyId={manageId} readOnly={isReferral} onOpenChange={(o) => { if (!o) setManageId(null) }} onChanged={load} />
 
-      {/* Сводка */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* Сводка — мини-дашборд по портфелю клиентов */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         <StatCard icon={<Users className="size-4" />} label="Клиентов" value={`${ov?.totalClients ?? 0}`} hint={`активных: ${ov?.activeClients ?? 0}`} />
+        <StatCard icon={<Briefcase className="size-4" />} label="Вакансий у клиентов" value={`${ov?.totalVacancies ?? 0}`} />
+        <StatCard icon={<UserSearch className="size-4" />} label="Кандидатов у клиентов" value={`${ov?.totalCandidates ?? 0}`} />
         <StatCard icon={<Wallet className="size-4" />} label="Оборот клиентов / мес" value={rub(ov?.totalMrrRub ?? 0)} />
-        <StatCard icon={<Percent className="size-4" />} label="Моя комиссия" value={`${ov?.commissionPercent ?? 0}%`} />
+        <StatCard icon={<Percent className="size-4" />} label="Моя комиссия" value={`${ov?.commissionPercent ?? 0}%`} hint={ov?.isOverride ? "фикс" : "по объёму"} />
         <StatCard icon={<Wallet className="size-4" />} label="Мой доход / мес" value={rub(ov?.totalEarningsRub ?? 0)} accent />
       </div>
 
@@ -144,51 +130,7 @@ export default function PartnerDashboardPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          {clients.length === 0 ? (
-            <p className="px-6 pb-6 text-sm text-muted-foreground">
-              Пока нет клиентов. Нажмите «Подключить клиента» — заведёте компанию, логин директора и продукты.
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-xs text-muted-foreground">
-                    <th className="px-4 py-2 font-medium">Клиент</th>
-                    <th className="px-4 py-2 font-medium">Подписка</th>
-                    <th className="px-4 py-2 font-medium">Продукты</th>
-                    <th className="px-4 py-2 font-medium text-right">Платит / мес</th>
-                    <th className="px-4 py-2 font-medium text-right">Мой доход / мес</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clients.map((c) => (
-                    <tr key={c.companyId} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => setManageId(c.companyId)} title={isReferral ? "Просмотр клиента" : "Настроить продукты клиента"}>
-                      <td className="px-4 py-2.5 font-medium">{c.name || "—"}</td>
-                      <td className="px-4 py-2.5">
-                        <Badge variant="outline" className="text-[11px]">
-                          {SUB_LABEL[c.subscriptionStatus ?? ""] ?? (c.subscriptionStatus || "—")}
-                        </Badge>
-                        {c.planName && <span className="ml-1.5 text-xs text-muted-foreground">{c.planName}</span>}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        {c.modules.length === 0 ? (
-                          <span className="text-muted-foreground">—</span>
-                        ) : (
-                          <div className="flex flex-wrap gap-1">
-                            {c.modules.map((m) => (
-                              <Badge key={m.slug} variant="secondary" className="text-[10px]">{m.name}</Badge>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{rub(c.mrrRub)}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums font-medium text-emerald-600 dark:text-emerald-400">{rub(c.earningsRub)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <PartnerClientsTable clients={clients} readOnly={isReferral} onOpen={setManageId} />
         </CardContent>
       </Card>
     </div>

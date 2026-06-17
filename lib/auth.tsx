@@ -33,6 +33,10 @@ export interface User {
   companyId?: string | null
   company?: string
   avatar?: string
+  // Per-company оверрайд видимых модулей сайдбара (companies.enabled_modules).
+  //   null/undefined  — grandfather (модули по роли, текущее поведение);
+  //   непустой массив — компания видит ИМЕННО эти ключи модулей.
+  enabledModules?: string[] | null
 }
 
 interface AuthContextValue {
@@ -92,6 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         role,
         companyId: session.user.companyId ?? null,
         avatar: session.user.avatarUrl ?? undefined,
+        enabledModules: session.user.enabledModules ?? null,
       }
     : FALLBACK_USER
 

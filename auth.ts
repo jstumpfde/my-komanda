@@ -4,7 +4,7 @@ import GoogleProvider from "next-auth/providers/google"
 import { eq, or, ilike } from "drizzle-orm"
 import bcrypt from "bcryptjs"
 import { db } from "@/lib/db"
-import { users } from "@/lib/db/schema"
+import { users, companies } from "@/lib/db/schema"
 import type { UserRole } from "@/lib/auth"
 import { VKProvider } from "@/lib/auth/vk-provider"
 import { isPlatformAdminEmail } from "@/lib/platform/auth"
@@ -48,6 +48,11 @@ declare module "next-auth" {
       avatarUrl: string | null
       isPlatformAdmin: boolean
       permissions: Record<string, boolean> | null
+      // Per-company оверрайд видимых модулей сайдбара (companies.enabled_modules).
+      //   null            — grandfather (модули по роли, текущее поведение);
+      //   непустой массив — компания видит ИМЕННО эти ключи модулей.
+      // Под impersonation читается по ЭФФЕКТИВНОЙ (клиентской) компании.
+      enabledModules?: string[] | null
       // ── Impersonation (партнёр «Войти как клиент») ──
       // Реальная компания-партнёр (когда companyId подменён на клиентскую).
       realCompanyId?: string | null
@@ -223,6 +228,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           session.user.effectiveRole = "director"
         }
       }
+
+      // ── Per-company оверрайд модулей сайдбара (companies.enabled_modules) ──────
+      // Читаем по ЭФФЕКТИВНОМУ companyId (после impersonation выше он уже подменён
+      // на клиентский). null/пустой/ошибка → grandfather (поле остаётся null,
+      // сайдбар показывает модули по роли — текущее поведение НЕ меняется).
+      session.user.enabledModules = null
+      const effectiveCompanyId = session.user.companyId
+      if (effectiveCompanyId) {
+        try {
+          const [row] = await db
+            .select({ enabledModules: companies.enabledModules })
+            .from(companies)
+            .where(eq(companies.id, effectiveCompanyId))
+            .limit(1)
+          const mods = row?.enabledModules
+          session.user.enabledModules =
+            Array.isArray(mods) && mods.length > 0 ? mods : null
+        } catch {
+          session.user.enabledModules = null
+        }
+      }
+
       return session
     },
   },

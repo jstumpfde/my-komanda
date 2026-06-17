@@ -5,6 +5,7 @@ import { db } from "@/lib/db"
 import { accessRequests, companies, users } from "@/lib/db/schema"
 import { requirePlatformOperator } from "@/lib/platform/auth"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
+import { accessTypeToUserRole, syncIntegratorForAccessType } from "@/lib/admin/assign-role"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -19,10 +20,14 @@ function genPassword(): string {
 
 // POST /api/admin/access-requests/[id]/approve
 //
-// Одобрить заявку на регистрацию: создать компанию + директора-логин,
-// пометить заявку approved. Возвращает креды (email + временный пароль)
-// для выдачи клиенту. Идемпотентно по статусу: повтор после approved → 400.
-// Если email уже занят пользователем → 409, заявка НЕ одобряется.
+// Одобрить заявку на регистрацию:
+//   - requestType !== 'partner' — создать компанию + директора-логин;
+//   - requestType === 'partner' — создать компанию + ПАРТНЁРА-логин
+//     (role='partner') и завести строку integrators (kind='partner').
+// В обоих случаях помечаем заявку approved и возвращаем креды (email +
+// временный пароль) для выдачи. Идемпотентно по статусу: повтор после
+// approved → 400. Если email уже занят пользователем → 409, заявка НЕ
+// одобряется.
 export async function POST(_req: NextRequest, { params }: Params) {
   try {
     await requirePlatformOperator()
@@ -67,6 +72,11 @@ export async function POST(_req: NextRequest, { params }: Params) {
     const tempPassword = genPassword()
     const passwordHash = bcrypt.hashSync(tempPassword, 10)
 
+    // Партнёрская заявка → создаём ПАРТНЁРА (role='partner') и заводим
+    // integrators(kind='partner'); обычная → директор-логин компании.
+    const isPartner = reqRow.requestType === "partner"
+    const userRole = isPartner ? accessTypeToUserRole("partner") : "director"
+
     const { companyId } = await db.transaction(async (tx) => {
       // 1. Компания (NOT NULL-поля берут дефолты схемы).
       const [company] = await tx
@@ -74,12 +84,12 @@ export async function POST(_req: NextRequest, { params }: Params) {
         .values({ name: companyName })
         .returning({ id: companies.id })
 
-      // 2. Директор-логин.
+      // 2. Логин (директор или партнёр).
       await tx.insert(users).values({
         email,
         name: (reqRow.name ?? companyName).trim() || companyName,
         passwordHash,
-        role: "director",
+        role: userRole,
         companyId: company.id,
       })
 
@@ -91,6 +101,11 @@ export async function POST(_req: NextRequest, { params }: Params) {
 
       return { companyId: company.id }
     })
+
+    // 4. Для партнёра — строка integrators(kind='partner') на его компанию.
+    if (isPartner) {
+      await syncIntegratorForAccessType("partner", companyId)
+    }
 
     return apiSuccess({ companyId, directorEmail: email, tempPassword })
   } catch (err) {
