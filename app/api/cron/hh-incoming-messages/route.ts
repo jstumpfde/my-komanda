@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { checkCronAuth } from "@/lib/cron/auth"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { scanIncomingMessages } from "@/lib/hh/scan-incoming"
 
 // LIMIT_PER_RUN ограничен 30, потому что nginx на проде имеет proxy timeout
@@ -15,22 +16,25 @@ import { scanIncomingMessages } from "@/lib/hh/scan-incoming"
 // AI (Anthropic). Для 30 откликов это укладывается в окно даже при пиковых
 // задержках. При нагрузке выше 30 откликов / 15 мин — поднять прокси-таймаут
 // nginx или запускать cron чаще (каждые 5 мин).
+const CRON_NAME = "hh-incoming-messages"
 const LIMIT_PER_RUN = 30
 const STALE_MINUTES = 14
 
 export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
-
+  const run = await startCronRun(CRON_NAME).catch(() => null)
   try {
     const result = await scanIncomingMessages({
       limit:        LIMIT_PER_RUN,
       staleMinutes: STALE_MINUTES,
     })
+    if (run) await finishCronRun(run.id, "ok", result as unknown as Record<string, unknown>)
     return NextResponse.json({ ok: true, ...result })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error("[cron/hh-incoming-messages]", msg)
+    if (run) await finishCronRun(run.id, "error", null, msg)
     return NextResponse.json({ ok: false, error: msg }, { status: 500 })
   }
 }
