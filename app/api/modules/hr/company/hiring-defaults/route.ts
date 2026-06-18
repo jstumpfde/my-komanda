@@ -36,6 +36,7 @@ const NESTED_KEYS: (keyof CompanyHiringDefaults)[] = [
   "stopFactorsDefaults",
   "rolePermissions",
   "feedbackSurveys",
+  "dashboardCards",
 ];
 
 function mergeDefaults(

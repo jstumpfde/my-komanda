@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { eq, count } from "drizzle-orm"
+import { eq, count, isNull, isNotNull, and } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { plans, planModules, modules, companies } from "@/lib/db/schema"
 import { requirePlatformAdmin, apiError, apiSuccess } from "@/lib/api-helpers"
@@ -46,29 +46,61 @@ export async function POST(req: NextRequest) {
 }
 
 // GET /api/admin/plans — все тарифы с модулями и кол-вом клиентов
-export async function GET() {
+// Query params:
+//   ?archived=true — только архивные (archived_at IS NOT NULL, deleted_at IS NULL)
+//   ?trashed=true  — только в корзине (deleted_at IS NOT NULL)
+//   по умолчанию   — только активные (archived_at IS NULL, deleted_at IS NULL)
+export async function GET(req: NextRequest) {
   try {
     await requirePlatformAdmin()
+
+    const { searchParams } = req.nextUrl
+    const archived = searchParams.get("archived") === "true"
+    const trashed  = searchParams.get("trashed")  === "true"
+
+    // Условие выборки по вкладке
+    let whereClause
+    if (trashed) {
+      whereClause = isNotNull(plans.deletedAt)
+    } else if (archived) {
+      whereClause = and(isNotNull(plans.archivedAt), isNull(plans.deletedAt))
+    } else {
+      whereClause = and(isNull(plans.archivedAt), isNull(plans.deletedAt))
+    }
 
     const rows = await db
       .select({ plan: plans, pm: planModules, module: modules })
       .from(plans)
       .leftJoin(planModules, eq(planModules.planId, plans.id))
       .leftJoin(modules, eq(modules.id, planModules.moduleId))
+      .where(whereClause)
       .orderBy(plans.sortOrder, modules.sortOrder)
 
     // Кол-во клиентов на каждом тарифе
     const clientCounts = await db
       .select({ planId: companies.planId, cnt: count() })
       .from(companies)
+      .where(isNull(companies.deletedAt))
       .groupBy(companies.planId)
 
     const countMap = new Map(clientCounts.map(r => [r.planId, r.cnt]))
+
+    // Счётчики для табов
+    const [{ archivedCount }] = await db
+      .select({ archivedCount: count() })
+      .from(plans)
+      .where(and(isNotNull(plans.archivedAt), isNull(plans.deletedAt)))
+
+    const [{ trashedCount }] = await db
+      .select({ trashedCount: count() })
+      .from(plans)
+      .where(isNotNull(plans.deletedAt))
 
     const planMap = new Map<string, {
       id: string; slug: string; name: string; price: number
       currency: string | null; interval: string | null; isPublic: boolean | null
       sortOrder: number | null; clientCount: number
+      archivedAt: Date | null; deletedAt: Date | null
       modules: { id: string; slug: string; name: string; icon: string | null }[]
     }>()
 
@@ -78,6 +110,8 @@ export async function GET() {
           id: plan.id, slug: plan.slug, name: plan.name, price: plan.price,
           currency: plan.currency, interval: plan.interval, isPublic: plan.isPublic,
           sortOrder: plan.sortOrder,
+          archivedAt: plan.archivedAt,
+          deletedAt: plan.deletedAt,
           clientCount: countMap.get(plan.id) ?? 0,
           modules: [],
         })
@@ -87,7 +121,13 @@ export async function GET() {
       }
     }
 
-    return apiSuccess([...planMap.values()])
+    return apiSuccess({
+      data: [...planMap.values()],
+      counts: {
+        archived: Number(archivedCount),
+        trashed: Number(trashedCount),
+      },
+    })
   } catch (err) {
     if (err instanceof Response) return err
     console.error("[admin/plans GET]", err)
