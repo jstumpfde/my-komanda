@@ -9,7 +9,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
-import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
+import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell, DataSelectHeadCell, DataSelectCell } from "@/components/ui/data-table"
 import { Building2, Users, FileText, RotateCcw, Trash, AlertTriangle, Loader2, Settings } from "lucide-react"
 import { toast } from "sonner"
 import { formatPrice, formatDate, ROLE_LABELS } from "./shared"
@@ -77,6 +77,73 @@ export function TrashTab({ onChanged }: { onChanged?: () => void }) {
 
   const [permanentTarget, setPermanentTarget] = useState<PermanentTarget | null>(null)
   const [permanentBusy, setPermanentBusy] = useState(false)
+
+  // Выборка строк для каждой под-таблицы
+  const [selectedCompanies, setSelectedCompanies] = useState<Set<string>>(new Set())
+  const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set())
+  const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
+
+  // Массовые действия
+  async function bulkRun(
+    ids: Set<string>,
+    fn: (id: string) => Promise<Response>,
+    okMsg: string,
+    clearFn: () => void,
+  ) {
+    if (ids.size === 0) return
+    setBulkBusy(true)
+    try {
+      await Promise.all([...ids].map(fn))
+      toast.success(`${okMsg}: ${ids.size}`)
+      clearFn()
+      refetch()
+    } catch { toast.error("Ошибка массового действия") } finally { setBulkBusy(false) }
+  }
+
+  const bulkRestoreCompanies = () => bulkRun(
+    selectedCompanies,
+    id => fetch(`/api/admin/clients/${id}/restore`, { method: "POST" }),
+    "Компании восстановлены",
+    () => setSelectedCompanies(new Set()),
+  )
+  const bulkPermanentCompanies = () => bulkRun(
+    selectedCompanies,
+    id => fetch(`/api/admin/clients/${id}/permanent`, { method: "DELETE" }),
+    "Компании удалены навсегда",
+    () => setSelectedCompanies(new Set()),
+  )
+  const bulkRestoreUsers = () => bulkRun(
+    selectedUsers,
+    id => fetch(`/api/admin/users/${id}/restore`, { method: "POST" }),
+    "Пользователи восстановлены",
+    () => setSelectedUsers(new Set()),
+  )
+  const bulkRestoreInvoices = () => bulkRun(
+    selectedInvoices,
+    id => fetch(`/api/admin/invoices/${id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "issued" }),
+    }),
+    "Счета восстановлены",
+    () => setSelectedInvoices(new Set()),
+  )
+
+  // Подтверждение массового удаления компаний навсегда
+  const [bulkPermanentOpen, setBulkPermanentOpen] = useState(false)
+
+  // toggle helpers
+  const toggleCompany = (id: string) => setSelectedCompanies(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const allCompaniesSelected = data.companies.length > 0 && data.companies.every(c => selectedCompanies.has(c.id))
+  const toggleAllCompanies = () => setSelectedCompanies(allCompaniesSelected ? new Set() : new Set(data.companies.map(c => c.id)))
+
+  const toggleUser = (id: string) => setSelectedUsers(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const allUsersSelected = data.users.length > 0 && data.users.every(u => selectedUsers.has(u.id))
+  const toggleAllUsers = () => setSelectedUsers(allUsersSelected ? new Set() : new Set(data.users.map(u => u.id)))
+
+  const toggleInvoice = (id: string) => setSelectedInvoices(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const allInvoicesSelected = data.invoices.length > 0 && data.invoices.every(inv => selectedInvoices.has(inv.id))
+  const toggleAllInvoices = () => setSelectedInvoices(allInvoicesSelected ? new Set() : new Set(data.invoices.map(inv => inv.id)))
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -214,9 +281,23 @@ export function TrashTab({ onChanged }: { onChanged?: () => void }) {
       {data.companies.length > 0 && (
         <>
           <SectionHeader icon={Building2} title="Компании" count={data.counts.companies} />
+          {selectedCompanies.size > 0 && (
+            <div className="flex items-center gap-3 mb-3 rounded-lg border border-border bg-muted/40 px-4 py-2 flex-wrap">
+              <span className="text-sm font-medium">Выбрано: {selectedCompanies.size}</span>
+              <div className="h-4 w-px bg-border" />
+              <Button size="sm" variant="ghost" className="h-8 gap-1.5" disabled={bulkBusy} onClick={bulkRestoreCompanies}>
+                {bulkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}Восстановить
+              </Button>
+              <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-destructive hover:text-destructive" disabled={bulkBusy} onClick={() => setBulkPermanentOpen(true)}>
+                {bulkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash className="h-3.5 w-3.5" />}Удалить навсегда
+              </Button>
+              <Button size="sm" variant="ghost" className="h-8 ml-auto text-muted-foreground" onClick={() => setSelectedCompanies(new Set())}>Снять выбор</Button>
+            </div>
+          )}
           <TableCard>
             <DataTable containerClassName="overflow-x-auto">
               <DataHead>
+                <DataSelectHeadCell checked={allCompaniesSelected} onCheckedChange={toggleAllCompanies} />
                 <DataHeadCell>Компания</DataHeadCell>
                 <DataHeadCell width="150px">ИНН</DataHeadCell>
                 <DataHeadCell width="130px">Удалена</DataHeadCell>
@@ -225,7 +306,8 @@ export function TrashTab({ onChanged }: { onChanged?: () => void }) {
               </DataHead>
               <tbody>
                 {data.companies.map(c => (
-                  <DataRow key={c.id} className="group">
+                  <DataRow key={c.id} className={selectedCompanies.has(c.id) ? "bg-primary/[0.04] group" : "group"}>
+                    <DataSelectCell checked={selectedCompanies.has(c.id)} onCheckedChange={() => toggleCompany(c.id)} />
                     <DataCell className="font-medium text-foreground"><div className="max-w-[360px] truncate" title={c.name}>{c.name}</div></DataCell>
                     <DataCell className="text-muted-foreground whitespace-nowrap">{c.inn ?? "—"}</DataCell>
                     <DataCell className="text-muted-foreground whitespace-nowrap">{formatDate(c.deletedAt)}</DataCell>
@@ -252,9 +334,20 @@ export function TrashTab({ onChanged }: { onChanged?: () => void }) {
       {data.users.length > 0 && (
         <>
           <SectionHeader icon={Users} title="Пользователи" count={data.counts.users} />
+          {selectedUsers.size > 0 && (
+            <div className="flex items-center gap-3 mb-3 rounded-lg border border-border bg-muted/40 px-4 py-2 flex-wrap">
+              <span className="text-sm font-medium">Выбрано: {selectedUsers.size}</span>
+              <div className="h-4 w-px bg-border" />
+              <Button size="sm" variant="ghost" className="h-8 gap-1.5" disabled={bulkBusy} onClick={bulkRestoreUsers}>
+                {bulkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}Восстановить
+              </Button>
+              <Button size="sm" variant="ghost" className="h-8 ml-auto text-muted-foreground" onClick={() => setSelectedUsers(new Set())}>Снять выбор</Button>
+            </div>
+          )}
           <TableCard>
             <DataTable containerClassName="overflow-x-auto">
               <DataHead>
+                <DataSelectHeadCell checked={allUsersSelected} onCheckedChange={toggleAllUsers} />
                 <DataHeadCell width="170px">Имя</DataHeadCell>
                 <DataHeadCell>Email</DataHeadCell>
                 <DataHeadCell width="130px">Роль</DataHeadCell>
@@ -265,7 +358,8 @@ export function TrashTab({ onChanged }: { onChanged?: () => void }) {
               </DataHead>
               <tbody>
                 {data.users.map(u => (
-                  <DataRow key={u.id} className="group">
+                  <DataRow key={u.id} className={selectedUsers.has(u.id) ? "bg-primary/[0.04] group" : "group"}>
+                    <DataSelectCell checked={selectedUsers.has(u.id)} onCheckedChange={() => toggleUser(u.id)} />
                     <DataCell className="font-medium text-foreground"><div className="max-w-[160px] truncate" title={u.name ?? undefined}>{u.name ?? "—"}</div></DataCell>
                     <DataCell className="text-muted-foreground">
                       {isAnonymizedEmail(u.email)
@@ -299,9 +393,20 @@ export function TrashTab({ onChanged }: { onChanged?: () => void }) {
       {data.invoices.length > 0 && (
         <>
           <SectionHeader icon={FileText} title="Счета (аннулированные)" count={data.counts.invoices} />
+          {selectedInvoices.size > 0 && (
+            <div className="flex items-center gap-3 mb-3 rounded-lg border border-border bg-muted/40 px-4 py-2 flex-wrap">
+              <span className="text-sm font-medium">Выбрано: {selectedInvoices.size}</span>
+              <div className="h-4 w-px bg-border" />
+              <Button size="sm" variant="ghost" className="h-8 gap-1.5" disabled={bulkBusy} onClick={bulkRestoreInvoices}>
+                {bulkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}Восстановить
+              </Button>
+              <Button size="sm" variant="ghost" className="h-8 ml-auto text-muted-foreground" onClick={() => setSelectedInvoices(new Set())}>Снять выбор</Button>
+            </div>
+          )}
           <TableCard>
             <DataTable containerClassName="overflow-x-auto">
               <DataHead>
+                <DataSelectHeadCell checked={allInvoicesSelected} onCheckedChange={toggleAllInvoices} />
                 <DataHeadCell width="150px">Номер</DataHeadCell>
                 <DataHeadCell>Компания</DataHeadCell>
                 <DataHeadCell align="right" width="140px">Сумма</DataHeadCell>
@@ -311,7 +416,8 @@ export function TrashTab({ onChanged }: { onChanged?: () => void }) {
               </DataHead>
               <tbody>
                 {data.invoices.map(inv => (
-                  <DataRow key={inv.id} className="group">
+                  <DataRow key={inv.id} className={selectedInvoices.has(inv.id) ? "bg-primary/[0.04] group" : "group"}>
+                    <DataSelectCell checked={selectedInvoices.has(inv.id)} onCheckedChange={() => toggleInvoice(inv.id)} />
                     <DataCell className="font-medium text-foreground whitespace-nowrap">{inv.invoiceNumber}</DataCell>
                     <DataCell className="text-muted-foreground">
                       {inv.companyName
@@ -338,7 +444,7 @@ export function TrashTab({ onChanged }: { onChanged?: () => void }) {
 
       {settingsDialog}
 
-      {/* Удалить навсегда — простое подтверждение (без ввода названия) */}
+      {/* Удалить навсегда одну компанию — простое подтверждение */}
       <Dialog open={!!permanentTarget} onOpenChange={(o) => { if (!o) setPermanentTarget(null) }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -353,6 +459,26 @@ export function TrashTab({ onChanged }: { onChanged?: () => void }) {
             <Button variant="outline" size="sm" onClick={() => setPermanentTarget(null)} disabled={permanentBusy}>Отмена</Button>
             <Button variant="destructive" size="sm" onClick={handlePermanent} disabled={permanentBusy} className="gap-1.5">
               {permanentBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash className="w-3.5 h-3.5" />}Удалить навсегда
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Массовое удаление компаний навсегда */}
+      <Dialog open={bulkPermanentOpen} onOpenChange={(o) => { if (!o) setBulkPermanentOpen(false) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="size-4" />Удалить навсегда {selectedCompanies.size} компани{selectedCompanies.size === 1 ? "ю" : selectedCompanies.size < 5 ? "и" : "й"}?
+            </DialogTitle>
+            <DialogDescription>
+              Все выбранные компании и их данные (пользователи, вакансии, кандидаты) будут удалены без возможности восстановления.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 mt-2">
+            <Button variant="outline" size="sm" onClick={() => setBulkPermanentOpen(false)} disabled={bulkBusy}>Отмена</Button>
+            <Button variant="destructive" size="sm" disabled={bulkBusy} className="gap-1.5" onClick={async () => { setBulkPermanentOpen(false); await bulkPermanentCompanies() }}>
+              {bulkBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash className="w-3.5 h-3.5" />}Удалить навсегда
             </Button>
           </div>
         </DialogContent>

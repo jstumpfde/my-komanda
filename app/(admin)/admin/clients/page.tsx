@@ -4,14 +4,15 @@ import { Suspense, useState, useEffect, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { AdminPageLayout } from "@/components/admin/admin-page-layout"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Shield, Building2, Users, FileText, Trash2 } from "lucide-react"
+import { Shield, Building2, Users, FileText, Trash2, Archive } from "lucide-react"
 import { CompaniesTab } from "@/components/admin/clients/companies-tab"
 import { UsersTab } from "@/components/admin/clients/users-tab"
 import { InvoicesTab } from "@/components/admin/clients/invoices-tab"
 import { TrashTab } from "@/components/admin/clients/trash-tab"
+import { ArchiveTab } from "@/components/admin/clients/archive-tab"
 
-type View = "companies" | "users" | "invoices" | "trash"
-const VIEWS: View[] = ["companies", "users", "invoices", "trash"]
+type View = "companies" | "users" | "invoices" | "archived" | "trash"
+const VIEWS: View[] = ["companies", "users", "invoices", "archived", "trash"]
 
 // Счётчик в табе: маленькая «пилюля» с числом.
 function TabCount({ n }: { n: number }) {
@@ -28,8 +29,8 @@ function AdminClientsInner() {
   const initial = searchParams.get("view")
   const [view, setView] = useState<View>(VIEWS.includes(initial as View) ? (initial as View) : "companies")
 
-  // Счётчики на табах (всего по платформе) + общий счётчик корзины.
-  const [counts, setCounts] = useState<{ companies: number; users: number; invoices: number; trash: number } | null>(null)
+  // Счётчики на табах (всего по платформе) + общий счётчик корзины и архива.
+  const [counts, setCounts] = useState<{ companies: number; users: number; invoices: number; archived: number; trash: number } | null>(null)
   const loadCounts = useCallback(() => {
     Promise.all([
       fetch("/api/admin/clients?limit=1").then(r => r.ok ? r.json() : null),
@@ -41,6 +42,7 @@ function AdminClientsInner() {
         companies: c?.total ?? 0,
         users: u?.total ?? 0,
         invoices: i?.total ?? 0,
+        archived: c?.counts?.archived ?? 0,
         trash: t?.counts?.total ?? 0,
       })
     }).catch(() => {})
@@ -76,6 +78,7 @@ function AdminClientsInner() {
                   <TabsTrigger value="companies" className="gap-1.5"><Building2 className="w-3.5 h-3.5" />Компании{counts && <TabCount n={counts.companies} />}</TabsTrigger>
                   <TabsTrigger value="users" className="gap-1.5"><Users className="w-3.5 h-3.5" />Пользователи{counts && <TabCount n={counts.users} />}</TabsTrigger>
                   <TabsTrigger value="invoices" className="gap-1.5"><FileText className="w-3.5 h-3.5" />Счета{counts && <TabCount n={counts.invoices} />}</TabsTrigger>
+                  <TabsTrigger value="archived" className="gap-1.5"><Archive className="w-3.5 h-3.5" />Архив{counts && counts.archived > 0 && <TabCount n={counts.archived} />}</TabsTrigger>
                   <TabsTrigger value="trash" className="gap-1.5"><Trash2 className="w-3.5 h-3.5" />Корзина{counts && counts.trash > 0 && <TabCount n={counts.trash} />}</TabsTrigger>
                 </TabsList>
               </Tabs>
@@ -84,6 +87,7 @@ function AdminClientsInner() {
             {view === "companies" && <CompaniesTab />}
             {view === "users" && <UsersTab />}
             {view === "invoices" && <InvoicesTab />}
+            {view === "archived" && <ArchiveTab onChanged={loadCounts} />}
             {view === "trash" && <TrashTab onChanged={loadCounts} />}
 
       </div>

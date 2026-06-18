@@ -422,6 +422,10 @@ export const companies = pgTable("companies", {
   // в manager_commission_rates). Авто-назначение: «кто завёл» → менеджер продаж.
   salesManagerId:     uuid("sales_manager_id").references((): any => users.id, { onDelete: "set null" }),
   accountManagerId:   uuid("account_manager_id").references((): any => users.id, { onDelete: "set null" }),
+  // Архив компаний (drizzle/0220): NULL — активна; не-NULL — в архиве (скрыта из
+  // активного списка, но НЕ в корзине). Из архива можно восстановить или отправить
+  // в корзину (deleted_at). Таб «Архив» в /admin/clients.
+  archivedAt:         timestamp("archived_at"),
   deletedAt:          timestamp("deleted_at"),
   createdAt:          timestamp("created_at").defaultNow(),
   updatedAt:          timestamp("updated_at").defaultNow(),
