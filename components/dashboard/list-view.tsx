@@ -186,14 +186,16 @@ function SortHeader({
       aria-sort={ariaSort}
       className={cn(
         // Эталон иконок сортировки портала — как в DataHeadCell (ListFilter
-        // перед заголовком, opacity-40 неактивна, scale-y-flip для desc).
+        // перед заголовком, opacity-40 неактивна). ListFilter по умолчанию
+        // сужается вниз (широкое сверху = «большое сверху» = убывание), поэтому
+        // флип scale-y вешаем на ASC (возрастание), desc — дефолтная ориентация.
         "inline-flex items-center gap-1.5 select-none whitespace-nowrap transition-colors",
         align === "center" && "justify-center",
         align === "right" && "flex-row-reverse",
         dir ? "text-foreground" : "text-muted-foreground hover:text-foreground",
       )}
     >
-      <ListFilter className={cn("size-3.5 transition-transform", dir === "desc" && "scale-y-[-1]", !dir && "opacity-40")} />
+      <ListFilter className={cn("size-3.5 transition-transform", dir === "asc" && "scale-y-[-1]", !dir && "opacity-40")} />
       {label}
     </button>
   )

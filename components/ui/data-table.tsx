@@ -52,7 +52,7 @@ export type SortDir = "asc" | "desc" | null
 // Карточка-обёртка таблицы: убирает встроенный у Card py-6 (из-за него над
 // шапкой висел пустой отступ) и обрезает таблицу по скруглению.
 export function TableCard({ className, ...props }: React.ComponentProps<typeof Card>) {
-  return <Card className={cn("py-0 overflow-hidden", className)} {...props} />
+  return <Card className={cn("py-0 overflow-hidden rounded-xl", className)} {...props} />
 }
 
 // Скролл-контейнер + сама таблица.
@@ -85,7 +85,7 @@ export function DataTable({
 // (DataTable maxHeight), иначе строки налезают на шапку при прокрутке страницы.
 export function DataHead({ className, children, sticky }: { className?: string; children: React.ReactNode; sticky?: boolean }) {
   return (
-    <thead className={cn("bg-muted/50 border-b border-t border-border", sticky && "sticky top-0 z-10", className)}>
+    <thead className={cn("bg-muted/60 border-b border-t border-border", sticky && "sticky top-0 z-10", className)}>
       <tr>{children}</tr>
     </thead>
   )
@@ -105,7 +105,7 @@ export function DataHeadCell({
 }: React.ComponentProps<"th"> & { align?: Align; width?: string; sortable?: boolean; sortDir?: SortDir; onSort?: () => void }) {
   return (
     <th
-      className={cn("px-4 py-3 text-sm font-semibold text-muted-foreground", ALIGN[align], className)}
+      className={cn("px-4 py-2.5 text-[13px] font-medium text-muted-foreground", ALIGN[align], className)}
       style={width ? { width, ...props.style } : props.style}
       {...props}
     >
@@ -119,7 +119,9 @@ export function DataHeadCell({
             sortDir ? "text-foreground" : "hover:text-foreground",
           )}
         >
-          <ListFilter className={cn("size-3.5 transition-transform", sortDir === "desc" && "scale-y-[-1]", !sortDir && "opacity-40")} />
+          {/* ListFilter сужается вниз (широкое сверху = «большое сверху» = убывание):
+              флип на ASC (возрастание), desc — дефолтная ориентация. */}
+          <ListFilter className={cn("size-3.5 transition-transform", sortDir === "asc" && "scale-y-[-1]", !sortDir && "opacity-40")} />
           {children}
         </button>
       ) : (
@@ -155,7 +157,7 @@ export function DataSelectHeadCell({
 export function DataRow({ className, ...props }: React.ComponentProps<"tr">) {
   return (
     <tr
-      className={cn("border-b border-border/50 hover:bg-muted/50 transition-colors", className)}
+      className={cn("border-b border-border/60 hover:bg-muted/50 transition-colors", className)}
       {...props}
     />
   )
