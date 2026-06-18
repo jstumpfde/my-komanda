@@ -17,7 +17,7 @@ import {
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell, DataSelectHeadCell, DataSelectCell } from "@/components/ui/data-table"
 import { cn } from "@/lib/utils"
 import {
-  Search, Eye, Lock, Unlock, CalendarPlus, MoreHorizontal, Trash2, Trash, RotateCcw, AlertTriangle, Loader2,
+  Search, Eye, Lock, Unlock, CalendarPlus, MoreHorizontal, Trash2, Trash, RotateCcw, AlertTriangle, Loader2, Archive,
 } from "lucide-react"
 import { toast } from "sonner"
 import { formatPrice, formatDate, useDebounce, TableFooter } from "./shared"
@@ -86,6 +86,9 @@ export function CompaniesTab({ trashed = false }: { trashed?: boolean }) {
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
+
+  const [archiveTarget, setArchiveTarget] = useState<ClientRow | null>(null)
+  const [archiving, setArchiving] = useState(false)
 
   const [trashTarget, setTrashTarget] = useState<ClientRow | null>(null)
   const [trashing, setTrashing] = useState(false)
@@ -184,6 +187,26 @@ export function CompaniesTab({ trashed = false }: { trashed?: boolean }) {
       if (res.ok) refetch()
     } finally {
       setBlockingId(null)
+    }
+  }
+
+  async function handleArchive() {
+    if (!archiveTarget) return
+    setArchiving(true)
+    try {
+      const res = await fetch(`/api/admin/clients/${archiveTarget.id}/archive`, { method: "POST" })
+      if (res.ok) {
+        toast.success("Компания перемещена в архив")
+        setArchiveTarget(null)
+        refetch()
+      } else {
+        const b = await res.json().catch(() => ({}))
+        toast.error(b.error || "Не удалось переместить в архив")
+      }
+    } catch {
+      toast.error("Ошибка сети")
+    } finally {
+      setArchiving(false)
     }
   }
 
@@ -381,6 +404,12 @@ export function CompaniesTab({ trashed = false }: { trashed?: boolean }) {
                               )}
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
+                                className="gap-2 cursor-pointer"
+                                onClick={() => setArchiveTarget(client)}
+                              >
+                                <Archive className="h-3.5 w-3.5" />В архив
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
                                 className="gap-2 cursor-pointer text-destructive focus:text-destructive"
                                 onClick={() => setTrashTarget(client)}
                               >
@@ -407,6 +436,24 @@ export function CompaniesTab({ trashed = false }: { trashed?: boolean }) {
 
       {/* Боковая панель компании */}
       <CompanySheet client={sheetClient} open={sheetOpen} onOpenChange={setSheetOpen} onChanged={refetch} />
+
+      {/* В архив — лёгкое подтверждение */}
+      <Dialog open={!!archiveTarget} onOpenChange={(o) => { if (!o) setArchiveTarget(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Переместить в архив?</DialogTitle>
+            <DialogDescription>
+              Компания «{archiveTarget?.name}» будет скрыта из активного списка. Из архива можно восстановить или отправить в корзину.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 mt-2">
+            <Button variant="outline" size="sm" onClick={() => setArchiveTarget(null)} disabled={archiving}>Отмена</Button>
+            <Button variant="secondary" size="sm" onClick={handleArchive} disabled={archiving} className="gap-1.5">
+              {archiving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}В архив
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* В корзину — лёгкое подтверждение */}
       <Dialog open={!!trashTarget} onOpenChange={(o) => { if (!o) setTrashTarget(null) }}>

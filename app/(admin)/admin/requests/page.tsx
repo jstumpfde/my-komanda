@@ -14,8 +14,23 @@ import {
 } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { Mail, Loader2, Check, X, UserPlus, Copy, Phone, Building2, PhoneCall } from "lucide-react"
+import {
+  Mail, Loader2, Check, X, UserPlus, Copy, Phone, Building2, PhoneCall,
+  List, Columns2,
+} from "lucide-react"
 import { FUNNEL_TEMPLATES, DEFAULT_TEMPLATE_KEY } from "@/lib/funnel-builder/blocks"
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+  useDraggable,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core"
+import { cn } from "@/lib/utils"
 
 // ─── Верхние разделы ─────────────────────────────────────────────────────────
 type Section = "registration" | "email"
@@ -31,8 +46,11 @@ function formatDate(iso: string | null): string {
   return d.toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
 }
 
+type ViewMode = "table" | "kanban"
+
 export default function AdminRequestsPage() {
   const [section, setSection] = useState<Section>("registration")
+  const [viewMode, setViewMode] = useState<ViewMode>("table")
 
   return (
     <AdminPageLayout>
@@ -48,24 +66,60 @@ export default function AdminRequestsPage() {
         </div>
 
         {/* Верхние табы-разделы */}
-        <div className="flex items-center gap-1 border-b border-border">
-          {SECTIONS.map(s => (
-            <button
-              key={s.key}
-              type="button"
-              onClick={() => setSection(s.key)}
-              className={`px-3 py-2 text-sm border-b-2 -mb-px transition-colors ${
-                section === s.key
-                  ? "border-primary text-foreground font-medium"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {s.label}
-            </button>
-          ))}
+        <div className="flex items-center justify-between border-b border-border">
+          <div className="flex items-center gap-1">
+            {SECTIONS.map(s => (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => setSection(s.key)}
+                className={`px-3 py-2 text-sm border-b-2 -mb-px transition-colors ${
+                  section === s.key
+                    ? "border-primary text-foreground font-medium"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Переключатель вида — только для раздела заявок на регистрацию */}
+          {section === "registration" && (
+            <div className="flex items-center bg-muted rounded-lg p-1 gap-0.5 mb-0.5">
+              <Button
+                variant={viewMode === "table" ? "default" : "ghost"}
+                size="sm"
+                className={cn(
+                  "h-7 px-2.5 text-xs gap-1.5 transition-all",
+                  viewMode !== "table" && "text-muted-foreground hover:text-foreground"
+                )}
+                onClick={() => setViewMode("table")}
+                title="Таблица"
+              >
+                <List className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Таблица</span>
+              </Button>
+              <Button
+                variant={viewMode === "kanban" ? "default" : "ghost"}
+                size="sm"
+                className={cn(
+                  "h-7 px-2.5 text-xs gap-1.5 transition-all",
+                  viewMode !== "kanban" && "text-muted-foreground hover:text-foreground"
+                )}
+                onClick={() => setViewMode("kanban")}
+                title="Канбан"
+              >
+                <Columns2 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Канбан</span>
+              </Button>
+            </div>
+          )}
         </div>
 
-        {section === "registration" ? <RegistrationRequests /> : <EmailChangeRequests />}
+        {section === "registration"
+          ? <RegistrationRequests viewMode={viewMode} />
+          : <EmailChangeRequests />}
       </div>
     </AdminPageLayout>
   )
@@ -91,6 +145,14 @@ const ACCESS_STATUS_TABS: Array<{ key: string; label: string }> = [
   { key: "approved",  label: "Одобренные" },
   { key: "rejected",  label: "Отклонённые" },
 ]
+
+// Стиль колонок канбана (градиент) — аналогично kanban-board.tsx
+const KANBAN_COLUMN_COLORS: Record<string, { from: string; to: string }> = {
+  new:       { from: "#8b5cf6", to: "#7c3aed" },
+  contacted: { from: "#3b82f6", to: "#2563eb" },
+  approved:  { from: "#22c55e", to: "#16a34a" },
+  rejected:  { from: "#94a3b8", to: "#64748b" },
+}
 
 const STATUS_META: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
   new:       { label: "Новая",      variant: "default" },
@@ -124,8 +186,8 @@ interface SetupParams {
   requestId: string
   isPartner: boolean
   funnelScenario: string
-  salesManagerId: string   // "" = не передавать (авто = текущий)
-  accountManagerId: string // "" = не назначен
+  salesManagerId: string
+  accountManagerId: string
 }
 
 // Список шаблонов воронки для Select
@@ -134,9 +196,11 @@ const FUNNEL_TEMPLATE_OPTIONS = Object.entries(FUNNEL_TEMPLATES).map(([key, tpl]
   label: tpl.name,
 }))
 
-function RegistrationRequests() {
+function RegistrationRequests({ viewMode }: { viewMode: ViewMode }) {
   const [status, setStatus] = useState("new")
+  // Для таблицы — строки текущего таба; для канбана — все строки всех статусов
   const [rows, setRows] = useState<AccessRequestRow[]>([])
+  const [allRows, setAllRows] = useState<AccessRequestRow[]>([])
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [creds, setCreds] = useState<ApprovedCreds | null>(null)
@@ -155,7 +219,30 @@ function RegistrationRequests() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { load(status) }, [status])
+  // Для канбана загружаем все статусы
+  const loadAll = () => {
+    setLoading(true)
+    const statuses = ["new", "contacted", "approved", "rejected"]
+    Promise.all(
+      statuses.map(st =>
+        fetch(`/api/admin/access-requests?status=${encodeURIComponent(st)}`)
+          .then(r => r.json())
+          .then(d => (Array.isArray(d) ? d : []))
+          .catch(() => [] as AccessRequestRow[])
+      )
+    )
+      .then(results => setAllRows(results.flat()))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    if (viewMode === "kanban") {
+      loadAll()
+    } else {
+      load(status)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, viewMode])
 
   // Загрузить список менеджеров один раз при открытии диалога параметров
   const openSetupDialog = (row: AccessRequestRow) => {
@@ -188,7 +275,11 @@ function RegistrationRequests() {
       const json = await res.json().catch(() => ({}))
       if (!res.ok) { toast.error(json.error ?? "Ошибка"); return }
       toast.success(next === "contacted" ? "Помечено «связались»" : "Заявка отклонена")
-      setRows(prev => prev.filter(r => r.id !== id))
+      if (viewMode === "kanban") {
+        setAllRows(prev => prev.map(r => r.id === id ? { ...r, status: next } : r))
+      } else {
+        setRows(prev => prev.filter(r => r.id !== id))
+      }
     } catch { toast.error("Ошибка сети") }
     finally { setBusyId(null) }
   }
@@ -201,16 +292,11 @@ function RegistrationRequests() {
     setSetupParams(null)
     try {
       const body: Record<string, unknown> = { funnelScenario }
-      // salesManagerId:
-      //   "" = не передаём → авто (одобряющий)
-      //   "__none__" = явно null (не назначен)
-      //   uuid = конкретный менеджер
       if (salesManagerId === "__none__") {
         body.salesManagerId = null
       } else if (salesManagerId !== "") {
         body.salesManagerId = salesManagerId
       }
-      // accountManagerId: "" или "__none__" → не передаём (null по дефолту)
       if (accountManagerId && accountManagerId !== "__none__") {
         body.accountManagerId = accountManagerId
       }
@@ -223,7 +309,11 @@ function RegistrationRequests() {
       const json = await res.json().catch(() => ({}))
       if (!res.ok) { toast.error(json.error ?? "Ошибка одобрения"); return }
       toast.success(isPartner ? "Компания и партнёр созданы" : "Компания и директор созданы")
-      setRows(prev => prev.filter(r => r.id !== requestId))
+      if (viewMode === "kanban") {
+        setAllRows(prev => prev.map(r => r.id === requestId ? { ...r, status: "approved" } : r))
+      } else {
+        setRows(prev => prev.filter(r => r.id !== requestId))
+      }
       setCreds({
         companyId: json.companyId,
         directorEmail: json.directorEmail,
@@ -240,135 +330,190 @@ function RegistrationRequests() {
     )
   }
 
+  // Обработчик drag-and-drop для канбана
+  const handleDragEnd = async (rowId: string, newStatus: string) => {
+    const row = allRows.find(r => r.id === rowId)
+    if (!row || row.status === newStatus) return
+
+    // Оптимистично обновляем
+    setAllRows(prev => prev.map(r => r.id === rowId ? { ...r, status: newStatus } : r))
+
+    // Если одобряем — открываем диалог
+    if (newStatus === "approved") {
+      openSetupDialog({ ...row, status: newStatus })
+      return
+    }
+
+    setBusyId(rowId)
+    try {
+      const res = await fetch(`/api/admin/access-requests/${rowId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(json.error ?? "Ошибка")
+        // Откатываем
+        setAllRows(prev => prev.map(r => r.id === rowId ? { ...r, status: row.status } : r))
+      } else {
+        const meta = STATUS_META[newStatus]
+        toast.success(`Статус изменён: ${meta?.label ?? newStatus}`)
+      }
+    } catch {
+      toast.error("Ошибка сети")
+      setAllRows(prev => prev.map(r => r.id === rowId ? { ...r, status: row.status } : r))
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const activeRows = viewMode === "kanban" ? allRows : rows
+
   return (
     <div className="space-y-4">
-      {/* Фильтр по статусу */}
-      <div className="flex items-center gap-1 flex-wrap">
-        {ACCESS_STATUS_TABS.map(t => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setStatus(t.key)}
-            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-              status === t.key
-                ? "bg-primary text-primary-foreground font-medium"
-                : "text-muted-foreground hover:bg-muted"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {/* Фильтр по статусу — только для таблицы */}
+      {viewMode === "table" && (
+        <div className="flex items-center gap-1 flex-wrap">
+          {ACCESS_STATUS_TABS.map(t => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setStatus(t.key)}
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                status === t.key
+                  ? "bg-primary text-primary-foreground font-medium"
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center h-48">
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </div>
-      ) : rows.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center text-sm text-muted-foreground">
-            Заявок нет
-          </CardContent>
-        </Card>
-      ) : (
-        <TableCard>
-          <DataTable>
-            <DataHead>
-              <DataHeadCell>Контакт</DataHeadCell>
-              <DataHeadCell>Компания</DataHeadCell>
-              <DataHeadCell>Тип</DataHeadCell>
-              <DataHeadCell>Статус</DataHeadCell>
-              <DataHeadCell>Дата</DataHeadCell>
-              <DataHeadCell align="right">Действия</DataHeadCell>
-            </DataHead>
-            <tbody>
-              {rows.map(row => {
-                const meta = STATUS_META[row.status ?? "new"] ?? STATUS_META.new
-                const typeLabel = REQUEST_TYPE_LABEL[row.requestType ?? "access"] ?? (row.requestType ?? "—")
-                const isPartner = row.requestType === "partner"
-                return (
-                  <DataRow key={row.id} className="align-top">
-                    <DataCell>
-                      <div className="font-medium">{row.name || "—"}</div>
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
-                        <Mail className="w-3 h-3" /> {row.email}
-                      </div>
-                      {row.phone && (
+      ) : viewMode === "table" ? (
+        /* ── Табличный вид ── */
+        rows.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center text-sm text-muted-foreground">
+              Заявок нет
+            </CardContent>
+          </Card>
+        ) : (
+          <TableCard>
+            <DataTable>
+              <DataHead>
+                <DataHeadCell>Контакт</DataHeadCell>
+                <DataHeadCell>Компания</DataHeadCell>
+                <DataHeadCell>Тип</DataHeadCell>
+                <DataHeadCell>Статус</DataHeadCell>
+                <DataHeadCell>Дата</DataHeadCell>
+                <DataHeadCell align="right">Действия</DataHeadCell>
+              </DataHead>
+              <tbody>
+                {rows.map(row => {
+                  const meta = STATUS_META[row.status ?? "new"] ?? STATUS_META.new
+                  const typeLabel = REQUEST_TYPE_LABEL[row.requestType ?? "access"] ?? (row.requestType ?? "—")
+                  const isPartner = row.requestType === "partner"
+                  return (
+                    <DataRow key={row.id} className="align-top">
+                      <DataCell>
+                        <div className="font-medium">{row.name || "—"}</div>
                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
-                          <Phone className="w-3 h-3" /> {row.phone}
+                          <Mail className="w-3 h-3" /> {row.email}
                         </div>
-                      )}
-                      {row.comment && (
-                        <div className="text-xs text-muted-foreground mt-1 max-w-xs whitespace-pre-wrap break-words">
-                          {row.comment}
+                        {row.phone && (
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
+                            <Phone className="w-3 h-3" /> {row.phone}
+                          </div>
+                        )}
+                        {row.comment && (
+                          <div className="text-xs text-muted-foreground mt-1 max-w-xs whitespace-pre-wrap break-words">
+                            {row.comment}
+                          </div>
+                        )}
+                      </DataCell>
+                      <DataCell className="text-muted-foreground">
+                        <div className="flex items-center gap-1.5">
+                          <Building2 className="w-3.5 h-3.5 shrink-0" />
+                          {row.companyName || "—"}
                         </div>
-                      )}
-                    </DataCell>
-                    <DataCell className="text-muted-foreground">
-                      <div className="flex items-center gap-1.5">
-                        <Building2 className="w-3.5 h-3.5 shrink-0" />
-                        {row.companyName || "—"}
-                      </div>
-                    </DataCell>
-                    <DataCell>
-                      <Badge
-                        variant={isPartner ? "default" : "outline"}
-                        className={`text-[10px] ${isPartner ? "bg-violet-600 hover:bg-violet-600 text-white" : ""}`}
-                      >
-                        {typeLabel}
-                      </Badge>
-                    </DataCell>
-                    <DataCell>
-                      <Badge variant={meta.variant} className="text-[10px]">{meta.label}</Badge>
-                    </DataCell>
-                    <DataCell className="text-muted-foreground whitespace-nowrap">
-                      {formatDate(row.createdAt)}
-                    </DataCell>
-                    <DataCell align="right">
-                      {row.status === "approved" || row.status === "rejected" ? (
-                        <span className="text-xs text-muted-foreground italic">{meta.label}</span>
-                      ) : (
-                        <div className="inline-flex items-center gap-2 flex-wrap justify-end">
-                          {row.status !== "contacted" && (
+                      </DataCell>
+                      <DataCell>
+                        <Badge
+                          variant={isPartner ? "default" : "outline"}
+                          className={`text-[10px] ${isPartner ? "bg-violet-600 hover:bg-violet-600 text-white" : ""}`}
+                        >
+                          {typeLabel}
+                        </Badge>
+                      </DataCell>
+                      <DataCell>
+                        <Badge variant={meta.variant} className="text-[10px]">{meta.label}</Badge>
+                      </DataCell>
+                      <DataCell className="text-muted-foreground whitespace-nowrap">
+                        {formatDate(row.createdAt)}
+                      </DataCell>
+                      <DataCell align="right">
+                        {row.status === "approved" || row.status === "rejected" ? (
+                          <span className="text-xs text-muted-foreground italic">{meta.label}</span>
+                        ) : (
+                          <div className="inline-flex items-center gap-2 flex-wrap justify-end">
+                            {row.status !== "contacted" && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={busyId === row.id}
+                                onClick={() => setStatusAction(row.id, "contacted")}
+                              >
+                                <PhoneCall className="w-3.5 h-3.5 mr-1" /> Связались
+                              </Button>
+                            )}
                             <Button
                               size="sm"
-                              variant="ghost"
+                              variant="outline"
                               disabled={busyId === row.id}
-                              onClick={() => setStatusAction(row.id, "contacted")}
+                              onClick={() => setStatusAction(row.id, "rejected")}
                             >
-                              <PhoneCall className="w-3.5 h-3.5 mr-1" /> Связались
+                              <X className="w-3.5 h-3.5 mr-1" /> Отклонить
                             </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={busyId === row.id}
-                            onClick={() => setStatusAction(row.id, "rejected")}
-                          >
-                            <X className="w-3.5 h-3.5 mr-1" /> Отклонить
-                          </Button>
-                          <Button
-                            size="sm"
-                            disabled={busyId === row.id}
-                            onClick={() => openSetupDialog(row)}
-                          >
-                            {busyId === row.id
-                              ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
-                              : <UserPlus className="w-3.5 h-3.5 mr-1" />}
-                            Одобрить
-                          </Button>
-                        </div>
-                      )}
-                    </DataCell>
-                  </DataRow>
-                )
-              })}
-            </tbody>
-          </DataTable>
-        </TableCard>
+                            <Button
+                              size="sm"
+                              disabled={busyId === row.id}
+                              onClick={() => openSetupDialog(row)}
+                            >
+                              {busyId === row.id
+                                ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                                : <UserPlus className="w-3.5 h-3.5 mr-1" />}
+                              Одобрить
+                            </Button>
+                          </div>
+                        )}
+                      </DataCell>
+                    </DataRow>
+                  )
+                })}
+              </tbody>
+            </DataTable>
+          </TableCard>
+        )
+      ) : (
+        /* ── Канбан-вид ── */
+        <KanbanView
+          rows={allRows}
+          busyId={busyId}
+          onDragEnd={handleDragEnd}
+          onContacted={(id) => setStatusAction(id, "contacted")}
+          onReject={(id) => setStatusAction(id, "rejected")}
+          onApprove={(row) => openSetupDialog(row)}
+        />
       )}
 
-      {/* Диалог «Параметры заведения» — появляется ПЕРЕД одобрением */}
+      {/* Диалог «Параметры заведения» */}
       <Dialog open={!!setupParams} onOpenChange={(o) => { if (!o) setSetupParams(null) }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -379,7 +524,6 @@ function RegistrationRequests() {
           </DialogHeader>
           {setupParams && (
             <div className="space-y-4 py-1">
-              {/* Сценарий обработки */}
               <div className="space-y-1.5">
                 <Label>Сценарий обработки</Label>
                 <Select
@@ -399,7 +543,6 @@ function RegistrationRequests() {
                 </Select>
               </div>
 
-              {/* Менеджер продаж */}
               <div className="space-y-1.5">
                 <Label>Менеджер продаж</Label>
                 <Select
@@ -427,7 +570,6 @@ function RegistrationRequests() {
                 </p>
               </div>
 
-              {/* Клиентский менеджер */}
               <div className="space-y-1.5">
                 <Label>Клиентский менеджер</Label>
                 <Select
@@ -503,6 +645,261 @@ function RegistrationRequests() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+// ─── Канбан-доска ─────────────────────────────────────────────────────────────
+
+interface KanbanViewProps {
+  rows: AccessRequestRow[]
+  busyId: string | null
+  onDragEnd: (rowId: string, newStatus: string) => void
+  onContacted: (id: string) => void
+  onReject: (id: string) => void
+  onApprove: (row: AccessRequestRow) => void
+}
+
+function KanbanView({ rows, busyId, onDragEnd, onContacted, onReject, onApprove }: KanbanViewProps) {
+  const [activeId, setActiveId] = useState<string | null>(null)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  )
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(String(event.active.id))
+  }
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    setActiveId(null)
+    if (!over) return
+    const rowId = String(active.id)
+    const newStatus = String(over.id)
+    onDragEnd(rowId, newStatus)
+  }
+
+  const activeRow = activeId ? rows.find(r => r.id === activeId) : null
+
+  return (
+    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <div
+        className="grid gap-3 w-full"
+        style={{ gridTemplateColumns: `repeat(4, minmax(220px, 1fr))` }}
+      >
+        {ACCESS_STATUS_TABS.map(tab => {
+          const colRows = rows.filter(r => (r.status ?? "new") === tab.key)
+          const colors = KANBAN_COLUMN_COLORS[tab.key]
+          return (
+            <KanbanColumn
+              key={tab.key}
+              id={tab.key}
+              label={tab.label}
+              count={colRows.length}
+              colorFrom={colors.from}
+              colorTo={colors.to}
+              rows={colRows}
+              busyId={busyId}
+              onContacted={onContacted}
+              onReject={onReject}
+              onApprove={onApprove}
+            />
+          )
+        })}
+      </div>
+
+      <DragOverlay>
+        {activeRow && (
+          <KanbanCard
+            row={activeRow}
+            busyId={busyId}
+            isDragging
+            onContacted={onContacted}
+            onReject={onReject}
+            onApprove={onApprove}
+          />
+        )}
+      </DragOverlay>
+    </DndContext>
+  )
+}
+
+// ─── Колонка канбана ──────────────────────────────────────────────────────────
+
+interface KanbanColumnProps {
+  id: string
+  label: string
+  count: number
+  colorFrom: string
+  colorTo: string
+  rows: AccessRequestRow[]
+  busyId: string | null
+  onContacted: (id: string) => void
+  onReject: (id: string) => void
+  onApprove: (row: AccessRequestRow) => void
+}
+
+function KanbanColumn({ id, label, count, colorFrom, colorTo, rows, busyId, onContacted, onReject, onApprove }: KanbanColumnProps) {
+  const { setNodeRef, isOver } = useDroppable({ id })
+
+  return (
+    <div className="flex flex-col rounded-xl min-w-0">
+      {/* Шапка колонки */}
+      <div className="mb-3 rounded-lg overflow-hidden">
+        <div
+          className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg"
+          style={{ background: `linear-gradient(135deg, ${colorFrom}, ${colorTo})` }}
+        >
+          <h3 className="font-medium text-white text-xs truncate">{label}</h3>
+          <span className="text-white/90 font-bold text-xs">{count}</span>
+        </div>
+      </div>
+
+      {/* Зона дропа + карточки */}
+      <div
+        ref={setNodeRef}
+        className={cn(
+          "space-y-2 flex-1 min-h-[300px] rounded-lg p-1.5 transition-colors",
+          isOver ? "bg-primary/5 ring-2 ring-primary/30" : "bg-muted/30",
+          rows.length === 0 && "flex items-center justify-center"
+        )}
+      >
+        {rows.length === 0 ? (
+          <span className="text-xs text-muted-foreground/50">Пусто</span>
+        ) : (
+          rows.map(row => (
+            <KanbanCard
+              key={row.id}
+              row={row}
+              busyId={busyId}
+              onContacted={onContacted}
+              onReject={onReject}
+              onApprove={onApprove}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Карточка канбана ─────────────────────────────────────────────────────────
+
+interface KanbanCardProps {
+  row: AccessRequestRow
+  busyId: string | null
+  isDragging?: boolean
+  onContacted: (id: string) => void
+  onReject: (id: string) => void
+  onApprove: (row: AccessRequestRow) => void
+}
+
+function KanbanCard({ row, busyId, isDragging, onContacted, onReject, onApprove }: KanbanCardProps) {
+  const { attributes, listeners, setNodeRef, transform, isDragging: isDrag } = useDraggable({ id: row.id })
+
+  const isPartner = row.requestType === "partner"
+  const typeLabel = REQUEST_TYPE_LABEL[row.requestType ?? "access"] ?? (row.requestType ?? "—")
+  const isBusy = busyId === row.id
+
+  const style = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
+    : undefined
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={cn(
+        "bg-background rounded-lg border border-border p-3 cursor-grab active:cursor-grabbing shadow-sm",
+        "hover:shadow-md transition-shadow select-none",
+        (isDrag || isDragging) && "opacity-50 shadow-lg ring-2 ring-primary/30"
+      )}
+    >
+      {/* Имя + тип */}
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="font-medium text-sm leading-tight truncate">{row.name || "—"}</div>
+        <Badge
+          variant={isPartner ? "default" : "outline"}
+          className={cn("text-[10px] shrink-0", isPartner && "bg-violet-600 hover:bg-violet-600 text-white")}
+        >
+          {typeLabel}
+        </Badge>
+      </div>
+
+      {/* Email */}
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+        <Mail className="w-3 h-3 shrink-0" />
+        <span className="truncate">{row.email}</span>
+      </div>
+
+      {/* Компания */}
+      {row.companyName && (
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+          <Building2 className="w-3 h-3 shrink-0" />
+          <span className="truncate">{row.companyName}</span>
+        </div>
+      )}
+
+      {/* Телефон */}
+      {row.phone && (
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+          <Phone className="w-3 h-3 shrink-0" />
+          <span>{row.phone}</span>
+        </div>
+      )}
+
+      {/* Комментарий */}
+      {row.comment && (
+        <div className="text-xs text-muted-foreground mt-1.5 line-clamp-2 italic border-t border-border/50 pt-1.5">
+          {row.comment}
+        </div>
+      )}
+
+      {/* Дата */}
+      <div className="text-[10px] text-muted-foreground/60 mt-2">{formatDate(row.createdAt)}</div>
+
+      {/* Действия — только для неконечных статусов */}
+      {row.status !== "approved" && row.status !== "rejected" && (
+        <div
+          className="flex items-center gap-1 mt-2 pt-2 border-t border-border/50"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          {row.status !== "contacted" && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 px-2 text-[10px]"
+              disabled={isBusy}
+              onClick={(e) => { e.stopPropagation(); onContacted(row.id) }}
+            >
+              <PhoneCall className="w-3 h-3 mr-1" /> Связались
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-[10px]"
+            disabled={isBusy}
+            onClick={(e) => { e.stopPropagation(); onReject(row.id) }}
+          >
+            <X className="w-3 h-3 mr-1" /> Отклонить
+          </Button>
+          <Button
+            size="sm"
+            className="h-6 px-2 text-[10px]"
+            disabled={isBusy}
+            onClick={(e) => { e.stopPropagation(); onApprove(row) }}
+          >
+            {isBusy
+              ? <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+              : <UserPlus className="w-3 h-3 mr-1" />}
+            Одобрить
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

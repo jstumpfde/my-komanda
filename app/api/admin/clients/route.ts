@@ -28,6 +28,7 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") ?? "20")))
   const sort = searchParams.get("sort") ?? "created_at"
   const trashed = searchParams.get("trashed") === "true"
+  const archived = searchParams.get("archived") === "true"
   const offset = (page - 1) * limit
 
   const statuses = statusParam ? statusParam.split(",").filter(Boolean) : []
@@ -60,8 +61,19 @@ export async function GET(req: NextRequest) {
     conditions.push(inArray(companies.subscriptionStatus, statuses))
   }
 
-  // Корзина: по умолчанию активные (deleted_at IS NULL); ?trashed=true — корзина.
-  conditions.push(trashed ? isNotNull(companies.deletedAt) : isNull(companies.deletedAt))
+  // Корзина / архив / активные:
+  //   ?trashed=true  → deleted_at IS NOT NULL (корзина)
+  //   ?archived=true → archived_at IS NOT NULL AND deleted_at IS NULL (архив)
+  //   по умолчанию   → archived_at IS NULL AND deleted_at IS NULL (активные)
+  if (trashed) {
+    conditions.push(isNotNull(companies.deletedAt))
+  } else if (archived) {
+    conditions.push(isNotNull(companies.archivedAt))
+    conditions.push(isNull(companies.deletedAt))
+  } else {
+    conditions.push(isNull(companies.archivedAt))
+    conditions.push(isNull(companies.deletedAt))
+  }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined
 
@@ -79,6 +91,12 @@ export async function GET(req: NextRequest) {
     .from(companies)
     .where(whereClause)
 
+  // Счётчик архивных компаний (для таба «Архив» в UI)
+  const [{ archivedCount }] = await db
+    .select({ archivedCount: count() })
+    .from(companies)
+    .where(and(isNotNull(companies.archivedAt), isNull(companies.deletedAt)))
+
   // Данные компаний
   const rows = await db
     .select({
@@ -88,6 +106,7 @@ export async function GET(req: NextRequest) {
       subscriptionStatus: companies.subscriptionStatus,
       trialEndsAt: companies.trialEndsAt,
       createdAt: companies.createdAt,
+      archivedAt: companies.archivedAt,
       planId: companies.planId,
       currentPlanId: companies.currentPlanId,
     })
@@ -103,6 +122,7 @@ export async function GET(req: NextRequest) {
       total: Number(total),
       page,
       totalPages: Math.ceil(Number(total) / limit),
+      counts: { archived: Number(archivedCount) },
     })
   }
 
@@ -186,5 +206,6 @@ export async function GET(req: NextRequest) {
     total: Number(total),
     page,
     totalPages: Math.ceil(Number(total) / limit),
+    counts: { archived: Number(archivedCount) },
   })
 }

@@ -138,6 +138,11 @@ export function UsersTab({ trashed = false }: { trashed?: boolean }) {
   const [pwSaving, setPwSaving] = useState(false)
   const [pwSetCreds, setPwSetCreds] = useState<{ email: string; password: string } | null>(null)
 
+  // Диалог «Тип доступа» (надёжнее, чем submenu-radio — тот флакует в Radix).
+  const [accessTarget, setAccessTarget] = useState<UserRow | null>(null)
+  const [accessValue, setAccessValue] = useState<string>("director")
+  const [accessSaving, setAccessSaving] = useState(false)
+
   const pageIds = data.data.map(u => u.id)
   const allSelected = pageIds.length > 0 && pageIds.every(id => selected.has(id))
   const toggleOne = (id: string) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -298,6 +303,20 @@ export function UsersTab({ trashed = false }: { trashed?: boolean }) {
     } catch { toast.error("Ошибка сети") } finally { setPwSaving(false) }
   }
 
+  function openAccess(user: UserRow) {
+    setAccessTarget(user)
+    setAccessValue(user.role === "partner" ? "" : user.role)
+  }
+
+  async function submitAccess() {
+    if (!accessTarget || !accessValue) return
+    setAccessSaving(true)
+    try {
+      await patchUser(accessTarget, { role: accessValue })
+      setAccessTarget(null)
+    } finally { setAccessSaving(false) }
+  }
+
   const clientOptions = ACCESS_TYPE_OPTIONS.filter(o => o.group === "client")
   const partnerOptions = ACCESS_TYPE_OPTIONS.filter(o => o.group === "partner")
 
@@ -441,22 +460,9 @@ export function UsersTab({ trashed = false }: { trashed?: boolean }) {
                           ) : (
                             <>
                               <DropdownMenuSeparator />
-                              <DropdownMenuSub>
-                                <DropdownMenuSubTrigger className="gap-2"><UserCog className="h-3.5 w-3.5" />Тип доступа</DropdownMenuSubTrigger>
-                                <DropdownMenuSubContent>
-                                  <DropdownMenuRadioGroup value={user.role === "partner" ? "" : user.role} onValueChange={(v) => { if (v && v !== user.role) patchUser(user, { role: v }) }}>
-                                    <DropdownMenuLabel className="text-xs">Клиент</DropdownMenuLabel>
-                                    {clientOptions.map(o => (
-                                      <DropdownMenuRadioItem key={o.value} value={o.value} className="cursor-pointer">{o.label}</DropdownMenuRadioItem>
-                                    ))}
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuLabel className="text-xs">Партнёрство</DropdownMenuLabel>
-                                    {partnerOptions.map(o => (
-                                      <DropdownMenuRadioItem key={o.value} value={o.value} className="cursor-pointer" disabled={!user.companyId}>{o.label}</DropdownMenuRadioItem>
-                                    ))}
-                                  </DropdownMenuRadioGroup>
-                                </DropdownMenuSubContent>
-                              </DropdownMenuSub>
+                              <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => openAccess(user)}>
+                                <UserCog className="h-3.5 w-3.5" />Тип доступа
+                              </DropdownMenuItem>
                               <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => openSetPassword(user)}>
                                 <KeyRound className="h-3.5 w-3.5" />Задать пароль
                               </DropdownMenuItem>
@@ -620,6 +626,41 @@ export function UsersTab({ trashed = false }: { trashed?: boolean }) {
               </DialogFooter>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Тип доступа */}
+      <Dialog open={!!accessTarget} onOpenChange={(o) => { if (!o) setAccessTarget(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Тип доступа</DialogTitle>
+            <DialogDescription>
+              Роль определяет права <span className="font-medium text-foreground">{accessTarget?.email}</span>. Партнёрские типы требуют компанию.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Тип доступа</Label>
+              <Select value={accessValue} onValueChange={setAccessValue}>
+                <SelectTrigger><SelectValue placeholder="Выберите тип" /></SelectTrigger>
+                <SelectContent>
+                  {clientOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                  {partnerOptions.map(o => (
+                    <SelectItem key={o.value} value={o.value} disabled={!accessTarget?.companyId}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {partnerOptions.some(o => o.value === accessValue) && !accessTarget?.companyId && (
+                <p className="text-xs text-destructive">Для партнёрского доступа у пользователя должна быть компания.</p>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAccessTarget(null)} disabled={accessSaving}>Отмена</Button>
+              <Button onClick={submitAccess} disabled={accessSaving || !accessValue} className="gap-1.5">
+                {accessSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCog className="h-4 w-4" />}Применить
+              </Button>
+            </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </>
