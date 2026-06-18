@@ -44,6 +44,7 @@ export const plans = pgTable("plans", {
   isArchived: boolean("is_archived").default(false),
   allowCustomBranding: boolean("allow_custom_branding").default(true),
   archivedAt: timestamp("archived_at"),
+  deletedAt:  timestamp("deleted_at"),
   createdAt:  timestamp("created_at").defaultNow(),
 })
 
@@ -209,6 +210,13 @@ export interface CompanyHiringDefaults {
     name: string      // «Наш канал разработчиков»
     username: string  // @devjobs или https://t.me/devjobs
   }>
+  // Настройки цветов KPI-карточек дашборда HR (без миграции, jsonb).
+  // intensity: "vivid" — сплошной фон + белый текст; "pale" — светлый тинт.
+  // colors: hex по ключам карточек (без # не храним — храним полный hex "#rrggbb").
+  dashboardCards?: {
+    intensity: "vivid" | "pale"
+    colors: Record<string, string>
+  }
 }
 
 // ── CompanyLegalContact (drizzle/0177) ──

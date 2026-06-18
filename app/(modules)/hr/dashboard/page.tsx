@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, type ElementType } from "react"
+import { useEffect, useState, useCallback, type ElementType } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
@@ -9,16 +9,20 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { ALL_STAGE_SLUGS, PLATFORM_STAGES, getStageLabel, type StageSlug } from "@/lib/stages"
 import { useAuth } from "@/lib/auth"
 import { isRestrictedWorkspace } from "@/lib/owner"
 import {
   Briefcase, Users, UserCheck, Plus, ChevronRight,
-  Sparkles, Activity, Calendar, CalendarDays, CheckCircle2, XCircle,
+  Sparkles, Activity, Calendar, CalendarDays, CheckCircle2, XCircle, Palette,
+  RotateCcw,
 } from "lucide-react"
 import { CandidatesProgressMiniTable } from "@/components/candidates/candidates-progress-mini-table"
 import { AwaitingReviewBanner } from "./_components/awaiting-review-banner"
+import type { CompanyHiringDefaults } from "@/lib/db/schema"
 
 // ─── Colors ─────────────────────────────────────────────────────────────────
 
@@ -28,6 +32,70 @@ const C = {
   orange: "#D85A30",
   red: "#E24B4A",
   purple: "#7F77DD",
+}
+
+// ─── Dashboard card config ────────────────────────────────────────────────────
+
+export type DashboardIntensity = "vivid" | "pale"
+
+export interface DashboardCardsConfig {
+  intensity: DashboardIntensity
+  colors: Record<string, string>
+}
+
+// Ключи карточек и их дефолтные hex-цвета (текущие цвета из Tailwind)
+const CARD_KEYS = ["vacancies", "candidates", "interviewScheduled", "interviewConducted", "hired", "rejected"] as const
+type CardKey = typeof CARD_KEYS[number]
+
+const CARD_DEFAULTS: Record<CardKey, string> = {
+  vacancies:           "#10b981", // emerald-500
+  candidates:          "#3b82f6", // blue-500
+  interviewScheduled:  "#8b5cf6", // violet-500
+  interviewConducted:  "#6366f1", // indigo-500
+  hired:               "#14b8a6", // teal-500
+  rejected:            "#f43f5e", // rose-500
+}
+
+const CARD_LABELS: Record<CardKey, string> = {
+  vacancies:           "Вакансий",
+  candidates:          "Откликов всего",
+  interviewScheduled:  "Назначено инт.",
+  interviewConducted:  "Проведено инт.",
+  hired:               "Нанято",
+  rejected:            "Отказов",
+}
+
+function getDefaultConfig(): DashboardCardsConfig {
+  return { intensity: "vivid", colors: { ...CARD_DEFAULTS } }
+}
+
+function mergeConfig(saved: CompanyHiringDefaults["dashboardCards"] | undefined): DashboardCardsConfig {
+  const def = getDefaultConfig()
+  if (!saved) return def
+  return {
+    intensity: saved.intensity ?? def.intensity,
+    colors: { ...def.colors, ...saved.colors },
+  }
+}
+
+// ─── Hex → rgba helper ───────────────────────────────────────────────────────
+
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace("#", "")
+  const r = parseInt(h.slice(0, 2), 16)
+  const g = parseInt(h.slice(2, 4), 16)
+  const b = parseInt(h.slice(4, 6), 16)
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return `rgba(100,100,100,${alpha})`
+  return `rgba(${r},${g},${b},${alpha})`
+}
+
+// Тёмный тон (70% от исходного) для текста в pale-режиме
+function hexDarken(hex: string, factor = 0.55): string {
+  const h = hex.replace("#", "")
+  const r = Math.round(parseInt(h.slice(0, 2), 16) * factor)
+  const g = Math.round(parseInt(h.slice(2, 4), 16) * factor)
+  const b = Math.round(parseInt(h.slice(4, 6), 16) * factor)
+  return `rgb(${r},${g},${b})`
 }
 
 // ─── Funnel ───────────────────────────────────────────────────────────────
@@ -108,12 +176,40 @@ function daysSince(iso: string | null): number {
 // ─── Color metric card ──────────────────────────────────────────────────────
 
 function Metric({
-  icon: Icon, label, value, trend, bg,
+  icon: Icon, label, value, trend, color, intensity,
 }: {
-  icon: ElementType; label: string; value: number | string; trend?: string; bg: string
+  icon: ElementType
+  label: string
+  value: number | string
+  trend?: string
+  color: string
+  intensity: DashboardIntensity
 }) {
+  if (intensity === "pale") {
+    const bg = hexToRgba(color, 0.13)
+    const textColor = hexDarken(color, 0.55)
+    const iconColor = hexDarken(color, 0.65)
+    return (
+      <div
+        className="rounded-xl shadow-sm hover:shadow-md transition-shadow p-4"
+        style={{ backgroundColor: bg }}
+      >
+        <div className="flex items-center gap-1.5 mb-2">
+          <Icon className="w-4 h-4" style={{ color: iconColor }} />
+          <span className="text-sm font-semibold" style={{ color: textColor }}>{label}</span>
+        </div>
+        <p className="text-3xl font-bold" style={{ color: textColor }}>{value}</p>
+        {trend && <p className="text-sm mt-1" style={{ color: textColor, opacity: 0.8 }}>{trend}</p>}
+      </div>
+    )
+  }
+
+  // vivid — сплошной фон, белый текст
   return (
-    <div className={cn("rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 text-white", bg)}>
+    <div
+      className="rounded-xl shadow-sm hover:shadow-md transition-shadow p-4"
+      style={{ backgroundColor: color }}
+    >
       <div className="flex items-center gap-1.5 mb-2">
         <Icon className="w-4 h-4 text-white" />
         <span className="text-sm font-semibold text-white">{label}</span>
@@ -121,6 +217,170 @@ function Metric({
       <p className="text-3xl font-bold text-white">{value}</p>
       {trend && <p className="text-sm mt-1 text-white/90">{trend}</p>}
     </div>
+  )
+}
+
+// ─── Card color settings sheet ────────────────────────────────────────────────
+
+function CardColorSheet({
+  open,
+  onOpenChange,
+  config,
+  onSave,
+}: {
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  config: DashboardCardsConfig
+  onSave: (cfg: DashboardCardsConfig) => Promise<void>
+}) {
+  const [local, setLocal] = useState<DashboardCardsConfig>(config)
+  const [saving, setSaving] = useState(false)
+
+  // Синхронизируем при открытии
+  useEffect(() => {
+    if (open) setLocal(config)
+  }, [open, config])
+
+  const setColor = (key: string, hex: string) => {
+    setLocal(prev => ({ ...prev, colors: { ...prev.colors, [key]: hex } }))
+  }
+
+  const handleHexInput = (key: string, raw: string) => {
+    // Принимаем текст по мере набора; нормализуем только при 6/7 символах
+    const val = raw.startsWith("#") ? raw : "#" + raw
+    if (/^#[0-9a-fA-F]{6}$/.test(val)) {
+      setColor(key, val)
+    }
+    // Временное хранение в поле handled через e.target.value напрямую
+  }
+
+  const handleReset = () => setLocal(getDefaultConfig())
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await onSave(local)
+      onOpenChange(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-[340px] sm:w-[400px] overflow-y-auto">
+        <SheetHeader className="mb-5">
+          <SheetTitle className="flex items-center gap-2">
+            <Palette className="w-4 h-4 text-muted-foreground" />
+            Цвета карточек
+          </SheetTitle>
+        </SheetHeader>
+
+        {/* Интенсивность */}
+        <div className="mb-6">
+          <Label className="text-xs text-muted-foreground mb-2 block">Режим отображения</Label>
+          <div className="flex gap-2">
+            {(["vivid", "pale"] as DashboardIntensity[]).map(mode => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setLocal(prev => ({ ...prev, intensity: mode }))}
+                className={cn(
+                  "flex-1 rounded-lg border py-2 text-sm font-medium transition-colors",
+                  local.intensity === mode
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-background text-muted-foreground hover:bg-muted/50"
+                )}
+              >
+                {mode === "vivid" ? "Яркий" : "Бледный"}
+              </button>
+            ))}
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-1.5">
+            {local.intensity === "vivid"
+              ? "Сплошной цветной фон, белый текст"
+              : "Светлая заливка, тёмный текст в тоне цвета"}
+          </p>
+        </div>
+
+        {/* Предпросмотр */}
+        <div className="mb-5">
+          <Label className="text-xs text-muted-foreground mb-2 block">Предпросмотр</Label>
+          <div className="grid grid-cols-3 gap-2">
+            {CARD_KEYS.map(key => (
+              <Metric
+                key={key}
+                icon={Briefcase}
+                label={CARD_LABELS[key]}
+                value={42}
+                color={local.colors[key] ?? CARD_DEFAULTS[key]}
+                intensity={local.intensity}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Цвета карточек */}
+        <div className="space-y-3 mb-6">
+          <Label className="text-xs text-muted-foreground block">Цвет карточки</Label>
+          {CARD_KEYS.map(key => {
+            const hex = local.colors[key] ?? CARD_DEFAULTS[key]
+            return (
+              <div key={key} className="flex items-center gap-3">
+                {/* Color picker */}
+                <label className="shrink-0 cursor-pointer relative">
+                  <div
+                    className="w-8 h-8 rounded-md border border-border shadow-sm"
+                    style={{ backgroundColor: hex }}
+                  />
+                  <input
+                    type="color"
+                    value={hex}
+                    onChange={e => setColor(key, e.target.value)}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  />
+                </label>
+                {/* Hex input */}
+                <input
+                  type="text"
+                  defaultValue={hex}
+                  key={hex} // re-mount при сбросе к дефолту
+                  maxLength={7}
+                  onChange={e => handleHexInput(key, e.target.value)}
+                  className="w-24 h-7 rounded-md border border-input bg-background px-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+                  placeholder="#10b981"
+                />
+                {/* Название */}
+                <span className="text-sm text-muted-foreground flex-1">{CARD_LABELS[key]}</span>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Кнопки */}
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5 text-xs"
+            onClick={handleReset}
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Сбросить
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="flex-1"
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? "Сохранение…" : "Сохранить"}
+          </Button>
+        </div>
+      </SheetContent>
+    </Sheet>
   )
 }
 
@@ -150,7 +410,7 @@ function readHrUserCache(): HrUserCache | null {
 
 export function DashboardView({ embedded = false }: { embedded?: boolean }) {
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, role } = useAuth()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loaded, setLoaded] = useState(false)
   // KPI из отчёта (те же цифры, что на /hr/report) — для верхних карточек.
@@ -160,6 +420,14 @@ export function DashboardView({ embedded = false }: { embedded?: boolean }) {
   // #47: имя из localStorage для мгновенного первого рендера. Заменяется на
   // user.name как только сессия подтянулась.
   const [cachedName, setCachedName] = useState<string>("")
+
+  // Настройки цветов карточек
+  const [cardsConfig, setCardsConfig] = useState<DashboardCardsConfig>(getDefaultConfig())
+  const [colorSheetOpen, setColorSheetOpen] = useState(false)
+  const [configLoaded, setConfigLoaded] = useState(false)
+
+  // Директор/владелец может настраивать цвета
+  const isDirectorLike = ["director", "client", "platform_admin", "admin"].includes(role)
 
   useEffect(() => {
     const c = readHrUserCache()
@@ -178,6 +446,19 @@ export function DashboardView({ embedded = false }: { embedded?: boolean }) {
       }
     } catch {}
   }, [user.name])
+
+  // Загружаем конфиг цветов из hiring-defaults
+  useEffect(() => {
+    fetch("/api/modules/hr/company/hiring-defaults")
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { hiringDefaults?: CompanyHiringDefaults } | null) => {
+        if (d?.hiringDefaults?.dashboardCards) {
+          setCardsConfig(mergeConfig(d.hiringDefaults.dashboardCards))
+        }
+        setConfigLoaded(true)
+      })
+      .catch(() => { setConfigLoaded(true) })
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -206,6 +487,22 @@ export function DashboardView({ embedded = false }: { embedded?: boolean }) {
       .catch(() => {})
     return () => { cancelled = true }
   }, [selectedVacancyId])
+
+  // Сохранение конфига цветов через существующий PATCH-эндпоинт hiring-defaults
+  const handleSaveCardsConfig = useCallback(async (cfg: DashboardCardsConfig) => {
+    const res = await fetch("/api/modules/hr/company/hiring-defaults", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dashboardCards: cfg }),
+    })
+    if (!res.ok) throw new Error("Ошибка сохранения")
+    const data = (await res.json()) as { hiringDefaults?: CompanyHiringDefaults }
+    if (data.hiringDefaults?.dashboardCards) {
+      setCardsConfig(mergeConfig(data.hiringDefaults.dashboardCards))
+    } else {
+      setCardsConfig(cfg)
+    }
+  }, [])
 
   // #47: эффективное имя — реальное user.name из сессии, иначе из кеша.
   const effectiveName = user.name || cachedName
@@ -258,6 +555,9 @@ export function DashboardView({ embedded = false }: { embedded?: boolean }) {
     }
     return parts.join(" · ")
   })()
+
+  // Цвет карточки — из конфига или дефолт
+  const cardColor = (key: CardKey) => cardsConfig.colors[key] ?? CARD_DEFAULTS[key]
 
   return (
         <main className="flex-1 overflow-auto bg-background">
@@ -318,14 +618,40 @@ export function DashboardView({ embedded = false }: { embedded?: boolean }) {
                 stage IN demo_opened+, см. /api/.../stats #49). Убраны
                 «Ср. время закрытия» (Скоро-плейсхолдер) и «Всего
                 кандидатов» (бесполезно при наличии «Прошли демо»). */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-              <Metric icon={Briefcase} label="Вакансий" value={reportKpi?.activeVacancies ?? kpi?.activeVacancies ?? "—"} bg="bg-emerald-500" />
-              <Metric icon={Users} label="Откликов всего" value={reportKpi?.totalCandidates ?? "—"} bg="bg-blue-500" />
-              <Metric icon={CalendarDays} label="Назначено инт." value={reportKpi?.interviewScheduled ?? "—"} bg="bg-violet-500" />
-              <Metric icon={CheckCircle2} label="Проведено инт." value={reportKpi?.interviewConducted ?? "—"} bg="bg-indigo-500" />
-              <Metric icon={UserCheck} label="Нанято" value={reportKpi?.totalHired ?? "—"} bg="bg-teal-500" />
-              <Metric icon={XCircle} label="Отказов" value={reportKpi?.totalRejected ?? "—"} bg="bg-rose-500" />
+            <div>
+              {/* Заголовок строки с кнопкой настройки — только для директора */}
+              {isDirectorLike && configLoaded && (
+                <div className="flex justify-end mb-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => setColorSheetOpen(true)}
+                  >
+                    <Palette className="w-3.5 h-3.5" />
+                    Настроить
+                  </Button>
+                </div>
+              )}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                <Metric icon={Briefcase} label="Вакансий" value={reportKpi?.activeVacancies ?? kpi?.activeVacancies ?? "—"} color={cardColor("vacancies")} intensity={cardsConfig.intensity} />
+                <Metric icon={Users} label="Откликов всего" value={reportKpi?.totalCandidates ?? "—"} color={cardColor("candidates")} intensity={cardsConfig.intensity} />
+                <Metric icon={CalendarDays} label="Назначено инт." value={reportKpi?.interviewScheduled ?? "—"} color={cardColor("interviewScheduled")} intensity={cardsConfig.intensity} />
+                <Metric icon={CheckCircle2} label="Проведено инт." value={reportKpi?.interviewConducted ?? "—"} color={cardColor("interviewConducted")} intensity={cardsConfig.intensity} />
+                <Metric icon={UserCheck} label="Нанято" value={reportKpi?.totalHired ?? "—"} color={cardColor("hired")} intensity={cardsConfig.intensity} />
+                <Metric icon={XCircle} label="Отказов" value={reportKpi?.totalRejected ?? "—"} color={cardColor("rejected")} intensity={cardsConfig.intensity} />
+              </div>
             </div>
+
+            {/* Sheet настройки цветов */}
+            {isDirectorLike && (
+              <CardColorSheet
+                open={colorSheetOpen}
+                onOpenChange={setColorSheetOpen}
+                config={cardsConfig}
+                onSave={handleSaveCardsConfig}
+              />
+            )}
 
             {/* ═══ AI-ассистент — #33: активирован SQL-инсайтами ═══ */}
             <AiInsights selectedVacancyId={selectedVacancyId} />

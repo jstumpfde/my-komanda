@@ -1,9 +1,10 @@
-import { eq } from "drizzle-orm"
+import { eq, and, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { plans, planModules, modules } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 
 // GET /api/plans — публичные тарифы с вложенными модулями и лимитами
+// Исключаем архивные и удалённые тарифы.
 export async function GET() {
   try {
     const rows = await db
@@ -15,7 +16,7 @@ export async function GET() {
       .from(plans)
       .leftJoin(planModules, eq(planModules.planId, plans.id))
       .leftJoin(modules, eq(modules.id, planModules.moduleId))
-      .where(eq(plans.isPublic, true))
+      .where(and(eq(plans.isPublic, true), isNull(plans.archivedAt), isNull(plans.deletedAt)))
       .orderBy(plans.sortOrder, modules.sortOrder)
 
     // Группируем по плану
