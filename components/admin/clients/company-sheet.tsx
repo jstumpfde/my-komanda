@@ -9,7 +9,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
-  Sheet, SheetContent, SheetHeader, SheetTitle,
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody,
 } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
 import { formatPrice, formatDate, ROLE_LABELS } from "@/components/admin/clients/shared"
@@ -202,7 +202,7 @@ export function CompanySheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+      <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2 pr-6">
             {selectedUser
@@ -214,7 +214,7 @@ export function CompanySheet({
 
         {selectedUser ? (
           // ── Под-панель пользователя ──────────────────────────────────────
-          <div className="px-4 pb-4 space-y-5">
+          <SheetBody className="space-y-5">
             <button onClick={() => setSelectedUser(null)} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
               <ChevronLeft className="h-4 w-4" />Назад к компании
             </button>
@@ -240,10 +240,10 @@ export function CompanySheet({
                 {(selectedUser.isActive ?? true) ? "Заблокировать" : "Разблокировать"}
               </Button>
             </div>
-          </div>
+          </SheetBody>
         ) : (
           // ── Карточка компании ────────────────────────────────────────────
-          <div className="px-4 pb-4 space-y-5">
+          <SheetBody className="space-y-5">
             {/* Подписка / тариф */}
             <dl className="divide-y divide-border/60">
               <Field label="Статус"><Badge variant="outline" className={cn("text-xs", statusCfg.color)}>{statusCfg.label}</Badge></Field>
@@ -349,7 +349,7 @@ export function CompanySheet({
                 {busy === "trash" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}В корзину
               </Button>
             </div>
-          </div>
+          </SheetBody>
         )}
       </SheetContent>
     </Sheet>

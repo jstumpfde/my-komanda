@@ -16,10 +16,11 @@ import {
   DropdownMenuSubTrigger, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell, DataSelectHeadCell, DataSelectCell } from "@/components/ui/data-table"
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
 import {
   Search, Building2, Lock, Unlock, MoreHorizontal, Loader2, UserCog, Trash2, RotateCcw, Eraser,
-  UserPlus, KeyRound, Copy, Check, RefreshCw,
+  UserPlus, KeyRound, Copy, Check, RefreshCw, User as UserIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 import {
@@ -120,6 +121,8 @@ export function UsersTab({ trashed = false }: { trashed?: boolean }) {
   const [cleaning, setCleaning] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
+  // Боковая панель пользователя (открывается по клику на строку — единый стиль с компанией/кандидатом)
+  const [sheetUser, setSheetUser] = useState<UserRow | null>(null)
 
   // Список компаний для селектов (создание/смена компании).
   const [companies, setCompanies] = useState<CompanyOption[]>([])
@@ -409,7 +412,7 @@ export function UsersTab({ trashed = false }: { trashed?: boolean }) {
               const isBlocked = user.isActive === false
               const isBusy = busyId === user.id
               return (
-                <DataRow key={user.id} className={cn("group", selected.has(user.id) && "bg-primary/[0.04]")}>
+                <DataRow key={user.id} onClick={() => setSheetUser(user)} className={cn("group cursor-pointer", selected.has(user.id) && "bg-primary/[0.04]")}>
                   <DataSelectCell checked={selected.has(user.id)} onCheckedChange={() => toggleOne(user.id)} />
                   <DataCell>
                     <p className="font-medium text-foreground truncate" title={user.name}>{user.name}</p>
@@ -421,7 +424,7 @@ export function UsersTab({ trashed = false }: { trashed?: boolean }) {
                   </DataCell>
                   <DataCell>
                     {user.companyId
-                      ? <Link href={`/admin/clients/${user.companyId}`} className="text-foreground hover:text-primary transition-colors inline-flex items-center gap-1.5">
+                      ? <Link href={`/admin/clients/${user.companyId}`} onClick={e => e.stopPropagation()} className="text-foreground hover:text-primary transition-colors inline-flex items-center gap-1.5">
                           <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                           <span className="truncate max-w-[28ch]" title={user.companyName ?? ""}>{user.companyName ?? "—"}</span>
                         </Link>
@@ -437,7 +440,7 @@ export function UsersTab({ trashed = false }: { trashed?: boolean }) {
                   </DataCell>
                   <DataCell className="text-foreground whitespace-nowrap">{formatDate(user.createdAt)}</DataCell>
                   <DataCell align="right">
-                    <div className="flex justify-end">
+                    <div className="flex justify-end" onClick={e => e.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Действия" disabled={isBusy}>
@@ -495,6 +498,54 @@ export function UsersTab({ trashed = false }: { trashed?: boolean }) {
         loading={loading} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize}
         emptyText={trashed ? "Корзина пуста" : "Нет пользователей"}
       />
+
+      {/* Боковая панель пользователя (клик по строке) — единый стиль с компанией/кандидатом */}
+      <Sheet open={!!sheetUser} onOpenChange={(o) => { if (!o) setSheetUser(null) }}>
+        <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+          {sheetUser && (() => {
+            const blocked = sheetUser.isActive === false
+            const u = sheetUser
+            const act = (fn: () => void) => { setSheetUser(null); fn() }
+            return (
+              <>
+                <SheetHeader>
+                  <SheetTitle className="flex items-center gap-2 pr-6">
+                    <UserIcon className="h-5 w-5 text-muted-foreground shrink-0" />
+                    <span className="break-words">{u.name || u.email}</span>
+                  </SheetTitle>
+                </SheetHeader>
+                <SheetBody className="space-y-5">
+                  <dl className="divide-y divide-border/60">
+                    <div className="flex justify-between gap-4 py-2 text-sm"><dt className="text-muted-foreground">Email</dt><dd className="text-right"><a href={`mailto:${u.email}`} className="text-primary hover:underline">{u.email}</a></dd></div>
+                    <div className="flex justify-between gap-4 py-2 text-sm"><dt className="text-muted-foreground">Роль</dt><dd><Badge variant="outline" className="text-xs">{ROLE_LABELS[u.role] ?? u.role}</Badge></dd></div>
+                    <div className="flex justify-between gap-4 py-2 text-sm"><dt className="text-muted-foreground">Компания</dt><dd className="text-right">{u.companyId
+                      ? <Link href={`/admin/clients/${u.companyId}`} className="text-primary hover:underline inline-flex items-center gap-1.5"><Building2 className="h-3.5 w-3.5" />{u.companyName ?? "—"}</Link>
+                      : <span className="text-muted-foreground">— без компании</span>}</dd></div>
+                    {u.position && <div className="flex justify-between gap-4 py-2 text-sm"><dt className="text-muted-foreground">Должность</dt><dd>{u.position}</dd></div>}
+                    <div className="flex justify-between gap-4 py-2 text-sm"><dt className="text-muted-foreground">Статус</dt><dd><Badge variant="outline" className={cn("text-xs", blocked
+                      ? "bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800"
+                      : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800")}>{blocked ? "Заблокирован" : "Активен"}</Badge></dd></div>
+                    <div className="flex justify-between gap-4 py-2 text-sm"><dt className="text-muted-foreground">Создан</dt><dd>{formatDate(u.createdAt)}</dd></div>
+                  </dl>
+                  <div className="space-y-2">
+                    {trashed ? (
+                      <Button variant="outline" className="w-full justify-start gap-2" onClick={() => act(() => restoreUser(u))}><RotateCcw className="h-4 w-4" />Восстановить</Button>
+                    ) : (
+                      <>
+                        <Button variant="outline" className="w-full justify-start gap-2" onClick={() => act(() => openAccess(u))}><UserCog className="h-4 w-4" />Тип доступа</Button>
+                        <Button variant="outline" className="w-full justify-start gap-2" onClick={() => act(() => openSetPassword(u))}><KeyRound className="h-4 w-4" />Задать пароль</Button>
+                        <Button variant="outline" className={cn("w-full justify-start gap-2", !blocked && "text-destructive hover:text-destructive")} onClick={() => act(() => patchUser(u, { isActive: blocked }))}>{blocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}{blocked ? "Разблокировать" : "Заблокировать"}</Button>
+                        {u.companyId && <Button variant="outline" className="w-full justify-start gap-2" asChild><Link href={`/admin/clients/${u.companyId}`}><Building2 className="h-4 w-4" />Открыть компанию</Link></Button>}
+                        <Button variant="outline" className="w-full justify-start gap-2 text-destructive hover:text-destructive" onClick={() => act(() => trashUser(u))}><Trash2 className="h-4 w-4" />В корзину</Button>
+                      </>
+                    )}
+                  </div>
+                </SheetBody>
+              </>
+            )
+          })()}
+        </SheetContent>
+      </Sheet>
 
       {/* Очистка: наблюдатели + осиротевшие → в корзину */}
       <Dialog open={cleanupOpen} onOpenChange={setCleanupOpen}>

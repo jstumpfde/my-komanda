@@ -253,7 +253,7 @@ function AdminPlansInner() {
               <DataHeadCell align="center">Статус</DataHeadCell>
               {view === "archived" && <DataHeadCell>В архиве с</DataHeadCell>}
               {view === "trash" && <DataHeadCell>В корзине с</DataHeadCell>}
-              <DataHeadCell align="right" />
+              <DataHeadCell align="right" width="80px">Действия</DataHeadCell>
             </DataHead>
             <tbody>
               {loading && (
@@ -281,8 +281,10 @@ function AdminPlansInner() {
                     </code>
                   </DataCell>
                   <DataCell align="right">
-                    <p className="font-semibold text-foreground">{formatPrice(plan.price)}</p>
-                    <p className="text-xs text-muted-foreground">/{plan.interval === "month" ? "мес" : "год"}</p>
+                    <p className="font-semibold text-foreground whitespace-nowrap">
+                      {formatPrice(plan.price)}
+                      <span className="text-xs font-normal text-muted-foreground"> /{plan.interval === "month" ? "мес" : "год"}</span>
+                    </p>
                   </DataCell>
                   <DataCell>
                     <div className="flex flex-wrap gap-1">
