@@ -8,6 +8,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody } from "@/components/ui/sheet"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
@@ -83,6 +84,9 @@ function AdminPlansInner() {
   const [permanentBusy, setPermanentBusy] = useState(false)
 
   const [restoringId, setRestoringId] = useState<string | null>(null)
+
+  // Боковая панель тарифа (клик по строке) — единый стиль с компанией/пользователем
+  const [sheetPlan, setSheetPlan] = useState<PlanRow | null>(null)
 
   const fetchData = useCallback(async (v: View) => {
     setLoading(true)
@@ -271,7 +275,7 @@ function AdminPlansInner() {
                 </tr>
               )}
               {!loading && plans.map(plan => (
-                <DataRow key={plan.id}>
+                <DataRow key={plan.id} onClick={() => setSheetPlan(plan)} className="cursor-pointer">
                   <DataCell>
                     <p className="font-medium text-foreground">{plan.name}</p>
                   </DataCell>
@@ -321,7 +325,7 @@ function AdminPlansInner() {
                     </DataCell>
                   )}
                   <DataCell align="right">
-                    <div className="flex justify-end">
+                    <div className="flex justify-end" onClick={e => e.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Действия">
@@ -407,6 +411,65 @@ function AdminPlansInner() {
             </tbody>
           </DataTable>
         </TableCard>
+
+        {/* Боковая панель тарифа (клик по строке) — единый стиль с компанией/пользователем */}
+        <Sheet open={!!sheetPlan} onOpenChange={(o) => { if (!o) setSheetPlan(null) }}>
+          <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+            {sheetPlan && (() => {
+              const p = sheetPlan
+              const act = (fn: () => void) => { setSheetPlan(null); fn() }
+              return (
+                <>
+                  <SheetHeader>
+                    <SheetTitle className="flex items-center gap-2 pr-6">
+                      <Package className="h-5 w-5 text-muted-foreground shrink-0" />
+                      <span className="break-words">{p.name}</span>
+                    </SheetTitle>
+                  </SheetHeader>
+                  <SheetBody className="space-y-5">
+                    <dl className="divide-y divide-border/60">
+                      <div className="flex justify-between gap-4 py-2 text-sm"><dt className="text-muted-foreground">Slug</dt><dd><code className="text-xs bg-muted px-1.5 py-0.5 rounded">{p.slug}</code></dd></div>
+                      <div className="flex justify-between gap-4 py-2 text-sm"><dt className="text-muted-foreground">Цена</dt><dd className="font-medium">{formatPrice(p.price)}<span className="text-xs font-normal text-muted-foreground"> /{p.interval === "month" ? "мес" : "год"}</span></dd></div>
+                      <div className="flex justify-between gap-4 py-2 text-sm"><dt className="text-muted-foreground">Статус</dt><dd><Badge variant="outline" className={p.isPublic ? "text-xs bg-emerald-500/10 text-emerald-700 border-emerald-200 dark:text-emerald-400 dark:border-emerald-800" : "text-xs text-muted-foreground"}>{p.isPublic ? "Публичный" : "Скрытый"}</Badge></dd></div>
+                      <div className="flex justify-between gap-4 py-2 text-sm"><dt className="text-muted-foreground">Клиентов</dt><dd className="font-medium">{p.clientCount}</dd></div>
+                      {view === "archived" && <div className="flex justify-between gap-4 py-2 text-sm"><dt className="text-muted-foreground">В архиве с</dt><dd>{formatDate(p.archivedAt)}</dd></div>}
+                      {view === "trash" && <div className="flex justify-between gap-4 py-2 text-sm"><dt className="text-muted-foreground">В корзине с</dt><dd>{formatDate(p.deletedAt)}</dd></div>}
+                    </dl>
+                    <div>
+                      <div className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wide">Модули</div>
+                      <div className="flex flex-wrap gap-1">
+                        {p.modules.length === 0
+                          ? <span className="text-sm text-muted-foreground">—</span>
+                          : p.modules.map(m => <Badge key={m.id} variant="secondary" className="text-xs">{m.name}</Badge>)}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      {view === "active" && (
+                        <>
+                          <Button variant="outline" className="w-full justify-start gap-2" asChild><Link href={`/admin/plans/${p.id}`}><Pencil className="h-4 w-4" />Редактировать</Link></Button>
+                          <Button variant="outline" className="w-full justify-start gap-2" onClick={() => act(() => setArchiveTarget(p))}><Archive className="h-4 w-4" />В архив</Button>
+                          <Button variant="outline" className="w-full justify-start gap-2 text-destructive hover:text-destructive" onClick={() => act(() => setTrashTarget(p))}><Trash2 className="h-4 w-4" />В корзину</Button>
+                        </>
+                      )}
+                      {view === "archived" && (
+                        <>
+                          <Button variant="outline" className="w-full justify-start gap-2" onClick={() => act(() => handleRestoreFromArchive(p))}><RotateCcw className="h-4 w-4" />Восстановить</Button>
+                          <Button variant="outline" className="w-full justify-start gap-2 text-destructive hover:text-destructive" onClick={() => act(() => setTrashTarget(p))}><Trash2 className="h-4 w-4" />В корзину</Button>
+                        </>
+                      )}
+                      {view === "trash" && (
+                        <>
+                          <Button variant="outline" className="w-full justify-start gap-2" onClick={() => act(() => handleRestoreFromTrash(p))}><RotateCcw className="h-4 w-4" />Восстановить</Button>
+                          <Button variant="outline" className="w-full justify-start gap-2 text-destructive hover:text-destructive" onClick={() => act(() => { setPermanentTyped(""); setPermanentTarget(p) })}><Trash className="h-4 w-4" />Удалить навсегда</Button>
+                        </>
+                      )}
+                    </div>
+                  </SheetBody>
+                </>
+              )
+            })()}
+          </SheetContent>
+        </Sheet>
 
         {/* Диалог: В архив */}
         <Dialog open={!!archiveTarget} onOpenChange={(o) => { if (!o) setArchiveTarget(null) }}>

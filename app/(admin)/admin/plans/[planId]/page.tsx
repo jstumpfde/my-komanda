@@ -30,6 +30,25 @@ interface PlanData {
 function toStr(v: number | null | undefined) { return v == null ? "" : String(v) }
 function toNum(s: string): number | null { const n = parseInt(s); return isNaN(n) ? null : n }
 
+// Ярлыки лимитов зависят от модуля: у продаж сущности — воронки/клиенты, а не
+// вакансии/кандидаты (рекрутинг). Поле в БД одно (maxVacancies/maxCandidates),
+// меняется только подпись под нужный модуль.
+const LIMIT_FIELDS_DEFAULT = [
+  { field: "maxVacancies",  label: "Вакансий" },
+  { field: "maxCandidates", label: "Кандидатов" },
+  { field: "maxEmployees",  label: "Сотрудников" },
+  { field: "maxScenarios",  label: "Сценариев" },
+  { field: "maxUsers",      label: "Пользователей" },
+]
+const LIMIT_LABELS_BY_MODULE: Record<string, Record<string, string>> = {
+  sales:     { maxVacancies: "Воронок",  maxCandidates: "Клиентов" },
+  marketing: { maxVacancies: "Кампаний", maxCandidates: "Лидов" },
+}
+function limitFieldsFor(slug: string) {
+  const o = LIMIT_LABELS_BY_MODULE[slug] ?? {}
+  return LIMIT_FIELDS_DEFAULT.map(f => ({ ...f, label: o[f.field] ?? f.label }))
+}
+
 export default function AdminPlanEditPage() {
   const params = useParams()
   const router = useRouter()
@@ -276,20 +295,14 @@ export default function AdminPlanEditPage() {
                         </div>
                         {mod.isIncluded && (
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pl-7">
-                            {[
-                              { field: "maxVacancies",  label: "Вакансий" },
-                              { field: "maxCandidates", label: "Кандидатов" },
-                              { field: "maxEmployees",  label: "Сотрудников" },
-                              { field: "maxScenarios",  label: "Сценариев" },
-                              { field: "maxUsers",      label: "Пользователей" },
-                            ].map(({ field, label }) => (
+                            {limitFieldsFor(mod.slug).map(({ field, label }) => (
                               <div key={field} className="space-y-1">
                                 <Label className="text-xs text-muted-foreground">{label}</Label>
                                 <Input
                                   type="number"
                                   placeholder="∞"
                                   className="h-8 text-sm"
-                                  value={(mod as Record<string, string>)[field]}
+                                  value={(mod as unknown as Record<string, string>)[field]}
                                   onChange={e => setLimit(mod.id, field as keyof ModuleState, e.target.value)}
                                 />
                               </div>
