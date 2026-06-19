@@ -1662,6 +1662,11 @@ export const tenantModules = pgTable("tenant_modules", {
   customLimits:  jsonb("custom_limits"),
   enabledAt:     timestamp("enabled_at", { withTimezone: true }),
   disabledAt:    timestamp("disabled_at", { withTimezone: true }),
+  // Биллинг-поля (миграция 0217): цена модуля на момент назначения,
+  // применённая скидка за набор, количество (зарезервировано для SaaS-unit).
+  priceKopecks:           integer("price_kopecks"),            // null = не задана
+  appliedDiscountPercent: integer("applied_discount_percent").notNull().default(0),
+  quantity:               integer("quantity").notNull().default(1),
 }, (t) => [unique().on(t.tenantId, t.moduleId)])
 
 // ─── LMS — Курсы ──────────────────────────────────────────────────────────────

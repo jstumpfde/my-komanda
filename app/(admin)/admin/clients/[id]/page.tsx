@@ -28,9 +28,11 @@ import {
 import {
   ArrowLeft, Building2, Loader2, Save, Plus, CalendarDays, RotateCcw,
   CheckCircle, Lock, Unlock, Trash2, Users, Receipt, Activity, LayoutGrid,
-  UserX, UserCheck, Shield, Handshake, Unlink,
+  UserX, UserCheck, Shield, Handshake, Unlink, ShoppingCart,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { PricingGrid, type ProductPricingRow, type BundleRow } from "@/components/admin/pricing-grid"
+import { computeBundlePrice } from "@/lib/pricing/calc"
 
 // ─── Типы ─────────────────────────────────────────────────────────────────────
 
@@ -516,6 +518,20 @@ export default function AdminClientPage() {
   const [infoSaving, setInfoSaving] = useState(false)
   const [infoSaved, setInfoSaved] = useState(false)
 
+  // Продукты и прайсинг
+  const [planPricing, setPlanPricing] = useState<ProductPricingRow[]>([])
+  const [planDiscounts, setPlanDiscounts] = useState<BundleRow[]>([])
+  const [productAssignments, setProductAssignments] = useState<Record<string, {
+    enabled: boolean; priceOverrideKopecks: string
+  }>>({})
+  const [productsSaving, setProductsSaving] = useState(false)
+  const [productsSaved, setProductsSaved] = useState(false)
+  const [productsError, setProductsError] = useState("")
+  const [assignResult, setAssignResult] = useState<{
+    subtotalKopecks: number; productCount: number; discountPercent: number
+    discountKopecks: number; totalKopecks: number
+  } | null>(null)
+
   // Партнёр компании
   const [partners, setPartners] = useState<PartnerOption[]>([])
   const [partnerSelect, setPartnerSelect] = useState<string>("none")
@@ -594,6 +610,30 @@ export default function AdminClientPage() {
       .catch(() => setError("Не удалось загрузить модули"))
       .finally(() => setLoading(false))
   }, [clientId])
+
+  // Загружаем цены плана клиента при смене плана
+  useEffect(() => {
+    const planId = company?.currentPlanId ?? company?.planId
+    if (!planId) return
+    fetch(`/api/admin/plans/${planId}/pricing`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return
+        const products: ProductPricingRow[] = data.products ?? []
+        const discounts: BundleRow[] = data.discounts ?? []
+        setPlanPricing(products)
+        setPlanDiscounts(discounts)
+        // Инициализируем назначения: всем enabled=false, override пуст
+        setProductAssignments(prev => {
+          const next: typeof prev = {}
+          for (const p of products) {
+            next[p.moduleId] = prev[p.moduleId] ?? { enabled: false, priceOverrideKopecks: "" }
+          }
+          return next
+        })
+      })
+      .catch(() => {})
+  }, [company?.currentPlanId, company?.planId])
 
   // Загружаем пользователей при переключении на вкладку
   useEffect(() => {
@@ -950,6 +990,50 @@ export default function AdminClientPage() {
     }
   }
 
+  async function handleSaveProducts() {
+    setProductsSaving(true)
+    setProductsError("")
+    setProductsSaved(false)
+    try {
+      const products = planPricing
+        .filter(p => p.isActive)
+        .map(p => {
+          const a = productAssignments[p.moduleId]
+          const override = a?.priceOverrideKopecks.trim()
+          const parsed = override ? Math.round(parseFloat(override.replace(",", ".")) * 100) : undefined
+          return {
+            moduleId: p.moduleId,
+            enabled: a?.enabled ?? false,
+            ...(parsed != null && !isNaN(parsed) ? { priceOverrideKopecks: parsed } : {}),
+          }
+        })
+      const res = await fetch(`/api/admin/clients/${clientId}/assign-products`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ products }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        setProductsError(d.error ?? "Ошибка сохранения")
+        return
+      }
+      const result = await res.json()
+      setAssignResult({
+        subtotalKopecks: result.subtotalKopecks,
+        productCount: result.productCount,
+        discountPercent: result.discountPercent,
+        discountKopecks: result.discountKopecks,
+        totalKopecks: result.totalKopecks,
+      })
+      setProductsSaved(true)
+      setTimeout(() => setProductsSaved(false), 2500)
+    } catch {
+      setProductsError("Ошибка сети")
+    } finally {
+      setProductsSaving(false)
+    }
+  }
+
   // ─── Loading ──────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -970,7 +1054,7 @@ export default function AdminClientPage() {
 
   return (
     <AdminPageLayout>
-          <div className="py-6 space-y-6" className="px-8">
+          <div className="py-6 space-y-6 px-8">
 
             {/* Шапка */}
             <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -1503,6 +1587,136 @@ export default function AdminClientPage() {
                     </Accordion>
                   </CardContent>
                 </Card>
+                {/* Продукты и прайсинг */}
+                {planPricing.filter(p => p.isActive).length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <ShoppingCart className="w-4 h-4" /> Продукты и прайсинг
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <p className="text-sm text-muted-foreground">
+                        Выберите продукты, подключённые клиенту. Итог рассчитывается по ценам тарифа
+                        со скидкой за набор.
+                      </p>
+
+                      {/* Список продуктов с тумблерами и опциональным override цены */}
+                      <div className="space-y-2">
+                        {planPricing.filter(p => p.isActive).map(row => {
+                          const mod = modules.find(m => m.moduleId === row.moduleId)
+                          const label = mod?.moduleName ?? row.moduleId
+                          const a = productAssignments[row.moduleId] ?? { enabled: false, priceOverrideKopecks: "" }
+                          return (
+                            <div key={row.moduleId} className="flex items-center gap-3 rounded-lg border px-3 py-2.5">
+                              <Switch
+                                id={`prod-${row.moduleId}`}
+                                checked={a.enabled}
+                                onCheckedChange={v =>
+                                  setProductAssignments(prev => ({
+                                    ...prev,
+                                    [row.moduleId]: { ...prev[row.moduleId] ?? { priceOverrideKopecks: "" }, enabled: v },
+                                  }))
+                                }
+                              />
+                              <Label htmlFor={`prod-${row.moduleId}`} className="flex-1 cursor-pointer text-sm font-medium">
+                                {label}
+                              </Label>
+                              <span className="text-xs text-muted-foreground tabular-nums">
+                                {(row.priceKopecks / 100).toLocaleString("ru-RU")} ₽/мес
+                              </span>
+                              {a.enabled && (
+                                <div className="flex items-center gap-1 ml-2">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    placeholder="Своя цена"
+                                    className="h-7 w-28 text-sm text-right"
+                                    value={a.priceOverrideKopecks}
+                                    onChange={e =>
+                                      setProductAssignments(prev => ({
+                                        ...prev,
+                                        [row.moduleId]: { ...prev[row.moduleId], priceOverrideKopecks: e.target.value },
+                                      }))
+                                    }
+                                  />
+                                  <span className="text-xs text-muted-foreground">₽</span>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      {/* Живой расчёт */}
+                      {(() => {
+                        const activeItems = planPricing
+                          .filter(p => p.isActive && (productAssignments[p.moduleId]?.enabled))
+                          .map(p => {
+                            const a = productAssignments[p.moduleId]
+                            const override = a?.priceOverrideKopecks?.trim()
+                            const parsed = override ? Math.round(parseFloat(override.replace(",", ".")) * 100) : NaN
+                            return { moduleId: p.moduleId, priceKopecks: !isNaN(parsed) ? parsed : p.priceKopecks }
+                          })
+                        const rules = planDiscounts
+                          .filter(d => d.isActive)
+                          .map(d => ({ minProducts: d.minProducts, maxProducts: d.maxProducts, discountPercent: d.discountPercent }))
+                        const calc = computeBundlePrice(activeItems, rules)
+                        if (activeItems.length === 0) return (
+                          <p className="text-xs text-muted-foreground italic">
+                            Включите хотя бы один продукт, чтобы увидеть расчёт.
+                          </p>
+                        )
+                        return (
+                          <div className="rounded-lg bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 p-4">
+                            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+                              <span className="text-muted-foreground">
+                                {calc.productCount} {calc.productCount === 1 ? "продукт" : calc.productCount < 5 ? "продукта" : "продуктов"}
+                              </span>
+                              <span className="font-medium tabular-nums">
+                                {(calc.subtotalKopecks / 100).toLocaleString("ru-RU")} ₽
+                              </span>
+                              {calc.discountPercent > 0 && (
+                                <>
+                                  <span className="text-muted-foreground">−</span>
+                                  <span className="text-emerald-600 font-medium">скидка {calc.discountPercent}%</span>
+                                  <span className="text-muted-foreground tabular-nums">
+                                    ({(calc.discountKopecks / 100).toLocaleString("ru-RU")} ₽)
+                                  </span>
+                                  <span className="text-muted-foreground">=</span>
+                                </>
+                              )}
+                              <span className="text-base font-bold text-violet-700 dark:text-violet-300 tabular-nums">
+                                Итого {(calc.totalKopecks / 100).toLocaleString("ru-RU")} ₽/мес
+                              </span>
+                            </div>
+                          </div>
+                        )
+                      })()}
+
+                      {/* Результат после сохранения */}
+                      {assignResult && (
+                        <div className="text-xs text-muted-foreground border-t pt-2">
+                          Сохранено: {assignResult.productCount} прод. ·{" "}
+                          {(assignResult.totalKopecks / 100).toLocaleString("ru-RU")} ₽/мес
+                          {assignResult.discountPercent > 0 && ` (скидка ${assignResult.discountPercent}%)`}
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-3 pt-1">
+                        <Button onClick={handleSaveProducts} disabled={productsSaving} className="gap-2">
+                          {productsSaving
+                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            : <Save className="w-3.5 h-3.5" />}
+                          Сохранить продукты
+                        </Button>
+                        {productsSaved && <span className="text-xs text-emerald-600 font-medium">Сохранено</span>}
+                        {productsError && <span className="text-xs text-destructive">{productsError}</span>}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
               </TabsContent>
 
               {/* ─── Пользователи ─── */}
