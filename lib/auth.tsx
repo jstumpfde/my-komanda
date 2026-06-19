@@ -137,7 +137,7 @@ export function useAuth() {
 }
 
 export const ROLE_LABELS: Record<UserRole, string> = {
-  platform_admin: "Администратор платформы",
+  platform_admin: "Админ",
   platform_manager: "Менеджер платформы",
   admin: "Администратор",
   director: "Директор",
@@ -149,6 +149,8 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   tester_hr: "Тестировщик HR",
   employee: "Сотрудник",
   partner: "Партнёр",
+  sales_manager: "Менеджер продаж",
+  account_manager: "Клиентский менеджер",
 }
 
 export const ROLE_ICONS: Record<UserRole, string> = {
@@ -164,6 +166,8 @@ export const ROLE_ICONS: Record<UserRole, string> = {
   tester_hr: "🧪",
   employee: "👤",
   partner: "🤝",
+  sales_manager: "💼",
+  account_manager: "🧑‍💼",
 }
 
 // Sidebar visibility per role

@@ -24,7 +24,7 @@ export const ROLE_LABELS: Record<string, string> = {
   observer:         "Наблюдатель",
   tester_hr:        "Тестировщик HR",
   partner:          "Партнёр",
-  platform_admin:   "Адм. платформы",
+  platform_admin:   "Админ",
   platform_manager: "Менеджер платформы",
   admin:            "Администратор",
   manager:          "Менеджер",

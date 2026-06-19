@@ -85,7 +85,7 @@ function getMatrix(): Record<string, RolePermissions> {
 
 const ROLE_META: Record<string, { label: string; description: string; isPlatform: boolean; isLocked: boolean; isPartner?: boolean; isManager?: boolean }> = {
   platform_admin: {
-    label: "Администратор платформы",
+    label: "Админ",
     description: "Полный доступ ко всем функциям платформы и администрированию",
     isPlatform: true,
     isLocked: true,
