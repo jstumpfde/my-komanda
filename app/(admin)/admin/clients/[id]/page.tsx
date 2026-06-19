@@ -26,9 +26,12 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog"
+import {
   ArrowLeft, Building2, Loader2, Save, Plus, CalendarDays, RotateCcw,
   CheckCircle, Lock, Unlock, Trash2, Users, Receipt, Activity, LayoutGrid,
-  UserX, UserCheck, Shield, Handshake, Unlink, ShoppingCart,
+  UserX, UserCheck, Shield, Handshake, Unlink, ShoppingCart, KeyRound, Copy, Check,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { PricingGrid, type ProductPricingRow, type BundleRow } from "@/components/admin/pricing-grid"
@@ -537,6 +540,13 @@ export default function AdminClientPage() {
   const [partnerSelect, setPartnerSelect] = useState<string>("none")
   const [partnerSaving, setPartnerSaving] = useState(false)
 
+  // Сброс пароля пользователя
+  const [resetPwdUserId, setResetPwdUserId]     = useState<string | null>(null)
+  const [resetPwdLoading, setResetPwdLoading]   = useState(false)
+  const [resetPwdResult, setResetPwdResult]     = useState<string | null>(null)
+  const [resetPwdError, setResetPwdError]       = useState<string | null>(null)
+  const [resetPwdCopied, setResetPwdCopied]     = useState(false)
+
   // Модули в меню (companies.enabled_modules). overrideOn=false → grandfather
   // (NULL, модули по роли). overrideOn=true → показываем РОВНО selectedModules.
   const [overrideOn, setOverrideOn] = useState(false)
@@ -988,6 +998,49 @@ export default function AdminClientPage() {
     if (res.ok) {
       setUsers(prev => prev.filter(u => u.id !== userId))
     }
+  }
+
+  function openResetPwdDialog(userId: string) {
+    setResetPwdUserId(userId)
+    setResetPwdResult(null)
+    setResetPwdError(null)
+    setResetPwdCopied(false)
+  }
+
+  function closeResetPwdDialog() {
+    setResetPwdUserId(null)
+    setResetPwdResult(null)
+    setResetPwdError(null)
+    setResetPwdCopied(false)
+  }
+
+  async function handleResetPassword() {
+    if (!resetPwdUserId) return
+    setResetPwdLoading(true)
+    setResetPwdError(null)
+    try {
+      const res = await fetch(
+        `/api/admin/clients/${clientId}/users/${resetPwdUserId}/reset-password`,
+        { method: "POST" }
+      )
+      const json = await res.json()
+      if (!res.ok) {
+        setResetPwdError(json?.error ?? "Ошибка сброса пароля")
+      } else {
+        setResetPwdResult(json?.password ?? "")
+      }
+    } catch {
+      setResetPwdError("Ошибка соединения")
+    } finally {
+      setResetPwdLoading(false)
+    }
+  }
+
+  async function handleCopyResetPwd() {
+    if (!resetPwdResult) return
+    await navigator.clipboard.writeText(resetPwdResult)
+    setResetPwdCopied(true)
+    setTimeout(() => setResetPwdCopied(false), 2000)
   }
 
   async function handleSaveProducts() {
@@ -1785,6 +1838,16 @@ export default function AdminClientPage() {
                               </DataCell>
                               <DataCell>
                                 <div className="flex items-center justify-end gap-1">
+                                  {/* Сброс пароля */}
+                                  <Button
+                                    size="icon" variant="ghost"
+                                    className="h-7 w-7 text-muted-foreground hover:text-violet-600"
+                                    title="Сбросить пароль"
+                                    onClick={() => openResetPwdDialog(user.id)}
+                                  >
+                                    <KeyRound className="w-3.5 h-3.5" />
+                                  </Button>
+
                                   <Button
                                     size="icon" variant="ghost"
                                     className={cn("h-7 w-7", user.isActive !== false
@@ -1836,6 +1899,97 @@ export default function AdminClientPage() {
                     )}
                   </CardContent>
                 </Card>
+
+                {/* ─── Диалог сброса пароля ─── */}
+                <Dialog
+                  open={resetPwdUserId !== null}
+                  onOpenChange={open => { if (!open) closeResetPwdDialog() }}
+                >
+                  <DialogContent className="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                        <KeyRound className="w-4 h-4 text-violet-600" />
+                        Сброс пароля
+                      </DialogTitle>
+                      <DialogDescription>
+                        {resetPwdResult
+                          ? "Новый временный пароль сгенерирован. Передайте его пользователю — больше не покажем."
+                          : "Будет сгенерирован новый временный пароль. Пользователь автоматически разблокируется."}
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="py-2 space-y-3">
+                      {resetPwdError && (
+                        <p className="text-sm text-destructive">{resetPwdError}</p>
+                      )}
+
+                      {resetPwdResult ? (
+                        <div className="space-y-2">
+                          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                            Новый пароль
+                          </p>
+                          <div className="flex items-center gap-2 rounded-md border bg-muted px-3 py-2">
+                            <span className="font-mono text-sm flex-1 select-all break-all">
+                              {resetPwdResult}
+                            </span>
+                            <Button
+                              size="icon" variant="ghost"
+                              className={cn("h-7 w-7 shrink-0", resetPwdCopied
+                                ? "text-emerald-600"
+                                : "text-muted-foreground hover:text-violet-600"
+                              )}
+                              title="Скопировать"
+                              onClick={handleCopyResetPwd}
+                            >
+                              {resetPwdCopied
+                                ? <Check className="w-3.5 h-3.5" />
+                                : <Copy className="w-3.5 h-3.5" />}
+                            </Button>
+                          </div>
+                          <p className="text-xs text-amber-600 font-medium">
+                            ⚠ Передайте пользователю — больше не покажем
+                          </p>
+                        </div>
+                      ) : (
+                        !resetPwdLoading && (
+                          <p className="text-sm text-muted-foreground">
+                            Текущий пароль будет аннулирован. Пользователь сможет войти только с новым временным паролем.
+                          </p>
+                        )
+                      )}
+
+                      {resetPwdLoading && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Генерируем пароль…
+                        </div>
+                      )}
+                    </div>
+
+                    <DialogFooter>
+                      {resetPwdResult ? (
+                        <Button variant="outline" onClick={closeResetPwdDialog}>
+                          Закрыть
+                        </Button>
+                      ) : (
+                        <>
+                          <Button variant="outline" onClick={closeResetPwdDialog} disabled={resetPwdLoading}>
+                            Отмена
+                          </Button>
+                          <Button
+                            className="bg-violet-600 hover:bg-violet-700 text-white"
+                            onClick={handleResetPassword}
+                            disabled={resetPwdLoading}
+                          >
+                            {resetPwdLoading
+                              ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Генерируем…</>
+                              : <><KeyRound className="w-4 h-4 mr-2" />Сбросить пароль</>}
+                          </Button>
+                        </>
+                      )}
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </TabsContent>
 
               {/* ─── Счета ─── */}
