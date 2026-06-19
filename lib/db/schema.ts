@@ -3510,3 +3510,140 @@ export const promoCodes = pgTable("platform_promo_codes", {
 
 export type PromoCode = typeof promoCodes.$inferSelect
 export type NewPromoCode = typeof promoCodes.$inferInsert
+
+// ============================================================================
+// Модуль «Проработка базы» (outreach) — единая база компаний по ИНН.
+// Грузим разнородные xlsx (ГлобусВЭД / портал / ЕГРЮЛ / звонки) сколько угодно
+// раз → дедуп по ИНН (без перезаписи, только ДОПОЛНЕНИЕ) → копим провенанс.
+// Всё тенант-скоупится по companyId (компания-владелец на платформе).
+// ============================================================================
+
+export interface OutreachCompanyData { [k: string]: unknown }   // гибкий мешок доп-полей
+export interface OutreachSourceRef {
+  importId: string
+  file: string
+  sourceType: string   // globusved | portal | egrul | calls | unknown
+  date: string         // ISO
+}
+export interface OutreachImportStats {
+  total: number; created: number; merged: number; skipped: number; contacts: number
+}
+
+// Карточка целевой компании (лида). Дедуп: один ИНН = одна карточка на тенанта.
+export const outreachCompanies = pgTable("outreach_companies", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  companyId:   uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  inn:         text("inn"),                                   // как в файле
+  innNorm:     text("inn_norm"),                              // нормализованный (только цифры) — ключ слияния
+  name:        text("name"),                                  // каноничное короткое имя
+  fullName:    text("full_name"),
+  region:      text("region"),
+  address:     text("address"),
+  website:     text("website"),
+  okvedCode:   text("okved_code"),
+  okvedName:   text("okved_name"),
+  ogrn:        text("ogrn"),
+  kpp:         text("kpp"),
+  description: text("description"),                           // чем занимается (обогащение)
+  segment:     text("segment"),                               // сегмент (ВЭД и т.п.)
+  status:      text("status").notNull().default("new"),       // new|enriched|contacted|replied|won|lost
+  enriched:    boolean("enriched").notNull().default(false),
+  dataJson:    jsonb("data_json").$type<OutreachCompanyData>(),
+  sourcesJson: jsonb("sources_json").$type<OutreachSourceRef[]>(),  // откуда пришли поля
+  dedupKey:    text("dedup_key"),                             // для строк без ИНН: norm(name)+region
+  firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).defaultNow(),
+  updatedAt:   timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (t) => [
+  // Уникальность по (тенант, нормализованный ИНН). NULL-ИНН в PG считаются разными → строки без ИНН не конфликтуют.
+  uniqueIndex("outreach_companies_company_inn_idx").on(t.companyId, t.innNorm),
+  index("outreach_companies_company_idx").on(t.companyId),
+  index("outreach_companies_dedup_idx").on(t.companyId, t.dedupKey),
+  index("outreach_companies_status_idx").on(t.companyId, t.status),
+])
+
+// Контакты компании (много на одну): телефоны, почты, ЛПР, мессенджеры. Дедуп по (target, kind, value).
+export const outreachContacts = pgTable("outreach_contacts", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  companyId:  uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  targetId:   uuid("target_id").notNull().references(() => outreachCompanies.id, { onDelete: "cascade" }),
+  kind:       text("kind").notNull(),                         // phone | email | person | whatsapp | telegram | site
+  value:      text("value").notNull(),                        // нормализованное значение
+  valueRaw:   text("value_raw"),                              // как было в файле
+  personName: text("person_name"),                            // ФИО (если контактное лицо)
+  position:   text("position"),                               // должность
+  source:     text("source"),                                 // файл/источник
+  createdAt:  timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (t) => [
+  uniqueIndex("outreach_contacts_uniq_idx").on(t.targetId, t.kind, t.value),
+  index("outreach_contacts_company_idx").on(t.companyId),
+  index("outreach_contacts_target_idx").on(t.targetId),
+])
+
+// ВЭД-данные компании (ГлобусВЭД): что/откуда возит, объёмы.
+export const outreachTrade = pgTable("outreach_trade", {
+  id:            uuid("id").primaryKey().defaultRandom(),
+  companyId:     uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  targetId:      uuid("target_id").notNull().references(() => outreachCompanies.id, { onDelete: "cascade" }),
+  direction:     text("direction"),                           // import | export
+  tnvedCodes:    jsonb("tnved_codes").$type<string[]>(),
+  countries:     jsonb("countries").$type<string[]>(),
+  suppliesCount: integer("supplies_count"),
+  supplySumUsd:  doublePrecision("supply_sum_usd"),
+  supplySumRub:  doublePrecision("supply_sum_rub"),
+  weightNet:     doublePrecision("weight_net"),
+  revenueRub:    doublePrecision("revenue_rub"),
+  year:          integer("year"),
+  source:        text("source"),
+  createdAt:     timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (t) => [
+  index("outreach_trade_company_idx").on(t.companyId),
+  index("outreach_trade_target_idx").on(t.targetId),
+])
+
+// Журнал загрузок (провенанс батчей): сколько строк создано/слито/пропущено.
+export const outreachImports = pgTable("outreach_imports", {
+  id:            uuid("id").primaryKey().defaultRandom(),
+  companyId:     uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  filename:      text("filename").notNull(),
+  sourceType:    text("source_type").notNull().default("unknown"),  // globusved|portal|egrul|calls|unknown
+  status:        text("status").notNull().default("done"),          // pending|done|error
+  rowsTotal:     integer("rows_total").notNull().default(0),
+  rowsCreated:   integer("rows_created").notNull().default(0),
+  rowsMerged:    integer("rows_merged").notNull().default(0),
+  rowsSkipped:   integer("rows_skipped").notNull().default(0),
+  contactsAdded: integer("contacts_added").notNull().default(0),
+  mappingJson:   jsonb("mapping_json"),                       // как колонки легли в поля
+  error:         text("error"),
+  createdBy:     uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt:     timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (t) => [
+  index("outreach_imports_company_idx").on(t.companyId),
+])
+
+export type OutreachCompany    = typeof outreachCompanies.$inferSelect
+export type NewOutreachCompany = typeof outreachCompanies.$inferInsert
+export type OutreachContact    = typeof outreachContacts.$inferSelect
+export type NewOutreachContact = typeof outreachContacts.$inferInsert
+export type OutreachTrade      = typeof outreachTrade.$inferSelect
+export type NewOutreachTrade   = typeof outreachTrade.$inferInsert
+export type OutreachImport     = typeof outreachImports.$inferSelect
+export type NewOutreachImport  = typeof outreachImports.$inferInsert
+
+// Подключение клиента к сервису рассылки — СВОЁ на каждую компанию (per-tenant).
+// Имя провайдера в UI скрыто; здесь только ключ клиента + статус.
+export interface OutreachIntegrationSettings { [k: string]: unknown }
+export const outreachIntegrations = pgTable("outreach_integrations", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  companyId:   uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }).unique(),
+  apiKey:      text("api_key"),                              // ключ клиента к провайдеру (секрет)
+  label:       text("label"),                               // нейтральная подпись подключения
+  status:      text("status").notNull().default("disconnected"),  // connected | disconnected | error
+  lastCheckAt: timestamp("last_check_at", { withTimezone: true }),
+  lastError:   text("last_error"),
+  settingsJson: jsonb("settings_json").$type<OutreachIntegrationSettings>(),
+  connectedBy: uuid("connected_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt:   timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt:   timestamp("updated_at", { withTimezone: true }).defaultNow(),
+})
+export type OutreachIntegration    = typeof outreachIntegrations.$inferSelect
+export type NewOutreachIntegration = typeof outreachIntegrations.$inferInsert

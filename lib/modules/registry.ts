@@ -244,4 +244,16 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Настройки',  href: '/qc/settings',    icon: 'Settings' },
     ],
   },
+  email_marketing: {
+    id: 'email_marketing',
+    name: 'Емайл маркетинг',
+    description: 'Единая база компаний (дедуп по ИНН) и email-рассылки',
+    icon: 'Mail',
+    basePath: '/email-marketing',
+    menuItems: [
+      { label: 'База',       href: '/email-marketing',           icon: 'Database' },
+      { label: 'Рассылки',   href: '/email-marketing/campaigns', icon: 'Send' },
+      { label: 'Настройки',  href: '/email-marketing/settings',  icon: 'Settings' },
+    ],
+  },
 }
