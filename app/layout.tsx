@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { Providers } from '@/components/providers'
 import { Toaster } from '@/components/ui/sonner'
+import { StaleDeploymentReload } from '@/components/stale-deployment-reload'
 import {
   getPlatformTitle,
   getPlatformDescription,
@@ -78,6 +79,7 @@ export default function RootLayout({
           {children}
         </Providers>
         <Toaster position="top-right" />
+        <StaleDeploymentReload />
         <Analytics />
       </body>
     </html>

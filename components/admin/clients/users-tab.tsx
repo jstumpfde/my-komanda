@@ -518,15 +518,27 @@ export function UsersTab({ trashed = false }: { trashed?: boolean }) {
                   <dl className="divide-y divide-border/60">
                     <div className="flex justify-between gap-4 py-2 text-sm"><dt className="text-muted-foreground">Email</dt><dd className="text-right"><a href={`mailto:${u.email}`} className="text-primary hover:underline">{u.email}</a></dd></div>
                     <div className="flex justify-between gap-4 py-2 text-sm"><dt className="text-muted-foreground">Роль</dt><dd><Badge variant="outline" className="text-xs">{ROLE_LABELS[u.role] ?? u.role}</Badge></dd></div>
-                    <div className="flex justify-between gap-4 py-2 text-sm"><dt className="text-muted-foreground">Компания</dt><dd className="text-right">{u.companyId
-                      ? <Link href={`/admin/clients/${u.companyId}`} className="text-primary hover:underline inline-flex items-center gap-1.5"><Building2 className="h-3.5 w-3.5" />{u.companyName ?? "—"}</Link>
-                      : <span className="text-muted-foreground">— без компании</span>}</dd></div>
                     {u.position && <div className="flex justify-between gap-4 py-2 text-sm"><dt className="text-muted-foreground">Должность</dt><dd>{u.position}</dd></div>}
                     <div className="flex justify-between gap-4 py-2 text-sm"><dt className="text-muted-foreground">Статус</dt><dd><Badge variant="outline" className={cn("text-xs", blocked
                       ? "bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800"
                       : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800")}>{blocked ? "Заблокирован" : "Активен"}</Badge></dd></div>
                     <div className="flex justify-between gap-4 py-2 text-sm"><dt className="text-muted-foreground">Создан</dt><dd>{formatDate(u.createdAt)}</dd></div>
                   </dl>
+                  {!trashed && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Компания (привязка)</Label>
+                      <Select
+                        value={u.companyId ?? NO_COMPANY}
+                        onValueChange={(v) => { if (v !== (u.companyId ?? NO_COMPANY)) act(() => patchUser(u, { companyId: v === NO_COMPANY ? null : v })) }}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NO_COMPANY}>— Без компании</SelectItem>
+                          {companies.map(co => <SelectItem key={co.id} value={co.id}>{co.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <div className="space-y-2">
                     {trashed ? (
                       <Button variant="outline" className="w-full justify-start gap-2" onClick={() => act(() => restoreUser(u))}><RotateCcw className="h-4 w-4" />Восстановить</Button>
