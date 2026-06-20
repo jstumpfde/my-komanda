@@ -31,6 +31,12 @@ export function AdminNav() {
   }, [])
 
   function toggle() {
+    // Кнопка-замок внутри nav → курсор остаётся над меню после клика. Без сброса
+    // hovered клик «не виден»: expanded=!collapsed||hovered оставался true, меню не
+    // схлопывалось, а лишь становилось оверлеем, из-под которого уезжал контент.
+    // Сбрасываем hovered, чтобы клик схлопывал/разворачивал сразу; разворот по
+    // наведению вернётся на следующем mouse-enter.
+    setHovered(false)
     setCollapsed((c) => {
       const next = !c
       try { localStorage.setItem("admin-nav-collapsed", next ? "1" : "0") } catch {}
