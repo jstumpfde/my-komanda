@@ -776,6 +776,11 @@ export const vacancies = pgTable("vacancies", {
   hhFunnelJson: jsonb("hh_funnel_json"),
   aiProcessSettings: jsonb("ai_process_settings").default({}),
   aiScoringEnabled: boolean("ai_scoring_enabled").notNull().default(false),
+  // «Портрет» — единственный источник оценки для этой вакансии (новый контур).
+  // true: критерии + пороги + жёсткость берутся из vacancy_specs (Spec).
+  // false (дефолт): прежнее legacy-поведение. Новые вакансии создаются с true;
+  // существующие переводятся вручную кнопкой «Перенести в Портрет».
+  portraitScoring: boolean("portrait_scoring").notNull().default(false),
   // P0-22: editable стоп-слова на уровне вакансии.
   stopWordsJson: jsonb("stop_words_json").$type<string[]>().notNull().default([
     "нет","неактуально","не подходит","спасибо","неинтересно","не интересно",

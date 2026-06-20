@@ -7,7 +7,7 @@
 // Spec переводятся в скоринг эквивалентно legacy.
 
 import type { CandidateSpec } from "@/lib/core/spec/types"
-import { mustHaveTexts } from "@/lib/core/spec/types"
+import { normalizeMustHave } from "@/lib/core/spec/types"
 import type { ResumeScreenInput } from "@/lib/ai-screen-resume"
 
 /**
@@ -22,18 +22,28 @@ export function buildSpecResumeInput(
   resume: ResumeScreenInput["resume"],
   vacancy: { title: string; city?: string | null },
   spec: CandidateSpec,
+  opts?: { respectHardness?: boolean },
 ): ResumeScreenInput {
-  // mustHave может быть в обоих форматах (string | { text, hard }) —
-  // нормализуем в тексты. Поведение прежнее: все пункты передаются AI как
-  // обязательные навыки (реальный hard/soft-нокаут — этап 2).
-  const mustHaveList = mustHaveTexts(spec.mustHave)
-  const mustHave = mustHaveList.length > 0
-    ? mustHaveList
-    : spec.portraitRequiredSkills
+  // mustHave: union(string | { text, hard }) → нормализуем в { text, hard }.
+  // respectHardness (контур «Портрет»): жёсткие пункты остаются обязательными
+  // (нокаут), мягкие переходят в «желательные» — влияют на балл, не отсеивают.
+  // Без флага (legacy/существующие Spec-вакансии): все пункты обязательные —
+  // поведение прежнее, не меняем отбор у текущих вакансий.
+  const respect = opts?.respectHardness === true
+  const mhItems = normalizeMustHave(spec.mustHave)
+  // Жёсткие must-have → нокаут; мягкие (только при respect) → желательные.
+  const hardTexts = (respect ? mhItems.filter(i => i.hard) : mhItems).map(i => i.text)
+  const softTexts = respect ? mhItems.filter(i => !i.hard).map(i => i.text) : []
+  // Нокаут-навыки для движка: есть жёсткие → они; пункты есть, но все мягкие →
+  // пусто (не отсеиваем); пунктов нет вовсе → v1-портрет.
+  const mustHave = hardTexts.length > 0
+    ? hardTexts
+    : (mhItems.length > 0 ? [] : spec.portraitRequiredSkills)
 
-  const niceToHave = spec.niceToHave.length > 0
-    ? spec.niceToHave
-    : spec.portraitNiceSkills
+  const niceToHave = [
+    ...softTexts,
+    ...(spec.niceToHave.length > 0 ? spec.niceToHave : spec.portraitNiceSkills),
+  ]
 
   const knockouts = [
     ...spec.dealBreakers,

@@ -299,6 +299,12 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
     const aiSettings: VacancyAiProcessSettings =
       (localVac?.aiProcessSettings as VacancyAiProcessSettings | null) ?? scopedAiSettings
 
+    // Контур «Портрет» (vacancies.portrait_scoring): пороги/действия берутся из
+    // Spec (vacancy_specs), а не из legacy ai_process_settings. effAiSettings поднят
+    // сюда, чтобы дойти и до блока порогов, и до блока авто-отказа ниже. По умолчанию
+    // effAiSettings == aiSettings → существующие вакансии работают без изменений.
+    let effAiSettings: VacancyAiProcessSettings = aiSettings
+
     // Если AI-скоринг резюме дал score ниже порога — отклоняем кандидата
     // (reject) или оставляем в "new" для ручного разбора (keep_new),
     // НЕ отправляя приглашение и НЕ запуская дожим.
@@ -594,13 +600,26 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             // КРОМЕ вакансий из SPEC_SCORING_LEGACY_VACANCY_IDS (снимок боевых
             // вакансий Орлинка — по-старому). Честное A/B 11.06: зоны 93%, медиана 0.
             // При пустом/недоступном Spec — тихий fallback на legacy.
+            const portraitOn = localVac.portraitScoring === true
             let screenInput: Parameters<typeof screenResume>[0] | null = null
-            if (isSpecScoringEnabled(localVac.id)) {
+            if (isSpecScoringEnabled(localVac.id) || portraitOn) {
               try {
                 const spec = await getSpec(localVac.id)
                 if (spec && (spec.mustHave.length > 0 || spec.portraitRequiredSkills.length > 0)) {
-                  screenInput = buildSpecResumeInput(resumeForScreen, { title: localVac.title, city: localVac.city }, spec)
-                  console.log(`[spec-scoring] vacancy=${localVac.id} candidate=${candidateId} — скоринг по Spec`)
+                  screenInput = buildSpecResumeInput(resumeForScreen, { title: localVac.title, city: localVac.city }, spec, { respectHardness: portraitOn })
+                  console.log(`[spec-scoring] vacancy=${localVac.id} candidate=${candidateId} — скоринг по Spec${portraitOn ? " (Портрет)" : ""}`)
+                }
+                // Контур «Портрет»: пороги/действия из Spec.resumeThresholds.
+                if (portraitOn && spec?.resumeThresholds) {
+                  const rt = spec.resumeThresholds
+                  effAiSettings = {
+                    ...aiSettings,
+                    minScoreLower:         rt.enabled ? rt.lowerThreshold : 0,
+                    minScoreUpper:         rt.enabled ? rt.upperThreshold : 0,
+                    midRangeAction:        rt.midRangeAction,
+                    autoRejectEnabled:     rt.autoRejectEnabled,
+                    rejectionDelayMinutes: rt.rejectionDelayMinutes,
+                  }
                 }
               } catch (specErr) {
                 console.warn(`[spec-scoring] vacancy=${localVac.id} — ошибка чтения Spec, fallback на legacy:`, specErr)
@@ -651,11 +670,11 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
               //
               // Legacy: minScore → minScoreLower (вычитываем для обратной
               // совместимости со старым PATCH /ai-settings).
-              const lower = typeof aiSettings.minScoreLower === "number"
-                ? aiSettings.minScoreLower
-                : (typeof aiSettings.minScore === "number" ? aiSettings.minScore : 0)
-              const upper = typeof aiSettings.minScoreUpper === "number"
-                ? aiSettings.minScoreUpper
+              const lower = typeof effAiSettings.minScoreLower === "number"
+                ? effAiSettings.minScoreLower
+                : (typeof effAiSettings.minScore === "number" ? effAiSettings.minScore : 0)
+              const upper = typeof effAiSettings.minScoreUpper === "number"
+                ? effAiSettings.minScoreUpper
                 : 0
 
               // ТЗ-3 Ч.2: глобальный режим воронки. Приоритет над midRangeAction.
@@ -663,8 +682,8 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
               //     для ВСЕХ кандидатов (если есть вопросы), независимо от
               //     порогов. Лоу-скор reject выключен (P0-14).
               //   - "direct_demo" (дефолт) — старая логика по midRangeAction.
-              const globalMode = aiSettings.prequalificationMode ?? "direct_demo"
-              const hasPqQuestions = (aiSettings.prequalification?.questions ?? []).some(q => q.text?.trim().length > 0)
+              const globalMode = effAiSettings.prequalificationMode ?? "direct_demo"
+              const hasPqQuestions = (effAiSettings.prequalification?.questions ?? []).some(q => q.text?.trim().length > 0)
 
               if (globalMode === "prequal_then_demo" || globalMode === "prequal_only") {
                 if (hasPqQuestions) {
@@ -674,14 +693,14 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
               } else if (lower > 0 && result.score < lower) {
                 belowThreshold = { score: result.score, threshold: lower, action: "reject" }
               } else if (upper > 0 && result.score < upper) {
-                const mid = aiSettings.midRangeAction ?? "direct_demo"
+                const mid = effAiSettings.midRangeAction ?? "direct_demo"
                 if (mid === "keep_new") {
                   belowThreshold = { score: result.score, threshold: upper, action: "keep_new" }
                 } else if (mid === "prequalification") {
                   // Сессия 9: реальный запуск опросника. Если предкв
                   // выключена в табе «Демо и воронка» или нет вопросов —
                   // по плану п.6 fallback на direct_demo (просто invite).
-                  const pqEnabled = aiSettings.prequalification?.enabled === true
+                  const pqEnabled = effAiSettings.prequalification?.enabled === true
                   if (pqEnabled && hasPqQuestions) {
                     belowThreshold = { score: result.score, threshold: upper, action: "prequalification" }
                   }
@@ -713,7 +732,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
           // D5: авто-отказ по AI-скору. По умолчанию ВЫКЛ (autoRejectEnabled
           // !== true) → reject-кандидаты падают в else (keep_new, ручной разбор)
           // — поведение P0-14 сохранено. Включается HR'ом осознанно (OUTWARD).
-          if (aiSettings.autoRejectEnabled === true && belowThreshold.action === "reject") {
+          if (effAiSettings.autoRejectEnabled === true && belowThreshold.action === "reject") {
             await db.update(candidates)
               .set({
                 stage:                        "rejected",
@@ -852,7 +871,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
           await scheduleRejection({
             candidateId,
             reason:       `stop_factor:${stopFactorMatch.factor}`,
-            delayMinutes: rejectionDelayMinutes(aiSettings),
+            delayMinutes: rejectionDelayMinutes(effAiSettings),
             message:      messageText,
           })
 
@@ -864,7 +883,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             tag:         "process-queue/stop-factor",
             candidateId,
             factor:      stopFactorMatch.factor,
-            delayMinutes: rejectionDelayMinutes(aiSettings),
+            delayMinutes: rejectionDelayMinutes(effAiSettings),
           }))
 
           results.push({
