@@ -46,25 +46,22 @@ export function AdminNav() {
 
   // Развёрнутый вид: либо зафиксирован, либо временно по наведению (при свёрнутом).
   const expanded = !collapsed || hovered
-  // Оверлей — когда зафиксировано свёрнуто, но раскрыто по наведению.
-  const overlay = collapsed && hovered
 
   return (
-    // Внешняя обёртка держит «след» (w-14 в свёрнутом), чтобы раскрытие по наведению
-    // не двигало контент — раскрытое меню ложится оверлеем.
+    // Обёртка тянет ширину под expanded: при разворачивании (клик ИЛИ наведение)
+    // меню раздвигает контент вправо in-flow — как сайдбар сайта, — а НЕ ложится
+    // оверлеем поверх (иначе раскрытое меню перекрывало левую часть таблицы).
+    // Hover-обработчики — на обёртке: она всегда равна ширине nav (оверлея нет),
+    // поэтому курсор не выходит за её пределы при разворачивании → без мерцания.
     <div
-      className={cn("relative shrink-0 transition-[width] duration-200", collapsed ? "w-14" : "w-52")}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className={cn("relative shrink-0 transition-[width] duration-200", expanded ? "w-52" : "w-14")}
     >
       <nav
-        // Обработчики hover — на самом nav (он расширяется до w-52 оверлеем), а НЕ на
-        // внешней w-14 обёртке: иначе при наведении на раскрытую часть (за пределами
-        // w-14) срабатывал onMouseLeave → меню мерцало и не разворачивалось.
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
         className={cn(
           "h-full border-r border-border bg-background py-3 overflow-y-auto overflow-x-hidden transition-[width] duration-200",
           expanded ? "w-52" : "w-14",
-          overlay && "absolute inset-y-0 left-0 z-40 shadow-xl",
         )}
       >
         {/* Кнопка фиксации свёрнут/развёрнут */}
