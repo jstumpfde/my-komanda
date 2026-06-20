@@ -9,6 +9,7 @@ import {
 } from "@/lib/db/schema"
 import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
 import { checkCronAuth } from "@/lib/cron/auth"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 
 // POST /api/cron/knowledge-gaps — Protected by X-Cron-Secret header.
 // Weekly: для каждого тенанта находит топ-10 неотвеченных вопросов за 7 дней,
@@ -83,10 +84,13 @@ async function askClaudeRecommendations(
   }
 }
 
+const CRON_NAME = "knowledge-gaps"
+
 export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
 
+  const run = await startCronRun(CRON_NAME).catch(() => null)
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
   try {
@@ -193,13 +197,11 @@ export async function POST(req: NextRequest) {
       notified++
     }
 
-    return NextResponse.json({
-      ok: true,
-      tenants: tenantIds.length,
-      notified,
-      checkedAt: new Date().toISOString(),
-    })
+    if (run) await finishCronRun(run.id, "ok", { tenants: tenantIds.length, notified })
+    return NextResponse.json({ ok: true, tenants: tenantIds.length, notified, checkedAt: new Date().toISOString() })
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (run) await finishCronRun(run.id, "error", null, msg)
     console.error("[cron/knowledge-gaps]", err)
     return NextResponse.json({ error: "Internal error" }, { status: 500 })
   }

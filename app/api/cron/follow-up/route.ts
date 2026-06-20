@@ -6,6 +6,7 @@ import { getValidToken } from "@/lib/hh-helpers"
 import { shouldStopFollowUp } from "@/lib/followup/should-stop"
 import { canSendNow } from "@/lib/schedule/can-send-now"
 import { checkCronAuth } from "@/lib/cron/auth"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { renderTemplate } from "@/lib/template-renderer"
 import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
 
@@ -15,19 +16,24 @@ import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
 //
 // Старый email-блок (48-часовое напоминание через sendMail) удалён —
 // теперь дожим идёт только через цепочку касаний follow_up_messages.
+const CRON_NAME = "follow-up"
+
 export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
 
+  const run = await startCronRun(CRON_NAME).catch(() => null)
   const now = new Date()
   const startedAt = Date.now()
   try {
     const campaign = await processCampaignTouches(now)
     const durationMs = Date.now() - startedAt
-    // Одна структурированная строка для logrotate/grep'а.
     console.log(JSON.stringify({ tag: "cron/follow-up", ...campaign, durationMs, ts: now.toISOString() }))
+    if (run) await finishCronRun(run.id, "ok", { ...campaign, durationMs })
     return NextResponse.json({ ok: true, campaign: { ...campaign, durationMs }, ts: now.toISOString() })
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (run) await finishCronRun(run.id, "error", null, msg)
     console.error("[cron/follow-up]", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
