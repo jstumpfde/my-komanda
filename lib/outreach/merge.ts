@@ -68,6 +68,7 @@ export async function mergeRows(opts: MergeOpts): Promise<OutreachImportStats> {
             segment:   sql`coalesce(${outreachCompanies.segment}, excluded.segment)`,
             dataJson:  sql`coalesce(excluded.data_json, '{}'::jsonb) || coalesce(${outreachCompanies.dataJson}, '{}'::jsonb)`,
             sourcesJson: sql`coalesce(${outreachCompanies.sourcesJson}, '[]'::jsonb) || excluded.sources_json`,
+            deletedAt: sql`null`,   // повторная загрузка достаёт компанию из корзины — база = что загрузил
             updatedAt: sql`now()`,
           },
         })
@@ -89,6 +90,7 @@ export async function mergeRows(opts: MergeOpts): Promise<OutreachImportStats> {
           address:  sql`coalesce(${outreachCompanies.address}, ${r.address ?? null})`,
           website:  sql`coalesce(${outreachCompanies.website}, ${r.website ?? null})`,
           sourcesJson: sql`coalesce(${outreachCompanies.sourcesJson}, '[]'::jsonb) || ${JSON.stringify([srcRef])}::jsonb`,
+          deletedAt: sql`null`,   // повторная загрузка достаёт компанию из корзины
           updatedAt: sql`now()`,
         }).where(eq(outreachCompanies.id, targetId))
         merged++

@@ -3551,6 +3551,7 @@ export const outreachCompanies = pgTable("outreach_companies", {
   dataJson:    jsonb("data_json").$type<OutreachCompanyData>(),
   sourcesJson: jsonb("sources_json").$type<OutreachSourceRef[]>(),  // откуда пришли поля
   dedupKey:    text("dedup_key"),                             // для строк без ИНН: norm(name)+region
+  deletedAt:   timestamp("deleted_at", { withTimezone: true }),  // корзина: NULL — активна, иначе в корзине
   firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).defaultNow(),
   updatedAt:   timestamp("updated_at", { withTimezone: true }).defaultNow(),
 }, (t) => [
@@ -3559,6 +3560,7 @@ export const outreachCompanies = pgTable("outreach_companies", {
   index("outreach_companies_company_idx").on(t.companyId),
   index("outreach_companies_dedup_idx").on(t.companyId, t.dedupKey),
   index("outreach_companies_status_idx").on(t.companyId, t.status),
+  index("outreach_companies_deleted_idx").on(t.companyId, t.deletedAt),
 ])
 
 // Контакты компании (много на одну): телефоны, почты, ЛПР, мессенджеры. Дедуп по (target, kind, value).

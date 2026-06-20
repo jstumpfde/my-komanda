@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody } from "@/compo
 import {
   Database, Upload, Search, Building2, Users, Hash, Loader2, FileSpreadsheet,
   CheckCircle2, AlertCircle, Globe, Phone, Mail, MapPin, User, ChevronRight,
+  Trash2, RotateCcw,
 } from "lucide-react"
 
 interface Stats { companies: number; withInn: number; contacts: number }
@@ -52,32 +53,47 @@ export default function EmailMarketingBasePage() {
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // Вид «База / Корзина», выбор строк и массовые действия
+  const [trashed, setTrashed] = useState(false)
+  const [trashCount, setTrashCount] = useState(0)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [selectAllMatching, setSelectAllMatching] = useState(false)  // «выбрать все N» сверх страницы
+  const [acting, setActing] = useState(false)
+
   // Боковая панель компании
   const [sheetId, setSheetId] = useState<string | null>(null)
   const [detail, setDetail] = useState<DetailData | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
 
-  const load = useCallback(async (query: string, inn: string, region: string) => {
+  const load = useCallback(async (query: string, inn: string, region: string, tr: boolean) => {
     setLoading(true)
     try {
       const params = new URLSearchParams({ limit: "100" })
       if (query) params.set("q", query)
       if (inn) params.set("inn", inn)
       if (region) params.set("region", region)
+      if (tr) params.set("trashed", "1")
       const [c, h] = await Promise.all([
         fetch(`/api/modules/email-marketing/companies?${params}`).then((r) => r.json()),
         fetch(`/api/modules/email-marketing/imports`).then((r) => r.json()),
       ])
-      if (c && !c.error) { setItems(c.items || []); setTotal(c.total || 0); setStats(c.stats || { companies: 0, withInn: 0, contacts: 0 }) }
+      if (c && !c.error) {
+        setItems(c.items || []); setTotal(c.total || 0)
+        setStats(c.stats || { companies: 0, withInn: 0, contacts: 0 })
+        setTrashCount(c.trashCount || 0)
+      }
       if (h && !h.error) setImports(h.items || [])
     } finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { load("", "", "") }, [load])
+  useEffect(() => { load("", "", "", false) }, [load])
   useEffect(() => {
-    const t = setTimeout(() => load(q, innFilter, regionFilter), 300)
+    const t = setTimeout(() => load(q, innFilter, regionFilter, trashed), 300)
     return () => clearTimeout(t)
-  }, [q, innFilter, regionFilter, load])
+  }, [q, innFilter, regionFilter, trashed, load])
+
+  // Смена фильтра/вида сбрасывает выделение — видимый набор строк меняется.
+  useEffect(() => { setSelected(new Set()); setSelectAllMatching(false) }, [q, innFilter, regionFilter, trashed])
 
   async function openDetail(id: string) {
     setSheetId(id); setDetail(null); setDetailLoading(true)
@@ -107,7 +123,40 @@ export default function EmailMarketingBasePage() {
     setUploadMsg(results.join("  •  "))
     setUploading(false)
     if (fileRef.current) fileRef.current.value = ""
-    load(q, innFilter, regionFilter)
+    load(q, innFilter, regionFilter, trashed)
+  }
+
+  // ── Выбор строк ──────────────────────────────────────────────────────────
+  const allLoadedSelected = items.length > 0 && items.every((r) => selected.has(r.id))
+  const selectedCount = selectAllMatching ? total : selected.size
+  function toggleAllLoaded() {
+    if (selectAllMatching || allLoadedSelected) { setSelected(new Set()); setSelectAllMatching(false) }
+    else setSelected(new Set(items.map((r) => r.id)))
+  }
+  function toggleRow(id: string) {
+    setSelectAllMatching(false)
+    setSelected((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  }
+  function clearSelection() { setSelected(new Set()); setSelectAllMatching(false) }
+
+  async function doBulk(action: "trash" | "restore" | "delete") {
+    if (action === "delete" && !window.confirm(`Удалить навсегда ${selectedCount.toLocaleString("ru")} компаний? Действие необратимо.`)) return
+    setActing(true)
+    try {
+      const payload: Record<string, unknown> = { action }
+      if (selectAllMatching) Object.assign(payload, { allMatching: true, q, inn: innFilter, region: regionFilter })
+      else payload.ids = [...selected]
+      const r = await fetch("/api/modules/email-marketing/companies/bulk", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+      }).then((res) => res.json())
+      if (r?.error) { setUploadMsg(`❌ ${r.error}`); return }
+      const verb = action === "trash" ? "в корзину" : action === "restore" ? "восстановлено" : "удалено навсегда"
+      setUploadMsg(`✅ ${verb}: ${(r.affected ?? 0).toLocaleString("ru")} компаний`)
+      clearSelection()
+      load(q, innFilter, regionFilter, trashed)
+    } catch (e) {
+      setUploadMsg(`❌ ${(e as Error).message}`)
+    } finally { setActing(false) }
   }
 
   const c = detail?.company
@@ -161,6 +210,29 @@ export default function EmailMarketingBasePage() {
               {uploadMsg && <div className="mt-3 text-xs rounded-lg bg-muted/50 p-3 leading-relaxed">{uploadMsg}</div>}
             </div>
 
+            {/* Tabs: База / Корзина */}
+            <div className="flex items-center gap-1 mb-3">
+              {[
+                { key: false, label: "База", count: stats.companies },
+                { key: true, label: "Корзина", count: trashCount },
+              ].map((tab) => (
+                <button
+                  key={String(tab.key)}
+                  onClick={() => setTrashed(tab.key)}
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    trashed === tab.key ? "bg-violet-600 text-white" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                  }`}
+                >
+                  {tab.label}
+                  {tab.count > 0 && (
+                    <span className={`text-xs tabular-nums rounded-full px-1.5 ${trashed === tab.key ? "bg-white/25" : "bg-muted"}`}>
+                      {tab.count.toLocaleString("ru")}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
             {/* Search + filters + table */}
             <div className="rounded-xl border border-border shadow-sm bg-card mb-6">
               <div className="p-4 border-b border-border flex items-center gap-3 flex-wrap">
@@ -178,10 +250,52 @@ export default function EmailMarketingBasePage() {
                 )}
                 <span className="ml-auto text-xs text-muted-foreground">{loading ? "загрузка…" : `показано ${items.length} из ${total.toLocaleString("ru")}`}</span>
               </div>
+
+              {/* Панель массовых действий */}
+              {selectedCount > 0 && (
+                <div className="px-4 py-2.5 border-b border-border bg-violet-50 dark:bg-violet-950/30 flex items-center gap-2.5 text-sm">
+                  <span className="font-medium">Выбрано {selectedCount.toLocaleString("ru")}</span>
+                  {!trashed ? (
+                    <button onClick={() => doBulk("trash")} disabled={acting}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white text-xs font-medium px-3 py-1.5 transition-colors">
+                      {acting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}В корзину
+                    </button>
+                  ) : (
+                    <>
+                      <button onClick={() => doBulk("restore")} disabled={acting}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-border hover:bg-muted/60 disabled:opacity-60 text-xs font-medium px-3 py-1.5 transition-colors">
+                        {acting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}Восстановить
+                      </button>
+                      <button onClick={() => doBulk("delete")} disabled={acting}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white text-xs font-medium px-3 py-1.5 transition-colors">
+                        {acting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}Удалить навсегда
+                      </button>
+                    </>
+                  )}
+                  <button onClick={clearSelection} className="ml-auto text-xs text-muted-foreground hover:text-foreground">Снять выделение</button>
+                </div>
+              )}
+
+              {/* Баннер «выбрать все N» (когда выбрана вся страница, а в базе больше) */}
+              {allLoadedSelected && !selectAllMatching && total > items.length && (
+                <div className="px-4 py-2 border-b border-border bg-muted/40 text-xs text-center">
+                  Выбрана вся страница ({items.length}).{" "}
+                  <button onClick={() => setSelectAllMatching(true)} className="text-violet-600 font-medium hover:underline">
+                    Выбрать все {total.toLocaleString("ru")}
+                  </button>
+                </div>
+              )}
+
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-xs text-muted-foreground border-b border-border">
+                      <th className="px-4 py-2.5 w-10">
+                        <input type="checkbox" aria-label="Выбрать все на странице"
+                          checked={selectAllMatching || allLoadedSelected}
+                          onChange={toggleAllLoaded}
+                          className="accent-violet-600 w-4 h-4 cursor-pointer align-middle" />
+                      </th>
                       <th className="px-4 py-2.5 font-medium">Компания</th>
                       <th className="px-4 py-2.5 font-medium">ИНН</th>
                       <th className="px-4 py-2.5 font-medium">Регион</th>
@@ -193,7 +307,13 @@ export default function EmailMarketingBasePage() {
                   </thead>
                   <tbody>
                     {items.map((r) => (
-                      <tr key={r.id} onClick={() => openDetail(r.id)} className="border-b border-border/50 hover:bg-muted/30 cursor-pointer">
+                      <tr key={r.id} onClick={() => openDetail(r.id)} className={`border-b border-border/50 hover:bg-muted/30 cursor-pointer ${(selectAllMatching || selected.has(r.id)) ? "bg-violet-50/60 dark:bg-violet-950/20" : ""}`}>
+                        <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                          <input type="checkbox" aria-label="Выбрать компанию"
+                            checked={selectAllMatching || selected.has(r.id)}
+                            onChange={() => toggleRow(r.id)}
+                            className="accent-violet-600 w-4 h-4 cursor-pointer align-middle" />
+                        </td>
                         <td className="px-4 py-2.5 font-medium max-w-[280px] truncate" title={displayName(r.name)}>{displayName(r.name)}</td>
                         <td className="px-4 py-2.5 tabular-nums text-muted-foreground">{r.inn || "—"}</td>
                         <td className="px-4 py-2.5 text-muted-foreground max-w-[160px] truncate" title={r.region || ""}>{r.region || "—"}</td>
@@ -204,7 +324,9 @@ export default function EmailMarketingBasePage() {
                       </tr>
                     ))}
                     {!loading && !items.length && (
-                      <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">Ничего не найдено — измените фильтры или загрузите xlsx выше.</td></tr>
+                      <tr><td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
+                        {trashed ? "Корзина пуста." : "Ничего не найдено — измените фильтры или загрузите xlsx выше."}
+                      </td></tr>
                     )}
                   </tbody>
                 </table>

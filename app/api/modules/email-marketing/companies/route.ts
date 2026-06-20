@@ -1,11 +1,12 @@
 import { NextRequest } from "next/server"
-import { and, eq, ilike, or, sql, desc } from "drizzle-orm"
+import { and, eq, ilike, or, sql, desc, isNull, isNotNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { outreachCompanies, outreachContacts } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { requireOutreachAccess } from "@/lib/outreach/access"
 
-// GET ?q=&limit=&offset= — страница единой базы компаний + агрегаты.
+// GET ?q=&inn=&region=&trashed=&limit=&offset= — страница единой базы компаний + агрегаты.
+// trashed=1 → показываем корзину (deleted_at IS NOT NULL), иначе активные.
 export async function GET(req: NextRequest) {
   try {
     const user = await requireOutreachAccess()
@@ -13,13 +14,17 @@ export async function GET(req: NextRequest) {
     const q = (sp.get("q") || "").trim()
     const innFilter = (sp.get("inn") || "").trim()
     const regionFilter = (sp.get("region") || "").trim()
+    const trashed = sp.get("trashed") === "1"
     const limit = Math.min(Number(sp.get("limit") || 50), 200)
     const offset = Math.max(Number(sp.get("offset") || 0), 0)
 
     const base = eq(outreachCompanies.companyId, user.companyId)
+    // Активные или корзина — по deleted_at.
+    const trashFilter = trashed ? isNotNull(outreachCompanies.deletedAt) : isNull(outreachCompanies.deletedAt)
     // and() игнорирует undefined-условия → собираем фильтры по наличию.
     const where = and(
       base,
+      trashFilter,
       q ? or(ilike(outreachCompanies.name, `%${q}%`), ilike(outreachCompanies.inn, `%${q}%`)) : undefined,
       innFilter ? ilike(outreachCompanies.inn, `%${innFilter}%`) : undefined,
       regionFilter ? ilike(outreachCompanies.region, `%${regionFilter}%`) : undefined,
@@ -45,13 +50,19 @@ export async function GET(req: NextRequest) {
       .offset(offset)
 
     const totalRow = await db.select({ n: sql<number>`count(*)::int` }).from(outreachCompanies).where(where)
+    // Карточки-агрегаты считаем по АКТИВНЫМ (без корзины) — корзина отдельным счётчиком.
+    const active = and(base, isNull(outreachCompanies.deletedAt))
     const statsRow = await db
       .select({
         companies: sql<number>`count(*)::int`,
         withInn: sql<number>`count(${outreachCompanies.innNorm})::int`,
       })
       .from(outreachCompanies)
-      .where(base)
+      .where(active)
+    const trashRow = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(outreachCompanies)
+      .where(and(base, isNotNull(outreachCompanies.deletedAt)))
     const contactsRow = await db
       .select({ n: sql<number>`count(*)::int` })
       .from(outreachContacts)
@@ -60,6 +71,7 @@ export async function GET(req: NextRequest) {
     return apiSuccess({
       items,
       total: totalRow[0]?.n ?? 0,
+      trashCount: trashRow[0]?.n ?? 0,
       stats: {
         companies: statsRow[0]?.companies ?? 0,
         withInn: statsRow[0]?.withInn ?? 0,
