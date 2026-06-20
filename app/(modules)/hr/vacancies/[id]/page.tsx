@@ -2988,6 +2988,7 @@ export default function VacancyPage() {
                   descriptionJson={apiVacancy?.descriptionJson}
                   aiQualityDetails={(apiVacancy as { aiQualityDetails?: unknown } | undefined)?.aiQualityDetails}
                   aiQualityAnalyzedAt={(apiVacancy as { aiQualityAnalyzedAt?: string | null } | undefined)?.aiQualityAnalyzedAt ?? null}
+                  portraitScoring={(apiVacancy as { portraitScoring?: boolean } | undefined)?.portraitScoring}
                   onTitleChange={(t) => { if (t) setInternalName(t) }}
                   onNavigateTab={(tab) => { setActiveTab(tab); window.scrollTo({ top: 0, behavior: "smooth" }) }}
                   onScoreChange={setAdvisorScore}
@@ -3981,7 +3982,11 @@ export default function VacancyPage() {
 
                 {/* ───────── ТАБ «Кого ищем» (R4 Candidate Spec, новый контур) ───────── */}
                 {settingsSection === "spec" && (
-                  <SpecEditor vacancyId={id} />
+                  <SpecEditor
+                    vacancyId={id}
+                    portraitScoring={(apiVacancy as { portraitScoring?: boolean } | undefined)?.portraitScoring}
+                    onAdopted={refetchVacancy}
+                  />
                 )}
 
                 {/* ───────── ТАБ «Дожим» ───────── */}

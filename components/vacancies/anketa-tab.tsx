@@ -1044,6 +1044,8 @@ interface AnketaTabProps {
   /** P0-28: pre-warmed AI-кеш из vacancies.ai_quality_*. */
   aiQualityDetails?: unknown
   aiQualityAnalyzedAt?: string | null
+  /** vacancies.portrait_scoring — на контуре «Портрет» legacy-блоки оценки прячем. */
+  portraitScoring?: boolean
   onTitleChange?: (title: string) => void
   onNavigateTab?: (tab: string) => void
   onScoreChange?: (score: { score: number; label: string }) => void
@@ -1097,15 +1099,17 @@ function ScoringStrictness({ data }: { data: AnketaData }) {
   )
 }
 
-export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQualityAnalyzedAt, onTitleChange, onNavigateTab, onScoreChange, onSavingChange, registerHandle }: AnketaTabProps) {
+export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQualityAnalyzedAt, portraitScoring, onTitleChange, onNavigateTab, onScoreChange, onSavingChange, registerHandle }: AnketaTabProps) {
   const [data, setData] = useState<AnketaData>(() => {
     const saved = (descriptionJson as Record<string, unknown>)?.anketa as Record<string, unknown> | undefined
     return saved ? migrateAnketa(saved) : emptyAnketa()
   })
   // Legacy-блоки скоринга (навыки-«запасной вариант» + «Портрет: AI-оценка») дублируют
-  // таб «Портрет» — временно показываем только владельцу, пока строим единую панель.
+  // таб «Портрет» — показываем только владельцу. На вакансиях контура «Портрет»
+  // (portrait_scoring=true) эти блоки НЕ действуют (Spec перекрывает) → прячем,
+  // чтобы не вводить в заблуждение.
   const { user } = useAuth()
-  const showLegacyScoring = isOwnerEmail(user?.email)
+  const showLegacyScoring = isOwnerEmail(user?.email) && portraitScoring !== true
   const [saving, setSaving] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   // Полноэкранный режим предпросмотра (верхняя кнопка тулбара). Нижняя кнопка

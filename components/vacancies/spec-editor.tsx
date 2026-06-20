@@ -12,8 +12,10 @@
  *     legacy-настроек (показываем бейдж «проверьте и сохраните»)
  * Сохранение: PUT /api/core/spec/[vacancyId] (zod-валидация на сервере).
  *
- * ВАЖНО: рантайм скоринга этот Spec пока НЕ читает (спящий контур).
- * Legacy-формы (Портрет, AI-профиль, блоки воронки) продолжают работать.
+ * КОНТУР: при vacancies.portrait_scoring=true рантайм скоринга резюме читает
+ * этот Spec ПОЛНОСТЬЮ — критерии, пороги (resumeThresholds), жёсткость (hard/soft).
+ * При false действует legacy (ai_process_settings + конструктор). Кнопка
+ * «Перенести в Портрет» (portraitScoring=false) переводит вакансию на новый контур.
  */
 
 import { useEffect, useState } from "react"
@@ -36,7 +38,7 @@ import {
 import { toast } from "sonner"
 import {
   Target, Plus, X, Loader2, ShieldAlert, FileText, Gauge,
-  ArrowRightLeft, AlertTriangle, Sparkles, Wand2,
+  ArrowRightLeft, AlertTriangle, Sparkles, Wand2, CheckCircle2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -405,9 +407,25 @@ function SuggestionDialog({
 interface SpecEditorProps {
   vacancyId: string
   onSaved?:  () => void
+  /** vacancies.portrait_scoring — оценивается ли вакансия из «Портрета» (новый контур). */
+  portraitScoring?: boolean
+  /** Вызвать после успешного «Перенести в Портрет» (рефетч вакансии). */
+  onAdopted?: () => void
 }
 
-export function SpecEditor({ vacancyId, onSaved }: SpecEditorProps) {
+export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: SpecEditorProps) {
+  const [adopting, setAdopting] = useState(false)
+  async function adoptPortrait() {
+    setAdopting(true)
+    try {
+      const r = await fetch(`/api/modules/hr/vacancies/${vacancyId}/portrait-adopt`, { method: "POST" }).then(x => x.json())
+      if (r?.error) { toast.error(r.error); return }
+      toast.success("Вакансия переведена на «Портрет» — оценка идёт отсюда")
+      onAdopted?.()
+    } catch (e) {
+      toast.error("Не удалось перевести: " + (e as Error).message)
+    } finally { setAdopting(false) }
+  }
   const [spec, setSpec]     = useState<CandidateSpec | null>(null)
   const [source, setSource] = useState<"spec" | "legacy" | null>(null)
   const [loaded, setLoaded] = useState(false)
@@ -599,6 +617,29 @@ export function SpecEditor({ vacancyId, onSaved }: SpecEditorProps) {
 
   return (
     <div className="space-y-6 max-w-3xl">
+      {/* Контур оценки: «Портрет» (активен) либо предложение перенести */}
+      {portraitScoring === true && (
+        <div className="rounded-lg border border-emerald-300 bg-emerald-50 dark:bg-emerald-950/20 px-3 py-2.5 flex items-center gap-2 text-sm text-emerald-900 dark:text-emerald-300">
+          <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+          <span>Оценка резюме идёт <b>только из «Портрета»</b> — критерии, пороги и жёсткость берутся отсюда.</span>
+        </div>
+      )}
+      {portraitScoring === false && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 px-3 py-3 flex items-start gap-2.5 text-sm">
+          <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <div className="font-medium text-amber-900 dark:text-amber-300">Вакансия на старом контуре оценки</div>
+            <div className="text-amber-800 dark:text-amber-400/90 text-xs mt-0.5">
+              Отбор управляется старыми настройками («Воронка» + конструктор). Перенесите на «Портрет», чтобы оценка шла только отсюда — текущие критерии и пороги сохранятся.
+            </div>
+          </div>
+          <Button size="sm" onClick={adoptPortrait} disabled={adopting} className="shrink-0">
+            {adopting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRightLeft className="w-4 h-4" />}
+            Перенести в Портрет
+          </Button>
+        </div>
+      )}
+
       {/* Заголовок секции */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
