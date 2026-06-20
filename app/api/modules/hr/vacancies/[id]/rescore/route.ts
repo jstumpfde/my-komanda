@@ -40,6 +40,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         title: vacancies.title,
         city: vacancies.city,
         companyId: vacancies.companyId,
+        portraitScoring: vacancies.portraitScoring,
       })
       .from(vacancies)
       .where(eq(vacancies.id, vacancyId))
@@ -95,7 +96,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             }
             const r = await screenResume(
               useSpecForResume && specForResume
-                ? buildSpecResumeInput(resumeForScreen, { title: vac.title, city: vac.city }, specForResume)
+                ? buildSpecResumeInput(resumeForScreen, { title: vac.title, city: vac.city }, specForResume, { respectHardness: vac.portraitScoring === true })
                 : {
                     resume: resumeForScreen,
                     vacancy: {

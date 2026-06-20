@@ -14,6 +14,8 @@ import {
   normalizeFunnelConfig,
 } from "@/lib/funnel-builder/blocks"
 import { buildDefaultAnketaQuestions } from "@/lib/funnel-builder/anketa-defaults"
+import { buildSpecFromLegacy } from "@/lib/core/spec/from-legacy"
+import { saveSpec } from "@/lib/core/spec/store"
 
 // Transliterate Russian text to Latin for slug generation
 function transliterate(text: string): string {
@@ -148,6 +150,8 @@ export async function POST(req: NextRequest) {
       slug,
       aiScoringEnabled: false,
       autoProcessingEnabled: false,
+      // Новые вакансии — на контуре «Портрет»: оценка только из vacancy_specs.
+      portraitScoring: true,
       aiProcessSettings: {
         enabled: false,
         midRangeAction: "direct_demo",
@@ -278,6 +282,22 @@ export async function POST(req: NextRequest) {
     })
 
     console.log("[POST /api/modules/hr/vacancies] created:", vacancy.id, "short:", vacancy.shortCode)
+
+    // Контур «Портрет»: новой вакансии сразу создаём Spec из её полей
+    // (буквально дефолтный, т.к. вакансия только создана). Без записи в
+    // vacancy_specs флаг portrait_scoring не активируется (рантайм падал бы
+    // в legacy). Не критично к сбою — вакансия уже создана.
+    try {
+      const spec = buildSpecFromLegacy({
+        requirementsJson:  vacancy.requirementsJson,
+        aiProcessSettings: vacancy.aiProcessSettings as Record<string, unknown> | null,
+        stopFactorsJson:   vacancy.stopFactorsJson,
+        descriptionJson:   vacancy.descriptionJson as Record<string, unknown> | null,
+      })
+      await saveSpec(vacancy.id, spec, user.id)
+    } catch (specErr) {
+      console.warn("[POST /api/modules/hr/vacancies] auto-spec failed:", specErr)
+    }
 
     logActivity({ companyId: user.companyId, userId: user.id!, action: "create", entityType: "vacancy", entityId: vacancy.id, entityTitle: vacancy.title, module: "hr", request: req })
     return apiSuccess(vacancy, 201)
