@@ -48,10 +48,13 @@ export function AdminNav() {
     // не двигало контент — раскрытое меню ложится оверлеем.
     <div
       className={cn("relative shrink-0 transition-[width] duration-200", collapsed ? "w-14" : "w-52")}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
     >
       <nav
+        // Обработчики hover — на самом nav (он расширяется до w-52 оверлеем), а НЕ на
+        // внешней w-14 обёртке: иначе при наведении на раскрытую часть (за пределами
+        // w-14) срабатывал onMouseLeave → меню мерцало и не разворачивалось.
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
         className={cn(
           "h-full border-r border-border bg-background py-3 overflow-y-auto overflow-x-hidden transition-[width] duration-200",
           expanded ? "w-52" : "w-14",
