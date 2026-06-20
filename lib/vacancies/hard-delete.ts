@@ -66,8 +66,12 @@ export async function hardDeleteVacancy(
     // Зависимые строки — порядок важен (сначала дети, потом вакансия).
     await safeExec(tx, sql`DELETE FROM follow_up_messages WHERE candidate_id IN (SELECT id FROM candidates WHERE vacancy_id = ${vacancyId})`)
     await safeExec(tx, sql`DELETE FROM hh_responses WHERE local_candidate_id IN (SELECT id FROM candidates WHERE vacancy_id = ${vacancyId})`)
+    // hh_candidates → FK на candidates (NO ACTION) — снести до кандидатов, иначе блок удаления.
+    await safeExec(tx, sql`DELETE FROM hh_candidates WHERE candidate_id IN (SELECT id FROM candidates WHERE vacancy_id = ${vacancyId})`)
     await safeExec(tx, sql`DELETE FROM candidates WHERE vacancy_id = ${vacancyId}`)
     await safeExec(tx, sql`DELETE FROM demos WHERE vacancy_id = ${vacancyId}`)
+    // predictive_hiring_alerts → FK на vacancies (NO ACTION) — снести до самой вакансии.
+    await safeExec(tx, sql`DELETE FROM predictive_hiring_alerts WHERE vacancy_id = ${vacancyId}`)
     // hh_vacancies: колонка-ссылка отличается между окружениями — пробуем обе.
     await safeExec(tx, sql`DELETE FROM hh_vacancies WHERE vacancy_id = ${vacancyId}`)
     await safeExec(tx, sql`DELETE FROM hh_vacancies WHERE local_vacancy_id = ${vacancyId}`)
