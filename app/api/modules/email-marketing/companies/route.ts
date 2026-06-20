@@ -11,13 +11,19 @@ export async function GET(req: NextRequest) {
     const user = await requireOutreachAccess()
     const sp = req.nextUrl.searchParams
     const q = (sp.get("q") || "").trim()
+    const innFilter = (sp.get("inn") || "").trim()
+    const regionFilter = (sp.get("region") || "").trim()
     const limit = Math.min(Number(sp.get("limit") || 50), 200)
     const offset = Math.max(Number(sp.get("offset") || 0), 0)
 
     const base = eq(outreachCompanies.companyId, user.companyId)
-    const where = q
-      ? and(base, or(ilike(outreachCompanies.name, `%${q}%`), ilike(outreachCompanies.inn, `%${q}%`)))
-      : base
+    // and() игнорирует undefined-условия → собираем фильтры по наличию.
+    const where = and(
+      base,
+      q ? or(ilike(outreachCompanies.name, `%${q}%`), ilike(outreachCompanies.inn, `%${q}%`)) : undefined,
+      innFilter ? ilike(outreachCompanies.inn, `%${innFilter}%`) : undefined,
+      regionFilter ? ilike(outreachCompanies.region, `%${regionFilter}%`) : undefined,
+    )
 
     const items = await db
       .select({
