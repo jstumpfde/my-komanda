@@ -240,7 +240,7 @@ export default function EmailMarketingBasePage() {
 
       {/* Боковая панель компании — детали + контакты */}
       <Sheet open={!!sheetId} onOpenChange={(o) => { if (!o) { setSheetId(null); setDetail(null) } }}>
-        <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+        <SheetContent side="right" className="w-full sm:max-w-3xl overflow-y-auto">
           <SheetHeader>
             <SheetTitle className="flex items-center gap-2 pr-6">
               <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
@@ -310,10 +310,12 @@ export default function EmailMarketingBasePage() {
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  // Ярлык над значением (не «значение вправо») — длинные адреса/имена не жмутся,
+  // просторно как в карточке кандидата.
   return (
-    <div className="flex justify-between gap-4 py-2 text-sm">
-      <dt className="text-muted-foreground shrink-0">{label}</dt>
-      <dd className="text-right break-words min-w-0">{children}</dd>
+    <div className="py-2.5 text-sm">
+      <dt className="text-xs text-muted-foreground mb-0.5">{label}</dt>
+      <dd className="break-words leading-snug">{children}</dd>
     </div>
   )
 }

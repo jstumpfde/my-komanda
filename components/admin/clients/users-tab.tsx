@@ -501,7 +501,7 @@ export function UsersTab({ trashed = false }: { trashed?: boolean }) {
 
       {/* Боковая панель пользователя (клик по строке) — единый стиль с компанией/кандидатом */}
       <Sheet open={!!sheetUser} onOpenChange={(o) => { if (!o) setSheetUser(null) }}>
-        <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+        <SheetContent side="right" className="w-full sm:max-w-3xl overflow-y-auto">
           {sheetUser && (() => {
             const blocked = sheetUser.isActive === false
             const u = sheetUser

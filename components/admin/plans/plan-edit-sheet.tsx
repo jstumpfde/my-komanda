@@ -118,7 +118,7 @@ export function PlanEditSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+      <SheetContent side="right" className="w-full sm:max-w-3xl overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2 pr-6">
             <Package className="h-5 w-5 text-muted-foreground shrink-0" />
