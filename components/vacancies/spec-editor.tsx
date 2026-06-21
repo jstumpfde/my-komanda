@@ -802,19 +802,22 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
               </p>
             </div>
 
-            <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
+            {/* Одна колонка: подпись + 4 равных сегмента-чипа во всю строку (выравнены
+                по вертикали как матрица, не вылазят за рамку). На узком экране подпись
+                встаёт над чипами. */}
+            <div className="space-y-1.5">
               {(Object.keys(WEIGHT_LABELS) as (keyof ScoringWeights)[]).map(k => {
                 const v = spec.scoringWeights[k]
                 const active = weightChipActive(v)
                 return (
-                  <div key={k} className="flex items-center justify-between gap-2">
-                    <span className="text-xs shrink-0 truncate">{WEIGHT_LABELS[k]}</span>
-                    <div className="flex gap-1 shrink-0">
+                  <div key={k} className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+                    <span className="text-xs text-muted-foreground sm:w-44 sm:shrink-0">{WEIGHT_LABELS[k]}</span>
+                    <div className="grid grid-cols-4 gap-1 sm:flex-1">
                       {WEIGHT_CHIPS.map(c => (
                         <button key={c.label} type="button"
                           onClick={() => patch({ scoringWeights: { ...spec.scoringWeights, [k]: c.value } })}
                           className={cn(
-                            "text-[11px] px-2 py-0.5 rounded-md border transition-colors",
+                            "text-[11px] px-1.5 py-1 rounded-md border text-center truncate transition-colors",
                             active === c.label
                               ? "bg-primary text-primary-foreground border-transparent"
                               : "text-muted-foreground border-border hover:text-foreground",
