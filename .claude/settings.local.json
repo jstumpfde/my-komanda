@@ -43,7 +43,9 @@
       "mcp__playwright__browser_fill_form",
       "mcp__playwright__browser_run_code_unsafe",
       "mcp__visualize__read_me",
-      "mcp__visualize__show_widget"
+      "mcp__visualize__show_widget",
+      "Monitor",
+      "mcp__Claude_Preview"
     ]
   }
 }
