@@ -49,7 +49,7 @@ import {
   type ScoringWeights,
   type MidRangeAction,
 } from "@/lib/core/spec/types"
-import { importanceLabel, computeRealism, REALISM_TONE_CLASS } from "./spec-editor-helpers"
+import { computeRealism, REALISM_TONE_CLASS } from "./spec-editor-helpers"
 import { useVacancySectionRegister } from "./vacancy-settings-context"
 
 // ─── Константы ───────────────────────────────────────────────────────────────
@@ -64,6 +64,21 @@ const WEIGHT_LABELS: Record<keyof ScoringWeights, string> = {
   managerial_match:    "Управленческий опыт",
   education:           "Образование",
   location_readiness:  "Готовность к локации",
+}
+
+// Важность критериев — чипами вместо ползунков (решение Юрия 21.06: «градусы шкалы
+// непонятны»). Чип задаёт числовой вес (движок читает scoringWeights как раньше).
+const WEIGHT_CHIPS = [
+  { label: "Не важно",   value: 0  },
+  { label: "Желательно", value: 10 },
+  { label: "Важно",      value: 20 },
+  { label: "Критично",   value: 33 },
+] as const
+function weightChipActive(v: number): string {
+  if (v >= 27) return "Критично"
+  if (v >= 15) return "Важно"
+  if (v >= 5)  return "Желательно"
+  return "Не важно"
 }
 
 const MID_RANGE_LABELS: Record<MidRangeAction, string> = {
@@ -465,11 +480,6 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
 
   // Веса теперь независимы (Σ=100 снято, решение #4). Сумма нужна лишь для
   // отображения доли каждой оси «%». Движок нормирует на фактическую сумму.
-  const weightSum = spec
-    ? (Object.keys(spec.scoringWeights) as (keyof ScoringWeights)[])
-        .reduce((s, k) => s + (spec.scoringWeights[k] ?? 0), 0)
-    : 0
-
   // ── Сохранение ─────────────────────────────────────────────────────────────
   const save = async () => {
     if (!spec) return
@@ -753,8 +763,8 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
             <Sparkles className="w-4 h-4" /> Критерии оценки
           </CardTitle>
           <CardDescription>
-            Что AI проверяет в резюме и анкете. Must-have активирует
-            структурированный скоринг v2. Все списки учитываются вместе (И).
+            Что хотим видеть и чего избегаем. Обязательные с «Жёстким» отсекают,
+            остальное влияет на балл. Все списки учитываются вместе (И).
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -765,16 +775,16 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
             placeholders={LIST_PLACEHOLDERS.must}
           />
           <ListEditor
-            label="Желательные (nice-to-have)"
-            hint="Повышают оценку, но не дисквалифицируют. Можно фразой."
+            label="Влияют на балл"
+            hint="Есть в резюме — плюс к баллу, нет — ниже, но не отказ. Можно фразой."
             maxItems={10}
             items={spec.niceToHave}
             setItems={v => patch({ niceToHave: v })}
             placeholders={LIST_PLACEHOLDERS.nice}
           />
           <ListEditor
-            label="Неприемлемо (deal-breakers)"
-            hint="При совпадении — отказ, даже если общий балл высокий. Можно фразой."
+            label="Неприемлемо"
+            hint="Отказ — только если AI прямо видит это в резюме. Сомнительное уточнит бот. Можно фразой."
             maxItems={10}
             items={spec.dealBreakers}
             setItems={v => patch({ dealBreakers: v })}
@@ -783,73 +793,33 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
 
           {/* Веса критериев — независимые оси 0–100 (Σ=100 снято) */}
           <div className="space-y-3 pt-2 border-t">
-            <div className="flex items-baseline justify-between">
+            <div>
               <Label className="text-sm font-medium">Важность критериев</Label>
-              <span className="text-xs text-muted-foreground tabular-nums">
-                Σ = {weightSum}
-              </span>
-            </div>
-            <p className="text-[11px] text-muted-foreground">
-              Оси независимы 0–100 — суммировать к 100 не нужно. AI взвешивает
-              относительно: доля каждой оси = вес ÷ сумма всех весов.
-            </p>
-
-            {/* Режим подачи важности AI */}
-            <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2">
-              <div>
-                <Label className="text-xs font-medium">Передавать важность AI</Label>
-                <p className="text-[11px] text-muted-foreground">
-                  {spec.weightMode === "percent"
-                    ? "Числом/процентом — точная относительная доля каждой оси"
-                    : "Тремя уровнями — «Важно / Критично / Обязательно» (грубее, стабильнее)"}
-                </p>
-              </div>
-              <div className="flex shrink-0 rounded-md border p-0.5 text-[11px]">
-                <button
-                  type="button"
-                  onClick={() => patch({ weightMode: "percent" })}
-                  className={cn(
-                    "rounded px-2 py-1 transition-colors",
-                    spec.weightMode === "percent"
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  Число/процент
-                </button>
-                <button
-                  type="button"
-                  onClick={() => patch({ weightMode: "level" })}
-                  className={cn(
-                    "rounded px-2 py-1 transition-colors",
-                    spec.weightMode === "level"
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  3 уровня
-                </button>
-              </div>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Насколько каждая ось тянет балл. Это вес влияния, не отсев.
+              </p>
             </div>
 
-            <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3">
+            <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
               {(Object.keys(WEIGHT_LABELS) as (keyof ScoringWeights)[]).map(k => {
                 const v = spec.scoringWeights[k]
-                const share = weightSum > 0 ? Math.round((v / weightSum) * 100) : 0
+                const active = weightChipActive(v)
                 return (
-                  <div key={k} className="space-y-1">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span className="text-xs">{WEIGHT_LABELS[k]}</span>
-                      <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-                        {v} · {share}%
-                      </span>
+                  <div key={k} className="flex items-center justify-between gap-2">
+                    <span className="text-xs shrink-0 truncate">{WEIGHT_LABELS[k]}</span>
+                    <div className="flex gap-1 shrink-0">
+                      {WEIGHT_CHIPS.map(c => (
+                        <button key={c.label} type="button"
+                          onClick={() => patch({ scoringWeights: { ...spec.scoringWeights, [k]: c.value } })}
+                          className={cn(
+                            "text-[11px] px-2 py-0.5 rounded-md border transition-colors",
+                            active === c.label
+                              ? "bg-primary text-primary-foreground border-transparent"
+                              : "text-muted-foreground border-border hover:text-foreground",
+                          )}
+                        >{c.label}</button>
+                      ))}
                     </div>
-                    <Slider
-                      value={[v]}
-                      onValueChange={([nv]) => patch({ scoringWeights: { ...spec.scoringWeights, [k]: nv } })}
-                      min={0} max={100} step={1}
-                    />
-                    <span className="text-[11px] text-muted-foreground">{importanceLabel(v)}</span>
                   </div>
                 )
               })}

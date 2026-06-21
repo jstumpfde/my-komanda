@@ -2860,11 +2860,11 @@ export default function VacancyPage() {
               {/* v2: плоский ряд из 10 под-табов — виден когда активна группа «Настройки» */}
               {navV2 && ["anketa", "content", "queue", "outbound", "settings"].includes(activeTab) && (() => {
                 const settingsSubTabs = [
-                  /* Порядок по ТЗ #26: Вакансия · Контент · Исходящий подбор · Портрет · Воронка · Источники · Расписание · Интеграции · Брендинг · Очередь */
+                  /* Портрет — вторым после «Вакансия» (решение Юрия 21.06): сначала кого ищем, затем процесс */
                   { kind: "tab",     value: "anketa"  , label: "Вакансия",        icon: ClipboardList, section: null             },
+                  { kind: "section", value: "settings", label: "Портрет",          icon: Target,        section: "spec"           },
                   { kind: "tab",     value: "content" , label: "Контент",          icon: BookOpen,      section: null             },
                   { kind: "tab",     value: "outbound", label: "Исходящий подбор", icon: UserSearch,    section: null             },
-                  { kind: "section", value: "settings", label: "Портрет",          icon: Target,        section: "spec"           },
                   { kind: "section", value: "settings", label: "Воронка",          icon: Workflow,      section: "funnel-builder" },
                   { kind: "section", value: "settings", label: "Источники",        icon: Link2,         section: "sources"        },
                   { kind: "section", value: "settings", label: "Расписание",       icon: Clock,         section: "ai"             },
