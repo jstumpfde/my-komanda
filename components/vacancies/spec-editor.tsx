@@ -624,6 +624,8 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
     const current = (sf[key] ?? { enabled: false }) as Record<string, unknown>
     setSf({ ...sf, [key]: { ...current, enabled: on } } as CandidateSpec["stopFactors"])
   }
+  const enabledFactorCount = (Object.values(sf) as Array<{ enabled?: boolean } | undefined>)
+    .filter(f => f?.enabled).length
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -964,6 +966,22 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
           </p>
         </CardContent>
       </Card>
+
+      {/* ── Итог: что реально отсеется автоматически (safety-first: «режем только очевидное») ── */}
+      <div className="rounded-lg border bg-muted/30 px-3.5 py-3 space-y-1.5">
+        <div className="font-medium text-sm flex items-center gap-2">
+          <ShieldAlert className="w-4 h-4 text-primary" /> Что отсеется автоматически
+        </div>
+        <ul className="space-y-1 text-xs text-muted-foreground">
+          <li>• <b className="text-foreground">Стоп-факторы</b> ({enabledFactorCount} вкл.) — формальное несоответствие, отказ сразу.</li>
+          <li>• <b className="text-foreground">Неприемлемо</b> ({spec.dealBreakers.length}) — отказ, только если AI прямо видит это в резюме.</li>
+          {spec.resumeThresholds.autoRejectEnabled ? (
+            <li>• <b className="text-foreground">Низкий балл</b> (&lt;{spec.resumeThresholds.lowerThreshold}) — авто-отказ <b className="text-amber-700 dark:text-amber-400">включён</b>.</li>
+          ) : (
+            <li>• <b className="text-foreground">Низкий балл</b> — <b className="text-emerald-700 dark:text-emerald-400">не отказ</b>: уходит в ручной разбор, спорное уточнит бот.</li>
+          )}
+        </ul>
+      </div>
 
       {/* ── (в) Пороги — две карточки рядом ── */}
       <div className="grid md:grid-cols-2 gap-4">
