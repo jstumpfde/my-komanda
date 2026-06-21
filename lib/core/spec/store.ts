@@ -13,7 +13,7 @@ import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancySpecs } from "@/lib/db/schema"
 import type { CandidateSpec } from "./types"
-import { normalizeMustHave } from "./types"
+import { normalizeMustHave, normalizeNiceToHave, normalizeDealBreakers } from "./types"
 
 // ─── Чтение ──────────────────────────────────────────────────────────────────
 
@@ -43,13 +43,17 @@ export async function saveSpec(
   spec:      CandidateSpec,
   userId?:   string,
 ): Promise<void> {
-  // Нормализуем mustHave к единому формату { text, hard } этапа 2:
-  // строки (legacy / старые сохранённые Spec) → { text, hard: true }.
-  // Хранение в одном формате упрощает рантайм-читатели.
+  // Нормализуем списки критериев к каноническому формату объектов:
+  // mustHave → { text, hard }, niceToHave → { text, importance },
+  // dealBreakers → { text, hard }. Строки (legacy) разворачиваются в объекты
+  // с дефолтами (hard:true / importance:"nice"). Хранение в одном формате
+  // упрощает рантайм-читатели и dual-write.
   const specWithTs: CandidateSpec = {
     ...spec,
-    mustHave:  normalizeMustHave(spec.mustHave),
-    updatedAt: new Date().toISOString(),
+    mustHave:     normalizeMustHave(spec.mustHave),
+    niceToHave:   normalizeNiceToHave(spec.niceToHave),
+    dealBreakers: normalizeDealBreakers(spec.dealBreakers),
+    updatedAt:    new Date().toISOString(),
   }
 
   await db

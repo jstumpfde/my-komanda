@@ -42,11 +42,17 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
-  DEFAULT_SCORING_WEIGHTS,
   normalizeMustHave,
+  normalizeNiceToHave,
+  normalizeDealBreakers,
   type CandidateSpec,
   type MustHaveItem,
-  type ScoringWeights,
+  type MustHaveEntry,
+  type NiceToHaveItem,
+  type NiceToHaveEntry,
+  type NiceImportance,
+  type DealBreakerItem,
+  type DealBreakerEntry,
   type MidRangeAction,
 } from "@/lib/core/spec/types"
 import { computeRealism, REALISM_TONE_CLASS } from "./spec-editor-helpers"
@@ -54,32 +60,21 @@ import { useVacancySectionRegister } from "./vacancy-settings-context"
 
 // ─── Константы ───────────────────────────────────────────────────────────────
 
-const WEIGHT_LABELS: Record<keyof ScoringWeights, string> = {
-  relevant_experience: "Релевантный опыт",
-  hard_skills:         "Hard skills",
-  tenure_stability:    "Стабильность работы",
-  results_in_numbers:  "Цифры результатов",
-  soft_skills_fit:     "Soft skills fit",
-  company_size_match:  "Размер компаний",
-  managerial_match:    "Управленческий опыт",
-  education:           "Образование",
-  location_readiness:  "Готовность к локации",
-}
-
-// Важность критериев — чипами вместо ползунков (решение Юрия 21.06: «градусы шкалы
-// непонятны»). Чип задаёт числовой вес (движок читает scoringWeights как раньше).
-const WEIGHT_CHIPS = [
-  { label: "Не важно",   value: 0  },
-  { label: "Желательно", value: 10 },
-  { label: "Важно",      value: 20 },
-  { label: "Критично",   value: 33 },
+// 🟢 «Подходит» — уровни важности на пункте (перестройка 21.06). Три верхних =
+// важность (балл), «Обязательно» = жёсткий отсев (уходит в mustHave hard).
+const GOOD_LEVELS = [
+  { value: "nice",      label: "Желательно"  },
+  { value: "important", label: "Важно"       },
+  { value: "very",      label: "Очень важно" },
+  { value: "required",  label: "Обязательно" },
 ] as const
-function weightChipActive(v: number): string {
-  if (v >= 27) return "Критично"
-  if (v >= 15) return "Важно"
-  if (v >= 5)  return "Желательно"
-  return "Не важно"
-}
+type GoodLevel = (typeof GOOD_LEVELS)[number]["value"]
+
+// 🔴 «Не подходит по смыслу» — стоп-фактор (отказ) vs минус к баллу.
+const BAD_KINDS = [
+  { hard: true,  label: "Стоп-фактор"   },
+  { hard: false, label: "Минус к баллу" },
+] as const
 
 const MID_RANGE_LABELS: Record<MidRangeAction, string> = {
   direct_demo:      "Сразу на демо",
@@ -417,6 +412,173 @@ function SuggestionDialog({
   )
 }
 
+// ─── 🟢 «Подходит»: единый список с важностью на пункте ──────────────────────
+
+/**
+ * Один редактор для всего, что «хотим видеть»: объединяет mustHave (hard =
+ * «Обязательно») и niceToHave (важность на пункте). На выходе разбивает обратно
+ * в два поля Spec — «Обязательно» → mustHave {hard:true}, остальное → niceToHave
+ * {importance}. Так движок читает поля как раньше (hard must-have = нокаут).
+ */
+function GoodEditor({
+  mustHave, niceToHave, onChange,
+}: {
+  mustHave:   MustHaveEntry[]
+  niceToHave: NiceToHaveEntry[]
+  onChange:   (next: { mustHave: MustHaveItem[]; niceToHave: NiceToHaveItem[] }) => void
+}) {
+  const rows: { text: string; level: GoodLevel }[] = [
+    ...normalizeMustHave(mustHave).map(m => ({ text: m.text, level: (m.hard ? "required" : "very") as GoodLevel })),
+    ...normalizeNiceToHave(niceToHave).map(n => ({ text: n.text, level: n.importance as GoodLevel })),
+  ]
+  const commit = (next: { text: string; level: GoodLevel }[]) => {
+    const mustHave   = next.filter(r => r.level === "required").map(r => ({ text: r.text, hard: true }))
+    const niceToHave = next.filter(r => r.level !== "required").map(r => ({ text: r.text, importance: r.level as NiceImportance }))
+    // Каждое поле в Spec лимитировано zod .max(10). Если правка вытолкнет бакет
+    // за 10 (напр. >10 «Обязательно» после «Собрать из вакансии») — отклоняем с
+    // подсказкой, иначе PUT вернул бы 400 и весь Портрет молча не сохранился.
+    if (mustHave.length > 10)   { toast.error("Не больше 10 «Обязательно»"); return }
+    if (niceToHave.length > 10) { toast.error("Не больше 10 пунктов «в баллах»"); return }
+    onChange({ mustHave, niceToHave })
+  }
+  const setLevel = (i: number, level: GoodLevel) => commit(rows.map((r, idx) => idx === i ? { ...r, level } : r))
+  const remove   = (i: number) => commit(rows.filter((_, idx) => idx !== i))
+
+  const [draft, setDraft] = useState("")
+  const add = () => {
+    const t = draft.trim()
+    if (!t) return
+    if (rows.some(r => r.text.toLowerCase() === t.toLowerCase())) { toast.error("Уже есть такой пункт"); return }
+    if (rows.length >= 10) { toast.error("Максимум 10"); return }
+    commit([...rows, { text: t, level: "nice" }])
+    setDraft("")
+  }
+  const ph = LIST_PLACEHOLDERS.must[rows.length % LIST_PLACEHOLDERS.must.length] || ""
+
+  return (
+    <div className="space-y-2.5">
+      <div className="flex items-baseline justify-between">
+        <Label className="text-sm font-medium">Что хотим видеть</Label>
+        <ListCounter count={rows.length} max={10} />
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Важность — на самом пункте. «Обязательно» = без этого отказ; остальное поднимает балл, но не режет. Можно фразой.
+      </p>
+      <OverRecommendedHint count={rows.length} />
+      <div className="space-y-1.5">
+        {rows.map((r, i) => (
+          <div key={i} className="rounded-md border p-2 space-y-1.5">
+            <div className="flex items-center gap-2">
+              <span className="flex-1 text-sm min-w-0 break-words">{r.text}</span>
+              <button type="button" onClick={() => remove(i)}
+                className="rounded-full hover:bg-muted-foreground/20 p-0.5 shrink-0" aria-label={`Убрать «${r.text}»`}>
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="grid grid-cols-4 gap-1">
+              {GOOD_LEVELS.map(l => (
+                <button key={l.value} type="button" onClick={() => setLevel(i, l.value)}
+                  className={cn(
+                    "text-[11px] px-1.5 py-1 rounded-md border text-center truncate transition-colors",
+                    r.level === l.value
+                      ? (l.value === "required"
+                          ? "bg-amber-500 text-white border-transparent"
+                          : "bg-primary text-primary-foreground border-transparent")
+                      : "text-muted-foreground border-border hover:text-foreground",
+                  )}
+                >{l.label}</button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <Input value={draft} onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); add() } }}
+          placeholder={ph} maxLength={200} disabled={rows.length >= 10} className="h-9" />
+        <Button type="button" size="icon" variant="outline" onClick={add}
+          disabled={rows.length >= 10 || !draft.trim()}>
+          <Plus className="w-4 h-4" />
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+// ─── 🔴 «Не подходит по смыслу»: стоп-фактор vs минус к баллу ─────────────────
+
+function BadEditor({
+  items, onChange,
+}: {
+  items:    DealBreakerEntry[]
+  onChange: (next: DealBreakerItem[]) => void
+}) {
+  const rows = normalizeDealBreakers(items)
+  const setHard = (i: number, hard: boolean) => onChange(rows.map((r, idx) => idx === i ? { ...r, hard } : r))
+  const remove  = (i: number) => onChange(rows.filter((_, idx) => idx !== i))
+
+  const [draft, setDraft] = useState("")
+  const add = () => {
+    const t = draft.trim()
+    if (!t) return
+    if (rows.some(r => r.text.toLowerCase() === t.toLowerCase())) { toast.error("Уже есть такой пункт"); return }
+    if (rows.length >= 10) { toast.error("Максимум 10"); return }
+    onChange([...rows, { text: t, hard: true }])
+    setDraft("")
+  }
+  const ph = LIST_PLACEHOLDERS.deal[rows.length % LIST_PLACEHOLDERS.deal.length] || ""
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-baseline justify-between">
+        <Label className="text-sm font-medium">
+          По смыслу <span className="font-normal text-muted-foreground">— AI читает резюме</span>
+        </Label>
+        <ListCounter count={rows.length} max={10} />
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Стоп-фактор — отказ, только если AI прямо видит это в резюме. Минус к баллу — просто ниже балл, не отказ. Можно фразой.
+      </p>
+      <div className="space-y-1.5">
+        {rows.map((r, i) => (
+          <div key={i} className="rounded-md border p-2 space-y-1.5">
+            <div className="flex items-center gap-2">
+              <span className="flex-1 text-sm min-w-0 break-words">{r.text}</span>
+              <button type="button" onClick={() => remove(i)}
+                className="rounded-full hover:bg-muted-foreground/20 p-0.5 shrink-0" aria-label={`Убрать «${r.text}»`}>
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-1 sm:max-w-sm">
+              {BAD_KINDS.map(k => (
+                <button key={String(k.hard)} type="button" onClick={() => setHard(i, k.hard)}
+                  className={cn(
+                    "text-[11px] px-1.5 py-1 rounded-md border text-center truncate transition-colors",
+                    r.hard === k.hard
+                      ? (k.hard
+                          ? "bg-red-500 text-white border-transparent"
+                          : "bg-amber-500 text-white border-transparent")
+                      : "text-muted-foreground border-border hover:text-foreground",
+                  )}
+                >{k.label}</button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <Input value={draft} onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); add() } }}
+          placeholder={ph} maxLength={200} disabled={rows.length >= 10} className="h-9" />
+        <Button type="button" size="icon" variant="outline" onClick={add}
+          disabled={rows.length >= 10 || !draft.trim()}>
+          <Plus className="w-4 h-4" />
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Главный компонент ───────────────────────────────────────────────────────
 
 interface SpecEditorProps {
@@ -626,6 +788,9 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
   }
   const enabledFactorCount = (Object.values(sf) as Array<{ enabled?: boolean } | undefined>)
     .filter(f => f?.enabled).length
+  const dbItems   = normalizeDealBreakers(spec.dealBreakers)
+  const dbHardCnt = dbItems.filter(d => d.hard).length
+  const dbSoftCnt = dbItems.length - dbHardCnt
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -758,96 +923,48 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
         </CardContent>
       </Card>
 
-      {/* ── (а) Критерии оценки ── */}
+      {/* ── 🟢 Подходит ── */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
-            <Sparkles className="w-4 h-4" /> Критерии оценки
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Подходит
           </CardTitle>
           <CardDescription>
-            Что хотим видеть и чего избегаем. Обязательные с «Жёстким» отсекают,
-            остальное влияет на балл. Все списки учитываются вместе (И).
+            Что хотим видеть в кандидате. Важность — на каждом пункте; всё учитывается вместе.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-5">
-          <MustHaveEditor
-            items={normalizeMustHave(spec.mustHave)}
-            setItems={v => patch({ mustHave: v })}
-            maxItems={10}
-            placeholders={LIST_PLACEHOLDERS.must}
+        <CardContent>
+          <GoodEditor
+            mustHave={spec.mustHave}
+            niceToHave={spec.niceToHave}
+            onChange={({ mustHave, niceToHave }) => patch({ mustHave, niceToHave })}
           />
-          <ListEditor
-            label="Влияют на балл"
-            hint="Есть в резюме — плюс к баллу, нет — ниже, но не отказ. Можно фразой."
-            maxItems={10}
-            items={spec.niceToHave}
-            setItems={v => patch({ niceToHave: v })}
-            placeholders={LIST_PLACEHOLDERS.nice}
-          />
-          <ListEditor
-            label="Неприемлемо"
-            hint="Отказ — только если AI прямо видит это в резюме. Сомнительное уточнит бот. Можно фразой."
-            maxItems={10}
-            items={spec.dealBreakers}
-            setItems={v => patch({ dealBreakers: v })}
-            placeholders={LIST_PLACEHOLDERS.deal}
-          />
-
-          {/* Веса критериев — независимые оси 0–100 (Σ=100 снято) */}
-          <div className="space-y-3 pt-2 border-t">
-            <div>
-              <Label className="text-sm font-medium">Важность критериев</Label>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                Насколько каждая ось тянет балл. Это вес влияния, не отсев.
-              </p>
-            </div>
-
-            {/* Одна колонка: подпись + 4 равных сегмента-чипа во всю строку (выравнены
-                по вертикали как матрица, не вылазят за рамку). На узком экране подпись
-                встаёт над чипами. */}
-            <div className="space-y-1.5">
-              {(Object.keys(WEIGHT_LABELS) as (keyof ScoringWeights)[]).map(k => {
-                const v = spec.scoringWeights[k]
-                const active = weightChipActive(v)
-                return (
-                  <div key={k} className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
-                    <span className="text-xs text-muted-foreground sm:w-44 sm:shrink-0">{WEIGHT_LABELS[k]}</span>
-                    <div className="grid grid-cols-4 gap-1 sm:flex-1">
-                      {WEIGHT_CHIPS.map(c => (
-                        <button key={c.label} type="button"
-                          onClick={() => patch({ scoringWeights: { ...spec.scoringWeights, [k]: c.value } })}
-                          className={cn(
-                            "text-[11px] px-1.5 py-1 rounded-md border text-center truncate transition-colors",
-                            active === c.label
-                              ? "bg-primary text-primary-foreground border-transparent"
-                              : "text-muted-foreground border-border hover:text-foreground",
-                          )}
-                        >{c.label}</button>
-                      ))}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-            <Button type="button" size="sm" variant="ghost" className="text-xs"
-              onClick={() => patch({ scoringWeights: DEFAULT_SCORING_WEIGHTS })}>
-              Сбросить к дефолтным
-            </Button>
-          </div>
         </CardContent>
       </Card>
 
-      {/* ── (б) Стоп-факторы ── */}
+      {/* ── 🔴 Не подходит ── */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
-            <ShieldAlert className="w-4 h-4" /> Стоп-факторы
+            <ShieldAlert className="w-4 h-4 text-red-500" /> Не подходит
           </CardTitle>
           <CardDescription>
-            Жёсткий отсев ДО AI-оценки. При срабатывании — авто-отказ.
+            Что отсекает кандидата или роняет балл.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-5">
+          <BadEditor
+            items={spec.dealBreakers}
+            onChange={v => patch({ dealBreakers: v })}
+          />
+
+          <div className="pt-4 border-t space-y-3">
+            <div>
+              <Label className="text-sm font-medium">Точные требования</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Формальные условия — режут кодом ещё ДО AI. Рекомендуем не больше 3, иначе отсев слишком широкий.
+              </p>
+            </div>
           <FactorRow
             title="Город / релокация"
             help="Если кандидат не из списка и не готов к переезду — стоп"
@@ -963,12 +1080,27 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
             />
           </FactorRow>
 
-          <p className="text-[11px] text-muted-foreground">
-            Тексты отказов настраиваются в блоке «Стоп-факторы по резюме»
-            Конструктора воронки — здесь только условия отсева.
-          </p>
+            <p className="text-[11px] text-muted-foreground">
+              Тексты отказов для этих условий — в блоке «Стоп-факторы по резюме» Конструктора воронки.
+            </p>
+          </div>
         </CardContent>
       </Card>
+
+      {/* ── 🤖 Спорное уточняет бот ── */}
+      <div className="flex items-center gap-3 rounded-lg border bg-muted/30 px-3.5 py-3">
+        <Wand2 className="w-4 h-4 shrink-0 text-primary" />
+        <div className="flex-1 min-w-0">
+          <Label className="text-sm font-medium">Спорное уточняет бот в чате</Label>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Если AI не уверен на 100% — не резать сразу, а дать боту уточнить у кандидата.
+          </p>
+        </div>
+        <Switch
+          checked={spec.botClarifyAmbiguous ?? false}
+          onCheckedChange={v => patch({ botClarifyAmbiguous: v })}
+        />
+      </div>
 
       {/* ── Итог: что реально отсеется автоматически (safety-first: «режем только очевидное») ── */}
       <div className="rounded-lg border bg-muted/30 px-3.5 py-3 space-y-1.5">
@@ -977,7 +1109,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
         </div>
         <ul className="space-y-1 text-xs text-muted-foreground">
           <li>• <b className="text-foreground">Стоп-факторы</b> ({enabledFactorCount} вкл.) — формальное несоответствие, отказ сразу.</li>
-          <li>• <b className="text-foreground">Неприемлемо</b> ({spec.dealBreakers.length}) — отказ, только если AI прямо видит это в резюме.</li>
+          <li>• <b className="text-foreground">Стоп-факторы по смыслу</b> ({dbHardCnt}) — отказ, только если AI прямо видит это в резюме.{dbSoftCnt > 0 ? ` Ещё ${dbSoftCnt} «минус к баллу» — не режут, только снижают.` : ""}</li>
           {spec.resumeThresholds.autoRejectEnabled ? (
             <li>• <b className="text-foreground">Низкий балл</b> (&lt;{spec.resumeThresholds.lowerThreshold}) — авто-отказ <b className="text-amber-700 dark:text-amber-400">включён</b>.</li>
           ) : (

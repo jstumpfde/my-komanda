@@ -18,7 +18,7 @@ import { getSpec } from "@/lib/core/spec/store"
 import { buildSpecFromLegacy, type LegacyVacancyInput } from "@/lib/core/spec/from-legacy"
 import { generateCandidateShortId } from "@/lib/short-id"
 import type { CandidateSpec } from "@/lib/core/spec/types"
-import { mustHaveTexts } from "@/lib/core/spec/types"
+import { mustHaveTexts, niceToHaveTexts, dealBreakerTexts } from "@/lib/core/spec/types"
 import type { VacancyAiProcessSettings } from "@/lib/db/schema"
 
 // ─── Константы ───────────────────────────────────────────────────────────────
@@ -68,7 +68,7 @@ interface RediscoveryLastRun {
 function buildKeywords(spec: CandidateSpec): string[] {
   const words: string[] = [
     ...mustHaveTexts(spec.mustHave),
-    ...spec.niceToHave,
+    ...niceToHaveTexts(spec.niceToHave),
     ...spec.portraitRequiredSkills,
     ...spec.portraitNiceSkills,
   ]
@@ -106,8 +106,8 @@ function formatCandidateForAI(c: RediscoveryCandidate): string {
 function formatSpecForAI(spec: CandidateSpec): string {
   const parts: string[] = []
   if (spec.mustHave.length)          parts.push(`Обязательно: ${mustHaveTexts(spec.mustHave).join(", ")}`)
-  if (spec.niceToHave.length)        parts.push(`Желательно: ${spec.niceToHave.join(", ")}`)
-  if (spec.dealBreakers.length)      parts.push(`Стоп-факторы: ${spec.dealBreakers.join(", ")}`)
+  if (spec.niceToHave.length)        parts.push(`Желательно: ${niceToHaveTexts(spec.niceToHave).join(", ")}`)
+  if (spec.dealBreakers.length)      parts.push(`Стоп-факторы: ${dealBreakerTexts(spec.dealBreakers).join(", ")}`)
   if (spec.portraitRequiredSkills.length) parts.push(`Ключевые навыки: ${spec.portraitRequiredSkills.join(", ")}`)
   if (spec.idealProfile)             parts.push(`Идеальный профиль: ${spec.idealProfile}`)
   return parts.join("\n") || "Критерии не заданы"

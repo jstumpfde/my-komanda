@@ -279,6 +279,95 @@ export function mustHaveTexts(items: ReadonlyArray<MustHaveEntry> | null | undef
   return normalizeMustHave(items).map(i => i.text)
 }
 
+// ─── 🟢 «Подходит»: важность на пункте (nice-to-have, перестройка 21.06) ───────
+
+/**
+ * Уровень важности пункта «Подходит» (что поднимает балл, не отсекает).
+ * nice = желательно, important = важно, very = очень важно.
+ * Верхний уровень «Обязательно (отсекает)» хранится НЕ здесь, а в mustHave
+ * (hard:true) — отсев это уже не «балл», а нокаут.
+ */
+export const NiceImportanceSchema = z.enum(["nice", "important", "very"])
+export type NiceImportance = z.infer<typeof NiceImportanceSchema>
+
+export const NiceToHaveItemSchema = z.object({
+  text:       z.string().min(1).max(200),
+  importance: NiceImportanceSchema.default("nice"),
+})
+export type NiceToHaveItem = z.infer<typeof NiceToHaveItemSchema>
+
+/** Элемент niceToHave: строка (legacy) ИЛИ объект (важность на пункте). */
+export type NiceToHaveEntry = string | NiceToHaveItem
+
+/**
+ * Нормализует niceToHave любого формата в массив { text, importance }.
+ * Строка → { text, importance: "nice" } (поведение прежнее). Битые отброшены.
+ */
+export function normalizeNiceToHave(items: ReadonlyArray<NiceToHaveEntry> | null | undefined): NiceToHaveItem[] {
+  if (!Array.isArray(items)) return []
+  const out: NiceToHaveItem[] = []
+  for (const it of items) {
+    if (typeof it === "string") {
+      const t = it.trim()
+      if (t) out.push({ text: t, importance: "nice" })
+    } else if (it && typeof it === "object" && typeof it.text === "string") {
+      const t = it.text.trim()
+      const imp = it.importance === "important" || it.importance === "very" ? it.importance : "nice"
+      if (t) out.push({ text: t, importance: imp })
+    }
+  }
+  return out
+}
+
+/** Только тексты niceToHave (для legacy-потребителей, ожидающих string[]). */
+export function niceToHaveTexts(items: ReadonlyArray<NiceToHaveEntry> | null | undefined): string[] {
+  return normalizeNiceToHave(items).map(i => i.text)
+}
+
+// ─── 🔴 «Не подходит» / По смыслу: стоп-фактор vs минус к баллу ────────────────
+
+/**
+ * Один пункт «Не подходит по смыслу».
+ * hard=true  → Стоп-фактор: отказ, если AI прямо видит это в резюме.
+ * hard=false → Минус к баллу: снижает балл, но НЕ отказ.
+ *
+ * ОБРАТНАЯ СОВМЕСТИМОСТЬ: старые Spec хранили dealBreakers как массив строк
+ * (все = отказ). Поэтому union(string | DealBreakerItem); строка нормализуется
+ * в { text, hard: true } — поведение прежнее.
+ */
+export const DealBreakerItemSchema = z.object({
+  text: z.string().min(1).max(200),
+  hard: z.boolean().default(true),
+})
+export type DealBreakerItem = z.infer<typeof DealBreakerItemSchema>
+
+/** Элемент dealBreakers: строка (legacy) ИЛИ объект (стоп/минус). */
+export type DealBreakerEntry = string | DealBreakerItem
+
+/**
+ * Нормализует dealBreakers любого формата в массив { text, hard }.
+ * Строка → { text, hard: true } (отказ, как раньше). Битые отброшены.
+ */
+export function normalizeDealBreakers(items: ReadonlyArray<DealBreakerEntry> | null | undefined): DealBreakerItem[] {
+  if (!Array.isArray(items)) return []
+  const out: DealBreakerItem[] = []
+  for (const it of items) {
+    if (typeof it === "string") {
+      const t = it.trim()
+      if (t) out.push({ text: t, hard: true })
+    } else if (it && typeof it === "object" && typeof it.text === "string") {
+      const t = it.text.trim()
+      if (t) out.push({ text: t, hard: typeof it.hard === "boolean" ? it.hard : true })
+    }
+  }
+  return out
+}
+
+/** Только тексты dealBreakers (для legacy-потребителей, ожидающих string[]). */
+export function dealBreakerTexts(items: ReadonlyArray<DealBreakerEntry> | null | undefined): string[] {
+  return normalizeDealBreakers(items).map(i => i.text)
+}
+
 // ─── Главная модель CandidateSpec ────────────────────────────────────────────
 
 /**
@@ -304,15 +393,20 @@ export const CandidateSpecSchema = z.object({
    */
   mustHave:      z.array(z.union([z.string().min(1).max(200), MustHaveItemSchema])).max(10).default([]),
   /**
-   * Желательные критерии (до 10). Повышают скор, но не дисквалифицируют.
+   * 🟢 «Подходит» — пункты, что повышают балл, но не дисквалифицируют (до 10).
+   * Формат: строка (legacy) ИЛИ { text, importance } (важность на пункте,
+   * перестройка 21.06). Нормализуйте через niceToHaveTexts()/normalizeNiceToHave().
    * Соответствует requirementsJson.nice_to_have.
    */
-  niceToHave:    z.array(z.string().min(1).max(200)).max(10).default([]),
+  niceToHave:    z.array(z.union([z.string().min(1).max(200), NiceToHaveItemSchema])).max(10).default([]),
   /**
-   * Дисквалификаторы (до 10). Presence → reject, даже если скор высокий.
+   * 🔴 «Не подходит по смыслу» — дисквалификаторы (до 10).
+   * Формат: строка (legacy = всегда стоп-фактор) ИЛИ { text, hard }
+   * (hard=true → Стоп-фактор/отказ, hard=false → Минус к баллу).
+   * Нормализуйте через dealBreakerTexts()/normalizeDealBreakers().
    * Соответствует requirementsJson.deal_breakers.
    */
-  dealBreakers:  z.array(z.string().min(1).max(200)).max(10).default([]),
+  dealBreakers:  z.array(z.union([z.string().min(1).max(200), DealBreakerItemSchema])).max(10).default([]),
   /**
    * Взвешенные критерии для v2-скоринга (9 осей Σ=100).
    * Соответствует requirementsJson.scoring_weights.
@@ -365,6 +459,13 @@ export const CandidateSpecSchema = z.object({
    * Передаётся в AI как дополнительный контекст при outbound-скоринге.
    */
   outboundSoftCriteria:    z.string().max(1000).default(""),
+
+  /**
+   * 🤖 Спорное уточняет бот: если AI не на 100% уверен (по dealBreakers/критериям) —
+   * не резать сразу, а дать боту в чате уточнить у кандидата. Хранится сейчас как
+   * настройка; интеграция с чат-ботом — отдельным шагом. По умолчанию ВЫКЛ.
+   */
+  botClarifyAmbiguous: z.boolean().default(false),
 
   // ── Метаданные ────────────────────────────────────────────────────────────
   /**

@@ -38,7 +38,7 @@
  */
 
 import type { CandidateSpec } from "./types"
-import { mustHaveTexts } from "./types"
+import { mustHaveTexts, niceToHaveTexts, dealBreakerTexts } from "./types"
 import type {
   VacancyRequirements,
   VacancyAiProcessSettings,
@@ -61,11 +61,12 @@ export interface SpecLegacyPatches {
  */
 export function specToLegacy(spec: CandidateSpec): SpecLegacyPatches {
   // ── requirementsJson ───────────────────────────────────────────────────────
-  // mustHave может быть в обоих форматах (string | { text, hard }) — берём тексты.
+  // Все три списка могут быть в union-формате — берём только тексты для legacy
+  // (v2-скоринг и compare-requirements читают requirementsJson как string[]).
   const requirementsJson: Partial<VacancyRequirements> = {
     must_have:      mustHaveTexts(spec.mustHave),
-    nice_to_have:   [...spec.niceToHave],
-    deal_breakers:  [...spec.dealBreakers],
+    nice_to_have:   niceToHaveTexts(spec.niceToHave),
+    deal_breakers:  dealBreakerTexts(spec.dealBreakers),
     scoring_weights: { ...spec.scoringWeights },
     ideal_profile:  spec.idealProfile,
   }

@@ -6,9 +6,16 @@
 // fresh-vs-fresh): средняя |Δ|=5, медиана 0, совпадение зон 93% — критерии
 // Spec переводятся в скоринг эквивалентно legacy.
 
-import type { CandidateSpec } from "@/lib/core/spec/types"
-import { normalizeMustHave } from "@/lib/core/spec/types"
+import type { CandidateSpec, NiceToHaveItem } from "@/lib/core/spec/types"
+import { normalizeMustHave, normalizeNiceToHave, normalizeDealBreakers } from "@/lib/core/spec/types"
 import type { ResumeScreenInput } from "@/lib/ai-screen-resume"
+
+/** В контуре «Портрет» суффикс важности на пункте, чтобы AI взвешивал сильнее. */
+function annotateImportance(n: NiceToHaveItem): string {
+  if (n.importance === "very")      return `${n.text} (очень важно)`
+  if (n.importance === "important") return `${n.text} (важно)`
+  return n.text
+}
 
 /**
  * Строит ResumeScreenInput, подставляя критерии/стоп-факторы из Spec:
@@ -40,13 +47,27 @@ export function buildSpecResumeInput(
     ? hardTexts
     : (mhItems.length > 0 ? [] : spec.portraitRequiredSkills)
 
+  // niceToHave: union(string | { text, importance }). В контуре «Портрет»
+  // (respect) добавляем суффикс важности, чтобы AI взвешивал пункт сильнее.
+  const niceItems = normalizeNiceToHave(spec.niceToHave)
+  const niceTexts = niceItems.length > 0
+    ? niceItems.map(n => (respect ? annotateImportance(n) : n.text))
+    : spec.portraitNiceSkills
+
+  // dealBreakers: union(string | { text, hard }). hard → стоп-фактор (отказ);
+  // soft (только при respect) → «нежелательно» — снижает балл, НЕ отказ.
+  // Без respect (legacy/существующие Spec) все пункты = отказ, как раньше.
+  const dbItems = normalizeDealBreakers(spec.dealBreakers)
+  const dbHard = (respect ? dbItems.filter(i => i.hard) : dbItems).map(i => i.text)
+  const dbSoft = respect ? dbItems.filter(i => !i.hard).map(i => i.text) : []
+
   const niceToHave = [
     ...softTexts,
-    ...(spec.niceToHave.length > 0 ? spec.niceToHave : spec.portraitNiceSkills),
+    ...niceTexts,
   ]
 
   const knockouts = [
-    ...spec.dealBreakers,
+    ...dbHard,
     ...spec.portraitKnockouts,
   ]
 
@@ -93,6 +114,7 @@ export function buildSpecResumeInput(
       aiIdealProfile:       spec.idealProfile || null,
       aiRequiredHardSkills: mustHave.length > 0 ? mustHave : null,
       aiStopFactors:        allKnockouts.length > 0 ? allKnockouts : null,
+      aiSoftAvoid:          dbSoft.length > 0 ? dbSoft : null,
       screeningQuestions:   niceToHave.length > 0 ? niceToHave : null,
       aiWeights:            Object.keys(aiWeights).length > 0 ? aiWeights : null,
     },
