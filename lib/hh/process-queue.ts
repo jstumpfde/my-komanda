@@ -19,7 +19,7 @@ import { isFollowUpPreset } from "@/lib/followup/presets"
 import { canSendNow } from "@/lib/schedule/can-send-now"
 import { screenResume } from "@/lib/ai-screen-resume"
 import { getSpec } from "@/lib/core/spec/store"
-import { buildSpecResumeInput, isSpecScoringEnabled } from "@/lib/core/spec/resume-input"
+import { buildSpecResumeInput, isSpecScoringEnabled, specHasScoringContent } from "@/lib/core/spec/resume-input"
 import { trySyncRejectToHh } from "@/lib/hh/sync-stage"
 import { scheduleRejection, rejectionDelayMinutes } from "@/lib/rejection/execute"
 import { startPrequalification } from "@/lib/prequalification/start"
@@ -308,6 +308,8 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
     // не режем авто-отказом — пускаем в чат, где бот деликатно уточнит недостающее.
     // По умолчанию false → поведение прежнее.
     let botClarifyOn = false
+    // Мягкое письмо отказа из «Портрета» (spec.rejectLetter) — уходит при авто-отказе.
+    let rejectLetterText: string | null = null
 
     // Если AI-скоринг резюме дал score ниже порога — отклоняем кандидата
     // (reject) или оставляем в "new" для ручного разбора (keep_new),
@@ -609,7 +611,16 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             if (isSpecScoringEnabled(localVac.id) || portraitOn) {
               try {
                 const spec = await getSpec(localVac.id)
-                if (spec && (spec.mustHave.length > 0 || spec.portraitRequiredSkills.length > 0)) {
+                // Гейт «строить из Spec»: для Портрета — ЛЮБОЕ наполнение Spec
+                // (🟢 пишет только niceToHave, отсев — через 🔴/точные требования,
+                // поэтому проверки одного mustHave недостаточно — иначе скоринг ушёл бы
+                // в legacy-анкету, игнорируя настроенный Портрет). Для не-Портрета
+                // (A/B-роллаут spec-скоринга) условие прежнее — инвариант существующих
+                // вакансий не трогаем.
+                const useSpec = !!spec && (portraitOn
+                  ? specHasScoringContent(spec)
+                  : (spec.mustHave.length > 0 || spec.portraitRequiredSkills.length > 0))
+                if (spec && useSpec) {
                   screenInput = buildSpecResumeInput(resumeForScreen, { title: localVac.title, city: localVac.city }, spec, { respectHardness: portraitOn })
                   console.log(`[spec-scoring] vacancy=${localVac.id} candidate=${candidateId} — скоринг по Spec${portraitOn ? " (Портрет)" : ""}`)
                 }
@@ -627,6 +638,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                 }
                 // Бот-уточнение: спорных по баллу не режем — пусть бот уточнит в чате.
                 if (portraitOn && spec) botClarifyOn = spec.botClarifyAmbiguous === true
+                if (portraitOn && spec) rejectLetterText = spec.rejectLetter?.trim() || null
               } catch (specErr) {
                 console.warn(`[spec-scoring] vacancy=${localVac.id} — ошибка чтения Spec, fallback на legacy:`, specErr)
               }
@@ -767,7 +779,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
 
             // Сообщение мягкого отказа через hh (discard_by_employer)
             // с подстановкой имени/вакансии — переиспользуем sync-stage.
-            await trySyncRejectToHh(candidateId)
+            await trySyncRejectToHh(candidateId, rejectLetterText)
           } else if (belowThreshold.action === "prequalification") {
             // Сессия 9: запускаем опросник. Стадию кандидата не меняем —
             // ставим только prequalificationStatus='pending' внутри start.

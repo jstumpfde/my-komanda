@@ -97,6 +97,9 @@ export function buildSpecResumeInput(
     const years   = sf.jobHopping.withinYears ?? 2
     structuralStops.push(`Частая смена работы: больше ${maxJobs} мест за последние ${years} г./лет (оцени по истории опыта в резюме)`)
   }
+  for (const cf of sf.customFactors ?? []) {
+    if (cf.enabled && cf.label.trim()) structuralStops.push(cf.label.trim())
+  }
 
   const allKnockouts = [...knockouts, ...structuralStops]
 
@@ -143,4 +146,38 @@ export function isSpecScoringEnabled(vacancyId: string): boolean {
   const legacy = process.env.SPEC_SCORING_LEGACY_VACANCY_IDS
   if (!legacy) return true
   return !legacy.split(",").map(s => s.trim()).filter(Boolean).includes(vacancyId)
+}
+
+/**
+ * Есть ли в Spec хоть какое-то наполнение для скоринга резюме?
+ *
+ * Гейт «строить screenInput из Spec vs fallback на legacy-анкету». В контуре
+ * «Портрет» 🟢 «Подходит» пишет ТОЛЬКО niceToHave (mustHave всегда пустой —
+ * нокаута у плюсовых критериев нет), а отсев настраивается через 🔴 «Не
+ * подходит» (dealBreakers) и «Точные требования» (структурные стоп-факторы).
+ * Поэтому проверять один mustHave недостаточно: Портрет-вакансия, настроенная
+ * только через 🟢/🔴/точные требования, иначе скорилась бы по legacy-анкете,
+ * игнорируя весь заданный Портрет. Здесь учитываем все оценочные секции.
+ */
+export function specHasScoringContent(spec: CandidateSpec): boolean {
+  const sf = spec.stopFactors
+  const structuralActive = !!(
+    (sf.city?.enabled && sf.city.allowedCities?.length) ||
+    (sf.format?.enabled && sf.format.allowedFormats?.length) ||
+    sf.age?.enabled ||
+    (sf.experience?.enabled && sf.experience.minYears != null) ||
+    (sf.driverLicense?.enabled && sf.driverLicense.requiredCategories?.length) ||
+    sf.jobHopping?.enabled ||
+    (sf.customFactors ?? []).some(c => c.enabled && c.label.trim().length > 0)
+  )
+  return (
+    normalizeMustHave(spec.mustHave).length > 0 ||
+    spec.portraitRequiredSkills.length > 0 ||
+    normalizeNiceToHave(spec.niceToHave).length > 0 ||
+    spec.portraitNiceSkills.length > 0 ||
+    normalizeDealBreakers(spec.dealBreakers).length > 0 ||
+    spec.portraitKnockouts.length > 0 ||
+    (spec.idealProfile || "").trim().length > 0 ||
+    structuralActive
+  )
 }

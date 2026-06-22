@@ -45,6 +45,7 @@ import {
   normalizeMustHave,
   normalizeNiceToHave,
   normalizeDealBreakers,
+  DEFAULT_REJECT_LETTER,
   type CandidateSpec,
   type MustHaveItem,
   type MustHaveEntry,
@@ -60,13 +61,12 @@ import { useVacancySectionRegister } from "./vacancy-settings-context"
 
 // ─── Константы ───────────────────────────────────────────────────────────────
 
-// 🟢 «Подходит» — уровни важности на пункте (перестройка 21.06). Три верхних =
-// важность (балл), «Обязательно» = жёсткий отсев (уходит в mustHave hard).
+// 🟢 «Подходит» — важность на пункте. ТРИ уровня (согласованный дизайн): 🟢 только
+// поднимает балл, НИКОГДА не отсекает. Отсев — это 🔴 (стоп-фактор / точные требования).
 const GOOD_LEVELS = [
   { value: "nice",      label: "Желательно"  },
   { value: "important", label: "Важно"       },
   { value: "very",      label: "Очень важно" },
-  { value: "required",  label: "Обязательно" },
 ] as const
 type GoodLevel = (typeof GOOD_LEVELS)[number]["value"]
 
@@ -427,19 +427,17 @@ function GoodEditor({
   niceToHave: NiceToHaveEntry[]
   onChange:   (next: { mustHave: MustHaveItem[]; niceToHave: NiceToHaveItem[] }) => void
 }) {
+  // 🟢 = только балл, не отсев → всё в niceToHave (3 уровня). Старые жёсткие
+  // must-have (если были) показываем как «Очень важно» и при правке переводим в
+  // niceToHave; mustHave очищаем (criteria-нокаута больше нет — отсев это 🔴).
   const rows: { text: string; level: GoodLevel }[] = [
-    ...normalizeMustHave(mustHave).map(m => ({ text: m.text, level: (m.hard ? "required" : "very") as GoodLevel })),
+    ...normalizeMustHave(mustHave).map(m => ({ text: m.text, level: "very" as GoodLevel })),
     ...normalizeNiceToHave(niceToHave).map(n => ({ text: n.text, level: n.importance as GoodLevel })),
   ]
   const commit = (next: { text: string; level: GoodLevel }[]) => {
-    const mustHave   = next.filter(r => r.level === "required").map(r => ({ text: r.text, hard: true }))
-    const niceToHave = next.filter(r => r.level !== "required").map(r => ({ text: r.text, importance: r.level as NiceImportance }))
-    // Каждое поле в Spec лимитировано zod .max(10). Если правка вытолкнет бакет
-    // за 10 (напр. >10 «Обязательно» после «Собрать из вакансии») — отклоняем с
-    // подсказкой, иначе PUT вернул бы 400 и весь Портрет молча не сохранился.
-    if (mustHave.length > 10)   { toast.error("Не больше 10 «Обязательно»"); return }
-    if (niceToHave.length > 10) { toast.error("Не больше 10 пунктов «в баллах»"); return }
-    onChange({ mustHave, niceToHave })
+    const niceToHave = next.map(r => ({ text: r.text, importance: r.level as NiceImportance }))
+    if (niceToHave.length > 10) { toast.error("Не больше 10 пунктов"); return }
+    onChange({ mustHave: [], niceToHave })
   }
   const setLevel = (i: number, level: GoodLevel) => commit(rows.map((r, idx) => idx === i ? { ...r, level } : r))
   const remove   = (i: number) => commit(rows.filter((_, idx) => idx !== i))
@@ -462,7 +460,7 @@ function GoodEditor({
         <ListCounter count={rows.length} max={10} />
       </div>
       <p className="text-xs text-muted-foreground">
-        Важность — на самом пункте. «Обязательно» = без этого отказ; остальное поднимает балл, но не режет. Можно фразой.
+        Есть в резюме → плюс к баллу (важность справа). Нет → балл ниже, но <b>не отказ</b>. «Очень важно» влияет сильнее. Можно фразой.
       </p>
       <OverRecommendedHint count={rows.length} />
       <div className="space-y-1.5">
@@ -475,15 +473,13 @@ function GoodEditor({
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
-            <div className="grid grid-cols-4 gap-1">
+            <div className="grid grid-cols-3 gap-1">
               {GOOD_LEVELS.map(l => (
                 <button key={l.value} type="button" onClick={() => setLevel(i, l.value)}
                   className={cn(
                     "text-[11px] px-1.5 py-1 rounded-md border text-center truncate transition-colors",
                     r.level === l.value
-                      ? (l.value === "required"
-                          ? "bg-amber-500 text-white border-transparent"
-                          : "bg-primary text-primary-foreground border-transparent")
+                      ? "bg-primary text-primary-foreground border-transparent"
                       : "text-muted-foreground border-border hover:text-foreground",
                   )}
                 >{l.label}</button>
@@ -572,6 +568,49 @@ function BadEditor({
           placeholder={ph} maxLength={200} disabled={rows.length >= 10} className="h-9" />
         <Button type="button" size="icon" variant="outline" onClick={add}
           disabled={rows.length >= 10 || !draft.trim()}>
+          <Plus className="w-4 h-4" />
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+// ─── «Добавить свой» точный фактор (произвольное требование фразой → AI) ──────
+
+function CustomFactorsEditor({
+  items, onChange,
+}: {
+  items:    { label: string; enabled: boolean }[]
+  onChange: (next: { label: string; enabled: boolean }[]) => void
+}) {
+  const [draft, setDraft] = useState("")
+  const add = () => {
+    const t = draft.trim()
+    if (!t) return
+    if (items.some(x => x.label.toLowerCase() === t.toLowerCase())) { toast.error("Уже есть"); return }
+    if (items.length >= 15) { toast.error("Максимум 15"); return }
+    onChange([...items, { label: t, enabled: true }])
+    setDraft("")
+  }
+  return (
+    <div className="space-y-1.5">
+      {items.map((f, i) => (
+        <div key={i} className="flex items-center gap-2 rounded-md border px-3 py-1.5">
+          <span className={cn("flex-1 text-sm min-w-0 break-words", !f.enabled && "text-muted-foreground line-through")}>{f.label}</span>
+          <Switch checked={f.enabled}
+            onCheckedChange={v => onChange(items.map((x, idx) => idx === i ? { ...x, enabled: v } : x))} />
+          <button type="button" onClick={() => onChange(items.filter((_, idx) => idx !== i))}
+            className="rounded-full hover:bg-muted-foreground/20 p-0.5 shrink-0 text-muted-foreground hover:text-destructive" aria-label="Убрать">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      ))}
+      <div className="flex gap-2">
+        <Input value={draft} onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); add() } }}
+          placeholder="Напр. «Готовность к командировкам», «Образование высшее», «Без перерывов в стаже»"
+          maxLength={160} className="h-8 text-sm" />
+        <Button type="button" size="icon" variant="outline" className="h-8 w-8 shrink-0" onClick={add} disabled={!draft.trim()}>
           <Plus className="w-4 h-4" />
         </Button>
       </div>
@@ -1131,6 +1170,18 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
             </div>
           </FactorRow>
 
+            <div className="pt-1 space-y-1.5">
+              <Label className="text-xs font-medium">Добавить свой</Label>
+              <p className="text-[11px] text-muted-foreground">
+                Любое точное требование фразой — оценит AI по резюме (образование, командировки,
+                перерывы в стаже, тип занятости и т.п.).
+              </p>
+              <CustomFactorsEditor
+                items={sf.customFactors ?? []}
+                onChange={v => setSf({ ...sf, customFactors: v })}
+              />
+            </div>
+
             <p className="text-[11px] text-muted-foreground">
               Тексты отказов для этих условий — в блоке «Стоп-факторы по резюме» Конструктора воронки.
             </p>
@@ -1153,93 +1204,70 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
         />
       </div>
 
-      {/* ── Итог: что реально отсеется автоматически (safety-first: «режем только очевидное») ── */}
-      <div className="rounded-lg border bg-muted/30 px-3.5 py-3 space-y-1.5">
-        <div className="font-medium text-sm flex items-center gap-2">
-          <ShieldAlert className="w-4 h-4 text-primary" /> Что отсеется автоматически
-        </div>
-        <ul className="space-y-1 text-xs text-muted-foreground">
-          <li>• <b className="text-foreground">Стоп-факторы</b> ({enabledFactorCount} вкл.) — формальное несоответствие, отказ сразу.</li>
-          <li>• <b className="text-foreground">Стоп-факторы по смыслу</b> ({dbHardCnt}) — отказ, только если AI прямо видит это в резюме.{dbSoftCnt > 0 ? ` Ещё ${dbSoftCnt} «минус к баллу» — не режут, только снижают.` : ""}</li>
-          {spec.resumeThresholds.autoRejectEnabled ? (
-            <li>• <b className="text-foreground">Низкий балл</b> (&lt;{spec.resumeThresholds.lowerThreshold}) — авто-отказ <b className="text-amber-700 dark:text-amber-400">включён</b>.</li>
-          ) : (
-            <li>• <b className="text-foreground">Низкий балл</b> — <b className="text-emerald-700 dark:text-emerald-400">не отказ</b>: уходит в ручной разбор, спорное уточнит бот.</li>
-          )}
-        </ul>
-      </div>
+      {/* ── Связка: балл → действие ── */}
+      <p className="text-xs text-muted-foreground">
+        «Подходит» и «Не подходит» формируют балл. Ниже — что с этим баллом делать.
+      </p>
 
-      {/* ── (в) Пороги — две карточки рядом ── */}
-      <div className="grid md:grid-cols-2 gap-4">
-        {/* Оценка резюме */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-start justify-between gap-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Gauge className="w-4 h-4" /> Оценка резюме
-              </CardTitle>
-              <Switch
-                checked={spec.resumeThresholds.enabled ?? true}
-                onCheckedChange={v => patch({ resumeThresholds: { ...spec.resumeThresholds, enabled: v } })}
-              />
+      {/* ── Автоматический отбор по баллу: мастер-тумблер + 3 зоны (согласованный дизайн) ── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between gap-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Gauge className="w-4 h-4" /> Автоматический отбор по баллу
+            </CardTitle>
+            <Switch
+              checked={spec.resumeThresholds.autoRejectEnabled}
+              onCheckedChange={v => patch({ resumeThresholds: { ...spec.resumeThresholds, autoRejectEnabled: v, enabled: true } })}
+            />
+          </div>
+          <CardDescription>
+            {!spec.resumeThresholds.autoRejectEnabled
+              ? "Выкл — AI просто ставит балл, решаете вы. Вкл — система действует сама по зонам ниже."
+              : spec.botClarifyAmbiguous
+                ? "Сильных приглашаем, средних уточняет бот в чате, слабых отклоняем. Спорных у нижнего порога бот тоже уточняет — до отказа."
+                : "Сильных приглашаем, средних отправляем на демо, слабых отклоняем. Чтобы средних/спорных уточнял бот — включите «Спорное уточняет бот» выше."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+            <div className="rounded-md border border-red-400/40 bg-red-500/10 py-2">
+              <div className="font-bold text-red-600 dark:text-red-400">&lt; {spec.resumeThresholds.lowerThreshold}</div>
+              <div className="text-muted-foreground">отказ</div>
             </div>
-            <CardDescription>Пороги AI-скоринга резюме и действие между ними.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {!(spec.resumeThresholds.enabled ?? true) ? (
-              <p className="text-[11px] text-muted-foreground bg-muted/40 rounded-md px-3 py-2 border">
-                Оценка резюме отключена — скоринг резюме не применяется, кандидаты идут в ручной разбор.
-              </p>
-            ) : (<>
-            <div className="space-y-1.5">
-              <div className="flex items-baseline justify-between">
-                <Label className="text-xs">Зелёная зона (приглашение)</Label>
-                <span className="text-sm font-bold text-emerald-600">≥{spec.resumeThresholds.upperThreshold}</span>
-              </div>
-              <Slider
-                value={[spec.resumeThresholds.upperThreshold]}
-                onValueChange={([v]) => patch({ resumeThresholds: { ...spec.resumeThresholds, upperThreshold: v } })}
-                min={10} max={100} step={5}
-              />
+            <div className="rounded-md border border-amber-400/40 bg-amber-500/10 py-2">
+              <div className="font-bold text-amber-600 dark:text-amber-400">{spec.resumeThresholds.lowerThreshold}–{Math.max(spec.resumeThresholds.lowerThreshold, spec.resumeThresholds.upperThreshold - 1)}</div>
+              <div className="text-muted-foreground">{spec.botClarifyAmbiguous ? "уточнить ботом" : "на демо"}</div>
             </div>
-            <div className="space-y-1.5">
-              <div className="flex items-baseline justify-between">
-                <Label className="text-xs">Красная зона (отказ/разбор)</Label>
-                <span className="text-sm font-bold text-amber-600">&lt;{spec.resumeThresholds.lowerThreshold}</span>
-              </div>
-              <Slider
-                value={[spec.resumeThresholds.lowerThreshold]}
-                onValueChange={([v]) => patch({ resumeThresholds: { ...spec.resumeThresholds, lowerThreshold: v } })}
-                min={0} max={95} step={5}
-              />
+            <div className="rounded-md border border-emerald-400/40 bg-emerald-500/10 py-2">
+              <div className="font-bold text-emerald-600 dark:text-emerald-400">≥ {spec.resumeThresholds.upperThreshold}</div>
+              <div className="text-muted-foreground">приглашение</div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Между порогами</Label>
-              <Select
-                value={spec.resumeThresholds.midRangeAction}
-                onValueChange={(v: MidRangeAction) => patch({ resumeThresholds: { ...spec.resumeThresholds, midRangeAction: v } })}
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(Object.keys(MID_RANGE_LABELS) as MidRangeAction[]).map(k => (
-                    <SelectItem key={k} value={k}>{MID_RANGE_LABELS[k]}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-baseline justify-between">
+              <Label className="text-xs">Порог отказа (ниже балл — отказ)</Label>
+              <span className="text-sm font-bold text-amber-600">&lt;{spec.resumeThresholds.lowerThreshold}</span>
             </div>
-            <div className="flex items-center justify-between gap-3 pt-1 border-t">
-              <div>
-                <Label className="text-xs">Реальный авто-отказ ниже порога</Label>
-                <p className="text-[11px] text-muted-foreground">Выкл = кандидаты идут в ручной разбор</p>
-              </div>
-              <Switch
-                checked={spec.resumeThresholds.autoRejectEnabled}
-                onCheckedChange={v => patch({ resumeThresholds: { ...spec.resumeThresholds, autoRejectEnabled: v } })}
-              />
+            <Slider
+              value={[spec.resumeThresholds.lowerThreshold]}
+              onValueChange={([v]) => patch({ resumeThresholds: { ...spec.resumeThresholds, lowerThreshold: Math.min(v, spec.resumeThresholds.upperThreshold - 5) } })}
+              min={0} max={95} step={5}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-baseline justify-between">
+              <Label className="text-xs">Порог приглашения (выше балл — приглашаем)</Label>
+              <span className="text-sm font-bold text-emerald-600">≥{spec.resumeThresholds.upperThreshold}</span>
             </div>
-            <div className="flex items-center gap-2">
+            <Slider
+              value={[spec.resumeThresholds.upperThreshold]}
+              onValueChange={([v]) => patch({ resumeThresholds: { ...spec.resumeThresholds, upperThreshold: Math.max(v, spec.resumeThresholds.lowerThreshold + 5) } })}
+              min={10} max={100} step={5}
+            />
+          </div>
+          {spec.resumeThresholds.autoRejectEnabled && (
+            <div className="flex items-center gap-2 pt-1 border-t">
               <Label className="text-xs shrink-0">Задержка отказа, мин</Label>
               <Input
                 type="number"
@@ -1247,31 +1275,53 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
                 onChange={e => patch({ resumeThresholds: { ...spec.resumeThresholds, rejectionDelayMinutes: Math.max(0, Number(e.target.value) || 0) } })}
                 className="w-24 h-8 text-sm"
               />
+              <span className="text-[11px] text-muted-foreground">отказ уходит не сразу — время передумать</span>
             </div>
-            </>)}
-          </CardContent>
-        </Card>
+          )}
+        </CardContent>
+      </Card>
 
-        {/* Оценка анкеты */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-start justify-between gap-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <FileText className="w-4 h-4" /> Оценка анкеты
-              </CardTitle>
-              <Switch
-                checked={spec.anketaThresholds.enabled ?? true}
-                onCheckedChange={v => patch({ anketaThresholds: { ...spec.anketaThresholds, enabled: v } })}
-              />
-            </div>
-            <CardDescription>Пороги AI-скрининга ответов анкеты (после демо).</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {!(spec.anketaThresholds.enabled ?? true) ? (
-              <p className="text-[11px] text-muted-foreground bg-muted/40 rounded-md px-3 py-2 border">
-                Оценка анкеты отключена — скрининг ответов не применяется.
-              </p>
-            ) : (<>
+      {/* ── Письмо отказа (мягкое) ── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileText className="w-4 h-4" /> Письмо отказа (мягкое)
+          </CardTitle>
+          <CardDescription>
+            Уходит при автоматическом отказе (балл &lt;{spec.resumeThresholds.lowerThreshold}). «{"{{имя}}"}» подставится само. Тон мягкий, без причин отказа.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Textarea
+            value={spec.rejectLetter || DEFAULT_REJECT_LETTER}
+            onChange={e => patch({ rejectLetter: e.target.value.slice(0, 2000) })}
+            rows={4}
+            maxLength={2000}
+          />
+        </CardContent>
+      </Card>
+
+      {/* ── Оценка анкеты (после демо) — вторичный блок ── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between gap-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <FileText className="w-4 h-4" /> Оценка анкеты <span className="text-xs font-normal text-muted-foreground">(после демо)</span>
+            </CardTitle>
+            <Switch
+              checked={spec.anketaThresholds.enabled ?? true}
+              onCheckedChange={v => patch({ anketaThresholds: { ...spec.anketaThresholds, enabled: v } })}
+            />
+          </div>
+          <CardDescription>Пороги AI-скрининга ответов анкеты (после демо).</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!(spec.anketaThresholds.enabled ?? true) ? (
+            <p className="text-[11px] text-muted-foreground bg-muted/40 rounded-md px-3 py-2 border">
+              Оценка анкеты отключена — скрининг ответов не применяется.
+            </p>
+          ) : (<>
+          <div className="grid sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <div className="flex items-baseline justify-between">
                 <Label className="text-xs">Зелёный уровень (на встречу)</Label>
@@ -1294,14 +1344,13 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
                 min={0} max={95} step={5}
               />
             </div>
-            <p className="text-[11px] text-muted-foreground bg-muted/40 rounded-md px-3 py-2 border">
-              Жёлтая зона (между порогами) — кандидат получает «мы свяжемся»,
-              решение за HR. Тексты уровней — в блоке «AI-скрининг анкеты».
-            </p>
-            </>)}
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+          <p className="text-[11px] text-muted-foreground bg-muted/40 rounded-md px-3 py-2 border">
+            Жёлтая зона (между порогами) — кандидат получает «мы свяжемся», решение за HR. Тексты уровней — в блоке «AI-скрининг анкеты».
+          </p>
+          </>)}
+        </CardContent>
+      </Card>
 
       {/* ── (г) Реалистичность портрета ── */}
       <RealismIndicator spec={spec} />

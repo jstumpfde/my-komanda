@@ -15,7 +15,7 @@ import { scoreCandidateById } from "@/lib/ai-score-candidate"
 import { scoreResumeRubric } from "@/lib/scoring/rubric"
 import { buildSpecFromAnketa, buildResumeText } from "@/lib/scoring/vacancy-spec"
 import { scoreTestSubmission } from "@/lib/ai-score-test"
-import { isSpecScoringEnabled, buildSpecResumeInput } from "@/lib/core/spec/resume-input"
+import { isSpecScoringEnabled, buildSpecResumeInput, specHasScoringContent } from "@/lib/core/spec/resume-input"
 import { getSpec } from "@/lib/core/spec/store"
 
 export const dynamic = "force-dynamic"
@@ -80,8 +80,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const specForResume = (dims.includes("resume") && isSpecScoringEnabled(vacancyId))
       ? await getSpec(vacancyId)
       : null
+    // Гейт «по Spec»: для Портрета — любое наполнение Spec (🟢/🔴/точные
+    // требования), иначе переоценка ушла бы в legacy-анкету. Не-Портрет — прежнее.
     const useSpecForResume = !!specForResume
-      && (specForResume.mustHave.length > 0 || specForResume.portraitRequiredSkills.length > 0)
+      && (vac.portraitScoring === true
+        ? specHasScoringContent(specForResume)
+        : (specForResume.mustHave.length > 0 || specForResume.portraitRequiredSkills.length > 0))
 
     for (const c of cands) {
       for (const d of dims) {

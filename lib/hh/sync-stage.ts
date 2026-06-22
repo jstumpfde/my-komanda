@@ -111,13 +111,20 @@ export async function trySyncRejectToHh(candidateId: string, customMessage?: str
     const token = await getValidToken(ctx.vac.companyId)
     if (!token) return false
 
-    // customMessage (Заход 3) — уже отрендеренный текст. Если задан, шлём его
-    // вместо generic rejectMessage вакансии (факторные тексты стоп-факторов).
+    // customMessage — текст отказа из вызывающего кода (факторные тексты
+    // стоп-факторов или «мягкое письмо» Портрета). Всегда прогоняем через
+    // renderTemplate: подстановка {{имя}}/{{вакансия}} идемпотентна (один
+    // проход, подставленное не перепарсивается), поэтому уже отрендеренные
+    // стоп-факторные тексты не страдают, а сырой rejectLetter Портрета
+    // корректно получает имя кандидата.
+    const { firstName } = await getCandidateFirstName(ctx.cand.id)
     let message: string
     if (typeof customMessage === "string" && customMessage.trim().length > 0) {
-      message = customMessage
+      message = renderTemplate(customMessage, {
+        name:    firstName,
+        vacancy: ctx.vac.title,
+      })
     } else {
-      const { firstName } = await getCandidateFirstName(ctx.cand.id)
       const tpl = ctx.vac.aiProcessSettings.rejectMessage?.trim() || DEFAULT_REJECT_MESSAGE
       message = renderTemplate(tpl, {
         name:    firstName,

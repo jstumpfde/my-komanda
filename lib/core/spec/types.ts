@@ -202,6 +202,13 @@ export const StopFactorsSchema = z.object({
   salaryExpectation:  StopFactorSalarySchema.optional(),
   driverLicense:      StopFactorDriverLicenseSchema.optional(),
   jobHopping:         StopFactorJobHoppingSchema.optional(),
+  /** «Добавить свой» — произвольные точные требования фразой (оценивает AI по
+   *  резюме): «Образование высшее», «Готовность к командировкам», «Без больших
+   *  перерывов в стаже» и т.п. Каждое включённое уходит в стоп-факторы AI. */
+  customFactors:      z.array(z.object({
+    label:   z.string().min(1).max(160),
+    enabled: z.boolean().default(true),
+  })).max(15).optional(),
 })
 export type StopFactors = z.infer<typeof StopFactorsSchema>
 
@@ -241,6 +248,12 @@ export const DEFAULT_SCORING_WEIGHTS: ScoringWeights = {
   education:           3,
   location_readiness:  2,
 }
+
+/** Дефолтное мягкое письмо отказа (согласованный текст Юрия). «{{имя}}» подставляется. */
+export const DEFAULT_REJECT_LETTER =
+  "{{имя}}, спасибо, что откликнулись на нашу вакансию! В этот раз мы остановились на " +
+  "других кандидатах, но будем рады видеть ваш отклик в будущем на другие наши позиции. " +
+  "Успехов в поиске — у вас всё получится!"
 
 // ─── Must-have пункт (этап 2: hard/soft) ─────────────────────────────────────
 
@@ -484,6 +497,14 @@ export const CandidateSpecSchema = z.object({
    * настройка; интеграция с чат-ботом — отдельным шагом. По умолчанию ВЫКЛ.
    */
   botClarifyAmbiguous: z.boolean().default(false),
+
+  /**
+   * Мягкое письмо отказа — уходит кандидату при АВТОМАТИЧЕСКОМ отказе по баллу
+   * (resumeThresholds.autoRejectEnabled + score < lower). «{{имя}}» подставляется.
+   * Пусто → используется DEFAULT_REJECT_LETTER. Тон нейтральный, без причин отказа
+   * (юр. требование, [[legal-rejection-texts-neutral-keep-autoreject]]).
+   */
+  rejectLetter: z.string().max(2000).default(""),
 
   // ── Метаданные ────────────────────────────────────────────────────────────
   /**
