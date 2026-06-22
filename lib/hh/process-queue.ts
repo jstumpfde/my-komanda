@@ -304,6 +304,10 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
     // сюда, чтобы дойти и до блока порогов, и до блока авто-отказа ниже. По умолчанию
     // effAiSettings == aiSettings → существующие вакансии работают без изменений.
     let effAiSettings: VacancyAiProcessSettings = aiSettings
+    // Бот-уточнение (spec.botClarifyAmbiguous, контур «Портрет»): спорных по баллу
+    // не режем авто-отказом — пускаем в чат, где бот деликатно уточнит недостающее.
+    // По умолчанию false → поведение прежнее.
+    let botClarifyOn = false
 
     // Если AI-скоринг резюме дал score ниже порога — отклоняем кандидата
     // (reject) или оставляем в "new" для ручного разбора (keep_new),
@@ -621,6 +625,8 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                     rejectionDelayMinutes: rt.rejectionDelayMinutes,
                   }
                 }
+                // Бот-уточнение: спорных по баллу не режем — пусть бот уточнит в чате.
+                if (portraitOn && spec) botClarifyOn = spec.botClarifyAmbiguous === true
               } catch (specErr) {
                 console.warn(`[spec-scoring] vacancy=${localVac.id} — ошибка чтения Spec, fallback на legacy:`, specErr)
               }
@@ -706,6 +712,14 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                   }
                 }
                 // mid === "direct_demo" → invite (ничего не помечаем).
+              }
+
+              // Бот-уточнение (botClarifyOn, контур «Портрет»): спорных по баллу
+              // (reject/keep_new) НЕ держим — пускаем в чат, где бот деликатно уточнит
+              // недостающее. prequalification/demo оставляем (это уже формы уточнения).
+              // Жёсткие стоп-факторы отсекаются раньше (matchStopFactors) и сюда не доходят.
+              if (botClarifyOn && (belowThreshold?.action === "reject" || belowThreshold?.action === "keep_new")) {
+                belowThreshold = null
               }
             }
           }

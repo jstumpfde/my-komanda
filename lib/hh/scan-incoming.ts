@@ -28,6 +28,7 @@ import { hhResponses, candidates, followUpMessages, hhCandidates, vacancies } fr
 import { getValidToken } from "@/lib/hh-helpers"
 import { classifyCandidateResponse } from "@/lib/ai/classify-candidate-response"
 import { processChatbotMessage } from "@/lib/ai/chatbot-processor"
+import { getSpec } from "@/lib/core/spec/store"
 import { executeFunnelAction } from "@/lib/ai/funnel-execute"
 import { isBlockEnabled } from "@/lib/funnel-builder/runtime"
 import { saveCandidatePhoto } from "@/lib/hh/save-candidate-photo"
@@ -422,11 +423,21 @@ export async function scanIncomingMessages(opts: {
         stopWordsJson:        vacancies.stopWordsJson,
         aiProcessSettings:    vacancies.aiProcessSettings,
         channelSources:       vacancies.channelSources,
+        portraitScoring:      vacancies.portraitScoring,
       })
       .from(candidates)
       .innerJoin(vacancies, eq(vacancies.id, candidates.vacancyId))
       .where(eq(candidates.id, candidateId))
       .limit(1)
+
+    // Бот-уточнение (контур «Портрет»): один раз на кандидата читаем spec-флаг,
+    // чтобы Executor мягко уточнял спорное. Только для Портрет-вакансий — иначе
+    // лишний запрос; дефолт false → поведение прежнее.
+    let botClarifyAmbiguous = false
+    if (candVac?.portraitScoring && candVac.vacancyId) {
+      try { botClarifyAmbiguous = (await getSpec(candVac.vacancyId))?.botClarifyAmbiguous === true } catch { /* fallback false */ }
+    }
+
     const automation = (candVac?.descriptionJson as { automation?: Record<string, unknown> } | null)?.automation
     const callIntent = (automation?.["callIntent"] as VacancyCallIntent | undefined) ?? {}
 
@@ -478,6 +489,7 @@ export async function scanIncomingMessages(opts: {
               aiChatbotEnabled:  candVac.aiChatbotEnabled,
               aiChatbotSettings: candVac.aiChatbotSettings,
               aiChatbotPrompt:   candVac.aiChatbotPrompt,
+              botClarifyAmbiguous,
             },
           })
           if (cb.handled) {

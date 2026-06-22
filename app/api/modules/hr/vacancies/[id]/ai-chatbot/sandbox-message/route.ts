@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { processChatbotMessage, type ChatbotSettings } from "@/lib/ai/chatbot-processor"
+import { getSpec } from "@/lib/core/spec/store"
 
 // Группа 33: песочница для тестирования AI чат-бота.
 // Получает текущее сообщение «от кандидата» + историю (в памяти UI),
@@ -50,6 +51,9 @@ export async function POST(
       return apiError("Сначала задайте системный промпт чат-бота", 400)
     }
 
+    // Бот-уточнение: даём HR протестировать поведение в песочнице.
+    const sandboxClarify = (await getSpec(id).catch(() => null))?.botClarifyAmbiguous === true
+
     // Преобразуем history в формат, который понимает processChatbotMessage
     // (через sandboxHistory). Берём только последние 6 ходов — pre-filter
     // смотрит максимум 3.
@@ -76,6 +80,7 @@ export async function POST(
         aiChatbotPrompt:   vacancy.aiChatbotPrompt,
         salaryMin:         vacancy.salaryMin,
         salaryMax:         vacancy.salaryMax,
+        botClarifyAmbiguous: sandboxClarify,
       },
       dryRun:         true,
       sandboxHistory,

@@ -174,6 +174,9 @@ export interface ProcessVacancy {
   aiChatbotPrompt:   string | null
   salaryMin?:        number | null
   salaryMax?:        number | null
+  /** spec.botClarifyAmbiguous (контур «Портрет»): бот деликатно уточняет спорные
+   *  моменты по критериям, прежде чем кандидата отсеют. Источник — vacancy_specs. */
+  botClarifyAmbiguous?: boolean | null
 }
 
 export interface ProcessInput {
@@ -1060,9 +1063,21 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
       "──────────────────────────\n"
     : ""
 
+  // Бот-уточнение (spec.botClarifyAmbiguous, контур «Портрет»): спорных кандидатов
+  // не режут, а пускают в чат, чтобы бот деликатно уточнил недостающее по критериям.
+  // Флаг включается HR'ом per-вакансия (дефолт OFF → блок не добавляется, поведение прежнее).
+  const clarifyGuidance = vacancy.botClarifyAmbiguous
+    ? "\n\n─── УТОЧНЕНИЕ СПОРНОГО ───\n" +
+      "Если по резюме/ответам есть СОМНЕНИЕ, подходит ли кандидат по ключевым требованиям " +
+      "(опыт, отрасль, навыки, формат, готовность) — не делай вывод молча. Деликатно, " +
+      "по-человечески задай ОДИН уточняющий вопрос по спорному моменту, дай шанс прояснить. " +
+      "Не допрашивай и не перечисляй требования списком — один вопрос за раз, в контексте беседы.\n" +
+      "──────────────────────────\n"
+    : ""
+
   const armoredSystemPrompt = offtopicHint
-    ? SAFETY_RULES + "\n" + OFFTOPIC_REDIRECT_HINT + candidateContextBlock + funnelGuidance + "\n\n" + prompt
-    : SAFETY_RULES + candidateContextBlock + funnelGuidance + "\n\n" + prompt
+    ? SAFETY_RULES + "\n" + OFFTOPIC_REDIRECT_HINT + candidateContextBlock + funnelGuidance + clarifyGuidance + "\n\n" + prompt
+    : SAFETY_RULES + candidateContextBlock + funnelGuidance + clarifyGuidance + "\n\n" + prompt
 
   // История диалога (последние пары) + текущее сообщение — как messages[], чтобы
   // Executor видел предыдущие реплики, а не отвечал в вакууме.
