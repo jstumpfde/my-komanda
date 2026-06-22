@@ -2062,6 +2062,19 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
           </div>
         </div>
 
+        {/* На контуре «Портрет» критерии оценки настраиваются в табе «Портрет»
+            (vacancy_specs), а эти legacy-блоки движок не читает → прячем дубль. */}
+        {portraitScoring ? (
+          <div className="rounded-lg border border-primary/30 bg-primary/5 px-3.5 py-3 mt-2 text-xs space-y-0.5">
+            <div className="font-medium text-sm text-foreground">Критерии оценки — в табе «Портрет»</div>
+            <p className="text-muted-foreground">
+              Стоп-факторы, важность критериев и пороги для этой вакансии теперь
+              настраиваются в «Портрете» (единый профиль кандидата). Прежний дубль здесь
+              убран, чтобы не путать. Образование и языки выше остаются — это hh-фильтры
+              для «Исходящего подбора».
+            </p>
+          </div>
+        ) : (<>
         {/* Stop factors */}
         <div className="space-y-2 pt-2 border-t">
           <div className="flex items-center gap-2">
@@ -2240,6 +2253,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
             onAdd={name => set("desiredParams", [...data.desiredParams, { id: `dp_${Date.now()}`, label: name, enabled: true, weight: 3, custom: true }])}
           />
         </div>
+        </>)}
       </Section>
 
       {/* ── 6. Условия (бывшая 7) ── */}
