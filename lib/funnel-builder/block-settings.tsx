@@ -72,6 +72,23 @@ interface VacancyShape {
   descriptionJson:      { finalScreens?: FinalScreensConfig; anketa?: AnketaShape; pipeline?: unknown } | null
   recoveryMessageEnabled: boolean
   recoveryMessageText:    string
+  /** vacancies.portrait_scoring — на контуре «Портрет» критерии/стоп-факторы/пороги
+   *  берутся из vacancy_specs, а эти legacy-блоки движок не читает → прячем дубль. */
+  portraitScoring?:     boolean
+}
+
+/** Заглушка-указатель: для Портрет-вакансий вместо дубля-редактора ведём в «Портрет». */
+function PortraitRedirectNotice({ what }: { what: string }) {
+  return (
+    <div className="rounded-lg border border-primary/30 bg-primary/5 px-3.5 py-3 text-xs space-y-1">
+      <div className="font-medium text-sm text-foreground">Настраивается в табе «Портрет»</div>
+      <p className="text-muted-foreground">
+        {what} для этой вакансии берутся из «Портрета» (единый профиль кандидата) — открой
+        вкладку «Портрет» вверху страницы вакансии. Здесь дубль убран, чтобы не путать:
+        правки в этом блоке движок оценки на контуре «Портрет» не читает.
+      </p>
+    </div>
+  )
 }
 
 function useVacancyData(vacancyId: string): { data: VacancyShape | null; loaded: boolean } {
@@ -112,6 +129,7 @@ function LoadingSpinner() {
 function AiResumeScoreSettingsWrapped({ vacancyId, onSaved }: BlockSettingsProps) {
   const { data, loaded } = useVacancyData(vacancyId)
   if (!loaded) return <LoadingSpinner />
+  if (data?.portraitScoring) return <PortraitRedirectNotice what="Критерии оценки и пороги резюме" />
   return (
     <div className="space-y-6">
       {/* Группа 25: новые структурированные требования для v2-скоринга. */}
@@ -146,6 +164,7 @@ function PrequalificationSettingsWrapped({ vacancyId, onSaved }: BlockSettingsPr
 function StopFactorsSettingsWrapped({ vacancyId, onSaved }: BlockSettingsProps) {
   const { data, loaded } = useVacancyData(vacancyId)
   if (!loaded) return <LoadingSpinner />
+  if (data?.portraitScoring) return <PortraitRedirectNotice what="Стоп-факторы по резюме" />
   return (
     <VacancyStopFactorsSettings
       vacancyId={vacancyId}
