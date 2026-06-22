@@ -370,24 +370,24 @@ function SuggestionDialog({
         </DialogHeader>
         <div className="space-y-4 py-2">
           <ListEditor
-            label="Обязательные (must-have)"
-            hint="Жёсткие требования"
+            label="Сильные плюсы"
+            hint="Войдут в «Подходит» как «Очень важно»"
             maxItems={10}
             items={edited.must_have}
             setItems={v => setField("must_have", v)}
             placeholders={LIST_PLACEHOLDERS.must}
           />
           <ListEditor
-            label="Желательные (nice-to-have)"
-            hint="Повышают оценку, не дисквалифицируют"
+            label="Плюсы"
+            hint="Войдут в «Подходит» как «Желательно»"
             maxItems={10}
             items={edited.nice_to_have}
             setItems={v => setField("nice_to_have", v)}
             placeholders={LIST_PLACEHOLDERS.nice}
           />
           <ListEditor
-            label="Неприемлемо (deal-breakers)"
-            hint="При совпадении — отказ"
+            label="Не подходит"
+            hint="Войдут в «Не подходит» (минус к баллу / стоп-фактор)"
             maxItems={10}
             items={edited.deal_breakers}
             setItems={v => setField("deal_breakers", v)}
@@ -784,11 +784,16 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
 
   const applySuggestion = () => {
     if (!editedSuggestion || !spec) return
+    // Контур «Портрет»: 🟢 «Подходит» не отсеивает → mustHave всегда пуст.
+    // Сильные требования AI → niceToHave «Очень важно», прочие плюсы → «Желательно».
+    const niceToHave = [
+      ...editedSuggestion.must_have.map(text => ({ text, importance: "very" as NiceImportance })),
+      ...editedSuggestion.nice_to_have.map(text => ({ text, importance: "nice" as NiceImportance })),
+    ].slice(0, 10)
     patch({
       idealProfile: editedSuggestion.ideal_profile.slice(0, 500),
-      // must-have → объекты {text, hard:true} (по умолчанию жёсткие)
-      mustHave:     editedSuggestion.must_have.slice(0, 10).map(text => ({ text, hard: true })),
-      niceToHave:   editedSuggestion.nice_to_have.slice(0, 10),
+      mustHave:     [],
+      niceToHave,
       dealBreakers: editedSuggestion.deal_breakers.slice(0, 10),
     })
     setSuggestionOpen(false)
@@ -856,26 +861,35 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
         </div>
       )}
 
-      {/* Заголовок секции */}
+      {/* Заголовок секции + «Заполнить из вакансии» (согласованный макет: кнопка наверху) */}
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <h3 className="text-lg font-semibold text-foreground mb-1 flex items-center gap-2">
             <Target className="w-5 h-5 text-primary" /> Портрет
           </h3>
           <p className="text-sm text-muted-foreground">
-            Единый профиль кандидата: критерии, стоп-факторы, пороги AI-оценки.
+            Опишите, кого ищете — по этим настройкам AI оценивает каждое резюме. Сначала эталон, затем плюсы и минусы.
           </p>
         </div>
-        {source === "legacy" && (
-          <Badge variant="outline" className="border-amber-400 text-amber-700 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400">
-            Собрано из текущих настроек — проверьте и сохраните
-          </Badge>
-        )}
-        {source === "spec" && (
-          <Badge variant="outline" className="border-primary/40 text-primary">
-            Сохранённый Spec
-          </Badge>
-        )}
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {!suggestUnavailable && (
+            <Button type="button" size="sm" onClick={requestSuggestion} disabled={suggesting}>
+              {suggesting
+                ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Анализ…</>
+                : <><Sparkles className="w-4 h-4 mr-1.5" /> Заполнить из вакансии</>}
+            </Button>
+          )}
+          {source === "legacy" && (
+            <Badge variant="outline" className="border-amber-400 text-amber-700 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400">
+              Собрано из текущих настроек — проверьте и сохраните
+            </Badge>
+          )}
+          {source === "spec" && (
+            <Badge variant="outline" className="border-primary/40 text-primary">
+              Сохранённый Spec
+            </Badge>
+          )}
+        </div>
       </div>
 
       {/* Плашка переноса v1 → v2 */}
@@ -923,29 +937,16 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
         </Alert>
       )}
 
-      {/* ── (0) Идеальный профиль — наверху + «Собрать из вакансии» ── */}
+      {/* ── (0) Идеальный профиль («Заполнить из вакансии» — в шапке панели) ── */}
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Target className="w-4 h-4" /> Идеальный профиль
-              </CardTitle>
-              <CardDescription>
-                1–2 предложения для AI: кто идеально подходит на эту позицию. С него
-                удобно начать — затем уточнить критерии и пороги ниже.
-              </CardDescription>
-            </div>
-            {!suggestUnavailable && (
-              <Button
-                type="button" variant="outline" size="sm" className="shrink-0"
-                onClick={requestSuggestion} disabled={suggesting}
-              >
-                {suggesting
-                  ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Анализ…</>
-                  : <><Sparkles className="w-4 h-4 mr-1.5" /> Собрать из вакансии</>}
-              </Button>
-            )}
+          <div>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Target className="w-4 h-4" /> Идеальный профиль
+            </CardTitle>
+            <CardDescription>
+              Короткий эталон в 1–2 фразах — с ним AI сверяет резюме. Детали ниже.
+            </CardDescription>
           </div>
         </CardHeader>
         <CardContent>
