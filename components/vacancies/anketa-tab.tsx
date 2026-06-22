@@ -2456,8 +2456,17 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
 
       {/* ── 7. AI-генерация (бывшая 9) ── */}
       <Section title="AI-генерация" number={8} filled={data.screeningQuestions.length > 0 || !!data.hhDescription}>
-        {/* Screening questions — блок виден всегда, чтобы можно было добавить
-            первый вопрос вручную (а не только после AI-парса). БАГ-6. */}
+        {/* Вопросы для скрининга — у контура «Портрет» это дубль: движок берёт
+            «что хотим видеть» из 🟢 «Подходит» (spec.niceToHave). Прячем + указатель. */}
+        {portraitScoring ? (
+          <div className="rounded-lg border border-primary/30 bg-primary/5 px-3.5 py-3 text-xs space-y-0.5">
+            <div className="font-medium text-sm text-foreground">Что проверять в резюме — в табе «Портрет»</div>
+            <p className="text-muted-foreground">
+              Критерии «что хотим видеть» для AI-оценки задаются в «Портрете» (секция 🟢 «Подходит»).
+              Здесь дубль убран. «Описание для hh.ru» ниже остаётся.
+            </p>
+          </div>
+        ) : (
         <div className="space-y-2">
           <Label className="text-xs font-medium">Вопросы для скрининга</Label>
           {data.screeningQuestions.length > 0 ? (
@@ -2497,6 +2506,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
             <Plus className="w-3 h-3" /> Добавить вопрос
           </Button>
         </div>
+        )}
 
         {/* Скрытый контрол: диалог «Сохранить анкету в библиотеку» (questionnaire_templates).
             Кнопок не рендерит — открывается из дропдауна «Действия» через AnketaTabHandle.saveToLibrary().
