@@ -176,6 +176,22 @@ export const StopFactorSalarySchema = z.object({
   rejectionText: z.string().optional(),
 })
 
+/** Водительские права: требуемые категории (A/B/C/…). Оценивает AI по резюме. */
+export const StopFactorDriverLicenseSchema = z.object({
+  enabled:            z.boolean().default(false),
+  requiredCategories: z.array(z.string()).optional(),
+  rejectionText:      z.string().optional(),
+})
+
+/** Частая смена работы: больше maxJobs мест за последние withinYears лет.
+ *  Оценивает AI по истории опыта в резюме (без хрупкого код-парсинга дат). */
+export const StopFactorJobHoppingSchema = z.object({
+  enabled:       z.boolean().default(false),
+  maxJobs:       z.number().int().min(1).max(20).optional(),   // дефолт 3 (решение Юрия)
+  withinYears:   z.number().int().min(1).max(10).optional(),   // дефолт 2
+  rejectionText: z.string().optional(),
+})
+
 export const StopFactorsSchema = z.object({
   city:               StopFactorCitySchema.optional(),
   format:             StopFactorFormatSchema.optional(),
@@ -184,6 +200,8 @@ export const StopFactorsSchema = z.object({
   documents:          StopFactorDocumentsSchema.optional(),
   citizenship:        StopFactorCitizenshipSchema.optional(),
   salaryExpectation:  StopFactorSalarySchema.optional(),
+  driverLicense:      StopFactorDriverLicenseSchema.optional(),
+  jobHopping:         StopFactorJobHoppingSchema.optional(),
 })
 export type StopFactors = z.infer<typeof StopFactorsSchema>
 

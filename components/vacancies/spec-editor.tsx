@@ -1080,6 +1080,57 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
             />
           </FactorRow>
 
+          <FactorRow
+            title="Водительские права"
+            help="Нужны указанные категории — иначе стоп. Оценивает AI по резюме"
+            enabled={sf.driverLicense?.enabled ?? false}
+            onToggle={v => toggleFactor("driverLicense", v)}
+          >
+            <div className="flex flex-wrap gap-1.5">
+              {["A", "B", "C", "D", "BE", "CE"].map(cat => {
+                const active = (sf.driverLicense?.requiredCategories ?? []).includes(cat)
+                return (
+                  <button key={cat} type="button"
+                    onClick={() => {
+                      const cur = sf.driverLicense?.requiredCategories ?? []
+                      const next = active ? cur.filter(c => c !== cat) : [...cur, cat]
+                      setSf({ ...sf, driverLicense: { ...(sf.driverLicense ?? { enabled: true }), requiredCategories: next } })
+                    }}
+                    className={cn(
+                      "text-xs px-2.5 py-0.5 rounded-md border transition-colors",
+                      active ? "bg-primary text-primary-foreground border-transparent" : "text-muted-foreground border-border hover:text-foreground",
+                    )}
+                  >{cat}</button>
+                )
+              })}
+            </div>
+          </FactorRow>
+
+          <FactorRow
+            title="Частая смена работы"
+            help="Слишком много мест за короткий срок — стоп. Оценивает AI по истории опыта"
+            enabled={sf.jobHopping?.enabled ?? false}
+            onToggle={v => toggleFactor("jobHopping", v)}
+          >
+            <div className="flex items-center gap-1.5 text-sm flex-wrap">
+              <span className="text-muted-foreground">больше</span>
+              <Input
+                type="number"
+                value={sf.jobHopping?.maxJobs ?? 3}
+                onChange={e => setSf({ ...sf, jobHopping: { ...(sf.jobHopping ?? { enabled: true }), maxJobs: Math.max(1, Number(e.target.value) || 3) } })}
+                className="w-14 h-8 text-sm text-center"
+              />
+              <span className="text-muted-foreground">мест за</span>
+              <Input
+                type="number"
+                value={sf.jobHopping?.withinYears ?? 2}
+                onChange={e => setSf({ ...sf, jobHopping: { ...(sf.jobHopping ?? { enabled: true }), withinYears: Math.max(1, Number(e.target.value) || 2) } })}
+                className="w-14 h-8 text-sm text-center"
+              />
+              <span className="text-muted-foreground">г./лет</span>
+            </div>
+          </FactorRow>
+
             <p className="text-[11px] text-muted-foreground">
               Тексты отказов для этих условий — в блоке «Стоп-факторы по резюме» Конструктора воронки.
             </p>

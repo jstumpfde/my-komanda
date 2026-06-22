@@ -89,6 +89,14 @@ export function buildSpecResumeInput(
   if (sf.experience?.enabled && sf.experience.minYears != null) {
     structuralStops.push(`Опыт не менее ${sf.experience.minYears} лет`)
   }
+  if (sf.driverLicense?.enabled && sf.driverLicense.requiredCategories?.length) {
+    structuralStops.push(`Нужны водительские права категорий: ${sf.driverLicense.requiredCategories.join(", ")}`)
+  }
+  if (sf.jobHopping?.enabled) {
+    const maxJobs = sf.jobHopping.maxJobs ?? 3
+    const years   = sf.jobHopping.withinYears ?? 2
+    structuralStops.push(`Частая смена работы: больше ${maxJobs} мест за последние ${years} г./лет (оцени по истории опыта в резюме)`)
+  }
 
   const allKnockouts = [...knockouts, ...structuralStops]
 
