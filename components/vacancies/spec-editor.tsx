@@ -551,7 +551,9 @@ function BadEditor({
         <ListCounter count={rows.length} max={10} />
       </div>
       <p className="text-xs text-muted-foreground">
-        Стоп-фактор — отказ, только если AI прямо видит это в резюме. Минус к баллу — просто ниже балл, не отказ. Можно фразой.
+        Стоп-фактор — отказ, только если AI прямо видит это в резюме. Минус к баллу — просто ниже балл, не отказ. Можно фразой. Кружок справа:{" "}
+        <span className="text-red-600 dark:text-red-400">красный — стоп-фактор</span>,{" "}
+        <span className="text-amber-600 dark:text-amber-400">янтарный — минус к баллу</span>.
       </p>
       <div className="space-y-1.5">
         {rows.map((r, i) => (
