@@ -2456,17 +2456,10 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
 
       {/* ── 7. AI-генерация (бывшая 9) ── */}
       <Section title="AI-генерация" number={8} filled={data.screeningQuestions.length > 0 || !!data.hhDescription}>
-        {/* Вопросы для скрининга — у контура «Портрет» это дубль: движок берёт
-            «что хотим видеть» из 🟢 «Подходит» (spec.niceToHave). Прячем + указатель. */}
-        {portraitScoring ? (
-          <div className="rounded-lg border border-primary/30 bg-primary/5 px-3.5 py-3 text-xs space-y-0.5">
-            <div className="font-medium text-sm text-foreground">Что проверять в резюме — в табе «Портрет»</div>
-            <p className="text-muted-foreground">
-              Критерии «что хотим видеть» для AI-оценки задаются в «Портрете» (секция 🟢 «Подходит»).
-              Здесь дубль убран. «Описание для hh.ru» ниже остаётся.
-            </p>
-          </div>
-        ) : (
+        {/* Вопросы для скрининга — у контура «Портрет» это дубль (движок берёт
+            «что хотим видеть» из 🟢 «Подходит», spec.niceToHave). Прячем без
+            указателя-заглушки — у Портрет-вакансий остаётся только «Описание для hh.ru». */}
+        {portraitScoring ? null : (
         <div className="space-y-2">
           <Label className="text-xs font-medium">Вопросы для скрининга</Label>
           {data.screeningQuestions.length > 0 ? (
