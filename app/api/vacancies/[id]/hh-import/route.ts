@@ -534,7 +534,10 @@ export async function POST(
       ...(mappedData.department ? { department: mappedData.department } : {}),
       ...(mappedData.workingDays ? { workingDaysText: mappedData.workingDays } : {}),
       ...(mappedData.workingTimeIntervals ? { workingTimeText: mappedData.workingTimeIntervals } : {}),
-      ...(specialConditions.length ? { specialConditions } : {}),
+      // specialConditions ВСЕГДА перезаписываем результатом текущего разбора (даже
+      // пустым []) — иначе при переимпорте сохранялся бы старый/ложный флаг (напр.
+      // «Открыты для ОВЗ»). Это hh-производные флаги, импорт для них — источник правды.
+      specialConditions,
     }
 
     const now = new Date()
