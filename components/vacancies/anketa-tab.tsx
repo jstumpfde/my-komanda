@@ -1980,7 +1980,9 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
       {/* ── 5. Образование, языки, оформление (слита с бывшей «Условия») ── */}
       <Section title="Образование, языки, оформление" number={5} filled={sectionFilled(5)} id="section-5">
         {/* Skills (legacy «запасной вариант» — дублирует таб «Портрет», скрыт кроме владельца) */}
-        {showLegacyScoring && (<>
+        {/* Навыки-оценка УБРАНЫ из конструктора вакансии — оценка только в табе «Портрет»
+            (решение Юрия, повторно 23.06). Жёсткий false, не зависит от флага. */}
+        {false && (<>
         <div className="space-y-1.5" onFocus={() => setAdvisorFocusedField("skills")}>
           <div className="flex items-center gap-2">
             <Label className="text-xs">Обязательные навыки</Label>
@@ -2088,9 +2090,10 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
           </div>
         </div>
 
-        {/* На контуре «Портрет» критерии оценки настраиваются в табе «Портрет»
-            (vacancy_specs), а эти legacy-блоки движок не читает → прячем дубль. */}
-        {portraitScoring ? null : (<>
+        {/* «Критерии отбора» и «Желаемые параметры» УБРАНЫ из конструктора вакансии —
+            оценка/критерии ТОЛЬКО в табе «Портрет» (решение Юрия, повторно 23.06).
+            Жёсткий false — не зависит от portraitScoring, физически не рендерится. */}
+        {false && (<>
         {/* Stop factors */}
         <div className="space-y-2 pt-2 border-t">
           <div className="flex items-center gap-2">
