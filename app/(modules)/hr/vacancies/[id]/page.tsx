@@ -2831,9 +2831,6 @@ export default function VacancyPage() {
                         <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { setLibraryDialogOpen(true); loadLibrary() }}>
                           <BookOpen className="size-3.5" />Из библиотеки
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => anketaFileInputRef.current?.click()}>
-                          <Upload className="size-3.5" />Загрузить файл
-                        </DropdownMenuItem>
                         <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { setHhImportBind(false); setHhImportDialogOpen(true) }}>
                           <Globe className="size-3.5" />Заполнить из hh.ru
                         </DropdownMenuItem>

@@ -11,19 +11,23 @@ import { classifyPosition } from "@/lib/position-classifier"
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
-const SPLIT_PROMPT = `Раздели текст описания вакансии на ТРИ части:
+const SPLIT_PROMPT = `Раздели текст описания вакансии на ЧЕТЫРЕ части:
 1. about — вступление и питч: о компании/продукте/миссии, «что мы даём» (плюшки,
    рост, условия). БЕЗ списка задач и требований. Можно абзацами/буллетами.
 2. responsibilities — обязанности (что сотрудник будет делать). Каждый пункт с
    новой строки, начинается с —.
 3. requirements — требования + личные качества + пункты «плюсом». Каждый пункт с
    новой строки, начинается с —.
+4. conditions — условия работы и что предлагает работодатель: график, оформление,
+   выплаты, соцпакет (ДМС, питание, обучение, парковка, оплата ГСМ, фитнес, премии,
+   корпоративный транспорт, релокация…) и прочие плюшки. Каждый пункт с новой
+   строки, начинается с —. Если условий в тексте нет — верни пустую строку.
 
-Верни JSON: { "about": "…", "responsibilities": "…", "requirements": "…" }
+Верни JSON: { "about": "…", "responsibilities": "…", "requirements": "…", "conditions": "…" }
 Без нумерации в буллетах. Только JSON, без markdown. Ничего не выдумывай —
 бери только то, что есть в тексте.`
 
-async function splitDescriptionWithAi(description: string): Promise<{ about: string; responsibilities: string; requirements: string } | null> {
+async function splitDescriptionWithAi(description: string): Promise<{ about: string; responsibilities: string; requirements: string; conditions: string } | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return null
   try {
@@ -55,7 +59,7 @@ async function splitDescriptionWithAi(description: string): Promise<{ about: str
     const text = textBlock?.text || ""
     if (!text) return null
     const raw = text.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim()
-    let parsed: { about?: string; responsibilities?: string; requirements?: string }
+    let parsed: { about?: string; responsibilities?: string; requirements?: string; conditions?: string }
     try {
       parsed = JSON.parse(raw)
     } catch {
@@ -67,6 +71,7 @@ async function splitDescriptionWithAi(description: string): Promise<{ about: str
       about:            String(parsed.about || "").trim(),
       responsibilities: String(parsed.responsibilities || "").trim(),
       requirements:     String(parsed.requirements || "").trim(),
+      conditions:       String(parsed.conditions || "").trim(),
     }
   } catch (err) {
     console.error("[hh-import] AI split failed:", err)
@@ -418,6 +423,9 @@ export async function POST(
     // Вступление/питч вакансии (миссия, о продукте, «что мы даём») — в описание
     // вакансии, чтобы продающий текст не терялся (а не подменялся дефолтом компании).
     const anketaAbout = split?.about || ""
+    // Условия работы/соцпакет → свободный текст «Условия» (как на hh, один блок).
+    // Галочки НЕ ставим автоматически — чтобы не приписать вакансии того, чего нет.
+    const anketaConditionsText = split?.conditions || ""
     console.log("[hh-import] AI split:", split ? "ok" : "fallback")
 
     // ─── Map HH values → anketa schema (Russian labels / schema ids) ────────
@@ -516,6 +524,9 @@ export async function POST(
         ? { positionCityFull: mappedData.cityFull } : {}),
       ...(anketaResponsibilities ? { responsibilities: anketaResponsibilities } : {}),
       ...(anketaRequirements ? { requirements: anketaRequirements } : {}),
+      // Условия из hh → текстовое поле «Условия» (Секция 6). Перезаписываем только
+      // когда импорт что-то нашёл, иначе оставляем введённое HR вручную.
+      ...(anketaConditionsText ? { conditionsText: anketaConditionsText } : {}),
       // Вступление вакансии → описание (показывается кандидату). Не теряем питч.
       ...(anketaAbout ? { companyDescription: anketaAbout } : {}),
       ...(mappedData.skills.length ? { requiredSkills: mappedData.skills } : {}),

@@ -81,6 +81,8 @@ interface AnketaData {
   // 6. Условия
   conditions: string[]
   conditionsCustom: string[]
+  // Свободный текст условий (как на hh: один блок). Заполняется при импорте из hh.
+  conditionsText: string
   employmentType: string[]
   schedule: string
   employeeType: string
@@ -365,7 +367,7 @@ function emptyAnketa(): AnketaData {
     aiLanguages: [], educationLevel: "",
     stopFactors: DEFAULT_STOP_FACTORS.map(f => ({ ...f })),
     desiredParams: DEFAULT_DESIRED_PARAMS.map(p => ({ ...p })),
-    conditions: [], conditionsCustom: [],
+    conditions: [], conditionsCustom: [], conditionsText: "",
     employmentType: [], schedule: "", employeeType: "permanent",
     avgDealSize: "", salesCycle: "", salesType: [], targetAudience: [],
     filterCities: [],
@@ -425,6 +427,7 @@ function migrateAnketa(saved: Record<string, unknown>): AnketaData {
   if (!Array.isArray(d.aiLanguages)) d.aiLanguages = []
   else d.aiLanguages = d.aiLanguages.filter(l => l && typeof l.lang === "string").map(l => ({ lang: l.lang, level: typeof l.level === "string" ? l.level : "" }))
   if (typeof d.educationLevel !== "string") d.educationLevel = ""
+  if (typeof d.conditionsText !== "string") d.conditionsText = ""
 
   // Apply parsed stop factors from file import
   const psf = (saved as Record<string, unknown>).parsedStopFactors as Record<string, string | boolean> | undefined
@@ -1961,9 +1964,6 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
           </div>
           <TagInputWithSuggestions tags={data.unacceptableSkills} onChange={v => set("unacceptableSkills", v)} placeholder="Что неприемлемо..." suggestions={UNACCEPTABLE_SUGGESTIONS} customType="skill" />
         </div>
-        <p className="text-[11px] text-muted-foreground leading-snug">
-          Основные настройки AI-оценки — в блоке «Портрет: AI-оценка» ниже; эти поля используются как запасной вариант.
-        </p>
         </>)}
 
         {/* Образование и языки — используются в «Исходящем подборе» (hh-фильтры) */}
@@ -2251,6 +2251,19 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
 
       {/* ── 6. Условия (бывшая 7) ── */}
       <Section title="Условия" number={6} filled={sectionFilled(6)} id="section-6">
+        {/* Условия текстом — как на hh (один блок). Заполняется при импорте из hh,
+            HR может править. Галочки ниже — быстрые соцпакет-теги. */}
+        <div className="space-y-1.5">
+          <Label className="text-xs">Условия (текст вакансии)</Label>
+          <Textarea
+            value={data.conditionsText}
+            onChange={e => set("conditionsText", e.target.value)}
+            onFocus={() => setAdvisorFocusedField("conditions")}
+            placeholder="Что предлагает работодатель: график, оформление, выплаты, ДМС, питание, обучение, парковка, оплата ГСМ, премии… — как в описании вакансии"
+            rows={4}
+            className="text-sm bg-[var(--input-bg)] border border-input w-full"
+          />
+        </div>
         <div className="flex flex-wrap gap-x-4 gap-y-2" onFocus={() => setAdvisorFocusedField("conditions")}>
           {CONDITIONS_OPTIONS.map(opt => (
             <label key={opt} className="flex items-center gap-1.5">
@@ -2622,16 +2635,8 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
         </div>
       </Section>
 
-      {/* ── 8. AI-профиль кандидата (legacy «Портрет: AI-оценка») — дублирует таб «Портрет»,
-            временно показываем только владельцу, пока строим единую панель ── */}
-      {showLegacyScoring && <AiProfileSection data={data} set={set} />}
-
       {/* Actions */}
       <div className="flex items-center gap-3 justify-end mt-4">
-        <Button variant="outline" size="sm" className="gap-1.5 h-9 text-xs border-[var(--ai)]/30 text-[var(--ai)] hover:bg-[var(--ai)]/5" onClick={handleAiRefill} disabled={aiLoading}>
-          {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-          Перезаполнить через AI
-        </Button>
         <Button variant="outline" size="sm" className="gap-1.5 h-9 text-xs" onClick={() => { setPreviewFullscreen(true); setPreviewOpen(true) }}>
           <Eye className="w-3.5 h-3.5" />
           Предпросмотр вакансии
@@ -2671,7 +2676,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
                     data.requirements && `\nТребования:\n${data.requirements}`,
                     data.requiredSkills.length > 0 && `\nОбязательные навыки: ${data.requiredSkills.join(", ")}`,
                     data.desiredSkills.length > 0 && `Желательные навыки: ${data.desiredSkills.join(", ")}`,
-                    (data.conditions.length > 0 || data.conditionsCustom.length > 0) && `\nУсловия: ${[...data.conditions, ...data.conditionsCustom].join(", ")}`,
+                    (data.conditionsText || data.conditions.length > 0 || data.conditionsCustom.length > 0) && `\nУсловия:\n${[data.conditionsText, [...data.conditions, ...data.conditionsCustom].join(", ")].filter(Boolean).join("\n")}`,
                     data.companyDescription && `\nО компании:\n${data.companyDescription}`,
                   ].filter(Boolean).join("\n")
                   await navigator.clipboard.writeText(lines)
@@ -2690,7 +2695,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
                     data.requirements && `<h3>Требования</h3><p style="white-space:pre-line">${data.requirements}</p>`,
                     data.requiredSkills.length > 0 && `<h3>Обязательные навыки</h3><p>${data.requiredSkills.join(", ")}</p>`,
                     data.desiredSkills.length > 0 && `<h3>Желательные навыки</h3><p>${data.desiredSkills.join(", ")}</p>`,
-                    (data.conditions.length > 0 || data.conditionsCustom.length > 0) && `<h3>Условия</h3><p>${[...data.conditions, ...data.conditionsCustom].join(", ")}</p>`,
+                    (data.conditionsText || data.conditions.length > 0 || data.conditionsCustom.length > 0) && `<h3>Условия</h3>${data.conditionsText ? `<p style="white-space:pre-line">${data.conditionsText}</p>` : ""}${(data.conditions.length > 0 || data.conditionsCustom.length > 0) ? `<p>${[...data.conditions, ...data.conditionsCustom].join(", ")}</p>` : ""}`,
                     data.companyDescription && `<h3>О компании</h3><p style="white-space:pre-line">${data.companyDescription}</p>`,
                   ].filter(Boolean).join("")
                   const w = window.open("", "_blank")
@@ -2754,12 +2759,15 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
                 <div className="flex flex-wrap gap-1.5">{data.desiredSkills.map(s => <Badge key={s} variant="outline" className="text-xs">{s}</Badge>)}</div>
               </div>
             )}
-            {(data.conditions.length > 0 || data.conditionsCustom.length > 0) && (
+            {(data.conditionsText || data.conditions.length > 0 || data.conditionsCustom.length > 0) && (
               <div className="mb-4">
                 <p className="font-semibold text-sm text-muted-foreground uppercase mb-1">Условия</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {[...data.conditions, ...data.conditionsCustom].map(c => <Badge key={c} variant="secondary" className="text-xs">{c}</Badge>)}
-                </div>
+                {data.conditionsText && <p className="whitespace-pre-line mb-1.5">{data.conditionsText}</p>}
+                {(data.conditions.length > 0 || data.conditionsCustom.length > 0) && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {[...data.conditions, ...data.conditionsCustom].map(c => <Badge key={c} variant="secondary" className="text-xs">{c}</Badge>)}
+                  </div>
+                )}
               </div>
             )}
             {data.companyDescription && (
