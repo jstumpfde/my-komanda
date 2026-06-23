@@ -1592,12 +1592,10 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
       case 1: return !!(data.companyName || data.clientCompanyId || data.companyMode === "own" || data.companyDescription)
       case 2: return !!data.positionCategory
       case 3: return !!(data.salaryFrom || data.salaryTo)
-      // 4 = бывшая 5 «Обязанности и требования»
-      case 4: return !!(data.responsibilities || data.requirements)
-      // 5 = бывшая 6 «Портрет кандидата»
-      case 5: return data.requiredSkills.length > 0
-      // 6 = бывшая 7 «Условия»
-      case 6: return data.conditions.length > 0 || data.conditionsCustom.length > 0
+      // 4 = «Обязанности, требования, условия» (условия перенесены из бывшей секции 6)
+      case 4: return !!(data.responsibilities || data.requirements || data.conditionsText || data.conditions.length > 0 || data.conditionsCustom.length > 0)
+      // 5 = «Образование, языки, оформление» (слита с бывшей секцией 6 «Условия»)
+      case 5: return !!(data.educationLevel || data.aiLanguages.length > 0 || data.employmentType.length > 0 || data.schedule)
       default: return false
     }
   }
@@ -1844,7 +1842,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
       </Section>
 
       {/* ── 4. Обязанности и требования (бывшая 5) ── */}
-      <Section title="Обязанности и требования" number={4} filled={sectionFilled(4)} id="section-4">
+      <Section title="Обязанности, требования, условия" number={4} filled={sectionFilled(4)} id="section-4">
         <p className="text-xs text-muted-foreground mt-1">Описание задач и функционала должности</p>
         <div className="space-y-1.5">
           <div className="flex items-center gap-2">
@@ -1942,10 +1940,43 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
             </div>
           </div>
         )}
+        {/* ── Условия (перенесены сюда из бывшей секции 6, к обязанностям/требованиям) ── */}
+        <div className="space-y-1.5 pt-2 border-t">
+          <Label className="text-xs">Условия (текст вакансии)</Label>
+          <Textarea
+            value={data.conditionsText}
+            onChange={e => set("conditionsText", e.target.value)}
+            onFocus={() => setAdvisorFocusedField("conditions")}
+            placeholder="Что предлагает работодатель: график, оформление, выплаты, ДМС, питание, обучение, парковка, оплата ГСМ, премии… — как в описании вакансии"
+            rows={4}
+            className="text-sm bg-[var(--input-bg)] border border-input w-full"
+          />
+        </div>
+        <div className="flex flex-wrap gap-x-4 gap-y-2" onFocus={() => setAdvisorFocusedField("conditions")}>
+          {CONDITIONS_OPTIONS.map(opt => (
+            <label key={opt} className="flex items-center gap-1.5">
+              <Checkbox checked={data.conditions.includes(opt)} onCheckedChange={() => toggleArray("conditions", opt)} />
+              <span className="text-sm">{opt}</span>
+            </label>
+          ))}
+        </div>
+        {data.conditionsCustom.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {data.conditionsCustom.map(c => (
+              <Badge key={c} variant="secondary" className="gap-1 text-xs">
+                {c}
+                <button type="button" onClick={() => set("conditionsCustom", data.conditionsCustom.filter(x => x !== c))} className="hover:text-destructive">
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            ))}
+          </div>
+        )}
+        <TagInput tags={[]} onChange={tags => { if (tags.length > 0) set("conditionsCustom", [...data.conditionsCustom, ...tags]) }} placeholder="Добавить своё условие..." customType="condition" />
       </Section>
 
-      {/* ── 5. Портрет кандидата (бывшая 6) ── */}
-      <Section title="Портрет кандидата" number={5} filled={sectionFilled(5)} id="section-5">
+      {/* ── 5. Образование, языки, оформление (слита с бывшей «Условия») ── */}
+      <Section title="Образование, языки, оформление" number={5} filled={sectionFilled(5)} id="section-5">
         {/* Skills (legacy «запасной вариант» — дублирует таб «Портрет», скрыт кроме владельца) */}
         {showLegacyScoring && (<>
         <div className="space-y-1.5" onFocus={() => setAdvisorFocusedField("skills")}>
@@ -2057,17 +2088,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
 
         {/* На контуре «Портрет» критерии оценки настраиваются в табе «Портрет»
             (vacancy_specs), а эти legacy-блоки движок не читает → прячем дубль. */}
-        {portraitScoring ? (
-          <div className="rounded-lg border border-primary/30 bg-primary/5 px-3.5 py-3 mt-2 text-xs space-y-0.5">
-            <div className="font-medium text-sm text-foreground">Критерии оценки — в табе «Портрет»</div>
-            <p className="text-muted-foreground">
-              Стоп-факторы, важность критериев и пороги для этой вакансии теперь
-              настраиваются в «Портрете» (единый профиль кандидата). Прежний дубль здесь
-              убран, чтобы не путать. Образование и языки выше остаются — это hh-фильтры
-              для «Исходящего подбора».
-            </p>
-          </div>
-        ) : (<>
+        {portraitScoring ? null : (<>
         {/* Stop factors */}
         <div className="space-y-2 pt-2 border-t">
           <div className="flex items-center gap-2">
@@ -2247,45 +2268,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
           />
         </div>
         </>)}
-      </Section>
-
-      {/* ── 6. Условия (бывшая 7) ── */}
-      <Section title="Условия" number={6} filled={sectionFilled(6)} id="section-6">
-        {/* Условия текстом — как на hh (один блок). Заполняется при импорте из hh,
-            HR может править. Галочки ниже — быстрые соцпакет-теги. */}
-        <div className="space-y-1.5">
-          <Label className="text-xs">Условия (текст вакансии)</Label>
-          <Textarea
-            value={data.conditionsText}
-            onChange={e => set("conditionsText", e.target.value)}
-            onFocus={() => setAdvisorFocusedField("conditions")}
-            placeholder="Что предлагает работодатель: график, оформление, выплаты, ДМС, питание, обучение, парковка, оплата ГСМ, премии… — как в описании вакансии"
-            rows={4}
-            className="text-sm bg-[var(--input-bg)] border border-input w-full"
-          />
-        </div>
-        <div className="flex flex-wrap gap-x-4 gap-y-2" onFocus={() => setAdvisorFocusedField("conditions")}>
-          {CONDITIONS_OPTIONS.map(opt => (
-            <label key={opt} className="flex items-center gap-1.5">
-              <Checkbox checked={data.conditions.includes(opt)} onCheckedChange={() => toggleArray("conditions", opt)} />
-              <span className="text-sm">{opt}</span>
-            </label>
-          ))}
-        </div>
-        {data.conditionsCustom.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {data.conditionsCustom.map(c => (
-              <Badge key={c} variant="secondary" className="gap-1 text-xs">
-                {c}
-                <button type="button" onClick={() => set("conditionsCustom", data.conditionsCustom.filter(x => x !== c))} className="hover:text-destructive">
-                  <X className="w-3 h-3" />
-                </button>
-              </Badge>
-            ))}
-          </div>
-        )}
-        <TagInput tags={[]} onChange={tags => { if (tags.length > 0) set("conditionsCustom", [...data.conditionsCustom, ...tags]) }} placeholder="Добавить своё условие..." customType="condition" />
-
+        {/* ── Оформление / график / тип (бывшая секция 6; условия перенесены в секцию 4) ── */}
         <div className="space-y-1.5 pt-2 border-t">
           <div className="flex items-center gap-2">
             <Label className="text-xs">Оформление</Label>
@@ -2461,6 +2444,8 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
       </div>{/* /hidden Документы */}
 
       {/* ── 7. AI-генерация (бывшая 9) ── */}
+      {/* AI-генерация — скрыто по решению Юрия (как Документы). Код секции сохранён. */}
+      <div className="hidden">
       <Section title="AI-генерация" number={8} filled={data.screeningQuestions.length > 0 || !!data.hhDescription}>
         {/* Вопросы для скрининга — у контура «Портрет» это дубль (движок берёт
             «что хотим видеть» из 🟢 «Подходит», spec.niceToHave). Прячем без
@@ -2634,6 +2619,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
           )}
         </div>
       </Section>
+      </div>
 
       {/* Actions */}
       <div className="flex items-center gap-3 justify-end mt-4">
