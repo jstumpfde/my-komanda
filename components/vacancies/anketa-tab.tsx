@@ -2349,18 +2349,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
             <p className="text-sm">{(data as Record<string,unknown>).department as string}</p>
           </div>
         ) : null}
-        {((data as Record<string,unknown>).workingDaysText as string | undefined) ? (
-          <div className="space-y-1.5 pt-2 border-t">
-            <Label className="text-xs">Рабочие дни</Label>
-            <p className="text-sm text-muted-foreground">{(data as Record<string,unknown>).workingDaysText as string}</p>
-          </div>
-        ) : null}
-        {((data as Record<string,unknown>).workingTimeText as string | undefined) ? (
-          <div className="space-y-1.5">
-            <Label className="text-xs">Рабочие часы</Label>
-            <p className="text-sm text-muted-foreground">{(data as Record<string,unknown>).workingTimeText as string}</p>
-          </div>
-        ) : null}
+        {/* «Рабочие дни/часы» из hh убраны — дублировали «График работы» выше (решение Юрия) */}
         {((data as Record<string,unknown>).specialConditions as string[] | undefined)?.length ? (
           <div className="space-y-1.5 pt-2 border-t">
             <Label className="text-xs">Спецусловия</Label>
@@ -2709,6 +2698,12 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
                 {data.employment.map(e => <Badge key={e} variant="outline">{e}</Badge>)}
               </div>
             )}
+            {data.companyDescription && (
+              <div className="mb-4">
+                <p className="font-semibold text-sm text-muted-foreground uppercase mb-1">О компании</p>
+                <div className="whitespace-pre-line">{data.companyDescription}</div>
+              </div>
+            )}
             {(data.salaryFrom || data.salaryTo) && (
               <div className="mb-4">
                 <p className="font-semibold text-sm text-muted-foreground uppercase mb-1">Зарплата</p>
@@ -2756,10 +2751,16 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
                 )}
               </div>
             )}
-            {data.companyDescription && (
+            {(data.educationLevel || data.aiLanguages.length > 0 || data.employmentType.length > 0 || data.schedule || data.employeeType) && (
               <div className="mb-4">
-                <p className="font-semibold text-sm text-muted-foreground uppercase mb-1">О компании</p>
-                <div className="whitespace-pre-line">{data.companyDescription}</div>
+                <p className="font-semibold text-sm text-muted-foreground uppercase mb-1">Образование, языки, оформление</p>
+                <div className="space-y-1 text-sm">
+                  {data.educationLevel && <p>Образование: {EDUCATION_LEVEL_OPTIONS.find(o => o.id === data.educationLevel)?.label || data.educationLevel}</p>}
+                  {data.aiLanguages.length > 0 && <p>Языки: {data.aiLanguages.map(l => { const ln = LANGUAGE_OPTIONS.find(o => o.id === l.lang)?.label || l.lang; const lv = LANGUAGE_LEVEL_OPTIONS.find(o => o.id === l.level)?.label || l.level; return lv ? `${ln} (${lv})` : ln }).filter(Boolean).join(", ")}</p>}
+                  {data.employmentType.length > 0 && <p>Оформление: {data.employmentType.join(", ")}</p>}
+                  {data.schedule && <p>График: {SCHEDULE_OPTIONS.find(o => o.value === data.schedule)?.label || data.schedule}</p>}
+                  {data.employeeType && <p>Тип сотрудника: {EMPLOYEE_TYPE_OPTIONS.find(o => o.value === data.employeeType)?.label || data.employeeType}</p>}
+                </div>
               </div>
             )}
           </div>

@@ -78,7 +78,7 @@ const SECTION_MAP: Record<string, string> = {
   requirements: "section-4",
   skills: "section-5",
   stopFactors: "section-5",
-  conditions: "section-6",
+  conditions: "section-4",
   company: "section-1",
 }
 
