@@ -56,6 +56,10 @@ interface AnketaData {
   bonus: string
   payFrequency: string[]
   showSalary: boolean
+  // Валюта / период / «на руки» зарплаты (для публикации на hh)
+  salaryCurrency: string
+  salaryPeriod: string
+  salaryNet: boolean
   // 4. О компании
   companyDescription: string
   // O1 мультикомпанийность: под какую компанию-бренд идёт вакансия.
@@ -86,6 +90,17 @@ interface AnketaData {
   employmentType: string[]
   schedule: string
   employeeType: string
+  // Навыки вакансии ДЛЯ ПУБЛИКАЦИИ на hh (не оценка; отдельно от requiredSkills/desiredSkills)
+  vacancySkills: string[]
+  // Оформление / занятость (hh)
+  internship: boolean
+  gphSubtypes: string[]
+  workHours: string
+  nightShifts: boolean
+  // Адрес работы
+  workAddress: string
+  workMetro: string
+  hideAddress: boolean
   // removed: questions (moved to Demonstration)
   questions: Question[]
   // 7. AI-генерация
@@ -154,7 +169,7 @@ const POSITION_CATEGORY_OPTIONS = Object.entries(POSITION_CATEGORIES).map(([key,
   label: val.label,
 }))
 
-const WORK_FORMAT_OPTIONS = ["Офис", "Гибрид", "Удалёнка"]
+const WORK_FORMAT_OPTIONS = ["Офис", "Гибрид", "Удалёнка", "Разъездной"]
 const COMPANY_WORK_FORMAT_OPTIONS = [
   { value: "office",   label: "Офис" },
   { value: "remote",   label: "Удалённо" },
@@ -162,7 +177,7 @@ const COMPANY_WORK_FORMAT_OPTIONS = [
   { value: "rotation", label: "Вахта" },
   { value: "travel",   label: "Разъездной" },
 ]
-const EMPLOYMENT_OPTIONS = ["Полная", "Частичная", "Проектная"]
+const EMPLOYMENT_OPTIONS = ["Полная", "Частичная", "Проектная", "Вахта"]
 
 const REQUIRED_EXPERIENCE_OPTIONS = [
   { value: "none", label: "Без опыта" },
@@ -171,61 +186,62 @@ const REQUIRED_EXPERIENCE_OPTIONS = [
   { value: "6+", label: "от 6 лет" },
 ]
 
-const EMPLOYMENT_TYPE_OPTIONS = ["Трудовой договор (ТК РФ)", "ГПХ", "Самозанятый", "ИП"]
-
 const SCHEDULE_OPTIONS = [
+  { value: "6/1", label: "6/1" },
   { value: "5/2", label: "5/2" },
+  { value: "4/4", label: "4/4" },
+  { value: "4/3", label: "4/3" },
+  { value: "4/2", label: "4/2" },
+  { value: "3/3", label: "3/3" },
+  { value: "3/2", label: "3/2" },
   { value: "2/2", label: "2/2" },
+  { value: "2/1", label: "2/1" },
+  { value: "1/3", label: "1/3" },
+  { value: "1/2", label: "1/2" },
+  { value: "weekends", label: "По выходным" },
   { value: "free", label: "Свободный" },
   { value: "shift", label: "Сменный" },
   { value: "rotation", label: "Вахта" },
   { value: "other", label: "Другое" },
 ]
 
+// Рабочие часы в день (чипы, hh)
+const WORK_HOURS_OPTIONS = [
+  "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "24",
+  "По договорённости", "Другое",
+]
+
+// Валюта зарплаты (hh)
+const SALARY_CURRENCY_OPTIONS = [
+  { value: "RUB", label: "₽" },
+  { value: "BYN", label: "Br" },
+  { value: "USD", label: "$" },
+  { value: "EUR", label: "€" },
+  { value: "KZT", label: "₸" },
+]
+
+// Период зарплаты
+const SALARY_PERIOD_OPTIONS = [
+  { value: "month", label: "За месяц" },
+  { value: "shift", label: "За смену" },
+  { value: "project", label: "За проект" },
+  { value: "hour", label: "За час" },
+  { value: "year", label: "За год" },
+]
+
+// Подтипы договора ГПХ
+const GPH_SUBTYPE_OPTIONS = [
+  { value: "самозанятый", label: "с самозанятым" },
+  { value: "ИП", label: "с ИП" },
+  { value: "физлицо", label: "с физлицом" },
+]
+
+// Категории водительских прав (hh)
+const DRIVER_LICENSE_OPTIONS = ["A", "B", "C", "D", "BE", "CE"]
+
 const EMPLOYEE_TYPE_OPTIONS = [
   { value: "permanent", label: "Постоянный" },
   { value: "temporary", label: "Временный / Проектный" },
-]
-
-const SALES_CYCLE_OPTIONS = [
-  { value: "1-3d", label: "1-3 дня" },
-  { value: "1-2w", label: "1-2 недели" },
-  { value: "1-3m", label: "1-3 месяца" },
-  { value: "3-6m", label: "3-6 месяцев" },
-  { value: "6m+", label: "6+ месяцев" },
-]
-
-const SALES_TYPE_OPTIONS = ["Холодные звонки", "Входящие лиды", "Демонстрации", "Партнёрские", "Тендеры", "Нетворкинг"]
-
-const TARGET_AUDIENCE_OPTIONS = ["Собственники", "Директора/CEO", "HR-директора", "Коммерческие директора", "Руководители отделов"]
-
-const AI_WEIGHT_OPTIONS: { value: AiWeightLevel; label: string }[] = [
-  { value: "critical", label: "Критично" },
-  { value: "important", label: "Важно" },
-  { value: "nice", label: "Желательно" },
-  { value: "irrelevant", label: "Не важно" },
-]
-
-// Уровни для КАСТОМ-критериев: шкала от «не отказываем» до «отказываем».
-// "required" (Обязательно) — knockout: не соответствует → отказ/балл 0.
-const CUSTOM_LEVEL_OPTIONS: { value: AiWeightLevel; label: string }[] = [
-  { value: "required", label: "Обязательно" },
-  { value: "critical", label: "Критично" },
-  { value: "important", label: "Важно" },
-  { value: "nice", label: "Желательно" },
-  { value: "irrelevant", label: "Не важно" },
-]
-
-// Встроенные критерии ОЦЕНКИ профпригодности. Город и формат работы убраны
-// намеренно — это жёсткие ФИЛЬТРЫ (стоп-факторы вакансии), а не баллы
-// (см. lib/scoring/vacancy-spec.ts и TZ-SCORING-FILTERS-SPLIT). Сверх этих осей
-// HR может добавить свои критерии ниже (aiCustomCriteria).
-const AI_WEIGHT_CRITERIA = [
-  { id: "industry_experience", label: "Опыт в отрасли" },
-  { id: "specific_skills", label: "Конкретные навыки" },
-  { id: "salary_match", label: "Зарплатное соответствие" },
-  { id: "management", label: "Опыт управления" },
-  { id: "education", label: "Образование" },
 ]
 
 const DEFAULT_AI_WEIGHTS: Record<string, AiWeightLevel> = {
@@ -237,9 +253,11 @@ const DEFAULT_AI_WEIGHTS: Record<string, AiWeightLevel> = {
 }
 
 const PAY_FREQUENCY_OPTIONS = [
-  { value: "monthly", label: "Ежемесячно" },
-  { value: "biweekly", label: "2 раза в месяц" },
-  { value: "weekly", label: "Еженедельно" },
+  { value: "daily", label: "Ежедневно" },
+  { value: "weekly", label: "Раз в неделю" },
+  { value: "biweekly", label: "Два раза в месяц" },
+  { value: "monthly", label: "Раз в месяц" },
+  { value: "project", label: "За проект" },
 ]
 
 const REQUIRED_SKILL_SUGGESTIONS = [
@@ -258,26 +276,6 @@ const REQUIRED_SKILL_SUGGESTIONS = [
   "Английский язык", "Немецкий язык", "Китайский язык", "Французский язык",
   "Водительские права B", "Командировки", "Работа в команде", "Лидерство",
   "Стрессоустойчивость", "Многозадачность", "Клиентоориентированность",
-]
-
-const DESIRED_SKILL_SUGGESTIONS = [
-  "Английский язык", "Управление командой", "Аналитика", "Маркетинг",
-  "Финансовый анализ", "Публичные выступления", "Наставничество",
-  "Стратегическое планирование", "Знание ERP", "Power BI", "SQL",
-  "Немецкий язык", "Китайский язык", "Французский язык",
-  "Agile/Scrum", "JIRA", "Confluence", "Figma", "Tableau",
-  "Проектное управление", "Тайм-менеджмент", "Деловая переписка",
-  "Копирайтинг", "SEO", "SMM", "Email-маркетинг", "Контент-маркетинг",
-  "Python", "JavaScript", "MS Office", "Google Workspace",
-  "Лидерство", "Коучинг", "Фасилитация", "Медиация", "Дизайн-мышление",
-  "Водительские права B", "Командировки", "Работа в команде",
-]
-
-const UNACCEPTABLE_SUGGESTIONS = [
-  "Без опыта продаж", "Частая смена работы", "Нет высшего образования",
-  "Судимость", "Нет водительских прав", "Не готов к командировкам",
-  "Нет опыта в отрасли", "Завышенные зарплатные ожидания", "Курение",
-  "Нет регистрации", "Не владеет ПК", "Работа только удалённо",
 ]
 
 const DEFAULT_STOP_FACTORS: StopFactor[] = [
@@ -360,6 +358,7 @@ function emptyAnketa(): AnketaData {
     positionCategory: "", workFormats: [], employment: [], positionCity: "",
     requiredExperience: "", hiringPlan: 1,
     salaryFrom: "", salaryTo: "", bonus: "", payFrequency: [], showSalary: true,
+    salaryCurrency: "RUB", salaryPeriod: "month", salaryNet: true,
     companyDescription: "", brandCompanyId: "",
     responsibilities: "", requirements: "",
     requiredSkills: [], desiredSkills: [], unacceptableSkills: [],
@@ -369,6 +368,8 @@ function emptyAnketa(): AnketaData {
     desiredParams: DEFAULT_DESIRED_PARAMS.map(p => ({ ...p })),
     conditions: [], conditionsCustom: [], conditionsText: "",
     employmentType: [], schedule: "", employeeType: "permanent",
+    vacancySkills: [], internship: false, gphSubtypes: [], workHours: "", nightShifts: false,
+    workAddress: "", workMetro: "", hideAddress: false,
     avgDealSize: "", salesCycle: "", salesType: [], targetAudience: [],
     filterCities: [],
     filterCitizenship: { mode: "russia", countries: [], isStopFactor: false },
@@ -428,6 +429,18 @@ function migrateAnketa(saved: Record<string, unknown>): AnketaData {
   else d.aiLanguages = d.aiLanguages.filter(l => l && typeof l.lang === "string").map(l => ({ lang: l.lang, level: typeof l.level === "string" ? l.level : "" }))
   if (typeof d.educationLevel !== "string") d.educationLevel = ""
   if (typeof d.conditionsText !== "string") d.conditionsText = ""
+  // Новые поля hh-публикации — тип-защита для старых анкет без этих ключей
+  if (typeof d.salaryCurrency !== "string" || !d.salaryCurrency) d.salaryCurrency = "RUB"
+  if (typeof d.salaryPeriod !== "string" || !d.salaryPeriod) d.salaryPeriod = "month"
+  if (typeof d.salaryNet !== "boolean") d.salaryNet = true
+  if (!Array.isArray(d.vacancySkills)) d.vacancySkills = []
+  if (typeof d.internship !== "boolean") d.internship = false
+  if (!Array.isArray(d.gphSubtypes)) d.gphSubtypes = []
+  if (typeof d.workHours !== "string") d.workHours = ""
+  if (typeof d.nightShifts !== "boolean") d.nightShifts = false
+  if (typeof d.workAddress !== "string") d.workAddress = ""
+  if (typeof d.workMetro !== "string") d.workMetro = ""
+  if (typeof d.hideAddress !== "boolean") d.hideAddress = false
 
   // Apply parsed stop factors from file import
   const psf = (saved as Record<string, unknown>).parsedStopFactors as Record<string, string | boolean> | undefined
@@ -1770,6 +1783,18 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
           <Input value={data.positionCity} onChange={e => set("positionCity", e.target.value)} placeholder="Москва" className="h-9 bg-[var(--input-bg)] border border-input w-full" />
         </div>
         <div className="space-y-1.5">
+          <Label className="text-xs">Адрес</Label>
+          <Input value={data.workAddress} onChange={e => set("workAddress", e.target.value)} placeholder="Город, улица, дом — или «по договорённости»" className="h-9 bg-[var(--input-bg)] border border-input w-full" />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Метро</Label>
+          <Input value={data.workMetro} onChange={e => set("workMetro", e.target.value)} placeholder="Станция метро, если есть" className="h-9 bg-[var(--input-bg)] border border-input w-full" />
+        </div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <Switch checked={data.hideAddress} onCheckedChange={v => set("hideAddress", !!v)} />
+          <span className="text-sm">Не показывать адрес в вакансии</span>
+        </label>
+        <div className="space-y-1.5">
           <div className="flex items-center gap-2">
             <Label className="text-xs">Требуемый опыт</Label>
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground border-muted-foreground/30">hh.ru</Badge>
@@ -1825,6 +1850,57 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
               <Input value={data.salaryTo} onChange={e => set("salaryTo", e.target.value)} placeholder="150 000 ₽" className="h-9 bg-[var(--input-bg)] border border-input" />
             </div>
           </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Валюта</Label>
+              <Select value={data.salaryCurrency} onValueChange={v => set("salaryCurrency", v)}>
+                <SelectTrigger className="h-9 w-full">
+                  <SelectValue placeholder="₽" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SALARY_CURRENCY_OPTIONS.map(o => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Период</Label>
+              <Select value={data.salaryPeriod} onValueChange={v => set("salaryPeriod", v)}>
+                <SelectTrigger className="h-9 w-full">
+                  <SelectValue placeholder="За месяц" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SALARY_PERIOD_OPTIONS.map(o => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Налоги</Label>
+            <div className="flex flex-wrap gap-2">
+              {([
+                { net: false, label: "До вычета налогов" },
+                { net: true, label: "На руки" },
+              ] as const).map(o => (
+                <button
+                  key={o.label}
+                  type="button"
+                  onClick={() => set("salaryNet", o.net)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-md text-sm border transition-colors",
+                    data.salaryNet === o.net
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-[var(--input-bg)] border-input hover:bg-accent"
+                  )}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Бонусы</Label>
             <Textarea value={data.bonus} onChange={e => set("bonus", e.target.value)} placeholder="% от продаж, KPI, бонус за перевыполнение плана, квартальная премия..." rows={2} className="text-sm bg-[var(--input-bg)] border border-input w-full" />
@@ -1878,72 +1954,6 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
           />
         </div>
 
-        {/* «Специфика продаж» (AI-профиль продавца) УБРАНА из конструктора вакансии —
-            это AI-оценка кандидата (кормит ai-screen-candidate), а оценка только в «Портрете»
-            (решение Юрия, 23.06). Жёсткий false — рендер физически отрезан, не зависит от категории. */}
-        {false && (
-          <div className="space-y-3 pt-3 border-t">
-            <div className="flex items-center gap-2">
-              <Label className="text-xs font-semibold">💼 Специфика продаж</Label>
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">AI-профиль продавца</Badge>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs">Средний чек / стоимость продукта</Label>
-              <Input
-                value={data.avgDealSize}
-                onChange={e => set("avgDealSize", e.target.value)}
-                placeholder="от 100 000 до 990 000 ₽/год"
-                className="h-9 bg-[var(--input-bg)] border border-input w-full"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs">Цикл сделки</Label>
-              <div className="flex flex-wrap gap-2">
-                {SALES_CYCLE_OPTIONS.map(opt => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => set("salesCycle", data.salesCycle === opt.value ? "" : opt.value)}
-                    className={cn(
-                      "px-3 py-1.5 rounded-md text-sm border transition-colors",
-                      data.salesCycle === opt.value
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-[var(--input-bg)] border-input hover:bg-accent"
-                    )}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs">Тип продаж</Label>
-              <div className="flex flex-wrap gap-3">
-                {SALES_TYPE_OPTIONS.map(opt => (
-                  <label key={opt} className="flex items-center gap-1.5">
-                    <Checkbox checked={data.salesType.includes(opt)} onCheckedChange={() => toggleArray("salesType", opt)} />
-                    <span className="text-sm">{opt}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs">ЛПР (лицо принимающее решение)</Label>
-              <div className="flex flex-wrap gap-3">
-                {TARGET_AUDIENCE_OPTIONS.map(opt => (
-                  <label key={opt} className="flex items-center gap-1.5">
-                    <Checkbox checked={data.targetAudience.includes(opt)} onCheckedChange={() => toggleArray("targetAudience", opt)} />
-                    <span className="text-sm">{opt}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
         {/* ── Условия (перенесены сюда из бывшей секции 6, к обязанностям/требованиям) ── */}
         <div className="space-y-1.5 pt-2 border-t">
           <Label className="text-xs">Условия (текст вакансии)</Label>
@@ -1981,27 +1991,19 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
 
       {/* ── 5. Образование, языки, оформление (слита с бывшей «Условия») ── */}
       <Section title="Образование, языки, оформление" number={5} filled={sectionFilled(5)} id="section-5">
-        {/* Skills (legacy «запасной вариант» — дублирует таб «Портрет», скрыт кроме владельца) */}
-        {/* Навыки-оценка УБРАНЫ из конструктора вакансии — оценка только в табе «Портрет»
-            (решение Юрия, повторно 23.06). Жёсткий false, не зависит от флага. */}
-        {false && (<>
-        <div className="space-y-1.5" onFocus={() => setAdvisorFocusedField("skills")}>
-          <div className="flex items-center gap-2">
-            <Label className="text-xs">Обязательные навыки</Label>
-          </div>
-          <TagInputWithSuggestions tags={data.requiredSkills} onChange={v => set("requiredSkills", v)} placeholder="Добавить навык..." suggestions={REQUIRED_SKILL_SUGGESTIONS} customType="skill" />
-        </div>
+        {/* Навыки вакансии — для публикации на hh (не влияют на оценку). Отдельно от
+            оценочных requiredSkills/desiredSkills (те живут в табе «Портрет»). */}
         <div className="space-y-1.5">
-          <Label className="text-xs">Желательные навыки</Label>
-          <TagInputWithSuggestions tags={data.desiredSkills} onChange={v => set("desiredSkills", v)} placeholder="Добавить навык..." suggestions={DESIRED_SKILL_SUGGESTIONS} customType="skill" />
+          <Label className="text-xs">Навыки</Label>
+          <TagInputWithSuggestions
+            tags={data.vacancySkills.slice(0, 15)}
+            onChange={v => set("vacancySkills", v.slice(0, 15))}
+            placeholder="Добавить навык..."
+            suggestions={REQUIRED_SKILL_SUGGESTIONS}
+            customType="skill"
+          />
+          <p className="text-[10px] text-muted-foreground">Для публикации на hh, не влияет на оценку</p>
         </div>
-        <div className="space-y-1.5" onFocus={() => setAdvisorFocusedField("stopFactors")}>
-          <div className="flex items-center gap-2">
-            <Label className="text-xs text-destructive/80">Неприемлемо</Label>
-          </div>
-          <TagInputWithSuggestions tags={data.unacceptableSkills} onChange={v => set("unacceptableSkills", v)} placeholder="Что неприемлемо..." suggestions={UNACCEPTABLE_SUGGESTIONS} customType="skill" />
-        </div>
-        </>)}
 
         {/* Образование и языки — используются в «Исходящем подборе» (hh-фильтры) */}
         <div className="space-y-3 pt-2 border-t">
@@ -2092,202 +2094,38 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
           </div>
         </div>
 
-        {/* «Критерии отбора» и «Желаемые параметры» УБРАНЫ из конструктора вакансии —
-            оценка/критерии ТОЛЬКО в табе «Портрет» (решение Юрия, повторно 23.06).
-            Жёсткий false — не зависит от portraitScoring, физически не рендерится. */}
-        {false && (<>
-        {/* Stop factors */}
-        <div className="space-y-2 pt-2 border-t">
-          <div className="flex items-center gap-2">
-            <Label className="text-xs font-semibold">Критерии отбора</Label>
-          </div>
-          <div className="space-y-2">
-            {data.stopFactors.map((f, idx) => (
-              <div key={f.id}>
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    checked={f.enabled}
-                    onCheckedChange={v => {
-                      const next = [...data.stopFactors]
-                      next[idx] = { ...next[idx], enabled: !!v }
-                      set("stopFactors", next)
-                    }}
-                  />
-                  <span className={cn("text-sm flex-1", !f.enabled && "text-muted-foreground")}>{f.label}</span>
-                  {f.custom && (
-                    <button type="button" onClick={() => set("stopFactors", data.stopFactors.filter((_, i) => i !== idx))} className="text-muted-foreground hover:text-destructive">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-                {f.enabled && f.id === "age" && (
-                  <div className="flex items-center gap-4 ml-6 mt-1">
-                    <div className="space-y-1 max-w-[200px]">
-                      <Label className="text-[10px] text-muted-foreground">Возраст от</Label>
-                      <Input
-                        type="number" min={18} max={65}
-                        value={f.ageRange?.[0] ?? 18}
-                        onChange={e => {
-                          const next = [...data.stopFactors]
-                          next[idx] = { ...next[idx], ageRange: [Number(e.target.value) || 18, f.ageRange?.[1] ?? 65] }
-                          set("stopFactors", next)
-                        }}
-                        className="h-7 text-xs bg-[var(--input-bg)] border border-input"
-                      />
-                    </div>
-                    <div className="space-y-1 max-w-[200px]">
-                      <Label className="text-[10px] text-muted-foreground">Возраст до</Label>
-                      <Input
-                        type="number" min={18} max={65}
-                        value={f.ageRange?.[1] ?? 65}
-                        onChange={e => {
-                          const next = [...data.stopFactors]
-                          next[idx] = { ...next[idx], ageRange: [f.ageRange?.[0] ?? 18, Number(e.target.value) || 65] }
-                          set("stopFactors", next)
-                        }}
-                        className="h-7 text-xs bg-[var(--input-bg)] border border-input"
-                      />
-                    </div>
-                  </div>
-                )}
-                {f.enabled && f.id === "city" && (
-                  <div className="ml-6 mt-1.5">
-                    <TagInput
-                      tags={data.filterCities}
-                      onChange={v => set("filterCities", v)}
-                      placeholder="Введите город и нажмите Enter..."
-                      customType="city"
-                    />
-                  </div>
-                )}
-                {f.enabled && f.id === "citizenship" && (
-                  <div className="ml-6 mt-1.5 space-y-2">
-                    <div className="flex flex-wrap gap-2">
-                      {(["russia", "any", "custom"] as const).map(m => (
-                        <button
-                          key={m}
-                          type="button"
-                          onClick={() => set("filterCitizenship", { ...data.filterCitizenship, mode: m })}
-                          className={cn(
-                            "px-2.5 py-1 rounded text-xs border transition-colors",
-                            data.filterCitizenship.mode === m
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "bg-[var(--input-bg)] border-input hover:bg-accent"
-                          )}
-                        >
-                          {m === "russia" ? "Только из России" : m === "any" ? "Любое гражданство" : "Указать страны"}
-                        </button>
-                      ))}
-                    </div>
-                    {data.filterCitizenship.mode === "custom" && (
-                      <TagInput
-                        tags={data.filterCitizenship.countries}
-                        onChange={v => set("filterCitizenship", { ...data.filterCitizenship, countries: v })}
-                        placeholder="Россия, Беларусь, Казахстан..."
-                        customType="country"
-                      />
-                    )}
-                    {data.filterCitizenship.mode !== "any" && (
-                      <label className="flex items-center gap-1.5">
-                        <Checkbox
-                          checked={data.filterCitizenship.isStopFactor}
-                          onCheckedChange={v => set("filterCitizenship", { ...data.filterCitizenship, isStopFactor: !!v })}
-                        />
-                        <span className="text-xs text-destructive/80">Стоп-фактор: автоотказ если не из указанных стран</span>
-                      </label>
-                    )}
-                  </div>
-                )}
-                {f.enabled && (f.id === "experience" || f.id === "salaryMax" || f.id === "documents") && (
-                  <Input
-                    value={f.value ?? ""}
-                    onChange={e => {
-                      const next = [...data.stopFactors]
-                      next[idx] = { ...next[idx], value: e.target.value }
-                      set("stopFactors", next)
-                    }}
-                    placeholder={f.id === "salaryMax" ? "Максимальная сумма" : f.id === "experience" ? "Мин. лет" : "Уточните..."}
-                    className="h-7 text-xs max-w-xs ml-6 mt-1"
-                  />
-                )}
-              </div>
-            ))}
-          </div>
-          <AddCustomInline
-            placeholder="Название стоп-фактора..."
-            itemType="stop_factor"
-            onAdd={name => set("stopFactors", [...data.stopFactors, { id: `sf_${Date.now()}`, label: name, enabled: true, custom: true }])}
-          />
-        </div>
-
-        {/* Desired params */}
-        <div className="space-y-2 pt-2 border-t">
-          <Label className="text-xs font-semibold">Желаемые параметры</Label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {data.desiredParams.map((p, idx) => (
-              <div key={p.id} className={cn("border rounded-lg p-3 transition-colors", p.enabled ? "border-primary/30 bg-primary/5" : "border-border")}>
-                <div className="flex items-center justify-between gap-2">
-                  <span className={cn("text-sm font-medium truncate", !p.enabled && "text-muted-foreground")}>{p.label}</span>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {p.custom && (
-                      <button type="button" onClick={() => set("desiredParams", data.desiredParams.filter((_, i) => i !== idx))} className="text-muted-foreground hover:text-destructive">
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                    <Switch
-                      checked={p.enabled}
-                      onCheckedChange={v => {
-                        const next = [...data.desiredParams]
-                        next[idx] = { ...next[idx], enabled: !!v }
-                        set("desiredParams", next)
-                      }}
-                    />
-                  </div>
-                </div>
-                {p.enabled && (
-                  <div className="flex items-center gap-1 mt-2">
-                    <span className="text-[10px] text-muted-foreground mr-1">Вес:</span>
-                    {[1, 2, 3, 4, 5].map(w => (
-                      <button
-                        key={w} type="button"
-                        className={cn(
-                          "w-6 h-6 rounded text-xs font-medium transition-colors",
-                          p.weight === w ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"
-                        )}
-                        onClick={() => {
-                          const next = [...data.desiredParams]
-                          next[idx] = { ...next[idx], weight: w }
-                          set("desiredParams", next)
-                        }}
-                      >
-                        {w}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-          <AddCustomInline
-            placeholder="Название параметра..."
-            itemType="parameter"
-            onAdd={name => set("desiredParams", [...data.desiredParams, { id: `dp_${Date.now()}`, label: name, enabled: true, weight: 3, custom: true }])}
-          />
-        </div>
-        </>)}
         {/* ── Оформление / график / тип (бывшая секция 6; условия перенесены в секцию 4) ── */}
-        <div className="space-y-1.5 pt-2 border-t">
+        <div className="space-y-2 pt-2 border-t">
           <div className="flex items-center gap-2">
             <Label className="text-xs">Оформление</Label>
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground border-muted-foreground/30">hh.ru</Badge>
           </div>
-          <div className="flex flex-wrap gap-3">
-            {EMPLOYMENT_TYPE_OPTIONS.map(opt => (
-              <label key={opt} className="flex items-center gap-1.5">
-                <Checkbox checked={data.employmentType.includes(opt)} onCheckedChange={() => toggleArray("employmentType", opt)} />
-                <span className="text-sm">{opt}</span>
-              </label>
-            ))}
+          <div className="flex flex-col gap-2.5">
+            {/* Трудовой договор */}
+            <label className="flex items-center gap-1.5">
+              <Checkbox checked={data.employmentType.includes("Трудовой договор (ТК РФ)")} onCheckedChange={() => toggleArray("employmentType", "Трудовой договор (ТК РФ)")} />
+              <span className="text-sm">Трудовой договор (ТК РФ)</span>
+            </label>
+            {/* Стажировка */}
+            <label className="flex items-center gap-1.5">
+              <Checkbox checked={data.internship} onCheckedChange={v => set("internship", !!v)} />
+              <span className="text-sm">Стажировка</span>
+            </label>
+            {/* Договор ГПХ + вложенные подтипы */}
+            <label className="flex items-center gap-1.5">
+              <Checkbox checked={data.employmentType.includes("ГПХ")} onCheckedChange={() => toggleArray("employmentType", "ГПХ")} />
+              <span className="text-sm">Договор ГПХ</span>
+            </label>
+            {data.employmentType.includes("ГПХ") && (
+              <div className="ml-6 flex flex-wrap gap-3">
+                {GPH_SUBTYPE_OPTIONS.map(o => (
+                  <label key={o.value} className="flex items-center gap-1.5">
+                    <Checkbox checked={data.gphSubtypes.includes(o.value)} onCheckedChange={() => toggleArray("gphSubtypes", o.value)} />
+                    <span className="text-sm">{o.label}</span>
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -2317,6 +2155,35 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
 
         <div className="space-y-1.5">
           <div className="flex items-center gap-2">
+            <Label className="text-xs">Рабочие часы в день</Label>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground border-muted-foreground/30">hh.ru</Badge>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {WORK_HOURS_OPTIONS.map(opt => (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => set("workHours", data.workHours === opt ? "" : opt)}
+                className={cn(
+                  "px-3 py-1.5 rounded-md text-sm border transition-colors",
+                  data.workHours === opt
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-[var(--input-bg)] border-input hover:bg-accent"
+                )}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-md border border-input px-3 py-2.5 flex items-center justify-between gap-3">
+          <span className="text-sm">Есть вечерние или ночные смены</span>
+          <Switch checked={data.nightShifts} onCheckedChange={v => set("nightShifts", !!v)} />
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
             <Label className="text-xs">Тип сотрудника</Label>
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground border-muted-foreground/30">hh.ru</Badge>
           </div>
@@ -2339,17 +2206,38 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
           </div>
         </div>
 
-        {/* ── Дополнительные поля из hh-импорта (только если заполнены) ── */}
-        {((data as Record<string,unknown>).driverLicenseTypes as string[] | undefined)?.length ? (
-          <div className="space-y-1.5 pt-2 border-t">
+        {/* Водительские права — чипы-тогглы, пишут в существующее driverLicenseTypes */}
+        <div className="space-y-1.5 pt-2 border-t">
+          <div className="flex items-center gap-2">
             <Label className="text-xs">Водительские права</Label>
-            <div className="flex flex-wrap gap-1.5">
-              {((data as Record<string,unknown>).driverLicenseTypes as string[]).map(cat => (
-                <Badge key={cat} variant="secondary" className="text-xs">{cat}</Badge>
-              ))}
-            </div>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground border-muted-foreground/30">hh.ru</Badge>
           </div>
-        ) : null}
+          <div className="flex flex-wrap gap-2">
+            {DRIVER_LICENSE_OPTIONS.map(cat => {
+              const cur = ((data as unknown as Record<string, unknown>).driverLicenseTypes as string[] | undefined) ?? []
+              const active = cur.includes(cat)
+              return (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => {
+                    const next = active ? cur.filter(x => x !== cat) : [...cur, cat]
+                    setData(prev => ({ ...(prev as unknown as Record<string, unknown>), driverLicenseTypes: next }) as unknown as AnketaData)
+                  }}
+                  className={cn(
+                    "px-3 py-1.5 rounded-md text-sm border transition-colors",
+                    active
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-[var(--input-bg)] border-input hover:bg-accent"
+                  )}
+                >
+                  {cat}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+        {/* ── Дополнительные поля из hh-импорта (только если заполнены) ── */}
         {((data as Record<string,unknown>).department as string | undefined) ? (
           <div className="space-y-1.5 pt-2 border-t">
             <Label className="text-xs">Отдел</Label>
@@ -2801,282 +2689,6 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
         }
       }}
     />
-    </div>
-  )
-}
-
-// ── AI Profile Section (collapsible) ────────────────────────────────────────
-
-function AiProfileSection({ data, set }: {
-  data: AnketaData
-  set: <K extends keyof AnketaData>(key: K, value: AnketaData[K]) => void
-}) {
-  const [open, setOpen] = useState(true)
-  // Индекс свежедобавленного критерия — на него ставим autoFocus
-  const [focusCriterionIdx, setFocusCriterionIdx] = useState<number | null>(null)
-
-  const hasSomeData = data.aiIdealProfile || data.aiRequiredHardSkills.length > 0
-    || data.aiStopFactors.length > 0 || data.aiMinExperience
-
-  return (
-    <div className="border rounded-lg bg-violet-50/30 dark:bg-violet-950/10" id="section-8">
-      <button
-        type="button"
-        className="flex items-center justify-between w-full px-4 py-3 text-left hover:bg-muted/50 transition-colors"
-        onClick={() => setOpen(!open)}
-      >
-        <div className="flex items-center gap-3">
-          <span className={cn(
-            "flex items-center justify-center w-6 h-6 rounded-full text-xs",
-            hasSomeData ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-          )}>
-            🤖
-          </span>
-          <div>
-            <span className="font-medium text-sm">Портрет: AI-оценка</span>
-            <p className="text-[10px] text-muted-foreground">Данные для автоматического скрининга и оценки</p>
-          </div>
-        </div>
-        <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", open && "rotate-180")} />
-      </button>
-      {open && (
-        <div className="px-4 pb-4 pt-1 space-y-4 border-t">
-          {/* Auto-fill button */}
-          {!hasSomeData && (data.requiredSkills.length > 0 || data.responsibilities || data.unacceptableSkills.length > 0) && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full h-9 text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/5"
-              onClick={() => {
-                // Map requiredExperience to years
-                const expMap: Record<string, string> = { "1-3": "1", "3-6": "3", "6+": "6", "none": "0" }
-                const minExp = expMap[data.requiredExperience] || data.experienceMin || ""
-
-                // Build ideal profile from responsibilities + requirements
-                const keySkills = data.requiredSkills.slice(0, 5).join(", ")
-                const keyDuties = data.responsibilities.split("\n").filter(l => l.trim()).slice(0, 3).map(l => l.replace(/^[•\-–]\s*/, "").trim()).join(", ")
-                const profile = keySkills && keyDuties
-                  ? `Кандидат с навыками: ${keySkills}. Ключевые задачи: ${keyDuties}.`
-                  : keySkills ? `Кандидат с навыками: ${keySkills}.`
-                  : ""
-
-                set("aiMinExperience", minExp)
-                // Дедуп при копировании: «B2B маркетинг»/«B2B-маркетинг» не
-                // должны попадать в AI-профиль как два разных навыка (иначе
-                // баллы скоринга размываются).
-                set("aiRequiredHardSkills", dedupeSkills(data.requiredSkills))
-                set("aiStopFactors", dedupeSkills(data.unacceptableSkills))
-                if (profile) set("aiIdealProfile", profile)
-                toast.success("AI-профиль заполнен из данных анкеты")
-              }}
-            >
-              🤖 Заполнить из анкеты
-            </Button>
-          )}
-
-          {/* Идеальный кандидат — общее описание в свободной форме */}
-          <div className="space-y-1.5">
-            <Label className="text-xs">Идеальный кандидат (в свободной форме)</Label>
-            <Textarea
-              value={data.aiIdealProfile}
-              onChange={e => set("aiIdealProfile", e.target.value)}
-              placeholder="Опытный руководитель продаж с B2B SaaS бэкграундом, который строил отдел с нуля, умеет продавать сам и растить команду. Управляет через метрики и CRM."
-              rows={3}
-              className="text-sm bg-[var(--input-bg)] border border-input"
-            />
-            <p className="text-[10px] text-muted-foreground">AI будет сравнивать каждое резюме с этим описанием</p>
-          </div>
-
-          {/* #23: индикатор жёсткости отбора (подсказка) */}
-          <ScoringStrictness data={data} />
-
-          {/* ── Подблок 1: Жёсткие требования (фильтры отсева) ── */}
-          <div className="space-y-3 border-t pt-3">
-            <div>
-              <div className="text-sm font-semibold">🚫 Жёсткие требования (фильтры отсева)</div>
-              <p className="text-[11px] text-muted-foreground">Не соответствует → отказ или низкий рейтинг</p>
-            </div>
-
-            {/* Required hard skills */}
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2">
-                <Label className="text-xs">Обязательные компетенции (hard skills)</Label>
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">AI-скрининг</Badge>
-              </div>
-              <TagInput
-                tags={data.aiRequiredHardSkills}
-                onChange={v => set("aiRequiredHardSkills", v)}
-                placeholder="Добавить навык..."
-                customType="skill"
-              />
-              <p className="text-[10px] text-muted-foreground">
-                Кандидат без этих навыков получит рейтинг ниже 50%. Совпадение
-                считается по доле: чем больше навыков совпало, тем выше балл (не
-                нужно, чтобы совпали все).
-              </p>
-              <p className={cn(
-                "text-[10px]",
-                data.aiRequiredHardSkills.length > 8
-                  ? "text-amber-600 dark:text-amber-400"
-                  : "text-muted-foreground",
-              )}>
-                {data.aiRequiredHardSkills.length > 8
-                  ? `⚠️ Навыков: ${data.aiRequiredHardSkills.length}. Слишком много обязательных навыков размывает оценку — почти ни одно резюме не закроет весь список, и баллы перестают различать кандидатов. Оставьте 4–6 ключевых, остальное перенесите в «Желательные навыки».`
-                  : "Рекомендуем 4–6 ключевых навыков. Второстепенное — в «Желательные навыки»."}
-              </p>
-            </div>
-
-            {/* AI stop factors */}
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2">
-                <Label className="text-xs text-destructive/80">Автоматический отказ — стоп-факторы</Label>
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-primary border-primary/30">AI-скрининг</Badge>
-              </div>
-              <TagInput
-                tags={data.aiStopFactors}
-                onChange={v => set("aiStopFactors", v)}
-                placeholder="Нет опыта B2B, Нет опыта управления..."
-                customType="stop_factor"
-              />
-              <p className="text-[10px] text-muted-foreground">Если у кандидата есть хотя бы один стоп-фактор — автоматический отказ (рейтинг 0)</p>
-            </div>
-
-            {/* Min experience */}
-            <div className="space-y-1.5">
-              <Label className="text-xs">Минимальный опыт для AI-фильтра (лет)</Label>
-              <Input
-                type="number"
-                min={0}
-                value={data.aiMinExperience}
-                onChange={e => set("aiMinExperience", e.target.value)}
-                placeholder="0"
-                className="h-9 bg-[var(--input-bg)] border border-input w-24"
-              />
-              <p className="text-[10px] text-muted-foreground">AI будет автоматически снижать рейтинг кандидатам с опытом менее указанного</p>
-            </div>
-          </div>
-
-          {/* ── Подблок 2: Критерии оценки (влияют на балл) ── */}
-          <div className="space-y-2 border-t pt-3">
-            <div>
-              <div className="text-sm font-semibold">⚖️ Критерии оценки (влияют на балл)</div>
-              <p className="text-[11px] text-muted-foreground">Влияют на итоговый балл, не отсеивают кандидата</p>
-            </div>
-            <div className="space-y-2">
-              {AI_WEIGHT_CRITERIA.map(criterion => (
-                <div key={criterion.id} className="flex items-center justify-between gap-3">
-                  <span className="text-sm text-muted-foreground">{criterion.label}</span>
-                  <div className="flex gap-0.5">
-                    {AI_WEIGHT_OPTIONS.map(opt => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => set("aiWeights", { ...data.aiWeights, [criterion.id]: opt.value })}
-                        className={cn(
-                          "px-2 py-0.5 rounded text-[10px] font-medium border transition-colors",
-                          data.aiWeights[criterion.id] === opt.value
-                            ? opt.value === "critical" ? "bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-300 border-red-300 dark:border-red-800"
-                              : opt.value === "important" ? "bg-amber-100 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-800"
-                              : opt.value === "nice" ? "bg-blue-100 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-800"
-                              : "bg-muted text-muted-foreground border-border"
-                            : "bg-background text-muted-foreground border-border hover:bg-accent"
-                        )}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Кастомные критерии: произвольное число под вакансию */}
-            {data.aiCustomCriteria.length > 0 && (
-              <div className="space-y-2 pt-1">
-                {data.aiCustomCriteria.map((cc, idx) => (
-                  <div key={idx} className="space-y-0.5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                      <Input
-                        autoFocus={focusCriterionIdx === idx}
-                        value={cc.label}
-                        onChange={e => {
-                          const next = [...data.aiCustomCriteria]
-                          next[idx] = { ...next[idx], label: e.target.value }
-                          set("aiCustomCriteria", next)
-                        }}
-                        placeholder="Например: Опыт в EdTech / Знание 1С"
-                        className="h-7 text-sm"
-                      />
-                      <button
-                        type="button"
-                        title="Удалить критерий"
-                        onClick={() => set("aiCustomCriteria", data.aiCustomCriteria.filter((_, i) => i !== idx))}
-                        className="text-muted-foreground hover:text-destructive shrink-0 px-1"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                    <div className="flex gap-0.5 shrink-0">
-                      {CUSTOM_LEVEL_OPTIONS.map(opt => (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          title={opt.value === "required" ? "Не соответствует → отказ (жёсткий отсев)" : undefined}
-                          onClick={() => {
-                            const next = [...data.aiCustomCriteria]
-                            next[idx] = { ...next[idx], weight: opt.value }
-                            set("aiCustomCriteria", next)
-                          }}
-                          className={cn(
-                            "px-2 py-0.5 rounded text-[10px] font-medium border transition-colors",
-                            cc.weight === opt.value
-                              ? opt.value === "required" ? "bg-red-600 text-white border-red-700"
-                                : opt.value === "critical" ? "bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-300 border-red-300 dark:border-red-800"
-                                : opt.value === "important" ? "bg-amber-100 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-800"
-                                : opt.value === "nice" ? "bg-blue-100 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-800"
-                                : "bg-muted text-muted-foreground border-border"
-                              : "bg-background text-muted-foreground border-border hover:bg-accent"
-                          )}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {!cc.label.trim() ? (
-                    <p className="text-[11px] text-muted-foreground pl-0.5">
-                      Введите название — пустой критерий игнорируется при оценке
-                    </p>
-                  ) : cc.weight === "required" && (
-                    <p className="text-[11px] text-red-600 pl-0.5">
-                      🛑 Обязательный: если кандидат не соответствует — автоматический отказ/балл 0
-                    </p>
-                  )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={() => {
-                const next = [...data.aiCustomCriteria, { label: "", weight: "important" as AiWeightLevel }]
-                set("aiCustomCriteria", next)
-                setFocusCriterionIdx(next.length - 1)
-              }}
-              className="text-xs text-primary hover:underline"
-            >
-              + Добавить свой критерий
-            </button>
-
-            <p className="text-[11px] text-muted-foreground leading-snug pt-1">
-              Город и формат работы здесь не оцениваются баллом — это жёсткие фильтры
-              (раздел «Стоп-факторы»): неподходящие кандидаты отсеиваются до оценки.
-            </p>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

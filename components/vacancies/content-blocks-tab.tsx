@@ -150,13 +150,22 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
     // stories-блоком, чтобы HR попал прямо в редактор сторис (StoriesEditorBlock),
     // а не искал его внутри урока. contentType остаётся "presentation".
     const isStories = choice === "stories"
-    const contentType: ContentType = isStories ? "presentation" : choice
-    const title = isStories ? "Сторис" : (contentType === "test" || contentType === "task" ? "Новый тест" : "Новый блок")
+    // «PDF презентация» — блок-демонстрация, СРАЗУ заполненный одним уроком с
+    // пустым pdf-блоком, чтобы HR попал прямо в загрузчик PDF (PdfEditorBlock).
+    const isPdf = choice === "pdf"
+    const contentType: ContentType = (isStories || isPdf) ? "presentation" : choice
+    const title = isStories ? "Сторис" : isPdf ? "PDF презентация" : (contentType === "test" || contentType === "task" ? "Новый тест" : "Новый блок")
     const block = await apiCreateBlock(contentType, title)
     if (block && isStories) {
       const storiesBlock = { ...createBlock("stories"), id: `blk-stories-${Date.now()}` }
       updateBlock(block.id, {
         lessons: [{ id: `les-${Date.now()}`, emoji: "▶", title: "Сторис", blocks: [storiesBlock] }],
+      })
+    }
+    if (block && isPdf) {
+      const pdfBlock = { ...createBlock("pdf"), id: `blk-pdf-${Date.now()}` }
+      updateBlock(block.id, {
+        lessons: [{ id: `les-${Date.now()}`, emoji: "📑", title: "Презентация", blocks: [pdfBlock] }],
       })
     }
     setCreating(false)
@@ -682,7 +691,7 @@ function LiveBattleToggle({ block, allBlocks, onToggle }: LiveBattleToggleProps)
 
 /** Выбор в диалоге типа блока: contentType ИЛИ псевдо-тип «сторис»
  *  (создаётся как presentation с пред-засеянным stories-блоком). */
-type PickerChoice = ContentType | "stories"
+type PickerChoice = ContentType | "stories" | "pdf"
 
 interface BlockTypePickerDialogProps {
   open: boolean
@@ -700,7 +709,7 @@ function BlockTypePickerDialog({ open, onClose, onCreate }: BlockTypePickerDialo
             Выберите тип нового блока контента
           </DialogDescription>
         </DialogHeader>
-        <div className="grid grid-cols-3 gap-3 pt-2">
+        <div className="grid grid-cols-2 gap-3 pt-2">
           <button
             onClick={() => onCreate("presentation")}
             className="flex flex-col items-center gap-2 rounded-xl border border-border p-4 hover:bg-blue-50 dark:hover:bg-blue-950/20 hover:border-blue-300 dark:hover:border-blue-700 transition-colors text-center"
@@ -709,6 +718,16 @@ function BlockTypePickerDialog({ open, onClose, onCreate }: BlockTypePickerDialo
             <div>
               <p className="text-sm font-semibold text-blue-700 dark:text-blue-400">Демонстрация</p>
               <p className="text-xs text-muted-foreground mt-0.5">Рассказываете о вакансии и компании</p>
+            </div>
+          </button>
+          <button
+            onClick={() => onCreate("pdf")}
+            className="flex flex-col items-center gap-2 rounded-xl border border-border p-4 hover:bg-sky-50 dark:hover:bg-sky-950/20 hover:border-sky-300 dark:hover:border-sky-700 transition-colors text-center"
+          >
+            <span className="text-2xl">📑</span>
+            <div>
+              <p className="text-sm font-semibold text-sky-700 dark:text-sky-400">PDF презентация</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Загрузите PDF — каждая страница станет слайдом, точно как в исходнике</p>
             </div>
           </button>
           <button

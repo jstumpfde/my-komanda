@@ -853,6 +853,11 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
   }
   const enabledFactorCount = (Object.values(sf) as Array<{ enabled?: boolean } | undefined>)
     .filter(f => f?.enabled).length
+  // Точные требования: стандартные включённые факторы + включённые customFactors
+  const exactFactorCount =
+    (["city", "format", "age", "experience", "citizenship", "salaryExpectation", "driverLicense", "jobHopping"] as const)
+      .filter(k => sf[k]?.enabled).length +
+    (sf.customFactors?.filter(f => f.enabled).length ?? 0)
   const dbItems   = normalizeDealBreakers(spec.dealBreakers)
   const dbHardCnt = dbItems.filter(d => d.hard).length
   const dbSoftCnt = dbItems.length - dbHardCnt
@@ -1021,10 +1026,23 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
 
           <div className="pt-4 border-t space-y-3">
             <div>
-              <Label className="text-sm font-medium">Точные требования</Label>
+              <div className="flex items-center gap-2">
+                <Label className="text-sm font-medium">Точные требования</Label>
+                {exactFactorCount > 0 && (
+                  <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                    Включено: {exactFactorCount}
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Формальные условия — режут кодом ещё ДО AI. Рекомендуем не больше 3, иначе отсев слишком широкий.
               </p>
+              {exactFactorCount > 3 && (
+                <p className="text-xs text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  Каждый включённый фильтр сужает воронку. Рекомендуем до 3.
+                </p>
+              )}
             </div>
           <FactorRow
             title="Город / релокация"

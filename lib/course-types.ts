@@ -1,4 +1,4 @@
-export type BlockType = "text" | "image" | "video" | "audio" | "file" | "info" | "button" | "task" | "media" | "stories"
+export type BlockType = "text" | "image" | "video" | "audio" | "file" | "info" | "button" | "task" | "media" | "stories" | "pdf"
 
 export interface StoriesCard {
   id: string
@@ -120,6 +120,17 @@ export interface Block {
   storiesCtaEnabled?: boolean
   storiesCtaText?: string     // текст кнопки (дефолт — STORIES_CTA_DEFAULT_TEXT)
   storiesCtaCaption?: string  // подпись над кнопкой (необязательно)
+  // pdf-блок — презентация из PDF. На загрузке PDF растеризуется на сервере
+  // (poppler) в картинки-слайды; кандидат листает их встроенным слайдером.
+  // Картинки = «фото каждой страницы», поэтому 100% точность вёрстки/шрифтов.
+  pdfUrl?: string             // ссылка на исходный PDF (для скачивания/ре-рендера)
+  pdfFileName?: string        // оригинальное имя файла
+  pdfPages?: string[]         // ссылки на картинки страниц по порядку
+  pdfPageCount?: number       // число страниц
+  pdfAspect?: number          // соотношение страницы ширина/высота (для рамки)
+  pdfRequireComplete?: boolean // требовать долистать до конца перед «Далее» (дефолт true)
+  pdfAllowDownload?: boolean  // показать кнопку скачать исходный PDF
+  pdfCaption?: string         // подпись под презентацией (необязательно)
 }
 
 /** Дефолт текста кнопки финального CTA-слайда сторис. Значение поля, не вшитая
@@ -174,6 +185,7 @@ export const BLOCK_TYPE_META: { type: BlockType; icon: string; label: string }[]
   { type: "task", icon: "✅", label: "Задание" },
   { type: "media", icon: "🎥", label: "Запись медиа" },
   { type: "stories", icon: "▶", label: "Сторис" },
+  { type: "pdf", icon: "📑", label: "PDF презентация" },
 ]
 
 export function defaultQuestion(): Question {
@@ -189,6 +201,8 @@ export function createBlock(type: BlockType): Block {
     videoUrl: "", videoLayout: "full", videoTitleTop: "", videoCaption: "",
     audioUrl: "", audioTitle: "", audioLayout: "full", audioTitleTop: "", audioCaption: "",
     fileUrl: "", fileName: "", fileLayout: "full", fileTitleTop: "", fileCaption: "",
+    pdfUrl: "", pdfFileName: "",
+    pdfRequireComplete: type === "pdf" ? true : undefined,
     infoStyle: "info", infoColor: "", infoIcon: "", infoSize: "m",
     buttonText: "Подробнее", buttonUrl: "", buttonVariant: "primary", buttonColor: "", buttonIconBefore: "", buttonIconAfter: "",
     taskTitle: "", taskDescription: "", questions: type === "task" ? [defaultQuestion()] : [],
