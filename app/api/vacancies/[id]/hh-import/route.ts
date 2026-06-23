@@ -11,14 +11,19 @@ import { classifyPosition } from "@/lib/position-classifier"
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
-const SPLIT_PROMPT = `Раздели текст описания вакансии на две части:
-1. Обязанности — что сотрудник будет делать (задачи, функционал, зоны ответственности)
-2. Требования — что должен знать и уметь кандидат (опыт, навыки, образование, личные качества)
+const SPLIT_PROMPT = `Раздели текст описания вакансии на ТРИ части:
+1. about — вступление и питч: о компании/продукте/миссии, «что мы даём» (плюшки,
+   рост, условия). БЕЗ списка задач и требований. Можно абзацами/буллетами.
+2. responsibilities — обязанности (что сотрудник будет делать). Каждый пункт с
+   новой строки, начинается с —.
+3. requirements — требования + личные качества + пункты «плюсом». Каждый пункт с
+   новой строки, начинается с —.
 
-Верни JSON: { "responsibilities": "текст обязанностей", "requirements": "текст требований" }
-Каждый пункт на новой строке, начинается с —. Без нумерации. Только JSON, без markdown.`
+Верни JSON: { "about": "…", "responsibilities": "…", "requirements": "…" }
+Без нумерации в буллетах. Только JSON, без markdown. Ничего не выдумывай —
+бери только то, что есть в тексте.`
 
-async function splitDescriptionWithAi(description: string): Promise<{ responsibilities: string; requirements: string } | null> {
+async function splitDescriptionWithAi(description: string): Promise<{ about: string; responsibilities: string; requirements: string } | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return null
   try {
@@ -50,7 +55,7 @@ async function splitDescriptionWithAi(description: string): Promise<{ responsibi
     const text = textBlock?.text || ""
     if (!text) return null
     const raw = text.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim()
-    let parsed: { responsibilities?: string; requirements?: string }
+    let parsed: { about?: string; responsibilities?: string; requirements?: string }
     try {
       parsed = JSON.parse(raw)
     } catch {
@@ -59,8 +64,9 @@ async function splitDescriptionWithAi(description: string): Promise<{ responsibi
       parsed = JSON.parse(jsonMatch[0])
     }
     return {
+      about:            String(parsed.about || "").trim(),
       responsibilities: String(parsed.responsibilities || "").trim(),
-      requirements: String(parsed.requirements || "").trim(),
+      requirements:     String(parsed.requirements || "").trim(),
     }
   } catch (err) {
     console.error("[hh-import] AI split failed:", err)
@@ -119,12 +125,23 @@ function mapSchedule(text: string): string {
   return ""
 }
 
+// hh: «Выплаты: два раза в месяц» → значение чекбокса «Частота выплат» анкеты.
+function mapPayFrequency(text: string): string {
+  if (!text) return ""
+  const t = text.toLowerCase()
+  if (/два раза в мес|дважды в мес|2 раза в мес|раз в полмесяца|каждые полмесяца/.test(t)) return "biweekly"
+  if (/еженедельн|раз в недел|каждую недел/.test(t)) return "weekly"
+  if (/ежемесячн|раз в мес|один раз в мес/.test(t)) return "monthly"
+  return ""
+}
+
 type Mapped = {
   title: string
   description: string
   salaryFrom: number | null
   salaryTo: number | null
   salaryCurrency: string
+  payFrequency: string         // monthly | biweekly | weekly | ""
   experience: string
   employment: string
   schedule: string
@@ -201,6 +218,18 @@ function parseHhHtml(html: string): Mapped {
       })
     })
   }
+  // Язык может быть только в списке навыков (hh не всегда отдаёт языковой блок) —
+  // напр. «Английский — B1 — Средний». Достаём оттуда, если блока языков нет.
+  if (qaLanguages.length === 0) {
+    const LANG_NAME_RE = /^(английск|немецк|французск|испанск|итальянск|китайск|японск|корейск|португальск|арабск|турецк|польск|нидерландск|шведск|финск|чешск|венгерск|румынск)/i
+    for (const s of qaSkills) {
+      if (!LANG_NAME_RE.test(s.trim())) continue
+      const parts = s.split(/\s*[—–:-]\s*/).map(p => p.trim()).filter(Boolean)
+      const lang = parts[0]
+      const level = parts.slice(1).find(p => /[abc][12]|базов|элементарн|средн|продвинут|свободн|родн|в совершенстве/i.test(p)) || ""
+      if (lang) qaLanguages.push({ lang, level })
+    }
+  }
 
   // ─── Водительские права ────────────────────────────────────────────────
   // hh отображает категории прав в виде бэджей или текста «Водительские права: B»
@@ -224,9 +253,12 @@ function parseHhHtml(html: string): Mapped {
     || $('[data-qa*="department"]').first().text().trim()
 
   // ─── Спец. условия (accept_handicapped, accept_kids) ───────────────────
-  const bodyHtml = $("body").html() || ""
-  const qaAcceptHandicapped = /инвалид|ОВЗ|ограниченн[ыeё][мх]? возможност/i.test(bodyHtml)
-  const qaAcceptKids = /несовершеннолетн|до 18 лет/i.test(bodyHtml)
+  // ВАЖНО: проверяем ТОЛЬКО текст описания вакансии + явный hh-бейдж доступности,
+  // НЕ весь HTML страницы — иначе ловим стандартную чрому/текст hh и ставим
+  // ложный флаг ОВЗ (юридически чувствительно — обещали бы доступность, которой нет).
+  const accessBadge = $('[data-qa*="accept-handicapped"], [data-qa*="accessible"]').text()
+  const qaAcceptHandicapped = /инвалид|ОВЗ|ограниченн[ыeё][мх]? возможност/i.test(`${qaDescription} ${accessBadge}`)
+  const qaAcceptKids = /несовершеннолетн|до 18 лет|с 1[46] лет/i.test(qaDescription)
 
   // ─── Professional roles / category ─────────────────────────────────────
   // hh.ru отображает профроль в нескольких возможных местах:
@@ -268,6 +300,10 @@ function parseHhHtml(html: string): Mapped {
   const salaryTo = parseNumber(toMatch?.[1])
   const salaryCurrency = detectCurrency(salaryText)
 
+  // ─── Частота выплат: «Выплаты: два раза в месяц» (рядом с зарплатой/в описании) ──
+  const payoutContext = `${qaSalary} ${metaSalary} ${metaDesc.match(/[Вв]ыплат[аы][^.]{0,40}/)?.[0] || ""} ${qaDescription.match(/[Вв]ыплат[аы][^.\n]{0,40}/)?.[0] || ""}`
+  const payFrequency = mapPayFrequency(payoutContext)
+
   // ─── Experience: data-qa → meta fallback ───────────────────────────────
   const experience = mapExperience(qaExperience || metaExperienceText)
 
@@ -294,6 +330,7 @@ function parseHhHtml(html: string): Mapped {
     salaryFrom,
     salaryTo,
     salaryCurrency,
+    payFrequency,
     experience,
     employment,
     schedule,
@@ -378,6 +415,9 @@ export async function POST(
       : null
     const anketaResponsibilities = split?.responsibilities || mappedData.description
     const anketaRequirements = split?.requirements || ""
+    // Вступление/питч вакансии (миссия, о продукте, «что мы даём») — в описание
+    // вакансии, чтобы продающий текст не терялся (а не подменялся дефолтом компании).
+    const anketaAbout = split?.about || ""
     console.log("[hh-import] AI split:", split ? "ok" : "fallback")
 
     // ─── Map HH values → anketa schema (Russian labels / schema ids) ────────
@@ -406,9 +446,13 @@ export async function POST(
     const anketaRequiredExperience = mappedData.experience
       ? (EXPERIENCE_TO_ANKETA[mappedData.experience] ?? "")
       : ""
-    const anketaSchedule = mappedData.schedule
-      ? (SCHEDULE_TO_ANKETA[mappedData.schedule] ?? "")
+    // График: если в рабочих днях явно «5/2»/«2/2» — ставим этот чип (а не «Свободный»
+    // от общего schedule-маппинга), чтобы не было рассинхрона с «Рабочие дни».
+    const daysChip = /5\s*\/\s*2/.test(mappedData.workingDays) ? "5/2"
+      : /2\s*\/\s*2/.test(mappedData.workingDays) ? "2/2"
       : ""
+    const anketaSchedule = daysChip
+      || (mappedData.schedule ? (SCHEDULE_TO_ANKETA[mappedData.schedule] ?? "") : "")
     const anketaWorkFormats = mappedData.schedule === "remote"
       ? ["Удалёнка"]
       : mappedData.schedule === "flyInFlyOut"
@@ -472,9 +516,12 @@ export async function POST(
         ? { positionCityFull: mappedData.cityFull } : {}),
       ...(anketaResponsibilities ? { responsibilities: anketaResponsibilities } : {}),
       ...(anketaRequirements ? { requirements: anketaRequirements } : {}),
+      // Вступление вакансии → описание (показывается кандидату). Не теряем питч.
+      ...(anketaAbout ? { companyDescription: anketaAbout } : {}),
       ...(mappedData.skills.length ? { requiredSkills: mappedData.skills } : {}),
       ...(mappedData.salaryFrom !== null ? { salaryFrom: String(mappedData.salaryFrom) } : {}),
       ...(mappedData.salaryTo !== null ? { salaryTo: String(mappedData.salaryTo) } : {}),
+      ...(mappedData.payFrequency ? { payFrequency: [mappedData.payFrequency] } : {}),
       ...(anketaEmployment.length ? { employment: anketaEmployment } : {}),
       ...(anketaRequiredExperience ? { requiredExperience: anketaRequiredExperience } : {}),
       ...(anketaSchedule ? { schedule: anketaSchedule } : {}),
