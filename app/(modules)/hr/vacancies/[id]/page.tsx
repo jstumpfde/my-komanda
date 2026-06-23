@@ -340,6 +340,7 @@ export default function VacancyPage() {
         experienceMin: parsed.experienceMin ?? existingAnketa.experienceMin ?? "",
         experienceIdeal: parsed.experienceIdeal ?? existingAnketa.experienceIdeal ?? "",
         conditions: parsed.conditions ?? existingAnketa.conditions ?? [],
+        conditionsText: parsed.conditionsText ?? existingAnketa.conditionsText ?? "",
         screeningQuestions: parsed.screeningQuestions ?? existingAnketa.screeningQuestions ?? [],
         // AI-профиль кандидата — заполняем из AI, не затирая ручное непустым→[].
         aiIdealProfile: (parsed.aiIdealProfile as string) || existingAnketa.aiIdealProfile || "",
