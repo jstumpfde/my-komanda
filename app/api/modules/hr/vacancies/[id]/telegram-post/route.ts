@@ -157,7 +157,16 @@ export async function POST(
     // ── Собираем данные вакансии для поста ──
     const desc = (vacancy.descriptionJson as Record<string, unknown>) ?? {}
     const anketa = (desc.anketa as Record<string, unknown>) ?? {}
-    const conditions = Array.isArray(anketa.conditions) ? (anketa.conditions as string[]) : []
+    // Условия: текст из hh-импорта (conditionsText, прозой) + галочки-теги — иначе
+    // импортированные условия не попадали бы в пост (conditions[] после импорта пуст).
+    const conditionsTags = Array.isArray(anketa.conditions) ? (anketa.conditions as string[]) : []
+    const conditionsText = String(anketa.conditionsText || "")
+    const conditions = [
+      ...(conditionsText
+        ? conditionsText.split("\n").map(s => s.replace(/^[—\-•·]\s*/, "").trim()).filter(Boolean)
+        : []),
+      ...conditionsTags,
+    ]
 
     const postParams = {
       title: vacancy.title,

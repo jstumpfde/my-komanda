@@ -271,9 +271,13 @@ export async function POST(req: NextRequest) {
     const industry = String(anketa.industry || "")
     const responsibilities = String(anketa.responsibilities || "")
     const requirements = String(anketa.requirements || "")
-    const conditions = Array.isArray(anketa.conditions)
+    // Условия: свободный текст (из hh-импорта) + галочки-теги. hh отдаёт условия
+    // прозой → текст в conditionsText, поэтому без него соцпакет терялся бы для кандидата.
+    const conditionsText = String(anketa.conditionsText || "")
+    const conditionsTags = Array.isArray(anketa.conditions)
       ? (anketa.conditions as string[]).join(", ")
       : String(anketa.conditions || "")
+    const conditions = [conditionsText, conditionsTags].filter(Boolean).join("\n")
     const bonus = String(anketa.bonus || "")
     const salary =
       vacancy.salaryMin && vacancy.salaryMax

@@ -2229,7 +2229,10 @@ export default function VacancyPage() {
     setOfferLoading(true)
     setOfferEditing(false)
     try {
-      const conditions = Array.isArray(anketa.conditions) ? (anketa.conditions as string[]).join(", ") : ""
+      // Условия: текст из hh-импорта (прозой) + галочки-теги — иначе импортированные условия в оффер не попадут.
+      const conditionsText = String(anketa.conditionsText || "")
+      const conditionsTags = Array.isArray(anketa.conditions) ? (anketa.conditions as string[]).join(", ") : ""
+      const conditions = [conditionsText, conditionsTags].filter(Boolean).join("\n")
       const res = await fetch("/api/ai/generate-offer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
