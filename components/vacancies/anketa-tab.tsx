@@ -2751,7 +2751,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
                 )}
               </div>
             )}
-            {(data.educationLevel || data.aiLanguages.length > 0 || data.employmentType.length > 0 || data.schedule || data.employeeType) && (
+            {(data.educationLevel || data.aiLanguages.length > 0 || data.employmentType.length > 0 || data.schedule) && (
               <div className="mb-4">
                 <p className="font-semibold text-sm text-muted-foreground uppercase mb-1">Образование, языки, оформление</p>
                 <div className="space-y-1 text-sm">
