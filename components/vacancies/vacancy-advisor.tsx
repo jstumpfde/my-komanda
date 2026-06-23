@@ -93,7 +93,7 @@ const SECTION_TIPS: Record<string, { icon: string; text: string }> = {
   },
   salary: {
     icon: "💰",
-    text: "Вакансии с указанной вилкой зарплат получают значительно больше откликов. Если указываете «до», оставляйте реалистичный максимум — завышенный потолок снижает конверсию из отклика в оффер. Укажите периодичность выплат и тип занятости.",
+    text: "Вакансии с указанной вилкой зарплат получают значительно больше откликов. Если указываете «до», оставляйте реалистичный максимум — завышенный потолок снижает конверсию из отклика в оффер. Укажите частоту выплат (еженедельно/раз в месяц) — это влияет на анализ мотивации.",
   },
   responsibilities: {
     icon: "📋",
@@ -109,11 +109,11 @@ const SECTION_TIPS: Record<string, { icon: string; text: string }> = {
   },
   stopFactors: {
     icon: "🚫",
-    text: "Стоп-факторы — автоматический фильтр на входе. Активируйте только те, что действительно критичны: каждый лишний стоп-фактор заметно сужает поток. Гражданство и документы — самые распространённые ограничения.",
+    text: "Стоп-факторы — жёсткие условия вакансии: город, формат, опыт, документы. Активируйте только требования, которые действительно критичны и не обсуждаются — каждый лишний фильтр заметно сужает поток откликов.",
   },
   conditions: {
     icon: "🏢",
-    text: "Конкретные условия повышают доверие: напишите адрес офиса, формат работы (удалённо/офис/гибрид), график. Бонусы и льготы лучше перечислить списком — они напрямую влияют на анализ мотивации в этой панели.",
+    text: "Конкретные условия повышают доверие: напишите адрес офиса, формат работы (удалённо/офис/гибрид), график (5/2, сменный и т.д.), тип занятости и оформление. Бонусы и льготы лучше перечислить списком — они напрямую влияют на анализ мотивации в этой панели.",
   },
   company: {
     icon: "🏷️",
@@ -1015,31 +1015,21 @@ function CompanyDescriptionCard({ description }: { description: string }) {
 }
 
 // ── Suggestions Panel ───────────────────────────────────────────────────────
-// Две отдельные группы:
-//   1. «Навыки для hh» (skills) — без лимита, все навыки можно добавить
-//   2. «Кого ищем (оценка кандидата)» (stopFactors) — точечно: топ-5 с «Показать все»
+// Группы предложений:
+//   1. «Навыки для hh» (skills) — все навыки можно добавить одним кликом
 // Шаблоны обязанностей/требований — без изменений.
-
-const CANDIDATE_PROFILE_LIMIT = 5
+// Оценка кандидата (stopFactors → unacceptableSkills) убрана: живёт во вкладке «Портрет».
 
 function SuggestionsPanel({ suggestions, onApply, vacancyData }: {
   suggestions: Suggestions
   onApply: (field: string, value: unknown) => void
   vacancyData: Record<string, unknown>
 }) {
-  const [showAllStopFactors, setShowAllStopFactors] = useState(false)
-
   const hasSkills = suggestions.skills.length > 0
-  const hasStopFactors = suggestions.stopFactors.length > 0
   const hasDuties = !!suggestions.duties
   const hasRequirements = !!suggestions.requirements
 
-  if (!hasSkills && !hasStopFactors && !hasDuties && !hasRequirements) return null
-
-  const visibleStopFactors = showAllStopFactors
-    ? suggestions.stopFactors
-    : suggestions.stopFactors.slice(0, CANDIDATE_PROFILE_LIMIT)
-  const hiddenCount = suggestions.stopFactors.length - CANDIDATE_PROFILE_LIMIT
+  if (!hasSkills && !hasDuties && !hasRequirements) return null
 
   return (
     <div className="space-y-2 pt-1">
@@ -1089,65 +1079,6 @@ function SuggestionsPanel({ suggestions, onApply, vacancyData }: {
         </>
       )}
 
-      {/* ── Группа 2: Кого ищем — точечно, топ-5 */}
-      {hasStopFactors && (
-        <>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Портрет (оценка кандидата)</p>
-          <div className="rounded-lg border p-2.5 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium">Неприемлемо</span>
-              <button
-                onClick={() => {
-                  const current = (vacancyData.unacceptableSkills as string[]) || []
-                  onApply("unacceptableSkills", mergeSkills(current, suggestions.stopFactors))
-                }}
-                className="text-[10px] text-primary hover:underline flex items-center gap-0.5"
-              >
-                <Plus className="w-3 h-3" /> Добавить все
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-1">
-              {visibleStopFactors.map(factor => {
-                const alreadyHas = hasSkill((vacancyData.unacceptableSkills as string[]) || [], factor)
-                return (
-                  <button
-                    key={factor}
-                    disabled={alreadyHas}
-                    onClick={() => {
-                      const current = (vacancyData.unacceptableSkills as string[]) || []
-                      onApply("unacceptableSkills", mergeSkills(current, [factor]))
-                    }}
-                    className={cn(
-                      "text-[11px] px-1.5 py-0.5 rounded border transition-colors",
-                      alreadyHas
-                        ? "bg-muted text-muted-foreground border-border cursor-default line-through"
-                        : "bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-900/50 hover:bg-red-100 dark:hover:bg-red-900/30 cursor-pointer"
-                    )}
-                  >
-                    {factor}
-                  </button>
-                )
-              })}
-            </div>
-            {!showAllStopFactors && hiddenCount > 0 && (
-              <button
-                onClick={() => setShowAllStopFactors(true)}
-                className="text-[10px] text-muted-foreground hover:text-foreground underline decoration-dotted underline-offset-2 transition-colors"
-              >
-                Показать все ({suggestions.stopFactors.length})
-              </button>
-            )}
-            {showAllStopFactors && suggestions.stopFactors.length > CANDIDATE_PROFILE_LIMIT && (
-              <button
-                onClick={() => setShowAllStopFactors(false)}
-                className="text-[10px] text-muted-foreground hover:text-foreground underline decoration-dotted underline-offset-2 transition-colors"
-              >
-                Свернуть
-              </button>
-            )}
-          </div>
-        </>
-      )}
 
       {/* Duties template */}
       {hasDuties && (
