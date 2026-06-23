@@ -31,6 +31,15 @@ import { resolveVacancyWebhook } from "@/lib/integrations/resolve"
 
 const DEMO_INVITE_MESSAGE = "Здравствуйте! Спасибо за отклик. Мы подготовили короткую демонстрацию должности — 15 минут, и вы узнаете всё о задачах, команде и доходе."
 
+// Контур «Портрет»: строка-подсказка следующего этапа (inviteNextStep ≠ demo)
+// добавляется в начало приглашения. Глубокая маршрутизация (запись в календарь,
+// видео-комната) — в доработке; пока кандидат хотя бы видит реальный следующий шаг.
+const NEXT_STEP_INVITE_NOTE: Record<string, string> = {
+  interview: "Следующий шаг — собеседование. Ниже — детали и как записаться.",
+  video:     "Следующий шаг — короткое видео-интервью.",
+  call:      "Следующий шаг — короткий телефонный разговор. Напишите, когда вам удобно созвониться.",
+}
+
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 export interface ProcessQueueOptions {
@@ -310,6 +319,12 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
     let botClarifyOn = false
     // Мягкое письмо отказа из «Портрета» (spec.rejectLetter) — уходит при авто-отказе.
     let rejectLetterText: string | null = null
+    // Авто-приглашение (spec.resumeThresholds.autoInviteEnabled, контур «Портрет»):
+    // по умолчанию true — приглашение уходит как раньше. Выкл — сильных/прошедших
+    // середину не зовём сами, паркуем на ручной разбор (независимо от авто-отказа).
+    let autoInviteOn = true
+    // Куда зовём при авто-приглашении (spec.resumeThresholds.inviteNextStep).
+    let inviteNextStep: "demo" | "interview" | "video" | "call" = "demo"
 
     // Если AI-скоринг резюме дал score ниже порога — отклоняем кандидата
     // (reject) или оставляем в "new" для ручного разбора (keep_new),
@@ -639,6 +654,10 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                 // Бот-уточнение: спорных по баллу не режем — пусть бот уточнит в чате.
                 if (portraitOn && spec) botClarifyOn = spec.botClarifyAmbiguous === true
                 if (portraitOn && spec) rejectLetterText = spec.rejectLetter?.trim() || null
+                if (portraitOn && spec?.resumeThresholds) {
+                  autoInviteOn   = spec.resumeThresholds.autoInviteEnabled !== false
+                  inviteNextStep = spec.resumeThresholds.inviteNextStep ?? "demo"
+                }
               } catch (specErr) {
                 console.warn(`[spec-scoring] vacancy=${localVac.id} — ошибка чтения Spec, fallback на legacy:`, specErr)
               }
@@ -732,6 +751,19 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
               // Жёсткие стоп-факторы отсекаются раньше (matchStopFactors) и сюда не доходят.
               if (botClarifyOn && (belowThreshold?.action === "reject" || belowThreshold?.action === "keep_new")) {
                 belowThreshold = null
+              }
+
+              // Авто-приглашение выключено (контур «Портрет», autoInviteOn=false):
+              // сами никого не зовём дальше. Прошедшие на демо/приглашение
+              // (belowThreshold===null) и середину без явного reject уходят на
+              // ручной разбор (keep_new). reject не трогаем — авто-отказ управляется
+              // отдельным тумблером. autoInviteOn=true (дефолт) → блок ничего не делает.
+              if (!autoInviteOn) {
+                if (belowThreshold === null) {
+                  belowThreshold = { score: result.score, threshold: upper || lower || 0, action: "keep_new" }
+                } else if (belowThreshold.action !== "reject") {
+                  belowThreshold = { ...belowThreshold, action: "keep_new" }
+                }
               }
             }
           }
@@ -1041,6 +1073,14 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             : replaced.trim()
         } else {
           finalMessage = replaced.includes(demoUrl) ? replaced : replaced + "\n\n" + demoUrl
+        }
+
+        // Контур «Портрет»: выбранный следующий этап (≠ demo) добавляем строкой
+        // в начало приглашения. Legacy/демо — без изменений (note только для
+        // interview/video/call у Портрет-вакансий).
+        if (localVac.portraitScoring === true && inviteNextStep !== "demo" && finalMessage) {
+          const note = NEXT_STEP_INVITE_NOTE[inviteNextStep]
+          if (note) finalMessage = note + "\n\n" + finalMessage
         }
       }
 

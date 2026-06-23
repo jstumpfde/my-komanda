@@ -5,6 +5,7 @@ import { demos, vacancies } from "@/lib/db/schema"
 import type { AnketaAutoReplySettings, PostDemoSettings } from "@/lib/db/schema"
 import { ANKETA_AUTO_REPLY_DELAYS, ANKETA_AUTO_REPLY_DELAYS_SECONDS } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { getSpec, saveSpec } from "@/lib/core/spec/store"
 
 const ANKETA_DELAY_SET = new Set<number>(ANKETA_AUTO_REPLY_DELAYS)
 const ANKETA_DELAY_SECONDS_SET = new Set<number>(ANKETA_AUTO_REPLY_DELAYS_SECONDS)
@@ -60,6 +61,7 @@ async function getOwnedDemo(vacancyId: string, companyId: string) {
     .select({
       id: demos.id,
       postDemoSettings: demos.postDemoSettings,
+      portraitScoring: vacancies.portraitScoring,
     })
     .from(demos)
     .innerJoin(vacancies, eq(demos.vacancyId, vacancies.id))
@@ -173,6 +175,28 @@ export async function PUT(
       .update(demos)
       .set({ postDemoSettings: settings, updatedAt: new Date() })
       .where(eq(demos.id, demo.id))
+
+    // Dual-write для Портрет-вакансий: «Оценка анкеты» перенесена из панели
+    // «Портрет» сюда, поэтому пороги анкеты (upper/lower) зеркалим в
+    // spec.anketaThresholds — именно его читает движок Портрета. Только при
+    // portrait_scoring и если пороги пришли в запросе.
+    if (demo.portraitScoring === true && (body.upperThreshold !== undefined || body.lowerThreshold !== undefined)) {
+      try {
+        const spec = await getSpec(id)
+        if (spec) {
+          await saveSpec(id, {
+            ...spec,
+            anketaThresholds: {
+              ...spec.anketaThresholds,
+              upperThreshold: settings.upperThreshold ?? spec.anketaThresholds.upperThreshold,
+              lowerThreshold: settings.lowerThreshold ?? spec.anketaThresholds.lowerThreshold,
+            },
+          })
+        }
+      } catch (e) {
+        console.warn("[post-demo-settings PUT] spec anketaThresholds sync failed:", e)
+      }
+    }
 
     return apiSuccess({ ok: true, settings })
   } catch (err) {

@@ -38,7 +38,7 @@ import {
 import { toast } from "sonner"
 import {
   Target, Plus, X, Loader2, ShieldAlert, FileText, Gauge,
-  ArrowRightLeft, AlertTriangle, Sparkles, Wand2, CheckCircle2,
+  ArrowRightLeft, AlertTriangle, Sparkles, Wand2, CheckCircle2, Check,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -63,12 +63,21 @@ import { useVacancySectionRegister } from "./vacancy-settings-context"
 
 // 🟢 «Подходит» — важность на пункте. ТРИ уровня (согласованный дизайн): 🟢 только
 // поднимает балл, НИКОГДА не отсекает. Отсев — это 🔴 (стоп-фактор / точные требования).
+// Цвет = важность: оранжевый → светло-зелёный → тёмно-зелёный. Подпись — по наведению.
 const GOOD_LEVELS = [
-  { value: "nice",      label: "Желательно"  },
-  { value: "important", label: "Важно"       },
-  { value: "very",      label: "Очень важно" },
+  { value: "nice",      label: "Желательно",  solid: "bg-orange-500",  text: "text-orange-600 dark:text-orange-400"   },
+  { value: "important", label: "Важно",       solid: "bg-emerald-500", text: "text-emerald-600 dark:text-emerald-400" },
+  { value: "very",      label: "Обязательно", solid: "bg-emerald-700", text: "text-emerald-700 dark:text-emerald-300" },
 ] as const
 type GoodLevel = (typeof GOOD_LEVELS)[number]["value"]
+
+// Куда зовём при авто-приглашении (короткий ярлык для зоны и опции селекта).
+const NEXT_STEP_LABEL: Record<string, string> = {
+  demo:      "на демо",
+  interview: "на интервью",
+  video:     "на видео",
+  call:      "на звонок",
+}
 
 // 🔴 «Не подходит по смыслу» — стоп-фактор (отказ) vs минус к баллу.
 const BAD_KINDS = [
@@ -460,31 +469,40 @@ function GoodEditor({
         <ListCounter count={rows.length} max={10} />
       </div>
       <p className="text-xs text-muted-foreground">
-        Есть в резюме → плюс к баллу (важность справа). Нет → балл ниже, но <b>не отказ</b>. «Очень важно» влияет сильнее. Можно фразой.
+        Есть в резюме → плюс к баллу. Нет → балл ниже, но <b>не отказ</b>. Цвет справа = важность:{" "}
+        <span className="text-orange-600 dark:text-orange-400">оранжевый — желательно</span>,{" "}
+        <span className="text-emerald-600 dark:text-emerald-400">светло-зелёный — важно</span>,{" "}
+        <span className="text-emerald-700 dark:text-emerald-300">тёмно-зелёный — обязательно</span> (сильнее влияет). Наведите — увидите подпись.
       </p>
       <OverRecommendedHint count={rows.length} />
       <div className="space-y-1.5">
         {rows.map((r, i) => (
-          <div key={i} className="rounded-md border p-2 space-y-1.5">
-            <div className="flex items-center gap-2">
-              <span className="flex-1 text-sm min-w-0 break-words">{r.text}</span>
-              <button type="button" onClick={() => remove(i)}
-                className="rounded-full hover:bg-muted-foreground/20 p-0.5 shrink-0" aria-label={`Убрать «${r.text}»`}>
-                <X className="w-3.5 h-3.5" />
-              </button>
+          <div key={i} className="rounded-md border p-2 flex items-center gap-2">
+            <span className="flex-1 text-sm min-w-0 break-words">{r.text}</span>
+            <div className="flex items-center gap-1 shrink-0" role="group" aria-label="Важность пункта">
+              {GOOD_LEVELS.map(l => {
+                const active = r.level === l.value
+                return (
+                  <button key={l.value} type="button" title={l.label} aria-label={l.label} aria-pressed={active}
+                    onClick={() => setLevel(i, l.value)}
+                    className={cn(
+                      "w-7 h-7 rounded-full border flex items-center justify-center transition-all",
+                      active
+                        ? cn(l.solid, "border-transparent text-white scale-110 shadow-sm")
+                        : "border-border bg-transparent hover:bg-muted-foreground/10",
+                    )}
+                  >
+                    {active
+                      ? <Check className="w-3.5 h-3.5" />
+                      : <span className={cn("w-2.5 h-2.5 rounded-full", l.solid, "opacity-60")} />}
+                  </button>
+                )
+              })}
             </div>
-            <div className="grid grid-cols-3 gap-1">
-              {GOOD_LEVELS.map(l => (
-                <button key={l.value} type="button" onClick={() => setLevel(i, l.value)}
-                  className={cn(
-                    "text-[11px] px-1.5 py-1 rounded-md border text-center truncate transition-colors",
-                    r.level === l.value
-                      ? "bg-primary text-primary-foreground border-transparent"
-                      : "text-muted-foreground border-border hover:text-foreground",
-                  )}
-                >{l.label}</button>
-              ))}
-            </div>
+            <button type="button" onClick={() => remove(i)}
+              className="rounded-full hover:bg-muted-foreground/20 p-0.5 shrink-0" aria-label={`Убрать «${r.text}»`}>
+              <X className="w-3.5 h-3.5" />
+            </button>
           </div>
         ))}
       </div>
@@ -825,6 +843,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
   }
 
   const sf = spec.stopFactors
+  const rt = spec.resumeThresholds
   const setSf = (next: CandidateSpec["stopFactors"]) => patch({ stopFactors: next })
   const toggleFactor = (key: keyof CandidateSpec["stopFactors"], on: boolean) => {
     const current = (sf[key] ?? { enabled: false }) as Record<string, unknown>
@@ -1205,153 +1224,150 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
         />
       </div>
 
+      {/* ── Как считается балл (пояснение) ── */}
+      <details className="rounded-lg border bg-muted/30 px-3.5 py-2.5 text-sm">
+        <summary className="cursor-pointer font-medium select-none">Как считается балл?</summary>
+        <div className="mt-2 space-y-1.5 text-xs text-muted-foreground">
+          <p>AI читает резюме и сверяет с «Портретом», выставляя <b>0–100</b>:</p>
+          <ul className="list-disc pl-4 space-y-1">
+            <li><b>Эталон</b> (идеальный профиль) — общая рамка соответствия.</li>
+            <li><b>«Подходит»</b> — каждый плюс тянет балл вверх; вес зависит от важности (желательно &lt; важно &lt; обязательно). Нет плюса → балл ниже, но <b>не отказ</b>.</li>
+            <li><b>«Не подходит»</b> — стоп-фактор, если AI прямо видит его в резюме, резко роняет балл / отказ; «минус к баллу» просто снижает.</li>
+            <li><b>«Точные требования»</b> — формальные отсечки по данным резюме/анкеты (город, опыт, права…).</li>
+          </ul>
+          <p>Готовый балл попадает в одну из зон порога ниже → действие (отказ / середина / приглашение).</p>
+        </div>
+      </details>
+
       {/* ── Связка: балл → действие ── */}
       <p className="text-xs text-muted-foreground">
         «Подходит» и «Не подходит» формируют балл. Ниже — что с этим баллом делать.
       </p>
 
-      {/* ── Автоматический отбор по баллу: мастер-тумблер + 3 зоны (согласованный дизайн) ── */}
+      {/* ── Автоматический отбор по баллу: два независимых действия (отказ / приглашение) ── */}
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-start justify-between gap-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Gauge className="w-4 h-4" /> Автоматический отбор по баллу
-            </CardTitle>
-            <Switch
-              checked={spec.resumeThresholds.autoRejectEnabled}
-              onCheckedChange={v => patch({ resumeThresholds: { ...spec.resumeThresholds, autoRejectEnabled: v, enabled: true } })}
-            />
-          </div>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Gauge className="w-4 h-4" /> Автоматический отбор по баллу
+          </CardTitle>
           <CardDescription>
-            {!spec.resumeThresholds.autoRejectEnabled
-              ? "Выкл — AI просто ставит балл, решаете вы. Вкл — система действует сама по зонам ниже."
-              : spec.botClarifyAmbiguous
-                ? "Сильных приглашаем, средних уточняет бот в чате, слабых отклоняем. Спорных у нижнего порога бот тоже уточняет — до отказа."
-                : "Сильных приглашаем, средних отправляем на демо, слабых отклоняем. Чтобы средних/спорных уточнял бот — включите «Спорное уточняет бот» выше."}
+            AI ставит балл 0–100. Авто-отказ и авто-приглашение включаются <b>независимо</b> — можно отказывать слабым, но сильных не звать сразу (и наоборот).
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* 3 зоны — подписи отражают, какие действия включены */}
           <div className="grid grid-cols-3 gap-2 text-center text-xs">
-            <div className="rounded-md border border-red-400/40 bg-red-500/10 py-2">
-              <div className="font-bold text-red-600 dark:text-red-400">&lt; {spec.resumeThresholds.lowerThreshold}</div>
-              <div className="text-muted-foreground">отказ</div>
+            <div className={cn("rounded-md border py-2", rt.autoRejectEnabled ? "border-red-400/40 bg-red-500/10" : "border-border bg-muted/30")}>
+              <div className={cn("font-bold", rt.autoRejectEnabled ? "text-red-600 dark:text-red-400" : "text-muted-foreground")}>&lt; {rt.lowerThreshold}</div>
+              <div className="text-muted-foreground">{rt.autoRejectEnabled ? "отказ" : "ручной разбор"}</div>
             </div>
             <div className="rounded-md border border-amber-400/40 bg-amber-500/10 py-2">
-              <div className="font-bold text-amber-600 dark:text-amber-400">{spec.resumeThresholds.lowerThreshold}–{Math.max(spec.resumeThresholds.lowerThreshold, spec.resumeThresholds.upperThreshold - 1)}</div>
-              <div className="text-muted-foreground">{spec.botClarifyAmbiguous ? "уточнить ботом" : "на демо"}</div>
+              <div className="font-bold text-amber-600 dark:text-amber-400">{rt.lowerThreshold}–{Math.max(rt.lowerThreshold, rt.upperThreshold - 1)}</div>
+              <div className="text-muted-foreground">{!(rt.autoInviteEnabled ?? true) ? "ручной разбор" : spec.botClarifyAmbiguous ? "уточнить ботом" : "на демо"}</div>
             </div>
-            <div className="rounded-md border border-emerald-400/40 bg-emerald-500/10 py-2">
-              <div className="font-bold text-emerald-600 dark:text-emerald-400">≥ {spec.resumeThresholds.upperThreshold}</div>
-              <div className="text-muted-foreground">приглашение</div>
+            <div className={cn("rounded-md border py-2", (rt.autoInviteEnabled ?? true) ? "border-emerald-400/40 bg-emerald-500/10" : "border-border bg-muted/30")}>
+              <div className={cn("font-bold", (rt.autoInviteEnabled ?? true) ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>≥ {rt.upperThreshold}</div>
+              <div className="text-muted-foreground">{(rt.autoInviteEnabled ?? true) ? (NEXT_STEP_LABEL[rt.inviteNextStep ?? "demo"] ?? "приглашение") : "ручной разбор"}</div>
             </div>
           </div>
+
+          {/* Пороги */}
           <div className="space-y-1.5">
             <div className="flex items-baseline justify-between">
-              <Label className="text-xs">Порог отказа (ниже балл — отказ)</Label>
-              <span className="text-sm font-bold text-amber-600">&lt;{spec.resumeThresholds.lowerThreshold}</span>
+              <Label className="text-xs">Порог отказа (ниже балл — слабые)</Label>
+              <span className="text-sm font-bold text-amber-600">&lt;{rt.lowerThreshold}</span>
             </div>
             <Slider
-              value={[spec.resumeThresholds.lowerThreshold]}
-              onValueChange={([v]) => patch({ resumeThresholds: { ...spec.resumeThresholds, lowerThreshold: Math.min(v, spec.resumeThresholds.upperThreshold - 5) } })}
+              value={[rt.lowerThreshold]}
+              onValueChange={([v]) => patch({ resumeThresholds: { ...rt, lowerThreshold: Math.min(v, rt.upperThreshold - 5) } })}
               min={0} max={95} step={5}
             />
           </div>
           <div className="space-y-1.5">
             <div className="flex items-baseline justify-between">
-              <Label className="text-xs">Порог приглашения (выше балл — приглашаем)</Label>
-              <span className="text-sm font-bold text-emerald-600">≥{spec.resumeThresholds.upperThreshold}</span>
+              <Label className="text-xs">Порог приглашения (выше балл — сильные)</Label>
+              <span className="text-sm font-bold text-emerald-600">≥{rt.upperThreshold}</span>
             </div>
             <Slider
-              value={[spec.resumeThresholds.upperThreshold]}
-              onValueChange={([v]) => patch({ resumeThresholds: { ...spec.resumeThresholds, upperThreshold: Math.max(v, spec.resumeThresholds.lowerThreshold + 5) } })}
+              value={[rt.upperThreshold]}
+              onValueChange={([v]) => patch({ resumeThresholds: { ...rt, upperThreshold: Math.max(v, rt.lowerThreshold + 5) } })}
               min={10} max={100} step={5}
             />
           </div>
-          {spec.resumeThresholds.autoRejectEnabled && (
-            <div className="flex items-center gap-2 pt-1 border-t">
-              <Label className="text-xs shrink-0">Задержка отказа, мин</Label>
-              <Input
-                type="number"
-                value={spec.resumeThresholds.rejectionDelayMinutes}
-                onChange={e => patch({ resumeThresholds: { ...spec.resumeThresholds, rejectionDelayMinutes: Math.max(0, Number(e.target.value) || 0) } })}
-                className="w-24 h-8 text-sm"
+
+          {/* Авто-отказ слабых + письмо отказа */}
+          <div className="rounded-lg border p-3 space-y-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <Label className="text-sm font-medium">Авто-отказ слабых</Label>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Балл &lt; {rt.lowerThreshold} → система сама отправляет мягкий отказ. Выкл — слабые ждут ручного разбора.</p>
+              </div>
+              <Switch
+                checked={rt.autoRejectEnabled}
+                onCheckedChange={v => patch({ resumeThresholds: { ...rt, autoRejectEnabled: v, enabled: true } })}
               />
-              <span className="text-[11px] text-muted-foreground">отказ уходит не сразу — время передумать</span>
             </div>
-          )}
+            {rt.autoRejectEnabled && (<>
+              <div className="flex items-center gap-2">
+                <Label className="text-xs shrink-0">Задержка отказа, мин</Label>
+                <Input
+                  type="number"
+                  value={rt.rejectionDelayMinutes}
+                  onChange={e => patch({ resumeThresholds: { ...rt, rejectionDelayMinutes: Math.max(0, Number(e.target.value) || 0) } })}
+                  className="w-24 h-8 text-sm"
+                />
+                <span className="text-[11px] text-muted-foreground">не сразу — время передумать</span>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> Письмо отказа (мягкое)</Label>
+                <p className="text-[11px] text-muted-foreground">«{"{{имя}}"}» подставится само. Тон мягкий, без причин отказа.</p>
+                <Textarea
+                  value={spec.rejectLetter || DEFAULT_REJECT_LETTER}
+                  onChange={e => patch({ rejectLetter: e.target.value.slice(0, 2000) })}
+                  rows={4}
+                  maxLength={2000}
+                />
+              </div>
+            </>)}
+          </div>
+
+          {/* Авто-приглашение сильных + выбор следующего этапа */}
+          <div className="rounded-lg border p-3 space-y-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <Label className="text-sm font-medium">Авто-приглашение сильных</Label>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Балл ≥ {rt.upperThreshold} → система сама зовёт дальше. Выкл — сильные ждут вашего решения.</p>
+              </div>
+              <Switch
+                checked={rt.autoInviteEnabled ?? true}
+                onCheckedChange={v => patch({ resumeThresholds: { ...rt, autoInviteEnabled: v, enabled: true } })}
+              />
+            </div>
+            {(rt.autoInviteEnabled ?? true) && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Следующий этап</Label>
+                <Select
+                  value={rt.inviteNextStep ?? "demo"}
+                  onValueChange={v => patch({ resumeThresholds: { ...rt, inviteNextStep: v as "demo" | "interview" | "video" | "call" } })}
+                >
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="demo">Демо-страница</SelectItem>
+                    <SelectItem value="interview">Запись на интервью (календарь)</SelectItem>
+                    <SelectItem value="video">Видео-интервью</SelectItem>
+                    <SelectItem value="call">Телефонный звонок</SelectItem>
+                  </SelectContent>
+                </Select>
+                {(rt.inviteNextStep ?? "demo") !== "demo" && (
+                  <p className="text-[11px] text-muted-foreground">Сейчас меняет текст приглашения; автозапись в календарь/видео — в доработке движка.</p>
+                )}
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
-      {/* ── Письмо отказа (мягкое) ── */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <FileText className="w-4 h-4" /> Письмо отказа (мягкое)
-          </CardTitle>
-          <CardDescription>
-            Уходит при автоматическом отказе (балл &lt;{spec.resumeThresholds.lowerThreshold}). «{"{{имя}}"}» подставится само. Тон мягкий, без причин отказа.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Textarea
-            value={spec.rejectLetter || DEFAULT_REJECT_LETTER}
-            onChange={e => patch({ rejectLetter: e.target.value.slice(0, 2000) })}
-            rows={4}
-            maxLength={2000}
-          />
-        </CardContent>
-      </Card>
-
-      {/* ── Оценка анкеты (после демо) — вторичный блок ── */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-start justify-between gap-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <FileText className="w-4 h-4" /> Оценка анкеты <span className="text-xs font-normal text-muted-foreground">(после демо)</span>
-            </CardTitle>
-            <Switch
-              checked={spec.anketaThresholds.enabled ?? true}
-              onCheckedChange={v => patch({ anketaThresholds: { ...spec.anketaThresholds, enabled: v } })}
-            />
-          </div>
-          <CardDescription>Пороги AI-скрининга ответов анкеты (после демо).</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {!(spec.anketaThresholds.enabled ?? true) ? (
-            <p className="text-[11px] text-muted-foreground bg-muted/40 rounded-md px-3 py-2 border">
-              Оценка анкеты отключена — скрининг ответов не применяется.
-            </p>
-          ) : (<>
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <div className="flex items-baseline justify-between">
-                <Label className="text-xs">Зелёный уровень (на встречу)</Label>
-                <span className="text-sm font-bold text-emerald-600">≥{spec.anketaThresholds.upperThreshold}</span>
-              </div>
-              <Slider
-                value={[spec.anketaThresholds.upperThreshold]}
-                onValueChange={([v]) => patch({ anketaThresholds: { ...spec.anketaThresholds, upperThreshold: v } })}
-                min={10} max={100} step={5}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <div className="flex items-baseline justify-between">
-                <Label className="text-xs">Красный уровень</Label>
-                <span className="text-sm font-bold text-amber-600">&lt;{spec.anketaThresholds.lowerThreshold}</span>
-              </div>
-              <Slider
-                value={[spec.anketaThresholds.lowerThreshold]}
-                onValueChange={([v]) => patch({ anketaThresholds: { ...spec.anketaThresholds, lowerThreshold: v } })}
-                min={0} max={95} step={5}
-              />
-            </div>
-          </div>
-          <p className="text-[11px] text-muted-foreground bg-muted/40 rounded-md px-3 py-2 border">
-            Жёлтая зона (между порогами) — кандидат получает «мы свяжемся», решение за HR. Тексты уровней — в блоке «AI-скрининг анкеты».
-          </p>
-          </>)}
-        </CardContent>
-      </Card>
+      {/* «Оценка анкеты (после демо)» перенесена в настройки анкеты (блок «После демо»). */}
 
       {/* ── (г) Реалистичность портрета ── */}
       <RealismIndicator spec={spec} />
