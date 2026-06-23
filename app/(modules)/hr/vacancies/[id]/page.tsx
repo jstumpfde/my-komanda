@@ -40,7 +40,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquare, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, RefreshCw, Bot, Workflow, FilePlus, UserSearch, Trash2, Target, Inbox, CalendarDays} from "lucide-react"
+import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquare, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, Plus, RefreshCw, Bot, Workflow, FilePlus, UserSearch, Trash2, Target, Inbox, CalendarDays} from "lucide-react"
 import { InterviewsView } from "@/app/(modules)/hr/interviews/page"
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-factors-settings"
@@ -300,6 +300,9 @@ export default function VacancyPage() {
   // Привязывать ли вакансию к hh (получать отклики) — отдельный шаг. По умолчанию
   // СНЯТО (просто заполнить поля); путь «Привязать» выставляет галочку явно.
   const [hhImportBind, setHhImportBind] = useState(false)
+  // Q3: предложение добавить компанию-работодателя из hh в список брендов HR
+  const [newBrandPrompt, setNewBrandPrompt] = useState<{ name: string; description: string } | null>(null)
+  const [addBrandBusy, setAddBrandBusy] = useState(false)
   const anketaFileInputRef = useRef<HTMLInputElement>(null)
 
   const parseTextAndFillAnketa = async (text: string) => {
@@ -418,16 +421,57 @@ export default function VacancyPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ hhUrl: url, bind: hhImportBind }),
       })
-      const data = await res.json().catch(() => ({})) as { error?: string }
+      const data = await res.json().catch(() => ({})) as { error?: string; data?: { companyName?: string }; companyAbout?: string }
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
       await refetchVacancy()
       toast.success(hhImportBind ? "✅ Заполнено и привязано к hh.ru" : "✅ Поля заполнены из hh.ru")
       setHhImportDialogOpen(false)
       setHhImportUrl("")
+      maybeOfferNewCompany(data.data?.companyName, data.companyAbout)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Ошибка импорта")
     } finally {
       setHhImportBusy(false)
+    }
+  }
+
+  // Q3: если компания с hh не совпадает ни с основной, ни с брендами — предложить добавить.
+  const maybeOfferNewCompany = (companyName?: string, description?: string) => {
+    const name = (companyName || "").trim()
+    if (!name) return
+    const known = new Set<string>()
+    if (mainCompanyData?.brandName) known.add(mainCompanyData.brandName.trim().toLowerCase())
+    brandCompaniesData.forEach(c => { if (c?.name) known.add(c.name.trim().toLowerCase()) })
+    if (known.has(name.toLowerCase())) return
+    setNewBrandPrompt({ name, description: (description || "").trim() })
+  }
+
+  const handleAddBrandCompany = async () => {
+    if (!newBrandPrompt) return
+    setAddBrandBusy(true)
+    try {
+      const newBrand = { id: `brand_${Date.now()}`, name: newBrandPrompt.name, description: newBrandPrompt.description }
+      const next = [...brandCompaniesData, newBrand]
+      const res = await fetch("/api/modules/hr/company/hiring-defaults", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brandCompanies: next }),
+      })
+      if (!res.ok) throw new Error("Не удалось сохранить компанию")
+      setBrandCompaniesData(next)
+      // Выбрать новую компанию для этой вакансии (anketa.brandCompanyId).
+      const existing = (apiVacancy?.descriptionJson as Record<string, unknown>) || {}
+      const existingAnketa = (existing.anketa as Record<string, unknown>) || {}
+      await fetch(`/api/modules/hr/vacancies/${id}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description_json: { ...existing, anketa: { ...existingAnketa, brandCompanyId: newBrand.id } } }),
+      })
+      await refetchVacancy()
+      toast.success(`Компания «${newBrand.name}» добавлена и выбрана`)
+      setNewBrandPrompt(null)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Ошибка")
+    } finally {
+      setAddBrandBusy(false)
     }
   }
 
@@ -4264,6 +4308,27 @@ export default function VacancyPage() {
             <Button className="w-full h-10" onClick={handleHhVacancyImport} disabled={hhImportBusy || !hhImportUrl.trim()}>
               {hhImportBusy ? <><Loader2 className="size-4 mr-1.5 animate-spin" />Заполнение...</> : <><Globe className="size-4 mr-1.5" />Заполнить</>}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Q3: Новая компания из hh ── */}
+      <Dialog open={!!newBrandPrompt} onOpenChange={(o) => { if (!o && !addBrandBusy) setNewBrandPrompt(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Новая компания из hh</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm">На hh указана компания <span className="font-medium">«{newBrandPrompt?.name}»</span> — её нет в вашем списке. Добавить в компании (Настройки HR) и выбрать для этой вакансии?</p>
+            {newBrandPrompt?.description && (
+              <p className="text-xs text-muted-foreground line-clamp-4 border rounded-md p-2 bg-muted/30 whitespace-pre-line">{newBrandPrompt.description}</p>
+            )}
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setNewBrandPrompt(null)} disabled={addBrandBusy}>Не сейчас</Button>
+              <Button onClick={handleAddBrandCompany} disabled={addBrandBusy}>
+                {addBrandBusy ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Plus className="size-4 mr-1.5" />}Добавить компанию
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

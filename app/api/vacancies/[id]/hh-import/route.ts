@@ -162,6 +162,7 @@ type Mapped = {
   workingTimeIntervals: string                  // детализация часов (hh text)
   acceptHandicapped: boolean                    // спец.условие: инвалидность
   acceptKids: boolean                           // спец.условие: несовершеннолетние
+  companyName: string                           // название компании-работодателя (для «Добавить как новую компанию»)
 }
 
 function parseHhHtml(html: string): Mapped {
@@ -257,6 +258,11 @@ function parseHhHtml(html: string): Mapped {
   const qaDepartment = $('[data-qa="vacancy-company-department"]').first().text().trim()
     || $('[data-qa*="department"]').first().text().trim()
 
+  // ─── Название компании-работодателя ─────────────────────────────────────
+  // Для предложения «Добавить как новую компанию» в список брендов HR.
+  const qaCompanyName = $('[data-qa="vacancy-company-name"]').first().text().trim()
+    || $('[data-qa="bloko-link"][data-qa="vacancy-company-name"]').first().text().trim()
+
   // ─── Спец. условия (accept_handicapped, accept_kids) ───────────────────
   // ВАЖНО: проверяем ТОЛЬКО текст описания вакансии + явный hh-бейдж доступности,
   // НЕ весь HTML страницы — иначе ловим стандартную чрому/текст hh и ставим
@@ -351,6 +357,7 @@ function parseHhHtml(html: string): Mapped {
     workingTimeIntervals: qaWorkingHours,
     acceptHandicapped: qaAcceptHandicapped,
     acceptKids: qaAcceptKids,
+    companyName: qaCompanyName,
   }
 }
 
@@ -635,7 +642,7 @@ export async function POST(
       request: req,
     })
 
-    return apiSuccess({ success: true, data: mappedData })
+    return apiSuccess({ success: true, data: mappedData, companyAbout: anketaAbout })
   } catch (err) {
     if (err instanceof Response) return err
     console.error("[hh-import]", err)
