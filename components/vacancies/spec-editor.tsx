@@ -1271,31 +1271,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
             </div>
           </div>
 
-          {/* Пороги */}
-          <div className="space-y-1.5">
-            <div className="flex items-baseline justify-between">
-              <Label className="text-xs">Порог отказа (ниже балл — слабые)</Label>
-              <span className="text-sm font-bold text-amber-600">&lt;{rt.lowerThreshold}</span>
-            </div>
-            <Slider
-              value={[rt.lowerThreshold]}
-              onValueChange={([v]) => patch({ resumeThresholds: { ...rt, lowerThreshold: Math.min(v, rt.upperThreshold - 5) } })}
-              min={0} max={95} step={5}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <div className="flex items-baseline justify-between">
-              <Label className="text-xs">Порог приглашения (выше балл — сильные)</Label>
-              <span className="text-sm font-bold text-emerald-600">≥{rt.upperThreshold}</span>
-            </div>
-            <Slider
-              value={[rt.upperThreshold]}
-              onValueChange={([v]) => patch({ resumeThresholds: { ...rt, upperThreshold: Math.max(v, rt.lowerThreshold + 5) } })}
-              min={10} max={100} step={5}
-            />
-          </div>
-
-          {/* Авто-отказ слабых + письмо отказа */}
+          {/* Авто-отказ слабых: порог + задержка + письмо отказа */}
           <div className="rounded-lg border p-3 space-y-3">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
@@ -1308,6 +1284,17 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
               />
             </div>
             {rt.autoRejectEnabled && (<>
+              <div className="space-y-1.5">
+                <div className="flex items-baseline justify-between">
+                  <Label className="text-xs">Порог отказа (ниже балл — отказ)</Label>
+                  <span className="text-sm font-bold text-red-600">&lt;{rt.lowerThreshold}</span>
+                </div>
+                <Slider
+                  value={[rt.lowerThreshold]}
+                  onValueChange={([v]) => patch({ resumeThresholds: { ...rt, lowerThreshold: Math.min(v, rt.upperThreshold - 5) } })}
+                  min={0} max={95} step={5}
+                />
+              </div>
               <div className="flex items-center gap-2">
                 <Label className="text-xs shrink-0">Задержка отказа, мин</Label>
                 <Input
@@ -1343,7 +1330,18 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
                 onCheckedChange={v => patch({ resumeThresholds: { ...rt, autoInviteEnabled: v, enabled: true } })}
               />
             </div>
-            {(rt.autoInviteEnabled ?? true) && (
+            {(rt.autoInviteEnabled ?? true) && (<>
+              <div className="space-y-1.5">
+                <div className="flex items-baseline justify-between">
+                  <Label className="text-xs">Порог приглашения (выше балл — приглашаем)</Label>
+                  <span className="text-sm font-bold text-emerald-600">≥{rt.upperThreshold}</span>
+                </div>
+                <Slider
+                  value={[rt.upperThreshold]}
+                  onValueChange={([v]) => patch({ resumeThresholds: { ...rt, upperThreshold: Math.max(v, rt.lowerThreshold + 5) } })}
+                  min={10} max={100} step={5}
+                />
+              </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Следующий этап</Label>
                 <Select
@@ -1362,7 +1360,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
                   <p className="text-[11px] text-muted-foreground">Сейчас меняет текст приглашения; автозапись в календарь/видео — в доработке движка.</p>
                 )}
               </div>
-            )}
+            </>)}
           </div>
         </CardContent>
       </Card>
