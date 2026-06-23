@@ -13,6 +13,7 @@ import type { Block, Lesson, Question } from "@/lib/course-types"
 import { resolveBrand } from "@/lib/brand-colors"
 import { VideoEmbed } from "@/components/blocks/VideoEmbed"
 import { StoriesPlayer } from "@/components/vacancies/stories-player"
+import { PdfSlidesViewer } from "@/components/vacancies/pdf-slides-viewer"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1349,6 +1350,10 @@ export default function DemoPage() {
       }
       return !mediaUploaded[b.id]
     }
+    // PDF-презентация: требуем долистать до последнего слайда (если включено).
+    if (b.type === "pdf" && b.pdfRequireComplete !== false && (b.pdfPages?.length ?? 0) > 0) {
+      return !viewedBlockIds.has(b.id)
+    }
     return false
   })
 
@@ -1380,12 +1385,15 @@ export default function DemoPage() {
       {/* Content — все блоки текущего урока рендерятся на одной странице */}
       <div className="flex-1">
         <div className="mx-auto max-w-2xl px-4 py-6 sm:py-8">
-          {/* Lesson header */}
-          <div className="mb-4">
-            <span className="text-xs font-medium uppercase tracking-wider text-gray-400">
-              {currentFlat.lessonEmoji} {currentFlat.lessonTitle}
-            </span>
-          </div>
+          {/* Lesson header — скрываем для PDF-презентации: слайдер сам себе
+              заголовок, иначе над ним висит лишнее название урока. */}
+          {!currentFlat.blocks.some((b) => b.type === "pdf" && (b.pdfPages?.length ?? 0) > 0) && (
+            <div className="mb-4">
+              <span className="text-xs font-medium uppercase tracking-wider text-gray-400">
+                {currentFlat.lessonEmoji} {currentFlat.lessonTitle}
+              </span>
+            </div>
+          )}
 
           {/* Blocks — все блоки в одной сплошной белой карточке */}
           <div className="rounded-xl bg-white overflow-hidden">
@@ -1437,6 +1445,25 @@ export default function DemoPage() {
                     ctaText={block.storiesCtaText}
                     ctaCaption={block.storiesCtaCaption}
                     onCta={handleNext}
+                  />
+                )}
+                {block.type === "pdf" && (
+                  <PdfSlidesViewer
+                    pages={block.pdfPages ?? []}
+                    aspect={block.pdfAspect || 16 / 9}
+                    brandColor={brandColor}
+                    caption={block.pdfCaption || undefined}
+                    allowDownload={block.pdfAllowDownload}
+                    pdfUrl={block.pdfUrl}
+                    fileName={block.pdfFileName}
+                    onReachedEnd={() =>
+                      setViewedBlockIds((prev) => {
+                        if (prev.has(block.id)) return prev
+                        const next = new Set(prev)
+                        next.add(block.id)
+                        return next
+                      })
+                    }
                   />
                 )}
                 {block.type === "media" && viQuestions.length > 0 && (

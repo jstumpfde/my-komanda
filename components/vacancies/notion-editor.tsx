@@ -31,6 +31,7 @@ import { toast } from "sonner"
 import type { Demo, Block, BlockType, Lesson, StoriesCard } from "@/lib/course-types"
 import {BLOCK_TYPE_META, createBlock, STORIES_CTA_DEFAULT_TEXT, STORIES_CARD_DEFAULT_DURATION_SEC} from "@/lib/course-types"
 import { StoriesPlayer } from "@/components/vacancies/stories-player"
+import { PdfSlidesViewer } from "@/components/vacancies/pdf-slides-viewer"
 import { resolveOptionPoints } from "@/lib/score-test-objective"
 import { TEMPLATE_VARIABLES } from "@/lib/templates/demo-templates"
 import { getMaterialType } from "@/lib/demo-types"
@@ -482,6 +483,9 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
     const lesson = demo.lessons[previewIdx]
     if (!lesson) { setPreviewMode(false); return null }
     const pct = ((previewIdx + 1) / demo.lessons.length) * 100
+    // PDF-презентация сама себе заголовок — не дублируем название урока сверху,
+    // иначе над слайдером висит лишнее «Презентация».
+    const isPdfLesson = lesson.blocks.some((b) => b.type === "pdf" && (b.pdfPages?.length ?? 0) > 0)
     return (
       <div className="max-w-5xl mx-auto py-6 px-6 sm:px-8">
         <div className="flex items-center justify-between mb-4">
@@ -496,11 +500,13 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
           </div>
           <span className="text-xs font-medium text-muted-foreground">{previewIdx + 1} / {demo.lessons.length}</span>
         </div>
-        <div className="bg-card rounded-2xl border p-8 sm:p-10">
-          <div className="text-center mb-8">
-            {/* <span className="text-5xl block mb-3">{lesson.emoji}</span> */}
-            <h1 className="text-2xl font-bold">{lesson.title}</h1>
-          </div>
+        <div className={cn("bg-card rounded-2xl border", isPdfLesson ? "p-3 sm:p-4" : "p-8 sm:p-10")}>
+          {!isPdfLesson && (
+            <div className="text-center mb-8">
+              {/* <span className="text-5xl block mb-3">{lesson.emoji}</span> */}
+              <h1 className="text-2xl font-bold">{lesson.title}</h1>
+            </div>
+          )}
           <div className="space-y-5">
             {lesson.blocks.map((block) => (
               <SimplePreviewBlock
@@ -3139,6 +3145,125 @@ function StoriesEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patc
   )
 }
 
+// ─── PDF-презентация ───────────────────────────────────────────────────────
+
+function PdfEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: Partial<Block>) => void }) {
+  const [uploading, setUploading] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const pages = block.pdfPages ?? []
+  const hasPdf = pages.length > 0
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file) return
+    if (!file.name.toLowerCase().endsWith(".pdf") && file.type !== "application/pdf") {
+      toast.error("Нужен файл PDF")
+      return
+    }
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const res = await fetch("/api/modules/hr/courses/pdf-to-slides", { method: "POST", body: fd })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(data.error || "Не удалось обработать PDF")
+        setUploading(false)
+        return
+      }
+      onUpdate({
+        pdfUrl: data.pdfUrl,
+        pdfFileName: data.fileName,
+        pdfPages: data.pages,
+        pdfPageCount: data.pageCount,
+        pdfAspect: data.aspect,
+      })
+      toast.success(`PDF загружен — страниц: ${data.pageCount}`)
+    } catch {
+      toast.error("Ошибка загрузки PDF")
+    }
+    setUploading(false)
+  }
+
+  return (
+    <div className="rounded-xl border border-dashed border-border bg-muted/20 p-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <span>📑</span><span>PDF презентация</span>
+          {hasPdf && <span className="text-xs text-muted-foreground/70">· {block.pdfPageCount ?? pages.length} стр.</span>}
+        </div>
+        {hasPdf && (
+          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={uploading} onClick={() => fileRef.current?.click()}>
+            {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Заменить PDF"}
+          </Button>
+        )}
+      </div>
+
+      <input ref={fileRef} type="file" accept=".pdf,application/pdf" className="hidden" onChange={handleFile} />
+
+      {uploading && !hasPdf && (
+        <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Конвертируем PDF в слайды...
+        </div>
+      )}
+
+      {!hasPdf && !uploading && (
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border py-10 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+        >
+          <Plus className="h-5 w-5" />
+          Загрузить PDF
+          <span className="text-[11px] text-muted-foreground/70">Каждая страница станет слайдом — точно как в исходнике</span>
+        </button>
+      )}
+
+      {hasPdf && (
+        <>
+          <PdfSlidesViewer
+            pages={pages}
+            aspect={block.pdfAspect || 16 / 9}
+            caption={block.pdfCaption || undefined}
+            allowDownload={block.pdfAllowDownload}
+            pdfUrl={block.pdfUrl}
+            fileName={block.pdfFileName}
+          />
+          <div className="space-y-2 rounded-lg border border-border bg-background/60 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor={`pdf-req-${block.id}`} className="text-xs font-normal text-muted-foreground">
+                Долистать до конца перед кнопкой «Далее»
+              </Label>
+              <Switch
+                id={`pdf-req-${block.id}`}
+                checked={block.pdfRequireComplete !== false}
+                onCheckedChange={(v) => onUpdate({ pdfRequireComplete: v })}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor={`pdf-dl-${block.id}`} className="text-xs font-normal text-muted-foreground">
+                Разрешить скачать исходный PDF
+              </Label>
+              <Switch
+                id={`pdf-dl-${block.id}`}
+                checked={!!block.pdfAllowDownload}
+                onCheckedChange={(v) => onUpdate({ pdfAllowDownload: v })}
+              />
+            </div>
+            <Input
+              value={block.pdfCaption || ""}
+              onChange={(e) => onUpdate({ pdfCaption: e.target.value })}
+              placeholder="Подпись под презентацией (необязательно)"
+              className="h-8 text-sm"
+            />
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ─── Media / other block types ─────────────────────────────────────────────
 
 function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdate: (patch: Partial<Block>) => void; onRemove: () => void }) {
@@ -3675,6 +3800,9 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
 
     case "stories":
       return <StoriesEditorBlock block={block} onUpdate={onUpdate} />
+
+    case "pdf":
+      return <PdfEditorBlock block={block} onUpdate={onUpdate} />
 
     default:
       return (
@@ -4845,6 +4973,18 @@ function SimplePreviewBlock({ block, onNext }: { block: Block; onNext?: () => vo
           ctaEnabled={block.storiesCtaEnabled}
           ctaText={block.storiesCtaText}
           ctaCaption={block.storiesCtaCaption}
+        />
+      )
+    case "pdf":
+      if (!block.pdfPages?.length) return null
+      return (
+        <PdfSlidesViewer
+          pages={block.pdfPages}
+          aspect={block.pdfAspect || 16 / 9}
+          caption={block.pdfCaption || undefined}
+          allowDownload={block.pdfAllowDownload}
+          pdfUrl={block.pdfUrl}
+          fileName={block.pdfFileName}
         />
       )
     default:
