@@ -26,7 +26,7 @@ export interface IntakeData {
   topPriority?: string
 }
 
-const MODEL = "claude-sonnet-4-20250514"
+const MODEL = "claude-sonnet-4-6"
 
 const TOOL: Anthropic.Tool = {
   name: "submit_spec",

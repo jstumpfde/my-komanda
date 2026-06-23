@@ -1,6 +1,6 @@
 import type { DemoLength } from "@/lib/demo-types"
 
-export const CLAUDE_MODEL = "claude-sonnet-4-20250514"
+export const CLAUDE_MODEL = "claude-sonnet-4-6"
 
 export type Tone = "energetic" | "friendly" | "business" | "direct"
 

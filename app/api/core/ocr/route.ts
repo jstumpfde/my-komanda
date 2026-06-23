@@ -34,7 +34,7 @@ const VALID_TARGETS: Set<TargetModule> = new Set([
   "crm",
 ])
 
-const CLAUDE_MODEL = "claude-sonnet-4-20250514"
+const CLAUDE_MODEL = "claude-sonnet-4-6"
 
 const OCR_SYSTEM_PROMPT =
   "Извлеки весь текст из изображения. Сохрани структуру: заголовки, списки, таблицы. " +

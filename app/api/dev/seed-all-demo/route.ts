@@ -1029,7 +1029,7 @@ export async function POST() {
           action: a.action,
           inputTokens,
           outputTokens,
-          model: "claude-sonnet-4-20250514",
+          model: "claude-sonnet-4-6",
           costUsd: cost,
           createdAt: daysAgo(Math.floor(Math.random() * 30)),
         })

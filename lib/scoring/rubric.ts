@@ -25,7 +25,7 @@ import {
 // Реэкспорт типов/констант для серверных потребителей (клиенты импортируют из ./types).
 export * from "./types"
 
-const MODEL = "claude-sonnet-4-20250514"
+const MODEL = "claude-sonnet-4-6"
 
 // Инструмент, через который модель ОБЯЗАНА вернуть структурированную оценку.
 function buildTool(spec: ScoringSpec): Anthropic.Tool {

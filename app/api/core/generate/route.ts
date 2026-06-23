@@ -9,7 +9,7 @@ import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
 // { text, title, blocks[] } — где blocks совместимы с типами из
 // components/editor/types.ts (Block[]).
 
-const CLAUDE_MODEL = "claude-sonnet-4-20250514"
+const CLAUDE_MODEL = "claude-sonnet-4-6"
 
 type TargetModule = "knowledge" | "learning" | "hr" | "crm"
 const VALID_TARGETS: Set<TargetModule> = new Set([

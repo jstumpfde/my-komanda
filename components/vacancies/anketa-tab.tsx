@@ -1667,23 +1667,16 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
             onContactChange={v => set("clientContactId", v)}
           />
         ) : (showCompanySection || brandSelectorEnabled) ? (
-          /* Агентский режим доступен, но выбрана своя компания — компактная карточка + кнопка переключения */
-          <div className="space-y-2">
-            <div className="rounded-lg border px-3 py-2.5 bg-[var(--input-bg)] flex items-center gap-2 w-fit min-w-[260px] max-w-[50%]">
-              <span className="text-sm font-medium truncate">{mainCompanyName || "Из кабинета"}</span>
-            </div>
-            <button
-              type="button"
-              className="text-xs text-primary hover:underline"
-              onClick={() => set("companyMode", "client")}
-            >
-              Заполняю для клиента →
-            </button>
+          /* Своя компания — компактная карточка без переключателя «Для клиента» (решение Юрия). */
+          <div className="rounded-lg border px-3 py-2.5 bg-[var(--input-bg)] flex items-center gap-2 w-fit min-w-[260px] max-w-[50%]">
+            <span className="text-sm font-medium truncate">{mainCompanyName || "Из кабинета"}</span>
           </div>
         ) : null}
 
-        {/* O1: выбор компании-бренда, под которую идёт вакансия */}
-        {brandSelectorEnabled && brandCompanies.length > 0 && (
+        {/* O1: выбор компании-бренда, под которую идёт вакансия.
+            Показываем только если есть реально ВТОРАЯ компания (бренд, отличный от
+            основной). Одна компания → селектора/значка нет (решение Юрия). */}
+        {brandSelectorEnabled && brandCompanies.some(c => c.name?.trim() && c.name.trim() !== (mainCompanyName || "").trim()) && (
           <div className="space-y-1.5 pb-3 border-b">
             <Label className="text-xs">Компания вакансии</Label>
             <Select

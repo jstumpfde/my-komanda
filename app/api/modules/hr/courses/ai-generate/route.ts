@@ -276,7 +276,7 @@ ${combinedText.slice(0, 12000)}
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6",
         max_tokens: 8192,
         system: "Ты — эксперт по созданию обучающих курсов для корпоративного обучения. Создай структурированный курс на основе предоставленных материалов. Ответь строго в JSON формате.",
         messages: [{ role: "user", content: prompt }],

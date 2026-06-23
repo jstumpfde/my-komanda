@@ -50,7 +50,7 @@ interface Evaluation {
   recommendations: string[]
 }
 
-const CLAUDE_MODEL = "claude-sonnet-4-20250514"
+const CLAUDE_MODEL = "claude-sonnet-4-6"
 const MIN_TURNS_FOR_EVAL = 5
 const MAX_TURNS_BEFORE_AUTO_EVAL = 10
 

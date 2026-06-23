@@ -36,7 +36,7 @@ interface GenerateRequest {
   websiteDoc?: boolean
 }
 
-const CLAUDE_MODEL = "claude-sonnet-4-20250514"
+const CLAUDE_MODEL = "claude-sonnet-4-6"
 
 // ─── Мастер-шаблоны (копия из SYSTEM_PROMPT Ненси) ──────────────────────────
 

@@ -6,6 +6,7 @@ import { vacancies, hhVacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { logActivity } from "@/lib/activity-log"
 import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
+import { classifyPosition } from "@/lib/position-classifier"
 
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -29,8 +30,12 @@ async function splitDescriptionWithAi(description: string): Promise<{ responsibi
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 2000,
+        // Sonnet 4 (claude-sonnet-4-2025…) устарел (ретайр ~15.06.2026) → 404 на
+        // прокси → split падал в fallback (весь текст в «Обязанности»). Sonnet 4.6
+        // актуальна. max_tokens 2000 был мал для длинных вакансий — JSON ответа
+        // обрезался, парс падал → тот же fallback. 12000 покрывает длинное (потолок 64K).
+        model: "claude-sonnet-4-6",
+        max_tokens: 12000,
         system: SPLIT_PROMPT,
         messages: [{ role: "user", content: description }],
       }),
@@ -447,6 +452,17 @@ export async function POST(
     if (mappedData.acceptHandicapped) specialConditions.push("Открыты для кандидатов с ОВЗ")
     if (mappedData.acceptKids) specialConditions.push("Трудоустройство несовершеннолетних")
 
+    // Категория должности: классифицируем по названию (с фолбэком на профроль из
+    // hh), чтобы поле «Категория» подтягивалось при импорте. positionCategory
+    // хранит КЛЮЧ категории (value опции) — его читает CategoryField в анкете.
+    // vacancyCategory (сырой текст hh) оставляем для совместимости.
+    const classifiedCategory = (() => {
+      const byTitle = classifyPosition(mappedData.title || "")
+      if (byTitle.category !== "other") return byTitle.category
+      const byRole = classifyPosition(mappedData.category || "")
+      return byRole.category !== "other" ? byRole.category : ""
+    })()
+
     const newAnketa: Record<string, unknown> = {
       ...existingAnketa,
       ...(mappedData.title ? { vacancyTitle: mappedData.title } : {}),
@@ -464,6 +480,7 @@ export async function POST(
       ...(anketaSchedule ? { schedule: anketaSchedule } : {}),
       ...(anketaWorkFormats.length ? { workFormats: anketaWorkFormats } : {}),
       ...(mappedData.category ? { vacancyCategory: mappedData.category } : {}),
+      ...(classifiedCategory ? { positionCategory: classifiedCategory } : {}),
       // Новые поля из hh (10.06)
       ...(anketaLanguages.length ? { aiLanguages: anketaLanguages } : {}),
       ...(mappedData.driverLicenseTypes.length ? { driverLicenseTypes: mappedData.driverLicenseTypes } : {}),

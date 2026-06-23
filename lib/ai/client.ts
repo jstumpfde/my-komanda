@@ -6,7 +6,7 @@ import Anthropic from "@anthropic-ai/sdk"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
 
 const HAIKU  = "claude-haiku-4-5-20251001"
-const SONNET = "claude-sonnet-4-20250514"
+const SONNET = "claude-sonnet-4-6"
 
 let _client: Anthropic | null = null
 function client(): Anthropic {

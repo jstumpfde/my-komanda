@@ -170,7 +170,7 @@ ${combinedText.slice(0, 12000)}
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6",
         max_tokens: 8192,
         system: "Ты эксперт по созданию корпоративных обучающих курсов. На основе предоставленных материалов создай структурированный курс. Отвечай ТОЛЬКО валидным JSON без markdown.",
         messages: [{ role: "user", content: prompt }],
@@ -218,7 +218,7 @@ ${combinedText.slice(0, 12000)}
       projectId: id,
       inputTokens,
       outputTokens,
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       costUsd: cost,
     })
 

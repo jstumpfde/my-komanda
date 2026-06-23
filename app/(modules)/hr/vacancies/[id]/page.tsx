@@ -297,8 +297,9 @@ export default function VacancyPage() {
   const [hhImportDialogOpen, setHhImportDialogOpen] = useState(false)
   const [hhImportUrl, setHhImportUrl] = useState("")
   const [hhImportBusy, setHhImportBusy] = useState(false)
-  // Привязывать ли вакансию к hh (получать отклики) — отдельный шаг, по умолчанию вкл.
-  const [hhImportBind, setHhImportBind] = useState(true)
+  // Привязывать ли вакансию к hh (получать отклики) — отдельный шаг. По умолчанию
+  // СНЯТО (просто заполнить поля); путь «Привязать» выставляет галочку явно.
+  const [hhImportBind, setHhImportBind] = useState(false)
   const anketaFileInputRef = useRef<HTMLInputElement>(null)
 
   const parseTextAndFillAnketa = async (text: string) => {
@@ -2833,7 +2834,7 @@ export default function VacancyPage() {
                         <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => anketaFileInputRef.current?.click()}>
                           <Upload className="size-3.5" />Загрузить файл
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { setHhImportBind(true); setHhImportDialogOpen(true) }}>
+                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => { setHhImportBind(false); setHhImportDialogOpen(true) }}>
                           <Globe className="size-3.5" />Заполнить из hh.ru
                         </DropdownMenuItem>
                       </DropdownMenuContent>
@@ -3771,7 +3772,7 @@ export default function VacancyPage() {
                           <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
                             <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#D6001C" }}>hh</div>
                             <div className="flex-1 min-w-0"><p className="text-sm font-medium">hh.ru</p><p className="text-[11px] text-muted-foreground">Эта вакансия не привязана к hh.ru. Нажмите «Привязать», чтобы выбрать вакансию из аккаунта.</p></div>
-                            <Button size="sm" className="h-8 text-xs shrink-0" onClick={() => setHhImportDialogOpen(true)}>Привязать</Button>
+                            <Button size="sm" className="h-8 text-xs shrink-0" onClick={() => { setHhImportBind(true); setHhImportDialogOpen(true) }}>Привязать</Button>
                           </div>
                         )}
                       {/* Авито Работа — карточка источника */}

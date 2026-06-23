@@ -338,7 +338,7 @@ export async function POST(req: NextRequest) {
     const prompt = buildPrompt(vacancyData, body, focusedField)
 
     const response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 3000,
       system: `Ты — AI-помощник для HR. Ты анализируешь анкету вакансии и даёшь рекомендации по улучшению.
 Отвечай ТОЛЬКО валидным JSON. Никакого markdown, комментариев или текста вне JSON.

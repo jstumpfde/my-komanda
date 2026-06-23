@@ -15,7 +15,7 @@ const SYSTEM_PROMPT =
   "Если ответ есть — дай краткий ответ и укажи название материала в скобках. " +
   "Если не найден — скажи что не нашёл. Отвечай на русском, кратко, 2-4 предложения."
 
-const CLAUDE_MODEL = "claude-sonnet-4-20250514"
+const CLAUDE_MODEL = "claude-sonnet-4-6"
 const MAX_QUESTION_LEN = 2000
 
 export async function POST(req: NextRequest) {

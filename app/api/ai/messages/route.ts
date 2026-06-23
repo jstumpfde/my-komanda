@@ -24,7 +24,7 @@ const ALLOWED_MODELS = new Set([
   "claude-haiku-4-20250307",
   "claude-haiku-3-5-20241022",
   "claude-3-haiku-20240307",
-  "claude-sonnet-4-20250514",
+  "claude-sonnet-4-6",
   "claude-3-5-sonnet-20241022",
   "claude-3-5-sonnet-20240620",
   "claude-3-sonnet-20240229",
@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
   const requestedModel = typeof body?.model === "string" ? body.model : ""
   const model = ALLOWED_MODELS.has(requestedModel)
     ? requestedModel
-    : "claude-sonnet-4-20250514"
+    : "claude-sonnet-4-6"
   const maxTokens = Math.min(Math.max(Number(body?.max_tokens) || 1024, 1), MAX_TOKENS_CAP)
 
   try {

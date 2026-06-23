@@ -6,7 +6,7 @@ import {eq, and} from "drizzle-orm"
 import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY
-const MODEL = "claude-sonnet-4-20250514"
+const MODEL = "claude-sonnet-4-6"
 
 const SYSTEM_PROMPT = `Ты — AI-ассистент HR-платформы my-komanda. Ты помогаешь HR-менеджерам и руководителям.
 
