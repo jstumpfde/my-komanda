@@ -261,7 +261,7 @@ function parseHhHtml(html: string): Mapped {
   // ─── Название компании-работодателя ─────────────────────────────────────
   // Для предложения «Добавить как новую компанию» в список брендов HR.
   const qaCompanyName = $('[data-qa="vacancy-company-name"]').first().text().trim()
-    || $('[data-qa="bloko-link"][data-qa="vacancy-company-name"]').first().text().trim()
+    || $('[data-qa*="vacancy-company-name"]').first().text().trim()
 
   // ─── Спец. условия (accept_handicapped, accept_kids) ───────────────────
   // ВАЖНО: проверяем ТОЛЬКО текст описания вакансии + явный hh-бейдж доступности,

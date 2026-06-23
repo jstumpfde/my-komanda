@@ -566,14 +566,12 @@ function BadEditor({
                 return (
                   <button key={String(k.hard)} type="button" onClick={() => setHard(i, k.hard)} title={k.label} aria-label={k.label}
                     className={cn(
-                      "w-7 h-7 rounded-full border flex items-center justify-center shrink-0 transition-all",
+                      "w-6 h-6 rounded-sm border shrink-0 transition-colors",
                       active
-                        ? (k.hard ? "bg-red-500 border-transparent text-white" : "bg-amber-500 border-transparent text-white")
-                        : (k.hard ? "border-red-300 text-red-400 hover:border-red-500" : "border-amber-300 text-amber-400 hover:border-amber-500"),
+                        ? (k.hard ? "bg-red-500/25 border-red-400" : "bg-amber-500/25 border-amber-400")
+                        : (k.hard ? "bg-transparent border-red-300/60 opacity-60 hover:opacity-100" : "bg-transparent border-amber-300/60 opacity-60 hover:opacity-100"),
                     )}
-                  >
-                    {active ? <Check className="w-3.5 h-3.5" /> : <span className={cn("w-2.5 h-2.5 rounded-full", k.hard ? "bg-red-400" : "bg-amber-400", "opacity-60")} />}
-                  </button>
+                  />
                 )
               })}
               <button type="button" onClick={() => remove(i)}

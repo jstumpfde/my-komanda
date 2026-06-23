@@ -450,8 +450,15 @@ export default function VacancyPage() {
     if (!newBrandPrompt) return
     setAddBrandBusy(true)
     try {
+      // Свежий список брендов с сервера (не state с mount) — чтобы не затереть
+      // правки логотипов/слоганов, сделанные в другой вкладке (Настройки HR).
+      const hdRes = await fetch("/api/modules/hr/company/hiring-defaults")
+      const hdJson = hdRes.ok ? await hdRes.json() : null
+      const currentBrands = Array.isArray(hdJson?.hiringDefaults?.brandCompanies)
+        ? (hdJson.hiringDefaults.brandCompanies as typeof brandCompaniesData)
+        : brandCompaniesData
       const newBrand = { id: `brand_${Date.now()}`, name: newBrandPrompt.name, description: newBrandPrompt.description }
-      const next = [...brandCompaniesData, newBrand]
+      const next = [...currentBrands, newBrand]
       const res = await fetch("/api/modules/hr/company/hiring-defaults", {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ brandCompanies: next }),

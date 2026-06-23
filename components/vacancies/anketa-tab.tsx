@@ -1167,7 +1167,9 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
         setData(prev => prev.brandCompanyId ? prev : { ...prev, brandCompanyId: hd.defaultBrandCompanyId })
       }
     }).catch(() => {})
-  }, [])
+    // descriptionJson в deps: после добавления компании из hh (Q3) вакансия рефетчится →
+    // список брендов перезагружается, и новая компания появляется в селекторе Секции 1.
+  }, [descriptionJson])
 
   const handleWizardComplete = useCallback((result: ParsedVacancy) => {
     // Find closest positionCategory
