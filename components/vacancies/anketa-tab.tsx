@@ -1878,8 +1878,10 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
           />
         </div>
 
-        {/* Специфика продаж — показываем только для продажных категорий */}
-        {isSalesCategory(data.positionCategory) && (
+        {/* «Специфика продаж» (AI-профиль продавца) УБРАНА из конструктора вакансии —
+            это AI-оценка кандидата (кормит ai-screen-candidate), а оценка только в «Портрете»
+            (решение Юрия, 23.06). Жёсткий false — рендер физически отрезан, не зависит от категории. */}
+        {false && (
           <div className="space-y-3 pt-3 border-t">
             <div className="flex items-center gap-2">
               <Label className="text-xs font-semibold">💼 Специфика продаж</Label>
