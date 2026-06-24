@@ -82,8 +82,8 @@ const NEXT_STEP_LABEL: Record<string, string> = {
 
 // 🔴 «Не подходит по смыслу» — стоп-фактор (отказ) vs минус к баллу.
 const BAD_KINDS = [
-  { hard: true,  label: "Стоп-фактор"   },
-  { hard: false, label: "Минус к баллу" },
+  { hard: true,  label: "Стоп-фактор",   solid: "bg-red-500"   },
+  { hard: false, label: "Минус к баллу", solid: "bg-amber-500" },
 ] as const
 
 const MID_RANGE_LABELS: Record<MidRangeAction, string> = {
@@ -662,15 +662,12 @@ function GoodEditor({
                     <button key={l.value} type="button" title={l.label} aria-label={l.label} aria-pressed={active}
                       onClick={() => setLevel(i, l.value)}
                       className={cn(
-                        "w-7 h-7 rounded-full border flex items-center justify-center transition-all",
-                        active
-                          ? cn(l.solid, "border-transparent text-white scale-110 shadow-sm")
-                          : "border-border bg-transparent hover:bg-muted-foreground/10",
+                        "w-7 h-[22px] rounded-md border border-transparent flex items-center justify-center text-white transition-all",
+                        l.solid,
+                        active ? "opacity-100 shadow-sm" : "opacity-30 hover:opacity-60",
                       )}
                     >
-                      {active
-                        ? <Check className="w-3.5 h-3.5" />
-                        : <span className={cn("w-2.5 h-2.5 rounded-full", l.solid, "opacity-60")} />}
+                      {active && <Check className="w-3.5 h-3.5" />}
                     </button>
                   )
                 })}
@@ -778,12 +775,13 @@ function BadEditor({
                 return (
                   <button key={String(k.hard)} type="button" onClick={() => setHard(i, k.hard)} title={k.label} aria-label={k.label}
                     className={cn(
-                      "w-6 h-6 rounded-sm border shrink-0 transition-colors",
-                      active
-                        ? (k.hard ? "bg-red-500/25 border-red-400" : "bg-amber-500/25 border-amber-400")
-                        : (k.hard ? "bg-transparent border-red-300/60 opacity-60 hover:opacity-100" : "bg-transparent border-amber-300/60 opacity-60 hover:opacity-100"),
+                      "w-7 h-[22px] rounded-md border border-transparent flex items-center justify-center text-white shrink-0 transition-all",
+                      k.solid,
+                      active ? "opacity-100 shadow-sm" : "opacity-30 hover:opacity-60",
                     )}
-                  />
+                  >
+                    {active && <Check className="w-3.5 h-3.5" />}
+                  </button>
                 )
               })}
               <button type="button" onClick={() => remove(i)}
@@ -1553,25 +1551,15 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
         />
       </div>
 
-      {/* ── Как считается балл (пояснение) ── */}
-      <details className="rounded-lg border bg-muted/30 px-3.5 py-2.5 text-sm">
-        <summary className="cursor-pointer font-medium select-none">Как считается балл?</summary>
-        <div className="mt-2 space-y-1.5 text-xs text-muted-foreground">
-          <p>AI читает резюме и сверяет с «Портретом», выставляя <b>0–100</b>:</p>
-          <ul className="list-disc pl-4 space-y-1">
-            <li><b>Эталон</b> (идеальный профиль) — общая рамка соответствия.</li>
-            <li><b>«Подходит»</b> — каждый плюс тянет балл вверх; вес зависит от важности (желательно &lt; важно &lt; обязательно). Нет плюса → балл ниже, но <b>не отказ</b>.</li>
-            <li><b>«Не подходит»</b> — стоп-фактор, если AI прямо видит его в резюме, резко роняет балл / отказ; «минус к баллу» просто снижает.</li>
-            <li><b>«Точные требования»</b> — формальные отсечки по данным резюме/анкеты (город, опыт, права…).</li>
-          </ul>
-          <p>Готовый балл попадает в одну из зон порога ниже → действие (отказ / середина / приглашение).</p>
-        </div>
-      </details>
-
-      {/* ── Связка: балл → действие ── */}
-      <p className="text-xs text-muted-foreground">
-        «Подходит» и «Не подходит» формируют балл. Ниже — что с этим баллом делать.
-      </p>
+      {/* ── Как считается балл: одним блоком, всегда видно (без раскрывашки) ── */}
+      <div className="rounded-lg border bg-muted/30 px-3.5 py-2.5 text-sm space-y-1.5">
+        <p className="font-medium">«Подходит» и «Не подходит» формируют балл <b>0–100</b>. Ниже — что с этим баллом делать.</p>
+        <ul className="list-disc pl-4 space-y-1 text-xs text-muted-foreground">
+          <li><b>«Подходит»</b> — каждый плюс тянет балл вверх; вес зависит от важности (желательно &lt; важно &lt; обязательно). Нет плюса → балл ниже, но <b>не отказ</b>.</li>
+          <li><b>«Не подходит»</b> — стоп-фактор (AI прямо видит в резюме) резко роняет балл / отказ; «минус к баллу» просто снижает.</li>
+          <li><b>«Точные требования»</b> — формальные отсечки (город, опыт, права…).</li>
+        </ul>
+      </div>
 
       {/* ── Автоматический отбор по баллу: два независимых действия (отказ / приглашение) ── */}
       <Card>
