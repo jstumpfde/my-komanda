@@ -758,7 +758,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
               // сами никого не зовём дальше. Прошедшие на демо/приглашение
               // (belowThreshold===null) и середину без явного reject уходят на
               // ручной разбор (keep_new). reject не трогаем — авто-отказ управляется
-              // отдельным тумблером. autoInviteOn=true (дефолт) → блок ничего не делает.
+              // отдельным тумблером. autoInviteOn=true (явно включено HR) → блок ничего не делает.
               if (!autoInviteOn) {
                 if (belowThreshold === null) {
                   belowThreshold = { score: result.score, threshold: upper || lower || 0, action: "keep_new" }

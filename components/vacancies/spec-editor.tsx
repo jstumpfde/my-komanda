@@ -120,9 +120,6 @@ const LIST_PLACEHOLDERS = {
   deal: ["Только B2C опыт", "Меньше 1 года в роли"],
 }
 
-const IDEAL_PLACEHOLDER =
-  "Опытный B2B продавец из стройиндустрии, готовый к длинным сделкам с крупными клиентами. Самостоятельный, ориентирован на результат."
-
 function csvToList(s: string): string[] {
   return s.split(",").map(x => x.trim()).filter(x => x.length > 0)
 }
@@ -941,7 +938,9 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
   useEffect(() => {
     if (!spec) return
     const composed = composeIdealProfile(spec)
-    if (composed !== (spec.idealProfile ?? "")) patch({ idealProfile: composed })
+    // Если все списки пусты (composed===""), НЕ затираем существующий профиль —
+    // страхует легаси-спеки, где скоринг держался только на ручном эталоне.
+    if (composed && composed !== (spec.idealProfile ?? "")) patch({ idealProfile: composed })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spec?.mustHave, spec?.niceToHave, spec?.dealBreakers])
 
