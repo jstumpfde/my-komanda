@@ -149,7 +149,7 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose }: {
             <Label className="text-sm font-medium flex items-center gap-1.5"><Link2 className="w-4 h-4" /> Сообщение / контент</Label>
             <div className="space-y-1">
               <Label className="text-[11px] text-muted-foreground">Сообщение кандидату (текст)</Label>
-              <Textarea value={stage.messagePresetId ?? ""} onChange={e => patch({ messagePresetId: e.target.value || null })} placeholder="напр. «Добрый день, {{name}}! …»" rows={3} className="text-sm" />
+              <Textarea value={stage.messagePresetId ?? ""} onChange={e => patch({ messagePresetId: e.target.value || null })} placeholder="напр. «Добрый день, {{name}}! …»" rows={6} className="text-base" />
               <div className="flex flex-wrap gap-1 pt-0.5">
                 {["{{name}}", (stage.action === "test" || stage.action === "task") ? "{{test_link}}" : "{{demo_link}}", "{{vacancy}}", "{{company}}"].map(ph => (
                   <button key={ph} type="button" onClick={() => patch({ messagePresetId: `${stage.messagePresetId ?? ""}${ph}` })} className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:bg-muted/50 font-mono">{ph}</button>
@@ -161,7 +161,7 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose }: {
               <div className="space-y-1">
                 <Label className="text-[11px] text-muted-foreground">Подключить блок из «Контента»</Label>
                 <Select value={stage.contentBlockId ?? "none"} onValueChange={v => patch({ contentBlockId: v === "none" ? null : v })}>
-                  <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="не выбрано" /></SelectTrigger>
+                  <SelectTrigger className="h-10 text-base"><SelectValue placeholder="не выбрано" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">— не подключать —</SelectItem>
                     {content.map(c => <SelectItem key={c.id} value={c.id}>{c.title} <span className="text-muted-foreground">· {c.contentType === "test" || c.contentType === "task" ? "тест" : "демо"}</span></SelectItem>)}
@@ -177,12 +177,12 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose }: {
             <Label className="text-sm font-medium flex items-center gap-1.5"><Route className="w-4 h-4" /> Правило прохода</Label>
             <div className="space-y-1">
               <Label className="text-[11px] text-muted-foreground">Критерий прохода</Label>
-              <Input value={stage.rule.passCriteria ?? ""} onChange={e => patchRule({ passCriteria: e.target.value || undefined })} placeholder={isScoring ? "напр. «ответил верно ≥ порога»" : "напр. «посмотрел демо»"} className="h-8 text-sm" />
+              <Input value={stage.rule.passCriteria ?? ""} onChange={e => patchRule({ passCriteria: e.target.value || undefined })} placeholder={isScoring ? "напр. «ответил верно ≥ порога»" : "напр. «посмотрел демо»"} className="h-10 text-base" />
             </div>
             {isScoring && (
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground shrink-0">Порог балла</span>
-                <Input type="number" value={stage.rule.threshold ?? ""} onChange={e => patchRule({ threshold: e.target.value === "" ? undefined : Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="w-20 h-7 text-sm" placeholder="—" />
+                <Input type="number" value={stage.rule.threshold ?? ""} onChange={e => patchRule({ threshold: e.target.value === "" ? undefined : Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="w-24 h-9 text-base" placeholder="—" />
               </div>
             )}
             <div className="flex items-center justify-between">
@@ -192,7 +192,7 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose }: {
             <div className="space-y-1">
               <Label className="text-[11px] text-muted-foreground">Прошёл → зовём на</Label>
               <Select value={stage.rule.advanceTo ?? "next"} onValueChange={v => patchRule({ advanceTo: v })}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-10 text-base"><SelectValue /></SelectTrigger>
                 <SelectContent>{advanceOptions.map(o => <SelectItem key={o.v} value={o.v}>{o.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
@@ -202,11 +202,11 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose }: {
             </div>
             <div className="space-y-1">
               <Label className="text-[11px] text-muted-foreground">Не прошёл → текст отказа</Label>
-              <Textarea value={stage.rule.rejectText ?? ""} onChange={e => patchRule({ rejectText: e.target.value || undefined })} placeholder="Благодарим за интерес. К сожалению…" rows={2} className="text-sm" />
+              <Textarea value={stage.rule.rejectText ?? ""} onChange={e => patchRule({ rejectText: e.target.value || undefined })} placeholder="Благодарим за интерес. К сожалению…" rows={4} className="text-base" />
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground shrink-0">Задержка отказа, мин</span>
-              <Input type="number" value={stage.rule.rejectDelayMinutes} onChange={e => patchRule({ rejectDelayMinutes: Math.max(0, Number(e.target.value) || 0) })} className="w-20 h-7 text-sm" />
+              <Input type="number" value={stage.rule.rejectDelayMinutes} onChange={e => patchRule({ rejectDelayMinutes: Math.max(0, Number(e.target.value) || 0) })} className="w-24 h-9 text-base" />
               {stage.rule.rejectDelayMinutes >= 60 && <span className="text-[11px] text-muted-foreground">= {Math.floor(stage.rule.rejectDelayMinutes / 60)} ч{stage.rule.rejectDelayMinutes % 60 ? ` ${stage.rule.rejectDelayMinutes % 60} мин` : ""}</span>}
             </div>
           </section>
@@ -229,11 +229,11 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose }: {
               <div key={i} className="rounded-md border p-2 space-y-1.5">
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] text-muted-foreground">Касание {i + 1} · через</span>
-                  <Input type="number" value={t.delayDays} onChange={e => setChain(chain.map((x, idx) => idx === i ? { ...x, delayDays: Math.max(0, Number(e.target.value) || 0) } : x))} className="w-14 h-6 text-xs" />
+                  <Input type="number" value={t.delayDays} onChange={e => setChain(chain.map((x, idx) => idx === i ? { ...x, delayDays: Math.max(0, Number(e.target.value) || 0) } : x))} className="w-16 h-10 text-base" />
                   <span className="text-[11px] text-muted-foreground">дн.</span>
                   <button onClick={() => setChain(chain.filter((_, idx) => idx !== i))} className="ml-auto text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
                 </div>
-                <Textarea value={t.text} onChange={e => setChain(chain.map((x, idx) => idx === i ? { ...x, text: e.target.value } : x))} placeholder="Текст касания…" rows={2} className="text-sm" />
+                <Textarea value={t.text} onChange={e => setChain(chain.map((x, idx) => idx === i ? { ...x, text: e.target.value } : x))} placeholder="Текст касания…" rows={4} className="text-base" />
               </div>
             ))}
           </section>
@@ -266,7 +266,7 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose }: {
             <div className="space-y-1">
               <Label className="text-[11px] text-muted-foreground">Статус hh / Avito при входе в стадию</Label>
               <Select value={stage.hhStatus ?? "none"} onValueChange={v => patch({ hhStatus: v === "none" ? undefined : v })}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="не менять" /></SelectTrigger>
+                <SelectTrigger className="h-10 text-base"><SelectValue placeholder="не менять" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">— не менять —</SelectItem>
                   {STAGE_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
@@ -275,7 +275,7 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose }: {
             </div>
             <div className="space-y-1">
               <Label className="text-[11px] text-muted-foreground">Название стадии (необязательно)</Label>
-              <Input value={stage.title ?? ""} onChange={e => patch({ title: e.target.value || undefined })} placeholder={meta.label} className="h-8 text-sm" />
+              <Input value={stage.title ?? ""} onChange={e => patch({ title: e.target.value || undefined })} placeholder={meta.label} className="h-10 text-base" />
             </div>
           </section>
         </div>
