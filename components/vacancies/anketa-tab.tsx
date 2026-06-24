@@ -44,7 +44,7 @@ interface AnketaData {
   clientCompanyId: string | null
   clientContactId: string | null
   // 2. Должность
-  positionCategory: string
+  positionCategory: string[]
   workFormats: string[]
   employment: string[]
   positionCity: string
@@ -99,7 +99,7 @@ interface AnketaData {
   nightShifts: boolean
   // Адрес работы
   workAddress: string
-  workMetro: string
+  workMetro: string[]
   hideAddress: boolean
   // removed: questions (moved to Demonstration)
   questions: Question[]
@@ -355,7 +355,7 @@ function emptyAnketa(): AnketaData {
     vacancyTitle: "",
     companyMode: "own", companyName: "", industry: "", companyCity: "", workFormat: "",
     clientCompanyId: null, clientContactId: null,
-    positionCategory: "", workFormats: [], employment: [], positionCity: "",
+    positionCategory: [], workFormats: [], employment: [], positionCity: "",
     requiredExperience: "", hiringPlan: 1,
     salaryFrom: "", salaryTo: "", bonus: "", payFrequency: [], showSalary: true,
     salaryCurrency: "RUB", salaryPeriod: "month", salaryNet: true,
@@ -369,7 +369,7 @@ function emptyAnketa(): AnketaData {
     conditions: [], conditionsCustom: [], conditionsText: "",
     employmentType: [], schedule: "", employeeType: "permanent",
     vacancySkills: [], internship: false, gphSubtypes: [], workHours: "", nightShifts: false,
-    workAddress: "", workMetro: "", hideAddress: false,
+    workAddress: "", workMetro: [], hideAddress: false,
     avgDealSize: "", salesCycle: "", salesType: [], targetAudience: [],
     filterCities: [],
     filterCitizenship: { mode: "russia", countries: [], isStopFactor: false },
@@ -439,8 +439,11 @@ function migrateAnketa(saved: Record<string, unknown>): AnketaData {
   if (typeof d.workHours !== "string") d.workHours = ""
   if (typeof d.nightShifts !== "boolean") d.nightShifts = false
   if (typeof d.workAddress !== "string") d.workAddress = ""
-  if (typeof d.workMetro !== "string") d.workMetro = ""
+  if (typeof d.workMetro === "string" && d.workMetro) d.workMetro = [d.workMetro as string]
+  else if (!Array.isArray(d.workMetro)) d.workMetro = []
   if (typeof d.hideAddress !== "boolean") d.hideAddress = false
+  if (typeof d.positionCategory === "string" && d.positionCategory) d.positionCategory = [d.positionCategory as string]
+  else if (!Array.isArray(d.positionCategory)) d.positionCategory = []
 
   // Apply parsed stop factors from file import
   const psf = (saved as Record<string, unknown>).parsedStopFactors as Record<string, string | boolean> | undefined
@@ -934,7 +937,7 @@ function AddCustomInline({ placeholder, onAdd, itemType }: { placeholder: string
 
 // ─── Category field with custom categories ──────────────────────────────────
 
-function CategoryField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function CategoryField({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
   const [customCategories, setCustomCategories] = useState<{ value: string; label: string }[]>([])
   const [modalOpen, setModalOpen] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState("")
@@ -955,6 +958,9 @@ function CategoryField({ value, onChange }: { value: string; onChange: (v: strin
     ...POSITION_CATEGORY_OPTIONS,
     ...customCategories,
   ]
+  const labelFor = (v: string) => allOptions.find(o => o.value === v)?.label || v
+  const availableSystem = POSITION_CATEGORY_OPTIONS.filter(o => !value.includes(o.value))
+  const availableCustom = customCategories.filter(o => !value.includes(o.value))
 
   const handleCreate = async () => {
     const name = newCategoryName.trim()
@@ -973,7 +979,7 @@ function CategoryField({ value, onChange }: { value: string; onChange: (v: strin
       const created = await res.json() as { id: string; name: string }
       const newVal = `custom:${created.id}`
       setCustomCategories(prev => [...prev, { value: newVal, label: created.name }])
-      onChange(newVal)
+      if (!value.includes(newVal)) onChange([...value, newVal])
       setNewCategoryName("")
       setModalOpen(false)
       toast.success("Категория добавлена")
@@ -987,23 +993,38 @@ function CategoryField({ value, onChange }: { value: string; onChange: (v: strin
   return (
     <div className="space-y-1.5">
       <Label className="text-xs">Категория</Label>
+      {value.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {value.map(v => (
+            <Badge key={v} variant="secondary" className="gap-1 text-xs">
+              {labelFor(v)}
+              <button type="button" onClick={() => onChange(value.filter(x => x !== v))} className="hover:text-destructive">
+                <X className="w-3 h-3" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
       <div className="flex items-center gap-3 w-full">
-        <Select value={value} onValueChange={onChange}>
+        <Select value="" onValueChange={v => { if (v && !value.includes(v)) onChange([...value, v]) }}>
           <SelectTrigger className="h-9 bg-[var(--input-bg)] border border-input flex-1">
-            <SelectValue placeholder="Выберите категорию" />
+            <SelectValue placeholder={value.length > 0 ? "Добавить ещё категорию" : "Выберите категорию"} />
           </SelectTrigger>
           <SelectContent>
-            {POSITION_CATEGORY_OPTIONS.length > 0 && (
+            {availableSystem.length > 0 && (
               <>
                 <div className="px-2 py-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Системные</div>
-                {POSITION_CATEGORY_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                {availableSystem.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
               </>
             )}
-            {customCategories.length > 0 && (
+            {availableCustom.length > 0 && (
               <>
                 <div className="px-2 py-1 mt-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider border-t">Пользовательские</div>
-                {customCategories.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                {availableCustom.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
               </>
+            )}
+            {availableSystem.length === 0 && availableCustom.length === 0 && (
+              <div className="px-2 py-1.5 text-xs text-muted-foreground">Все категории добавлены</div>
             )}
           </SelectContent>
         </Select>
@@ -1194,7 +1215,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
     setData(prev => ({
       ...prev,
       vacancyTitle: result.positionTitle || prev.vacancyTitle,
-      positionCategory: catMatch?.value || prev.positionCategory,
+      positionCategory: catMatch && !prev.positionCategory.includes(catMatch.value) ? [...prev.positionCategory, catMatch.value] : prev.positionCategory,
       industry: result.industry || prev.industry,
       positionCity: result.positionCity || prev.positionCity,
       workFormats: result.workFormats.length > 0 ? result.workFormats : prev.workFormats,
@@ -1284,7 +1305,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
     const total = 7
     if (data.vacancyTitle) filled++
     if (data.companyName || data.clientCompanyId || data.companyMode === "own") filled++
-    if (data.positionCategory) filled++
+    if (data.positionCategory.length) filled++
     if (data.salaryFrom || data.salaryTo) filled++
     if (data.responsibilities || data.requirements) filled++
     if (data.requiredSkills.length > 0) filled++
@@ -1605,7 +1626,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
     switch (idx) {
       // Секция 1 теперь объединяет «Компания» + «О компании» (задача #19)
       case 1: return !!(data.companyName || data.clientCompanyId || data.companyMode === "own" || data.companyDescription)
-      case 2: return !!data.positionCategory
+      case 2: return data.positionCategory.length > 0
       case 3: return !!(data.salaryFrom || data.salaryTo)
       // 4 = «Обязанности, требования, условия» (условия перенесены из бывшей секции 6)
       case 4: return !!(data.responsibilities || data.requirements || data.conditionsText || data.conditions.length > 0 || data.conditionsCustom.length > 0)
@@ -1788,7 +1809,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Метро</Label>
-          <Input value={data.workMetro} onChange={e => set("workMetro", e.target.value)} placeholder="Станция метро, если есть" className="h-9 bg-[var(--input-bg)] border border-input w-full" />
+          <TagInput tags={data.workMetro} onChange={v => set("workMetro", v)} placeholder="Станция метро — Enter добавит, можно несколько" />
         </div>
         <label className="flex items-center gap-2 cursor-pointer">
           <Switch checked={data.hideAddress} onCheckedChange={v => set("hideAddress", !!v)} />
@@ -1955,7 +1976,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
         </div>
 
         {/* ── Условия (перенесены сюда из бывшей секции 6, к обязанностям/требованиям) ── */}
-        <div className="space-y-1.5 pt-2 border-t">
+        <div className="space-y-1.5 pt-2">
           <Label className="text-xs">Условия (текст вакансии)</Label>
           <Textarea
             value={data.conditionsText}
@@ -2533,7 +2554,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
               <DialogTitle className="text-lg">{data.vacancyTitle || "Без названия"}</DialogTitle>
               <div className="flex items-center gap-1 shrink-0">
                 <Button variant="ghost" size="icon" className="h-8 w-8" title="Скопировать" onClick={async () => {
-                  const categoryLabel = POSITION_CATEGORY_OPTIONS.find(o => o.value === data.positionCategory)?.label || data.positionCategory
+                  const categoryLabel = data.positionCategory.map(c => POSITION_CATEGORY_OPTIONS.find(o => o.value === c)?.label || c).join(", ")
                   const lines = [
                     `Название: ${data.vacancyTitle}`,
                     data.positionCity && `Город: ${data.positionCity}`,
@@ -2555,7 +2576,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
                   <Copy className="w-4 h-4" />
                 </Button>
                 <Button variant="ghost" size="icon" className="h-8 w-8" title="Печать / PDF" onClick={() => {
-                  const categoryLabel = POSITION_CATEGORY_OPTIONS.find(o => o.value === data.positionCategory)?.label || data.positionCategory
+                  const categoryLabel = data.positionCategory.map(c => POSITION_CATEGORY_OPTIONS.find(o => o.value === c)?.label || c).join(", ")
                   const sections = [
                     `<h1 style="font-size:20px;margin:0 0 8px">${data.vacancyTitle || "Без названия"}</h1>`,
                     [data.positionCity, categoryLabel, ...data.workFormats, ...data.employment].filter(Boolean).join(" · "),
@@ -2581,14 +2602,14 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
             </div>
           </DialogHeader>
           <div className="space-y-4 text-sm leading-relaxed">
-            {(data.positionCity || data.positionCategory) && (
+            {(data.positionCity || data.positionCategory.length > 0) && (
               <div className="flex flex-wrap gap-2">
                 {data.positionCity && <Badge variant="secondary">{data.positionCity}</Badge>}
-                {data.positionCategory && (
-                  <Badge variant="outline">
-                    {POSITION_CATEGORY_OPTIONS.find(o => o.value === data.positionCategory)?.label || data.positionCategory}
+                {data.positionCategory.map(c => (
+                  <Badge key={c} variant="outline">
+                    {POSITION_CATEGORY_OPTIONS.find(o => o.value === c)?.label || c}
                   </Badge>
-                )}
+                ))}
                 {data.workFormats.map(f => <Badge key={f} variant="outline">{f}</Badge>)}
                 {data.employment.map(e => <Badge key={e} variant="outline">{e}</Badge>)}
               </div>

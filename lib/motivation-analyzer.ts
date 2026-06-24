@@ -65,7 +65,7 @@ export function analyzeMotivation(data: {
     score += 15
     checks.push({ status: "ok", text: "Указана бонусная часть (KPI/%)" })
   } else {
-    suggestions.push("Опишите структуру бонусов: за что платится, какой % или сумма")
+    checks.push({ status: "warning", text: "Бонусная часть не описана — укажите, за что и сколько платится" })
   }
 
   // 4. Конкретика бонусов — 15 баллов
@@ -82,7 +82,7 @@ export function analyzeMotivation(data: {
     score += 10
     checks.push({ status: "ok", text: "Частота выплат указана" })
   } else {
-    suggestions.push("Выберите частоту выплат")
+    checks.push({ status: "warning", text: "Частота выплат не выбрана" })
   }
 
   // 6. Доп. бенефиты в бонусах — 10 баллов
@@ -98,7 +98,7 @@ export function analyzeMotivation(data: {
     score += 5
     checks.push({ status: "ok", text: "\"Без потолка дохода\" — мотивирует сильных кандидатов" })
   } else if (data.category && /продаж/i.test(data.category)) {
-    suggestions.push("Потолка дохода нет — если это правда, сильный аргумент для продажников")
+    suggestions.push("Без потолка дохода")
   }
 
   // 8. Прозрачность / пример расчёта — 10 баллов

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { vacancies, candidates, demos } from "@/lib/db/schema"
+import { vacancies, candidates, demos, vacancySpecs } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 
 interface HealthIssue {
@@ -44,6 +44,20 @@ export async function POST(req: NextRequest) {
       .where(and(eq(demos.vacancyId, body.vacancyId), eq(demos.kind, "demo")))
       .limit(1)
 
+    // Get portrait/spec (критерии оценки кандидата)
+    const [specRow] = await db
+      .select({ spec: vacancySpecs.spec })
+      .from(vacancySpecs)
+      .where(eq(vacancySpecs.vacancyId, body.vacancyId))
+      .limit(1)
+    const spec = (specRow?.spec as Record<string, unknown>) || {}
+    const portraitFilled =
+      (Array.isArray(spec.niceToHave) && spec.niceToHave.length > 0) ||
+      (Array.isArray(spec.mustHave) && spec.mustHave.length > 0) ||
+      (Array.isArray(spec.dealBreakers) && spec.dealBreakers.length > 0) ||
+      (Array.isArray(spec.customFactors) && (spec.customFactors as unknown[]).length > 0) ||
+      (typeof spec.idealProfile === "string" && spec.idealProfile.trim().length > 0)
+
     const issues: HealthIssue[] = []
 
     // 1. Anketa filled
@@ -76,6 +90,13 @@ export async function POST(req: NextRequest) {
       issues.push({ type: "demo_ok", severity: "ok", message: "Демонстрация создана", action: "" })
     }
 
+    // 4b. Портрет (критерии оценки кандидата)
+    if (portraitFilled) {
+      issues.push({ type: "portrait_ok", severity: "ok", message: "Портрет кандидата заполнен", action: "" })
+    } else {
+      issues.push({ type: "portrait_missing", severity: "warning", message: "Портрет (критерии оценки) не заполнен", action: "Заполните критерии в «Портрете»", tab: "settings" })
+    }
+
     // 5. Pipeline
     if (!pipeline?.preset) {
       issues.push({ type: "pipeline_missing", severity: "warning", message: "Воронка не настроена", action: "Выберите сценарий обработки кандидатов", tab: "automation" })
@@ -105,12 +126,12 @@ export async function POST(req: NextRequest) {
       issues.push({ type: "high_score_unprocessed", severity: "warning", message: `${conflicts.length} кандидатов с высоким AI-скором не обработаны`, action: "Пригласите подходящих кандидатов", tab: "candidates" })
     }
 
-    // Calculate score
-    const criticals = issues.filter(i => i.severity === "critical").length
-    const warnings = issues.filter(i => i.severity === "warning").length
+    // Готовность = доля ПОЛНОСТЬЮ готовых блоков (анкета, зарплата, hh, демо, Портрет,
+    // воронка, шаблоны). Недоделанное (warning/critical) не даёт частичного балла —
+    // поэтому готовность честно ОТСТАЁТ от заполненности анкеты и не зелёная, пока не всё готово.
     const oks = issues.filter(i => i.severity === "ok").length
     const total = issues.length
-    const score = Math.max(0, Math.round(((oks * 1 + warnings * 0.5) / total) * 100))
+    const score = total > 0 ? Math.round((oks / total) * 100) : 0
 
     // Next step
     const firstIssue = issues.find(i => i.severity === "critical") || issues.find(i => i.severity === "warning")

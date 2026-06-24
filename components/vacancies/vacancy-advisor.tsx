@@ -360,18 +360,14 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
 
     return (
       <div className="space-y-3">
-        {/* Score */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className={cn("text-2xl font-bold tabular-nums", scoreColor)}>{result.score}%</span>
-            <Badge variant={result.score < 40 ? "destructive" : result.score < 70 ? "secondary" : "default"} className="text-xs">
-              {result.scoreLabel}
-            </Badge>
-          </div>
-          <Progress value={result.score} className={cn("h-2", progressColor)} />
-          <p className="text-xs text-muted-foreground">
-            Анкета заполнена на {result.score}% — {result.scoreLabel.toLowerCase()}
-          </p>
+        {/* Заполненность анкеты — одна строка (% жирным+цветным, «средне» бейджем). Без
+            большого дубль-числа и полосы: «насколько готово» живёт в «Готовности вакансии». */}
+        <div className="flex items-center gap-2 text-sm flex-wrap">
+          <span className="text-muted-foreground">Анкета заполнена —</span>
+          <span className={cn("font-semibold tabular-nums", scoreColor)}>{result.score}%</span>
+          <Badge variant={result.score < 40 ? "destructive" : result.score < 70 ? "secondary" : "default"} className="text-xs">
+            {result.scoreLabel}
+          </Badge>
         </div>
 
         {/* Static contextual tip (instant, no AI call) */}
@@ -405,6 +401,9 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
           onApply={onApplySuggestion ? (t: string) => handleApply("vacancyTitle", t) : undefined}
         />
 
+        {/* О компании — сразу под названием (как в форме: блок «Компания» идёт вверху) */}
+        <CompanyDescriptionCard description={companyDescription || (vacancyData.companyDescription as string) || ""} />
+
         {/* 3. Формат работы */}
         <FormatCard workFormats={(vacancyData.workFormats as string[]) || []} />
 
@@ -433,9 +432,6 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
           } : undefined}
         />
 
-        {/* 8. О компании */}
-        <CompanyDescriptionCard description={companyDescription || (vacancyData.companyDescription as string) || ""} />
-
         {/* Sections: критичные и рекомендации — соответствуют секциям 4-5 (обязанности, требования, навыки, стоп-факторы) */}
         {errors.length > 0 && (
           <div className="space-y-1.5">
@@ -458,15 +454,6 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
         {/* Clickable suggestions — рекомендуемые навыки, стоп-факторы, шаблоны */}
         {result.suggestions && onApplySuggestion && (
           <SuggestionsPanel suggestions={result.suggestions} onApply={handleApply} vacancyData={vacancyData} />
-        )}
-
-        {oks.length > 0 && (
-          <div className="space-y-1.5">
-            <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Заполнено</p>
-            {oks.map(s => (
-              <SectionCard key={s.id} section={s} onClick={() => handleSectionClick(s.id)} compact />
-            ))}
-          </div>
         )}
 
         {/* 14. Профиль продавца — на основе бизнес-критериев */}

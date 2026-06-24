@@ -199,7 +199,7 @@ function staticAnalysis(body: Record<string, unknown>): AdvisorResponse {
 
 function buildStaticSalaryAnalysis(d: Record<string, unknown>): SalaryAnalysis | null {
   const title = (d.vacancyTitle as string) || ""
-  const category = (d.positionCategory as string) || ""
+  const category = Array.isArray(d.positionCategory) ? ((d.positionCategory as string[])[0] || "") : ((d.positionCategory as string) || "")
   const city = (d.positionCity as string) || ""
   const experienceMin = (d.experienceMin as string) || ""
 
@@ -481,7 +481,7 @@ function buildPrompt(d: Record<string, unknown>, body: Record<string, unknown>, 
   parts.push("")
   parts.push("═══ ДАННЫЕ АНКЕТЫ ═══")
   parts.push(`Название: ${d.vacancyTitle || "(пусто)"}`)
-  parts.push(`Категория: ${d.positionCategory || "(пусто)"}`)
+  parts.push(`Категория: ${Array.isArray(d.positionCategory) ? ((d.positionCategory as string[]).join(", ") || "(пусто)") : (d.positionCategory || "(пусто)")}`)
   parts.push(`Город: ${d.positionCity || "(пусто)"}`)
   parts.push(`Формат работы: ${(d.workFormats as string[])?.join(", ") || "(пусто)"}`)
   parts.push(`Занятость: ${(d.employment as string[])?.join(", ") || "(пусто)"}`)
@@ -511,7 +511,7 @@ function buildPrompt(d: Record<string, unknown>, body: Record<string, unknown>, 
 
   // Справочник зарплат для контекста
   const title = (d.vacancyTitle as string) || ""
-  const category = (d.positionCategory as string) || ""
+  const category = Array.isArray(d.positionCategory) ? ((d.positionCategory as string[])[0] || "") : ((d.positionCategory as string) || "")
   const benchmark = findBenchmark(title, category)
   if (benchmark) {
     const city = (d.positionCity as string) || ""

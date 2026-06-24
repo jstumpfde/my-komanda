@@ -325,7 +325,7 @@ export default function VacancyPage() {
       const newAnketa: Record<string, unknown> = {
         ...existingAnketa,
         vacancyTitle: existingAnketa.vacancyTitle || parsed.positionTitle || "",
-        positionCategory: parsed.positionCategory ?? existingAnketa.positionCategory ?? "",
+        positionCategory: parsed.positionCategory ? [parsed.positionCategory] : (Array.isArray(existingAnketa.positionCategory) ? existingAnketa.positionCategory : (existingAnketa.positionCategory ? [existingAnketa.positionCategory] : [])),
         workFormats: parsed.workFormats ?? existingAnketa.workFormats ?? [],
         employment: parsed.employment ?? existingAnketa.employment ?? [],
         positionCity: parsed.positionCity ?? existingAnketa.positionCity ?? "",
