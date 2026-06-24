@@ -267,7 +267,7 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
   // Темы с собственной карточкой выше (название/зарплата/компания) НЕ дублируем
   // в списках «Критично/Рекомендации» — иначе одно и то же оценивается дважды
   // и противоречит (название «90/100 🟢» сверху и «перегружено 🟠» снизу).
-  const CARDED_TOPICS = new Set(["title"]) // пока de-dup только название; зарплата/компания — следующим шагом
+  const CARDED_TOPICS = new Set(["title", "salary"]) // эти темы — карточками выше, в нижних списках не дублируем
   const errors = result?.sections.filter(s => s.status === "error" && !CARDED_TOPICS.has(s.id)) || []
   const warnings = result?.sections.filter(s => s.status === "warning" && !CARDED_TOPICS.has(s.id)) || []
   const oks = result?.sections.filter(s => s.status === "ok") || []
@@ -414,27 +414,23 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
         {/* 4. Опыт */}
         <ExperienceInsightCard level={experienceLevel || "3-5"} currentLevel={experienceLevel} />
 
-        {/* 5. Аналитика зарплат */}
-        {result.salaryAnalysis && (
-          <SalaryAnalysisCard analysis={result.salaryAnalysis} />
-        )}
-
-        {/* 6b. Лучшее время публикации — по откликам компании */}
-        <BestPublishTimeCard vacancyId={vacancyId} city={(vacancyData.positionCity as string) || (vacancyData.companyCity as string) || ""} />
-
-        {/* 7. Анализ мотивации */}
+        {/* 5. Зарплата и мотивация — объединено: рынок + балл + бонусы (была отдельная «Аналитика зарплат») */}
         <MotivationAnalysisCard
           salaryMin={parseInt(String(vacancyData.salaryFrom || "0").replace(/\s/g, "")) || 0}
           salaryMax={parseInt(String(vacancyData.salaryTo || "0").replace(/\s/g, "")) || 0}
           bonuses={(vacancyData.bonus as string) || ""}
           payFrequency={(vacancyData.payFrequency as string[]) || []}
           category={(vacancyData.positionCategory as string) || ""}
+          salaryAnalysis={result.salaryAnalysis}
           onAppendBonus={onApplySuggestion ? (text: string) => {
             const current = (vacancyData.bonus as string) || ""
             const newText = current ? `${current}\n• ${text}` : `• ${text}`
             onApplySuggestion("bonus", newText)
           } : undefined}
         />
+
+        {/* 6b. Лучшее время публикации — по откликам компании */}
+        <BestPublishTimeCard vacancyId={vacancyId} city={(vacancyData.positionCity as string) || (vacancyData.companyCity as string) || ""} />
 
         {/* Sections: критичные и рекомендации — соответствуют секциям 4-5 (обязанности, требования, навыки, стоп-факторы) */}
         {errors.length > 0 && (
@@ -821,12 +817,13 @@ function SellerProfileCard({ avgDealSize, salesCycle, salesType, targetAudience,
 
 // ── Motivation Analysis Card ────────────────────────────────────────────────
 
-function MotivationAnalysisCard({ salaryMin, salaryMax, bonuses, payFrequency, category, onAppendBonus }: {
+function MotivationAnalysisCard({ salaryMin, salaryMax, bonuses, payFrequency, category, salaryAnalysis, onAppendBonus }: {
   salaryMin: number
   salaryMax: number
   bonuses: string
   payFrequency: string[]
   category: string
+  salaryAnalysis?: SalaryAnalysis
   onAppendBonus?: (text: string) => void
 }) {
   // Don't show if nothing is filled
@@ -834,51 +831,81 @@ function MotivationAnalysisCard({ salaryMin, salaryMax, bonuses, payFrequency, c
 
   const result = analyzeMotivation({ salaryMin: salaryMin || undefined, salaryMax: salaryMax || undefined, bonuses, payFrequency, category })
 
-  const barColor = result.score >= 80 ? "bg-emerald-500"
-    : result.score >= 60 ? "bg-emerald-400"
-    : result.score >= 40 ? "bg-amber-500"
-    : "bg-red-500"
-  const scoreColor = result.score >= 60 ? "text-emerald-600 dark:text-emerald-400"
-    : result.score >= 40 ? "text-amber-600 dark:text-amber-400"
-    : "text-red-600 dark:text-red-400"
+  // Балл на бледной подложке (цвет по числу), без рамки — как у названия.
+  const scoreBg = result.score >= 75 ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
+    : result.score >= 40 ? "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"
+    : "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300"
+  const issues = result.checks.filter(c => c.status !== "ok")
+
+  // Мини-шкала рынка (из бывшей «Аналитики зарплат»).
+  const a = salaryAnalysis
+  let medianPos = 0, rangeLeft = 0, rangeWidth = 0
+  if (a) {
+    const scaleWidth = a.recommendedRange.max - a.recommendedRange.min * 0.5
+    medianPos = Math.min(95, Math.max(5, ((a.marketMedian - a.recommendedRange.min * 0.5) / scaleWidth) * 100))
+    rangeLeft = Math.max(0, ((a.recommendedRange.min - a.recommendedRange.min * 0.5) / scaleWidth) * 100)
+    rangeWidth = ((a.recommendedRange.max - a.recommendedRange.min) / scaleWidth) * 100
+  }
+  const assessmentColor = a?.currentAssessment.includes("ниже") ? "text-red-600 dark:text-red-400"
+    : a?.currentAssessment === "в рынке" ? "text-emerald-600 dark:text-emerald-400"
+    : "text-muted-foreground"
 
   return (
-    <div className="rounded-lg border p-3 space-y-2.5">
-      <div className="flex items-center gap-1.5">
-        <TrendingUp className="w-3.5 h-3.5 text-primary" />
-        <span className="text-xs font-medium">Анализ мотивации</span>
+    <div className="rounded-lg border p-3 space-y-2">
+      {/* Заголовок + балл на подложке */}
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5 text-xs font-medium">
+          <TrendingUp className="w-3.5 h-3.5 text-primary" />Зарплата и мотивация
+        </span>
+        <span className="flex items-baseline gap-1.5 shrink-0">
+          <span className={cn("text-sm font-medium tabular-nums px-2 py-0.5 rounded", scoreBg)}>{result.score}/100</span>
+          <span className="text-[10px] text-muted-foreground">{result.label}</span>
+        </span>
       </div>
 
-      <div className="flex items-center gap-2">
-        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-          <div className={cn("h-full rounded-full transition-all", barColor)} style={{ width: `${result.score}%` }} />
-        </div>
-        <span className={cn("text-xs font-bold tabular-nums", scoreColor)}>{result.score}/100</span>
-      </div>
-
-      <div className="space-y-0.5">
-        {result.checks.map((c, i) => (
-          <div key={i} className="flex items-start gap-1.5">
-            {c.status === "ok" ? (
-              <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0 mt-0.5" />
-            ) : c.status === "error" ? (
-              <XCircle className="w-3 h-3 text-red-500 shrink-0 mt-0.5" />
-            ) : (
-              <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0 mt-0.5" />
-            )}
-            <span className="text-[10px] text-muted-foreground leading-relaxed">{c.text}</span>
+      {/* Рынок — компактная полоска */}
+      {a && (
+        <div className="space-y-1">
+          <div className="relative h-2.5 bg-muted rounded-full overflow-hidden">
+            <div className="absolute h-full bg-emerald-200 dark:bg-emerald-900/40 rounded-full" style={{ left: `${rangeLeft}%`, width: `${rangeWidth}%` }} />
+            <div className="absolute top-0 h-full w-0.5 bg-primary" style={{ left: `${medianPos}%` }} />
           </div>
-        ))}
-      </div>
+          <div className="flex justify-between text-[10px] text-muted-foreground">
+            <span>ваша вилка: <span className={cn("font-medium", assessmentColor)}>{a.currentAssessment}</span></span>
+            <span>медиана {formatSalary(a.marketMedian)}</span>
+          </div>
+        </div>
+      )}
 
+      {/* Замечания: рынок (impactNote) + мотивация (только предупреждения) */}
+      {(a?.impactNote || issues.length > 0) && (
+        <div className="space-y-1">
+          {a?.impactNote && (
+            <div className="flex items-start gap-1.5">
+              <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0 mt-0.5" />
+              <span className="text-[11px] text-muted-foreground leading-relaxed">{a.impactNote}</span>
+            </div>
+          )}
+          {issues.map((c, i) => (
+            <div key={i} className="flex items-start gap-1.5">
+              {c.status === "error"
+                ? <XCircle className="w-3 h-3 text-red-500 shrink-0 mt-0.5" />
+                : <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0 mt-0.5" />}
+              <span className="text-[11px] text-muted-foreground leading-relaxed">{c.text}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Бонусы — реальные шаблоны */}
       {result.suggestions.length > 0 && onAppendBonus && (
-        <div className="pt-1 border-t space-y-1">
+        <div className="pt-1.5 border-t space-y-0.5">
           <span className="text-[10px] font-medium text-muted-foreground">Добавить в бонусы:</span>
           {result.suggestions.map((s, i) => (
             <button
               key={i}
               onClick={() => onAppendBonus(s)}
-              className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-colors text-amber-800 dark:text-amber-200 underline decoration-dotted underline-offset-2"
+              className="w-full text-left text-[11px] px-2 py-1 rounded hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-colors text-amber-800 dark:text-amber-200 underline decoration-dotted underline-offset-2"
             >
               + {s}
             </button>
