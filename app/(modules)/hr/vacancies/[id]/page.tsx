@@ -1028,6 +1028,7 @@ export default function VacancyPage() {
     rawUrlSection === "general" ? "page" :
     rawUrlSection === "automation" ? "ai" :
     rawUrlSection && (LEGACY_SECTIONS_REDIRECT_TO_FUNNEL_BUILDER as readonly string[]).includes(rawUrlSection) ? "funnel-builder" :
+    rawUrlSection === "funnel-v2" && !isOwnerEmail(user?.email) ? "page" :
     rawUrlSection && (SETTINGS_SECTION_IDS as readonly string[]).includes(rawUrlSection)
       ? (rawUrlSection as SettingsSectionId)
       : "page"
