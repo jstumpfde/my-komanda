@@ -3,12 +3,16 @@ import {eq, and, inArray} from "drizzle-orm"
 import { db } from "@/lib/db"
 import {adaptationAssignments, adaptationSteps, stepCompletions} from "@/lib/db/schema"
 import { checkCronAuth } from "@/lib/cron/auth"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
+
+const CRON_NAME = "adaptation"
 
 // POST /api/cron/adaptation — Protected by X-Cron-Secret header.
 export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
 
+  const run = await startCronRun(CRON_NAME).catch(() => null)
   const now = new Date()
   let sent = 0
   let advanced = 0
@@ -120,6 +124,7 @@ export async function POST(req: NextRequest) {
         .where(eq(adaptationAssignments.id, a.id))
     }
 
+    if (run) await finishCronRun(run.id, "ok", { processed: assignments.length, sent, advanced })
     return NextResponse.json({
       ok:       true,
       processed: assignments.length,
@@ -128,6 +133,7 @@ export async function POST(req: NextRequest) {
       ts:       now.toISOString(),
     })
   } catch (err) {
+    if (run) await finishCronRun(run.id, "error", null, err instanceof Error ? err.message : String(err))
     console.error("[cron/adaptation]", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
