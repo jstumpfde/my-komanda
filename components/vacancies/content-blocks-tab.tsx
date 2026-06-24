@@ -86,9 +86,6 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
 
-  // Диалог выбора типа при создании блока
-  const [typePickerOpen, setTypePickerOpen] = useState(false)
-
   // Управление редактором выбранного блока (общий ряд кнопок справа)
   const editorRef = useRef<NotionEditorHandle>(null)
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving">("saved")
@@ -138,13 +135,7 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
 
   const selectedBlock = blocks.find(b => b.id === selectedId) ?? null
 
-  // Создать блок с выбором типа
-  const handleAddBlock = useCallback(() => {
-    setTypePickerOpen(true)
-  }, [])
-
   const doCreateBlock = useCallback(async (choice: PickerChoice) => {
-    setTypePickerOpen(false)
     setCreating(true)
     // «Сторис» — это блок-демонстрация, СРАЗУ заполненный одним уроком с пустым
     // stories-блоком, чтобы HR попал прямо в редактор сторис (StoriesEditorBlock),
@@ -244,6 +235,19 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
     }
   }, [setLiveBattle])
 
+  // Смена роли блока Демо↔Тест прямо в редакторе (вместо отдельного типа при
+  // создании). Тест-блок (contentType='test') синкается в demos kind='test' —
+  // это боевой тест кандидату; поэтому при переводе в «Тест», если боевого
+  // теста ещё нет, делаем этот блок боевым (как было при создании через диалог).
+  const handleChangeContentType = useCallback(async (block: ContentBlock, type: ContentType) => {
+    if (block.contentType === type) return
+    updateBlock(block.id, { contentType: type })
+    if (type === "test" || type === "task") {
+      const hasOtherLive = blocks.some(b => b.id !== block.id && (b.contentType === "test" || b.contentType === "task") && b.isLiveBattle)
+      if (!hasOtherLive) await setLiveBattle(block.id, true)
+    }
+  }, [updateBlock, blocks, setLiveBattle])
+
   // --- Render ---
 
   if (loading) {
@@ -296,24 +300,37 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
           </div>
           <div>
             <p className="font-medium text-foreground">Блоков контента нет</p>
-            <p className="text-sm text-muted-foreground mt-1">Создайте блок и наполните его чем угодно — текст, видео, вопросы, задание</p>
+            <p className="text-sm text-muted-foreground mt-1">Создайте блок и наполните его</p>
           </div>
-          <button
-            disabled={creating}
-            onClick={handleAddBlock}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-primary text-primary-foreground px-3 py-2 text-sm hover:bg-primary/90 transition-colors"
-          >
-            {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-            Добавить блок
-          </button>
+          {/* Создание сразу из редактора: текст/фото/видео/задание добавляются ВНУТРИ
+              «Редактора». Отдельные кнопки только под Сторис и PDF-презентацию. */}
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <button
+              disabled={creating}
+              onClick={() => doCreateBlock("presentation")}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary text-primary-foreground px-3 py-2 text-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
+            >
+              {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+              Редактор
+            </button>
+            <button
+              disabled={creating}
+              onClick={() => doCreateBlock("stories")}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-muted/40 transition-colors disabled:opacity-50"
+            >
+              <Clapperboard className="w-3.5 h-3.5" />
+              Сторис
+            </button>
+            <button
+              disabled={creating}
+              onClick={() => doCreateBlock("pdf")}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-muted/40 transition-colors disabled:opacity-50"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              PDF презентация
+            </button>
+          </div>
         </div>
-
-        {/* Диалог выбора типа блока */}
-        <BlockTypePickerDialog
-          open={typePickerOpen}
-          onClose={() => setTypePickerOpen(false)}
-          onCreate={doCreateBlock}
-        />
       </>
     )
   }
@@ -480,17 +497,32 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
             </div>
           )}
 
-          {/* «+ Блок» — всегда виден справа от блоков (не уезжает) */}
-          <button
-            ref={plusRef}
-            type="button"
-            disabled={creating}
-            onClick={handleAddBlock}
-            className="shrink-0 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-2.5 h-9 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
-          >
-            {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-            Блок
-          </button>
+          {/* «+ Блок» — дропдаун: Редактор / Сторис / PDF презентация
+              (создание сразу, без отдельного диалога выбора типа) */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                ref={plusRef}
+                type="button"
+                disabled={creating}
+                className="shrink-0 flex items-center gap-1.5 rounded-lg border border-dashed border-border px-2.5 h-9 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+              >
+                {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                Блок
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => doCreateBlock("presentation")}>
+                <Plus className="w-3.5 h-3.5" />Редактор
+              </DropdownMenuItem>
+              <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => doCreateBlock("stories")}>
+                <Clapperboard className="w-3.5 h-3.5" />Сторис
+              </DropdownMenuItem>
+              <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => doCreateBlock("pdf")}>
+                <FileText className="w-3.5 h-3.5" />PDF презентация
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* Скрытый замер полной ленты — решает, сворачивать ли в дропдаун */}
           <div ref={measureRef} aria-hidden className="invisible pointer-events-none absolute left-0 top-0 flex items-center gap-2">
@@ -560,13 +592,28 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
             <span className="text-muted-foreground/60"> · изм. {fmtDate(selectedBlock.updatedAt)}</span>
           </div>
 
-          {/* Переключатель «Боевой» — только для block:* блоков */}
+          {/* Роль блока (Демо/Тест) + «Боевой» — только для block:* блоков.
+              Тест нужен, чтобы завести боевой тест кандидату (синк в demos kind='test'). */}
           {selectedBlock.kind.startsWith("block:") && (
-            <LiveBattleToggle
-              block={selectedBlock}
-              allBlocks={uiBlocks}
-              onToggle={handleToggleLiveBattle}
-            />
+            <div className="flex items-center gap-2">
+              <div className="inline-flex rounded-md border border-border overflow-hidden text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => handleChangeContentType(selectedBlock, "presentation")}
+                  className={cn("px-2 py-1 transition-colors", selectedBlock.contentType === "presentation" ? "bg-blue-500/10 text-blue-600 font-medium" : "text-muted-foreground hover:text-foreground")}
+                >Демо</button>
+                <button
+                  type="button"
+                  onClick={() => handleChangeContentType(selectedBlock, "test")}
+                  className={cn("px-2 py-1 border-l border-border transition-colors", (selectedBlock.contentType === "test" || selectedBlock.contentType === "task") ? "bg-amber-500/10 text-amber-600 font-medium" : "text-muted-foreground hover:text-foreground")}
+                >Тест</button>
+              </div>
+              <LiveBattleToggle
+                block={selectedBlock}
+                allBlocks={uiBlocks}
+                onToggle={handleToggleLiveBattle}
+              />
+            </div>
           )}
         </div>
       )}
@@ -597,13 +644,6 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
           </div>
         )}
       </div>
-
-      {/* Диалог выбора типа блока */}
-      <BlockTypePickerDialog
-        open={typePickerOpen}
-        onClose={() => setTypePickerOpen(false)}
-        onCreate={doCreateBlock}
-      />
 
       {/* Диалог подтверждения удаления */}
       <AlertDialog open={!!deleteConfirmId} onOpenChange={open => { if (!open) setDeleteConfirmId(null) }}>

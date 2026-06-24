@@ -2917,12 +2917,12 @@ export default function VacancyPage() {
                   { kind: "tab",     value: "anketa"  , label: "Вакансия",        icon: ClipboardList, section: null             },
                   { kind: "section", value: "settings", label: "Портрет",          icon: Target,        section: "spec"           },
                   { kind: "tab",     value: "content" , label: "Контент",          icon: BookOpen,      section: null             },
-                  { kind: "tab",     value: "outbound", label: "Исходящий подбор", icon: UserSearch,    section: null             },
                   { kind: "section", value: "settings", label: "Воронка",          icon: Workflow,      section: "funnel-builder" },
                   { kind: "section", value: "settings", label: "Источники",        icon: Link2,         section: "sources"        },
                   { kind: "section", value: "settings", label: "Расписание",       icon: Clock,         section: "ai"             },
                   { kind: "section", value: "settings", label: "Интеграции",       icon: Settings,      section: "integrations"   },
                   { kind: "section", value: "settings", label: "Брендинг",         icon: Globe,         section: "page"           },
+                  { kind: "tab",     value: "outbound", label: "Исходящий подбор", icon: UserSearch,    section: null             },
                   { kind: "tab",     value: "queue"   , label: "Очередь",          icon: Inbox,         section: null             },
                 ] as const
                 const handleSubTabClick = (s: typeof settingsSubTabs[number]) => {
