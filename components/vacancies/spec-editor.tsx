@@ -39,6 +39,7 @@ import { toast } from "sonner"
 import {
   Target, Plus, X, Loader2, ShieldAlert, FileText, Gauge,
   ArrowRightLeft, AlertTriangle, Sparkles, Wand2, CheckCircle2, Check,
+  Lightbulb,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -116,6 +117,25 @@ interface SuggestionResult {
   nice_to_have:  string[]
   deal_breakers: string[]
   ideal_profile: string
+}
+
+/** Ответ POST .../requirements/synonyms */
+interface SynonymsResult {
+  synonyms: string[]
+}
+
+/** Одна конфликтующая пара из .../portrait/check-conflicts */
+interface ConflictItem {
+  good: string
+  bad:  string
+  why:  string
+}
+
+/** Состояние блока синонимов для одного критерия */
+interface SynonymState {
+  loading:  boolean
+  synonyms: string[]
+  open:     boolean
 }
 
 // ─── Теги-редактор списков (must/nice/deal) ──────────────────────────────────
@@ -421,6 +441,126 @@ function SuggestionDialog({
   )
 }
 
+// ─── Блок синонимов под критерием ────────────────────────────────────────────
+
+function SynonymBlock({
+  text, side, vacancyId, onAdd,
+}: {
+  text:       string
+  side:       "good" | "bad"
+  vacancyId:  string
+  onAdd:      (synonym: string) => void
+}) {
+  const [state, setState] = useState<SynonymState>({ loading: false, synonyms: [], open: false })
+  const [customDraft, setCustomDraft] = useState("")
+
+  const load = async () => {
+    if (state.open) { setState(s => ({ ...s, open: false })); return }
+    if (state.synonyms.length > 0) { setState(s => ({ ...s, open: true })); return }
+    setState(s => ({ ...s, loading: true, open: false }))
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/requirements/synonyms`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ text, side }),
+      })
+      const json = await res.json() as SynonymsResult | { error?: string }
+      if (!res.ok || "error" in json) {
+        toast.error(("error" in json && json.error) ? json.error : "Не удалось получить синонимы")
+        setState(s => ({ ...s, loading: false }))
+        return
+      }
+      setState({ loading: false, synonyms: (json as SynonymsResult).synonyms, open: true })
+    } catch {
+      toast.error("Ошибка запроса синонимов")
+      setState(s => ({ ...s, loading: false }))
+    }
+  }
+
+  const addOne = (syn: string) => {
+    onAdd(syn)
+    toast.success(`Добавлено: ${syn}`)
+  }
+
+  const addAll = () => {
+    state.synonyms.forEach(s => onAdd(s))
+    toast.success(`Добавлено ${state.synonyms.length} вариантов`)
+    setState(s => ({ ...s, open: false }))
+  }
+
+  const addCustom = () => {
+    const t = customDraft.trim()
+    if (!t) return
+    onAdd(t)
+    toast.success(`Добавлено: ${t}`)
+    setCustomDraft("")
+  }
+
+  return (
+    <div className="mt-1">
+      <button
+        type="button"
+        onClick={load}
+        className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50"
+        disabled={state.loading}
+      >
+        {state.loading
+          ? <><Loader2 className="w-3 h-3 animate-spin" /> Загрузка…</>
+          : <><Lightbulb className="w-3 h-3" /> + Похожие</>}
+      </button>
+
+      {state.open && state.synonyms.length > 0 && (
+        <div className="mt-2 rounded-md border border-dashed border-blue-300 dark:border-blue-700 bg-blue-50/50 dark:bg-blue-950/20 p-2.5 space-y-2">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-[11px] text-muted-foreground leading-snug">
+              AI и так учтёт по смыслу; добавьте, если хотите зафиксировать явно:
+            </p>
+            <button
+              type="button"
+              onClick={addAll}
+              className="shrink-0 text-[11px] text-blue-600 dark:text-blue-400 hover:underline whitespace-nowrap"
+            >
+              + Добавить все
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {state.synonyms.map((syn, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => addOne(syn)}
+                className="text-xs px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+              >
+                {syn}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-1.5">
+            <Input
+              value={customDraft}
+              onChange={e => setCustomDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom() } }}
+              placeholder="свой вариант…"
+              className="h-7 text-xs"
+              maxLength={150}
+            />
+            <Button
+              type="button"
+              size="icon"
+              variant="outline"
+              className="h-7 w-7 shrink-0"
+              onClick={addCustom}
+              disabled={!customDraft.trim()}
+            >
+              <Plus className="w-3 h-3" />
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── 🟢 «Подходит»: единый список с важностью на пункте ──────────────────────
 
 /**
@@ -430,11 +570,12 @@ function SuggestionDialog({
  * {importance}. Так движок читает поля как раньше (hard must-have = нокаут).
  */
 function GoodEditor({
-  mustHave, niceToHave, onChange,
+  mustHave, niceToHave, onChange, vacancyId,
 }: {
   mustHave:   MustHaveEntry[]
   niceToHave: NiceToHaveEntry[]
   onChange:   (next: { mustHave: MustHaveItem[]; niceToHave: NiceToHaveItem[] }) => void
+  vacancyId:  string
 }) {
   // 🟢 = только балл, не отсев → всё в niceToHave (3 уровня). Старые жёсткие
   // must-have (если были) показываем как «Очень важно» и при правке переводим в
@@ -462,6 +603,20 @@ function GoodEditor({
   }
   const ph = LIST_PLACEHOLDERS.must[rows.length % LIST_PLACEHOLDERS.must.length] || ""
 
+  /** Добавить синоним к критерию по индексу: дописываем через запятую, дедуп */
+  const addSynonymToRow = (i: number, syn: string) => {
+    const row = rows[i]
+    if (!row) return
+    // Дедуп: если синоним уже есть в тексте критерия (регистронезависимо) — пропускаем
+    const existing = row.text.toLowerCase()
+    if (existing.includes(syn.toLowerCase())) {
+      toast.info(`«${syn}» уже есть в критерии`)
+      return
+    }
+    const updated = rows.map((r, idx) => idx === i ? { ...r, text: `${r.text}, ${syn}` } : r)
+    commit(updated)
+  }
+
   return (
     <div className="space-y-2.5">
       <div className="flex items-baseline justify-between">
@@ -477,32 +632,40 @@ function GoodEditor({
       <OverRecommendedHint count={rows.length} />
       <div className="space-y-1.5">
         {rows.map((r, i) => (
-          <div key={i} className="rounded-md border p-2 flex items-center gap-2">
-            <span className="flex-1 text-sm min-w-0 break-words">{r.text}</span>
-            <div className="flex items-center gap-1 shrink-0" role="group" aria-label="Важность пункта">
-              {GOOD_LEVELS.map(l => {
-                const active = r.level === l.value
-                return (
-                  <button key={l.value} type="button" title={l.label} aria-label={l.label} aria-pressed={active}
-                    onClick={() => setLevel(i, l.value)}
-                    className={cn(
-                      "w-7 h-7 rounded-full border flex items-center justify-center transition-all",
-                      active
-                        ? cn(l.solid, "border-transparent text-white scale-110 shadow-sm")
-                        : "border-border bg-transparent hover:bg-muted-foreground/10",
-                    )}
-                  >
-                    {active
-                      ? <Check className="w-3.5 h-3.5" />
-                      : <span className={cn("w-2.5 h-2.5 rounded-full", l.solid, "opacity-60")} />}
-                  </button>
-                )
-              })}
+          <div key={i} className="rounded-md border p-2">
+            <div className="flex items-center gap-2">
+              <span className="flex-1 text-sm min-w-0 break-words">{r.text}</span>
+              <div className="flex items-center gap-1 shrink-0" role="group" aria-label="Важность пункта">
+                {GOOD_LEVELS.map(l => {
+                  const active = r.level === l.value
+                  return (
+                    <button key={l.value} type="button" title={l.label} aria-label={l.label} aria-pressed={active}
+                      onClick={() => setLevel(i, l.value)}
+                      className={cn(
+                        "w-7 h-7 rounded-full border flex items-center justify-center transition-all",
+                        active
+                          ? cn(l.solid, "border-transparent text-white scale-110 shadow-sm")
+                          : "border-border bg-transparent hover:bg-muted-foreground/10",
+                      )}
+                    >
+                      {active
+                        ? <Check className="w-3.5 h-3.5" />
+                        : <span className={cn("w-2.5 h-2.5 rounded-full", l.solid, "opacity-60")} />}
+                    </button>
+                  )
+                })}
+              </div>
+              <button type="button" onClick={() => remove(i)}
+                className="rounded-full hover:bg-muted-foreground/20 p-0.5 shrink-0" aria-label={`Убрать «${r.text}»`}>
+                <X className="w-3.5 h-3.5" />
+              </button>
             </div>
-            <button type="button" onClick={() => remove(i)}
-              className="rounded-full hover:bg-muted-foreground/20 p-0.5 shrink-0" aria-label={`Убрать «${r.text}»`}>
-              <X className="w-3.5 h-3.5" />
-            </button>
+            <SynonymBlock
+              text={r.text}
+              side="good"
+              vacancyId={vacancyId}
+              onAdd={syn => addSynonymToRow(i, syn)}
+            />
           </div>
         ))}
       </div>
@@ -522,10 +685,11 @@ function GoodEditor({
 // ─── 🔴 «Не подходит по смыслу»: стоп-фактор vs минус к баллу ─────────────────
 
 function BadEditor({
-  items, onChange,
+  items, onChange, vacancyId,
 }: {
-  items:    DealBreakerEntry[]
-  onChange: (next: DealBreakerItem[]) => void
+  items:      DealBreakerEntry[]
+  onChange:   (next: DealBreakerItem[]) => void
+  vacancyId:  string
 }) {
   const rows = normalizeDealBreakers(items)
   const setHard = (i: number, hard: boolean) => onChange(rows.map((r, idx) => idx === i ? { ...r, hard } : r))
@@ -541,6 +705,17 @@ function BadEditor({
     setDraft("")
   }
   const ph = LIST_PLACEHOLDERS.deal[rows.length % LIST_PLACEHOLDERS.deal.length] || ""
+
+  /** Добавить синоним к критерию по индексу: дописываем через запятую, дедуп */
+  const addSynonymToRow = (i: number, syn: string) => {
+    const row = rows[i]
+    if (!row) return
+    if (row.text.toLowerCase().includes(syn.toLowerCase())) {
+      toast.info(`«${syn}» уже есть в критерии`)
+      return
+    }
+    onChange(rows.map((r, idx) => idx === i ? { ...r, text: `${r.text}, ${syn}` } : r))
+  }
 
   return (
     <div className="space-y-2">
@@ -579,6 +754,12 @@ function BadEditor({
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
+            <SynonymBlock
+              text={r.text}
+              side="bad"
+              vacancyId={vacancyId}
+              onAdd={syn => addSynonymToRow(i, syn)}
+            />
           </div>
         ))}
       </div>
@@ -673,6 +854,10 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
   const [suggestionOpen, setSuggestionOpen] = useState(false)
   const [editedSuggestion, setEditedSuggestion] = useState<SuggestionResult | null>(null)
   const [suggestUnavailable, setSuggestUnavailable] = useState(false)
+
+  // Проверка противоречий «Подходит» ↔ «Не подходит»
+  const [conflictsChecking, setConflictsChecking]   = useState(false)
+  const [conflictsResult, setConflictsResult]       = useState<ConflictItem[] | null>(null)
 
   // CSV-строки для списочных стоп-факторов (как в VacancyStopFactorsSettings)
   const [cityCsv, setCityCsv]               = useState("")
@@ -810,6 +995,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
       ...editedSuggestion.must_have.map(text => ({ text, importance: "very" as NiceImportance })),
       ...editedSuggestion.nice_to_have.map(text => ({ text, importance: "nice" as NiceImportance })),
     ].slice(0, 10)
+    const dealBreakers = editedSuggestion.deal_breakers.slice(0, 10).map(text => ({ text, hard: false }))
     patch({
       idealProfile: editedSuggestion.ideal_profile.slice(0, 500),
       mustHave:     [],
@@ -817,10 +1003,48 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
       // Пред-заполнение НЕ создаёт жёстких стоп-факторов: deal_breakers от AI кладём
       // мягкими (hard:false = минус к баллу, не отказ). Жёсткий отсев HR включает сам,
       // осознанно — иначе «опыт B2B» зарубит того, кто написал «продавал CRM».
-      dealBreakers: editedSuggestion.deal_breakers.slice(0, 10).map(text => ({ text, hard: false })),
+      dealBreakers,
     })
     setSuggestionOpen(false)
     toast.success("Портрет заполнен из вакансии — проверьте и сохраните")
+    // Автозапуск проверки противоречий один раз после applySuggestion
+    const goodTexts = niceToHave.map(n => n.text)
+    const badTexts  = dealBreakers.map(d => d.text)
+    if (goodTexts.length > 0 && badTexts.length > 0) {
+      void checkConflicts(goodTexts, badTexts)
+    }
+  }
+
+  // ── Проверка противоречий ──────────────────────────────────────────────────
+  const checkConflicts = async (goodOverride?: string[], badOverride?: string[]) => {
+    if (!spec) return
+    const good = goodOverride ?? [
+      ...normalizeMustHave(spec.mustHave).map(m => m.text),
+      ...normalizeNiceToHave(spec.niceToHave).map(n => n.text),
+    ]
+    const bad = badOverride ?? normalizeDealBreakers(spec.dealBreakers).map(d => d.text)
+    if (good.length === 0 || bad.length === 0) {
+      setConflictsResult([])
+      return
+    }
+    setConflictsChecking(true)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/portrait/check-conflicts`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ good, bad }),
+      })
+      const json = await res.json() as { conflicts?: ConflictItem[]; error?: string }
+      if (!res.ok || json.error) {
+        toast.error(json.error ?? "Не удалось проверить противоречия")
+        return
+      }
+      setConflictsResult(json.conflicts ?? [])
+    } catch {
+      toast.error("Ошибка проверки противоречий")
+    } finally {
+      setConflictsChecking(false)
+    }
   }
 
   // ── Рендер ─────────────────────────────────────────────────────────────────
@@ -992,6 +1216,48 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
         </CardContent>
       </Card>
 
+      {/* ── Статус-плашка противоречий (над секциями «Подходит» и «Не подходит») ── */}
+      {conflictsResult !== null && (
+        <div className="space-y-1.5">
+          {conflictsResult.length === 0 ? (
+            <div className="flex items-center gap-2 rounded-lg border border-green-300 bg-green-50 dark:bg-green-950/20 px-3 py-2 text-sm text-green-800 dark:text-green-300">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-green-600" />
+              <span>«Подходит» и «Не подходит» не противоречат</span>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-red-300 bg-red-50 dark:bg-red-950/20 px-3 py-2.5 space-y-1.5">
+              {conflictsResult.map((c, i) => (
+                <div key={i} className="flex items-start gap-2 text-sm text-red-800 dark:text-red-300">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-red-500 mt-0.5" />
+                  <span>
+                    Противоречие: «{c.good}» и «{c.bad}» — {c.why}; оставьте одно
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => checkConflicts()}
+          disabled={conflictsChecking}
+          className="text-xs h-7"
+        >
+          {conflictsChecking
+            ? <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> Проверяю…</>
+            : <><AlertTriangle className="w-3 h-3 mr-1.5" /> Проверить на противоречия</>}
+        </Button>
+      </div>
+
+      {/* Пояснение про бота */}
+      <p className="text-xs text-muted-foreground -mt-2">
+        Если бот включён — спорное он уточнит у кандидата и в «Подходит», и в «Не подходит», а не отрежет сразу.
+      </p>
+
       {/* ── 🟢 Подходит ── */}
       <Card>
         <CardHeader className="pb-3">
@@ -1007,6 +1273,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
             mustHave={spec.mustHave}
             niceToHave={spec.niceToHave}
             onChange={({ mustHave, niceToHave }) => patch({ mustHave, niceToHave })}
+            vacancyId={vacancyId}
           />
         </CardContent>
       </Card>
@@ -1025,6 +1292,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
           <BadEditor
             items={spec.dealBreakers}
             onChange={v => patch({ dealBreakers: v })}
+            vacancyId={vacancyId}
           />
 
           <div className="pt-4 border-t space-y-3">
