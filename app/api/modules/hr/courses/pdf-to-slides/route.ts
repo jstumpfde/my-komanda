@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireCompany } from "@/lib/api-helpers"
 import { uploadsDir } from "@/lib/uploads-path"
-import { mkdir, writeFile, readdir, rm } from "fs/promises"
+import { mkdir, writeFile, readdir, readFile, rm } from "fs/promises"
 import path from "path"
 import { execFile } from "child_process"
 import { promisify } from "util"
@@ -41,6 +41,26 @@ function parsePdfInfo(stdout: string): { pageCount: number; aspect: number } {
     if (w > 0 && h > 0) aspect = w / h
   }
   return { pageCount, aspect }
+}
+
+/**
+ * Точное соотношение сторон PNG из заголовка IHDR (без зависимостей). Это
+ * размеры того, что РЕАЛЬНО отрисовал pdftoppm — с учётом поворота страницы
+ * (/Rotate 90), которого нет в MediaBox из pdfinfo. Иначе книжный MediaBox +
+ * поворот → pdfinfo отдаёт книжный aspect, а картинка альбомная → рамка и
+ * картинка не совпадают (поля/обрезка). Структура PNG: сигнатура 8 байт, далее
+ * IHDR (length 4 + type 4 + width 4 + height 4) → width @16, height @20, BE.
+ */
+async function pngAspect(filePath: string): Promise<number | null> {
+  try {
+    const buf = await readFile(filePath)
+    if (buf.length < 24 || buf.readUInt32BE(0) !== 0x89504e47) return null
+    const w = buf.readUInt32BE(16)
+    const h = buf.readUInt32BE(20)
+    return w > 0 && h > 0 ? w / h : null
+  } catch {
+    return null
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -132,6 +152,12 @@ export async function POST(req: NextRequest) {
       await rm(dir, { recursive: true, force: true }).catch(() => {})
       return NextResponse.json({ error: "PDF не содержит страниц" }, { status: 400 })
     }
+
+    // Источник правды для aspect — реальные размеры отрисованной первой
+    // страницы (учитывают поворот /Rotate, в отличие от MediaBox из pdfinfo).
+    // Так и альбомный, и книжный PDF отображаются без полей/обрезки.
+    const realAspect = await pngAspect(path.join(dir, files[0]))
+    if (realAspect) aspect = realAspect
 
     const base = `/uploads/${companyId}/pdf-slides/${id}`
     const pages = files.map((f) => `${base}/${f}`)
