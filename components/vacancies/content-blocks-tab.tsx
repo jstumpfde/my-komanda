@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { Loader2, Plus, Pencil, Trash2, Sparkles, FileText, AlertCircle, Save, BookOpen, Eye, Check, Download, ChevronDown, FilePlus, Zap, Clapperboard } from "lucide-react"
+import { Loader2, Plus, Pencil, Trash2, Sparkles, FileText, AlertCircle, Save, BookOpen, Eye, Check, Download, ChevronDown, ChevronRight, FilePlus, Zap, Clapperboard } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { useContentBlocks, type ContentBlock, type ContentType } from "@/hooks/use-content-blocks"
@@ -75,9 +75,10 @@ function ContentTypeBadge({ contentType }: { contentType: ContentType }) {
 interface ContentBlocksTabProps {
   vacancyId: string
   vacancyTitle?: string | null
+  onNavigateNext?: () => void
 }
 
-export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
+export function ContentBlocksTab({ vacancyId, onNavigateNext }: ContentBlocksTabProps) {
   const { blocks, loading, error, createBlock: apiCreateBlock, updateBlock, saveSettings, deleteBlock, reorder, setLiveBattle } = useContentBlocks(vacancyId)
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -555,6 +556,21 @@ export function ContentBlocksTab({ vacancyId }: ContentBlocksTabProps) {
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
+
+            {/* Далее → следующий этап (Воронка). Всегда доступна (единообразно с
+                другими табами). Если контент ещё сохраняется — сначала сохраняем,
+                подпись «Сохранить и далее». */}
+            {onNavigateNext && (
+              <Button
+                size="sm"
+                variant="default"
+                className="gap-1.5 text-xs h-8"
+                onClick={() => { if (saveStatus === "saving") editorRef.current?.save(); onNavigateNext() }}
+              >
+                {saveStatus === "saving" ? "Сохранить и далее" : "Далее"}
+                <ChevronRight className="w-3.5 h-3.5" />
+              </Button>
+            )}
 
             {/* Создать из... (dropdown): Создать с нуля / Из библиотеки */}
             <DropdownMenu>
