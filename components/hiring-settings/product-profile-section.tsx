@@ -77,7 +77,7 @@ export function ProductProfileSection({ defaults, onPatch }: {
         ))}
 
         <Button type="button" variant="outline" size="sm" onClick={addProfile} className="gap-1.5"><Plus className="w-4 h-4" /> Добавить продукт</Button>
-        <p className="text-[11px] text-muted-foreground">Несколько продуктов с разным чеком — несколько профилей (напр. «готовые 30–100к» + «кастом 500к+»). При &gt;1 профиле компания помечается мультипродуктовой.</p>
+        <p className="text-[11px] text-muted-foreground">Несколько продуктов с разным чеком — несколько профилей (напр. «готовые 30–100к» + «кастом 500к+»).</p>
 
         <div className="flex justify-end pt-1">
           <Button onClick={save} disabled={saving} className="gap-1.5">
