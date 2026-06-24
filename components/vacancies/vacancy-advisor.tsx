@@ -264,10 +264,6 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
     ? result.score < 40 ? "[&>div]:bg-red-500" : result.score < 70 ? "[&>div]:bg-amber-500" : "[&>div]:bg-emerald-500"
     : ""
 
-  const errors = result?.sections.filter(s => s.status === "error") || []
-  const warnings = result?.sections.filter(s => s.status === "warning") || []
-  const oks = result?.sections.filter(s => s.status === "ok") || []
-
   // Detect experience level from stop factors
   const experienceLevel = useMemo(() => {
     const expFactor = (vacancyData.stopFactors as Array<{ id: string; enabled: boolean; value?: string }>)
@@ -316,6 +312,78 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
 
   const staticTip = focusedField ? SECTION_TIPS[focusedField] ?? null : null
 
+  // ── Тематическая запись (одна карточка на тему) ───────────────────────────
+  function renderThemeRow({
+    icon,
+    label,
+    status,
+    message,
+    rightContent,
+    isScreening = false,
+    extra,
+    onClick,
+  }: {
+    icon: string
+    label: string
+    status: "ok" | "warning" | "error" | "info"
+    message?: string
+    rightContent?: React.ReactNode
+    isScreening?: boolean
+    extra?: React.ReactNode
+    onClick?: () => void
+  }) {
+    const isError = status === "error"
+    const isWarning = status === "warning"
+
+    const statusIcon = (status === "ok" || status === "info")
+      ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+      : status === "warning"
+        ? <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+        : <XCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+
+    const rowClass = cn(
+      "w-full text-left rounded-md border px-2.5 py-2 transition-colors",
+      isError && "border-red-200 dark:border-red-900/50 bg-red-50/50 dark:bg-red-950/20",
+      isWarning && "border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20",
+      !isError && !isWarning && "border-border",
+      onClick && "hover:bg-accent/50 cursor-pointer",
+    )
+
+    const inner = (
+      <div className="flex items-start gap-2">
+        {statusIcon}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-1.5">
+            <span className={cn("text-sm font-medium leading-tight", isError && "text-red-700 dark:text-red-400")}>
+              {icon} {label}
+            </span>
+            {rightContent}
+          </div>
+          {message && (
+            <p className={cn("text-xs mt-0.5 leading-relaxed", isError ? "text-red-600 dark:text-red-400" : "text-muted-foreground")}>
+              {message}
+            </p>
+          )}
+          {isScreening && status !== "ok" && (
+            <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+              настраивается в Портрете
+            </span>
+          )}
+        </div>
+      </div>
+    )
+
+    return (
+      <div key={label} className="space-y-1">
+        {onClick
+          ? <button type="button" onClick={onClick} className={rowClass}>{inner}</button>
+          : <div className={rowClass}>{inner}</div>
+        }
+        {extra}
+      </div>
+    )
+  }
+
   function renderContent() {
     if (!result && loading) {
       return (
@@ -358,10 +426,86 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
       )
     }
 
+    // ── Данные для тематических записей ──────────────────────────────────────
+    const sectionById = Object.fromEntries(result.sections.map(s => [s.id, s]))
+
+    // Название — совмещаем AI-секцию title с локальным scoreVacancyTitle
+    const titleText = (vacancyData.vacancyTitle as string) || ""
+    const titleAiSection = sectionById["title"]
+    const salaryFromNum = parseInt(String(vacancyData.salaryFrom || "0").replace(/\s/g, "")) || 0
+    const workFormats = (vacancyData.workFormats as string[]) || []
+    const titleLocalScore = titleText ? scoreVacancyTitle(titleText, {
+      format: workFormats[0],
+      salaryMin: salaryFromNum,
+    }) : null
+    const titleStatus: "ok" | "warning" | "error" =
+      titleAiSection?.status === "error" ? "error"
+        : titleAiSection?.status === "warning" ? "warning"
+          : (titleLocalScore && titleLocalScore.score < 40) ? "error"
+            : (titleLocalScore && titleLocalScore.score < 60) ? "warning"
+              : "ok"
+    const titleMessage = titleAiSection?.message
+      || (titleLocalScore ? titleLocalScore.checks.find(c => c.status !== "ok")?.text : undefined)
+      || (titleStatus === "ok" ? "Название выглядит хорошо" : undefined)
+
+    // Зарплата и мотивация
+    const salaryMin = salaryFromNum
+    const salaryMax = parseInt(String(vacancyData.salaryTo || "0").replace(/\s/g, "")) || 0
+    const bonuses = (vacancyData.bonus as string) || ""
+    const payFrequency = (vacancyData.payFrequency as string[]) || []
+    const motivationResult = (salaryMin || salaryMax || bonuses)
+      ? analyzeMotivation({ salaryMin: salaryMin || undefined, salaryMax: salaryMax || undefined, bonuses, payFrequency, category: (vacancyData.positionCategory as string) || "" })
+      : null
+    const salaryAiSection = sectionById["salary"]
+    const salaryStatus: "ok" | "warning" | "error" | "info" =
+      salaryAiSection?.status === "error" ? "error"
+        : salaryAiSection?.status === "warning" ? "warning"
+          : motivationResult && motivationResult.score < 40 ? "error"
+            : motivationResult && motivationResult.score < 60 ? "warning"
+              : "ok"
+    const salaryMessage = salaryAiSection?.message
+      || (motivationResult ? motivationResult.checks.find(c => c.status !== "ok")?.text : undefined)
+      || (motivationResult && motivationResult.score >= 60 ? "Условия мотивации — хорошие" : undefined)
+
+    // О компании
+    const companyDesc = companyDescription || (vacancyData.companyDescription as string) || ""
+    const companyAiSection = sectionById["company"]
+    const companyStatus: "ok" | "warning" | "error" =
+      companyAiSection?.status === "error" ? "error"
+        : companyAiSection?.status === "warning" ? "warning"
+          : !companyDesc ? "warning"
+            : "ok"
+    const companyMessage = companyAiSection?.message
+      || (!companyDesc ? "Описание компании не заполнено" : "Описание заполнено — редактируется в «О компании»")
+
+    // Остальные AI-секции
+    const responsibilitiesSection = sectionById["responsibilities"]
+    const requirementsSection = sectionById["requirements"]
+    const skillsSection = sectionById["skills"]
+    const stopFactorsSection = sectionById["stopFactors"]
+    const conditionsSection = sectionById["conditions"]
+
+    // Формат работы
+    const hasRemote = workFormats.some(f => /удалён/i.test(f))
+    const hasHybrid = workFormats.some(f => /гибрид/i.test(f))
+    const formatMessage = workFormats.length === 0 ? undefined
+      : hasRemote ? "Удалёнка: пул кандидатов шире — нет географических ограничений"
+        : hasHybrid ? "Гибрид — компромисс: +30% к пулу vs офис"
+          : "Офис сужает пул, но повышает контроль"
+
+    // Опыт
+    const expInsight = experienceLevel ? (EXPERIENCE_INSIGHTS[experienceLevel] || null) : null
+
+    // Варианты названия (чипы)
+    const titleSuggestions = result.suggestions?.titles || []
+
+    // Бонусы для мотивации
+    const bonusSuggestions = motivationResult?.suggestions || []
+
     return (
-      <div className="space-y-3">
-        {/* Score */}
-        <div className="space-y-2">
+      <div className="space-y-2">
+        {/* Шапка: балл + прогресс */}
+        <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <span className={cn("text-2xl font-bold tabular-nums", scoreColor)}>{result.score}%</span>
             <Badge variant={result.score < 40 ? "destructive" : result.score < 70 ? "secondary" : "default"} className="text-xs">
@@ -370,11 +514,11 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
           </div>
           <Progress value={result.score} className={cn("h-2", progressColor)} />
           <p className="text-xs text-muted-foreground">
-            Анкета заполнена на {result.score}% — {result.scoreLabel.toLowerCase()}
+            Анкета заполнена — {result.score}% · {result.scoreLabel.toLowerCase()}
           </p>
         </div>
 
-        {/* Static contextual tip (instant, no AI call) */}
+        {/* Статический контекстный подсказ */}
         {staticTip && (
           <div key={focusedField} className="rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800 p-3 animate-in fade-in duration-200">
             <div className="flex items-start gap-2">
@@ -384,7 +528,7 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
           </div>
         )}
 
-        {/* AI context tip (from last analysis) */}
+        {/* AI context tip */}
         {result.contextTip && !staticTip && (
           <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 animate-in fade-in duration-300">
             <div className="flex items-start gap-2">
@@ -394,90 +538,170 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
           </div>
         )}
 
-        {/* Title scoring + suggestions */}
-        <TitleScoringCard
-          title={(vacancyData.vacancyTitle as string) || ""}
-          context={{
-            format: (vacancyData.workFormats as string[])?.[0],
-            salaryMin: parseInt(String(vacancyData.salaryFrom || "0").replace(/\s/g, "")) || 0,
-          }}
-          suggestions={result.suggestions?.titles || []}
-          onApply={onApplySuggestion ? (t: string) => handleApply("vacancyTitle", t) : undefined}
-        />
+        {/* ── ТЕМАТИЧЕСКИЕ ЗАПИСИ ─────────────────────────────────────────── */}
+        <div className="space-y-1.5">
 
-        {/* 3. Формат работы */}
-        <FormatCard workFormats={(vacancyData.workFormats as string[]) || []} />
+          {/* 1. Название */}
+          {titleText && renderThemeRow({
+            icon: "✏️",
+            label: "Название",
+            status: titleStatus,
+            message: titleMessage,
+            onClick: () => handleSectionClick("title"),
+            extra: titleSuggestions.length > 0 && onApplySuggestion ? (
+              <div className="pl-2 flex flex-wrap gap-1 mt-0.5">
+                <span className="text-[10px] text-muted-foreground self-center">Варианты:</span>
+                {titleSuggestions.map((s, i) => {
+                  const sc = scoreVacancyTitle(s, { format: workFormats[0], salaryMin })
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => handleApply("vacancyTitle", s)}
+                      className="text-[10px] px-1.5 py-0.5 rounded border bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-950/50 transition-colors"
+                      title={`Оценка: ${sc.score}/100`}
+                    >
+                      {s}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : undefined,
+          })}
 
-        {/* 4. Опыт */}
-        <ExperienceInsightCard level={experienceLevel || "3-5"} currentLevel={experienceLevel} />
+          {/* 2. О компании */}
+          {renderThemeRow({
+            icon: "🏢",
+            label: "О компании",
+            status: companyStatus,
+            message: companyMessage,
+            onClick: !companyDesc
+              ? () => { window.open("/settings/company", "_blank") }
+              : () => handleSectionClick("company"),
+          })}
 
-        {/* 5. Аналитика зарплат */}
+          {/* 3. Зарплата и мотивация */}
+          {renderThemeRow({
+            icon: "💰",
+            label: "Зарплата и мотивация",
+            status: salaryStatus,
+            message: salaryMessage,
+            rightContent: motivationResult ? (
+              <span className={cn("text-xs font-bold tabular-nums shrink-0",
+                motivationResult.score >= 60 ? "text-emerald-600 dark:text-emerald-400"
+                  : motivationResult.score >= 40 ? "text-amber-600 dark:text-amber-400"
+                    : "text-red-600 dark:text-red-400"
+              )}>
+                {motivationResult.score}/100
+              </span>
+            ) : undefined,
+            onClick: () => handleSectionClick("salary"),
+            extra: bonusSuggestions.length > 0 && onApplySuggestion ? (
+              <div className="pl-2 space-y-0.5">
+                <span className="text-[10px] text-muted-foreground">Добавить в бонусы:</span>
+                {bonusSuggestions.map((s, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => {
+                      const current = bonuses
+                      const newText = current ? `${current}\n• ${s}` : `• ${s}`
+                      onApplySuggestion!("bonus", newText)
+                    }}
+                    className="block w-full text-left text-[10px] px-2 py-1 rounded hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-colors text-amber-800 dark:text-amber-200 underline decoration-dotted underline-offset-2"
+                  >
+                    + {s}
+                  </button>
+                ))}
+              </div>
+            ) : undefined,
+          })}
+
+          {/* 4. Обязанности */}
+          {responsibilitiesSection && renderThemeRow({
+            icon: "📋",
+            label: responsibilitiesSection.title || "Обязанности",
+            status: responsibilitiesSection.status,
+            message: responsibilitiesSection.message,
+            isScreening: AI_SCREENING_FIELDS.has("responsibilities"),
+            onClick: !AI_SCREENING_FIELDS.has("responsibilities")
+              ? () => handleSectionClick("responsibilities")
+              : undefined,
+          })}
+
+          {/* 5. Требования */}
+          {requirementsSection && renderThemeRow({
+            icon: "🎯",
+            label: requirementsSection.title || "Требования",
+            status: requirementsSection.status,
+            message: requirementsSection.message,
+            isScreening: AI_SCREENING_FIELDS.has("requirements"),
+            onClick: !AI_SCREENING_FIELDS.has("requirements")
+              ? () => handleSectionClick("requirements")
+              : undefined,
+          })}
+
+          {/* 6. Навыки */}
+          {skillsSection && renderThemeRow({
+            icon: "⚡",
+            label: skillsSection.title || "Навыки",
+            status: skillsSection.status,
+            message: skillsSection.message,
+            isScreening: AI_SCREENING_FIELDS.has("skills"),
+            onClick: !AI_SCREENING_FIELDS.has("skills")
+              ? () => handleSectionClick("skills")
+              : undefined,
+          })}
+
+          {/* 7. Условия */}
+          {conditionsSection && renderThemeRow({
+            icon: "🏢",
+            label: conditionsSection.title || "Условия",
+            status: conditionsSection.status,
+            message: conditionsSection.message,
+            onClick: () => handleSectionClick("conditions"),
+          })}
+
+          {/* 8. Стоп-факторы — оценка кандидата настраивается в Портрете */}
+          {stopFactorsSection && renderThemeRow({
+            icon: "🚫",
+            label: stopFactorsSection.title || "Стоп-факторы",
+            status: stopFactorsSection.status,
+            message: stopFactorsSection.message,
+            isScreening: true,
+            onClick: undefined,
+          })}
+
+          {/* Info: Формат работы */}
+          {workFormats.length > 0 && renderThemeRow({
+            icon: "🔄",
+            label: `Формат: ${workFormats.join(", ")}`,
+            status: "ok",
+            message: formatMessage,
+          })}
+
+          {/* Info: Опыт */}
+          {expInsight && renderThemeRow({
+            icon: "📅",
+            label: `Опыт: ${expInsight.label}`,
+            status: "ok",
+            message: expInsight.tip,
+          })}
+
+        </div>
+
+        {/* Аналитика зарплат — компактная карточка */}
         {result.salaryAnalysis && (
           <SalaryAnalysisCard analysis={result.salaryAnalysis} />
         )}
 
-        {/* 6b. Лучшее время публикации — по откликам компании */}
-        <BestPublishTimeCard vacancyId={vacancyId} city={(vacancyData.positionCity as string) || (vacancyData.companyCity as string) || ""} />
-
-        {/* 7. Анализ мотивации */}
-        <MotivationAnalysisCard
-          salaryMin={parseInt(String(vacancyData.salaryFrom || "0").replace(/\s/g, "")) || 0}
-          salaryMax={parseInt(String(vacancyData.salaryTo || "0").replace(/\s/g, "")) || 0}
-          bonuses={(vacancyData.bonus as string) || ""}
-          payFrequency={(vacancyData.payFrequency as string[]) || []}
-          category={(vacancyData.positionCategory as string) || ""}
-          onAppendBonus={onApplySuggestion ? (text: string) => {
-            const current = (vacancyData.bonus as string) || ""
-            const newText = current ? `${current}\n• ${text}` : `• ${text}`
-            onApplySuggestion("bonus", newText)
-          } : undefined}
-        />
-
-        {/* 8. О компании */}
-        <CompanyDescriptionCard description={companyDescription || (vacancyData.companyDescription as string) || ""} />
-
-        {/* Sections: критичные и рекомендации — соответствуют секциям 4-5 (обязанности, требования, навыки, стоп-факторы) */}
-        {errors.length > 0 && (
-          <div className="space-y-1.5">
-            <p className="text-xs font-medium text-red-600 dark:text-red-400 uppercase tracking-wider">Критично</p>
-            {errors.map(s => (
-              <SectionCard key={s.id} section={s} onClick={() => handleSectionClick(s.id)} />
-            ))}
-          </div>
-        )}
-
-        {warnings.length > 0 && (
-          <div className="space-y-1.5">
-            <p className="text-xs font-medium text-amber-600 dark:text-amber-400 uppercase tracking-wider">Рекомендации</p>
-            {warnings.map(s => (
-              <SectionCard key={s.id} section={s} onClick={() => handleSectionClick(s.id)} />
-            ))}
-          </div>
-        )}
-
-        {/* Clickable suggestions — рекомендуемые навыки, стоп-факторы, шаблоны */}
+        {/* Навыки для hh + шаблоны обязанностей/требований */}
         {result.suggestions && onApplySuggestion && (
           <SuggestionsPanel suggestions={result.suggestions} onApply={handleApply} vacancyData={vacancyData} />
         )}
 
-        {oks.length > 0 && (
-          <div className="space-y-1.5">
-            <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Заполнено</p>
-            {oks.map(s => (
-              <SectionCard key={s.id} section={s} onClick={() => handleSectionClick(s.id)} compact />
-            ))}
-          </div>
-        )}
-
-        {/* 14. Профиль продавца — на основе бизнес-критериев */}
-        <SellerProfileCard
-          avgDealSize={(vacancyData.avgDealSize as string) || ""}
-          salesCycle={(vacancyData.salesCycle as string) || ""}
-          salesType={(vacancyData.salesType as string[]) || []}
-          targetAudience={(vacancyData.targetAudience as string[]) || []}
-          currentRequirements={(vacancyData.requirements as string) || ""}
-          onFillRequirements={onApplySuggestion ? (text) => onApplySuggestion("requirements", text) : undefined}
-        />
+        {/* Лучшее время публикации (статистика — в конце) */}
+        <BestPublishTimeCard vacancyId={vacancyId} city={(vacancyData.positionCity as string) || (vacancyData.companyCity as string) || ""} />
 
         {/* P0-28: дата последнего анализа + force-refresh. */}
         <div className="pt-1 space-y-1">
@@ -622,293 +846,6 @@ function SalaryAnalysisCard({ analysis }: { analysis: SalaryAnalysis }) {
   )
 }
 
-// ── Format Card ─────────────────────────────────────────────────────────────
-
-function FormatCard({ workFormats }: { workFormats: string[] }) {
-  if (!workFormats || workFormats.length === 0) return null
-
-  const hasRemote = workFormats.some(f => /удалён/i.test(f))
-  const hasOffice = workFormats.some(f => /офис/i.test(f))
-  const hasHybrid = workFormats.some(f => /гибрид/i.test(f))
-
-  const tips: { emoji: string; text: string }[] = []
-  if (hasRemote) tips.push({ emoji: "✅", text: "Удалёнка: пул кандидатов шире — нет географических ограничений" })
-  if (hasOffice && !hasRemote) tips.push({ emoji: "📍", text: "Офис сужает пул, но повышает контроль. Зарплаты выше +10-20%" })
-  if (hasHybrid) tips.push({ emoji: "🔄", text: "Гибрид — компромисс: +30% к пулу vs офис" })
-
-  return (
-    <div className="rounded-lg border p-3 space-y-2">
-      {/* QW5: заголовок и бейджи формата — в одну строку */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="flex items-center gap-1.5 shrink-0">
-          <Sparkles className="w-3.5 h-3.5 text-primary" />
-          <span className="text-xs font-medium">Формат работы</span>
-        </div>
-        {workFormats.map(f => (
-          <Badge key={f} variant="secondary" className="text-[10px]">{f}</Badge>
-        ))}
-      </div>
-      {tips.map((t, i) => (
-        <p key={i} className="text-xs text-muted-foreground leading-relaxed">{t.emoji} {t.text}</p>
-      ))}
-    </div>
-  )
-}
-
-// ── Experience Insight Card ─────────────────────────────────────────────────
-
-function ExperienceInsightCard({ level, currentLevel }: { level: string; currentLevel?: string | null }) {
-  const insight = EXPERIENCE_INSIGHTS[level] || EXPERIENCE_INSIGHTS["3-5"]
-  if (!insight) return null
-
-  return (
-    <div className="rounded-lg border p-3 space-y-2">
-      <div className="flex items-center gap-1.5">
-        <Sparkles className="w-3.5 h-3.5 text-primary" />
-        <span className="text-xs font-medium">Опыт: {insight.label}{currentLevel === level ? " (текущий)" : ""}</span>
-      </div>
-      <p className="text-xs text-muted-foreground leading-relaxed">{insight.tip}</p>
-    </div>
-  )
-}
-
-// ── Market Context Card ─────────────────────────────────────────────────────
-
-// ── Title Scoring Card ──────────────────────────────────────────────────────
-
-function TitleScoringCard({ title, context, suggestions, onApply }: {
-  title: string
-  context: { format?: string; city?: string; salaryMin?: number }
-  suggestions: string[]
-  onApply?: (title: string) => void
-}) {
-  if (!title) return null
-
-  const result = scoreVacancyTitle(title, context)
-  const scoreColor = result.score >= 60 ? "text-emerald-600 dark:text-emerald-400"
-    : result.score >= 40 ? "text-amber-600 dark:text-amber-400"
-    : "text-red-600 dark:text-red-400"
-  const barColor = result.score >= 80 ? "bg-emerald-500"
-    : result.score >= 60 ? "bg-emerald-400"
-    : result.score >= 40 ? "bg-amber-500"
-    : "bg-red-500"
-
-  return (
-    <div className="rounded-lg border p-3 space-y-2.5">
-      <div className="flex items-center gap-1.5">
-        <Lightbulb className="w-3.5 h-3.5 text-primary" />
-        <span className="text-xs font-medium">Оценка названия</span>
-      </div>
-
-      <p className="text-xs font-medium text-foreground truncate">&ldquo;{title}&rdquo;</p>
-
-      <div className="flex items-center gap-2">
-        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-          <div className={cn("h-full rounded-full transition-all", barColor)} style={{ width: `${result.score}%` }} />
-        </div>
-        <span className={cn("text-xs font-bold tabular-nums", scoreColor)}>{result.score}/100</span>
-        <Badge variant={result.score >= 60 ? "default" : result.score >= 40 ? "secondary" : "destructive"} className="text-[10px] h-4 px-1.5">
-          {result.label}
-        </Badge>
-      </div>
-
-      <div className="space-y-0.5">
-        {result.checks.map((c, i) => (
-          <div key={i} className="flex items-start gap-1.5">
-            {c.status === "ok" ? (
-              <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0 mt-0.5" />
-            ) : c.status === "error" ? (
-              <XCircle className="w-3 h-3 text-red-500 shrink-0 mt-0.5" />
-            ) : (
-              <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0 mt-0.5" />
-            )}
-            <span className="text-[10px] text-muted-foreground leading-relaxed">{c.text}</span>
-          </div>
-        ))}
-      </div>
-
-      {suggestions.length > 0 && onApply && (
-        <div className="pt-1 border-t space-y-0.5">
-          <span className="text-[10px] font-medium text-muted-foreground">Варианты с высоким откликом:</span>
-          {suggestions.map((s, i) => {
-            const sScore = scoreVacancyTitle(s, context)
-            const sColor = sScore.score >= 60 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
-            return (
-              <button
-                key={i}
-                onClick={() => onApply(s)}
-                className="w-full text-left px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors group"
-              >
-                <span className="text-xs text-blue-800 dark:text-blue-200 underline decoration-dotted underline-offset-2 group-hover:text-blue-600">{s}</span>
-                <span className={cn("text-[10px] font-bold ml-1.5", sColor)}>&rarr; {sScore.score}/100</span>
-              </button>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Seller Profile Card ─────────────────────────────────────────────────────
-
-function SellerProfileCard({ avgDealSize, salesCycle, salesType, targetAudience, currentRequirements, onFillRequirements }: {
-  avgDealSize: string
-  salesCycle: string
-  salesType: string[]
-  targetAudience: string[]
-  currentRequirements: string
-  onFillRequirements?: (text: string) => void
-}) {
-  // Показываем только если заполнено хотя бы одно поле
-  if (!avgDealSize && !salesCycle && salesType.length === 0 && targetAudience.length === 0) return null
-
-  const tips: string[] = []
-  const reqTemplate: string[] = []
-
-  // Средний чек
-  const dealNum = parseInt(avgDealSize.replace(/\D/g, ""))
-  if (dealNum >= 100000) {
-    tips.push("💼 Нужен опыт продаж сложных решений, не FMCG")
-    reqTemplate.push("• Опыт продаж продуктов с чеком от 100к ₽")
-  }
-  if (dealNum >= 500000) {
-    tips.push("🎯 Длинные сделки — нужна системность и работа с CRM")
-    reqTemplate.push("• Опыт продаж enterprise-решений с чеком 500к+")
-  }
-
-  // Цикл сделки
-  const cycleMap: Record<string, string> = {
-    "1-3d": "Быстрые продажи — важна скорость и напор",
-    "1-2w": "Средний цикл — баланс скорости и качества",
-    "1-3m": "Нужна системность и работа с CRM",
-    "3-6m": "Сложные сделки — навыки выстраивания отношений",
-    "6m+": "Enterprise-продажи — опыт C-level переговоров",
-  }
-  if (salesCycle && cycleMap[salesCycle]) {
-    tips.push(`🔄 ${cycleMap[salesCycle]}`)
-    if (salesCycle === "3-6m" || salesCycle === "6m+") {
-      reqTemplate.push("• Опыт длинных сделок (3+ месяцев)")
-    }
-  }
-
-  // ЛПР
-  if (targetAudience.includes("Собственники") || targetAudience.includes("Директора/CEO")) {
-    tips.push("👔 Опыт переговоров C-level / с собственниками")
-    reqTemplate.push("• Опыт ведения переговоров на уровне C-level")
-  }
-
-  // Тип продаж
-  if (salesType.includes("Холодные звонки")) {
-    reqTemplate.push("• Опыт холодных продаж")
-  }
-  if (salesType.includes("Тендеры")) {
-    reqTemplate.push("• Опыт участия в тендерах")
-  }
-
-  if (tips.length === 0) return null
-
-  return (
-    <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
-      <div className="flex items-center gap-1.5">
-        <Sparkles className="w-3.5 h-3.5 text-primary" />
-        <span className="text-xs font-medium text-primary">Профиль продавца</span>
-      </div>
-      <div className="space-y-1">
-        {tips.map((t, i) => (
-          <p key={i} className="text-xs text-foreground leading-relaxed">{t}</p>
-        ))}
-      </div>
-      {onFillRequirements && reqTemplate.length > 0 && (
-        <button
-          type="button"
-          onClick={() => {
-            const combined = currentRequirements
-              ? `${currentRequirements}\n${reqTemplate.join("\n")}`
-              : reqTemplate.join("\n")
-            onFillRequirements(combined)
-          }}
-          className="w-full text-left text-xs px-2 py-1.5 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center justify-center gap-1 mt-1"
-        >
-          <Plus className="w-3 h-3" /> Заполнить требования из профиля
-        </button>
-      )}
-    </div>
-  )
-}
-
-// ── Motivation Analysis Card ────────────────────────────────────────────────
-
-function MotivationAnalysisCard({ salaryMin, salaryMax, bonuses, payFrequency, category, onAppendBonus }: {
-  salaryMin: number
-  salaryMax: number
-  bonuses: string
-  payFrequency: string[]
-  category: string
-  onAppendBonus?: (text: string) => void
-}) {
-  // Don't show if nothing is filled
-  if (!salaryMin && !salaryMax && !bonuses) return null
-
-  const result = analyzeMotivation({ salaryMin: salaryMin || undefined, salaryMax: salaryMax || undefined, bonuses, payFrequency, category })
-
-  const barColor = result.score >= 80 ? "bg-emerald-500"
-    : result.score >= 60 ? "bg-emerald-400"
-    : result.score >= 40 ? "bg-amber-500"
-    : "bg-red-500"
-  const scoreColor = result.score >= 60 ? "text-emerald-600 dark:text-emerald-400"
-    : result.score >= 40 ? "text-amber-600 dark:text-amber-400"
-    : "text-red-600 dark:text-red-400"
-
-  return (
-    <div className="rounded-lg border p-3 space-y-2.5">
-      <div className="flex items-center gap-1.5">
-        <TrendingUp className="w-3.5 h-3.5 text-primary" />
-        <span className="text-xs font-medium">Анализ мотивации</span>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-          <div className={cn("h-full rounded-full transition-all", barColor)} style={{ width: `${result.score}%` }} />
-        </div>
-        <span className={cn("text-xs font-bold tabular-nums", scoreColor)}>{result.score}/100</span>
-      </div>
-
-      <div className="space-y-0.5">
-        {result.checks.map((c, i) => (
-          <div key={i} className="flex items-start gap-1.5">
-            {c.status === "ok" ? (
-              <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0 mt-0.5" />
-            ) : c.status === "error" ? (
-              <XCircle className="w-3 h-3 text-red-500 shrink-0 mt-0.5" />
-            ) : (
-              <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0 mt-0.5" />
-            )}
-            <span className="text-[10px] text-muted-foreground leading-relaxed">{c.text}</span>
-          </div>
-        ))}
-      </div>
-
-      {result.suggestions.length > 0 && onAppendBonus && (
-        <div className="pt-1 border-t space-y-1">
-          <span className="text-[10px] font-medium text-muted-foreground">Добавить в бонусы:</span>
-          {result.suggestions.map((s, i) => (
-            <button
-              key={i}
-              onClick={() => onAppendBonus(s)}
-              className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-colors text-amber-800 dark:text-amber-200 underline decoration-dotted underline-offset-2"
-            >
-              + {s}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// MarketContextCard удалён: содержал незаверенные рыночные цифры без источника.
-
 // ── Best Publish Time Card ──────────────────────────────────────────────────
 // Лучшее время публикации по откликам компании (GET /best-publish-time).
 // Эндпоинт агрегирует hh_responses по дню недели и часу (МСК). Честно помечаем,
@@ -966,50 +903,6 @@ function BestPublishTimeCard({ vacancyId, city }: { vacancyId?: string; city?: s
           </p>
         </>
       )}
-    </div>
-  )
-}
-
-// ── Company Description Card ────────────────────────────────────────────────
-
-function CompanyDescriptionCard({ description }: { description: string }) {
-  // Пустое описание — подсказка с кнопкой заполнения
-  if (!description) {
-    return (
-      <div className="rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 p-3 space-y-2">
-        <div className="flex items-center gap-1.5">
-          <span className="text-sm font-semibold">🏢 О компании</span>
-        </div>
-        <p className="text-sm text-foreground leading-relaxed">
-          ⚠️ Описание компании не заполнено.
-        </p>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Описание компании помогает привлечь мотивированных кандидатов.
-        </p>
-        <a
-          href="/settings/company"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-sm text-primary hover:underline font-medium"
-        >
-          Заполнить в настройках →
-        </a>
-      </div>
-    )
-  }
-
-  // Описание заполнено — компактное подтверждение без повтора текста: само
-  // описание редактируется в блоке «О компании» формы рядом.
-  // AI-блок только оценивает/подсказывает — прямые «изменить» убраны.
-  return (
-    <div className="rounded-lg border p-3 space-y-2">
-      <div className="flex items-center gap-1.5">
-        <span className="text-sm font-semibold">🏢 О компании</span>
-      </div>
-      <div className="flex items-center gap-1.5">
-        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-        <span className="text-xs text-emerald-700 dark:text-emerald-400">Описание заполнено — редактируется в блоке «О компании» формы</span>
-      </div>
     </div>
   )
 }
@@ -1120,6 +1013,8 @@ function SuggestionsPanel({ suggestions, onApply, vacancyData }: {
 }
 
 // ── Section card ─────────────────────────────────────────────────────────────
+// Оставлен для совместимости (не используется в основном рендере, но может
+// импортироваться снаружи или понадобиться в будущем).
 
 function SectionCard({ section, onClick, compact }: {
   section: SectionAnalysis
