@@ -145,9 +145,17 @@ export async function PATCH(req: NextRequest) {
   const current = (company?.hiringDefaultsJson ?? {}) as CompanyHiringDefaults;
   const merged = mergeDefaults(current, patch);
 
+  // ТЗ №1: синк флага мультипродуктовости. Несколько профилей продукта →
+  // companies.is_multi_product = true. Один профиль не трогаем (ТЗ: «можно
+  // оставить как есть»), чтобы не сбрасывать флаг, выставленный иным путём.
+  const companyUpdate: Record<string, unknown> = { hiringDefaultsJson: merged };
+  if (Array.isArray(patch.productProfiles) && patch.productProfiles.length > 1) {
+    companyUpdate.isMultiProduct = true;
+  }
+
   await db
     .update(companies)
-    .set({ hiringDefaultsJson: merged })
+    .set(companyUpdate)
     .where(eq(companies.id, ctx.companyId));
 
   // O3: аудит изменения срока хранения ПДн (ФЗ-152).

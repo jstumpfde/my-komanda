@@ -87,6 +87,8 @@ export interface CompanyBrandingExtra {
   fontFamily?:  string  // "inter" | "manrope" | "ibm-plex" | "roboto"
 }
 
+import type { ProductProfile } from "@/lib/hiring/product-profile"
+
 // ── CompanyHiringDefaults (drizzle/0156) ──
 // Дефолты компании для всех вакансий (HR → Настройки найма).
 // Хранится в companies.hiring_defaults_json. VacancyStopFactors определён ниже
@@ -217,6 +219,10 @@ export interface CompanyHiringDefaults {
     intensity: "vivid" | "pale"
     colors: Record<string, string>
   }
+  // ТЗ №1: профиль продукта/продаж для найма (ручное заполнение). Без миграции —
+  // живёт внутри hiring_defaults_json. Seed для генерации анкет/Портрета — отд. ТЗ.
+  productProfiles?: ProductProfile[]
+  defaultProductProfileId?: string
 }
 
 // ── CompanyLegalContact (drizzle/0177) ──
