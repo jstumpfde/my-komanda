@@ -4059,6 +4059,7 @@ export default function VacancyPage() {
                     vacancyId={id}
                     portraitScoring={(apiVacancy as { portraitScoring?: boolean } | undefined)?.portraitScoring}
                     onAdopted={refetchVacancy}
+                    onNavigateNext={() => { setV2SettingsSub("content"); setActiveTab("content"); window.scrollTo({ top: 0, behavior: "smooth" }) }}
                   />
                 )}
 

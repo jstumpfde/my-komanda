@@ -877,9 +877,11 @@ interface SpecEditorProps {
   portraitScoring?: boolean
   /** Вызвать после успешного «Перенести в Портрет» (рефетч вакансии). */
   onAdopted?: () => void
+  /** «Далее → Контент» — переход на следующий этап. */
+  onNavigateNext?: () => void
 }
 
-export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: SpecEditorProps) {
+export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onNavigateNext }: SpecEditorProps) {
   const [adopting, setAdopting] = useState(false)
   async function adoptPortrait() {
     setAdopting(true)
@@ -1559,6 +1561,25 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
         </ul>
       </div>
 
+      {/* ── Идеальный профиль: производное от «Подходит/Не подходит», только чтение (выше авто-отбора) ── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Target className="w-4 h-4" /> Идеальный профиль
+          </CardTitle>
+          <CardDescription>
+            Эталон-рамка для AI. Собирается автоматически из «Подходит / Не подходит» — менять вручную не нужно.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {spec.idealProfile.trim() ? (
+            <p className="text-sm whitespace-pre-wrap rounded-md border bg-muted/30 px-3 py-2 text-muted-foreground">{spec.idealProfile}</p>
+          ) : (
+            <p className="text-sm text-muted-foreground italic">Заполните «Подходит» и «Не подходит» — профиль соберётся сам.</p>
+          )}
+        </CardContent>
+      </Card>
+
       {/* ── Автоматический отбор по баллу: два независимых действия (отказ / приглашение) ── */}
       <Card>
         <CardHeader className="pb-3">
@@ -1688,30 +1709,25 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
       {/* ── (г) Реалистичность портрета ── */}
       <RealismIndicator spec={spec} />
 
-      {/* ── Идеальный профиль: производное от «Подходит/Не подходит», только чтение ── */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Target className="w-4 h-4" /> Идеальный профиль
-          </CardTitle>
-          <CardDescription>
-            Эталон-рамка для AI. Собирается автоматически из «Подходит / Не подходит» — менять вручную не нужно.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {spec.idealProfile.trim() ? (
-            <p className="text-sm whitespace-pre-wrap rounded-md border bg-muted/30 px-3 py-2 text-muted-foreground">{spec.idealProfile}</p>
-          ) : (
-            <p className="text-sm text-muted-foreground italic">Заполните «Подходит» и «Не подходит» — профиль соберётся сам.</p>
-          )}
-        </CardContent>
-      </Card>
-
       <p className="text-xs text-muted-foreground pt-1">
         Заполненный Портрет используется для AI-оценки откликов (новый контур).
         У вакансий с пустым Портретом действуют прежние настройки воронки.
         Изменения сохраняются общей кнопкой «Сохранить настройки» внизу.
       </p>
+
+      {/* Далее → следующий этап (Контент). Сохраняет Портрет, затем переходит. */}
+      {onNavigateNext && (
+        <div className="flex justify-end pt-1">
+          <Button
+            size="sm"
+            variant="default"
+            className="h-9 text-xs"
+            onClick={async () => { try { await save(); onNavigateNext() } catch { /* ошибку показал save() */ } }}
+          >
+            Далее → Контент
+          </Button>
+        </div>
+      )}
 
       {/* Диалог подтверждения AI-предложения */}
       <SuggestionDialog
