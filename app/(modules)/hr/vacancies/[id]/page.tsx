@@ -80,6 +80,7 @@ import { FinalScreensSettings, type FinalScreensConfig } from "@/components/vaca
 import { RecoveryMessageSettings } from "@/components/vacancies/recovery-message-settings"
 import { FirstMessagesChainEditor } from "@/components/vacancies/first-messages-chain-editor"
 import { FunnelBuilder } from "@/components/vacancies/funnel-builder"
+import { FunnelV2Builder } from "@/components/vacancies/funnel-v2-builder"
 import { SpecEditor } from "@/components/vacancies/spec-editor"
 import { FunnelTab } from "@/components/vacancies/funnel-tab"
 import { MessageQueueSection } from "@/components/vacancies/message-queue-section"
@@ -1018,7 +1019,7 @@ export default function VacancyPage() {
   const rawUrlSection = rawUrlTab === "automation" ? "ai" : (searchParams?.get("section") ?? null)
   // Миграция старых section-значений на новые 6 табов.
   // general → page (стартовая вкладка с брендингом), automation → ai.
-  const SETTINGS_SECTION_IDS = ["page", "sources", "messages", "funnel", "funnel-builder", "spec", "followup", "aichatbot", "ai", "integrations"] as const
+  const SETTINGS_SECTION_IDS = ["page", "sources", "messages", "funnel", "funnel-builder", "funnel-v2", "spec", "followup", "aichatbot", "ai", "integrations"] as const
   type SettingsSectionId = typeof SETTINGS_SECTION_IDS[number]
   // Скрытые legacy-секции: при прямой ссылке (?section=funnel|messages|followup|aichatbot)
   // перенаправляем на funnel-builder — их контент теперь живёт внутри Конструктора воронки.
@@ -2918,6 +2919,7 @@ export default function VacancyPage() {
                   { kind: "section", value: "settings", label: "Портрет",          icon: Target,        section: "spec"           },
                   { kind: "tab",     value: "content" , label: "Контент",          icon: BookOpen,      section: null             },
                   { kind: "section", value: "settings", label: "Воронка",          icon: Workflow,      section: "funnel-builder" },
+                  { kind: "section", value: "settings", label: "Воронка v2",       icon: Workflow,      section: "funnel-v2"      },
                   { kind: "section", value: "settings", label: "Источники",        icon: Link2,         section: "sources"        },
                   { kind: "section", value: "settings", label: "Расписание",       icon: Clock,         section: "ai"             },
                   { kind: "section", value: "settings", label: "Интеграции",       icon: Settings,      section: "integrations"   },
@@ -2942,15 +2944,17 @@ export default function VacancyPage() {
                   s.kind === "tab" ? activeTab === s.value : activeTab === "settings" && settingsSection === s.section
                 // Разбиваем: на lg+ все 10 в строке; на <lg первые 5 видны, 6-10 в «Ещё»
                 // Если активный пункт попал в «скрытые» — добавляем его перед «Ещё» (на мобильных)
+                // «Воронка v2» (beta) — только владельцу (j.stumpf@yandex.ru)
+                const subTabs = settingsSubTabs.filter(s => s.section !== "funnel-v2" || isOwnerEmail(user?.email))
                 const VISIBLE_COUNT_SM = 5
-                const visibleTabs = settingsSubTabs.slice(0, VISIBLE_COUNT_SM)
-                const overflowTabs = settingsSubTabs.slice(VISIBLE_COUNT_SM)
+                const visibleTabs = subTabs.slice(0, VISIBLE_COUNT_SM)
+                const overflowTabs = subTabs.slice(VISIBLE_COUNT_SM)
                 const activeOverflow = overflowTabs.find(getIsActive)
                 return (
                   <div className="mb-4 border-b -mx-4 px-4 sm:mx-0 sm:px-0">
                     {/* lg+: все 10 в одной строке (overflow-x-auto как запасной) */}
                     <div className="hidden lg:flex items-center gap-1 overflow-x-auto">
-                      {settingsSubTabs.map((s) => {
+                      {subTabs.map((s) => {
                         const isActive = getIsActive(s)
                         return (
                           <button
@@ -4050,6 +4054,19 @@ export default function VacancyPage() {
                 {settingsSection === "funnel-builder" && (
                 <div className="space-y-6 max-w-3xl">
                   <FunnelBuilder vacancyId={id} />
+                </div>
+                )}
+
+                {/* ───────── Воронка v2 (beta, только владельцу) ───────── */}
+                {settingsSection === "funnel-v2" && isOwnerEmail(user?.email) && (
+                <div className="space-y-6">
+                  <FunnelV2Builder vacancyId={id} onOpenPortrait={() => {
+                    setSettingsSection("spec")
+                    const sp = new URLSearchParams(window.location.search)
+                    sp.set("tab", "settings"); sp.set("section", "spec")
+                    router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+                    window.scrollTo({ top: 0, behavior: "smooth" })
+                  }} />
                 </div>
                 )}
 
