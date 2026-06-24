@@ -3,12 +3,17 @@ import { db } from "@/lib/db"
 import {pulseResponses, pulseSurveys, notifications} from "@/lib/db/schema"
 import {eq, and, avg, sql} from "drizzle-orm"
 import { checkCronAuth } from "@/lib/cron/auth"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 
 // POST /api/cron/pulse-alerts — scan recent pulse responses for low scores
 // Protected by X-Cron-Secret header.
+
+const CRON_NAME = "pulse-alerts"
+
 export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
+  const run = await startCronRun(CRON_NAME).catch(() => null)
   try {
     // Find all tenants with pulse surveys sent in last 7 days
     const recentSurveys = await db
@@ -67,8 +72,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (run) await finishCronRun(run.id, "ok", { scanned: recentSurveys.length, alertsCreated })
     return NextResponse.json({ scanned: recentSurveys.length, alertsCreated })
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (run) await finishCronRun(run.id, "error", null, msg)
+    console.error("[cron/pulse-alerts]", err)
     return NextResponse.json({ error: "Failed to scan pulse alerts" }, { status: 500 })
   }
 }
