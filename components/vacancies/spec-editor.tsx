@@ -86,6 +86,22 @@ const BAD_KINDS = [
   { hard: false, label: "Минус к баллу", solid: "bg-amber-500" },
 ] as const
 
+/** Локальная сборка «идеального профиля» из структурных списков (без AI) —
+ *  всегда в синхроне с «Подходит/Не подходит». Это эталон-рамка для AI-скоринга. */
+function composeIdealProfile(spec: CandidateSpec): string {
+  const must  = normalizeMustHave(spec.mustHave).map(m => m.text)
+  const wants = normalizeNiceToHave(spec.niceToHave).map(n => n.text)
+  const bad   = normalizeDealBreakers(spec.dealBreakers)
+  const hard  = bad.filter(b => b.hard).map(b => b.text)
+  const soft  = bad.filter(b => !b.hard).map(b => b.text)
+  const parts: string[] = []
+  if (must.length)  parts.push(`Обязательно: ${must.join(", ")}`)
+  if (wants.length) parts.push(`Желательно: ${wants.join(", ")}`)
+  if (hard.length)  parts.push(`Не подходит (отказ): ${hard.join(", ")}`)
+  if (soft.length)  parts.push(`Минус к баллу: ${soft.join(", ")}`)
+  return parts.join(". ").slice(0, 500)
+}
+
 const MID_RANGE_LABELS: Record<MidRangeAction, string> = {
   direct_demo:      "Сразу на демо",
   prequalification: "Предквалификация (AI-вопросы)",
@@ -920,6 +936,15 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
   // Универсальный апдейтер
   const patch = (p: Partial<CandidateSpec>) => setSpec(prev => prev ? { ...prev, ...p } : prev)
 
+  // «Идеальный профиль» — производное поле: авто-собирается из «Подходит/Не
+  // подходит» и держится в синхроне (решение Юрия — обновляется само).
+  useEffect(() => {
+    if (!spec) return
+    const composed = composeIdealProfile(spec)
+    if (composed !== (spec.idealProfile ?? "")) patch({ idealProfile: composed })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spec?.mustHave, spec?.niceToHave, spec?.dealBreakers])
+
   // Веса теперь независимы (Σ=100 снято, решение #4). Сумма нужна лишь для
   // отображения доли каждой оси «%». Движок нормирует на фактическую сумму.
   // ── Сохранение ─────────────────────────────────────────────────────────────
@@ -1225,32 +1250,6 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
           </AlertDescription>
         </Alert>
       )}
-
-      {/* ── (0) Идеальный профиль («Заполнить из вакансии» — в шапке панели) ── */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Target className="w-4 h-4" /> Идеальный профиль
-            </CardTitle>
-            <CardDescription>
-              Короткий эталон в 1–2 фразах — с ним AI сверяет резюме. Детали ниже.
-            </CardDescription>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Textarea
-            value={spec.idealProfile}
-            onChange={e => patch({ idealProfile: e.target.value.slice(0, 500) })}
-            placeholder={IDEAL_PLACEHOLDER}
-            rows={3}
-            maxLength={500}
-          />
-          <p className="text-[11px] text-muted-foreground mt-1.5 text-right">
-            {spec.idealProfile.length}/500
-          </p>
-        </CardContent>
-      </Card>
 
       {/* ── Статус-плашка противоречий (над секциями «Подходит» и «Не подходит») ── */}
       {conflictsResult !== null && (
@@ -1689,6 +1688,25 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
 
       {/* ── (г) Реалистичность портрета ── */}
       <RealismIndicator spec={spec} />
+
+      {/* ── Идеальный профиль: производное от «Подходит/Не подходит», только чтение ── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Target className="w-4 h-4" /> Идеальный профиль
+          </CardTitle>
+          <CardDescription>
+            Эталон-рамка для AI. Собирается автоматически из «Подходит / Не подходит» — менять вручную не нужно.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {spec.idealProfile.trim() ? (
+            <p className="text-sm whitespace-pre-wrap rounded-md border bg-muted/30 px-3 py-2 text-muted-foreground">{spec.idealProfile}</p>
+          ) : (
+            <p className="text-sm text-muted-foreground italic">Заполните «Подходит» и «Не подходит» — профиль соберётся сам.</p>
+          )}
+        </CardContent>
+      </Card>
 
       <p className="text-xs text-muted-foreground pt-1">
         Заполненный Портрет используется для AI-оценки откликов (новый контур).
