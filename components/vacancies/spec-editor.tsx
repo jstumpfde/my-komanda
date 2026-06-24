@@ -814,7 +814,10 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
       idealProfile: editedSuggestion.ideal_profile.slice(0, 500),
       mustHave:     [],
       niceToHave,
-      dealBreakers: editedSuggestion.deal_breakers.slice(0, 10),
+      // Пред-заполнение НЕ создаёт жёстких стоп-факторов: deal_breakers от AI кладём
+      // мягкими (hard:false = минус к баллу, не отказ). Жёсткий отсев HR включает сам,
+      // осознанно — иначе «опыт B2B» зарубит того, кто написал «продавал CRM».
+      dealBreakers: editedSuggestion.deal_breakers.slice(0, 10).map(text => ({ text, hard: false })),
     })
     setSuggestionOpen(false)
     toast.success("Портрет заполнен из вакансии — проверьте и сохраните")
