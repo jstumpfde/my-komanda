@@ -444,12 +444,13 @@ function SuggestionDialog({
 // ─── Блок синонимов под критерием ────────────────────────────────────────────
 
 function SynonymBlock({
-  text, side, vacancyId, onAdd,
+  text, side, vacancyId, onAdd, onAddMany,
 }: {
   text:       string
   side:       "good" | "bad"
   vacancyId:  string
   onAdd:      (synonym: string) => void
+  onAddMany?: (synonyms: string[]) => number
 }) {
   const [state, setState] = useState<SynonymState>({ loading: false, synonyms: [], open: false })
   const [customDraft, setCustomDraft] = useState("")
@@ -483,8 +484,11 @@ function SynonymBlock({
   }
 
   const addAll = () => {
-    state.synonyms.forEach(s => onAdd(s))
-    toast.success(`Добавлено ${state.synonyms.length} вариантов`)
+    // Одним коммитом (иначе stale-замыкание перезапишет всё, кроме последнего).
+    const n = onAddMany
+      ? onAddMany(state.synonyms)
+      : (state.synonyms.forEach(s => onAdd(s)), state.synonyms.length)
+    toast.success(n > 0 ? `Добавлено вариантов: ${n}` : "Все варианты уже добавлены")
     setState(s => ({ ...s, open: false }))
   }
 
@@ -617,6 +621,22 @@ function GoodEditor({
     commit(updated)
   }
 
+  /** Добавить несколько синонимов ОДНИМ коммитом (дедуп). Возвращает добавленное. */
+  const addSynonymsToRow = (i: number, syns: string[]): number => {
+    const row = rows[i]
+    if (!row) return 0
+    const existing = row.text.toLowerCase()
+    const seen = new Set<string>()
+    const toAdd = syns.filter(s => {
+      const k = s.trim().toLowerCase()
+      if (!k || existing.includes(k) || seen.has(k)) return false
+      seen.add(k); return true
+    })
+    if (toAdd.length === 0) return 0
+    commit(rows.map((r, idx) => idx === i ? { ...r, text: `${r.text}, ${toAdd.join(", ")}` } : r))
+    return toAdd.length
+  }
+
   return (
     <div className="space-y-2.5">
       <div className="flex items-baseline justify-between">
@@ -665,6 +685,7 @@ function GoodEditor({
               side="good"
               vacancyId={vacancyId}
               onAdd={syn => addSynonymToRow(i, syn)}
+              onAddMany={syns => addSynonymsToRow(i, syns)}
             />
           </div>
         ))}
@@ -717,6 +738,22 @@ function BadEditor({
     onChange(rows.map((r, idx) => idx === i ? { ...r, text: `${r.text}, ${syn}` } : r))
   }
 
+  /** Добавить несколько синонимов ОДНИМ onChange (дедуп). Возвращает добавленное. */
+  const addSynonymsToRow = (i: number, syns: string[]): number => {
+    const row = rows[i]
+    if (!row) return 0
+    const existing = row.text.toLowerCase()
+    const seen = new Set<string>()
+    const toAdd = syns.filter(s => {
+      const k = s.trim().toLowerCase()
+      if (!k || existing.includes(k) || seen.has(k)) return false
+      seen.add(k); return true
+    })
+    if (toAdd.length === 0) return 0
+    onChange(rows.map((r, idx) => idx === i ? { ...r, text: `${r.text}, ${toAdd.join(", ")}` } : r))
+    return toAdd.length
+  }
+
   return (
     <div className="space-y-2">
       <div className="flex items-baseline justify-between">
@@ -759,6 +796,7 @@ function BadEditor({
               side="bad"
               vacancyId={vacancyId}
               onAdd={syn => addSynonymToRow(i, syn)}
+              onAddMany={syns => addSynonymsToRow(i, syns)}
             />
           </div>
         ))}

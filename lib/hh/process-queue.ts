@@ -320,9 +320,10 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
     // Мягкое письмо отказа из «Портрета» (spec.rejectLetter) — уходит при авто-отказе.
     let rejectLetterText: string | null = null
     // Авто-приглашение (spec.resumeThresholds.autoInviteEnabled, контур «Портрет»):
-    // по умолчанию true — приглашение уходит как раньше. Выкл — сильных/прошедших
-    // середину не зовём сами, паркуем на ручной разбор (независимо от авто-отказа).
-    let autoInviteOn = true
+    // по умолчанию ВЫКЛ (решение Юрия) — сильных/прошедших середину НЕ зовём сами,
+    // паркуем на ручной разбор. Приглашаем только при явном autoInviteEnabled===true
+    // (undefined/отсутствие ключа = ВЫКЛ — согласовано с UI `?? false` и zod-дефолтом).
+    let autoInviteOn = false
     // Куда зовём при авто-приглашении (spec.resumeThresholds.inviteNextStep).
     let inviteNextStep: "demo" | "interview" | "video" | "call" = "demo"
 
@@ -655,7 +656,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                 if (portraitOn && spec) botClarifyOn = spec.botClarifyAmbiguous === true
                 if (portraitOn && spec) rejectLetterText = spec.rejectLetter?.trim() || null
                 if (portraitOn && spec?.resumeThresholds) {
-                  autoInviteOn   = spec.resumeThresholds.autoInviteEnabled !== false
+                  autoInviteOn   = spec.resumeThresholds.autoInviteEnabled === true
                   inviteNextStep = spec.resumeThresholds.inviteNextStep ?? "demo"
                 }
               } catch (specErr) {

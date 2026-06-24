@@ -69,6 +69,7 @@ interface UseContentBlocksResult {
   error: string | null
   createBlock: (contentType: ContentType, title: string) => Promise<ContentBlock | null>
   updateBlock: (id: string, patch: BlockPatch) => void
+  flush: (id?: string) => void
   saveSettings: (id: string, settings: Record<string, unknown>) => Promise<void>
   deleteBlock: (id: string) => Promise<boolean>
   reorder: (idsInOrder: string[]) => Promise<void>
@@ -209,6 +210,17 @@ export function useContentBlocks(vacancyId: string | null): UseContentBlocksResu
     }
   }, [persistUpdate])
 
+  // Немедленно сохранить накопленные (дебаунс) патчи — напр. перед уходом с таба,
+  // чтобы последние правки не потерялись при размонтировании.
+  const flush = useCallback((id?: string) => {
+    const ids = id ? [id] : Object.keys(pendingPatches.current)
+    for (const i of ids) {
+      if (debounceRefs.current[i]) { clearTimeout(debounceRefs.current[i]); delete debounceRefs.current[i] }
+      const accumulated = pendingPatches.current[i]
+      if (accumulated) { delete pendingPatches.current[i]; persistUpdate(i, accumulated) }
+    }
+  }, [persistUpdate])
+
   const deleteBlock = useCallback(async (id: string): Promise<boolean> => {
     try {
       const res = await fetch(`/api/modules/hr/demos/${id}`, { method: "DELETE" })
@@ -301,5 +313,5 @@ export function useContentBlocks(vacancyId: string | null): UseContentBlocksResu
     }).then(r => { if (!r.ok) throw new Error() }).catch(() => toast.error("Не удалось сохранить «боевой» статус блока"))
   }, [blocks])
 
-  return { blocks, loading, error, createBlock, updateBlock, saveSettings, deleteBlock, reorder, setLiveBattle }
+  return { blocks, loading, error, createBlock, updateBlock, flush, saveSettings, deleteBlock, reorder, setLiveBattle }
 }

@@ -9,9 +9,6 @@ import {
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
-} from "@/components/ui/dialog"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Loader2, Plus, Pencil, Trash2, Sparkles, FileText, AlertCircle, Save, BookOpen, Eye, Check, Download, ChevronDown, ChevronRight, FilePlus, Zap, Clapperboard } from "lucide-react"
@@ -79,7 +76,7 @@ interface ContentBlocksTabProps {
 }
 
 export function ContentBlocksTab({ vacancyId, onNavigateNext }: ContentBlocksTabProps) {
-  const { blocks, loading, error, createBlock: apiCreateBlock, updateBlock, saveSettings, deleteBlock, reorder, setLiveBattle } = useContentBlocks(vacancyId)
+  const { blocks, loading, error, createBlock: apiCreateBlock, updateBlock, flush, saveSettings, deleteBlock, reorder, setLiveBattle } = useContentBlocks(vacancyId)
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
@@ -236,18 +233,14 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext }: ContentBlocksTab
     }
   }, [setLiveBattle])
 
-  // Смена роли блока Демо↔Тест прямо в редакторе (вместо отдельного типа при
-  // создании). Тест-блок (contentType='test') синкается в demos kind='test' —
-  // это боевой тест кандидату; поэтому при переводе в «Тест», если боевого
-  // теста ещё нет, делаем этот блок боевым (как было при создании через диалог).
-  const handleChangeContentType = useCallback(async (block: ContentBlock, type: ContentType) => {
+  // Смена роли блока Демо↔Тест прямо в редакторе. Меняем ТОЛЬКО тип; отправку
+  // кандидату («Боевой») HR включает отдельным тумблером рядом. Так нет гонки
+  // двух PUT и неверного сброса «боевого» у чужой группы (тест-блок синкается в
+  // demos kind='test' уже на свежем contentType при включении «Боевой»).
+  const handleChangeContentType = useCallback((block: ContentBlock, type: ContentType) => {
     if (block.contentType === type) return
     updateBlock(block.id, { contentType: type })
-    if (type === "test" || type === "task") {
-      const hasOtherLive = blocks.some(b => b.id !== block.id && (b.contentType === "test" || b.contentType === "task") && b.isLiveBattle)
-      if (!hasOtherLive) await setLiveBattle(block.id, true)
-    }
-  }, [updateBlock, blocks, setLiveBattle])
+  }, [updateBlock])
 
   // --- Render ---
 
@@ -565,7 +558,7 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext }: ContentBlocksTab
                 size="sm"
                 variant="default"
                 className="gap-1.5 text-xs h-8"
-                onClick={() => { if (saveStatus === "saving") editorRef.current?.save(); onNavigateNext() }}
+                onClick={() => { flush(); onNavigateNext?.() }}
               >
                 {saveStatus === "saving" ? "Сохранить и далее" : "Далее"}
                 <ChevronRight className="w-3.5 h-3.5" />
@@ -749,65 +742,3 @@ function LiveBattleToggle({ block, allBlocks, onToggle }: LiveBattleToggleProps)
  *  (создаётся как presentation с пред-засеянным stories-блоком). */
 type PickerChoice = ContentType | "stories" | "pdf"
 
-interface BlockTypePickerDialogProps {
-  open: boolean
-  onClose: () => void
-  onCreate: (choice: PickerChoice) => void
-}
-
-function BlockTypePickerDialog({ open, onClose, onCreate }: BlockTypePickerDialogProps) {
-  return (
-    <Dialog open={open} onOpenChange={v => { if (!v) onClose() }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Тип блока</DialogTitle>
-          <DialogDescription>
-            Выберите тип нового блока контента
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid grid-cols-2 gap-3 pt-2">
-          <button
-            onClick={() => onCreate("presentation")}
-            className="flex flex-col items-center gap-2 rounded-xl border border-border p-4 hover:bg-blue-50 dark:hover:bg-blue-950/20 hover:border-blue-300 dark:hover:border-blue-700 transition-colors text-center"
-          >
-            <span className="text-2xl">🎯</span>
-            <div>
-              <p className="text-sm font-semibold text-blue-700 dark:text-blue-400">Демонстрация</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Рассказываете о вакансии и компании</p>
-            </div>
-          </button>
-          <button
-            onClick={() => onCreate("pdf")}
-            className="flex flex-col items-center gap-2 rounded-xl border border-border p-4 hover:bg-sky-50 dark:hover:bg-sky-950/20 hover:border-sky-300 dark:hover:border-sky-700 transition-colors text-center"
-          >
-            <span className="text-2xl">📑</span>
-            <div>
-              <p className="text-sm font-semibold text-sky-700 dark:text-sky-400">PDF презентация</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Загрузите PDF — каждая страница станет слайдом, точно как в исходнике</p>
-            </div>
-          </button>
-          <button
-            onClick={() => onCreate("test")}
-            className="flex flex-col items-center gap-2 rounded-xl border border-border p-4 hover:bg-amber-50 dark:hover:bg-amber-950/20 hover:border-amber-300 dark:hover:border-amber-700 transition-colors text-center"
-          >
-            <span className="text-2xl">📝</span>
-            <div>
-              <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Тест</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Задания и вопросы для кандидата</p>
-            </div>
-          </button>
-          <button
-            onClick={() => onCreate("stories")}
-            className="flex flex-col items-center gap-2 rounded-xl border border-border p-4 hover:bg-fuchsia-50 dark:hover:bg-fuchsia-950/20 hover:border-fuchsia-300 dark:hover:border-fuchsia-700 transition-colors text-center"
-          >
-            <Clapperboard className="w-6 h-6 text-fuchsia-600 dark:text-fuchsia-400" />
-            <div>
-              <p className="text-sm font-semibold text-fuchsia-700 dark:text-fuchsia-400">Сторис</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Видео/фото на весь экран, как в соцсетях</p>
-            </div>
-          </button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
-}
