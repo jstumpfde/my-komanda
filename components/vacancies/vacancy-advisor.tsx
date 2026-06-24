@@ -264,8 +264,12 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
     ? result.score < 40 ? "[&>div]:bg-red-500" : result.score < 70 ? "[&>div]:bg-amber-500" : "[&>div]:bg-emerald-500"
     : ""
 
-  const errors = result?.sections.filter(s => s.status === "error") || []
-  const warnings = result?.sections.filter(s => s.status === "warning") || []
+  // Темы с собственной карточкой выше (название/зарплата/компания) НЕ дублируем
+  // в списках «Критично/Рекомендации» — иначе одно и то же оценивается дважды
+  // и противоречит (название «90/100 🟢» сверху и «перегружено 🟠» снизу).
+  const CARDED_TOPICS = new Set(["title"]) // пока de-dup только название; зарплата/компания — следующим шагом
+  const errors = result?.sections.filter(s => s.status === "error" && !CARDED_TOPICS.has(s.id)) || []
+  const warnings = result?.sections.filter(s => s.status === "warning" && !CARDED_TOPICS.has(s.id)) || []
   const oks = result?.sections.filter(s => s.status === "ok") || []
 
   // Detect experience level from stop factors
@@ -672,65 +676,56 @@ function TitleScoringCard({ title, context, suggestions, onApply }: {
   if (!title) return null
 
   const result = scoreVacancyTitle(title, context)
-  const scoreColor = result.score >= 60 ? "text-emerald-600 dark:text-emerald-400"
-    : result.score >= 40 ? "text-amber-600 dark:text-amber-400"
-    : "text-red-600 dark:text-red-400"
-  const barColor = result.score >= 80 ? "bg-emerald-500"
-    : result.score >= 60 ? "bg-emerald-400"
-    : result.score >= 40 ? "bg-amber-500"
-    : "bg-red-500"
+  // Подложка под балл — бледная, цвет по числу (≥75 зелёная, ≥40 янтарная, ниже красная), без рамки.
+  const scoreBg = result.score >= 75 ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
+    : result.score >= 40 ? "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"
+    : "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300"
+  const issues = result.checks.filter(c => c.status !== "ok")
 
   return (
-    <div className="rounded-lg border p-3 space-y-2.5">
-      <div className="flex items-center gap-1.5">
-        <Lightbulb className="w-3.5 h-3.5 text-primary" />
-        <span className="text-xs font-medium">Оценка названия</span>
+    <div className="rounded-lg border p-3 space-y-2">
+      {/* Заголовок темы + балл на бледной подложке (цвет по числу), без рамки */}
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5 text-xs font-medium">
+          <Lightbulb className="w-3.5 h-3.5 text-primary" />Оценка названия
+        </span>
+        <span className="flex items-baseline gap-1.5 shrink-0">
+          <span className={cn("text-sm font-medium tabular-nums px-2 py-0.5 rounded", scoreBg)}>{result.score}/100</span>
+          <span className="text-[10px] text-muted-foreground">{result.label}</span>
+        </span>
       </div>
 
-      <p className="text-xs font-medium text-foreground truncate">&ldquo;{title}&rdquo;</p>
-
-      <div className="flex items-center gap-2">
-        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-          <div className={cn("h-full rounded-full transition-all", barColor)} style={{ width: `${result.score}%` }} />
+      {/* Замечание (что улучшить) — вместо списка галочек */}
+      {issues.length > 0 ? (
+        <div className="space-y-1">
+          {issues.map((c, i) => (
+            <div key={i} className="flex items-start gap-1.5">
+              {c.status === "error"
+                ? <XCircle className="w-3 h-3 text-red-500 shrink-0 mt-0.5" />
+                : <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0 mt-0.5" />}
+              <span className="text-[11px] text-muted-foreground leading-relaxed">{c.text}</span>
+            </div>
+          ))}
         </div>
-        <span className={cn("text-xs font-bold tabular-nums", scoreColor)}>{result.score}/100</span>
-        <Badge variant={result.score >= 60 ? "default" : result.score >= 40 ? "secondary" : "destructive"} className="text-[10px] h-4 px-1.5">
-          {result.label}
-        </Badge>
-      </div>
+      ) : (
+        <p className="text-[11px] text-muted-foreground">Название выглядит хорошо.</p>
+      )}
 
-      <div className="space-y-0.5">
-        {result.checks.map((c, i) => (
-          <div key={i} className="flex items-start gap-1.5">
-            {c.status === "ok" ? (
-              <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0 mt-0.5" />
-            ) : c.status === "error" ? (
-              <XCircle className="w-3 h-3 text-red-500 shrink-0 mt-0.5" />
-            ) : (
-              <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0 mt-0.5" />
-            )}
-            <span className="text-[10px] text-muted-foreground leading-relaxed">{c.text}</span>
-          </div>
-        ))}
-      </div>
-
+      {/* Варианты — с новой строки, чипами */}
       {suggestions.length > 0 && onApply && (
-        <div className="pt-1 border-t space-y-0.5">
-          <span className="text-[10px] font-medium text-muted-foreground">Варианты с высоким откликом:</span>
-          {suggestions.map((s, i) => {
-            const sScore = scoreVacancyTitle(s, context)
-            const sColor = sScore.score >= 60 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
-            return (
+        <div className="pt-1.5 border-t">
+          <span className="text-[10px] font-medium text-muted-foreground">Варианты:</span>
+          <div className="flex flex-wrap gap-1.5 mt-1">
+            {suggestions.map((s, i) => (
               <button
                 key={i}
                 onClick={() => onApply(s)}
-                className="w-full text-left px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors group"
+                className="text-[11px] px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-200 hover:bg-blue-100 dark:hover:bg-blue-950/50 transition-colors"
               >
-                <span className="text-xs text-blue-800 dark:text-blue-200 underline decoration-dotted underline-offset-2 group-hover:text-blue-600">{s}</span>
-                <span className={cn("text-[10px] font-bold ml-1.5", sColor)}>&rarr; {sScore.score}/100</span>
+                {s}
               </button>
-            )
-          })}
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -1137,7 +1132,7 @@ function SectionCard({ section, onClick, compact }: {
           <div className="flex items-center gap-1.5">
             <span className="text-xs font-medium">{section.title}</span>
             {isAiField && section.status !== "ok" && (
-              <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 shrink-0">AI-скрининг</Badge>
+              <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 shrink-0">в Портрете</Badge>
             )}
           </div>
           {!compact && section.status !== "ok" && (

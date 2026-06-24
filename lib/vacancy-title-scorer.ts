@@ -20,17 +20,21 @@ export function scoreVacancyTitle(
   let score = 0
   const checks: TitleCheck[] = []
 
-  // 1. Длина (оптимум 25-65 символов) — до 15 баллов
+  // 1. Длина (оптимум 25-48 символов) — до 15 баллов. Длиннее — хуже для hh:
+  //    в листинге обрезается, перегруженные заголовки хуже читаются.
   const len = title.length
-  if (len >= 25 && len <= 65) {
+  if (len >= 25 && len <= 48) {
     score += 15
     checks.push({ status: "ok", text: `Длина ${len} — оптимально` })
   } else if (len >= 15 && len < 25) {
     score += 8
-    checks.push({ status: "warning", text: `Короткое (${len}). Рекомендуем 30-60 символов` })
+    checks.push({ status: "warning", text: `Короткое (${len}). Рекомендуем 30-45 символов` })
+  } else if (len > 48 && len <= 65) {
+    score += 4
+    checks.push({ status: "warning", text: `Длинновато (${len} симв.) — на hh короче работает лучше, сократите до 40–45` })
   } else if (len > 65) {
-    score += 5
-    checks.push({ status: "warning", text: `Длинное (${len}). Может обрезаться в поиске hh.ru` })
+    score += 2
+    checks.push({ status: "warning", text: `Слишком длинное (${len}) — обрежется в поиске hh.ru` })
   } else {
     checks.push({ status: "error", text: `Слишком короткое (${len})` })
   }
