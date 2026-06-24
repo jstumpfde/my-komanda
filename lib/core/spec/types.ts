@@ -100,12 +100,12 @@ export const ResumeThresholdsSchema = z.object({
   autoRejectEnabled: z.boolean().default(false),
   /**
    * Авто-приглашение: сильных (score >= upper) и прошедших середину система
-   * сама зовёт на следующий этап. По умолчанию ВКЛ (сохраняет прежнее
-   * поведение — приглашение всегда уходило). Выкл — кандидат не зовётся
-   * автоматически, остаётся на ручной разбор HR. Независим от autoRejectEnabled:
+   * сама зовёт на следующий этап. По умолчанию ВЫКЛ (решение Юрия): сильный
+   * кандидат не зовётся автоматически, остаётся на ручной разбор HR — чтобы
+   * никого не пригласить вслепую. Независим от autoRejectEnabled:
    * можно отказывать, но не приглашать (и наоборот).
    */
-  autoInviteEnabled: z.boolean().default(true),
+  autoInviteEnabled: z.boolean().default(false),
   /**
    * Куда зовём при авто-приглашении:
    *   demo      — демо-страница (дефолт, текущее поведение)
@@ -118,9 +118,9 @@ export const ResumeThresholdsSchema = z.object({
   inviteNextStep: z.enum(["demo", "interview", "video", "call"]).default("demo"),
   /**
    * Задержка отказа в минутах. 0 = мгновенно.
-   * Дефолт 300 (5 ч) — утренний отклик → отказ к обеду.
+   * Дефолт 60 (1 ч) — решение Юрия.
    */
-  rejectionDelayMinutes: z.number().int().min(0).default(300),
+  rejectionDelayMinutes: z.number().int().min(0).default(60),
 })
 export type ResumeThresholds = z.infer<typeof ResumeThresholdsSchema>
 

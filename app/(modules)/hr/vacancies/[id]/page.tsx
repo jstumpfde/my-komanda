@@ -4225,6 +4225,20 @@ export default function VacancyPage() {
                     sections={["dialer"] satisfies AutomationSectionId[]}
                     tabKey="integrations"
                   />
+
+                  {/* Далее → следующий под-раздел настроек (Брендинг) */}
+                  <div className="flex justify-end pt-1">
+                    <Button size="sm" variant="default" className="gap-1.5 h-9 text-xs" onClick={() => {
+                      setSettingsSection("page")
+                      const sp = new URLSearchParams(window.location.search)
+                      sp.set("tab", "settings"); sp.set("section", "page")
+                      router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+                      window.scrollTo({ top: 0, behavior: "smooth" })
+                    }}>
+                      Далее → Брендинг
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
                 </div>
                 )}
 

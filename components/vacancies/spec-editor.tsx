@@ -1554,11 +1554,11 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
             </div>
             <div className="rounded-md border border-amber-400/40 bg-amber-500/10 py-2">
               <div className="font-bold text-amber-600 dark:text-amber-400">{rt.lowerThreshold}–{Math.max(rt.lowerThreshold, rt.upperThreshold - 1)}</div>
-              <div className="text-muted-foreground">{!(rt.autoInviteEnabled ?? true) ? "ручной разбор" : spec.botClarifyAmbiguous ? "уточнить ботом" : "на демо"}</div>
+              <div className="text-muted-foreground">{!(rt.autoInviteEnabled ?? false) ? "ручной разбор" : spec.botClarifyAmbiguous ? "уточнить ботом" : "на демо"}</div>
             </div>
-            <div className={cn("rounded-md border py-2", (rt.autoInviteEnabled ?? true) ? "border-emerald-400/40 bg-emerald-500/10" : "border-border bg-muted/30")}>
-              <div className={cn("font-bold", (rt.autoInviteEnabled ?? true) ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>≥ {rt.upperThreshold}</div>
-              <div className="text-muted-foreground">{(rt.autoInviteEnabled ?? true) ? (NEXT_STEP_LABEL[rt.inviteNextStep ?? "demo"] ?? "приглашение") : "ручной разбор"}</div>
+            <div className={cn("rounded-md border py-2", (rt.autoInviteEnabled ?? false) ? "border-emerald-400/40 bg-emerald-500/10" : "border-border bg-muted/30")}>
+              <div className={cn("font-bold", (rt.autoInviteEnabled ?? false) ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>≥ {rt.upperThreshold}</div>
+              <div className="text-muted-foreground">{(rt.autoInviteEnabled ?? false) ? (NEXT_STEP_LABEL[rt.inviteNextStep ?? "demo"] ?? "приглашение") : "ручной разбор"}</div>
             </div>
           </div>
 
@@ -1594,6 +1594,9 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
                   onChange={e => patch({ resumeThresholds: { ...rt, rejectionDelayMinutes: Math.max(0, Number(e.target.value) || 0) } })}
                   className="w-24 h-8 text-sm"
                 />
+                {rt.rejectionDelayMinutes >= 60 && (
+                  <span className="text-[11px] text-muted-foreground">= {Math.floor(rt.rejectionDelayMinutes / 60)} ч{rt.rejectionDelayMinutes % 60 ? ` ${rt.rejectionDelayMinutes % 60} мин` : ""}</span>
+                )}
                 <span className="text-[11px] text-muted-foreground">не сразу — время передумать</span>
               </div>
               <div className="space-y-1.5">
@@ -1617,11 +1620,11 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted }: S
                 <p className="text-[11px] text-muted-foreground mt-0.5">Балл ≥ {rt.upperThreshold} → система сама зовёт дальше. Выкл — сильные ждут вашего решения.</p>
               </div>
               <Switch
-                checked={rt.autoInviteEnabled ?? true}
+                checked={rt.autoInviteEnabled ?? false}
                 onCheckedChange={v => patch({ resumeThresholds: { ...rt, autoInviteEnabled: v, enabled: true } })}
               />
             </div>
-            {(rt.autoInviteEnabled ?? true) && (<>
+            {(rt.autoInviteEnabled ?? false) && (<>
               <div className="space-y-1.5">
                 <div className="flex items-baseline justify-between">
                   <Label className="text-xs">Порог приглашения (выше балл — приглашаем)</Label>
