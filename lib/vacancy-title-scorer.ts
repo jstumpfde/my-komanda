@@ -55,7 +55,7 @@ export function scoreVacancyTitle(
   }
 
   // 3. Формат работы — до 15 баллов
-  if (/удалён|remote/i.test(title)) {
+  if (/удал[её]н|remote/i.test(title)) {
     score += 15
     checks.push({ status: "ok", text: "Указан формат работы (удалённо)" })
   } else if (/офис|гибрид|hybrid/i.test(title)) {

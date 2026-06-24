@@ -2537,8 +2537,8 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
           Сохранить
         </Button>
         {onNavigateTab && (
-          <Button size="sm" variant="default" className="gap-1.5 h-9 text-xs" onClick={async () => { await save(); onNavigateTab("course") }} disabled={saving}>
-            Далее &rarr; Демонстрация
+          <Button size="sm" variant="default" className="gap-1.5 h-9 text-xs" onClick={async () => { await save(); onNavigateTab("spec") }} disabled={saving}>
+            Далее &rarr; Портрет
           </Button>
         )}
       </div>

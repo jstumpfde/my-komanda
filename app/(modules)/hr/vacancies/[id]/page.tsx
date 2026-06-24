@@ -3043,7 +3043,19 @@ export default function VacancyPage() {
                   aiQualityAnalyzedAt={(apiVacancy as { aiQualityAnalyzedAt?: string | null } | undefined)?.aiQualityAnalyzedAt ?? null}
                   portraitScoring={(apiVacancy as { portraitScoring?: boolean } | undefined)?.portraitScoring}
                   onTitleChange={(t) => { if (t) setInternalName(t) }}
-                  onNavigateTab={(tab) => { setActiveTab(tab); window.scrollTo({ top: 0, behavior: "smooth" }) }}
+                  onNavigateTab={(tab) => {
+                    // «Далее → Портрет»: Портрет — это section «spec» внутри «Настроек», не верхний таб.
+                    if (tab === "spec") {
+                      setActiveTab("settings")
+                      setSettingsSection("spec")
+                      const sp = new URLSearchParams(window.location.search)
+                      sp.set("tab", "settings"); sp.set("section", "spec")
+                      router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+                    } else {
+                      setActiveTab(tab)
+                    }
+                    window.scrollTo({ top: 0, behavior: "smooth" })
+                  }}
                   onScoreChange={setAdvisorScore}
                   onSavingChange={setAnketaSaving}
                   registerHandle={registerAnketaHandle}
