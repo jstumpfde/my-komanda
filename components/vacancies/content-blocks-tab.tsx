@@ -747,7 +747,7 @@ function BlockTypePickerDialog({ open, onClose, onCreate }: BlockTypePickerDialo
             <Clapperboard className="w-6 h-6 text-fuchsia-600 dark:text-fuchsia-400" />
             <div>
               <p className="text-sm font-semibold text-fuchsia-700 dark:text-fuchsia-400">Сторис</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Короткие вертикальные видео/фото на весь экран, как в соцсетях</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Видео/фото на весь экран, как в соцсетях</p>
             </div>
           </button>
         </div>
