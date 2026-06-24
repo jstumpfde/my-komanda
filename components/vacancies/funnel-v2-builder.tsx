@@ -103,7 +103,7 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose }: {
   const isInterview = stage.action === "interview"
   const isScoring = SCORING_ACTIONS.includes(stage.action)
   const isContent = CONTENT_ACTIONS.includes(stage.action)
-  const chain: DozhimTouch[] = stage.dozhimChain ?? dozhimChainFor(stage.dozhim)
+  const chain: DozhimTouch[] = stage.dozhimChain ?? dozhimChainFor(stage.dozhim, stage.action)
 
   const patch = (p: Partial<FunnelV2Stage>) => onChange({ ...stage, ...p })
   const patchRule = (p: Partial<FunnelV2Stage["rule"]>) => onChange({ ...stage, rule: { ...stage.rule, ...p } })
@@ -125,7 +125,8 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose }: {
             <span className="hidden sm:inline">{expanded ? "Свернуть" : "На весь экран"}</span>
           </button>
         </SheetHeader>
-        <SheetBody className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+        <SheetBody className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="mx-auto w-full max-w-3xl space-y-5">
 
           {/* Действие */}
           <section className="space-y-2">
@@ -147,8 +148,14 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose }: {
           <section className="space-y-2 border-t pt-4">
             <Label className="text-sm font-medium flex items-center gap-1.5"><Link2 className="w-4 h-4" /> Сообщение / контент</Label>
             <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Сообщение кандидату (пресет / текст)</Label>
-              <Input value={stage.messagePresetId ?? ""} onChange={e => patch({ messagePresetId: e.target.value || null })} placeholder="напр. «Приветствие» или текст" className="h-8 text-sm" />
+              <Label className="text-[11px] text-muted-foreground">Сообщение кандидату (текст)</Label>
+              <Textarea value={stage.messagePresetId ?? ""} onChange={e => patch({ messagePresetId: e.target.value || null })} placeholder="напр. «Добрый день, {{name}}! …»" rows={3} className="text-sm" />
+              <div className="flex flex-wrap gap-1 pt-0.5">
+                {["{{name}}", (stage.action === "test" || stage.action === "task") ? "{{test_link}}" : "{{demo_link}}", "{{vacancy}}", "{{company}}"].map(ph => (
+                  <button key={ph} type="button" onClick={() => patch({ messagePresetId: `${stage.messagePresetId ?? ""}${ph}` })} className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:bg-muted/50 font-mono">{ph}</button>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground/70"><b className="font-mono">{(stage.action === "test" || stage.action === "task") ? "{{test_link}}" : "{{demo_link}}"}</b> — индивидуальная ссылка кандидату, формируется автоматически.</p>
             </div>
             {isContent && (
               <div className="space-y-1">
@@ -212,7 +219,7 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose }: {
             </div>
             <div className="flex gap-1">
               {DOZHIM_OPTS.map(d => (
-                <button key={d} type="button" onClick={() => onChange({ ...stage, dozhim: d, dozhimChain: dozhimChainFor(d) })}
+                <button key={d} type="button" onClick={() => onChange({ ...stage, dozhim: d, dozhimChain: dozhimChainFor(d, stage.action) })}
                   className={cn("text-[11px] px-2 py-1 rounded-md border flex-1", stage.dozhim === d ? "bg-blue-500/10 border-blue-400 text-blue-700 dark:text-blue-300 font-medium" : "border-border text-muted-foreground hover:bg-muted/50")}>{DOZHIM_LABEL[d]}</button>
               ))}
             </div>
@@ -271,6 +278,7 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose }: {
               <Input value={stage.title ?? ""} onChange={e => patch({ title: e.target.value || undefined })} placeholder={meta.label} className="h-8 text-sm" />
             </div>
           </section>
+        </div>
         </SheetBody>
         <SheetFooter className="px-5 py-3 border-t">
           <button onClick={onClose} className="w-full rounded-md bg-primary text-primary-foreground py-2 text-sm font-medium hover:bg-primary/90 inline-flex items-center justify-center gap-1.5"><Check className="w-4 h-4" /> Готово</button>

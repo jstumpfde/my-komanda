@@ -4,6 +4,9 @@
 // Хранение: vacancy.descriptionJson.funnelV2 (jsonb, без миграции).
 // Фаза 1 — КОНСТРУКТОР (настраиваешь и видишь); рантайм (исполнение) — позже.
 
+import { FOLLOWUP_PRESETS, type FollowUpPreset } from "@/lib/followup/presets"
+import { DEFAULT_FOLLOWUP_NOT_OPENED, DEFAULT_TEST_NOT_OPENED } from "@/lib/followup/default-messages"
+
 export type StageActionType =
   | "message"          // просто сообщение/касание
   | "prequalification" // AI-вопросы перед демо
@@ -40,22 +43,16 @@ export const DOZHIM_LABEL: Record<DozhimPreset, string> = {
 /** Одно касание цепочки дожима — свой текст и через сколько дней слать. */
 export interface DozhimTouch { text: string; delayDays: number }
 
-/** Дефолтные цепочки касаний по пресету (тексты редактируются на стадии). */
-const DOZHIM_PRESETS: Record<DozhimPreset, DozhimTouch[]> = {
-  off: [],
-  soft: [{ text: "Напоминаем — будем рады вашему ответу 🙂", delayDays: 2 }],
-  standard: [
-    { text: "Напоминаем — посмотрите, это пара минут 🙂", delayDays: 1 },
-    { text: "Если вакансия неактуальна — дайте знать, спасибо!", delayDays: 3 },
-  ],
-  strong: [
-    { text: "Добрый день! Ждём вашего ответа по вакансии.", delayDays: 1 },
-    { text: "Напоминаем о себе — будем рады продолжить 🙂", delayDays: 2 },
-    { text: "Последнее напоминание: вакансия ещё открыта.", delayDays: 4 },
-  ],
-}
-export function dozhimChainFor(preset: DozhimPreset): DozhimTouch[] {
-  return DOZHIM_PRESETS[preset].map(t => ({ ...t }))
+// Маппинг пресета v2 → согласованный пресет дожима (lib/followup).
+const PRESET_MAP: Record<DozhimPreset, FollowUpPreset> = { off: "off", soft: "soft", standard: "standard", strong: "aggressive" }
+
+/** Цепочка касаний по пресету — РЕАЛЬНЫЕ согласованные тексты (lib/followup),
+ *  с {{demo_link}}/{{test_link}}. Для тест-стадий — тексты по тесту. */
+export function dozhimChainFor(preset: DozhimPreset, action?: StageActionType): DozhimTouch[] {
+  const fp = FOLLOWUP_PRESETS[PRESET_MAP[preset]]
+  if (!fp || fp.messageIndexes.length === 0) return []
+  const texts = (action === "test" || action === "task") ? DEFAULT_TEST_NOT_OPENED : DEFAULT_FOLLOWUP_NOT_OPENED
+  return fp.messageIndexes.map((mi, i) => ({ text: texts[mi] ?? "", delayDays: fp.days[i] ?? i + 1 }))
 }
 
 /** Статусы hh/Avito (маппинг «вход в стадию → статус»). Сработает при рантайме. */
@@ -117,7 +114,7 @@ export function makeStage(action: StageActionType, idSeed: string): FunnelV2Stag
       rejectDelayMinutes: DEFAULT_REJECT_DELAY_MIN,
     },
     dozhim: "standard",
-    dozhimChain: dozhimChainFor("standard"),
+    dozhimChain: dozhimChainFor("standard", action),
     messagePresetId: null,
     contentBlockId: null,
   }
