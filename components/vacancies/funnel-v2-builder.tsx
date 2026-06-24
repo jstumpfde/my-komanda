@@ -1,10 +1,10 @@
 "use client"
 
 // Воронка v2 — конструктор «стадий» (FUNNEL-V2.md, Фаза 1).
-// Стадия 1 = Портрет (read-only сводка из spec). Стадии 2…N — редактируемые
-// карточки: действие + сообщение-пресет + правило прохода + дожим + hh-статус +
-// напоминания. DnD-реордер. Фаза 1 — конструктор без рантайма (ничего не
-// исполняет). Видно только владельцу (гейт на странице + 404 на API).
+// Карточка стадии = компактная сводка; клик → Sheet со всеми настройками
+// (действие, сообщение/контент, правило прохода+куда зовёт, цепочка дожима,
+// hh-статус, интервью). Стадия 1 = Портрет (read-only из spec). Конструктор
+// без рантайма. Видно только владельцу (гейт на странице + 404 на API).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
@@ -17,23 +17,28 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-  GripVertical, Trash2, ChevronDown, ChevronUp, Plus, Loader2, Target, ExternalLink,
+  GripVertical, Trash2, Plus, Loader2, Target, ExternalLink, ChevronRight,
   ClipboardList, PlayCircle, ListChecks, ClipboardCheck, Calendar, FileText,
-  ShieldCheck, Phone, MessageSquare, CircleCheck, Check,
+  ShieldCheck, Phone, MessageSquare, CircleCheck, Check, Link2, Route, Repeat, X,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody, SheetFooter,
+} from "@/components/ui/sheet"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
-  STAGE_ACTIONS, DOZHIM_LABEL, makeStage, emptyFunnelV2, normalizeFunnelV2,
+  STAGE_ACTIONS, DOZHIM_LABEL, STAGE_STATUSES, makeStage, emptyFunnelV2,
+  normalizeFunnelV2, dozhimChainFor,
   type FunnelV2Config, type FunnelV2Stage, type StageActionType,
-  type DozhimPreset, type InterviewMode,
+  type DozhimPreset, type InterviewMode, type DozhimTouch,
 } from "@/lib/funnel-v2/types"
 
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -41,166 +46,125 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   "clipboard-check": ClipboardCheck, "calendar": Calendar, "file-text": FileText,
   "shield-check": ShieldCheck, "phone": Phone, "message": MessageSquare, "circle-check": CircleCheck,
 }
-function actionMeta(type: StageActionType) {
-  return STAGE_ACTIONS.find(a => a.type === type) ?? STAGE_ACTIONS[0]
-}
-// Действия со скорингом (есть порог балла)
+function actionMeta(type: StageActionType) { return STAGE_ACTIONS.find(a => a.type === type) ?? STAGE_ACTIONS[0] }
 const SCORING_ACTIONS: StageActionType[] = ["prequalification", "test", "task"]
+const CONTENT_ACTIONS: StageActionType[] = ["demo", "test", "task", "prequalification"]
 const INTERVIEW_MODES: Array<{ v: InterviewMode; label: string }> = [
   { v: "phone", label: "Телефон" }, { v: "zoom", label: "Zoom" }, { v: "office", label: "Офис" },
 ]
 const DOZHIM_OPTS: DozhimPreset[] = ["off", "soft", "standard", "strong"]
 
-// ── Карточка стадии (sortable) ───────────────────────────────────────────────
-function StageCard({
-  stage, index, onChange, onRemove,
-}: {
-  stage: FunnelV2Stage
-  index: number
-  onChange: (s: FunnelV2Stage) => void
-  onRemove: () => void
+interface ContentBlock { id: string; title: string; contentType: string }
+
+// ── Компактная карточка стадии (клик → Sheet) ────────────────────────────────
+function StageCard({ stage, index, onOpen, onRemove }: {
+  stage: FunnelV2Stage; index: number; onOpen: () => void; onRemove: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: stage.id })
-  const [open, setOpen] = useState(false)
+  const meta = actionMeta(stage.action)
+  const Icon = ICONS[meta.icon] ?? MessageSquare
+  return (
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn("rounded-xl border border-border bg-card", isDragging && "opacity-60 shadow-lg")}>
+      <div className="flex items-center gap-2.5 p-3">
+        <button {...attributes} {...listeners} className="cursor-grab text-muted-foreground/50 hover:text-muted-foreground touch-none" aria-label="Перетащить"><GripVertical className="w-4 h-4" /></button>
+        <span className="grid place-items-center w-6 h-6 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-medium shrink-0">{index + 2}</span>
+        <Icon className="w-4 h-4 text-muted-foreground shrink-0" />
+        <button onClick={onOpen} className="flex-1 min-w-0 text-left">
+          <div className="text-sm font-medium truncate">{stage.title?.trim() || meta.label}</div>
+          <div className="flex flex-wrap gap-1.5 mt-1">
+            <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">{meta.label}</span>
+            {stage.action === "interview" && stage.interviewMode && <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">{INTERVIEW_MODES.find(m => m.v === stage.interviewMode)?.label}</span>}
+            <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">дожим: {DOZHIM_LABEL[stage.dozhim].toLowerCase()}</span>
+            {stage.hhStatus && <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">hh: {stage.hhStatus}</span>}
+          </div>
+        </button>
+        <button onClick={onOpen} className="text-muted-foreground hover:text-foreground p-1" aria-label="Настроить"><ChevronRight className="w-4 h-4" /></button>
+        <button onClick={onRemove} className="text-muted-foreground hover:text-destructive p-1" aria-label="Удалить стадию"><Trash2 className="w-3.5 h-3.5" /></button>
+      </div>
+    </div>
+  )
+}
+
+// ── Sheet редактирования стадии ──────────────────────────────────────────────
+function StageSheet({ stage, index, allStages, content, onChange, onClose }: {
+  stage: FunnelV2Stage | null
+  index: number
+  allStages: FunnelV2Stage[]
+  content: ContentBlock[]
+  onChange: (s: FunnelV2Stage) => void
+  onClose: () => void
+}) {
+  if (!stage) return null
   const meta = actionMeta(stage.action)
   const Icon = ICONS[meta.icon] ?? MessageSquare
   const isInterview = stage.action === "interview"
   const isScoring = SCORING_ACTIONS.includes(stage.action)
+  const isContent = CONTENT_ACTIONS.includes(stage.action)
+  const chain: DozhimTouch[] = stage.dozhimChain ?? dozhimChainFor(stage.dozhim)
 
   const patch = (p: Partial<FunnelV2Stage>) => onChange({ ...stage, ...p })
   const patchRule = (p: Partial<FunnelV2Stage["rule"]>) => onChange({ ...stage, rule: { ...stage.rule, ...p } })
+  const setChain = (next: DozhimTouch[]) => onChange({ ...stage, dozhimChain: next })
+
+  // «куда зовёт»: следующая стадия + остальные стадии (ветвление). Номер = реальный индекс.
+  const advanceOptions = [
+    { v: "next", label: "Следующая стадия" },
+    ...allStages.map((s, i) => ({ s, i })).filter(({ s }) => s.id !== stage.id).map(({ s, i }) => ({ v: s.id, label: `Стадия ${i + 2} · ${s.title?.trim() || actionMeta(s.action).label}` })),
+  ]
 
   return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn(
-        "rounded-xl border bg-card",
-        open ? "border-primary/40" : "border-border",
-        isDragging && "opacity-60 shadow-lg",
-      )}
-    >
-      {/* Шапка */}
-      <div className="flex items-center gap-2.5 p-3">
-        <button {...attributes} {...listeners} className="cursor-grab text-muted-foreground/50 hover:text-muted-foreground touch-none" aria-label="Перетащить">
-          <GripVertical className="w-4 h-4" />
-        </button>
-        <span className="grid place-items-center w-6 h-6 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-medium shrink-0">{index + 2}</span>
-        <Icon className="w-4 h-4 text-muted-foreground shrink-0" />
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium truncate">{stage.title?.trim() || meta.label}</div>
-          {!open && (
-            <div className="flex flex-wrap gap-1.5 mt-1">
-              <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">{meta.label}</span>
-              {isInterview && stage.interviewMode && (
-                <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">{INTERVIEW_MODES.find(m => m.v === stage.interviewMode)?.label}</span>
-              )}
-              <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">дожим: {DOZHIM_LABEL[stage.dozhim].toLowerCase()}</span>
-              {stage.hhStatus && <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">hh: {stage.hhStatus}</span>}
-            </div>
-          )}
-        </div>
-        <button onClick={() => setOpen(o => !o)} className="text-muted-foreground hover:text-foreground p-1" aria-label={open ? "Свернуть" : "Развернуть"}>
-          {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-        </button>
-        <button onClick={onRemove} className="text-muted-foreground hover:text-destructive p-1" aria-label="Удалить стадию">
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      </div>
+    <Sheet open={!!stage} onOpenChange={(o) => { if (!o) onClose() }}>
+      <SheetContent className="sm:max-w-md w-full p-0 flex flex-col">
+        <SheetHeader className="px-5 py-4 border-b">
+          <SheetTitle className="flex items-center gap-2 text-base"><Icon className="w-4 h-4 text-muted-foreground" /> Стадия {index + 2} · {stage.title?.trim() || meta.label}</SheetTitle>
+        </SheetHeader>
+        <SheetBody className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
 
-      {/* Тело */}
-      {open && (
-        <div className="px-3 pb-3 pl-12 space-y-3.5">
           {/* Действие */}
-          <div className="space-y-1.5">
+          <section className="space-y-2">
             <Label className="text-xs text-muted-foreground">Действие — что делает кандидат</Label>
             <div className="flex flex-wrap gap-1.5">
               {STAGE_ACTIONS.map(a => {
                 const active = a.type === stage.action
                 return (
-                  <button
-                    key={a.type}
-                    type="button"
-                    onClick={() => patch(a.type === "interview" ? { ...makeStage("interview", stage.id.slice(3)), id: stage.id, action: "interview", messagePresetId: stage.messagePresetId, title: stage.title } : { action: a.type })}
-                    className={cn(
-                      "text-xs px-2.5 py-1.5 rounded-md border transition-colors",
-                      active ? "bg-blue-500/10 border-blue-400 text-blue-700 dark:text-blue-300 font-medium" : "border-border text-muted-foreground hover:bg-muted/50",
-                    )}
-                  >{a.label}</button>
+                  <button key={a.type} type="button"
+                    onClick={() => patch(a.type === "interview" ? { ...makeStage("interview", stage.id.slice(3)), id: stage.id, action: "interview", messagePresetId: stage.messagePresetId, title: stage.title, hhStatus: stage.hhStatus } : { action: a.type })}
+                    className={cn("text-xs px-2.5 py-1.5 rounded-md border transition-colors", active ? "bg-blue-500/10 border-blue-400 text-blue-700 dark:text-blue-300 font-medium" : "border-border text-muted-foreground hover:bg-muted/50")}>{a.label}</button>
                 )
               })}
             </div>
             <p className="text-[11px] text-muted-foreground/80">{meta.desc}</p>
-          </div>
+          </section>
 
-          {/* Параметры интервью */}
-          {isInterview && (
-            <div className="space-y-2.5 rounded-md border border-dashed p-2.5">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Тип встречи</Label>
-                <div className="flex gap-1.5">
-                  {INTERVIEW_MODES.map(m => (
-                    <button key={m.v} type="button" onClick={() => patch({ interviewMode: m.v })}
-                      className={cn("text-xs px-2.5 py-1 rounded-md border", stage.interviewMode === m.v ? "bg-blue-500/10 border-blue-400 text-blue-700 dark:text-blue-300 font-medium" : "border-border text-muted-foreground hover:bg-muted/50")}>{m.label}</button>
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Согласование времени</Label>
-                <div className="flex flex-col gap-1.5">
-                  <label className="flex items-center gap-2 text-xs cursor-pointer">
-                    <input type="checkbox" checked={stage.scheduling?.includes("bot") ?? false}
-                      onChange={e => patch({ scheduling: e.target.checked ? [...new Set([...(stage.scheduling ?? []), "bot" as const])] : (stage.scheduling ?? []).filter(s => s !== "bot") })} />
-                    Бот согласует в чате и пишет в календарь
-                  </label>
-                  <label className="flex items-center gap-2 text-xs cursor-pointer">
-                    <input type="checkbox" checked={stage.scheduling?.includes("self_link") ?? false}
-                      onChange={e => patch({ scheduling: e.target.checked ? [...new Set([...(stage.scheduling ?? []), "self_link" as const])] : (stage.scheduling ?? []).filter(s => s !== "self_link") })} />
-                    Ссылка для самозаписи
-                  </label>
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Напоминания</Label>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2 text-xs cursor-pointer">
-                    <input type="checkbox" checked={stage.reminders?.dayBefore ?? false} onChange={e => patch({ reminders: { dayBefore: e.target.checked, morning: stage.reminders?.morning ?? false } })} /> За сутки
-                  </label>
-                  <label className="flex items-center gap-2 text-xs cursor-pointer">
-                    <input type="checkbox" checked={stage.reminders?.morning ?? false} onChange={e => patch({ reminders: { dayBefore: stage.reminders?.dayBefore ?? false, morning: e.target.checked } })} /> Утром в день встречи
-                  </label>
-                </div>
-              </div>
+          {/* Сообщение / контент */}
+          <section className="space-y-2 border-t pt-4">
+            <Label className="text-sm font-medium flex items-center gap-1.5"><Link2 className="w-4 h-4" /> Сообщение / контент</Label>
+            <div className="space-y-1">
+              <Label className="text-[11px] text-muted-foreground">Сообщение кандидату (пресет / текст)</Label>
+              <Input value={stage.messagePresetId ?? ""} onChange={e => patch({ messagePresetId: e.target.value || null })} placeholder="напр. «Приветствие» или текст" className="h-8 text-sm" />
             </div>
-          )}
-
-          {/* Сообщение-пресет + дожим */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Сообщение (пресет)</Label>
-              <Input value={stage.messagePresetId ?? ""} onChange={e => patch({ messagePresetId: e.target.value || null })} placeholder="напр. «Приветствие»" className="h-8 text-sm" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Дожим (если молчит)</Label>
-              <div className="flex gap-1">
-                {DOZHIM_OPTS.map(d => (
-                  <button key={d} type="button" onClick={() => patch({ dozhim: d })}
-                    className={cn("text-xs px-2 py-1 rounded-md border flex-1", stage.dozhim === d ? "bg-blue-500/10 border-blue-400 text-blue-700 dark:text-blue-300 font-medium" : "border-border text-muted-foreground hover:bg-muted/50")}>{DOZHIM_LABEL[d]}</button>
-                ))}
+            {isContent && (
+              <div className="space-y-1">
+                <Label className="text-[11px] text-muted-foreground">Подключить блок из «Контента»</Label>
+                <Select value={stage.contentBlockId ?? "none"} onValueChange={v => patch({ contentBlockId: v === "none" ? null : v })}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="не выбрано" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">— не подключать —</SelectItem>
+                    {content.map(c => <SelectItem key={c.id} value={c.id}>{c.title} <span className="text-muted-foreground">· {c.contentType === "test" || c.contentType === "task" ? "тест" : "демо"}</span></SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {content.length === 0 && <p className="text-[11px] text-muted-foreground/70">Блоков пока нет — создайте во вкладке «Контент».</p>}
               </div>
-            </div>
-          </div>
+            )}
+          </section>
 
           {/* Правило прохода */}
-          <div className="space-y-2 rounded-md border p-2.5">
-            <Label className="text-xs text-muted-foreground">Правило прохода</Label>
-            <div className="flex items-center justify-between">
-              <span className="text-xs">Авто-приглашение прошедших → следующая стадия</span>
-              <Switch checked={stage.rule.autoAdvance} onCheckedChange={v => patchRule({ autoAdvance: v })} />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs">Авто-отказ не прошедших</span>
-              <Switch checked={stage.rule.autoReject} onCheckedChange={v => patchRule({ autoReject: v })} />
+          <section className="space-y-2.5 border-t pt-4">
+            <Label className="text-sm font-medium flex items-center gap-1.5"><Route className="w-4 h-4" /> Правило прохода</Label>
+            <div className="space-y-1">
+              <Label className="text-[11px] text-muted-foreground">Критерий прохода</Label>
+              <Input value={stage.rule.passCriteria ?? ""} onChange={e => patchRule({ passCriteria: e.target.value || undefined })} placeholder={isScoring ? "напр. «ответил верно ≥ порога»" : "напр. «посмотрел демо»"} className="h-8 text-sm" />
             </div>
             {isScoring && (
               <div className="flex items-center gap-2">
@@ -208,33 +172,110 @@ function StageCard({
                 <Input type="number" value={stage.rule.threshold ?? ""} onChange={e => patchRule({ threshold: e.target.value === "" ? undefined : Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="w-20 h-7 text-sm" placeholder="—" />
               </div>
             )}
+            <div className="flex items-center justify-between">
+              <span className="text-xs">Авто-приглашение прошедших</span>
+              <Switch checked={stage.rule.autoAdvance} onCheckedChange={v => patchRule({ autoAdvance: v })} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[11px] text-muted-foreground">Прошёл → зовём на</Label>
+              <Select value={stage.rule.advanceTo ?? "next"} onValueChange={v => patchRule({ advanceTo: v })}>
+                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>{advanceOptions.map(o => <SelectItem key={o.v} value={o.v}>{o.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-xs">Авто-отказ не прошедших</span>
+              <Switch checked={stage.rule.autoReject} onCheckedChange={v => patchRule({ autoReject: v })} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[11px] text-muted-foreground">Не прошёл → текст отказа</Label>
+              <Textarea value={stage.rule.rejectText ?? ""} onChange={e => patchRule({ rejectText: e.target.value || undefined })} placeholder="Благодарим за интерес. К сожалению…" rows={2} className="text-sm" />
+            </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground shrink-0">Задержка отказа, мин</span>
               <Input type="number" value={stage.rule.rejectDelayMinutes} onChange={e => patchRule({ rejectDelayMinutes: Math.max(0, Number(e.target.value) || 0) })} className="w-20 h-7 text-sm" />
               {stage.rule.rejectDelayMinutes >= 60 && <span className="text-[11px] text-muted-foreground">= {Math.floor(stage.rule.rejectDelayMinutes / 60)} ч{stage.rule.rejectDelayMinutes % 60 ? ` ${stage.rule.rejectDelayMinutes % 60} мин` : ""}</span>}
             </div>
-          </div>
+          </section>
 
-          {/* hh-статус + название */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">hh-статус при входе</Label>
-              <Input value={stage.hhStatus ?? ""} onChange={e => patch({ hhStatus: e.target.value || undefined })} placeholder="напр. «первичный контакт»" className="h-8 text-sm" />
+          {/* Дожим — цепочка касаний */}
+          <section className="space-y-2 border-t pt-4">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium flex items-center gap-1.5"><Repeat className="w-4 h-4" /> Дожим — цепочка касаний</Label>
+              <button onClick={() => setChain([...chain, { text: "", delayDays: 1 }])} className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-0.5"><Plus className="w-3 h-3" /> касание</button>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Название стадии (необяз.)</Label>
+            <div className="flex gap-1">
+              {DOZHIM_OPTS.map(d => (
+                <button key={d} type="button" onClick={() => onChange({ ...stage, dozhim: d, dozhimChain: dozhimChainFor(d) })}
+                  className={cn("text-[11px] px-2 py-1 rounded-md border flex-1", stage.dozhim === d ? "bg-blue-500/10 border-blue-400 text-blue-700 dark:text-blue-300 font-medium" : "border-border text-muted-foreground hover:bg-muted/50")}>{DOZHIM_LABEL[d]}</button>
+              ))}
+            </div>
+            {chain.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground/70">Без дожима. Выберите пресет или добавьте касание.</p>
+            ) : chain.map((t, i) => (
+              <div key={i} className="rounded-md border p-2 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-muted-foreground">Касание {i + 1} · через</span>
+                  <Input type="number" value={t.delayDays} onChange={e => setChain(chain.map((x, idx) => idx === i ? { ...x, delayDays: Math.max(0, Number(e.target.value) || 0) } : x))} className="w-14 h-6 text-xs" />
+                  <span className="text-[11px] text-muted-foreground">дн.</span>
+                  <button onClick={() => setChain(chain.filter((_, idx) => idx !== i))} className="ml-auto text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
+                </div>
+                <Textarea value={t.text} onChange={e => setChain(chain.map((x, idx) => idx === i ? { ...x, text: e.target.value } : x))} placeholder="Текст касания…" rows={2} className="text-sm" />
+              </div>
+            ))}
+          </section>
+
+          {/* Интервью */}
+          {isInterview && (
+            <section className="space-y-2.5 border-t pt-4">
+              <Label className="text-sm font-medium flex items-center gap-1.5"><Calendar className="w-4 h-4" /> Интервью</Label>
+              <div className="space-y-1">
+                <Label className="text-[11px] text-muted-foreground">Тип встречи</Label>
+                <div className="flex gap-1.5">
+                  {INTERVIEW_MODES.map(m => <button key={m.v} type="button" onClick={() => patch({ interviewMode: m.v })} className={cn("text-xs px-2.5 py-1 rounded-md border", stage.interviewMode === m.v ? "bg-blue-500/10 border-blue-400 text-blue-700 dark:text-blue-300 font-medium" : "border-border text-muted-foreground hover:bg-muted/50")}>{m.label}</button>)}
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] text-muted-foreground">Согласование времени</Label>
+                <label className="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" checked={stage.scheduling?.includes("bot") ?? false} onChange={e => patch({ scheduling: e.target.checked ? [...new Set([...(stage.scheduling ?? []), "bot" as const])] : (stage.scheduling ?? []).filter(s => s !== "bot") })} /> Бот согласует в чате и пишет в календарь</label>
+                <label className="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" checked={stage.scheduling?.includes("self_link") ?? false} onChange={e => patch({ scheduling: e.target.checked ? [...new Set([...(stage.scheduling ?? []), "self_link" as const])] : (stage.scheduling ?? []).filter(s => s !== "self_link") })} /> Ссылка для самозаписи</label>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] text-muted-foreground">Напоминания</Label>
+                <label className="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" checked={stage.reminders?.dayBefore ?? false} onChange={e => patch({ reminders: { dayBefore: e.target.checked, morning: stage.reminders?.morning ?? false } })} /> За сутки</label>
+                <label className="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" checked={stage.reminders?.morning ?? false} onChange={e => patch({ reminders: { dayBefore: stage.reminders?.dayBefore ?? false, morning: e.target.checked } })} /> Утром в день встречи</label>
+              </div>
+            </section>
+          )}
+
+          {/* Статус + название */}
+          <section className="space-y-2.5 border-t pt-4">
+            <div className="space-y-1">
+              <Label className="text-[11px] text-muted-foreground">Статус hh / Avito при входе в стадию</Label>
+              <Select value={stage.hhStatus ?? "none"} onValueChange={v => patch({ hhStatus: v === "none" ? undefined : v })}>
+                <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="не менять" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— не менять —</SelectItem>
+                  {STAGE_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[11px] text-muted-foreground">Название стадии (необязательно)</Label>
               <Input value={stage.title ?? ""} onChange={e => patch({ title: e.target.value || undefined })} placeholder={meta.label} className="h-8 text-sm" />
             </div>
-          </div>
-        </div>
-      )}
-    </div>
+          </section>
+        </SheetBody>
+        <SheetFooter className="px-5 py-3 border-t">
+          <button onClick={onClose} className="w-full rounded-md bg-primary text-primary-foreground py-2 text-sm font-medium hover:bg-primary/90 inline-flex items-center justify-center gap-1.5"><Check className="w-4 h-4" /> Готово</button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   )
 }
 
-// ── Стадия 1: Портрет (read-only сводка) ─────────────────────────────────────
+// ── Стадия 1: Портрет (read-only) ────────────────────────────────────────────
 interface SpecSummary { upper?: number; lower?: number; autoReject?: boolean; autoInvite?: boolean; stops: string[]; criteriaCount: number }
-
 function PortraitStageCard({ summary, loading, onOpen }: { summary: SpecSummary | null; loading: boolean; onOpen?: () => void }) {
   const empty = !loading && summary && summary.criteriaCount === 0 && summary.stops.length === 0
   return (
@@ -242,25 +283,18 @@ function PortraitStageCard({ summary, loading, onOpen }: { summary: SpecSummary 
       <div className="flex items-center gap-2.5">
         <span className="grid place-items-center w-6 h-6 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-medium shrink-0">1</span>
         <Target className="w-4 h-4 text-muted-foreground shrink-0" />
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium">Отклик → скан резюме <span className="text-[11px] text-muted-foreground font-normal">· из Портрета</span></div>
-        </div>
-        {onOpen && (
-          <button onClick={onOpen} className="text-xs text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1">Открыть Портрет <ExternalLink className="w-3 h-3" /></button>
-        )}
+        <div className="flex-1 min-w-0"><div className="text-sm font-medium">Отклик → скан резюме <span className="text-[11px] text-muted-foreground font-normal">· из Портрета</span></div></div>
+        {onOpen && <button onClick={onOpen} className="text-xs text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1">Открыть Портрет <ExternalLink className="w-3 h-3" /></button>}
       </div>
       <div className="flex flex-wrap gap-1.5 mt-2.5 pl-9">
-        {loading ? (
-          <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> загрузка…</span>
-        ) : summary ? (<>
-          <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">пороги &lt;{summary.lower ?? 40} / {summary.lower ?? 40}–{(summary.upper ?? 75) - 1} / ≥{summary.upper ?? 75}</span>
-          <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">авто-отказ {summary.autoReject ? "вкл" : "выкл"}</span>
-          <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">авто-приглашение {summary.autoInvite ? "вкл" : "выкл"}</span>
-          {summary.stops.length > 0 && <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">стоп: {summary.stops.join(", ")}</span>}
-          {empty && <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground/70">пусто → 100% проходят дальше</span>}
-        </>) : (
-          <span className="text-[11px] text-muted-foreground/70">Портрет не настроен → проходят все</span>
-        )}
+        {loading ? <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> загрузка…</span>
+          : summary ? (<>
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">пороги &lt;{summary.lower ?? 40} / {summary.lower ?? 40}–{(summary.upper ?? 75) - 1} / ≥{summary.upper ?? 75}</span>
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">авто-отказ {summary.autoReject ? "вкл" : "выкл"}</span>
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">авто-приглашение {summary.autoInvite ? "вкл" : "выкл"}</span>
+            {summary.stops.length > 0 && <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">стоп: {summary.stops.join(", ")}</span>}
+            {empty && <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground/70">пусто → 100% проходят дальше</span>}
+          </>) : <span className="text-[11px] text-muted-foreground/70">Портрет не настроен → проходят все</span>}
       </div>
     </div>
   )
@@ -270,33 +304,42 @@ function PortraitStageCard({ summary, loading, onOpen }: { summary: SpecSummary 
 export function FunnelV2Builder({ vacancyId, onOpenPortrait }: { vacancyId: string; onOpenPortrait?: () => void }) {
   const [config, setConfig] = useState<FunnelV2Config | null>(null)
   const [summary, setSummary] = useState<SpecSummary | null>(null)
+  const [content, setContent] = useState<ContentBlock[]>([])
   const [specLoading, setSpecLoading] = useState(true)
   const [loading, setLoading] = useState(true)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle")
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }))
 
-  // Загрузка конфигурации воронки v2
   useEffect(() => {
     let cancelled = false
-    fetch(`/api/modules/hr/vacancies/${vacancyId}/funnel-v2`)
-      .then(r => r.ok ? r.json() : null)
+    fetch(`/api/modules/hr/vacancies/${vacancyId}/funnel-v2`).then(r => r.ok ? r.json() : null)
       .then((d: { config?: FunnelV2Config } | null) => { if (!cancelled) setConfig(d?.config ? normalizeFunnelV2(d.config) : emptyFunnelV2()) })
       .catch(() => { if (!cancelled) setConfig(emptyFunnelV2()) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [vacancyId])
 
-  // Загрузка сводки Портрета (стадия 1)
+  // Список контент-блоков (для «подключить демо/тест»)
   useEffect(() => {
     let cancelled = false
-    fetch(`/api/core/spec/${vacancyId}`)
-      .then(r => r.ok ? r.json() : null)
+    fetch(`/api/modules/hr/demos?vacancy_id=${encodeURIComponent(vacancyId)}&list=1`).then(r => r.ok ? r.json() : null)
+      .then((d: { data?: Array<{ id: string; title: string; content_type?: string; contentType?: string }> } | Array<{ id: string; title: string; content_type?: string; contentType?: string }> | null) => {
+        if (cancelled) return
+        const rows = Array.isArray(d) ? d : (d?.data ?? [])
+        setContent(rows.map(r => ({ id: r.id, title: r.title || "Без названия", contentType: r.contentType || r.content_type || "presentation" })))
+      })
+      .catch(() => { if (!cancelled) setContent([]) })
+    return () => { cancelled = true }
+  }, [vacancyId])
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/core/spec/${vacancyId}`).then(r => r.ok ? r.json() : null)
       .then((d: { spec?: Record<string, unknown> } | null) => {
         if (cancelled) return
-        const spec = d?.spec
-        if (!spec) { setSummary(null); return }
+        const spec = d?.spec; if (!spec) { setSummary(null); return }
         const rt = (spec.resumeThresholds ?? {}) as Record<string, unknown>
         const sf = (spec.stopFactors ?? {}) as Record<string, unknown>
         const STOP_LABELS: Record<string, string> = { city: "город", format: "формат", age: "возраст", experience: "опыт", documents: "документы", citizenship: "гражданство", salaryExpectation: "зарплата" }
@@ -304,61 +347,37 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait }: { vacancyId: stri
         const nice = Array.isArray(spec.niceToHave) ? spec.niceToHave.length : 0
         const must = Array.isArray(spec.mustHave) ? spec.mustHave.length : 0
         const deal = Array.isArray(spec.dealBreakers) ? spec.dealBreakers.length : 0
-        setSummary({
-          upper: typeof rt.upperThreshold === "number" ? rt.upperThreshold : undefined,
-          lower: typeof rt.lowerThreshold === "number" ? rt.lowerThreshold : undefined,
-          autoReject: rt.autoRejectEnabled === true,
-          autoInvite: rt.autoInviteEnabled === true,
-          stops,
-          criteriaCount: nice + must + deal,
-        })
+        setSummary({ upper: typeof rt.upperThreshold === "number" ? rt.upperThreshold : undefined, lower: typeof rt.lowerThreshold === "number" ? rt.lowerThreshold : undefined, autoReject: rt.autoRejectEnabled === true, autoInvite: rt.autoInviteEnabled === true, stops, criteriaCount: nice + must + deal })
       })
       .catch(() => { if (!cancelled) setSummary(null) })
       .finally(() => { if (!cancelled) setSpecLoading(false) })
     return () => { cancelled = true }
   }, [vacancyId])
 
-  // Сохранение (дебаунс)
   const persist = useCallback((next: FunnelV2Config) => {
     setSaveState("saving")
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/funnel-v2`, {
-          method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ config: next }),
-        })
+        const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/funnel-v2`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ config: next }) })
         if (!res.ok) throw new Error()
-        setSaveState("saved")
-        setTimeout(() => setSaveState("idle"), 1500)
+        setSaveState("saved"); setTimeout(() => setSaveState("idle"), 1500)
       } catch { setSaveState("idle"); toast.error("Не удалось сохранить воронку") }
     }, 600)
   }, [vacancyId])
-
   const update = useCallback((next: FunnelV2Config) => { setConfig(next); persist(next) }, [persist])
 
   const stages = config?.stages ?? []
   const stageIds = useMemo(() => stages.map(s => s.id), [stages])
+  const editing = stages.find(s => s.id === editingId) ?? null
+  const editingIndex = stages.findIndex(s => s.id === editingId)
 
-  const addStage = (action: StageActionType) => {
-    if (!config) return
-    const st = makeStage(action, `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`)
-    update({ ...config, stages: [...config.stages, st] })
-  }
-  const changeStage = (i: number, s: FunnelV2Stage) => { if (!config) return; update({ ...config, stages: config.stages.map((x, idx) => idx === i ? s : x) }) }
-  const removeStage = (i: number) => { if (!config) return; update({ ...config, stages: config.stages.filter((_, idx) => idx !== i) }) }
-  const onDragEnd = (e: DragEndEvent) => {
-    if (!config) return
-    const { active, over } = e
-    if (!over || active.id === over.id) return
-    const from = config.stages.findIndex(s => s.id === active.id)
-    const to = config.stages.findIndex(s => s.id === over.id)
-    if (from < 0 || to < 0) return
-    update({ ...config, stages: arrayMove(config.stages, from, to) })
-  }
+  const addStage = (action: StageActionType) => { if (!config) return; const st = makeStage(action, `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`); update({ ...config, stages: [...config.stages, st] }); setEditingId(st.id) }
+  const changeStage = (s: FunnelV2Stage) => { if (!config) return; update({ ...config, stages: config.stages.map(x => x.id === s.id ? s : x) }) }
+  const removeStage = (id: string) => { if (!config) return; if (editingId === id) setEditingId(null); update({ ...config, stages: config.stages.filter(s => s.id !== id) }) }
+  const onDragEnd = (e: DragEndEvent) => { if (!config) return; const { active, over } = e; if (!over || active.id === over.id) return; const from = config.stages.findIndex(s => s.id === active.id); const to = config.stages.findIndex(s => s.id === over.id); if (from < 0 || to < 0) return; update({ ...config, stages: arrayMove(config.stages, from, to) }) }
 
-  if (loading) {
-    return <div className="flex items-center justify-center py-16 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Загрузка…</div>
-  }
+  if (loading) return <div className="flex items-center justify-center py-16 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Загрузка…</div>
 
   return (
     <div className="space-y-3 max-w-3xl">
@@ -368,7 +387,7 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait }: { vacancyId: stri
             <h3 className="text-base font-semibold">Воронка v2 — стадии</h3>
             <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400">beta · только для вас</span>
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5">Конструктор пути кандидата. Пока настраиваете и видите — кандидатов ещё не ведёт.</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Конструктор пути кандидата. Клик по стадии — настройки в панели. Пока не ведёт кандидатов.</p>
         </div>
         <span className="text-[11px] text-muted-foreground shrink-0 mt-1">
           {saveState === "saving" ? <span className="inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> сохранение…</span>
@@ -376,46 +395,33 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait }: { vacancyId: stri
         </span>
       </div>
 
-      {/* Стадия 1 — Портрет */}
       <PortraitStageCard summary={summary} loading={specLoading} onOpen={onOpenPortrait} />
 
-      {/* Стадии 2…N */}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={stageIds} strategy={verticalListSortingStrategy}>
           <div className="space-y-2.5">
-            {stages.map((s, i) => (
-              <StageCard key={s.id} stage={s} index={i} onChange={(ns) => changeStage(i, ns)} onRemove={() => removeStage(i)} />
-            ))}
+            {stages.map((s, i) => <StageCard key={s.id} stage={s} index={i} onOpen={() => setEditingId(s.id)} onRemove={() => removeStage(s.id)} />)}
           </div>
         </SortableContext>
       </DndContext>
 
-      {/* Добавить стадию */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="w-full rounded-xl border border-dashed border-border py-3 flex items-center justify-center gap-1.5 text-sm text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors">
-            <Plus className="w-4 h-4" /> Добавить стадию
-          </button>
+          <button className="w-full rounded-xl border border-dashed border-border py-3 flex items-center justify-center gap-1.5 text-sm text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"><Plus className="w-4 h-4" /> Добавить стадию</button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="center" className="w-64">
-          {STAGE_ACTIONS.map(a => {
-            const Icon = ICONS[a.icon] ?? MessageSquare
-            return (
-              <DropdownMenuItem key={a.type} className="gap-2 cursor-pointer" onClick={() => addStage(a.type)}>
-                <Icon className="w-4 h-4 text-muted-foreground" />
-                <div className="flex flex-col">
-                  <span className="text-sm">{a.label}</span>
-                  <span className="text-[11px] text-muted-foreground">{a.desc}</span>
-                </div>
-              </DropdownMenuItem>
-            )
-          })}
+          {STAGE_ACTIONS.map(a => { const Icon = ICONS[a.icon] ?? MessageSquare; return (
+            <DropdownMenuItem key={a.type} className="gap-2 cursor-pointer" onClick={() => addStage(a.type)}>
+              <Icon className="w-4 h-4 text-muted-foreground" />
+              <div className="flex flex-col"><span className="text-sm">{a.label}</span><span className="text-[11px] text-muted-foreground">{a.desc}</span></div>
+            </DropdownMenuItem>
+          )})}
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {stages.length === 0 && (
-        <p className="text-xs text-muted-foreground text-center pt-1">Стадия 1 (Портрет) уже есть. Добавьте следующие стадии пути — приветствие, демо, тест, интервью, оффер…</p>
-      )}
+      {stages.length === 0 && <p className="text-xs text-muted-foreground text-center pt-1">Стадия 1 (Портрет) уже есть. Добавьте следующие — приветствие, демо, тест, интервью, оффер…</p>}
+
+      <StageSheet stage={editing} index={editingIndex} allStages={stages} content={content} onChange={changeStage} onClose={() => setEditingId(null)} />
     </div>
   )
 }

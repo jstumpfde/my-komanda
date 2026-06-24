@@ -37,6 +37,30 @@ export const DOZHIM_LABEL: Record<DozhimPreset, string> = {
   off: "Без дожима", soft: "Мягкий", standard: "Стандарт", strong: "Сильный",
 }
 
+/** Одно касание цепочки дожима — свой текст и через сколько дней слать. */
+export interface DozhimTouch { text: string; delayDays: number }
+
+/** Дефолтные цепочки касаний по пресету (тексты редактируются на стадии). */
+const DOZHIM_PRESETS: Record<DozhimPreset, DozhimTouch[]> = {
+  off: [],
+  soft: [{ text: "Напоминаем — будем рады вашему ответу 🙂", delayDays: 2 }],
+  standard: [
+    { text: "Напоминаем — посмотрите, это пара минут 🙂", delayDays: 1 },
+    { text: "Если вакансия неактуальна — дайте знать, спасибо!", delayDays: 3 },
+  ],
+  strong: [
+    { text: "Добрый день! Ждём вашего ответа по вакансии.", delayDays: 1 },
+    { text: "Напоминаем о себе — будем рады продолжить 🙂", delayDays: 2 },
+    { text: "Последнее напоминание: вакансия ещё открыта.", delayDays: 4 },
+  ],
+}
+export function dozhimChainFor(preset: DozhimPreset): DozhimTouch[] {
+  return DOZHIM_PRESETS[preset].map(t => ({ ...t }))
+}
+
+/** Статусы hh/Avito (маппинг «вход в стадию → статус»). Сработает при рантайме. */
+export const STAGE_STATUSES = ["новый", "первичный контакт", "интервью", "тестовое задание", "оффер", "принят", "отказ"]
+
 /** Правило прохода стадии. Решение (включён ли авто-отказ/приглашение, порог) —
  *  ВНУТРИ стадии; общие дефолты (задержка, шаблоны) — наследуются из библиотеки. */
 export interface StageRule {
@@ -44,6 +68,9 @@ export interface StageRule {
   autoReject: boolean         // авто-отказ не прошедших
   threshold?: number          // порог балла (для скоринговых действий: test/task/prequalification)
   rejectDelayMinutes: number  // задержка отказа, дефолт 60 (наследуется, можно переопределить)
+  passCriteria?: string       // критерий прохода (описательно / для AI)
+  advanceTo?: string          // куда зовём прошедших: "next" (по умолч.) | id стадии (ветвление)
+  rejectText?: string         // текст отказа (пресет/текст)
 }
 
 export interface StageReminders {
@@ -60,8 +87,10 @@ export interface FunnelV2Stage {
   scheduling?: SchedulingMode[]   // оба варианта по умолчанию
   // ссылка на пресет сообщения (broadcastTemplates) или null
   messagePresetId?: string | null
+  contentBlockId?: string | null  // подключённый блок из «Контента» (демо/тест)
   rule: StageRule
   dozhim: DozhimPreset
+  dozhimChain?: DozhimTouch[]      // редактируемая цепочка касаний (тексты)
   hhStatus?: string               // статус hh при входе в стадию
   reminders?: StageReminders      // только для стадий-встреч
 }
@@ -88,7 +117,9 @@ export function makeStage(action: StageActionType, idSeed: string): FunnelV2Stag
       rejectDelayMinutes: DEFAULT_REJECT_DELAY_MIN,
     },
     dozhim: "standard",
+    dozhimChain: dozhimChainFor("standard"),
     messagePresetId: null,
+    contentBlockId: null,
   }
   if (action === "interview") {
     base.interviewMode = "phone"
@@ -114,6 +145,9 @@ export function normalizeFunnelV2(raw: unknown): FunnelV2Config {
           autoReject: st.rule?.autoReject === true,
           threshold: typeof st.rule?.threshold === "number" ? st.rule.threshold : undefined,
           rejectDelayMinutes: typeof st.rule?.rejectDelayMinutes === "number" ? st.rule.rejectDelayMinutes : DEFAULT_REJECT_DELAY_MIN,
+          passCriteria: typeof st.rule?.passCriteria === "string" ? st.rule.passCriteria : undefined,
+          advanceTo: typeof st.rule?.advanceTo === "string" ? st.rule.advanceTo : undefined,
+          rejectText: typeof st.rule?.rejectText === "string" ? st.rule.rejectText : undefined,
         },
         dozhim: (["off", "soft", "standard", "strong"] as DozhimPreset[]).includes(st.dozhim) ? st.dozhim : "standard",
       }
