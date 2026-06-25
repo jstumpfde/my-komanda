@@ -307,7 +307,6 @@ export function MultiCompanyBlock({ defaults, onPatch, renderProducts }: {
   const [defaultBrandCompanyId, setDefaultBrandCompanyId] = useState<string>(
     defaults.defaultBrandCompanyId ?? ""
   )
-  const [brandsExpanded, setBrandsExpanded] = useState(false)
   const [dragBrandId, setDragBrandId] = useState<string | null>(null)
   // Сворачивание карточки компании: ключ "" — основная, иначе id бренда.
   const [collapsedCos, setCollapsedCos] = useState<Record<string, boolean>>({})
@@ -508,8 +507,8 @@ export function MultiCompanyBlock({ defaults, onPatch, renderProducts }: {
         </CardContent>
       </Card>
 
-        {/* Рамка 2: основная компания (идентичность + продукты внутри) */}
-        {(!showCompanySelector || brandsExpanded) && (
+        {/* Рамка 2: основная компания (идентичность + продукты внутри) — видна всегда */}
+        {true && (
           <div className="rounded-lg border p-3 space-y-3 bg-muted/20">
             {/* Шапка карточки */}
             <div className="flex items-start gap-3">
@@ -615,62 +614,28 @@ export function MultiCompanyBlock({ defaults, onPatch, renderProducts }: {
           </div>
         )}
 
-        {/* Мультикомпания ВКЛ + СВЁРНУТО → компания по умолчанию */}
-        {showCompanySelector && !brandsExpanded && (() => {
-          const defBrand = defaultBrandCompanyId ? brandCompanies.find(c => c.id === defaultBrandCompanyId) : null
-          const dName = defBrand ? (defBrand.name || "Без названия") : mainDisplayName
-          const dDesc = defBrand ? (defBrand.description ?? "") : companyDescription
-          const dLogo = defBrand ? (defBrand.logo ?? "") : (mainCompany?.logoUrl ?? "")
-          return (
-            <div className="rounded-lg border p-3 space-y-1.5 bg-muted/20">
-              <div className="flex items-center gap-2.5">
-                {dLogo ? (
-                  <img src={dLogo} alt="" className="w-8 h-8 rounded object-contain border bg-white shrink-0" />
-                ) : (
-                  <div className="w-8 h-8 rounded border bg-muted flex items-center justify-center shrink-0">
-                    <Building2 className="w-4 h-4 text-muted-foreground/40" />
-                  </div>
-                )}
-                <span className="text-sm font-semibold truncate flex-1">{dName}</span>
-                <span className="inline-flex items-center gap-1 text-[10px] rounded px-1.5 py-0.5 bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 shrink-0">По умолчанию</span>
-              </div>
-              {dDesc
-                ? <p className="text-xs text-muted-foreground line-clamp-2">{dDesc}</p>
-                : <p className="text-xs text-muted-foreground/70 italic">Без описания</p>}
-            </div>
-          )
-        })()}
-
-        {/* Список брендов */}
+        {/* Список компаний-брендов — каждая отдельной сворачиваемой карточкой */}
         {showCompanySelector && (
           <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={() => setBrandsExpanded(e => !e)}
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
-              >
-                <ChevronDown className={cn("w-4 h-4 transition-transform", brandsExpanded && "rotate-180")} />
-                {brandsExpanded ? "Свернуть" : `Показать все компании (${brandCompanies.length + 1})`}
-              </button>
+            <div className="flex items-center justify-end gap-2">
               <Button
                 size="sm"
                 variant="outline"
                 className="h-7 text-xs gap-1.5"
-                onClick={() => { setBrandsExpanded(true); addBrandCompany() }}
+                onClick={addBrandCompany}
               >
                 <Plus className="w-3.5 h-3.5" />Добавить компанию
               </Button>
             </div>
 
-            {brandsExpanded && brandCompanies.length === 0 && (
+            {brandCompanies.length === 0 && (
               <p className="text-xs text-muted-foreground/70 italic px-1">Пока нет добавленных компаний. Нажмите «Добавить компанию».</p>
             )}
-            {brandsExpanded && brandCompanies.length > 1 && (
+            {brandCompanies.length > 1 && (
               <p className="text-[11px] text-muted-foreground/70 px-1">Перетащите за «⠿» чтобы поменять порядок.</p>
             )}
 
-            {brandsExpanded && brandCompanies.map((c, i) => (
+            {brandCompanies.map((c, i) => (
               <div
                 key={c.id}
                 onDragOver={e => { if (dragBrandId) e.preventDefault() }}
