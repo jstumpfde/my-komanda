@@ -3377,8 +3377,8 @@ function StoriesEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patc
         className="w-full rounded-lg border border-dashed border-border hover:border-primary/50 py-6 flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
       >
         {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
-        <span className="text-sm font-medium">Добавить</span>
-        <span className="text-[11px]">любой формат — JPG, PNG, HEIC, MP4, MOV…, вертикальные и горизонтальные</span>
+        <span className="text-sm font-medium">Добавить фото / видео</span>
+        <span className="text-[11px]">любой формат — фото (JPG, PNG, HEIC…) или видео (MP4, MOV…), вертикальные и горизонтальные</span>
       </button>
 
       {/* Финальный CTA-слайд: после последней карточки — экран с призывом откликнуться */}

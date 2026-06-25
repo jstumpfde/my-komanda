@@ -292,6 +292,9 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
   const warnings = zoneSections(result?.sections.filter(s => s.status === "warning" && !CARDED_TOPICS.has(s.id)) || [])
   const oks = result?.sections.filter(s => s.status === "ok") || []
 
+  // В зоне «portrait» показываем только портретные секции — без вакансийных карточек.
+  const isPortrait = zone === "portrait"
+
   // Detect experience level from stop factors
   const experienceLevel = useMemo(() => {
     const expFactor = (vacancyData.stopFactors as Array<{ id: string; enabled: boolean; value?: string }>)
@@ -414,43 +417,48 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
           </div>
         )}
 
-        {/* Title scoring + suggestions */}
-        <TitleScoringCard
-          title={(vacancyData.vacancyTitle as string) || ""}
-          context={{
-            format: (vacancyData.workFormats as string[])?.[0],
-            salaryMin: parseInt(String(vacancyData.salaryFrom || "0").replace(/\s/g, "")) || 0,
-          }}
-          suggestions={result.suggestions?.titles || []}
-          onApply={onApplySuggestion ? (t: string) => handleApply("vacancyTitle", t) : undefined}
-        />
+        {/* Вакансийные карточки — только в зоне 'vacancy' (не на Портрете) */}
+        {!isPortrait && (
+          <>
+            {/* Title scoring + suggestions */}
+            <TitleScoringCard
+              title={(vacancyData.vacancyTitle as string) || ""}
+              context={{
+                format: (vacancyData.workFormats as string[])?.[0],
+                salaryMin: parseInt(String(vacancyData.salaryFrom || "0").replace(/\s/g, "")) || 0,
+              }}
+              suggestions={result.suggestions?.titles || []}
+              onApply={onApplySuggestion ? (t: string) => handleApply("vacancyTitle", t) : undefined}
+            />
 
-        {/* О компании — сразу под названием (как в форме: блок «Компания» идёт вверху) */}
-        <CompanyDescriptionCard description={companyDescription || (vacancyData.companyDescription as string) || ""} />
+            {/* О компании — сразу под названием (как в форме: блок «Компания» идёт вверху) */}
+            <CompanyDescriptionCard description={companyDescription || (vacancyData.companyDescription as string) || ""} />
 
-        {/* 3. Формат работы */}
-        <FormatCard workFormats={(vacancyData.workFormats as string[]) || []} />
+            {/* 3. Формат работы */}
+            <FormatCard workFormats={(vacancyData.workFormats as string[]) || []} />
 
-        {/* 4. Опыт */}
-        <ExperienceInsightCard level={experienceLevel || "3-5"} currentLevel={experienceLevel} />
+            {/* 4. Опыт */}
+            <ExperienceInsightCard level={experienceLevel || "3-5"} currentLevel={experienceLevel} />
 
-        {/* 5. Зарплата и мотивация — объединено: рынок + балл + бонусы (была отдельная «Аналитика зарплат») */}
-        <MotivationAnalysisCard
-          salaryMin={parseInt(String(vacancyData.salaryFrom || "0").replace(/\s/g, "")) || 0}
-          salaryMax={parseInt(String(vacancyData.salaryTo || "0").replace(/\s/g, "")) || 0}
-          bonuses={(vacancyData.bonus as string) || ""}
-          payFrequency={(vacancyData.payFrequency as string[]) || []}
-          category={(vacancyData.positionCategory as string) || ""}
-          salaryAnalysis={result.salaryAnalysis}
-          onAppendBonus={onApplySuggestion ? (text: string) => {
-            const current = (vacancyData.bonus as string) || ""
-            const newText = current ? `${current}\n• ${text}` : `• ${text}`
-            onApplySuggestion("bonus", newText)
-          } : undefined}
-        />
+            {/* 5. Зарплата и мотивация — объединено: рынок + балл + бонусы (была отдельная «Аналитика зарплат») */}
+            <MotivationAnalysisCard
+              salaryMin={parseInt(String(vacancyData.salaryFrom || "0").replace(/\s/g, "")) || 0}
+              salaryMax={parseInt(String(vacancyData.salaryTo || "0").replace(/\s/g, "")) || 0}
+              bonuses={(vacancyData.bonus as string) || ""}
+              payFrequency={(vacancyData.payFrequency as string[]) || []}
+              category={(vacancyData.positionCategory as string) || ""}
+              salaryAnalysis={result.salaryAnalysis}
+              onAppendBonus={onApplySuggestion ? (text: string) => {
+                const current = (vacancyData.bonus as string) || ""
+                const newText = current ? `${current}\n• ${text}` : `• ${text}`
+                onApplySuggestion("bonus", newText)
+              } : undefined}
+            />
 
-        {/* 6b. Лучшее время публикации — по откликам компании */}
-        <BestPublishTimeCard vacancyId={vacancyId} city={(vacancyData.positionCity as string) || (vacancyData.companyCity as string) || ""} />
+            {/* 6b. Лучшее время публикации — по откликам компании */}
+            <BestPublishTimeCard vacancyId={vacancyId} city={(vacancyData.positionCity as string) || (vacancyData.companyCity as string) || ""} />
+          </>
+        )}
 
         {/* Sections: критичные и рекомендации — соответствуют секциям 4-5 (обязанности, требования, навыки, стоп-факторы) */}
         {errors.length > 0 && (
@@ -476,15 +484,17 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
           <SuggestionsPanel suggestions={result.suggestions} onApply={handleApply} vacancyData={vacancyData} />
         )}
 
-        {/* 14. Профиль продавца — на основе бизнес-критериев */}
-        <SellerProfileCard
-          avgDealSize={(vacancyData.avgDealSize as string) || ""}
-          salesCycle={(vacancyData.salesCycle as string) || ""}
-          salesType={(vacancyData.salesType as string[]) || []}
-          targetAudience={(vacancyData.targetAudience as string[]) || []}
-          currentRequirements={(vacancyData.requirements as string) || ""}
-          onFillRequirements={onApplySuggestion ? (text) => onApplySuggestion("requirements", text) : undefined}
-        />
+        {/* 14. Профиль продавца — только в зоне вакансии (не на Портрете) */}
+        {!isPortrait && (
+          <SellerProfileCard
+            avgDealSize={(vacancyData.avgDealSize as string) || ""}
+            salesCycle={(vacancyData.salesCycle as string) || ""}
+            salesType={(vacancyData.salesType as string[]) || []}
+            targetAudience={(vacancyData.targetAudience as string[]) || []}
+            currentRequirements={(vacancyData.requirements as string) || ""}
+            onFillRequirements={onApplySuggestion ? (text) => onApplySuggestion("requirements", text) : undefined}
+          />
+        )}
 
         {/* P0-28: дата последнего анализа + force-refresh. */}
         <div className="pt-1 space-y-1">

@@ -1171,7 +1171,8 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
   const dbSoftCnt = dbItems.length - dbHardCnt
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className={vacancyAnketaData ? "flex items-start gap-6" : undefined}>
+    <div className="space-y-6 min-w-0 flex-1">
       {/* Контур оценки: «Портрет» (активен) либо предложение перенести */}
       {portraitScoring === true && (
         <div className="rounded-lg border border-emerald-300 bg-emerald-50 dark:bg-emerald-950/20 px-3 py-2.5 flex items-center gap-2 text-sm text-emerald-900 dark:text-emerald-300">
@@ -1734,20 +1735,6 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
         Изменения сохраняются общей кнопкой «Сохранить настройки» внизу.
       </p>
 
-      {/* ── AI-советчик зоны «Портрет» ─────────────────────────────────────
-          Показывает только портретные секции (стоп-факторы, навыки must/nice).
-          Встроен inline без боковой панели — vacancyAnketaData передаётся из
-          page.tsx через prop, если доступны данные анкеты вакансии. */}
-      {vacancyAnketaData && (
-        <div className="pt-2">
-          <VacancyAdvisor
-            vacancyId={vacancyId}
-            vacancyData={vacancyAnketaData}
-            zone="portrait"
-          />
-        </div>
-      )}
-
       {/* «Далее → Контент» перенесена в общий sticky-бар (рядом с «Сохранить
           настройки») — см. useEffect с setNextAction выше. */}
 
@@ -1759,6 +1746,20 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
         onEdited={setEditedSuggestion}
         onApply={applySuggestion}
       />
+    </div>
+
+    {/* ── AI-советчик зоны «Портрет» — правая колонка ────────────────────────
+        На широком экране (lg+) стоит справа рядом с формой (как на странице
+        Вакансия). На узком — скрывается внутри VacancyAdvisor как mobile-кнопка. */}
+    {vacancyAnketaData && (
+      <div className="hidden lg:block w-[340px] shrink-0 self-stretch">
+        <VacancyAdvisor
+          vacancyId={vacancyId}
+          vacancyData={vacancyAnketaData}
+          zone="portrait"
+        />
+      </div>
+    )}
     </div>
   )
 }
