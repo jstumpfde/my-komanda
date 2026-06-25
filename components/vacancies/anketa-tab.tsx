@@ -25,6 +25,7 @@ import { CompanySelector } from "@/components/vacancies/company-selector"
 import { type ParsedVacancy } from "@/components/vacancies/anketa-wizard"
 import { VacancyAdvisor } from "@/components/vacancies/vacancy-advisor"
 import { AnketaTemplateControls } from "@/components/vacancies/anketa-template-controls"
+import { shortenCompanyDescription } from "@/lib/vacancies/shorten-company-description"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1184,7 +1185,9 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
       const desc = json?.companyDescription
       if (desc) {
         setCompanyDescription(desc)
-        setData(prev => prev.companyDescription ? prev : { ...prev, companyDescription: desc })
+        // В вакансию — короткая выжимка (без условий/«Что мы даём»); полный
+        // текст хранится в companyDescription для кнопки «Подтянуть».
+        setData(prev => prev.companyDescription ? prev : { ...prev, companyDescription: shortenCompanyDescription(desc) })
       }
       if (json) setMainCompanyName((json.brandName || json.name || "").toString())
     }).catch(() => {})
@@ -1722,10 +1725,10 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
                 const id = v === "__main__" ? "" : v
                 set("brandCompanyId", id)
                 if (id === "") {
-                  if (companyDescription) set("companyDescription", companyDescription)
+                  if (companyDescription) set("companyDescription", shortenCompanyDescription(companyDescription))
                 } else {
                   const bc = brandCompanies.find(c => c.id === id)
-                  if (bc?.description?.trim()) set("companyDescription", bc.description)
+                  if (bc?.description?.trim()) set("companyDescription", shortenCompanyDescription(bc.description))
                 }
               }}
             >
@@ -1757,7 +1760,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
               size="sm"
               className="h-7 text-[11px] gap-1 px-2"
               disabled={!companyDescription}
-              onClick={() => set("companyDescription", companyDescription)}
+              onClick={() => set("companyDescription", shortenCompanyDescription(companyDescription))}
             >
               <RefreshCw className="w-3 h-3" /> Подтянуть из настроек
             </Button>
