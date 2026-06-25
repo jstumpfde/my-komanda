@@ -214,12 +214,16 @@ export async function applyRoleTemplateToVacancy(opts: {
     ? await db.select({ sections: demoTemplates.sections, name: demoTemplates.name }).from(demoTemplates).where(eq(demoTemplates.id, role.demoTemplateId)).limit(1)
     : [undefined]
 
-  // Проверка перезаписи: есть ли уже непустой контент
+  // Проверка перезаписи: есть ли уже непустой контент. Пустой spec-row у свежей
+  // вакансии за «контент» не считаем (иначе предупреждение о перезаписи выскакивало
+  // бы на ПЕРВОМ применении к черновику) — смотрим непустой Портрет.
   const existingAnketaQs = Array.isArray(anketa.questions) ? (anketa.questions as unknown[]).length : 0
   const existingFunnel = (desc.funnelV2 as { stages?: unknown[] } | undefined)?.stages?.length ?? 0
-  const [existingSpec] = await db.select({ vacancyId: vacancySpecs.vacancyId }).from(vacancySpecs).where(eq(vacancySpecs.vacancyId, vacancyId)).limit(1)
+  const [existingSpec] = await db.select({ spec: vacancySpecs.spec }).from(vacancySpecs).where(eq(vacancySpecs.vacancyId, vacancyId)).limit(1)
+  const sp = (existingSpec?.spec ?? {}) as Partial<CandidateSpec>
+  const specHasContent = !!(sp.mustHave?.length || sp.niceToHave?.length || sp.dealBreakers?.length || sp.customCriteria?.length || (sp.idealProfile ?? "").trim())
   const [existingDemo] = await db.select({ id: demos.id }).from(demos).where(and(eq(demos.vacancyId, vacancyId), eq(demos.kind, "demo"))).limit(1)
-  const hasContent = existingAnketaQs > 0 || existingFunnel > 0 || !!existingSpec || !!existingDemo
+  const hasContent = existingAnketaQs > 0 || existingFunnel > 0 || specHasContent || !!existingDemo
   if (hasContent && !overwrite) return { ok: false, reason: "needs_confirm" }
 
   // Подстановка токенов
