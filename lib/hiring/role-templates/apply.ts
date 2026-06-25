@@ -4,7 +4,7 @@
 // (vacancy_specs.spec) → анкета (descriptionJson.anketa.questions), подставив
 // значения профиля продукта в токены. Метки происхождения — в descriptionJson.
 
-import { and, eq } from "drizzle-orm"
+import { and, eq, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import {
   vacancies, vacancySpecs, demos, roleTemplates, questionnaireTemplates, demoTemplates, companies,
@@ -72,13 +72,15 @@ export function substituteString(s: string | undefined | null, map: TokenMap): s
       ? out.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), val)
       : out.replace(new RegExp(`,?\\s*\\{\\{${key}\\}\\}`, "g"), "")
   }
-  // Остальные токены.
+  // Остальные ПРОДУКТОВЫЕ токены.
   for (const [k, v] of Object.entries(map)) {
     out = out.replace(new RegExp(`\\{\\{${k}\\}\\}`, "g"), v ?? "")
   }
-  // Любой нераспознанный токен — убрать, чтобы в сохранённом контенте не осталось «{{...}}».
-  out = out.replace(/\{\{[^}]+\}\}/g, "")
-  // Подчистка артефактов от вырезанных токенов.
+  // ВАЖНО: нераспознанные {{...}} НЕ трогаем — это рантайм-токены кандидата
+  // ({{имя}}/{{должность}}/{{компания}}/{{город}}/{{зарплата_*}}/{{ссылка_на_демо}}…),
+  // которые обязаны дожить до снимка и подставляются позже на каждого кандидата
+  // (lib/template-renderer.ts). Слепая вырезка ломала бы приветствие демо.
+  // Подчистка артефактов только от вырезанных возражений.
   out = out
     .replace(/\(\s*,\s*/g, "(")
     .replace(/,\s*\)/g, ")")
@@ -104,7 +106,10 @@ function subQuestions(qs: Question[], map: TokenMap): Question[] {
 type CritEntry = string | { text: string; [k: string]: unknown }
 function subCritList(list: CritEntry[] | undefined, map: TokenMap): CritEntry[] | undefined {
   if (!Array.isArray(list)) return list
-  return list.map((e) => typeof e === "string" ? substituteString(e, map) : { ...e, text: substituteString(e.text, map) })
+  // Пустые после подстановки пункты выкидываем — иначе z.string().min(1) уронит parse.
+  return list
+    .map((e) => typeof e === "string" ? substituteString(e, map) : { ...e, text: substituteString(e.text, map) })
+    .filter((e) => (typeof e === "string" ? e : e.text).trim() !== "")
 }
 
 function subSpec(spec: Partial<CandidateSpec>, map: TokenMap): Partial<CandidateSpec> {
@@ -115,7 +120,9 @@ function subSpec(spec: Partial<CandidateSpec>, map: TokenMap): Partial<Candidate
     niceToHave: subCritList(spec.niceToHave as CritEntry[] | undefined, map) as CandidateSpec["niceToHave"],
     dealBreakers: subCritList(spec.dealBreakers as CritEntry[] | undefined, map) as CandidateSpec["dealBreakers"],
     customCriteria: Array.isArray(spec.customCriteria)
-      ? spec.customCriteria.map((c) => ({ ...c, label: substituteString(c.label, map), hint: c.hint ? substituteString(c.hint, map) : c.hint }))
+      ? spec.customCriteria
+          .map((c) => ({ ...c, label: substituteString(c.label, map), hint: c.hint ? substituteString(c.hint, map) : c.hint }))
+          .filter((c) => c.label.trim() !== "")
       : spec.customCriteria,
   }
 }
@@ -175,9 +182,9 @@ export async function applyRoleTemplateToVacancy(opts: {
     .limit(1)
   if (!vac) return { ok: false, reason: "not_found" }
 
-  // Шаблон роли (системный или тенанта)
+  // Шаблон роли (системный или тенанта, не из корзины)
   const [role] = await db.select().from(roleTemplates)
-    .where(eq(roleTemplates.id, roleTemplateId)).limit(1)
+    .where(and(eq(roleTemplates.id, roleTemplateId), isNull(roleTemplates.deletedAt))).limit(1)
   if (!role || (!role.isSystem && role.tenantId !== companyId)) return { ok: false, reason: "not_found" }
 
   // Профиль продукта
@@ -190,8 +197,12 @@ export async function applyRoleTemplateToVacancy(opts: {
   const products = resolveVacancyProducts(hd, brandCompanyId)
   if (products.length === 0) return { ok: false, reason: "no_products" }
 
+  // Дефолт бренд-аварно (как в route GET), иначе дефолт основной компании.
+  const fallbackDefaultId = brandCompanyId
+    ? hd.brandDefaultProductProfileIds?.[brandCompanyId]
+    : hd.defaultProductProfileId
   const profile = (productProfileId && products.find((p) => p.id === productProfileId))
-    || products.find((p) => p.id === hd.defaultProductProfileId)
+    || products.find((p) => p.id === fallbackDefaultId)
     || products[0]
   if (!profile) return { ok: false, reason: "no_profile" }
 
@@ -222,25 +233,30 @@ export async function applyRoleTemplateToVacancy(opts: {
 
   // Атомарно
   const demoId = await db.transaction(async (tx) => {
-    // 1) Демо (upsert по kind='demo' — одна запись на вакансию)
+    // 1) Демо (upsert по kind='demo' — одна запись на вакансию). existingDemo
+    //    перечитываем ВНУТРИ tx, чтобы при гонке не создать второй demo-блок.
     let id: string
     const demoTitle = substituteString(dtmpl?.name ?? `Демо — ${role.name}`, map)
-    if (existingDemo) {
-      id = existingDemo.id
+    const [demoInTx] = await tx.select({ id: demos.id }).from(demos).where(and(eq(demos.vacancyId, vacancyId), eq(demos.kind, "demo"))).limit(1)
+    if (demoInTx) {
+      id = demoInTx.id
       await tx.update(demos).set({ title: demoTitle, lessonsJson: sections, contentType: "presentation", updatedAt: new Date() }).where(eq(demos.id, id))
     } else {
       const [row] = await tx.insert(demos).values({ vacancyId, kind: "demo", title: demoTitle, lessonsJson: sections, contentType: "presentation", status: "draft", sortOrder: 0 }).returning({ id: demos.id })
       id = row.id
     }
 
-    // 2) Воронка v2: привязать стадию demo к созданному блоку
-    const stages = stagesRaw.map((s) => s.action === "demo" ? { ...s, contentBlockId: id } : s)
+    // 2) Воронка v2: стадии demo → созданный блок; у остальных contentBlockId
+    //    обнуляем (тест-блоки шаблона не копируются — не оставляем висячих ссылок).
+    const stages = stagesRaw.map((s) => s.action === "demo" ? { ...s, contentBlockId: id } : { ...s, contentBlockId: null })
 
     // 3) Портрет (в той же транзакции)
     await saveSpec(vacancyId, spec as CandidateSpec, userId, tx)
 
     // 4) Анкета (мерж: только questions, остальной джоб-постинг не трогаем) +
-    //    воронка + метки происхождения. descriptionJson мержим по верхним ключам.
+    //    воронка + метки происхождения + включение контура Портрета. descriptionJson
+    //    мержим по верхним ключам. portraitScoring=true — применяем полный снимок
+    //    Портрета (иначе на старых черновиках пороги/действия Spec мертвы).
     const nextDesc = {
       ...desc,
       funnelV2: { enabled: true, stages },
@@ -254,7 +270,7 @@ export async function applyRoleTemplateToVacancy(opts: {
       },
     }
     await tx.update(vacancies)
-      .set({ descriptionJson: nextDesc, updatedAt: new Date() })
+      .set({ descriptionJson: nextDesc, portraitScoring: true, updatedAt: new Date() })
       .where(and(eq(vacancies.id, vacancyId), eq(vacancies.companyId, companyId)))
 
     return id
