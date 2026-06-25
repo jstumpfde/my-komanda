@@ -44,6 +44,7 @@ import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, Mes
 import { InterviewsView } from "@/app/(modules)/hr/interviews/page"
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-factors-settings"
+import { ApplyRoleTemplateDialog } from "@/components/vacancies/apply-role-template-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
@@ -2151,6 +2152,21 @@ export default function VacancyPage() {
   const [healthNextStep, setHealthNextStep] = useState("")
   const healthLoadedRef = useRef(false)
 
+  // ТЗ №3: диалог применения шаблона роли + ручное обновление готовности.
+  const [applyTemplateOpen, setApplyTemplateOpen] = useState(false)
+  const refreshHealth = () => {
+    fetch("/api/ai/vacancy-health-check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ vacancyId: id }),
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { score: number; issues: typeof healthIssues; nextStep: string } | null) => {
+        if (data) { setHealthScore(data.score); setHealthIssues(data.issues); setHealthNextStep(data.nextStep) }
+      })
+      .catch(() => {})
+  }
+
   useEffect(() => {
     if (!id || healthLoadedRef.current) return
     healthLoadedRef.current = true
@@ -2669,6 +2685,19 @@ export default function VacancyPage() {
                     )}
                   </div>
                 )}
+                {/* ТЗ №3: применить готовый шаблон роли (анкета+Портрет+воронка+демо) */}
+                <div className="mt-2 pt-2 border-t flex items-center justify-between gap-2">
+                  <p className="text-[11px] text-muted-foreground">Или возьмите готовый шаблон роли с нашими вопросами и критериями.</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 text-[10px] gap-1 shrink-0"
+                    onClick={() => setApplyTemplateOpen(true)}
+                    title="Развернёт анкету, Портрет, воронку и демо из шаблона роли и подставит данные продукта"
+                  >
+                    <Sparkles className="w-3 h-3" />Применить шаблон роли
+                  </Button>
+                </div>
               </div>
             )}
 
@@ -4821,6 +4850,14 @@ export default function VacancyPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ТЗ №3: применение шаблона роли к вакансии */}
+      <ApplyRoleTemplateDialog
+        vacancyId={id}
+        open={applyTemplateOpen}
+        onOpenChange={setApplyTemplateOpen}
+        onApplied={() => { refetchVacancy(); refreshHealth() }}
+      />
 
     </SidebarProvider>
   )

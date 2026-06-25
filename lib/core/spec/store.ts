@@ -15,6 +15,10 @@ import { vacancySpecs } from "@/lib/db/schema"
 import type { CandidateSpec } from "./types"
 import { normalizeMustHave, normalizeNiceToHave, normalizeDealBreakers } from "./types"
 
+// Исполнитель запросов: глобальный db ИЛИ tx внутри db.transaction — чтобы
+// saveSpec можно было вызвать атомарно вместе с другими записями (ТЗ №3).
+type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0]
+
 // ─── Чтение ──────────────────────────────────────────────────────────────────
 
 /**
@@ -42,6 +46,7 @@ export async function saveSpec(
   vacancyId: string,
   spec:      CandidateSpec,
   userId?:   string,
+  executor:  Executor = db,
 ): Promise<void> {
   // Нормализуем списки критериев к каноническому формату объектов:
   // mustHave → { text, hard }, niceToHave → { text, importance },
@@ -56,7 +61,7 @@ export async function saveSpec(
     updatedAt:    new Date().toISOString(),
   }
 
-  await db
+  await executor
     .insert(vacancySpecs)
     .values({
       vacancyId,
