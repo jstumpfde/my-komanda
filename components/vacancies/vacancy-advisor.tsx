@@ -55,6 +55,17 @@ interface AdvisorResult {
   salaryAnalysis?: SalaryAnalysis
 }
 
+// Зона советчика:
+//   'vacancy'  — секции про поля страницы «Вакансия» (название, зарплата,
+//                обязанности, требования, условия, описание компании).
+//   'portrait' — секции про «Портрет» / AI-скоринг (стоп-факторы,
+//                разделение требований, навыки must/nice).
+//   undefined  — все секции (поведение до разделения, обратная совместимость).
+export type AdvisorZone = "vacancy" | "portrait"
+
+// Какие id секций относятся к зоне Портрета.
+const PORTRAIT_SECTION_IDS = new Set(["stopFactors", "skills"])
+
 interface VacancyAdvisorProps {
   vacancyId?: string
   vacancyData: Record<string, unknown>
@@ -67,6 +78,8 @@ interface VacancyAdvisorProps {
   onScrollToSection?: (sectionId: string) => void
   onApplySuggestion?: (field: string, value: unknown) => void
   onScoreChange?: (score: { score: number; label: string }) => void
+  /** Фильтр зоны: если передан — показываются только секции этой зоны. */
+  zone?: AdvisorZone
 }
 
 // ── Section ID to anketa section mapping ─────────────────────────────────────
@@ -81,8 +94,6 @@ const SECTION_MAP: Record<string, string> = {
   conditions: "section-4",
   company: "section-1",
 }
-
-const AI_SCREENING_FIELDS = new Set(["responsibilities", "requirements", "skills", "stopFactors"])
 
 // ── Static section tips (instant, no AI call) ────────────────────────────────
 
@@ -132,7 +143,7 @@ const EXPERIENCE_INSIGHTS: Record<string, { label: string; tip: string }> = {
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, focusedField, initialResult, initialAnalyzedAt, onScrollToSection, onApplySuggestion, onScoreChange }: VacancyAdvisorProps) {
+export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, focusedField, initialResult, initialAnalyzedAt, onScrollToSection, onApplySuggestion, onScoreChange, zone }: VacancyAdvisorProps) {
   const [result, setResult] = useState<AdvisorResult | null>(initialResult ?? null)
   const [analyzedAt, setAnalyzedAt] = useState<string | null>(initialAnalyzedAt ?? null)
   const [cached, setCached] = useState<boolean>(Boolean(initialResult))
@@ -268,8 +279,17 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
   // в списках «Критично/Рекомендации» — иначе одно и то же оценивается дважды
   // и противоречит (название «90/100 🟢» сверху и «перегружено 🟠» снизу).
   const CARDED_TOPICS = new Set(["title", "salary"]) // эти темы — карточками выше, в нижних списках не дублируем
-  const errors = result?.sections.filter(s => s.status === "error" && !CARDED_TOPICS.has(s.id)) || []
-  const warnings = result?.sections.filter(s => s.status === "warning" && !CARDED_TOPICS.has(s.id)) || []
+
+  // Фильтр зоны: в vacancy-зоне скрываем портретные секции, в portrait — наоборот.
+  const zoneSections = (sections: SectionAnalysis[]) => {
+    if (!zone) return sections
+    if (zone === "portrait") return sections.filter(s => PORTRAIT_SECTION_IDS.has(s.id))
+    // vacancy: скрываем портретные (они на вкладке Портрет)
+    return sections.filter(s => !PORTRAIT_SECTION_IDS.has(s.id))
+  }
+
+  const errors = zoneSections(result?.sections.filter(s => s.status === "error" && !CARDED_TOPICS.has(s.id)) || [])
+  const warnings = zoneSections(result?.sections.filter(s => s.status === "warning" && !CARDED_TOPICS.has(s.id)) || [])
   const oks = result?.sections.filter(s => s.status === "ok") || []
 
   // Detect experience level from stop factors
@@ -1135,8 +1155,6 @@ function SectionCard({ section, onClick, compact }: {
   onClick: () => void
   compact?: boolean
 }) {
-  const isAiField = AI_SCREENING_FIELDS.has(section.id)
-
   return (
     <button
       onClick={onClick}
@@ -1158,9 +1176,6 @@ function SectionCard({ section, onClick, compact }: {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
             <span className="text-xs font-medium">{section.title}</span>
-            {isAiField && section.status !== "ok" && (
-              <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 shrink-0">в Портрете</Badge>
-            )}
           </div>
           {!compact && section.status !== "ok" && (
             <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{section.message}</p>

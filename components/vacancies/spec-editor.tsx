@@ -59,6 +59,7 @@ import {
 } from "@/lib/core/spec/types"
 import { computeRealism, REALISM_TONE_CLASS } from "./spec-editor-helpers"
 import { useVacancySectionRegister, useVacancySettings } from "./vacancy-settings-context"
+import { VacancyAdvisor } from "./vacancy-advisor"
 
 // ─── Константы ───────────────────────────────────────────────────────────────
 
@@ -879,9 +880,12 @@ interface SpecEditorProps {
   onAdopted?: () => void
   /** «Далее → Контент» — переход на следующий этап. */
   onNavigateNext?: () => void
+  /** Данные анкеты вакансии для AI-советчика зоны «Портрет».
+   *  Если не передан — панель советчика не показывается. */
+  vacancyAnketaData?: Record<string, unknown>
 }
 
-export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onNavigateNext }: SpecEditorProps) {
+export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onNavigateNext, vacancyAnketaData }: SpecEditorProps) {
   const [adopting, setAdopting] = useState(false)
   async function adoptPortrait() {
     setAdopting(true)
@@ -1729,6 +1733,20 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
         У вакансий с пустым Портретом действуют прежние настройки воронки.
         Изменения сохраняются общей кнопкой «Сохранить настройки» внизу.
       </p>
+
+      {/* ── AI-советчик зоны «Портрет» ─────────────────────────────────────
+          Показывает только портретные секции (стоп-факторы, навыки must/nice).
+          Встроен inline без боковой панели — vacancyAnketaData передаётся из
+          page.tsx через prop, если доступны данные анкеты вакансии. */}
+      {vacancyAnketaData && (
+        <div className="pt-2">
+          <VacancyAdvisor
+            vacancyId={vacancyId}
+            vacancyData={vacancyAnketaData}
+            zone="portrait"
+          />
+        </div>
+      )}
 
       {/* «Далее → Контент» перенесена в общий sticky-бар (рядом с «Сохранить
           настройки») — см. useEffect с setNextAction выше. */}

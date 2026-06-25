@@ -1881,7 +1881,7 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
   return (
     <div
       className={cn(
-        "relative group/block",
+        "flex items-start gap-1 group/block",
         isDragging && "opacity-30",
         isDragOver && "ring-1 ring-primary/40 ring-offset-1 rounded-lg"
       )}
@@ -1900,10 +1900,26 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
       onDrop={onDrop}
       data-block-id={block.id}
     >
-      {/* Action bar — горизонтальная, вверху справа, внутри блока, при наведении */}
+      {/* Block content — центральная колонка */}
+      <div className="flex-1 min-w-0" data-notion-area>
+        {block.type === "text" ? (
+          <NotionTextBlock
+            block={block}
+            editorRef={editorRef}
+            isHovered={isHovered}
+            onSync={syncContent}
+            onUpdate={onUpdate}
+            onKeyDown={handleKeyDown}
+          />
+        ) : (
+          <NotionMediaBlock block={block} onUpdate={onUpdate} onRemove={onRemove} />
+        )}
+      </div>
+
+      {/* Action bar — правая колонка, при наведении */}
       <div className={cn(
-        "absolute right-0 top-0 z-10 flex items-center gap-0.5",
-        "bg-background/95 backdrop-blur-sm border border-border rounded-md shadow-sm px-0.5 py-0.5 w-fit",
+        "shrink-0 flex items-center gap-0.5 self-start pt-0.5",
+        "bg-background/95 backdrop-blur-sm border border-border rounded-md shadow-sm px-0.5 py-0.5",
         "transition-all duration-100",
         isHovered ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
       )}>
@@ -1947,22 +1963,6 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
         >
           <Trash2 className="w-3 h-3" />
         </button>
-      </div>
-
-      {/* Block content */}
-      <div className="min-w-0" data-notion-area>
-        {block.type === "text" ? (
-          <NotionTextBlock
-            block={block}
-            editorRef={editorRef}
-            isHovered={isHovered}
-            onSync={syncContent}
-            onUpdate={onUpdate}
-            onKeyDown={handleKeyDown}
-          />
-        ) : (
-          <NotionMediaBlock block={block} onUpdate={onUpdate} onRemove={onRemove} />
-        )}
       </div>
     </div>
   )
@@ -2092,7 +2092,7 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
           "[&_ol]:list-decimal [&_ol]:list-inside [&_ol]:space-y-0.5",
           "[&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2",
           "[&_strong]:font-semibold [&_em]:italic",
-          "w-full px-1 py-0.5 rounded hover:bg-muted/20 focus:bg-transparent transition-colors"
+          "w-full pl-[4.25rem] pr-1 py-0.5 rounded hover:bg-muted/20 focus:bg-transparent transition-colors"
         )}
         onBlur={onSync}
         onInput={onSync}
@@ -2100,9 +2100,9 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
         onPaste={(e) => { e.preventDefault(); const text = e.clipboardData.getData("text/plain"); document.execCommand("insertText", false, text) }}
       />
 
-      {/* Emoji & tag buttons — bottom-right, on hover */}
+      {/* Emoji & tag buttons — левое боковое поле, при наведении */}
       <div className={cn(
-        "absolute bottom-0.5 right-0 flex items-center gap-0.5 z-10",
+        "absolute top-0 left-0 flex items-center gap-0.5 z-10",
         "transition-opacity duration-100",
         isHovered || showEmoji || showTags ? "opacity-100" : "opacity-0 pointer-events-none"
       )}>
@@ -2118,11 +2118,12 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
                 const rect = emojiBtnRef.current.getBoundingClientRect()
                 const spaceBelow = window.innerHeight - rect.bottom - 8
                 const spaceAbove = rect.top - 8
+                // Открываем вправо от кнопки (кнопка слева), а не влево
                 if (spaceBelow >= 300 || spaceBelow >= spaceAbove) {
-                  setEmojiPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+                  setEmojiPos({ top: rect.bottom + 4, left: rect.left })
                   setEmojiAvailH(spaceBelow)
                 } else {
-                  setEmojiPos({ bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right })
+                  setEmojiPos({ bottom: window.innerHeight - rect.top + 4, left: rect.left })
                   setEmojiAvailH(spaceAbove)
                 }
               }
@@ -2165,7 +2166,7 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
             <div
               data-text-popup
               className={cn(
-                "absolute right-0 z-50 bg-popover border border-border rounded-xl shadow-xl overflow-hidden w-52",
+                "absolute left-0 z-50 bg-popover border border-border rounded-xl shadow-xl overflow-hidden w-52",
                 tagsOpenUpward ? "bottom-full mb-1" : "top-full mt-1"
               )}
             >
@@ -3296,7 +3297,7 @@ function StoriesEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patc
         className="w-full rounded-lg border border-dashed border-border hover:border-primary/50 py-6 flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
       >
         {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
-        <span className="text-sm font-medium">Добавить фото / видео</span>
+        <span className="text-sm font-medium">Добавить</span>
         <span className="text-[11px]">любой формат — фото (JPG, PNG, HEIC…) или видео (MP4, MOV…), вертикальные и горизонтальные</span>
       </button>
 

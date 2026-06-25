@@ -22,7 +22,7 @@ function computeInputHash(vacancyData: Record<string, unknown> | undefined): str
     "responsibilities", "requirements",
     "requiredSkills", "desiredSkills", "unacceptableSkills",
     "stopFactors", "conditions", "conditionsCustom",
-    "experienceMin", "experienceIdeal",
+    "experienceMin", "experienceIdeal", "requiredExperience",
   ]
   const seed = keysOrdered.map(k => `${k}:${JSON.stringify(vacancyData[k] ?? null)}`).join("|")
   return createHash("sha256").update(seed).digest("hex")
@@ -72,6 +72,13 @@ interface AdvisorResponse {
 function staticAnalysis(body: Record<string, unknown>): AdvisorResponse {
   const d = body.vacancyData as Record<string, unknown> | undefined
   if (!d) return { score: 0, scoreLabel: "Не заполнено", sections: [], contextTip: undefined }
+
+  // Маппинг requiredExperience → experienceMin (см. аналогичный блок в POST handler)
+  if (!d.experienceMin && d.requiredExperience) {
+    const reqExpMap: Record<string, string> = { "1-3": "1", "3-6": "3", "6+": "6" }
+    const mapped = reqExpMap[d.requiredExperience as string]
+    if (mapped) (d as Record<string, unknown>).experienceMin = mapped
+  }
 
   const sections: SectionAnalysis[] = []
   let filled = 0
@@ -297,6 +304,15 @@ export async function POST(req: NextRequest) {
 
   const vacancyData = body.vacancyData as Record<string, unknown> | undefined
   if (!vacancyData) return apiSuccess(fallback)
+
+  // Баг с опытом: тумблер «Требуемый опыт» в анкете пишет в requiredExperience
+  // (none/1-3/3-6/6+), а советчик смотрит experienceMin. Маппим здесь, чтобы
+  // не трогать фронт. Если experienceMin уже заполнен — оставляем как есть.
+  if (!vacancyData.experienceMin && vacancyData.requiredExperience) {
+    const reqExpMap: Record<string, string> = { "1-3": "1", "3-6": "3", "6+": "6" }
+    const mapped = reqExpMap[vacancyData.requiredExperience as string]
+    if (mapped) vacancyData.experienceMin = mapped
+  }
 
   const focusedField = (body.focusedField as string) || ""
 

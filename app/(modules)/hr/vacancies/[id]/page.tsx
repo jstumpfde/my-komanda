@@ -4112,6 +4112,7 @@ export default function VacancyPage() {
                     portraitScoring={(apiVacancy as { portraitScoring?: boolean } | undefined)?.portraitScoring}
                     onAdopted={refetchVacancy}
                     onNavigateNext={() => { setV2SettingsSub("content"); setActiveTab("content"); window.scrollTo({ top: 0, behavior: "smooth" }) }}
+                    vacancyAnketaData={(apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.anketa as Record<string, unknown> | undefined}
                   />
                 )}
 

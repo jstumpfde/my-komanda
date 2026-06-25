@@ -2687,7 +2687,10 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
         </DialogContent>
       </Dialog>
     </div>
-    {/* ── AI Advisor Panel ── */}
+    {/* ── AI Advisor Panel (зона «Вакансия») ──
+        Показывает только секции про поля страницы Вакансия: название, зарплата,
+        обязанности, требования, условия, описание компании. Портретные секции
+        (стоп-факторы, навыки must/nice) живут на вкладке «Портрет». */}
     <VacancyAdvisor
       vacancyId={vacancyId}
       vacancyData={data as unknown as Record<string, unknown>}
@@ -2696,6 +2699,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
       initialResult={aiQualityDetails as never}
       initialAnalyzedAt={aiQualityAnalyzedAt ?? null}
       onScoreChange={onScoreChange}
+      zone="vacancy"
       onApplySuggestion={(field, value) => {
         if (field === "vacancyTitle") {
           set("vacancyTitle", value as string)
