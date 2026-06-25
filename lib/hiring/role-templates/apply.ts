@@ -3,8 +3,12 @@
 // демо → стадии Воронки v2 (с привязкой contentBlockId к демо) → Портрет
 // (vacancy_specs.spec) → анкета (descriptionJson.anketa.questions), подставив
 // значения профиля продукта в токены. Метки происхождения — в descriptionJson.
+//
+// Двухволновой сценарий: если в funnelV2Template стадиях заданы
+// _demoTemplateId или _questionnaireTemplateId, apply создаёт отдельную
+// запись в demos для каждой стадии и проставляет contentBlockId.
 
-import { and, eq, isNull } from "drizzle-orm"
+import { and, eq, inArray, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import {
   vacancies, vacancySpecs, demos, roleTemplates, questionnaireTemplates, demoTemplates, companies,
@@ -161,6 +165,84 @@ export function resolveVacancyProducts(hd: CompanyHiringDefaults, brandCompanyId
   return normalizeProductProfiles(hd.productProfiles)
 }
 
+// ─── Двухволновые вспомогательные функции ────────────────────────────────────
+
+/**
+ * Упаковать массив Question[] в lessonsJson-формат (один урок, один task-блок).
+ * calc-stage-score.ts читает вопросы именно так: blocks[].type="task" + questions[].
+ * Рантайм (resolve-content) отдаёт этот lessonsJson клиенту при action=prequalification/test.
+ */
+function questionsToLessonsJson(questions: Question[], title: string): Lesson[] {
+  return [
+    {
+      id: "lesson-questions",
+      emoji: "📋",
+      title,
+      blocks: [
+        {
+          id:               "block-questions",
+          type:             "task",
+          content:          "",
+          questions,
+          // Поля-заглушки, обязательные для совместимости с blk()-форматом демо-редактора:
+          imageUrl: "", imageLayout: "full", imageCaption: "", imageTitleTop: "",
+          videoUrl: "", videoLayout: "full", videoTitleTop: "", videoCaption: "",
+          audioUrl: "", audioTitle: "", audioLayout: "full", audioTitleTop: "", audioCaption: "",
+          fileUrl: "", fileName: "", fileLayout: "full", fileTitleTop: "", fileCaption: "",
+          infoStyle: "info", infoColor: "", infoIcon: "", infoSize: "m",
+          buttonText: "", buttonUrl: "", buttonVariant: "primary", buttonColor: "",
+          buttonIconBefore: "", buttonIconAfter: "",
+          taskTitle: title, taskDescription: "",
+        },
+      ],
+    },
+  ]
+}
+
+/**
+ * Признак двухволнового шаблона: хотя бы одна стадия в воронке имеет
+ * _demoTemplateId или _questionnaireTemplateId.
+ */
+function isTwoWaveTemplate(stages: FunnelV2Stage[]): boolean {
+  return stages.some((s) => s._demoTemplateId || s._questionnaireTemplateId)
+}
+
+/**
+ * Загрузить все demoTemplates и questionnaireTemplates, на которые ссылаются
+ * стадии через _demoTemplateId / _questionnaireTemplateId.
+ * Возвращает маппинги id → данные.
+ */
+async function loadTwoWaveTemplateData(stages: FunnelV2Stage[]): Promise<{
+  demoTmplById: Map<string, { sections: unknown; name: string }>
+  questTmplById: Map<string, { questions: unknown }>
+}> {
+  const demoIds = [...new Set(
+    stages.map((s) => s._demoTemplateId).filter((id): id is string => !!id)
+  )]
+  const questIds = [...new Set(
+    stages.map((s) => s._questionnaireTemplateId).filter((id): id is string => !!id)
+  )]
+
+  const demoTmplById = new Map<string, { sections: unknown; name: string }>()
+  const questTmplById = new Map<string, { questions: unknown }>()
+
+  if (demoIds.length > 0) {
+    const rows = await db.select({ id: demoTemplates.id, sections: demoTemplates.sections, name: demoTemplates.name })
+      .from(demoTemplates)
+      .where(inArray(demoTemplates.id, demoIds))
+    for (const r of rows) demoTmplById.set(r.id, { sections: r.sections, name: r.name })
+  }
+
+  if (questIds.length > 0) {
+    const rows = await db.select({ id: questionnaireTemplates.id, questions: questionnaireTemplates.questions })
+      .from(questionnaireTemplates)
+      .where(inArray(questionnaireTemplates.id, questIds))
+    for (const r of rows) questTmplById.set(r.id, { questions: r.questions })
+  }
+
+  return { demoTmplById, questTmplById }
+}
+
 // ─── Применение ──────────────────────────────────────────────────────────────
 
 export type ApplyResult = { ok: true; demoId: string } | { ok: false; reason: "needs_confirm" | "no_products" | "not_found" | "no_profile" }
@@ -206,13 +288,8 @@ export async function applyRoleTemplateToVacancy(opts: {
     || products[0]
   if (!profile) return { ok: false, reason: "no_profile" }
 
-  // Контент шаблона: вопросы анкеты + секции демо
-  const [qtmpl] = role.questionnaireTemplateId
-    ? await db.select({ questions: questionnaireTemplates.questions }).from(questionnaireTemplates).where(eq(questionnaireTemplates.id, role.questionnaireTemplateId)).limit(1)
-    : [undefined]
-  const [dtmpl] = role.demoTemplateId
-    ? await db.select({ sections: demoTemplates.sections, name: demoTemplates.name }).from(demoTemplates).where(eq(demoTemplates.id, role.demoTemplateId)).limit(1)
-    : [undefined]
+  // Шаблон воронки
+  const stagesTemplate = (role.funnelV2Template ?? []) as FunnelV2Stage[]
 
   // Проверка перезаписи: есть ли уже непустой контент. Пустой spec-row у свежей
   // вакансии за «контент» не считаем (иначе предупреждение о перезаписи выскакивало
@@ -228,15 +305,167 @@ export async function applyRoleTemplateToVacancy(opts: {
 
   // Подстановка токенов
   const map = buildTokenMap(profile)
-  const questions = subQuestions((qtmpl?.questions as Question[]) ?? [], map)
   // Прогоняем через Zod-схему: снимок — полный валидный CandidateSpec с дефолтами
   // (Partial из шаблона дополняется недостающими полями), чтобы скоринг не споткнулся.
   const spec = CandidateSpecSchema.parse(subSpec((role.specTemplate ?? {}) as Partial<CandidateSpec>, map))
-  const sections = subSections((dtmpl?.sections as Lesson[]) ?? [], map)
-  const stagesRaw = subStages((role.funnelV2Template ?? []) as FunnelV2Stage[], map)
+  const stagesRaw = subStages(stagesTemplate, map)
+
+  // Двухволновой сценарий: хотя бы одна стадия имеет _demoTemplateId или
+  // _questionnaireTemplateId → создаём отдельные demos-записи на каждую стадию.
+  const twoWave = isTwoWaveTemplate(stagesTemplate)
+
+  // Для одноволнового: загружаем данные из role.questionnaireTemplateId + role.demoTemplateId.
+  // Для двухволнового: загружаем данные из _demoTemplateId / _questionnaireTemplateId стадий.
+  const [qtmpl] = (!twoWave && role.questionnaireTemplateId)
+    ? await db.select({ questions: questionnaireTemplates.questions }).from(questionnaireTemplates).where(eq(questionnaireTemplates.id, role.questionnaireTemplateId)).limit(1)
+    : [undefined]
+  const [dtmpl] = (!twoWave && role.demoTemplateId)
+    ? await db.select({ sections: demoTemplates.sections, name: demoTemplates.name }).from(demoTemplates).where(eq(demoTemplates.id, role.demoTemplateId)).limit(1)
+    : [undefined]
+
+  // Загрузка шаблонов для двухволнового сценария (один запрос на тип).
+  const twoWaveData = twoWave
+    ? await loadTwoWaveTemplateData(stagesRaw)
+    : { demoTmplById: new Map(), questTmplById: new Map() }
+
+  // Одноволновой: вопросы анкеты (для descriptionJson.anketa.questions) и секции демо.
+  const questions = !twoWave
+    ? subQuestions((qtmpl?.questions as Question[]) ?? [], map)
+    : []
+  const sections = !twoWave
+    ? subSections((dtmpl?.sections as Lesson[]) ?? [], map)
+    : []
 
   // Атомарно
   const demoId = await db.transaction(async (tx) => {
+
+    // ── ДВУХВОЛНОВОЙ ПУТЬ ────────────────────────────────────────────────────
+    if (twoWave) {
+      // Для каждой стадии с _demoTemplateId или _questionnaireTemplateId создаём
+      // отдельную запись в demos и запоминаем stageId → blockId.
+      // kind='block:demo' — демо-секции; kind='block:questionnaire' — вопросы анкеты.
+      // Рантайм (resolve-content) ищет demos WHERE id=contentBlockId — kind не важен.
+
+      const stageBlockMap = new Map<string, string>() // stageId → demos.id
+
+      // id первой demo-стадии с _demoTemplateId — получит kind='demo' для
+      // совместимости с legacy /demo маршрутом (он ищет demos WHERE kind='demo').
+      const firstDemoStageId = stagesRaw.find((s) => s.action === "demo" && s._demoTemplateId)?.id
+
+      for (const s of stagesRaw) {
+        const demoTmplId = s._demoTemplateId
+        const questTmplId = s._questionnaireTemplateId
+
+        if (demoTmplId) {
+          // Демо-блок для этой стадии.
+          // Первая demo-стадия → kind='demo' (legacy-маршрут /demo [token] берёт
+          // первый kind='demo' при отсутствии contentBlockId в v2-состоянии кандидата).
+          // Последующие → kind='block:demo' (не мешают legacy-запросу).
+          const tmpl = twoWaveData.demoTmplById.get(demoTmplId)
+          const blockSections = subSections((tmpl?.sections as Lesson[]) ?? [], map)
+          const blockTitle = substituteString(tmpl?.name ?? `Демо — ${role.name}`, map)
+          const kind = s.id === firstDemoStageId ? "demo" : "block:demo"
+
+          // Upsert: ищем существующий блок по kind+vacancyId для этой стадии.
+          // Для двухволновых используем kind='block:demo' + title как discriminator.
+          // Для первой demo-стадии — kind='demo' (стандартный одноволновой upsert).
+          let blockId: string
+          if (kind === "demo") {
+            const [existing] = await tx.select({ id: demos.id }).from(demos)
+              .where(and(eq(demos.vacancyId, vacancyId), eq(demos.kind, "demo"))).limit(1)
+            if (existing) {
+              blockId = existing.id
+              await tx.update(demos).set({ title: blockTitle, lessonsJson: blockSections, contentType: "presentation", updatedAt: new Date() }).where(eq(demos.id, blockId))
+            } else {
+              const [row] = await tx.insert(demos).values({ vacancyId, kind, title: blockTitle, lessonsJson: blockSections, contentType: "presentation", status: "draft", sortOrder: 0 }).returning({ id: demos.id })
+              blockId = row.id
+            }
+          } else {
+            // kind='block:demo': upsert по title+kind+vacancyId.
+            const [existing] = await tx.select({ id: demos.id }).from(demos)
+              .where(and(eq(demos.vacancyId, vacancyId), eq(demos.kind, kind), eq(demos.title, blockTitle))).limit(1)
+            if (existing) {
+              blockId = existing.id
+              await tx.update(demos).set({ lessonsJson: blockSections, contentType: "presentation", updatedAt: new Date() }).where(eq(demos.id, blockId))
+            } else {
+              const [row] = await tx.insert(demos).values({ vacancyId, kind, title: blockTitle, lessonsJson: blockSections, contentType: "presentation", status: "draft", sortOrder: 0 }).returning({ id: demos.id })
+              blockId = row.id
+            }
+          }
+          stageBlockMap.set(s.id, blockId)
+        }
+
+        if (questTmplId) {
+          // Блок с вопросами для этой стадии (хранится как demos с kind='block:questionnaire').
+          // lessonsJson — задачный урок (task-блок), calc-stage-score читает его через
+          // collectTaskQuestions(blocks[].type="task" + questions[]).
+          const tmpl = twoWaveData.questTmplById.get(questTmplId)
+          const qs = subQuestions((tmpl?.questions as Question[]) ?? [], map)
+          const blockTitle = `Вопросы — ${s.title ?? s.action} (${s.id})`
+          const lessonsJson = questionsToLessonsJson(qs, s.title ?? "Анкета")
+
+          // Upsert по kind='block:questionnaire' + stageId в title (стабильный discriminator).
+          const [existing] = await tx.select({ id: demos.id }).from(demos)
+            .where(and(eq(demos.vacancyId, vacancyId), eq(demos.kind, "block:questionnaire"), eq(demos.title, blockTitle))).limit(1)
+          let blockId: string
+          if (existing) {
+            blockId = existing.id
+            await tx.update(demos).set({ lessonsJson, contentType: "presentation", updatedAt: new Date() }).where(eq(demos.id, blockId))
+          } else {
+            const [row] = await tx.insert(demos).values({ vacancyId, kind: "block:questionnaire", title: blockTitle, lessonsJson, contentType: "presentation", status: "draft", sortOrder: 0 }).returning({ id: demos.id })
+            blockId = row.id
+          }
+          stageBlockMap.set(s.id, blockId)
+        }
+      }
+
+      // Собираем итоговые стадии: contentBlockId из stageBlockMap; _demoTemplateId /
+      // _questionnaireTemplateId зачищаем — в descriptionJson они не нужны (рантайм
+      // читает только contentBlockId).
+      const stages: FunnelV2Stage[] = stagesRaw.map((s) => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { _demoTemplateId, _questionnaireTemplateId, ...rest } = s
+        const contentBlockId = stageBlockMap.get(s.id) ?? null
+        return { ...rest, contentBlockId }
+      })
+
+      // Портрет
+      await saveSpec(vacancyId, spec as CandidateSpec, userId, tx)
+
+      // Для двухволновых anketa.questions = вопросы волны 1 (первая questionnaire-стадия).
+      // Это сохраняет совместимость с legacy-путём скоринга (lib/ai-screen-candidate.ts
+      // читает descriptionJson.anketa.questions). Рантайм v2 использует contentBlockId.
+      const firstQuestStage = stagesRaw.find((s) => s._questionnaireTemplateId)
+      let anketaQuestions: Question[] = []
+      if (firstQuestStage?._questionnaireTemplateId) {
+        const tmpl = twoWaveData.questTmplById.get(firstQuestStage._questionnaireTemplateId)
+        anketaQuestions = subQuestions((tmpl?.questions as Question[]) ?? [], map)
+      }
+
+      const nextDesc = {
+        ...desc,
+        funnelV2: { enabled: true, stages },
+        anketa: { ...anketa, questions: anketaQuestions },
+        appliedRoleTemplate: {
+          roleTemplateId: role.id,
+          roleTemplateSlug: role.slug,
+          productProfileId: profile.id,
+          appliedAt: new Date().toISOString(),
+          appliedBy: userId ?? null,
+          twoWave: true,
+        },
+      }
+      await tx.update(vacancies)
+        .set({ descriptionJson: nextDesc, portraitScoring: true, updatedAt: new Date() })
+        .where(and(eq(vacancies.id, vacancyId), eq(vacancies.companyId, companyId)))
+
+      // Возвращаем id первого demo-блока (совместимость с ApplyResult.demoId).
+      const firstDemoStage = stagesRaw.find((s) => s.action === "demo" && s._demoTemplateId)
+      return firstDemoStage ? (stageBlockMap.get(firstDemoStage.id) ?? "") : ""
+    }
+
+    // ── ОДНОВОЛНОВОЙ ПУТЬ (без изменений) ───────────────────────────────────
+
     // 1) Демо (upsert по kind='demo' — одна запись на вакансию). existingDemo
     //    перечитываем ВНУТРИ tx, чтобы при гонке не создать второй demo-блок.
     let id: string

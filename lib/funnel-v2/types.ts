@@ -90,6 +90,24 @@ export interface FunnelV2Stage {
   dozhimChain?: DozhimTouch[]      // редактируемая цепочка касаний (тексты)
   hhStatus?: string               // статус hh при входе в стадию
   reminders?: StageReminders      // только для стадий-встреч
+
+  // ── Template-time метаданные (apply.ts) ──────────────────────────────────
+  // Используются ТОЛЬКО при применении шаблона роли к вакансии.
+  // Рантайм (resolve-content, stage-completion-handler) их игнорирует:
+  // к моменту исполнения contentBlockId уже проставлен apply.ts-ом.
+  // Хранятся в funnelV2Template стадиях (jsonb в role_templates), в
+  // descriptionJson.funnelV2.stages НЕ попадают (apply зачищает их при записи).
+
+  /** id шаблона демо (demo_templates), секции которого нужно развернуть в
+   *  demos-запись для ЭТОЙ стадии. Если null/undefined — для demo-стадии
+   *  используется role.demoTemplateId (стандартный, одноволновой путь). */
+  _demoTemplateId?: string | null
+
+  /** id шаблона анкеты (questionnaire_templates), вопросы которого нужно
+   *  завернуть в task-блок demos-записи для ЭТОЙ стадии.
+   *  Если null/undefined — для prequalification/test-стадии используется
+   *  role.questionnaireTemplateId (одноволновой путь). */
+  _questionnaireTemplateId?: string | null
 }
 
 export interface FunnelV2Config {
