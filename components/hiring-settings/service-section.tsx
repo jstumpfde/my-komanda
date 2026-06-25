@@ -309,6 +309,9 @@ export function MultiCompanyBlock({ defaults, onPatch, renderProducts }: {
   )
   const [brandsExpanded, setBrandsExpanded] = useState(false)
   const [dragBrandId, setDragBrandId] = useState<string | null>(null)
+  // Сворачивание карточки компании: ключ "" — основная, иначе id бренда.
+  const [collapsedCos, setCollapsedCos] = useState<Record<string, boolean>>({})
+  const toggleCo = (k: string) => setCollapsedCos(s => ({ ...s, [k]: !s[k] }))
 
   // Основная компания (из /api/companies)
   const [mainCompany, setMainCompany] = useState<MainCompanyData | null>(null)
@@ -561,8 +564,17 @@ export function MultiCompanyBlock({ defaults, onPatch, renderProducts }: {
                   </p>
                 )}
               </div>
+              <button
+                type="button"
+                onClick={() => toggleCo("")}
+                title={collapsedCos[""] ? "Развернуть" : "Свернуть"}
+                className="shrink-0 text-muted-foreground hover:text-foreground p-0.5"
+              >
+                <ChevronDown className={cn("w-4 h-4 transition-transform", !collapsedCos[""] && "rotate-180")} />
+              </button>
             </div>
 
+            {!collapsedCos[""] && (<>
             {/* Подсказка про редактирование */}
             <p className="text-[11px] text-muted-foreground/70 flex items-center gap-1">
               Логотип, название, слоган и сайт основной компании редактируются в{" "}
@@ -599,6 +611,7 @@ export function MultiCompanyBlock({ defaults, onPatch, renderProducts }: {
 
             {/* Продукты основной компании — вложены в её карточку */}
             {renderProducts && <div className="pt-1 border-t">{renderProducts("")}</div>}
+            </>)}
           </div>
         )}
 
@@ -715,8 +728,17 @@ export function MultiCompanyBlock({ defaults, onPatch, renderProducts }: {
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </Button>
+                  <button
+                    type="button"
+                    onClick={() => toggleCo(c.id)}
+                    title={collapsedCos[c.id] ? "Развернуть" : "Свернуть"}
+                    className="shrink-0 text-muted-foreground hover:text-foreground p-0.5"
+                  >
+                    <ChevronDown className={cn("w-4 h-4 transition-transform", !collapsedCos[c.id] && "rotate-180")} />
+                  </button>
                 </div>
 
+                {!collapsedCos[c.id] && (<>
                 {/* Логотип */}
                 <div className="space-y-1">
                   <Label className="text-xs">Логотип</Label>
@@ -822,6 +844,7 @@ export function MultiCompanyBlock({ defaults, onPatch, renderProducts }: {
 
                 {/* Продукты этого бренда — вложены в его карточку (после ввода названия) */}
                 {renderProducts && c.name.trim() !== "" && <div className="pt-1 border-t">{renderProducts(c.id)}</div>}
+                </>)}
               </div>
             ))}
           </div>
