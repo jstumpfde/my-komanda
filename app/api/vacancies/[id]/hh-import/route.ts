@@ -84,6 +84,15 @@ function extractCityName(raw: string): string {
   return raw.split(",")[0].trim()
 }
 
+// «Рабочие часы в день» — чипы анкеты (workHours). hh: «Рабочие часы: 8».
+const WORK_HOURS_OPTIONS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "24"]
+function mapWorkHours(text: string): string {
+  if (!text) return ""
+  if (/договор/i.test(text)) return "По договорённости"
+  const m = text.match(/\d+/)
+  return m && WORK_HOURS_OPTIONS.includes(m[0]) ? m[0] : ""
+}
+
 function parseNumber(raw: string | undefined | null): number | null {
   if (!raw) return null
   const digits = raw.replace(/[^\d]/g, "")
@@ -160,6 +169,7 @@ type Mapped = {
   department: string                            // отдел
   workingDays: string                           // детализация рабочих дней (hh text)
   workingTimeIntervals: string                  // детализация часов (hh text)
+  metro: string[]                               // станции метро (hh address-metro-station-name)
   acceptHandicapped: boolean                    // спец.условие: инвалидность
   acceptKids: boolean                           // спец.условие: несовершеннолетние
   companyName: string                           // название компании-работодателя (для «Добавить как новую компанию»)
@@ -191,6 +201,12 @@ function parseHhHtml(html: string): Mapped {
   const qaAddress = $('[data-qa="vacancy-view-raw-address"]').first().text().trim()
   const qaScheduleDays = $('[data-qa="work-schedule-by-days-text"]').first().text().trim()
   const qaWorkingHours = $('[data-qa="working-hours-text"]').first().text().trim()
+  // Метро (hh: data-qa="address-metro-station-name", может быть несколько + дубли)
+  const qaMetro: string[] = []
+  $('[data-qa="address-metro-station-name"]').each((_, el) => {
+    const s = $(el).text().trim()
+    if (s && !qaMetro.includes(s)) qaMetro.push(s)
+  })
   const qaSkills: string[] = []
   $('[data-qa="skills-element"]').each((_, el) => {
     const s = $(el).text().trim()
@@ -355,6 +371,7 @@ function parseHhHtml(html: string): Mapped {
     department: qaDepartment,
     workingDays: qaScheduleDays,
     workingTimeIntervals: qaWorkingHours,
+    metro: qaMetro,
     acceptHandicapped: qaAcceptHandicapped,
     acceptKids: qaAcceptKids,
     companyName: qaCompanyName,
@@ -552,6 +569,14 @@ export async function POST(
       ...(mappedData.department ? { department: mappedData.department } : {}),
       ...(mappedData.workingDays ? { workingDaysText: mappedData.workingDays } : {}),
       ...(mappedData.workingTimeIntervals ? { workingTimeText: mappedData.workingTimeIntervals } : {}),
+      // «Рабочие часы в день» (чип) ← «Рабочие часы: 8»; метро ← address-metro-station-name;
+      // «Адрес» ← полный адрес, только если есть улица (иначе город уже в «Город»).
+      ...((): Record<string, unknown> => { const wh = mapWorkHours(mappedData.workingTimeIntervals); return wh ? { workHours: wh } : {} })(),
+      ...(mappedData.metro.length ? { workMetro: mappedData.metro } : {}),
+      ...((): Record<string, unknown> => {
+        const parts = (mappedData.cityFull || "").split(",").map(s => s.trim()).filter(Boolean)
+        return parts.length > 1 ? { workAddress: mappedData.cityFull.trim() } : {}
+      })(),
       // specialConditions ВСЕГДА перезаписываем результатом текущего разбора (даже
       // пустым []) — иначе при переимпорте сохранялся бы старый/ложный флаг (напр.
       // «Открыты для ОВЗ»). Это hh-производные флаги, импорт для них — источник правды.
