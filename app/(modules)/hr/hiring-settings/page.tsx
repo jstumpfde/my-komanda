@@ -6,7 +6,7 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
-import { Settings, Plug, GitBranch, Clock, ShieldAlert, Wrench, MessageSquare, Heart, Package } from "lucide-react"
+import { Settings, Plug, GitBranch, Clock, ShieldAlert, Wrench, MessageSquare, Heart, Package, Building2 } from "lucide-react"
 import { IntegrationsContent } from "@/components/hr/integrations-content"
 import { SendDelaySettings } from "@/components/company/send-delay-settings"
 import { TrashRetentionSettings } from "@/components/company/trash-retention-settings"
@@ -14,7 +14,7 @@ import { FunnelAutomationSection } from "@/components/hiring-settings/funnel-aut
 import { InterviewSection } from "@/components/hiring-settings/interview-section"
 import { AdaptationSection } from "@/components/hiring-settings/adaptation-section"
 import { StopFactorsSection } from "@/components/hiring-settings/stop-factors-section"
-import { ServiceSection } from "@/components/hiring-settings/service-section"
+import { ServiceSection, MultiCompanyBlock } from "@/components/hiring-settings/service-section"
 import { ProductProfileSection } from "@/components/hiring-settings/product-profile-section"
 import type { CompanyHiringDefaults } from "@/lib/db/schema"
 
@@ -22,10 +22,11 @@ import type { CompanyHiringDefaults } from "@/lib/db/schema"
 
 const HIRING_DEFAULTS_URL = "/api/modules/hr/company/hiring-defaults"
 
-type TabKey = "funnel" | "product" | "interview" | "adaptation" | "ai" | "stop-factors" | "service" | "integrations"
+type TabKey = "funnel" | "companies" | "product" | "interview" | "adaptation" | "ai" | "stop-factors" | "service" | "integrations"
 
 const TABS: { value: TabKey; label: string; icon: typeof Settings }[] = [
   { value: "funnel",        label: "Воронка и автоматизация", icon: GitBranch },
+  { value: "companies",     label: "Компании",                icon: Building2 },
   { value: "product",       label: "Профиль продукта",        icon: Package },
   { value: "interview",     label: "Интервью",                icon: Clock },
   { value: "adaptation",    label: "Адаптация",               icon: Heart },
@@ -150,6 +151,10 @@ export default function HiringSettingsPage() {
 
               {activeTab === "funnel" && (
                 <FunnelAutomationSection defaults={defaults} onPatch={onPatch} />
+              )}
+
+              {activeTab === "companies" && (
+                <MultiCompanyBlock defaults={defaults} onPatch={onPatch} />
               )}
 
               {activeTab === "product" && defaults && (

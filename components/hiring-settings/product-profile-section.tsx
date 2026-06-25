@@ -106,13 +106,20 @@ function ProfileForm({ profile, index, onChange }: {
           <Input value={profile.name} onChange={e => onChange({ name: e.target.value })} placeholder={`Продукт ${index + 1}`} className="h-9" />
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Тип продаж</Label>
-          <Select value={profile.salesType} onValueChange={v => onChange({ salesType: v })}>
-            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-            <SelectContent>{SALES_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-          </Select>
+          <Label className="text-xs">Тип продаж / отрасль</Label>
+          <Input
+            value={profile.salesType}
+            onChange={e => onChange({ salesType: e.target.value })}
+            list={`sales-type-${profile.id}`}
+            placeholder="напр. Металлоконструкции, SaaS, Стройматериалы…"
+            className="h-9"
+          />
+          <datalist id={`sales-type-${profile.id}`}>
+            {SALES_TYPES.map(t => <option key={t} value={t} />)}
+          </datalist>
         </div>
       </div>
+      <p className="text-[11px] text-muted-foreground -mt-2">Любая отрасль или формат продаж — начните вводить, подскажем частые варианты, или впишите своё (напр. «Промышленное строительство», «Оптовая торговля мебелью»).</p>
 
       <div className="space-y-1.5">
         <Label className="text-xs">Что продаём — и какую задачу клиента решает</Label>

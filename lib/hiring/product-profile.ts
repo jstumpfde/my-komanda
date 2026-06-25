@@ -3,8 +3,21 @@
 // самодостаточно (seed для генерации анкет/Портрета/демо — отдельные ТЗ).
 // Здесь — только модель + хелперы. Без связи с вакансией и sales-модулем.
 
+// Подсказки для поля «Тип продаж / отрасль». Это НЕ закрытый список — поле
+// со свободным вводом, сюда можно вписать любую отрасль. Массив лишь наполняет
+// автоподсказки (datalist) частыми вариантами из разных сфер.
 export const SALES_TYPES = [
-  "B2B IT", "SaaS", "CRM", "Автоматизация", "Digital", "Услуги", "Другое",
+  // IT / digital
+  "B2B IT", "SaaS", "CRM", "Автоматизация бизнеса", "Digital-агентство", "Веб-разработка",
+  // Производство / промышленность
+  "Металлоконструкции", "Промышленное оборудование", "Станки и инструмент", "Промышленное строительство",
+  // Стройка / недвижимость
+  "Строительные материалы", "Строительство домов", "Ремонт и отделка", "Недвижимость",
+  // Товары
+  "Товары народного потребления", "Оптовая торговля", "Розничная торговля", "Мебель",
+  // Услуги
+  "B2B-услуги", "Юридические услуги", "Бухгалтерские услуги", "Маркетинговые услуги",
+  "Логистика", "Образование", "Медицина", "HoReCa",
 ] as const
 
 export type DealCycle = "1d" | "2-7d" | "1-4w" | "1-3m" | "3m+"
@@ -54,7 +67,7 @@ export function makeProductProfile(name = "Основной продукт"): Pr
     id: uuid(),
     name,
     productDescription: "",
-    salesType: "B2B IT",
+    salesType: "",
     checkRange: { min: 0, max: null, recurring: false },
     dealCycle: "1-4w",
     icp: "",
@@ -74,7 +87,7 @@ export function normalizeProductProfiles(raw: unknown): ProductProfile[] {
         id: typeof p.id === "string" && p.id ? p.id : uuid(),
         name: typeof p.name === "string" ? p.name : "",
         productDescription: typeof p.productDescription === "string" ? p.productDescription : "",
-        salesType: typeof p.salesType === "string" ? p.salesType : "B2B IT",
+        salesType: typeof p.salesType === "string" ? p.salesType : "",
         checkRange: {
           min: typeof cr.min === "number" ? cr.min : 0,
           max: typeof cr.max === "number" ? cr.max : null,

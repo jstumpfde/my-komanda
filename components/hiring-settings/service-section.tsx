@@ -46,7 +46,6 @@ export function ServiceSection({ defaults, onPatch }: {
   return (
     <div className="space-y-5">
       <DataRetentionBlock defaults={defaults} onPatch={onPatch} />
-      <MultiCompanyBlock defaults={defaults} onPatch={onPatch} />
       <AiKillSwitchBlock />
     </div>
   )
@@ -294,7 +293,7 @@ export function BitrixBlock({ defaults, onPatch }: {
 // 4. Мультикомпания / выбор компании в анкете
 // ─────────────────────────────────────────────────────────────────────────────
 
-function MultiCompanyBlock({ defaults, onPatch }: {
+export function MultiCompanyBlock({ defaults, onPatch }: {
   defaults: CompanyHiringDefaults
   onPatch: (patch: Partial<CompanyHiringDefaults>) => Promise<void>
 }) {
