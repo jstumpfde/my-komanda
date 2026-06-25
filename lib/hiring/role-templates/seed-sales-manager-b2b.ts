@@ -4,10 +4,10 @@
 // Контент уложен в реальные типы проекта (Question / CandidateSpec / FunnelV2Stage).
 // Токены {{...}} хранятся как есть — подстановка профиля продукта в ТЗ №3.
 
-import { and, eq, isNull } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { roleTemplates, questionnaireTemplates, demoTemplates } from "@/lib/db/schema"
-import { makeStage, type FunnelV2Stage, type StageActionType } from "@/lib/funnel-v2/types"
+import { makeStage, dozhimChainFor, type FunnelV2Stage, type StageActionType } from "@/lib/funnel-v2/types"
 import type { CandidateSpec } from "@/lib/core/spec/types"
 import type { Question } from "@/lib/course-types"
 import type { RoleScoringFormula } from "./types"
@@ -159,7 +159,16 @@ export const SALES_B2B_SPEC: Partial<CandidateSpec> = {
 
 function stage(action: StageActionType, seed: string, over: Partial<FunnelV2Stage>): FunnelV2Stage {
   const base = makeStage(action, seed)
-  return { ...base, ...over, rule: { ...base.rule, ...(over.rule ?? {}) } }
+  // makeStage зашивает dozhimChain под пресет "standard"; при смене пресета в
+  // override пересчитываем цепочку под итоговый dozhim (для "off" — пустая),
+  // иначе сохранённая цепочка рассинхронится с лейблом пресета (билдер читает
+  // сохранённую цепочку первой). См. надзор ТЗ №2.
+  const dozhim = over.dozhim ?? base.dozhim
+  return {
+    ...base, ...over, dozhim,
+    dozhimChain: dozhimChainFor(dozhim, action),
+    rule: { ...base.rule, ...(over.rule ?? {}) },
+  }
 }
 
 export const SALES_B2B_FUNNEL: FunnelV2Stage[] = [
@@ -282,17 +291,18 @@ type SeedResult = {
  * Идемпотентно: анкета/демо ищутся по имени среди системных, роль — по slug.
  */
 export async function seedSalesManagerB2B(createdBy?: string): Promise<SeedResult> {
-  // 1) Системная анкета
+  // 1) Системная анкета. Lookup без фильтра deletedAt + сброс deletedAt:null —
+  // повторный сид достаёт системную строку из корзины, а не плодит дубль.
   const [existingQ] = await db.select({ id: questionnaireTemplates.id })
     .from(questionnaireTemplates)
-    .where(and(eq(questionnaireTemplates.isSystem, true), eq(questionnaireTemplates.name, QUESTIONNAIRE_NAME), isNull(questionnaireTemplates.deletedAt)))
+    .where(and(eq(questionnaireTemplates.isSystem, true), eq(questionnaireTemplates.name, QUESTIONNAIRE_NAME)))
     .limit(1)
 
   let questionnaireTemplateId: string
   if (existingQ) {
     questionnaireTemplateId = existingQ.id
     await db.update(questionnaireTemplates)
-      .set({ questions: SALES_B2B_QUESTIONS, updatedAt: new Date() })
+      .set({ questions: SALES_B2B_QUESTIONS, deletedAt: null, updatedAt: new Date() })
       .where(eq(questionnaireTemplates.id, existingQ.id))
   } else {
     const [row] = await db.insert(questionnaireTemplates)
@@ -301,17 +311,17 @@ export async function seedSalesManagerB2B(createdBy?: string): Promise<SeedResul
     questionnaireTemplateId = row.id
   }
 
-  // 2) Системное короткое демо
+  // 2) Системное короткое демо (та же защита от корзины).
   const [existingD] = await db.select({ id: demoTemplates.id })
     .from(demoTemplates)
-    .where(and(eq(demoTemplates.isSystem, true), eq(demoTemplates.name, DEMO_NAME), isNull(demoTemplates.deletedAt)))
+    .where(and(eq(demoTemplates.isSystem, true), eq(demoTemplates.name, DEMO_NAME)))
     .limit(1)
 
   let demoTemplateId: string
   if (existingD) {
     demoTemplateId = existingD.id
     await db.update(demoTemplates)
-      .set({ sections: SALES_B2B_DEMO_SECTIONS, updatedAt: new Date() })
+      .set({ sections: SALES_B2B_DEMO_SECTIONS, deletedAt: null, updatedAt: new Date() })
       .where(eq(demoTemplates.id, existingD.id))
   } else {
     const [row] = await db.insert(demoTemplates)
@@ -339,6 +349,7 @@ export async function seedSalesManagerB2B(createdBy?: string): Promise<SeedResul
     funnelV2Template: SALES_B2B_FUNNEL,
     scoringFormula: SALES_B2B_FORMULA,
     isPublished: true,
+    deletedAt: null,            // повторный сид достаёт роль из корзины
     createdBy: createdBy ?? null,
     updatedAt: new Date(),
   }
