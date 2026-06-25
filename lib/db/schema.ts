@@ -88,6 +88,9 @@ export interface CompanyBrandingExtra {
 }
 
 import type { ProductProfile } from "@/lib/hiring/product-profile"
+import type { CandidateSpec } from "@/lib/core/spec/types"
+import type { FunnelV2Stage } from "@/lib/funnel-v2/types"
+import type { RoleScoringFormula } from "@/lib/hiring/role-templates/types"
 
 // ── CompanyHiringDefaults (drizzle/0156) ──
 // Дефолты компании для всех вакансий (HR → Настройки найма).
@@ -2527,6 +2530,32 @@ export const questionnaireTemplates = pgTable("questionnaire_templates", {
   deletedAt:  timestamp("deleted_at"),
   createdAt:  timestamp("created_at").defaultNow(),
   updatedAt:  timestamp("updated_at").defaultNow(),
+})
+
+// ─── Role Templates (ТЗ №2) ──────────────────────────────────────────────────
+// Шаблон роли — тонкая обёртка над контентом (анкета + демо + критерии + воронка).
+// Системный (is_system=true, tenant_id=null) виден всем тенантам; тенант может
+// завести свой. Анкета/демо — ссылками на questionnaire_templates/demo_templates;
+// критерии (CandidateSpec) и стадии Воронки v2 — inline jsonb (отд. таблиц нет).
+// Применение к вакансии (подстановка профиля продукта) — ТЗ №3. Миграция 0225.
+export const roleTemplates = pgTable("role_templates", {
+  id:                      uuid("id").primaryKey().defaultRandom(),
+  slug:                    text("slug").unique(),              // 'sales-manager-b2b'
+  name:                    text("name").notNull(),
+  description:             text("description"),
+  roleCategory:            text("role_category"),              // 'sales' | 'marketing' | ...
+  isSystem:                boolean("is_system").default(false),
+  tenantId:                uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }),
+  questionnaireTemplateId: uuid("questionnaire_template_id").references(() => questionnaireTemplates.id, { onDelete: "set null" }),
+  demoTemplateId:          uuid("demo_template_id").references(() => demoTemplates.id, { onDelete: "set null" }),
+  specTemplate:            jsonb("spec_template").$type<Partial<CandidateSpec>>().notNull().default({}),
+  funnelV2Template:        jsonb("funnel_v2_template").$type<FunnelV2Stage[]>().notNull().default([]),
+  scoringFormula:          jsonb("scoring_formula").$type<RoleScoringFormula>().notNull().default({}),
+  isPublished:             boolean("is_published").default(false),
+  deletedAt:               timestamp("deleted_at"),
+  createdAt:               timestamp("created_at").defaultNow(),
+  updatedAt:               timestamp("updated_at").defaultNow(),
+  createdBy:               uuid("created_by").references(() => users.id, { onDelete: "set null" }),
 })
 
 // ─── Training: AI ролевые сценарии ───────────────────────────────────────────
