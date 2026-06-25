@@ -15,7 +15,12 @@ export function CompaniesProductsSection({ defaults, onPatch }: {
   defaults: CompanyHiringDefaults
   onPatch: (patch: Partial<CompanyHiringDefaults>) => Promise<void>
 }) {
-  const brands = Array.isArray(defaults.brandCompanies) ? defaults.brandCompanies : []
+  // Продукты доп.брендов показываем только в режиме мультикомпании. Без него
+  // компания одна — нужны только продукты основной (иначе пустые/случайные
+  // бренды плодят лишние редакторы продуктов).
+  const brands = defaults.showCompanySelector && Array.isArray(defaults.brandCompanies)
+    ? defaults.brandCompanies.filter((b) => (b?.name ?? "").trim() !== "")
+    : []
 
   // Сохранение продуктов основной компании (productProfiles — top-level массив).
   const saveMain = (profiles: ProductProfile[], defaultId: string) =>
