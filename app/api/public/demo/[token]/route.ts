@@ -5,6 +5,8 @@ import { candidates, vacancies, demos, companies, hhResponses } from "@/lib/db/s
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { isShortId } from "@/lib/short-id"
 import { buildCandidateDeepLink, generateInviteToken } from "@/lib/telegram/candidate-bot"
+import { normalizeFunnelV2 } from "@/lib/funnel-v2/types"
+import { resolveCurrentStageContent } from "@/lib/funnel-v2/resolve-content"
 
 // Достаём first/last/city из hh resume. У части записей raw_data — это сам
 // resume, у других обёрнут в { resume: ... }. Альтернативные ключи
@@ -52,6 +54,8 @@ export async function GET(
         source: candidates.source,
         // F7: для deep-link на финальном экране
         telegramInviteToken: candidates.telegramInviteToken,
+        // Воронка v2: состояние кандидата (stageId, completedAt и т.д.)
+        funnelV2StateJson: candidates.funnelV2StateJson,
       })
       .from(candidates)
       .where(isShortId(token) ? eq(candidates.shortId, token) : eq(candidates.token, token))
@@ -82,6 +86,8 @@ export async function GET(
         brandTextColor: companies.brandTextColor,
         // F7: username бота для формирования deep-link на финальном экране
         candidateBotUsername: companies.candidateBotUsername,
+        // Воронка v2: флаг рантайма
+        funnelV2RuntimeEnabled: vacancies.funnelV2RuntimeEnabled,
       })
       .from(vacancies)
       .innerJoin(companies, eq(vacancies.companyId, companies.id))
@@ -100,6 +106,82 @@ export async function GET(
     }
 
     const vacancy = vacancyRows[0]
+
+    // ── ГЕЙТ ВОРОНКИ V2 ──────────────────────────────────────────────────────
+    // При funnelV2RuntimeEnabled=true: контент берётся из текущей стадии
+    // кандидата (resolveCurrentStageContent), а не из легаси kind='demo'.
+    // При флаге=false — весь легаси-путь ниже без изменений.
+    const vacancyDescJson = (vacancy.descriptionJson as Record<string, unknown> | null) ?? {}
+    if (vacancy.funnelV2RuntimeEnabled) {
+      const funnelV2 = normalizeFunnelV2(vacancyDescJson.funnelV2)
+      // Текущая стадия кандидата (funnelV2StateJson добавлен в select выше)
+      const candState = candidate.funnelV2StateJson
+      const currentStageId = candState?.stageId
+      const currentStage = currentStageId
+        ? funnelV2.stages.find(s => s.id === currentStageId)
+        : null
+
+      // C. Защита URL: если кандидат пришёл на /demo, но его стадия — test/task
+      // (или любая другая не-demo), редиректим на правильный URL.
+      if (currentStage && currentStage.action !== "demo") {
+        if (currentStage.action === "test" || currentStage.action === "task") {
+          // Редирект на /test/<token> — там кандидат и должен быть сейчас.
+          const { NextResponse } = await import("next/server")
+          return NextResponse.redirect(`https://company24.pro/test/${token}`, { status: 302 })
+        }
+        // Любая другая стадия (interview, offer, hired и т.д.) — мягкий 410.
+        return apiError(
+          `Демо недоступно на текущей стадии (${currentStage.action}). Проверьте письмо с актуальной ссылкой.`,
+          410,
+        )
+      }
+
+      const candidateForV2 = {
+        id:                candidate.id,
+        token:             token,
+        name:              candidate.name,
+        email:             null,
+        phone:             null,
+        vacancyId:         candidate.vacancyId,
+        funnelV2StateJson: candState ?? null,
+      }
+      const vacancyForV2 = {
+        id:                     vacancy.id,
+        funnelV2,
+        funnelV2RuntimeEnabled: true,
+      }
+
+      const resolved = await resolveCurrentStageContent(candidateForV2, vacancyForV2)
+      if (resolved) {
+        // Контент из v2-блока текущей стадии
+        return apiSuccess({
+          candidateName:      candidate.name,
+          vacancyTitle:       vacancy.title,
+          companyName:        vacancy.companyBrandName || vacancy.companyName,
+          companyLogo:        vacancy.companyLogo,
+          brandPrimaryColor:  vacancy.brandPrimaryColor,
+          brandBgColor:       vacancy.brandBgColor,
+          brandTextColor:     vacancy.brandTextColor,
+          salaryMin:          vacancy.salaryMin,
+          salaryMax:          vacancy.salaryMax,
+          city:               vacancy.city,
+          format:             vacancy.format,
+          lessons:            resolved.lessonsJson,
+          progress:           candidate.demoProgressJson,
+          answers:            candidate.anketaAnswers,
+          postDemoSettings:   resolved.postDemoSettings ?? {},
+          anketaIntro:        null,
+          finalScreens:       null,
+          prefill:            { first_name: null, last_name: null, city: null },
+          videoIntro:         null,
+          candidateTelegramDeepLink: null,
+          // Метка v2 для фронта (опционально, можно игнорировать)
+          _funnelV2:          { stageId: resolved.stageId, demoKind: resolved.demoKind },
+        })
+      }
+      // resolved=null: нет contentBlockId на стадии → падаем в легаси-путь ниже
+    }
+    // ── /ГЕЙТ ВОРОНКИ V2 ────────────────────────────────────────────────────
 
     // Find published demo for this vacancy
     const demoRows = await db

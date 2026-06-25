@@ -92,6 +92,29 @@ import type { CandidateSpec } from "@/lib/core/spec/types"
 import type { FunnelV2Stage } from "@/lib/funnel-v2/types"
 import type { RoleScoringFormula } from "@/lib/hiring/role-templates/types"
 
+// ── Рантайм воронки v2 — состояние кандидата (drizzle/0226) ─────────────────
+// Хранится в candidates.funnel_v2_state_json (jsonb, nullable).
+// NULL = кандидат ещё не вошёл в v2-воронку (едет по легаси-пути).
+// Инвариант: stageId всегда ссылается на существующую стадию в vacancy.descriptionJson.funnelV2.stages.
+export interface FunnelV2State {
+  /** id текущей стадии (FunnelV2Stage.id) */
+  stageId:                  string
+  /** ISO-8601: когда кандидат вошёл в эту стадию */
+  enteredAt:                string
+  /** ISO-8601: когда стадия завершена (null = ещё в процессе) */
+  completedAt:              string | null
+  /** Балл за прохождение стадии (для test/prequalification/task) */
+  scoreForStage:            number | null
+  /** stageId отложенного отказа (если отказ запланирован, но ещё не исполнен) */
+  pendingRejectionStageId:  string | null
+  /** Уже отрендеренный текст отказа (с подставленными {{имя}} и пр.) — сохраняется при scheduleV2Rejection */
+  pendingRejectionText?:    string | null
+  /** Количество отправленных дожим-касаний на текущей стадии */
+  touchesSent:              number
+  /** ISO-8601: когда запустили цепочку дожима на текущей стадии */
+  dozhimStartedAt:          string | null
+}
+
 // ── CompanyHiringDefaults (drizzle/0156) ──
 // Дефолты компании для всех вакансий (HR → Настройки найма).
 // Хранится в companies.hiring_defaults_json. VacancyStopFactors определён ниже
@@ -846,6 +869,11 @@ export const vacancies = pgTable("vacancies", {
   // меняется. Включается точечно (полигон), обратимо. См. drizzle/0166 и
   // lib/funnel-builder/runtime.ts (isBlockEnabled).
   funnelRuntimeEnabled: boolean("funnel_runtime_enabled").notNull().default(false),
+  // drizzle/0226 — Фаза 0 рантайма воронки v2. Отдельный флаг от funnelRuntimeEnabled
+  // (который управляет блоками Funnel Builder). false (дефолт) = легаси-путь для
+  // всех кандидатов; true = новые кандидаты идут через v2-рантайм.
+  // Включать только на полигон-вакансиях (Ф1); Орлинк/ИП не трогать.
+  funnelV2RuntimeEnabled: boolean("funnel_v2_runtime_enabled").notNull().default(false),
   // Авто-разбор hh-откликов: cron каждые 10 минут разбирает накопленные отклики
   // в рабочее время. Если выключено — клиент жмёт «Разобрать» вручную.
   autoProcessingEnabled:      boolean("auto_processing_enabled").notNull().default(false),
@@ -1496,6 +1524,9 @@ export const candidates = pgTable("candidates", {
   // списков/счётчиков; восстановление или удаление навсегда; авто-очистка по
   // companies.trash_retention_days.
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  // drizzle/0226 — Фаза 0 рантайма воронки v2. NULL = кандидат в легаси-пути,
+  // не вошёл в v2-воронку. Структура — FunnelV2State (объявлен выше в этом файле).
+  funnelV2StateJson: jsonb("funnel_v2_state_json").$type<FunnelV2State | null>(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })

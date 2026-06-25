@@ -985,6 +985,100 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
         results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "off_hours_soft_message" })
       } else {
 
+      // ── ГЕЙТ ВОРОНКИ V2 ────────────────────────────────────────────────────
+      // При флаге funnelV2RuntimeEnabled=true (default false):
+      //   1. Нормализуем funnelV2 из descriptionJson
+      //   2. Если enabled и есть стадии — записываем stateJson на первую стадию,
+      //      вызываем executeStageEntry (шлёт приглашение/demo через v2)
+      //   3. Помечаем hh_response как 'invited' и пропускаем весь легаси-путь
+      // При флаге=false — весь легаси-путь ниже без изменений.
+      //
+      // Единственная точка ветвления; легаси-ветка не трогается вообще.
+      let funnelV2Handled = false
+      if (candidateId && localVac && localVac.funnelV2RuntimeEnabled) {
+        try {
+          const descJson = localVac.descriptionJson as Record<string, unknown> | null
+          const { normalizeFunnelV2 } = await import("@/lib/funnel-v2/types")
+          const funnelV2 = normalizeFunnelV2(descJson?.funnelV2)
+          if (funnelV2.enabled && funnelV2.stages.length > 0) {
+            const firstStage = funnelV2.stages[0]
+            const nowIso = new Date().toISOString()
+            // Читаем token кандидата для CandidateForExecutor
+            const [candRow] = await db
+              .select({ token: candidates.token, name: candidates.name, email: candidates.email, phone: candidates.phone })
+              .from(candidates)
+              .where(eq(candidates.id, candidateId))
+              .limit(1)
+            if (candRow) {
+              // Записываем начальное состояние v2-воронки в candidates
+              const initialState: import("@/lib/db/schema").FunnelV2State = {
+                stageId:                 firstStage.id,
+                enteredAt:               nowIso,
+                completedAt:             null,
+                scoreForStage:           null,
+                pendingRejectionStageId: null,
+                touchesSent:             0,
+                dozhimStartedAt:         null,
+              }
+              await db.update(candidates)
+                .set({ funnelV2StateJson: initialState, updatedAt: new Date() })
+                .where(eq(candidates.id, candidateId))
+
+              // Вызываем исполнитель стадии
+              const { executeStageEntry } = await import("@/lib/funnel-v2/runtime-executor")
+              const candidateForV2: import("@/lib/funnel-v2/runtime-executor").CandidateForExecutor = {
+                id:                candidateId,
+                token:             candRow.token ?? "",
+                name:              candRow.name,
+                email:             candRow.email,
+                phone:             candRow.phone,
+                vacancyId:         localVac.id,
+                funnelV2StateJson: initialState,
+              }
+              const vacancyForV2: import("@/lib/funnel-v2/runtime-executor").VacancyForExecutor = {
+                id:                         localVac.id,
+                title:                      localVac.title,
+                companyId:                  localVac.companyId,
+                funnelV2,
+                funnelV2RuntimeEnabled:     true,
+                scheduleEnabled:            localVac.scheduleEnabled,
+                scheduleStart:              localVac.scheduleStart,
+                scheduleEnd:                localVac.scheduleEnd,
+                scheduleTimezone:           localVac.scheduleTimezone,
+                scheduleWorkingDays:        localVac.scheduleWorkingDays,
+                scheduleExcludedHolidayIds: localVac.scheduleExcludedHolidayIds,
+              }
+              await executeStageEntry(candidateForV2, vacancyForV2, firstStage)
+
+              // Помечаем отклик как обработанный
+              await db.update(hhResponses)
+                .set({ status: "invited", localCandidateId: candidateId })
+                .where(eq(hhResponses.id, resp.id))
+
+              funnelV2Handled = true
+              invitedCount++
+              results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "funnel_v2_entry" })
+
+              console.log("[PQ] funnel-v2 вход в первую стадию", JSON.stringify({
+                tag:         "process-queue/funnel-v2-entry",
+                candidateId,
+                stageId:     firstStage.id,
+                action:      firstStage.action,
+              }))
+            }
+          }
+        } catch (v2Err) {
+          console.error("[PQ] funnel-v2 entry failed, fallback на legacy:",
+            v2Err instanceof Error ? v2Err.message : v2Err)
+          // funnelV2Handled остаётся false → легаси-ветка ниже выполнится
+        }
+      }
+      // ── /ГЕЙТ ВОРОНКИ V2 ───────────────────────────────────────────────────
+
+      if (!funnelV2Handled) {
+      // Легаси-путь: при флаге=false или v2 не сработал (ошибка/нет стадий).
+      // ВЕСЬ нижеследующий блок — без изменений относительно оригинала.
+
       // Проверяем — отправляли ли работодателю уже что-то по этому отклику.
       let previouslyInvited = false
       try {
@@ -1221,6 +1315,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
 
       invitedCount++
       results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "invited" })
+      } // конец if (!funnelV2Handled) — легаси invite-путь
       } // конец else (обычный invite-путь; off-hours soft mode обработан выше)
       } // конец if (!belowThreshold && !stopFactorMatch) — отказ/keep_new/стоп-фактор обработан выше отдельной веткой
     } catch (err: unknown) {

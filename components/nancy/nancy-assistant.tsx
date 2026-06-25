@@ -204,6 +204,22 @@ function getBestRussianVoice(): SpeechSynthesisVoice | null {
   return ruVoices[0] ?? null
 }
 
+// Очищает текст ответа ассистента для синтеза речи:
+// убирает теги <action>...</action>, markdown и прочие служебные символы.
+function cleanForTts(text: string): string {
+  return text
+    // Убираем action-теги целиком (они не произносятся)
+    .replace(/<action>[\s\S]*?<\/action>/gi, "")
+    // Убираем markdown-разметку
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/^#+\s+/gm, "")
+    .replace(/`([^`]+)`/g, "$1")
+    // Убираем любые оставшиеся HTML/XML-теги
+    .replace(/<[^>]+>/g, "")
+    .trim()
+}
+
 async function speakText(
   text: string,
   onEnd?: () => void,
@@ -211,11 +227,15 @@ async function speakText(
 ) {
   if (!text) { onEnd?.(); return }
 
+  // Очищаем текст от тегов и markdown перед отправкой в TTS
+  const ttsText = cleanForTts(text)
+  if (!ttsText) { onEnd?.(); return }
+
   try {
     const res = await fetch("/api/modules/hr/nancy/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text: ttsText }),
     })
     if (res.ok && res.status !== 204) {
       const data = await res.arrayBuffer()
@@ -236,13 +256,8 @@ async function speakText(
 
   if (typeof window !== "undefined" && "speechSynthesis" in window) {
     window.speechSynthesis.cancel()
-    // Убираем markdown-разметку для TTS
-    const clean = text
-      .replace(/\*\*([^*]+)\*\*/g, "$1")
-      .replace(/\*([^*]+)\*/g, "$1")
-      .replace(/^#+\s+/gm, "")
-      .replace(/`([^`]+)`/g, "$1")
-    const utt = new SpeechSynthesisUtterance(clean)
+    // ttsText уже очищен выше (cleanForTts), используем его напрямую
+    const utt = new SpeechSynthesisUtterance(ttsText)
     utt.lang  = "ru-RU"
     utt.rate  = 0.97
     utt.pitch = 1.0
@@ -630,7 +645,7 @@ export function NancyAssistant() {
               addNancyMessage(`Не удалось запланировать интервью: ${err.error ?? res.statusText}`)
               return
             }
-            const start = new Date(action.startAt).toLocaleString("ru-RU", {
+            const start = new Date(action.startAt!).toLocaleString("ru-RU", {
               day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
             })
             addNancyMessage(`Интервью запланировано на ${start}. Можешь посмотреть в календаре.`)

@@ -3167,15 +3167,20 @@ export default function VacancyPage() {
                   Фаза 1 — легаси demo/test показываются как первые блоки,
                   рантайм их по-прежнему читает по kind. */}
               <TabsContent value="content">
-                <ContentBlocksTab vacancyId={id} vacancyTitle={vacancyTitle} onNavigateNext={() => {
-                  // Далее → следующий этап после «Контент» = «Воронка» (section funnel-builder).
-                  setActiveTab("settings")
-                  setSettingsSection("funnel-builder")
-                  const sp = new URLSearchParams(window.location.search)
-                  sp.set("tab", "settings"); sp.set("section", "funnel-builder")
-                  router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
-                  window.scrollTo({ top: 0, behavior: "smooth" })
-                }} />
+                <ContentBlocksTab
+                  vacancyId={id}
+                  vacancyTitle={vacancyTitle}
+                  funnelV2RuntimeEnabled={apiVacancy?.funnelV2RuntimeEnabled === true}
+                  onNavigateNext={() => {
+                    // Далее → следующий этап после «Контент» = «Воронка» (section funnel-builder).
+                    setActiveTab("settings")
+                    setSettingsSection("funnel-builder")
+                    const sp = new URLSearchParams(window.location.search)
+                    sp.set("tab", "settings"); sp.set("section", "funnel-builder")
+                    router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+                    window.scrollTo({ top: 0, behavior: "smooth" })
+                  }}
+                />
               </TabsContent>
 
               {/* Интервью — календарь компании прямо внутри вакансии (часть единого

@@ -73,9 +73,15 @@ interface ContentBlocksTabProps {
   vacancyId: string
   vacancyTitle?: string | null
   onNavigateNext?: () => void
+  /**
+   * Фаза 3 (пункт G): при true — тумблеры «Демо/Тест» и «Боевой» (LiveBattleToggle)
+   * скрываются, показывается подпись «Контентом управляет воронка v2».
+   * При false (default) — тумблеры как обычно.
+   */
+  funnelV2RuntimeEnabled?: boolean
 }
 
-export function ContentBlocksTab({ vacancyId, onNavigateNext }: ContentBlocksTabProps) {
+export function ContentBlocksTab({ vacancyId, onNavigateNext, funnelV2RuntimeEnabled = false }: ContentBlocksTabProps) {
   const { blocks, loading, error, createBlock: apiCreateBlock, updateBlock, flush, saveSettings, deleteBlock, reorder, setLiveBattle } = useContentBlocks(vacancyId)
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -638,27 +644,35 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext }: ContentBlocksTab
           </div>
 
           {/* Роль блока (Демо/Тест) + «Боевой» — только для block:* блоков.
+              При funnelV2RuntimeEnabled=true — тумблеры скрыты, контентом управляет воронка v2.
               Тест нужен, чтобы завести боевой тест кандидату (синк в demos kind='test'). */}
           {selectedBlock.kind.startsWith("block:") && (
-            <div className="flex items-center gap-2">
-              <div className="inline-flex rounded-md border border-border overflow-hidden text-[11px]">
-                <button
-                  type="button"
-                  onClick={() => handleChangeContentType(selectedBlock, "presentation")}
-                  className={cn("px-2 py-1 transition-colors", selectedBlock.contentType === "presentation" ? "bg-blue-500/10 text-blue-600 font-medium" : "text-muted-foreground hover:text-foreground")}
-                >Демо</button>
-                <button
-                  type="button"
-                  onClick={() => handleChangeContentType(selectedBlock, "test")}
-                  className={cn("px-2 py-1 border-l border-border transition-colors", (selectedBlock.contentType === "test" || selectedBlock.contentType === "task") ? "bg-amber-500/10 text-amber-600 font-medium" : "text-muted-foreground hover:text-foreground")}
-                >Тест</button>
+            funnelV2RuntimeEnabled ? (
+              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                <Zap className="w-3 h-3 text-violet-500" />
+                Контентом управляет воронка v2 (стадия → блок)
+              </span>
+            ) : (
+              <div className="flex items-center gap-2">
+                <div className="inline-flex rounded-md border border-border overflow-hidden text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => handleChangeContentType(selectedBlock, "presentation")}
+                    className={cn("px-2 py-1 transition-colors", selectedBlock.contentType === "presentation" ? "bg-blue-500/10 text-blue-600 font-medium" : "text-muted-foreground hover:text-foreground")}
+                  >Демо</button>
+                  <button
+                    type="button"
+                    onClick={() => handleChangeContentType(selectedBlock, "test")}
+                    className={cn("px-2 py-1 border-l border-border transition-colors", (selectedBlock.contentType === "test" || selectedBlock.contentType === "task") ? "bg-amber-500/10 text-amber-600 font-medium" : "text-muted-foreground hover:text-foreground")}
+                  >Тест</button>
+                </div>
+                <LiveBattleToggle
+                  block={selectedBlock}
+                  allBlocks={uiBlocks}
+                  onToggle={handleToggleLiveBattle}
+                />
               </div>
-              <LiveBattleToggle
-                block={selectedBlock}
-                allBlocks={uiBlocks}
-                onToggle={handleToggleLiveBattle}
-              />
-            </div>
+            )
           )}
         </div>
       )}

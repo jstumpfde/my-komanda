@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import { eq, and, desc } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, demos, testSubmissions, type PostDemoSettings } from "@/lib/db/schema"
+import { candidates, demos, testSubmissions, vacancies, type PostDemoSettings } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { isShortId } from "@/lib/short-id"
 import { scoreTestSubmission } from "@/lib/ai-score-test"
@@ -14,6 +14,8 @@ import {
   type ObjectiveResult,
 } from "@/lib/score-test-objective"
 import type { Question } from "@/lib/course-types"
+// Воронка v2: хук завершения теста (только при funnelV2RuntimeEnabled=true)
+import { onTestSubmitted } from "@/lib/funnel-v2/stage-completion-handler"
 
 const MIN_ANSWER_LEN = 10
 const DEFAULT_PASSING_SCORE = 70
@@ -202,6 +204,30 @@ export async function POST(
         settings:     (demo?.postDemoSettings as PostDemoSettings | null) ?? {},
       })
     }
+
+    // Воронка v2: если флаг включён и кандидат в v2-воронке — применяем StageRule.
+    // Fire-and-forget: ошибка не блокирует ответ кандидату.
+    // Объективный балл (0..100) передаём сразу — не ждём AI-скоринга.
+    void (async () => {
+      try {
+        const [vac] = await db
+          .select({
+            funnelV2RuntimeEnabled: vacancies.funnelV2RuntimeEnabled,
+            funnelV2StateJson:      candidates.funnelV2StateJson,
+          })
+          .from(vacancies)
+          .innerJoin(candidates, eq(candidates.vacancyId, vacancies.id))
+          .where(eq(candidates.id, candidate.id))
+          .limit(1)
+        if (vac?.funnelV2RuntimeEnabled && vac?.funnelV2StateJson) {
+          // Передаём объективный балл если есть (иначе onTestSubmitted посчитает сам)
+          const objectiveScore = objective && objective.maxPoints > 0 ? objective.score : undefined
+          await onTestSubmitted(candidate.id, structured, objectiveScore)
+        }
+      } catch (err) {
+        console.error("[test/submit] v2-хук onTestSubmitted упал:", err instanceof Error ? err.message : err)
+      }
+    })()
 
     return apiSuccess({ ok: true })
   } catch (err) {

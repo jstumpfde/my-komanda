@@ -196,6 +196,49 @@ async function processOneTouch(
   // первых сообщений. Стоп-триггеры пропускаем (это не дожим), но
   // дополнительно проверяем что демо ещё не открыто — иначе
   // дальнейшие приветственные сообщения теряют смысл.
+  // ── Воронка v2: стоп-триггер для дожима branch=`funnelv2:<stageId>` ──────────
+  // Если кандидат продвинулся дальше (stageId изменился) или стадия завершена
+  // (completedAt задан) — дожим этой стадии уже неактуален, отменяем.
+  if (typeof msg.branch === "string" && msg.branch.startsWith("funnelv2:")) {
+    const branchStageId = msg.branch.slice("funnelv2:".length)
+    const [candV2] = await db
+      .select({ funnelV2StateJson: candidates.funnelV2StateJson, stage: candidates.stage })
+      .from(candidates)
+      .where(eq(candidates.id, msg.candidateId))
+      .limit(1)
+    if (!candV2) {
+      await db.update(followUpMessages)
+        .set({ status: "cancelled", errorMessage: "candidate_missing" })
+        .where(eq(followUpMessages.id, msg.id))
+      return { outcome: "cancelled", reason: "v2_candidate_missing" }
+    }
+    // Терминальные стадии — всегда отменяем
+    if (candV2.stage === "rejected" || candV2.stage === "hired") {
+      await db.update(followUpMessages)
+        .set({ status: "cancelled", errorMessage: "stage_terminal" })
+        .where(eq(followUpMessages.id, msg.id))
+      return { outcome: "cancelled", reason: "v2_stage_terminal" }
+    }
+    const v2State = candV2.funnelV2StateJson as import("@/lib/db/schema").FunnelV2State | null | undefined
+    if (v2State) {
+      // Кандидат ушёл на другую стадию → дожим старой стадии отменяем
+      if (v2State.stageId !== branchStageId) {
+        await db.update(followUpMessages)
+          .set({ status: "cancelled", errorMessage: `v2_stage_changed:${v2State.stageId}` })
+          .where(eq(followUpMessages.id, msg.id))
+        return { outcome: "cancelled", reason: "v2_stage_changed" }
+      }
+      // Стадия завершена (completedAt задан) → дожим уже не нужен
+      if (v2State.completedAt) {
+        await db.update(followUpMessages)
+          .set({ status: "cancelled", errorMessage: "v2_stage_completed" })
+          .where(eq(followUpMessages.id, msg.id))
+        return { outcome: "cancelled", reason: "v2_stage_completed" }
+      }
+    }
+    // Стадия совпадает и ещё не завершена — продолжаем отправку (fallthrough)
+  }
+
   const isChainStep = msg.branch === "first_msg_2" || msg.branch === "first_msg_3"
   // Off-hours: мягкое Сообщение 1, запланированное при отклике вне рабочих
   // часов (producer — lib/messaging/first-messages-chain.ts,

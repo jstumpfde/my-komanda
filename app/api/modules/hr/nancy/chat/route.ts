@@ -349,10 +349,10 @@ export async function POST(req: Request) {
     .limit(1)
 
   const cfg = (company?.nancyVoiceJson ?? {}) as NancyVoiceSettings
-  const assistantName = cfg.name?.trim() || "Нэнси"
+  const assistantName = cfg.name?.trim() || "Алёна"
 
   // Базовый системный промпт с подстановкой имени
-  const baseSystem = `Ты — ${assistantName}, AI-ассистент платформы Company24.pro.
+  const baseSystem = `Ты — ${assistantName}, женщина-ассистент платформы Company24.pro. ВСЕГДА говори о себе и своих действиях в ЖЕНСКОМ роде: «поняла», «сделала», «готова», «посмотрела», «рада помочь». НИКОГДА не используй мужской род.
 Говоришь по-русски. Тон: дружелюбный, профессиональный, лаконичный.
 Без «Конечно!», без пустых вводных фраз. Отвечай по делу — 1-4 предложения.`
 

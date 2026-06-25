@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from "next/server"
 import { and, eq, or, sql } from "drizzle-orm"
 import { nanoid } from "nanoid"
 import { db } from "@/lib/db"
-import { candidates, demos, hhCandidates } from "@/lib/db/schema"
+import { candidates, demos, hhCandidates, vacancies } from "@/lib/db/schema"
 import { generateCandidateShortId, isShortId } from "@/lib/short-id"
 import { normalizePhone, normalizeEmail } from "@/lib/candidates/normalize-contacts"
 // #19: scheduleAnketaConfirmation больше не вызываем — функция оставлена
 // для совместимости с уже запланированными follow_up_messages, но новые
 // записи теперь идут только через scheduleAnketaAutoReply (таб «Воронка»).
 import { scheduleAnketaAutoReply } from "@/lib/messaging/anketa-auto-reply"
+// Воронка v2: хук завершения анкеты (только при funnelV2RuntimeEnabled=true)
+import { onAnketaCompleted } from "@/lib/funnel-v2/stage-completion-handler"
 
 type AnketaPayload = {
   telegram?: string
@@ -148,6 +150,25 @@ export async function POST(
         vacancyId:   existing.vacancyId,
       })
 
+      // Воронка v2: если флаг включён и кандидат в v2-воронке — применяем StageRule.
+      // Fire-and-forget: ошибка здесь не блокирует ответ кандидату.
+      void (async () => {
+        try {
+          // Проверяем флаг вакансии перед тем, как грузить тяжёлый обработчик
+          const [vac] = await db
+            .select({ funnelV2RuntimeEnabled: vacancies.funnelV2RuntimeEnabled, funnelV2StateJson: candidates.funnelV2StateJson })
+            .from(vacancies)
+            .innerJoin(candidates, eq(candidates.vacancyId, vacancies.id))
+            .where(eq(candidates.id, existing.id))
+            .limit(1)
+          if (vac?.funnelV2RuntimeEnabled && vac?.funnelV2StateJson) {
+            await onAnketaCompleted(existing.id)
+          }
+        } catch (err) {
+          console.error("[demo/apply] v2-хук onAnketaCompleted упал:", err instanceof Error ? err.message : err)
+        }
+      })()
+
       return NextResponse.json({ success: true, id: existing.id })
     }
 
@@ -228,6 +249,23 @@ export async function POST(
           vacancyId:   demo.vacancyId,
         })
       }
+
+      // Воронка v2 (dedup-ветка): аналогично основной ветке выше.
+      void (async () => {
+        try {
+          const [vac] = await db
+            .select({ funnelV2RuntimeEnabled: vacancies.funnelV2RuntimeEnabled, funnelV2StateJson: candidates.funnelV2StateJson })
+            .from(vacancies)
+            .innerJoin(candidates, eq(candidates.vacancyId, vacancies.id))
+            .where(eq(candidates.id, dup.id))
+            .limit(1)
+          if (vac?.funnelV2RuntimeEnabled && vac?.funnelV2StateJson) {
+            await onAnketaCompleted(dup.id)
+          }
+        } catch (err) {
+          console.error("[demo/apply] v2-хук onAnketaCompleted (dedup) упал:", err instanceof Error ? err.message : err)
+        }
+      })()
 
       return NextResponse.json({ success: true, id: dup.id, deduplicated: true })
     }

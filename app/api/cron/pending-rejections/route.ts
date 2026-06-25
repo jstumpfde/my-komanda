@@ -14,10 +14,13 @@ import { NextRequest, NextResponse } from "next/server"
 import { and, eq, isNotNull, lte, sql } from "drizzle-orm"
 import { db, pgClient } from "@/lib/db"
 import { candidates, vacancies } from "@/lib/db/schema"
+import type { FunnelV2State } from "@/lib/db/schema"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { canSendNow, type VacancySchedule } from "@/lib/schedule/can-send-now"
 import { executeRejection } from "@/lib/rejection/execute"
+import { sanitizeRejectionText } from "@/lib/rejection/legal-guard"
+import { trySyncRejectToHh } from "@/lib/hh/sync-stage"
 
 const CRON_NAME = "pending-rejections"
 const MAX_PER_RUN = 50
@@ -89,6 +92,57 @@ async function run_(_req: NextRequest) {
       if (!sched.allowed) { deferredOffHours++; continue }
 
       try {
+        // ── v2-ветка: если кандидат в воронке v2 — используем сохранённый текст
+        // и очищаем маркер v2 из funnelV2StateJson после исполнения.
+        const [candState] = await db
+          .select({ funnelV2StateJson: candidates.funnelV2StateJson })
+          .from(candidates)
+          .where(eq(candidates.id, row.candidateId))
+          .limit(1)
+        const v2State = candState?.funnelV2StateJson as FunnelV2State | null | undefined
+
+        if (v2State?.pendingRejectionStageId) {
+          // v2-отказ: исполняем через executeRejection (он всё равно чистит pendingRejection*
+          // и ставит stage='rejected'), а текст берём из v2State.pendingRejectionText.
+          // Сначала подставляем сохранённый текст в pendingRejectionMessage, чтобы
+          // executeRejection → trySyncRejectToHh его подхватил.
+          const savedText = sanitizeRejectionText(v2State.pendingRejectionText ?? null)
+          if (savedText) {
+            await db.update(candidates)
+              .set({ pendingRejectionMessage: savedText })
+              .where(eq(candidates.id, row.candidateId))
+          }
+
+          const res = await executeRejection({
+            candidateId: row.candidateId,
+            reason:      row.reason ?? `funnel_v2:${v2State.pendingRejectionStageId}`,
+          })
+
+          // Очищаем v2-маркеры из funnelV2StateJson (pendingRejection* уже очищен executeRejection)
+          if (res.rejected) {
+            const freshState = await db
+              .select({ funnelV2StateJson: candidates.funnelV2StateJson })
+              .from(candidates)
+              .where(eq(candidates.id, row.candidateId))
+              .limit(1)
+            const afterState = freshState[0]?.funnelV2StateJson as FunnelV2State | null | undefined
+            if (afterState) {
+              await db.update(candidates)
+                .set({
+                  funnelV2StateJson: {
+                    ...afterState,
+                    pendingRejectionStageId: null,
+                    pendingRejectionText:    null,
+                  },
+                })
+                .where(eq(candidates.id, row.candidateId))
+            }
+            rejected++
+          }
+          continue
+        }
+
+        // ── Легаси-ветка: стандартный путь (без изменений) ───────────────────
         const res = await executeRejection({
           candidateId: row.candidateId,
           reason:      row.reason ?? "delayed_rejection",

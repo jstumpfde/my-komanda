@@ -1,0 +1,344 @@
+/**
+ * Рантайм воронки v2 — обработчик завершения стадии.
+ *
+ * Фаза 2: реализованы onAnketaCompleted и onTestSubmitted.
+ *
+ * Алгоритм для каждой точки завершения:
+ *   1. Загрузить кандидата и вакансию из БД.
+ *   2. Убедиться, что флаг funnelV2RuntimeEnabled=true и есть funnelV2StateJson.
+ *   3. Найти текущую стадию в конфиге воронки.
+ *   4. Вычислить балл через calcStageScore (если есть контентный блок с вопросами).
+ *   5. Записать scoreForStage и completedAt в funnelV2StateJson.
+ *   6. Применить StageRule:
+ *      - если rule.autoReject && scorePercent < threshold → scheduleV2Rejection
+ *      - иначе если rule.autoAdvance → advanceToNextStage
+ *      - иначе → пометить completedAt (ждёт HR)
+ */
+
+import { eq } from "drizzle-orm"
+import { db } from "@/lib/db"
+import { candidates, vacancies, demos } from "@/lib/db/schema"
+import type { FunnelV2State } from "@/lib/db/schema"
+import { normalizeFunnelV2 } from "@/lib/funnel-v2/types"
+import type { FunnelV2Stage } from "@/lib/funnel-v2/types"
+import { calcStageScore, calcStageScoreWithAI } from "@/lib/funnel-v2/calc-stage-score"
+import { scheduleV2Rejection } from "@/lib/funnel-v2/advance-stage"
+import { advanceToNextStage } from "@/lib/funnel-v2/advance-stage"
+import type { CandidateForExecutor, VacancyForExecutor } from "@/lib/funnel-v2/runtime-executor"
+import type { StructuredAnswer } from "@/lib/score-test-objective"
+import { renderTemplate } from "@/lib/template-renderer"
+import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Вспомогательные загрузчики
+// ────────────────────────────────────────────────────────────────────────────────
+
+/** Загрузить минимальный срез кандидата + вакансии для обработчика. */
+async function loadForCompletion(candidateId: string): Promise<{
+  candidate: CandidateForExecutor
+  vacancy: VacancyForExecutor
+} | null> {
+  const [row] = await db
+    .select({
+      // Поля кандидата
+      cId:               candidates.id,
+      cToken:            candidates.token,
+      cName:             candidates.name,
+      cEmail:            candidates.email,
+      cPhone:            candidates.phone,
+      cVacancyId:        candidates.vacancyId,
+      cFunnelV2State:    candidates.funnelV2StateJson,
+      // Поля вакансии
+      vId:               vacancies.id,
+      vTitle:            vacancies.title,
+      vCompanyId:        vacancies.companyId,
+      vDescriptionJson:  vacancies.descriptionJson,
+      vFunnelV2Runtime:  vacancies.funnelV2RuntimeEnabled,
+      // Расписание для adjustToWorkingWindow
+      vSchedEnabled:     vacancies.scheduleEnabled,
+      vSchedStart:       vacancies.scheduleStart,
+      vSchedEnd:         vacancies.scheduleEnd,
+      vSchedTz:          vacancies.scheduleTimezone,
+      vSchedDays:        vacancies.scheduleWorkingDays,
+      vSchedHolidays:    vacancies.scheduleExcludedHolidayIds,
+    })
+    .from(candidates)
+    .innerJoin(vacancies, eq(vacancies.id, candidates.vacancyId))
+    .where(eq(candidates.id, candidateId))
+    .limit(1)
+
+  if (!row) return null
+
+  // Распаковываем funnelV2 из descriptionJson
+  const descJson = row.vDescriptionJson as { funnelV2?: unknown } | null
+  const funnelV2 = normalizeFunnelV2(descJson?.funnelV2)
+
+  const candidate: CandidateForExecutor = {
+    id:                candidateId,
+    token:             row.cToken ?? "",
+    name:              row.cName ?? "",
+    email:             row.cEmail,
+    phone:             row.cPhone,
+    vacancyId:         row.cVacancyId,
+    funnelV2StateJson: (row.cFunnelV2State as FunnelV2State | null) ?? null,
+  }
+
+  const vacancy: VacancyForExecutor = {
+    id:                       row.vId,
+    title:                    row.vTitle,
+    companyId:                row.vCompanyId ?? "",
+    funnelV2:                 funnelV2,
+    funnelV2RuntimeEnabled:   row.vFunnelV2Runtime ?? false,
+    scheduleEnabled:          row.vSchedEnabled,
+    scheduleStart:            row.vSchedStart,
+    scheduleEnd:              row.vSchedEnd,
+    scheduleTimezone:         row.vSchedTz,
+    scheduleWorkingDays:      row.vSchedDays as number[] | null,
+    scheduleExcludedHolidayIds: row.vSchedHolidays as string[] | null,
+  }
+
+  return { candidate, vacancy }
+}
+
+/** Загрузить lessonsJson контентного блока текущей стадии (из таблицы demos). */
+async function loadStageLessons(contentBlockId: string): Promise<unknown> {
+  const [demoRow] = await db
+    .select({ lessonsJson: demos.lessonsJson })
+    .from(demos)
+    .where(eq(demos.id, contentBlockId))
+    .limit(1)
+  return demoRow?.lessonsJson ?? []
+}
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Применение StageRule
+// ────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Применить правило стадии после её завершения:
+ *   - Записать scoreForStage + completedAt в funnelV2StateJson.
+ *   - Применить StageRule: autoReject / autoAdvance / пометить completedAt.
+ */
+async function applyStageRule(args: {
+  candidate:    CandidateForExecutor
+  vacancy:      VacancyForExecutor
+  stage:        FunnelV2Stage
+  scorePercent: number
+  totalScore:   number
+}): Promise<void> {
+  const { candidate, vacancy, stage, scorePercent, totalScore } = args
+  const now = new Date()
+  const nowIso = now.toISOString()
+
+  // Шаг 1: записать балл и отметить стадию завершённой (completedAt).
+  const prevState = candidate.funnelV2StateJson
+  const updatedState: FunnelV2State = {
+    stageId:                 prevState?.stageId                 ?? stage.id,
+    enteredAt:               prevState?.enteredAt               ?? nowIso,
+    completedAt:             nowIso,
+    scoreForStage:           totalScore,
+    pendingRejectionStageId: prevState?.pendingRejectionStageId ?? null,
+    pendingRejectionText:    prevState?.pendingRejectionText     ?? null,
+    touchesSent:             prevState?.touchesSent             ?? 0,
+    dozhimStartedAt:         prevState?.dozhimStartedAt         ?? null,
+  }
+
+  await db.update(candidates)
+    .set({ funnelV2StateJson: updatedState, updatedAt: now })
+    .where(eq(candidates.id, candidate.id))
+
+  // Обновляем локальный объект для передачи в scheduleV2Rejection / advanceToNextStage
+  const updatedCandidate: CandidateForExecutor = {
+    ...candidate,
+    funnelV2StateJson: updatedState,
+  }
+
+  const rule = stage.rule
+  const threshold = typeof rule.threshold === "number" ? rule.threshold : 0
+
+  // Шаг 2: autoReject — если балл ниже порога
+  if (rule.autoReject && scorePercent < threshold) {
+    // Рендерим текст отказа ({{имя}} и пр.)
+    const { firstName } = await getCandidateFirstName(candidate.id)
+    const rawText = rule.rejectText ?? ""
+    const renderedText = rawText.trim().length > 0
+      ? renderTemplate(rawText, {
+          name:    firstName,
+          vacancy: vacancy.title ?? "",
+        })
+      : null
+
+    await scheduleV2Rejection(
+      updatedCandidate,
+      stage.id,
+      rule.rejectDelayMinutes,
+      renderedText ?? undefined,
+    )
+
+    console.log("[funnel-v2/completion]", JSON.stringify({
+      tag:          "funnel-v2/stage-rule/reject",
+      candidateId:  candidate.id,
+      stageId:      stage.id,
+      scorePercent,
+      threshold,
+      delayMinutes: rule.rejectDelayMinutes,
+    }))
+    return
+  }
+
+  // Шаг 3: autoAdvance — если балл достаточный (или нет ограничения)
+  if (rule.autoAdvance) {
+    await advanceToNextStage(updatedCandidate, vacancy, {
+      advanceTo:    rule.advanceTo,
+      scoreForStage: totalScore,
+    })
+
+    console.log("[funnel-v2/completion]", JSON.stringify({
+      tag:         "funnel-v2/stage-rule/advance",
+      candidateId: candidate.id,
+      stageId:     stage.id,
+      scorePercent,
+      advanceTo:   rule.advanceTo ?? "next",
+    }))
+    return
+  }
+
+  // Шаг 4: ни autoReject, ни autoAdvance — стадия помечена completedAt, ждём HR.
+  console.log("[funnel-v2/completion]", JSON.stringify({
+    tag:         "funnel-v2/stage-rule/wait-hr",
+    candidateId: candidate.id,
+    stageId:     stage.id,
+    scorePercent,
+    note:        "autoReject=false, autoAdvance=false — ждём решения HR",
+  }))
+}
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Публичные хуки
+// ────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Хук: кандидат заполнил анкету на демо-стадии.
+ *
+ * Вызывается из /api/public/demo/[token]/apply ТОЛЬКО при:
+ *   - vacancy.funnelV2RuntimeEnabled === true
+ *   - у кандидата есть funnelV2StateJson (он в v2-воронке)
+ *
+ * @param candidateId  id кандидата
+ * @param answersArg   Структурированные ответы (если есть; иначе пустой массив).
+ */
+export async function onAnketaCompleted(
+  candidateId: string,
+  answersArg: StructuredAnswer[] = [],
+): Promise<void> {
+  const loaded = await loadForCompletion(candidateId)
+  if (!loaded) {
+    console.warn("[funnel-v2/completion] onAnketaCompleted — кандидат/вакансия не найдены", { candidateId })
+    return
+  }
+  const { candidate, vacancy } = loaded
+
+  // Гейт: только v2-кандидаты с активным флагом
+  if (!vacancy.funnelV2RuntimeEnabled || !candidate.funnelV2StateJson) return
+
+  const stageId = candidate.funnelV2StateJson.stageId
+  const stage = vacancy.funnelV2.stages.find((s) => s.id === stageId)
+  if (!stage) {
+    console.warn("[funnel-v2/completion] onAnketaCompleted — стадия не найдена в конфиге", { candidateId, stageId })
+    return
+  }
+
+  // Подсчёт балла: если у стадии есть contentBlockId — читаем lessonsJson
+  let scorePercent = 100
+  let totalScore = 0
+  if (stage.contentBlockId) {
+    const lessonsJson = await loadStageLessons(stage.contentBlockId)
+    const score = calcStageScore(lessonsJson, answersArg)
+    scorePercent = score.scorePercent
+    totalScore   = score.totalScore
+  }
+
+  await applyStageRule({ candidate, vacancy, stage, scorePercent, totalScore })
+}
+
+/**
+ * Хук: кандидат сдал тестовое задание.
+ *
+ * Вызывается из /api/public/test/[token]/submit ТОЛЬКО при:
+ *   - vacancy.funnelV2RuntimeEnabled === true
+ *   - у кандидата есть funnelV2StateJson (он в v2-воронке)
+ *
+ * Фаза 3 (пункт F): onTestSubmitted вызывается ПОСЛЕ завершения processTestScoring
+ * (caller передаёт финальный objectiveScore). Если в тесте есть AI-вопросы
+ * (textMatchMode='ai') — вызываем calcStageScoreWithAI чтобы получить точный балл.
+ * Это async-вызов: StageRule применяется к РЕАЛЬНОМУ итоговому баллу, а не промежуточному.
+ *
+ * @param candidateId       id кандидата
+ * @param answersArg        Структурированные ответы кандидата (из structuredAnswers тела запроса).
+ * @param objectiveScore    Объективный балл (0–100), если уже подсчитан кодом (опционально).
+ *                          Если задан И в блоке нет AI-вопросов — используется напрямую.
+ *                          Если в блоке есть AI-вопросы — всё равно запускаем calcStageScoreWithAI.
+ */
+export async function onTestSubmitted(
+  candidateId: string,
+  answersArg: StructuredAnswer[] = [],
+  objectiveScore?: number,
+): Promise<void> {
+  const loaded = await loadForCompletion(candidateId)
+  if (!loaded) {
+    console.warn("[funnel-v2/completion] onTestSubmitted — кандидат/вакансия не найдены", { candidateId })
+    return
+  }
+  const { candidate, vacancy } = loaded
+
+  // Гейт: только v2-кандидаты с активным флагом
+  if (!vacancy.funnelV2RuntimeEnabled || !candidate.funnelV2StateJson) return
+
+  const stageId = candidate.funnelV2StateJson.stageId
+  const stage = vacancy.funnelV2.stages.find((s) => s.id === stageId)
+  if (!stage) {
+    console.warn("[funnel-v2/completion] onTestSubmitted — стадия не найдена в конфиге", { candidateId, stageId })
+    return
+  }
+
+  let scorePercent = 100
+  let totalScore = 0
+
+  if (stage.contentBlockId) {
+    const lessonsJson = await loadStageLessons(stage.contentBlockId)
+
+    // Фаза 3 (E+F): проверяем наличие AI-вопросов в блоке.
+    // Если есть — запускаем полный AI-скоринг (async, точный балл).
+    // Если нет — используем объективный балл (быстро, без AI).
+    const quickScore = calcStageScore(lessonsJson, answersArg)
+
+    if (quickScore.hasPendingAiQuestions) {
+      // Есть AI-вопросы → нужен async AI-путь для точного балла.
+      // calcStageScoreWithAI учтёт и объективные, и AI-вопросы.
+      try {
+        const fullScore = await calcStageScoreWithAI(lessonsJson, answersArg)
+        scorePercent = fullScore.scorePercent
+        totalScore   = fullScore.totalScore
+      } catch (err) {
+        // AI упал — деградируем к объективному баллу (безопасно).
+        console.warn("[funnel-v2/completion] onTestSubmitted: AI-скоринг упал, используем объективный балл:", err instanceof Error ? err.message : err)
+        scorePercent = typeof objectiveScore === "number" ? objectiveScore : quickScore.scorePercent
+        totalScore   = typeof objectiveScore === "number" ? objectiveScore : quickScore.totalScore
+      }
+    } else if (typeof objectiveScore === "number") {
+      // Нет AI-вопросов + объективный балл уже готов → используем напрямую.
+      scorePercent = objectiveScore
+      totalScore   = objectiveScore
+    } else {
+      // Нет AI-вопросов + нет готового балла → считаем объективно.
+      scorePercent = quickScore.scorePercent
+      totalScore   = quickScore.totalScore
+    }
+  } else if (typeof objectiveScore === "number") {
+    // Нет contentBlockId, но есть переданный балл (редкий случай)
+    scorePercent = objectiveScore
+    totalScore   = objectiveScore
+  }
+
+  await applyStageRule({ candidate, vacancy, stage, scorePercent, totalScore })
+}

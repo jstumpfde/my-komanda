@@ -39,6 +39,8 @@ export interface ApiVacancy {
   deletedAt: string | null
   createdAt: string | null
   updatedAt: string | null
+  /** Флаг рантайма воронки v2 (Фаза 3). */
+  funnelV2RuntimeEnabled?: boolean
 }
 
 interface VacancyCounts {
