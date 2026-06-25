@@ -98,6 +98,9 @@ interface NancyAction {
     | "schedule_interview"
     | "show_candidates_above_threshold"
     | "export_candidates"
+    | "fill_vacancy"
+    | "generate_vacancy_setup"
+    | "apply_role_template"
   // fill_outbound
   textClauses?: Array<{ text: string; field: string }>
   area?: string
@@ -123,6 +126,16 @@ interface NancyAction {
   interviewer?: string
   // show_candidates_above_threshold
   threshold?: number
+  // fill_vacancy — поля анкеты вакансии
+  responsibilities?: string
+  requirements?: string
+  conditions?: string
+  companyDescription?: string
+  requiredSkills?: string[]
+  // apply_role_template
+  templateSlug?: string
+  templateId?: string
+  overwrite?: boolean
 }
 
 interface NancyConfig {
@@ -733,6 +746,152 @@ export function NancyAssistant() {
         addNancyMessage("Готовлю файл Excel с кандидатами…")
         // Открываем скачивание в новой вкладке (GET = скачать все поля)
         window.open(`/api/modules/hr/vacancies/${vid}/export-candidates`, "_blank")
+
+      // ── Скилл 8: заполнить поля анкеты вакансии из брифа ──
+      } else if (action.type === "fill_vacancy") {
+        const vid = action.vacancyId
+        if (!vid) {
+          addNancyMessage("Открой страницу вакансии — тогда смогу заполнить описание.")
+          continue
+        }
+        // Сначала читаем текущую descriptionJson, чтобы не затереть другие поля
+        void (async () => {
+          try {
+            const getRes = await fetch(`/api/modules/hr/vacancies/${vid}`)
+            const current = getRes.ok ? ((await getRes.json()) as { data?: { descriptionJson?: unknown } }).data : null
+            const existingDesc = (current?.descriptionJson ?? {}) as Record<string, unknown>
+            const existingAnketa = (existingDesc.anketa ?? {}) as Record<string, unknown>
+
+            // Мёрджим только переданные поля — не затираем остальные
+            const anketaPatch: Record<string, unknown> = { ...existingAnketa }
+            if (action.responsibilities)   anketaPatch.responsibilities   = action.responsibilities
+            if (action.requirements)       anketaPatch.requirements       = action.requirements
+            if (action.conditions)         anketaPatch.conditions         = action.conditions
+            if (action.companyDescription) anketaPatch.companyDescription = action.companyDescription
+            if (action.requiredSkills?.length) anketaPatch.requiredSkills = action.requiredSkills
+
+            const putRes = await fetch(`/api/modules/hr/vacancies/${vid}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                description_json: { ...existingDesc, anketa: anketaPatch },
+              }),
+            })
+            if (!putRes.ok) {
+              const err = (await putRes.json().catch(() => ({}))) as { error?: string }
+              addNancyMessage(`Не удалось сохранить описание вакансии: ${err.error ?? putRes.statusText}`)
+              return
+            }
+            const filledFields: string[] = []
+            if (action.responsibilities)   filledFields.push("обязанности")
+            if (action.requirements)       filledFields.push("требования")
+            if (action.conditions)         filledFields.push("условия")
+            if (action.companyDescription) filledFields.push("описание компании")
+            if (action.requiredSkills?.length) filledFields.push("навыки")
+            addNancyMessage(
+              `Готово! Заполнила: ${filledFields.join(", ")}. Хочешь, запущу авто-настройку — сгенерирую описание для hh.ru, демо и воронку?`
+            )
+          } catch {
+            addNancyMessage("Ошибка при сохранении описания вакансии. Попробуй ещё раз.")
+          }
+        })()
+
+      // ── Скилл 9: авто-настройка вакансии (hh-описание + демо + воронка) ──
+      } else if (action.type === "generate_vacancy_setup") {
+        const vid = action.vacancyId
+        if (!vid) {
+          addNancyMessage("Открой страницу вакансии — тогда запущу авто-настройку.")
+          continue
+        }
+        addNancyMessage("Запускаю авто-настройку: генерирую описание для hh.ru, демо и воронку…")
+        void (async () => {
+          try {
+            // Шаг 1: получить anketa вакансии для генерации hh-описания
+            const getRes = await fetch(`/api/modules/hr/vacancies/${vid}`)
+            const vacData = getRes.ok ? ((await getRes.json()) as { data?: { descriptionJson?: unknown; salaryMax?: number; salaryMin?: number } }).data : null
+            const anketa = ((vacData?.descriptionJson as Record<string, unknown> | undefined)?.anketa ?? {}) as Record<string, unknown>
+
+            // Шаг 2: hh-описание
+            await fetch("/api/ai/generate-hh-description", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ anketa }),
+            }).catch(() => {})
+
+            // Шаг 3: демо
+            await fetch("/api/modules/hr/demo/generate", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ vacancyId: vid, template: "medium" }),
+            }).catch(() => {})
+
+            // Шаг 4: базовая воронка (preset по зарплате)
+            const salary = vacData?.salaryMax || vacData?.salaryMin || 0
+            const preset = salary < 100000 ? "fast" : salary >= 500000 ? "deep" : "standard"
+            const existingDesc2 = ((vacData?.descriptionJson ?? {}) as Record<string, unknown>)
+            await fetch(`/api/modules/hr/vacancies/${vid}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                description_json: { ...existingDesc2, pipeline: { preset, stages: [] } },
+              }),
+            }).catch(() => {})
+
+            addNancyMessage("Готово! Описание для hh.ru, демо и воронка настроены. Можешь открыть вакансию и проверить.")
+          } catch {
+            addNancyMessage("Ошибка при авто-настройке. Попробуй ещё раз или запусти вручную кнопкой «Создать описание, демо и воронку».")
+          }
+        })()
+
+      // ── Скилл 10: применить шаблон роли ──
+      } else if (action.type === "apply_role_template") {
+        const vid = action.vacancyId
+        if (!vid) {
+          addNancyMessage("Открой страницу вакансии — тогда смогу применить шаблон роли.")
+          continue
+        }
+        void (async () => {
+          try {
+            // Если slug передан — находим нужный шаблон по slug
+            let roleTemplateId = action.templateId
+            if (!roleTemplateId) {
+              const tmplRes = await fetch(`/api/modules/hr/vacancies/${vid}/apply-role-template`)
+              if (tmplRes.ok) {
+                const tmplData = (await tmplRes.json()) as { templates?: Array<{ id: string; slug?: string | null }> }
+                const templates = tmplData.templates ?? []
+                if (action.templateSlug) {
+                  roleTemplateId = templates.find(t => t.slug === action.templateSlug)?.id
+                }
+                // Если slug не задан или не найден — берём первый доступный системный шаблон
+                if (!roleTemplateId) {
+                  roleTemplateId = templates[0]?.id
+                }
+              }
+            }
+            if (!roleTemplateId) {
+              addNancyMessage("Не нашла подходящего шаблона роли. Попробуй выбрать шаблон вручную на странице вакансии.")
+              return
+            }
+            const applyRes = await fetch(`/api/modules/hr/vacancies/${vid}/apply-role-template`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ roleTemplateId, overwrite: action.overwrite ?? false }),
+            })
+            if (applyRes.status === 409) {
+              // В вакансии уже есть контент — спросить подтверждение
+              addNancyMessage("В вакансии уже есть контент. Применить шаблон поверх (данные будут перезаписаны)?")
+              return
+            }
+            if (!applyRes.ok) {
+              const err = (await applyRes.json().catch(() => ({}))) as { error?: string }
+              addNancyMessage(`Не удалось применить шаблон: ${err.error ?? applyRes.statusText}`)
+              return
+            }
+            addNancyMessage("Шаблон роли применён! Анкета, Портрет и воронка заполнены. Открой вакансию, чтобы посмотреть и уточнить.")
+          } catch {
+            addNancyMessage("Ошибка при применении шаблона роли. Попробуй ещё раз.")
+          }
+        })()
       }
     }
   }, [addNancyMessage])
