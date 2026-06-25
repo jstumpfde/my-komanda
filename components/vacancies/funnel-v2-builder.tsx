@@ -117,7 +117,7 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose }: {
 
   return (
     <Sheet open={!!stage} onOpenChange={(o) => { if (!o) onClose() }}>
-      <SheetContent className={cn("p-0 flex flex-col gap-0", expanded ? "w-screen max-w-none sm:max-w-none" : "w-full sm:max-w-2xl")}>
+      <SheetContent className={cn("p-0 flex flex-col gap-0", expanded ? "w-screen max-w-none sm:max-w-none" : "w-full sm:max-w-6xl")}>
         <SheetHeader className="px-5 py-4 border-b flex-row items-center justify-between gap-2 space-y-0">
           <SheetTitle className="flex items-center gap-2 text-base min-w-0"><Icon className="w-4 h-4 text-muted-foreground shrink-0" /> <span className="truncate">Стадия {index + 2} · {stage.title?.trim() || meta.label}</span></SheetTitle>
           <button onClick={() => setExpanded(e => !e)} className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs shrink-0 mr-7" aria-label={expanded ? "Свернуть" : "На весь экран"}>
@@ -126,7 +126,7 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose }: {
           </button>
         </SheetHeader>
         <SheetBody className="flex-1 overflow-y-auto px-5 py-4">
-        <div className="mx-auto w-full max-w-3xl space-y-5">
+        <div className="mx-auto w-full max-w-5xl space-y-5">
 
           {/* Действие */}
           <section className="space-y-2">
