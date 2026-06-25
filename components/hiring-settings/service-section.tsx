@@ -484,27 +484,28 @@ export function MultiCompanyBlock({ defaults, onPatch, renderProducts }: {
     : "Основная компания"
 
   return (
-    <Card className="max-w-3xl">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-medium">Мультикомпания / выбор компании в анкете</CardTitle>
-        <CardDescription>Несколько компаний/брендов для найма под клиентов (аутсорсинг/рекрутинг)</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Тумблер мультикомпании */}
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Выбор компании в анкете вакансии</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Несколько компаний/брендов для найма под клиентов (аутсорсинг/рекрутинг)</p>
+    <div className="max-w-3xl space-y-4">
+      {/* Рамка 1: переключатель мультикомпании — отдельной карточкой сверху */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-medium">Мультикомпания / выбор компании в анкете</CardTitle>
+          <CardDescription>Несколько компаний/брендов для найма под клиентов (аутсорсинг/рекрутинг)</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Выбор компании в анкете вакансии</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Несколько компаний/брендов для найма под клиентов (аутсорсинг/рекрутинг)</p>
+            </div>
+            <Switch checked={showCompanySelector} onCheckedChange={toggleCompanySelector} />
           </div>
-          <Switch checked={showCompanySelector} onCheckedChange={toggleCompanySelector} />
-        </div>
+          <p className="text-[11px] text-muted-foreground leading-relaxed rounded-md bg-muted/30 border px-3 py-2">
+            <strong>Первая компания</strong> — основная (из настроек компании). Можно добавить дополнительные бренды (для аутсорсинга/нескольких юрлиц): загрузите логотип, название, слоган, сайт — и сможете выбирать их на вакансии. Если что-то не заполнено — на вакансии можно указать вручную.
+          </p>
+        </CardContent>
+      </Card>
 
-        {/* Пояснение вверху блока */}
-        <p className="text-[11px] text-muted-foreground leading-relaxed rounded-md bg-muted/30 border px-3 py-2">
-          <strong>Первая компания</strong> — основная (из настроек компании). Можно добавить дополнительные бренды (для аутсорсинга/нескольких юрлиц): загрузите логотип, название, слоган, сайт — и сможете выбирать их на вакансии. Если что-то не заполнено — на вакансии можно указать вручную.
-        </p>
-
-        {/* Основная компания — read-only карточка */}
+        {/* Рамка 2: основная компания (идентичность + продукты внутри) */}
         {(!showCompanySelector || brandsExpanded) && (
           <div className="rounded-lg border p-3 space-y-3 bg-muted/20">
             {/* Шапка карточки */}
@@ -825,8 +826,7 @@ export function MultiCompanyBlock({ defaults, onPatch, renderProducts }: {
             ))}
           </div>
         )}
-      </CardContent>
-    </Card>
+    </div>
   )
 }
 
