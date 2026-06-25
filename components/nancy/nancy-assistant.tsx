@@ -220,10 +220,16 @@ function cleanForTts(text: string): string {
     .trim()
 }
 
+// Тихий 1-байтный mp3-файл в base64 — для разблокировки autoplay.
+// Стандартный минимальный валидный mp3-фрейм (silence).
+const SILENT_MP3_DATA_URI =
+  "data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU2LjM2LjEwMAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDV1dXV1dXV1dXV1dXV1dXV1dXV1dXV6urq6urq6urq6urq6urq6urq6urq6v////////////////////////////////8AAAAATGF2YzU2LjQxAAAAAAAAAAAAAAAAJAAAAAAAAAAAASDs90hvAAAAAAAAAAAAAAAAAAAA//MUZAAAAAGkAAAAAAAAA0gAAAAATEFN//MUZAMAAAGkAAAAAAAAA0gAAAAARTMu//MUZAYAAAGkAAAAAAAAA0gAAAAAOTku//MUZAkAAAGkAAAAAAAAA0gAAAAANVVV"
+
 async function speakText(
   text: string,
   onEnd?: () => void,
   audioRef?: React.MutableRefObject<HTMLAudioElement | null>,
+  unlockedAudioRef?: React.MutableRefObject<HTMLAudioElement | null>,
 ) {
   if (!text) { onEnd?.(); return }
 
@@ -231,6 +237,7 @@ async function speakText(
   const ttsText = cleanForTts(text)
   if (!ttsText) { onEnd?.(); return }
 
+  let blobUrl: string | null = null
   try {
     const res = await fetch("/api/modules/hr/nancy/tts", {
       method: "POST",
@@ -243,17 +250,41 @@ async function speakText(
       // На мобиле микрофон освобождается ДО вызова (см. speakAndContinue в
       // компоненте), чтобы iOS не уводил звук в ушной динамик и не рвал сессию.
       const blob = new Blob([data], { type: "audio/mpeg" })
-      const url  = URL.createObjectURL(blob)
-      const audio = new Audio(url)
-      if (audioRef) audioRef.current = audio
-      const cleanup = () => { URL.revokeObjectURL(url); if (audioRef) audioRef.current = null; onEnd?.() }
-      audio.onended = cleanup
-      audio.onerror = cleanup
-      await audio.play()
-      return
-    }
-  } catch { /* fall through */ }
+      blobUrl = URL.createObjectURL(blob)
 
+      // Используем разблокированный элемент если он передан и разблокирован,
+      // иначе fallback на new Audio() (старое поведение для случая без жеста).
+      const el = unlockedAudioRef?.current ?? new Audio()
+      if (audioRef) audioRef.current = el
+
+      const cleanup = () => {
+        if (blobUrl) { URL.revokeObjectURL(blobUrl); blobUrl = null }
+        if (audioRef) audioRef.current = null
+        onEnd?.()
+      }
+
+      el.onended = cleanup
+      el.onerror = cleanup
+      el.src = blobUrl
+      el.muted = false
+
+      try {
+        await el.play()
+        return
+      } catch (playErr) {
+        // play() отклонён даже после unlock — логируем, но НЕ падаем на читалку
+        console.warn("[nancy/tts] audio.play() rejected after unlock attempt:", playErr)
+        cleanup()
+        return
+      }
+    }
+    // Сервер вернул 204 (TTS отключён / нет ключа) → fallback на браузерный синтез
+  } catch {
+    // Сетевая ошибка → fallback на браузерный синтез
+    if (blobUrl) { URL.revokeObjectURL(blobUrl); blobUrl = null }
+  }
+
+  // Fallback: браузерный speechSynthesis (только при 204 или сетевой ошибке)
   if (typeof window !== "undefined" && "speechSynthesis" in window) {
     window.speechSynthesis.cancel()
     // ttsText уже очищен выше (cleanForTts), используем его напрямую
@@ -326,6 +357,32 @@ export function NancyAssistant() {
   const sendMessageRef      = useRef<(text: string) => Promise<void>>(async () => {})
   const startListeningRef   = useRef<() => void>(() => {})
 
+  // ── Единый разблокированный HTMLAudioElement для обхода autoplay-политики ──
+  // Браузер блокирует audio.play() если с момента пользовательского жеста
+  // прошло слишком много времени (transient activation истекла). Чтобы играть
+  // Яндекс-аудио на отложенных/длинных ответах, держим ОДИН элемент, который
+  // «разблокируется» тихим play/pause при первом жесте пользователя.
+  const unlockedAudioRef = useRef<HTMLAudioElement | null>(null)
+  const audioUnlockedRef = useRef(false)
+
+  // Инициализируем элемент один раз на клиенте
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const el = new Audio()
+    el.preload = "none"
+    unlockedAudioRef.current = el
+  }, [])
+
+  // Идемпотентный unlock: вызывать в каждом обработчике пользовательского жеста.
+  const unlockAudio = useCallback(() => {
+    if (audioUnlockedRef.current) return
+    const el = unlockedAudioRef.current
+    if (!el) return
+    el.src = SILENT_MP3_DATA_URI
+    el.muted = true
+    el.play().then(() => { el.pause(); el.muted = false; audioUnlockedRef.current = true }).catch(() => {})
+  }, [])
+
   // ── Поддержка микрофона (Web Audio API — работает в Safari/Chrome/Yandex) ──
   useEffect(() => {
     setMicSupported(micIsSupported())
@@ -381,7 +438,7 @@ export function NancyAssistant() {
     const greeting = config?.greeting?.trim() || WELCOME[mod]
     setMessages([{ id: "welcome", role: "nancy", text: greeting }])
     setSpeaking(true)
-    void speakText(greeting, () => setSpeaking(false))
+    void speakText(greeting, () => setSpeaking(false), undefined, unlockedAudioRef)
     setTimeout(() => inputRef.current?.focus(), 100)
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -742,6 +799,8 @@ export function NancyAssistant() {
     const trimmed = text.trim()
     if (!trimmed) return
 
+    // Unlock audio на жесте отправки (идемпотентно)
+    unlockAudio()
     setInput("")
     setMessages((prev) => [...prev, { id: `u-${Date.now()}`, role: "user", text: trimmed }])
     setThinking(true)
@@ -809,7 +868,7 @@ export function NancyAssistant() {
         if (convModeRef.current && !thinkingRef.current) {
           setTimeout(() => startListening(), mobile ? 350 : 600)
         }
-      }, currentAudioRef)
+      }, currentAudioRef, unlockedAudioRef)
     } catch {
       const errText = "Нет связи. Попробуй ещё раз."
       setMessages((prev) => [...prev, { id: `err-${Date.now()}`, role: "nancy", text: errText }])
@@ -818,11 +877,11 @@ export function NancyAssistant() {
       void speakText(errText, () => {
         setSpeaking(false)
         if (convModeRef.current && !thinkingRef.current) setTimeout(() => startListening(), mobile ? 350 : 600)
-      }, currentAudioRef)
+      }, currentAudioRef, unlockedAudioRef)
     } finally {
       setThinking(false)
     }
-  }, [messages, pathname, mod, handleActions, startListening])
+  }, [messages, pathname, mod, handleActions, startListening, unlockAudio, unlockedAudioRef])
 
   // Держим sendMessageRef актуальным, чтобы startListening не зависел от него напрямую
   useEffect(() => { sendMessageRef.current = sendMessage }, [sendMessage])
@@ -848,6 +907,8 @@ export function NancyAssistant() {
       setListening(false)
       return
     }
+    // Unlock audio на жесте нажатия микрофона (идемпотентно)
+    unlockAudio()
     try {
       const ok = await ensureMic()
       if (!ok) { showMicError(new Error("no audio api")); return }
@@ -855,12 +916,14 @@ export function NancyAssistant() {
     } catch (e) {
       showMicError(e)
     }
-  }, [listening, startListening, showMicError])
+  }, [listening, startListening, showMicError, unlockAudio])
 
   // ── Режим разговора ──
   const toggleConvMode = useCallback(async () => {
     const next = !convModeRef.current
     if (next) {
+      // Unlock audio на жесте включения режима разговора (идемпотентно)
+      unlockAudio()
       // ensureMic вызывается в обработчике клика → Safari разрешает микрофон
       try {
         const ok = await ensureMic()
@@ -880,7 +943,7 @@ export function NancyAssistant() {
       stopCurrentSpeech()
       releaseMic()
     }
-  }, [startListening, stopCurrentSpeech, showMicError])
+  }, [startListening, stopCurrentSpeech, showMicError, unlockAudio])
 
   // ── Проверка видимости по конфигу ──
   // Ждём загрузки конфига (configLoaded), затем применяем правила.
@@ -907,7 +970,7 @@ export function NancyAssistant() {
   if (!open) {
     return (
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => { unlockAudio(); setOpen(true) }}
         className={cn(
           "fixed bottom-20 md:bottom-4 right-4 z-50",
           "h-16 w-16 rounded-full shadow-lg border-2 border-primary",
