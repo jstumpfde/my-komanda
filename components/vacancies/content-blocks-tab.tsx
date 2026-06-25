@@ -581,20 +581,8 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext }: ContentBlocksTab
               </DropdownMenu>
             </div>
 
-            {/* Далее → следующий этап (Воронка). Всегда доступна (единообразно с
-                другими табами). Если контент ещё сохраняется — сначала сохраняем,
-                подпись «Сохранить и далее». */}
-            {onNavigateNext && (
-              <Button
-                size="sm"
-                variant="default"
-                className="gap-1.5 text-xs h-8"
-                onClick={() => { flush(); onNavigateNext?.() }}
-              >
-                {saveStatus === "saving" ? "Сохранить и далее" : "Далее"}
-                <ChevronRight className="w-3.5 h-3.5" />
-              </Button>
-            )}
+            {/* «Далее → Воронка» перенесена ВНИЗ справа (после редактора) —
+                единообразно с анкетой; в верхней панели только действия редактора. */}
 
             {/* Создать из... (dropdown): Создать с нуля / Из библиотеки */}
             <DropdownMenu>
@@ -684,6 +672,22 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext }: ContentBlocksTab
           </div>
         )}
       </div>
+
+      {/* Далее → следующий этап (Воронка) — внизу справа, единообразно с анкетой.
+          Если контент ещё сохраняется — сначала сохраняем («Сохранить и далее»). */}
+      {onNavigateNext && (
+        <div className="flex items-center justify-end pt-3 mt-3 border-t">
+          <Button
+            size="sm"
+            variant="default"
+            className="gap-1.5 h-9 text-xs"
+            onClick={() => { flush(); onNavigateNext?.() }}
+          >
+            {saveStatus === "saving" ? "Сохранить и далее" : "Далее"}
+            <ChevronRight className="w-3.5 h-3.5" /> Воронка
+          </Button>
+        </div>
+      )}
 
       {/* Диалог подтверждения удаления */}
       <AlertDialog open={!!deleteConfirmId} onOpenChange={open => { if (!open) setDeleteConfirmId(null) }}>
