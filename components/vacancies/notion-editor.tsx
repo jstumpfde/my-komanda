@@ -1783,7 +1783,17 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
   const editorRef = useRef<HTMLDivElement>(null)
   const mouseDownPos = useRef<{ x: number; y: number } | null>(null)
   const isDragStarted = useRef(false)
+  // Определяем, занимает ли текстовый блок одну строку
+  const [isSingleLine, setIsSingleLine] = useState(true)
 
+  const checkSingleLine = useCallback(() => {
+    const el = editorRef.current
+    if (!el) return
+    // lineHeight из стилей, fallback 24px
+    const computedLh = parseFloat(getComputedStyle(el).lineHeight)
+    const lineH = Number.isFinite(computedLh) && computedLh > 0 ? computedLh : 24
+    setIsSingleLine(el.scrollHeight <= Math.ceil(lineH * 1.6))
+  }, [])
 
   // Set innerHTML when block changes
   useEffect(() => {
@@ -1791,14 +1801,27 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
       if (editorRef.current.innerHTML !== block.content) {
         editorRef.current.innerHTML = block.content || ""
       }
+      checkSingleLine()
     }
-  }, [block.id])
+  }, [block.id, checkSingleLine])
+
+  // ResizeObserver: следим за изменением высоты редактора
+  useEffect(() => {
+    if (block.type !== "text") return
+    const el = editorRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => checkSingleLine())
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [block.type, checkSingleLine])
 
   const syncContent = useCallback(() => {
     if (editorRef.current && block.type === "text") {
       onUpdate({ content: editorRef.current.innerHTML })
+      // После каждого ввода пересчитываем одну/несколько строк
+      checkSingleLine()
     }
-  }, [onUpdate, block.type])
+  }, [onUpdate, block.type, checkSingleLine])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "/") {
@@ -1907,6 +1930,7 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
             block={block}
             editorRef={editorRef}
             isHovered={isHovered}
+            isSingleLine={isSingleLine}
             onSync={syncContent}
             onUpdate={onUpdate}
             onKeyDown={handleKeyDown}
@@ -1916,53 +1940,68 @@ function NotionBlock({ block, idx, totalBlocks, isHovered, isDragging, isDragOve
         )}
       </div>
 
-      {/* Action bar — правая колонка, при наведении */}
+      {/* Правая панель: [#][😊][action-тулбар] — всё в один ряд при наведении */}
       <div className={cn(
         "shrink-0 flex items-center gap-0.5 self-start pt-0.5",
-        "bg-background/95 backdrop-blur-sm border border-border rounded-md shadow-sm px-0.5 py-0.5",
-        "transition-all duration-100",
+        "transition-opacity duration-100",
         isHovered ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
       )}>
-        <button
-          title="Перетащить"
-          className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-grab active:cursor-grabbing"
-          draggable
-          onDragStart={() => { isDragStarted.current = true; onDragStart() }}
-          onDragEnd={() => { isDragStarted.current = false; onDragEnd() }}
-        >
-          <GripVertical className="w-3 h-3" />
-        </button>
-        <button
-          onClick={onDuplicate}
-          title="Дублировать блок"
-          className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-        >
-          <Copy className="w-3 h-3" />
-        </button>
-        <button
-          onClick={onMoveUp}
-          disabled={idx === 0}
-          title="Вверх"
-          className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
-        >
-          <ArrowUp className="w-3 h-3" />
-        </button>
-        <button
-          onClick={onMoveDown}
-          disabled={idx === totalBlocks - 1}
-          title="Вниз"
-          className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
-        >
-          <ArrowDown className="w-3 h-3" />
-        </button>
-        <div className="w-px h-3 bg-border mx-0.5" />
-        <button
-          onClick={onRemove}
-          title="Удалить блок"
-          className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors"
-        >
-          <Trash2 className="w-3 h-3" />
-        </button>
+        {/* # и 😊 — только при одной строке (inline ряд) */}
+        {block.type === "text" && isSingleLine && (
+          <TextBlockControls
+            editorRef={editorRef}
+            isHovered={isHovered}
+            onSync={syncContent}
+            openLeft
+          />
+        )}
+
+        {/* Action bar */}
+        <div className={cn(
+          "flex items-center gap-0.5",
+          "bg-background/95 backdrop-blur-sm border border-border rounded-md shadow-sm px-0.5 py-0.5"
+        )}>
+          <button
+            title="Перетащить"
+            className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-grab active:cursor-grabbing"
+            draggable
+            onDragStart={() => { isDragStarted.current = true; onDragStart() }}
+            onDragEnd={() => { isDragStarted.current = false; onDragEnd() }}
+          >
+            <GripVertical className="w-3 h-3" />
+          </button>
+          <button
+            onClick={onDuplicate}
+            title="Дублировать блок"
+            className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <Copy className="w-3 h-3" />
+          </button>
+          <button
+            onClick={onMoveUp}
+            disabled={idx === 0}
+            title="Вверх"
+            className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
+          >
+            <ArrowUp className="w-3 h-3" />
+          </button>
+          <button
+            onClick={onMoveDown}
+            disabled={idx === totalBlocks - 1}
+            title="Вниз"
+            className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
+          >
+            <ArrowDown className="w-3 h-3" />
+          </button>
+          <div className="w-px h-3 bg-border mx-0.5" />
+          <button
+            onClick={onRemove}
+            title="Удалить блок"
+            className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -2019,12 +2058,24 @@ interface NotionTextBlockProps {
   block: Block
   editorRef: React.RefObject<HTMLDivElement | null>
   isHovered: boolean
+  isSingleLine: boolean
   onSync: () => void
   onUpdate: (patch: Partial<Block>) => void
   onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void
 }
 
-function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: NotionTextBlockProps) {
+// ─── Shared emoji/tags controls for text block ─────────────────────────────
+// Используется и внутри NotionTextBlock (multi-line, bottom-right),
+// и снаружи в NotionBlock (single-line, inline-right ряд).
+interface TextBlockControlsProps {
+  editorRef: React.RefObject<HTMLDivElement | null>
+  isHovered: boolean
+  onSync: () => void
+  /** При true — поповеры открываются вправо→влево (расположение справа) */
+  openLeft?: boolean
+}
+
+function TextBlockControls({ editorRef, isHovered, onSync, openLeft }: TextBlockControlsProps) {
   const [showEmoji, setShowEmoji] = useState(false)
   const [showTags, setShowTags] = useState(false)
   const [tagsOpenUpward, setTagsOpenUpward] = useState(false)
@@ -2035,7 +2086,6 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
   const emojiSearchRef = useRef<HTMLInputElement>(null)
   const savedRangeRef = useRef<Range | null>(null)
 
-  // Save selection before popup opens (so we don't lose cursor)
   const saveSelection = () => {
     const sel = window.getSelection()
     if (sel && sel.rangeCount > 0) {
@@ -2043,7 +2093,6 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
     }
   }
 
-  // Restore saved selection before inserting
   const restoreSelectionAndInsert = (text: string) => {
     const el = editorRef.current
     if (!el) return
@@ -2060,7 +2109,6 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
     setShowTags(false)
   }
 
-  // Close popups on outside click
   useEffect(() => {
     if (!showEmoji && !showTags) return
     const handler = (e: MouseEvent) => {
@@ -2074,6 +2122,112 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
     return () => document.removeEventListener("mousedown", handler)
   }, [showEmoji, showTags])
 
+  const visible = isHovered || showEmoji || showTags
+
+  return (
+    <>
+      {/* # — переменные */}
+      <div className="relative" data-text-popup>
+        <button
+          ref={tagsBtnRef}
+          onMouseDown={(e) => {
+            e.preventDefault()
+            saveSelection()
+            setShowEmoji(false)
+            if (!showTags && tagsBtnRef.current) {
+              const rect = tagsBtnRef.current.getBoundingClientRect()
+              setTagsOpenUpward(window.innerHeight - rect.bottom < 300)
+            }
+            setShowTags((v) => !v)
+          }}
+          title="Вставить переменную"
+          className={cn(
+            "w-7 h-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-sm font-bold",
+            "transition-opacity duration-100",
+            visible ? "opacity-100" : "opacity-0 pointer-events-none"
+          )}
+        >
+          #
+        </button>
+        {showTags && (
+          <div
+            data-text-popup
+            className={cn(
+              "absolute z-50 bg-popover border border-border rounded-xl shadow-xl overflow-hidden w-52",
+              openLeft ? "right-0" : "left-0",
+              tagsOpenUpward ? "bottom-full mb-1" : "top-full mt-1"
+            )}
+          >
+            <div className="px-3 py-1.5 border-b border-border">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Переменные</span>
+            </div>
+            <div className="p-1">
+              {QUICK_TAGS.map((t) => (
+                <button
+                  key={t.tag}
+                  onMouseDown={(ev) => { ev.preventDefault(); restoreSelectionAndInsert(t.tag) }}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left hover:bg-muted transition-colors"
+                >
+                  <span className="font-mono text-[11px] text-primary bg-primary/10 rounded px-1 py-0.5 shrink-0">{t.tag}</span>
+                  <span className="text-xs text-muted-foreground truncate">{t.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 😊 — эмодзи */}
+      <div className="relative" data-text-popup>
+        <button
+          ref={emojiBtnRef}
+          onMouseDown={(e) => {
+            e.preventDefault()
+            saveSelection()
+            setShowTags(false)
+            if (!showEmoji && emojiBtnRef.current) {
+              const rect = emojiBtnRef.current.getBoundingClientRect()
+              const spaceBelow = window.innerHeight - rect.bottom - 8
+              const spaceAbove = rect.top - 8
+              if (spaceBelow >= 300 || spaceBelow >= spaceAbove) {
+                // При openLeft пикер прижимаем к правому краю кнопки
+                setEmojiPos(openLeft
+                  ? { top: rect.bottom + 4, right: window.innerWidth - rect.right }
+                  : { top: rect.bottom + 4, left: rect.left }
+                )
+                setEmojiAvailH(spaceBelow)
+              } else {
+                setEmojiPos(openLeft
+                  ? { bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right }
+                  : { bottom: window.innerHeight - rect.top + 4, left: rect.left }
+                )
+                setEmojiAvailH(spaceAbove)
+              }
+            }
+            setShowEmoji((v) => !v)
+          }}
+          title="Вставить эмодзи"
+          className={cn(
+            "w-7 h-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-base",
+            "transition-opacity duration-100",
+            visible ? "opacity-100" : "opacity-0 pointer-events-none"
+          )}
+        >
+          😊
+        </button>
+        <InlineEmojiPicker
+          isOpen={showEmoji}
+          positionStyle={emojiPos}
+          availH={emojiAvailH}
+          searchRef={emojiSearchRef}
+          onSelect={(e) => { restoreSelectionAndInsert(e); setShowEmoji(false) }}
+        />
+      </div>
+    </>
+  )
+}
+
+function NotionTextBlock({ block, editorRef, isHovered, isSingleLine, onSync, onKeyDown }: NotionTextBlockProps) {
   return (
     <div className="relative group/textblock">
       <div
@@ -2092,7 +2246,7 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
           "[&_ol]:list-decimal [&_ol]:list-inside [&_ol]:space-y-0.5",
           "[&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2",
           "[&_strong]:font-semibold [&_em]:italic",
-          "w-full pl-[4.25rem] pr-1 py-0.5 rounded hover:bg-muted/20 focus:bg-transparent transition-colors"
+          "w-full px-1 py-0.5 rounded hover:bg-muted/20 focus:bg-transparent transition-colors"
         )}
         onBlur={onSync}
         onInput={onSync}
@@ -2100,95 +2254,21 @@ function NotionTextBlock({ block, editorRef, isHovered, onSync, onKeyDown }: Not
         onPaste={(e) => { e.preventDefault(); const text = e.clipboardData.getData("text/plain"); document.execCommand("insertText", false, text) }}
       />
 
-      {/* Emoji & tag buttons — левое боковое поле, при наведении */}
-      <div className={cn(
-        "absolute top-0 left-0 flex items-center gap-0.5 z-10",
-        "transition-opacity duration-100",
-        isHovered || showEmoji || showTags ? "opacity-100" : "opacity-0 pointer-events-none"
-      )}>
-        {/* Emoji button */}
-        <div className="relative" data-text-popup>
-          <button
-            ref={emojiBtnRef}
-            onMouseDown={(e) => {
-              e.preventDefault()
-              saveSelection()
-              setShowTags(false)
-              if (!showEmoji && emojiBtnRef.current) {
-                const rect = emojiBtnRef.current.getBoundingClientRect()
-                const spaceBelow = window.innerHeight - rect.bottom - 8
-                const spaceAbove = rect.top - 8
-                // Открываем вправо от кнопки (кнопка слева), а не влево
-                if (spaceBelow >= 300 || spaceBelow >= spaceAbove) {
-                  setEmojiPos({ top: rect.bottom + 4, left: rect.left })
-                  setEmojiAvailH(spaceBelow)
-                } else {
-                  setEmojiPos({ bottom: window.innerHeight - rect.top + 4, left: rect.left })
-                  setEmojiAvailH(spaceAbove)
-                }
-              }
-              setShowEmoji((v) => !v)
-            }}
-            title="Вставить эмодзи"
-            className="w-8 h-8 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-base"
-          >
-            😊
-          </button>
-          <InlineEmojiPicker
-            isOpen={showEmoji}
-            positionStyle={emojiPos}
-            availH={emojiAvailH}
-            searchRef={emojiSearchRef}
-            onSelect={(e) => { restoreSelectionAndInsert(e); setShowEmoji(false) }}
+      {/* Emoji & tag buttons — правый нижний угол, только при multi-line */}
+      {!isSingleLine && (
+        <div className={cn(
+          "absolute bottom-0 right-0 flex items-center gap-0.5 z-10",
+          "transition-opacity duration-100",
+          isHovered ? "opacity-100" : "opacity-0 pointer-events-none"
+        )}>
+          <TextBlockControls
+            editorRef={editorRef}
+            isHovered={isHovered}
+            onSync={onSync}
+            openLeft
           />
         </div>
-
-        {/* Tag button */}
-        <div className="relative" data-text-popup>
-          <button
-            ref={tagsBtnRef}
-            onMouseDown={(e) => {
-              e.preventDefault()
-              saveSelection()
-              setShowEmoji(false)
-              if (!showTags && tagsBtnRef.current) {
-                const rect = tagsBtnRef.current.getBoundingClientRect()
-                setTagsOpenUpward(window.innerHeight - rect.bottom < 300)
-              }
-              setShowTags((v) => !v)
-            }}
-            title="Вставить переменную"
-            className="w-8 h-8 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-sm font-bold"
-          >
-            #
-          </button>
-          {showTags && (
-            <div
-              data-text-popup
-              className={cn(
-                "absolute left-0 z-50 bg-popover border border-border rounded-xl shadow-xl overflow-hidden w-52",
-                tagsOpenUpward ? "bottom-full mb-1" : "top-full mt-1"
-              )}
-            >
-              <div className="px-3 py-1.5 border-b border-border">
-                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Переменные</span>
-              </div>
-              <div className="p-1">
-                {QUICK_TAGS.map((t) => (
-                  <button
-                    key={t.tag}
-                    onMouseDown={(ev) => { ev.preventDefault(); restoreSelectionAndInsert(t.tag) }}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left hover:bg-muted transition-colors"
-                  >
-                    <span className="font-mono text-[11px] text-primary bg-primary/10 rounded px-1 py-0.5 shrink-0">{t.tag}</span>
-                    <span className="text-xs text-muted-foreground truncate">{t.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   )
 }
