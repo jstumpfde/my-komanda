@@ -53,13 +53,14 @@ export function BootstrapFromSiteDialog({ open, onOpenChange, hasExistingProduct
     if (!result) return
     setApplying(true)
     try {
-      // Описание компании → /api/companies
+      // Описание компании → /api/companies (проверяем ответ — без ложного успеха)
       if (desc.trim()) {
-        await fetch("/api/companies", {
+        const r = await fetch("/api/companies", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ company_description: desc.trim() }),
         })
+        if (!r.ok) throw new Error("desc_save_failed")
       }
       // Продукты → hiring_defaults (заменяют текущие продукты основной компании)
       if (result.products.length) {

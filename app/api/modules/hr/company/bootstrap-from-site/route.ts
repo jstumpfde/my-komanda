@@ -3,16 +3,18 @@
 // Сохранение делает клиент через существующие эндпоинты после проверки.
 
 import { NextRequest, NextResponse } from "next/server"
-import { requireCompany } from "@/lib/api-helpers"
+import { requireDirector } from "@/lib/api-helpers"
 import { normalizeUrl, fetchSiteText } from "@/lib/hiring/bootstrap/fetch-site"
-import { extractProfileFromSiteText } from "@/lib/hiring/bootstrap/extract-profile"
+import { extractProfileFromSiteText, ExtractError } from "@/lib/hiring/bootstrap/extract-profile"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
   try {
-    await requireCompany()
+    // Общекомпанийская настройка (описание + продукты) — операция директора,
+    // как и /api/companies. Иначе у не-директора описание молча не сохранится.
+    await requireDirector()
     const body = (await req.json().catch(() => ({}))) as { url?: string }
 
     const url = normalizeUrl(body.url ?? "")
@@ -38,6 +40,9 @@ export async function POST(req: NextRequest) {
     })
   } catch (err) {
     if (err instanceof Response) return err
+    if (err instanceof ExtractError) {
+      return NextResponse.json({ error: "Не удалось распознать профиль с сайта — заполните вручную" }, { status: 422 })
+    }
     console.error("[bootstrap-from-site]", err)
     return NextResponse.json({ error: "Ошибка обработки сайта" }, { status: 500 })
   }
