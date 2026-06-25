@@ -83,6 +83,7 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext }: ContentBlocksTab
   const [renamingValue, setRenamingValue] = useState("")
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  const [genDemo, setGenDemo] = useState(false)
 
   // Управление редактором выбранного блока (общий ряд кнопок справа)
   const editorRef = useRef<NotionEditorHandle>(null)
@@ -208,6 +209,24 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext }: ContentBlocksTab
     setRenamingValue(title)
   }, [selectedBlock, apiCreateBlock, updateBlock])
 
+  // Онбординг Фаза 2: AI генерит демо из профиля компании/продукта → новый
+  // демо-блок в редакторе (там же правится = ревью).
+  const handleGenerateDemo = useCallback(async () => {
+    if (!vacancyId) return
+    setGenDemo(true)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/generate-demo`, { method: "POST" })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { toast.error(data.error ?? "Не удалось сгенерировать демо"); return }
+      const block = await apiCreateBlock("presentation", data.title || "Демонстрация")
+      if (!block) { toast.error("Не удалось создать блок"); return }
+      updateBlock(block.id, { lessons: data.lessons, title: data.title || undefined })
+      setSelectedId(block.id)
+      toast.success("Демо сгенерировано — проверьте и при необходимости поправьте")
+    } catch { toast.error("Ошибка генерации демо") }
+    finally { setGenDemo(false) }
+  }, [vacancyId, apiCreateBlock, updateBlock])
+
   // Drag-and-drop reorder
   const handleDragStart = (idx: number) => { dragIdxRef.current = idx }
   const handleDragOver = (e: React.DragEvent, idx: number) => { e.preventDefault(); setDragOverIdx(idx) }
@@ -322,6 +341,15 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext }: ContentBlocksTab
             >
               <FileText className="w-3.5 h-3.5" />
               PDF презентация
+            </button>
+            <button
+              disabled={genDemo}
+              onClick={handleGenerateDemo}
+              title="AI соберёт демо из описания компании и продукта (профиль найма)"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 text-primary px-3 py-2 text-sm hover:bg-primary/5 transition-colors disabled:opacity-50"
+            >
+              {genDemo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+              Сгенерировать демо
             </button>
           </div>
         </div>
@@ -514,6 +542,9 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext }: ContentBlocksTab
               </DropdownMenuItem>
               <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => doCreateBlock("pdf")}>
                 <FileText className="w-3.5 h-3.5" />PDF презентация
+              </DropdownMenuItem>
+              <DropdownMenuItem className="gap-2 cursor-pointer text-primary" disabled={genDemo} onClick={handleGenerateDemo}>
+                {genDemo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}Сгенерировать демо
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
