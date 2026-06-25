@@ -6,7 +6,7 @@
 // Без связи с вакансией и sales-модулем (это следующие ТЗ).
 
 import { useState } from "react"
-import { Package, Save, Loader2, Plus, Trash2, Star, X } from "lucide-react"
+import { Package, Save, Loader2, Plus, Trash2, Star, X, ChevronDown } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
@@ -36,6 +36,8 @@ export function ProductProfilesEditor({ value, defaultId: initialDefaultId, onSa
       : (initial[0]?.id ?? ""),
   )
   const [saving, setSaving] = useState(false)
+  const [collapsedProd, setCollapsedProd] = useState<Record<string, boolean>>({})
+  const toggleProd = (id: string) => setCollapsedProd(s => ({ ...s, [id]: !s[id] }))
 
   const single = profiles.length === 1
   const update = (id: string, patch: Partial<ProductProfile>) => setProfiles(ps => ps.map(p => p.id === id ? { ...p, ...patch } : p))
@@ -66,15 +68,22 @@ export function ProductProfilesEditor({ value, defaultId: initialDefaultId, onSa
         {profiles.map((p, i) => (
           <div key={p.id} className={cn("rounded-lg border p-4 space-y-4", !single && p.id === defaultId && "border-primary/40 bg-primary/[0.03]")}>
             {!single && (
-              <div className="flex items-center justify-between gap-2">
-                <button type="button" onClick={() => setDefaultId(p.id)} className={cn("inline-flex items-center gap-1.5 text-xs", p.id === defaultId ? "text-amber-600 dark:text-amber-400 font-medium" : "text-muted-foreground hover:text-foreground")}>
-                  <Star className={cn("w-3.5 h-3.5", p.id === defaultId && "fill-amber-400")} /> {p.id === defaultId ? "Профиль по умолчанию" : "Сделать по умолчанию"}
+              <div className="flex items-center gap-2">
+                {/* Свёртка + название продукта */}
+                <button type="button" onClick={() => toggleProd(p.id)} className="flex items-center gap-1.5 min-w-0 flex-1 text-left">
+                  <ChevronDown className={cn("w-4 h-4 shrink-0 text-muted-foreground transition-transform", !collapsedProd[p.id] && "rotate-180")} />
+                  <span className="text-sm font-medium truncate">{p.name?.trim() || `Продукт ${i + 1}`}</span>
                 </button>
-                <button type="button" onClick={() => removeProfile(p.id)} className="text-muted-foreground hover:text-destructive p-1" aria-label="Удалить продукт"><Trash2 className="w-3.5 h-3.5" /></button>
+                <button type="button" onClick={() => setDefaultId(p.id)} title={p.id === defaultId ? "Профиль по умолчанию" : "Сделать по умолчанию"} className={cn("inline-flex items-center gap-1 text-xs shrink-0", p.id === defaultId ? "text-amber-600 dark:text-amber-400 font-medium" : "text-muted-foreground hover:text-foreground")}>
+                  <Star className={cn("w-3.5 h-3.5", p.id === defaultId && "fill-amber-400")} /><span className="hidden sm:inline">{p.id === defaultId ? "По умолчанию" : "Сделать осн."}</span>
+                </button>
+                <button type="button" onClick={() => removeProfile(p.id)} className="text-muted-foreground hover:text-destructive p-1 shrink-0" aria-label="Удалить продукт"><Trash2 className="w-3.5 h-3.5" /></button>
               </div>
             )}
 
-            <ProfileForm profile={p} index={i} onChange={(patch) => update(p.id, patch)} />
+            {(single || !collapsedProd[p.id]) && (
+              <ProfileForm profile={p} index={i} onChange={(patch) => update(p.id, patch)} />
+            )}
           </div>
         ))}
 
