@@ -18,7 +18,7 @@
  * «Перенести в Портрет» (portraitScoring=false) переводит вакансию на новый контур.
  */
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -58,7 +58,7 @@ import {
   type MidRangeAction,
 } from "@/lib/core/spec/types"
 import { computeRealism, REALISM_TONE_CLASS } from "./spec-editor-helpers"
-import { useVacancySectionRegister } from "./vacancy-settings-context"
+import { useVacancySectionRegister, useVacancySettings } from "./vacancy-settings-context"
 
 // ─── Константы ───────────────────────────────────────────────────────────────
 
@@ -990,6 +990,21 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
     save,
   })
 
+  // «Далее → Контент» отдаём в общий sticky-бар, чтобы стоять в один ряд с
+  // «Сохранить настройки» (а не друг под другом). setNextAction стабилен (useState).
+  const settingsCtx = useVacancySettings()
+  const setNext = settingsCtx?.setNextAction
+  const saveRef = useRef(save); saveRef.current = save
+  const navRef = useRef(onNavigateNext); navRef.current = onNavigateNext
+  useEffect(() => {
+    if (!setNext || !onNavigateNext) return
+    setNext({
+      label: "Далее → Контент",
+      onClick: async () => { try { await saveRef.current(); navRef.current?.() } catch { /* save показал ошибку */ } },
+    })
+    return () => setNext(null)
+  }, [setNext, !!onNavigateNext])
+
   // ── Перенос v1-портрета → v2-критерии (Этап 2, п.3) ───────────────────────
   const canTransferFromPortrait = !!spec
     && spec.mustHave.length === 0
@@ -1715,19 +1730,8 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
         Изменения сохраняются общей кнопкой «Сохранить настройки» внизу.
       </p>
 
-      {/* Далее → следующий этап (Контент). Сохраняет Портрет, затем переходит. */}
-      {onNavigateNext && (
-        <div className="flex justify-end pt-1">
-          <Button
-            size="sm"
-            variant="default"
-            className="h-9 text-xs"
-            onClick={async () => { try { await save(); onNavigateNext() } catch { /* ошибку показал save() */ } }}
-          >
-            Далее → Контент
-          </Button>
-        </div>
-      )}
+      {/* «Далее → Контент» перенесена в общий sticky-бар (рядом с «Сохранить
+          настройки») — см. useEffect с setNextAction выше. */}
 
       {/* Диалог подтверждения AI-предложения */}
       <SuggestionDialog

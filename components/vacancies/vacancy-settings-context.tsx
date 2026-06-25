@@ -53,6 +53,10 @@ interface VacancySettingsCtx {
   hasUserInteracted: boolean
   /** Метка времени последней реальной интеракции HR (для per-секционного dirty). */
   getLastInteractionAt: () => number
+  /** Опц. кнопка «Далее» в sticky-баре (рядом с «Сохранить настройки»). Секция
+   *  ставит её на маунте и снимает на анмаунте. null = нет «Далее». */
+  nextAction: { label: string; onClick: () => void | Promise<void> } | null
+  setNextAction: (a: { label: string; onClick: () => void | Promise<void> } | null) => void
 }
 
 const Ctx = createContext<VacancySettingsCtx | null>(null)
@@ -60,6 +64,7 @@ const Ctx = createContext<VacancySettingsCtx | null>(null)
 export function VacancySettingsProvider({ children }: { children: ReactNode }) {
   const [pendingChanges, setPendingChanges] = useState<Record<SectionKey, boolean>>({})
   const [saving, setSaving] = useState(false)
+  const [nextAction, setNextAction] = useState<{ label: string; onClick: () => void | Promise<void> } | null>(null)
   const [hasUserInteracted, setHasUserInteracted] = useState(false)
   const interactedRef = useRef(false)
   // Метка времени ПОСЛЕДНЕЙ реальной интеракции HR. Секция считает себя dirty
@@ -171,7 +176,9 @@ export function VacancySettingsProvider({ children }: { children: ReactNode }) {
     saving,
     hasUserInteracted,
     getLastInteractionAt,
-  }), [pendingCount, hasPending, pendingChanges, markChanged, markSaved, registerSaver, unregisterSaver, saveAll, tabHasPending, saving, hasUserInteracted, getLastInteractionAt])
+    nextAction,
+    setNextAction,
+  }), [pendingCount, hasPending, pendingChanges, markChanged, markSaved, registerSaver, unregisterSaver, saveAll, tabHasPending, saving, hasUserInteracted, getLastInteractionAt, nextAction])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
@@ -310,22 +317,34 @@ export function VacancyTabPendingDot({ tab }: { tab: VacancyTabKey }) {
  */
 export function VacancyStickySaveBar() {
   const ctx = useVacancySettings()
-  if (!ctx || !ctx.hasPending) return null
+  if (!ctx || (!ctx.hasPending && !ctx.nextAction)) return null
   const label = ctx.pendingCount > 1
     ? `Сохранить настройки (${ctx.pendingCount} изменения)`
     : "Сохранить настройки"
   return (
     <div className={cn(
-      "sticky bottom-4 z-40 mt-6 max-w-3xl flex justify-end pointer-events-none",
+      "sticky bottom-4 z-40 mt-6 max-w-3xl flex justify-end items-center gap-2 pointer-events-none",
     )}>
-      <Button
-        onClick={() => { void ctx.saveAll() }}
-        disabled={ctx.saving}
-        className="pointer-events-auto gap-2 h-11 px-5 text-sm shadow-lg shadow-primary/20"
-      >
-        {ctx.saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-        {label}
-      </Button>
+      {/* Слева — «Сохранить настройки» (когда есть изменения), справа — «Далее». */}
+      {ctx.hasPending && (
+        <Button
+          onClick={() => { void ctx.saveAll() }}
+          disabled={ctx.saving}
+          className="pointer-events-auto gap-2 h-11 px-5 text-sm shadow-lg shadow-primary/20"
+        >
+          {ctx.saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          {label}
+        </Button>
+      )}
+      {ctx.nextAction && (
+        <Button
+          onClick={() => { void ctx.nextAction?.onClick() }}
+          disabled={ctx.saving}
+          className="pointer-events-auto gap-1.5 h-11 px-5 text-sm shadow-lg shadow-primary/20"
+        >
+          {ctx.nextAction.label}
+        </Button>
+      )}
     </div>
   )
 }
