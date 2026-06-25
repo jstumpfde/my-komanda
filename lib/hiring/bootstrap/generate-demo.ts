@@ -13,7 +13,27 @@ const client = new Anthropic({ baseURL: getClaudeApiUrl() })
 /** Ошибка генерации (невалидный AI-ответ) — роут отдаёт её как 422. */
 export class GenerateDemoError extends Error {}
 
-const SYSTEM = `Ты — копирайтер, который делает короткую демонстрацию вакансии для кандидата (это страница из текстовых блоков в нашем редакторе, НЕ PDF и НЕ слайды).
+export type DemoLength = "short" | "full"
+
+// Короткое демо — 1–2 экрана, хук для ПЕРВОГО касания (кандидат только откликнулся).
+const SYSTEM_SHORT = `Ты — копирайтер, который делает КОРОТКУЮ демонстрацию вакансии для кандидата (страница из текстовых блоков в нашем редакторе, НЕ PDF и НЕ слайды). Это ПЕРВОЕ касание: кандидат только откликнулся, внимание 10–20 секунд.
+
+ПРАВИЛА:
+- Опирайся ТОЛЬКО на переданные факты (описание компании, продукт, вакансия), не выдумывай. Кратко и цепляюще, без воды.
+- Это ХУК, а не лонгрид: 1–2 урока, суммарно 1–2 экрана. Задача — заинтересовать и подвести к вопросам, а не рассказать всё.
+- Тон — человеческий, без рекламных клише («лучший», «уникальный», «лидер рынка»).
+- {{имя}} — только в приветствии (подставится при отправке), других плейсхолдеров не используй.
+- ЗАПРЕЩЕНО упоминать пол/возраст/гражданство и иные недопустимые требования.
+
+СТРУКТУРА (1–2 урока):
+1. 👋 Коротко о главном — приветствие с {{имя}} + ёмко (4–7 строк): кто вы, что за продукт, что за роль, чем интересно. Всё вместе, без разбивки на разделы.
+2. ✍️ Что дальше — 1–2 предложения: предложи заполнить короткую анкету.
+
+ФОРМАТ ОТВЕТА: СТРОГО валидный JSON-массив без markdown:
+[{"emoji":"👋","title":"...","content":"текст..."}, ...]`
+
+// Полное демо — 6 разделов, для более вовлечённой стадии воронки.
+const SYSTEM_FULL = `Ты — копирайтер, который делает демонстрацию вакансии для кандидата (это страница из текстовых блоков в нашем редакторе, НЕ PDF и НЕ слайды).
 
 ПРАВИЛА:
 - Опирайся на переданные факты (описание компании, продукт, вакансия) и раскрывай их РАЗВЁРНУТО, живо и содержательно. Домысливать можно ПОДАЧУ и формулировки, но НЕ сами факты (не выдумывай цифры, клиентов, продукты, которых нет). Если данных мало — раскрой имеющееся полноценно, без воды.
@@ -63,8 +83,9 @@ export async function generateDemoFromProfile(opts: {
   companyDescription: string
   product: ProductProfile | null
   vacancyTitle: string
+  length?: DemoLength
 }): Promise<GeneratedDemo> {
-  const { companyDescription, product, vacancyTitle } = opts
+  const { companyDescription, product, vacancyTitle, length = "full" } = opts
 
   const facts = [
     vacancyTitle ? `Вакансия: ${vacancyTitle}` : "",
@@ -76,8 +97,8 @@ export async function generateDemoFromProfile(opts: {
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 4500,
-    system: SYSTEM,
+    max_tokens: length === "short" ? 1500 : 4500,
+    system: length === "short" ? SYSTEM_SHORT : SYSTEM_FULL,
     messages: [{
       role: "user",
       content:
@@ -106,5 +127,6 @@ export async function generateDemoFromProfile(opts: {
 
   if (lessons.length === 0) throw new GenerateDemoError("Не удалось собрать демо")
 
-  return { title: vacancyTitle ? `Демо · ${vacancyTitle}` : "Демонстрация", lessons }
+  const suffix = length === "short" ? " (короткое)" : ""
+  return { title: (vacancyTitle ? `Демо${suffix} · ${vacancyTitle}` : `Демонстрация${suffix}`), lessons }
 }

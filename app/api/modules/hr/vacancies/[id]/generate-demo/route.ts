@@ -13,10 +13,12 @@ import { generateDemoFromProfile, GenerateDemoError } from "@/lib/hiring/bootstr
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
-export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const c = await requireCompany()
     const { id } = await ctx.params
+    const body = (await req.json().catch(() => ({}))) as { length?: "short" | "full" }
+    const length = body.length === "short" ? "short" : "full"
 
     const [vac] = await db.select({ title: vacancies.title, descriptionJson: vacancies.descriptionJson })
       .from(vacancies)
@@ -41,7 +43,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
 
     const vacancyTitle = (typeof anketa.vacancyTitle === "string" && anketa.vacancyTitle.trim()) ? anketa.vacancyTitle : (vac.title ?? "")
 
-    const result = await generateDemoFromProfile({ companyDescription, product, vacancyTitle })
+    const result = await generateDemoFromProfile({ companyDescription, product, vacancyTitle, length })
     return NextResponse.json({ ok: true, ...result })
   } catch (err) {
     if (err instanceof Response) return err

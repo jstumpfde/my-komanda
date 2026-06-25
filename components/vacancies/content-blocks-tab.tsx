@@ -211,11 +211,13 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext }: ContentBlocksTab
 
   // Онбординг Фаза 2: AI генерит демо из профиля компании/продукта → новый
   // демо-блок в редакторе (там же правится = ревью).
-  const handleGenerateDemo = useCallback(async () => {
+  const handleGenerateDemo = useCallback(async (length: "short" | "full" = "full") => {
     if (!vacancyId) return
     setGenDemo(true)
     try {
-      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/generate-demo`, { method: "POST" })
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/generate-demo`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ length }),
+      })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) { toast.error(data.error ?? "Не удалось сгенерировать демо"); return }
       const block = await apiCreateBlock("presentation", data.title || "Демонстрация")
@@ -342,15 +344,27 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext }: ContentBlocksTab
               <FileText className="w-3.5 h-3.5" />
               PDF презентация
             </button>
-            <button
-              disabled={genDemo}
-              onClick={handleGenerateDemo}
-              title="AI соберёт демо из описания компании и продукта (профиль найма)"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 text-primary px-3 py-2 text-sm hover:bg-primary/5 transition-colors disabled:opacity-50"
-            >
-              {genDemo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-              Сгенерировать демо
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  disabled={genDemo}
+                  title="AI соберёт демо из описания компании и продукта (профиль найма)"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 text-primary px-3 py-2 text-sm hover:bg-primary/5 transition-colors disabled:opacity-50"
+                >
+                  {genDemo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                  Сгенерировать демо
+                  <ChevronDown className="w-3 h-3 opacity-50" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="center">
+                <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => handleGenerateDemo("short")}>
+                  <Sparkles className="w-3.5 h-3.5" /><div><div>Короткое</div><div className="text-[10px] text-muted-foreground">1–2 экрана · для первого касания</div></div>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => handleGenerateDemo("full")}>
+                  <Sparkles className="w-3.5 h-3.5" /><div><div>Полное</div><div className="text-[10px] text-muted-foreground">6 разделов · для вовлечённой стадии</div></div>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </>
@@ -543,8 +557,11 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext }: ContentBlocksTab
               <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => doCreateBlock("pdf")}>
                 <FileText className="w-3.5 h-3.5" />PDF презентация
               </DropdownMenuItem>
-              <DropdownMenuItem className="gap-2 cursor-pointer text-primary" disabled={genDemo} onClick={handleGenerateDemo}>
-                {genDemo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}Сгенерировать демо
+              <DropdownMenuItem className="gap-2 cursor-pointer text-primary" disabled={genDemo} onClick={() => handleGenerateDemo("short")}>
+                {genDemo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}Демо короткое <span className="text-[10px] text-muted-foreground">1–2 экрана</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem className="gap-2 cursor-pointer text-primary" disabled={genDemo} onClick={() => handleGenerateDemo("full")}>
+                {genDemo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}Демо полное <span className="text-[10px] text-muted-foreground">6 разделов</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
