@@ -90,7 +90,7 @@ export async function generateDemoFromProfile(opts: {
   const facts = [
     vacancyTitle ? `Вакансия: ${vacancyTitle}` : "",
     companyDescription ? `Описание компании:\n${companyDescription}` : "",
-    product ? `Продукт: ${product.name}\nЧто продаём: ${product.productDescription}\nТип/отрасль: ${product.salesType}\nICP (кто покупает): ${product.icp}` : "",
+    product ? `Продукт/направление: ${product.name}\nЧто это и какую задачу решает: ${product.productDescription}\nОтрасль/направление: ${product.salesType}\nДля кого (клиент/аудитория): ${product.icp}` : "",
   ].filter(Boolean).join("\n\n")
 
   if (!facts.trim()) throw new GenerateDemoError("Нет данных для генерации (заполните описание компании или профиль продукта)")

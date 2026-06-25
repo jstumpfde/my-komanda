@@ -36,8 +36,8 @@ export function CompaniesProductsSection({ defaults, onPatch }: {
   const renderProducts = (companyKey: string) => companyKey === ""
     ? (
       <ProductProfilesEditor
-        title="Продукты компании"
-        description="Что и кому продаёт эта компания. Найм использует это для генерации анкет и критериев оценки."
+        title="Продукт / направление компании"
+        description="Чем занимается компания и что предлагает клиентам. Найм использует это для генерации анкет, демо и критериев — по любой должности (не только продажи)."
         value={defaults.productProfiles}
         defaultId={defaults.defaultProductProfileId}
         onSave={saveMain}
@@ -45,8 +45,8 @@ export function CompaniesProductsSection({ defaults, onPatch }: {
     )
     : (
       <ProductProfilesEditor
-        title="Продукты компании"
-        description="Продукты этого бренда. Применяются при найме под эту компанию."
+        title="Продукт / направление компании"
+        description="Чем занимается этот бренд и что предлагает клиентам. Применяется при найме под эту компанию — по любой должности."
         value={defaults.brandProductProfiles?.[companyKey]}
         defaultId={defaults.brandDefaultProductProfileIds?.[companyKey]}
         onSave={saveBrand(companyKey)}

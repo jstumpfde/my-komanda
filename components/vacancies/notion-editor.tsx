@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
@@ -26,6 +27,7 @@ import {
   Heading1, Heading2, Heading3, List as ListIcon, ListOrdered, Link2, Hash,
   Type, ImageIcon, Video, Music, FileText, Info, MousePointerClick, CheckSquare,
   ChevronLeft, ChevronRight, Mic, Highlighter, Loader2, Clapperboard,
+  Undo2, Redo2, ArchiveRestore,
 } from "lucide-react"
 import { toast } from "sonner"
 import type { Demo, Block, BlockType, Lesson, StoriesCard } from "@/lib/course-types"
@@ -62,7 +64,36 @@ export interface NotionEditorHandle {
   openSaveTemplate: () => void
   downloadTxt: () => void
   generateWithAI: () => Promise<void>
+  undo: () => void
+  redo: () => void
 }
+
+// ─── История правок (Undo/Redo) + корзина удалённых ──────────────────────────
+// Снимок контента = массив уроков. Глубокая копия для иммутабельности стека.
+function cloneLessons(lessons: Lesson[]): Lesson[] {
+  try { return structuredClone(lessons) } catch { return JSON.parse(JSON.stringify(lessons)) }
+}
+// «Структурный отпечаток» — число уроков и блоков в каждом. Меняется при
+// добавлении/удалении/перестановке блоков и уроков (но не при правке текста).
+function structuralKey(lessons: Lesson[]): string {
+  return lessons.length + "|" + lessons.map((l) => l.blocks.length).join(",")
+}
+const HISTORY_LIMIT = 60          // максимум снимков в стеке undo
+const TRASH_TTL_MS = 24 * 60 * 60 * 1000   // корзина хранит удалённое 24 часа
+
+// «N минут/часов назад» для меток корзины.
+function fmtAgo(ts: number): string {
+  const m = Math.floor((Date.now() - ts) / 60000)
+  if (m < 1) return "только что"
+  if (m < 60) return `${m} мин назад`
+  const h = Math.floor(m / 60)
+  return `${h} ч назад`
+}
+
+// Запись корзины: удалённый блок (с указанием урока) или целый удалённый урок.
+type TrashEntry =
+  | { kind: "block"; ts: number; block: Block; lessonId: string; lessonTitle: string; index: number }
+  | { kind: "lesson"; ts: number; lesson: Lesson; index: number }
 
 function htmlToPlainText(html: string): string {
   if (!html) return ""
@@ -139,6 +170,43 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
   const [localNavText, setLocalNavText] = useState(navButtonText || "")
   const renamingOriginalTitle = useRef<string>("")
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ─── Undo/Redo ──────────────────────────────────────────────────────────
+  const [past, setPast] = useState<Lesson[][]>([])
+  const [future, setFuture] = useState<Lesson[][]>([])
+  const lastEditAt = useRef<number>(0)        // для коалесинга быстрого набора текста
+
+  // ─── Корзина удалённых блоков/уроков (24 ч, localStorage пер-демо) ─────────
+  const trashKey = `demo-trash:${vacancyId ?? "local"}`
+  const [trash, setTrash] = useState<TrashEntry[]>([])
+  const [trashOpen, setTrashOpen] = useState(false)
+  // Загрузка корзины с прунингом просрочки при маунте/смене ключа.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(trashKey)
+      const arr: TrashEntry[] = raw ? JSON.parse(raw) : []
+      const fresh = Array.isArray(arr) ? arr.filter((e) => Date.now() - e.ts < TRASH_TTL_MS) : []
+      setTrash(fresh)
+      if (fresh.length !== (Array.isArray(arr) ? arr.length : 0)) {
+        try { localStorage.setItem(trashKey, JSON.stringify(fresh)) } catch {}
+      }
+    } catch { setTrash([]) }
+  }, [trashKey])
+  // Положить запись в корзину (новые сверху, прунинг просрочки, потолок 50).
+  const pushTrash = useCallback((entry: TrashEntry) => {
+    setTrash((prev) => {
+      const next = [entry, ...prev.filter((e) => Date.now() - e.ts < TRASH_TTL_MS)].slice(0, 50)
+      try { localStorage.setItem(trashKey, JSON.stringify(next)) } catch {}
+      return next
+    })
+  }, [trashKey])
+  const removeTrash = useCallback((ts: number) => {
+    setTrash((prev) => {
+      const next = prev.filter((e) => e.ts !== ts)
+      try { localStorage.setItem(trashKey, JSON.stringify(next)) } catch {}
+      return next
+    })
+  }, [trashKey])
 
   // Library + save-template state
   const [libraryOpen, setLibraryOpen] = useState(false)
@@ -275,14 +343,53 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
   const LESSON_ROW_H = 30           // высота строки урока (изм. ~29px + запас)
   const lessonListHeight = `${Math.max(7, Math.min(demo.lessons.length, 12)) * LESSON_ROW_H}px`
 
-  // Save helper
+  // Save helper. Перед применением кладёт ПРЕДЫДУЩЕЕ состояние в стек undo.
+  // Быстрый набор текста коалесится (один снимок на «всплеск»), структурные
+  // правки (добавить/удалить/переставить блок или урок) — всегда отдельный снимок.
   const save = useCallback((lessons: Lesson[]) => {
+    const prev = demo.lessons
+    const isStructural = structuralKey(prev) !== structuralKey(lessons)
+    const now = Date.now()
+    const coalesce = !isStructural && now - lastEditAt.current < 600
+    lastEditAt.current = now
+    if (!coalesce) {
+      setPast((p) => [...p, cloneLessons(prev)].slice(-HISTORY_LIMIT))
+      setFuture([])
+    }
     setSaveStatus("saving")
     onSaveStatusChange?.("saving")
     onUpdate({ ...demo, lessons, updatedAt: new Date() })
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => { setSaveStatus("saved"); onSaveStatusChange?.("saved") }, 800)
   }, [demo, onUpdate, onSaveStatusChange])
+
+  // Применить снимок напрямую (минуя историю) — общий помощник для undo/redo.
+  const applySnapshot = useCallback((lessons: Lesson[]) => {
+    setSaveStatus("saving")
+    onSaveStatusChange?.("saving")
+    onUpdate({ ...demo, lessons: cloneLessons(lessons), updatedAt: new Date() })
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => { setSaveStatus("saved"); onSaveStatusChange?.("saved") }, 800)
+  }, [demo, onUpdate, onSaveStatusChange])
+
+  const undo = useCallback(() => {
+    if (past.length === 0) { toast("Нечего отменять"); return }
+    const snapshot = past[past.length - 1]
+    setPast(past.slice(0, -1))
+    setFuture((f) => [cloneLessons(demo.lessons), ...f].slice(0, HISTORY_LIMIT))
+    // Сохранить активный урок, если он ещё есть в восстановленном состоянии.
+    if (snapshot[0] && !snapshot.some((l) => l.id === activeLessonId)) setActiveLessonId(snapshot[0].id)
+    applySnapshot(snapshot)
+  }, [past, demo, activeLessonId, applySnapshot])
+
+  const redo = useCallback(() => {
+    if (future.length === 0) { toast("Нечего вернуть"); return }
+    const snapshot = future[0]
+    setFuture(future.slice(1))
+    setPast((p) => [...p, cloneLessons(demo.lessons)].slice(-HISTORY_LIMIT))
+    if (snapshot[0] && !snapshot.some((l) => l.id === activeLessonId)) setActiveLessonId(snapshot[0].id)
+    applySnapshot(snapshot)
+  }, [future, demo, activeLessonId, applySnapshot])
 
   const saveNow = useCallback(() => {
     setSaveStatus("saved")
@@ -344,6 +451,23 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
     return () => window.removeEventListener("keydown", handler)
   }, [previewMode])
 
+  // Ctrl/⌘+Z — отмена, Ctrl/⌘+Shift+Z или Ctrl+Y — возврат. Срабатывает только
+  // когда фокус внутри редактора (чтобы не перехватывать набор на остальной странице).
+  const rootRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (previewMode || !(e.ctrlKey || e.metaKey)) return
+      const k = e.key.toLowerCase()
+      if (k !== "z" && k !== "y") return
+      const tgt = e.target as Node | null
+      if (rootRef.current && tgt && !rootRef.current.contains(tgt)) return
+      if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); redo() }
+      else if (k === "z") { e.preventDefault(); undo() }
+    }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  }, [previewMode, undo, redo])
+
   // Expose imperative handle for parent toolbar
   useImperativeHandle(ref, () => ({
     save: saveNow,
@@ -393,7 +517,9 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
       URL.revokeObjectURL(url)
     },
     generateWithAI,
-  }), [saveNow, onOpenLibrary, demo, generateWithAI])
+    undo,
+    redo,
+  }), [saveNow, onOpenLibrary, demo, generateWithAI, undo, redo])
 
   // Lesson ops
   const updateLesson = (lessonId: string, patch: Partial<Lesson>) =>
@@ -430,8 +556,12 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
   }
 
   const deleteLesson = (id: string) => {
+    const idx = demo.lessons.findIndex((l) => l.id === id)
+    const lesson = idx >= 0 ? demo.lessons[idx] : null
+    if (lesson) pushTrash({ kind: "lesson", ts: Date.now(), lesson, index: idx })
     const nl = demo.lessons.filter((l) => l.id !== id)
-    save(nl); if (activeLessonId === id) setActiveLessonId(nl[0]?.id || ""); setDeleteConfirmId(null); toast("Урок удалён")
+    save(nl); if (activeLessonId === id) setActiveLessonId(nl[0]?.id || ""); setDeleteConfirmId(null)
+    toast("Урок удалён", { description: "Можно отменить (Ctrl+Z) или вернуть из корзины" })
   }
 
   const dropLesson = (target: number) => {
@@ -459,7 +589,25 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
 
   const removeBlock = (id: string) => {
     if (!activeLesson) return
+    const idx = activeLesson.blocks.findIndex((b) => b.id === id)
+    if (idx >= 0) pushTrash({ kind: "block", ts: Date.now(), block: activeLesson.blocks[idx], lessonId: activeLesson.id, lessonTitle: activeLesson.title || "Без названия", index: idx })
     updateLesson(activeLessonId, { blocks: activeLesson.blocks.filter((b) => b.id !== id) })
+  }
+
+  // Восстановить запись из корзины: блок — в его урок (или активный), урок — на место.
+  const restoreTrash = (entry: TrashEntry) => {
+    if (entry.kind === "block") {
+      const target = demo.lessons.find((l) => l.id === entry.lessonId) || activeLesson
+      if (!target) { toast.error("Некуда восстановить — урок удалён"); return }
+      const nb = [...target.blocks]; nb.splice(Math.min(entry.index, nb.length), 0, entry.block)
+      save(demo.lessons.map((l) => l.id === target.id ? { ...l, blocks: nb } : l))
+      setActiveLessonId(target.id)
+    } else {
+      const nl = [...demo.lessons]; nl.splice(Math.min(entry.index, nl.length), 0, entry.lesson)
+      save(nl); setActiveLessonId(entry.lesson.id)
+    }
+    removeTrash(entry.ts)
+    toast.success("Восстановлено")
   }
 
   const moveBlock = (idx: number, dir: -1 | 1) => {
@@ -563,7 +711,7 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
   // ─── Editor layout ────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col" style={{ height: "calc(100vh - 180px)" }}>
+    <div ref={rootRef} className="flex flex-col" style={{ height: "calc(100vh - 180px)" }}>
       {/* Top bar — shown only when not embedded in parent toolbar */}
       {!hideToolbar && (
         <div className="flex items-center justify-between mb-3 flex-shrink-0">
@@ -868,6 +1016,60 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
 
         {/* RIGHT — Notion-style block editor */}
         <div className="flex-1 min-w-0 overflow-y-auto">
+          {/* Панель отмены/возврата + корзина удалённого. Sticky — всегда под рукой. */}
+          <div className="sticky top-0 z-20 flex items-center gap-1 mb-2 py-1.5 px-1 -mx-1 bg-background/85 backdrop-blur-sm border-b border-border/60">
+            <Button
+              variant="ghost" size="sm" className="h-7 px-2 gap-1 text-xs"
+              onClick={undo} disabled={past.length === 0}
+              title="Отменить (Ctrl+Z)"
+            >
+              <Undo2 className="w-3.5 h-3.5" /><span className="hidden sm:inline">Назад</span>
+            </Button>
+            <Button
+              variant="ghost" size="sm" className="h-7 px-2 gap-1 text-xs"
+              onClick={redo} disabled={future.length === 0}
+              title="Вернуть (Ctrl+Shift+Z)"
+            >
+              <Redo2 className="w-3.5 h-3.5" /><span className="hidden sm:inline">Вперёд</span>
+            </Button>
+            <div className="flex-1" />
+            <Popover open={trashOpen} onOpenChange={setTrashOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-7 px-2 gap-1 text-xs" title="Недавно удалённое (хранится 24 ч)">
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Корзина</span>
+                  {trash.length > 0 && <Badge variant="secondary" className="h-4 px-1 text-[10px] leading-none">{trash.length}</Badge>}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-80 p-0">
+                <div className="px-3 py-2 border-b">
+                  <p className="text-sm font-medium">Недавно удалённое</p>
+                  <p className="text-[11px] text-muted-foreground">Блоки и уроки хранятся 24 часа</p>
+                </div>
+                {trash.length === 0 ? (
+                  <div className="px-3 py-6 text-center text-xs text-muted-foreground">Пусто</div>
+                ) : (
+                  <div className="max-h-72 overflow-y-auto py-1">
+                    {trash.map((entry) => (
+                      <div key={entry.ts} className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm truncate">
+                            {entry.kind === "lesson"
+                              ? `Урок: ${entry.lesson.title || "Без названия"}`
+                              : `Блок «${BLOCK_TYPE_META.find((m) => m.type === entry.block.type)?.label ?? entry.block.type}» · ${entry.lessonTitle}`}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">{fmtAgo(entry.ts)}</p>
+                        </div>
+                        <Button variant="outline" size="sm" className="h-7 px-2 gap-1 text-xs shrink-0" onClick={() => restoreTrash(entry)}>
+                          <ArchiveRestore className="w-3.5 h-3.5" />Вернуть
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </PopoverContent>
+            </Popover>
+          </div>
           {activeLesson ? (
             <NotionLessonEditor
               key={activeLessonId}
@@ -3884,64 +4086,87 @@ function InlineBetweenBar({ onAdd }: { onAdd: (type: BlockType) => void }) {
 
   return (
     <div
-      className="relative w-full flex items-center group/between my-2"
-      style={{ minHeight: 20 }}
+      className="relative w-full flex items-center group/between my-1"
+      style={{ minHeight: 40, paddingTop: 10, paddingBottom: 10 }}
       onMouseEnter={() => setVisible(true)}
       onMouseLeave={() => setVisible(false)}
     >
       {/* Линия */}
       <div className={cn(
         "absolute inset-x-0 top-1/2 -translate-y-1/2 h-px transition-colors duration-100",
-        visible ? "bg-primary/30" : "bg-transparent group-hover/between:bg-border/60"
+        visible ? "bg-primary/30" : "bg-border/30"
       )} />
 
-      {/* Иконки по центру */}
+      {/* Намёк «+» — виден всегда, исчезает при hover когда появляются иконки */}
       <div
         className={cn(
           "absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2",
-          "flex items-center justify-center gap-1",
+          "w-5 h-5 rounded-full flex items-center justify-center",
           "transition-all duration-100",
-          visible ? "opacity-100 scale-100 pointer-events-auto" : "opacity-0 scale-95 pointer-events-none"
+          visible ? "opacity-0 scale-75 pointer-events-none" : "opacity-35 scale-100"
         )}
+        style={{
+          backgroundColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)",
+          border: `1px solid ${isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.12)"}`,
+        }}
       >
-        {TOOLBAR_BLOCK_ITEMS.map((item) => {
-          const colors = isDark ? item.dark : item.light
-          return (
-            <button
-              key={item.type}
-              title={item.label}
-              onClick={() => onAdd(item.type)}
-              className="w-7 h-7 rounded-md flex items-center justify-center"
-              style={{
-                backgroundColor: colors.bg,
-                border: `0.5px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
-                boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-                transition: "all 0.15s ease",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.boxShadow = "0 2px 5px rgba(0,0,0,0.12)"
-                e.currentTarget.style.transform = "scale(1.05)"
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.08)"
-                e.currentTarget.style.transform = "scale(1)"
-              }}
-              onMouseDown={(e) => {
-                e.currentTarget.style.boxShadow = "0 1px 2px rgba(0,0,0,0.08)"
-                e.currentTarget.style.transform = "scale(0.95)"
-              }}
-              onMouseUp={(e) => {
-                e.currentTarget.style.boxShadow = "0 2px 5px rgba(0,0,0,0.12)"
-                e.currentTarget.style.transform = "scale(1.05)"
-              }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                {item.svg(colors.icon)}
-              </svg>
-            </button>
-          )
-        })}
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <path d="M5 1v8M1 5h8" stroke={isDark ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.5)"} strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
       </div>
+
+      {/* Иконки по центру — появляются при hover */}
+      <TooltipProvider delayDuration={0} skipDelayDuration={0}>
+        <div
+          className={cn(
+            "absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2",
+            "flex items-center justify-center gap-1",
+            "transition-all duration-100",
+            visible ? "opacity-100 scale-100 pointer-events-auto" : "opacity-0 scale-95 pointer-events-none"
+          )}
+        >
+          {TOOLBAR_BLOCK_ITEMS.map((item) => {
+            const colors = isDark ? item.dark : item.light
+            return (
+              <Tooltip key={item.type}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => onAdd(item.type)}
+                    className="w-7 h-7 rounded-md flex items-center justify-center"
+                    style={{
+                      backgroundColor: colors.bg,
+                      border: `0.5px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+                      transition: "all 0.15s ease",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.boxShadow = "0 2px 5px rgba(0,0,0,0.12)"
+                      e.currentTarget.style.transform = "scale(1.05)"
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.08)"
+                      e.currentTarget.style.transform = "scale(1)"
+                    }}
+                    onMouseDown={(e) => {
+                      e.currentTarget.style.boxShadow = "0 1px 2px rgba(0,0,0,0.08)"
+                      e.currentTarget.style.transform = "scale(0.95)"
+                    }}
+                    onMouseUp={(e) => {
+                      e.currentTarget.style.boxShadow = "0 2px 5px rgba(0,0,0,0.12)"
+                      e.currentTarget.style.transform = "scale(1.05)"
+                    }}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      {item.svg(colors.icon)}
+                    </svg>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">{item.label}</TooltipContent>
+              </Tooltip>
+            )
+          })}
+        </div>
+      </TooltipProvider>
     </div>
   )
 }
@@ -3984,13 +4209,17 @@ function mediaSizeToWidth(size: "S" | "M" | "L"): string {
 
 function FmtBtn({ icon: Icon, tip, cmd }: { icon: React.ElementType; tip: string; cmd: () => void }) {
   return (
-    <button
-      className="w-7 h-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-      title={tip}
-      onMouseDown={(e) => { e.preventDefault(); cmd() }}
-    >
-      <Icon className="w-3.5 h-3.5" />
-    </button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          className="w-7 h-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          onMouseDown={(e) => { e.preventDefault(); cmd() }}
+        >
+          <Icon className="w-3.5 h-3.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top">{tip}</TooltipContent>
+    </Tooltip>
   )
 }
 
