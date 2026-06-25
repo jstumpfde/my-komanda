@@ -1,8 +1,8 @@
 "use client"
 
-// ТЗ №1: секция «Профиль продукта (для найма)» в hiring-settings.
-// Ручное заполнение профиля продукта/продаж компании. Хранится в
-// hiring_defaults_json.productProfiles[] + defaultProductProfileId.
+// Профиль продукта (для найма) — переиспользуемый редактор. Контролируемый:
+// родитель передаёт value/defaultId + onSave. Используется per-company в табе
+// «Компании» (главная → productProfiles, бренды → brandProductProfiles[id]).
 // Без связи с вакансией и sales-модулем (это следующие ТЗ).
 
 import { useState } from "react"
@@ -16,21 +16,23 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import type { CompanyHiringDefaults } from "@/lib/db/schema"
 import {
   SALES_TYPES, DEAL_CYCLES, SALES_CHANNELS, makeProductProfile, normalizeProductProfiles,
   type ProductProfile,
 } from "@/lib/hiring/product-profile"
 
-export function ProductProfileSection({ defaults, onPatch }: {
-  defaults: CompanyHiringDefaults
-  onPatch: (patch: Partial<CompanyHiringDefaults>) => Promise<void>
+export function ProductProfilesEditor({ value, defaultId: initialDefaultId, onSave, title, description }: {
+  value: ProductProfile[] | undefined
+  defaultId?: string
+  onSave: (profiles: ProductProfile[], defaultId: string) => Promise<void>
+  title?: string
+  description?: string
 }) {
-  const initial = normalizeProductProfiles(defaults.productProfiles)
+  const initial = normalizeProductProfiles(value)
   const [profiles, setProfiles] = useState<ProductProfile[]>(initial.length ? initial : [makeProductProfile()])
   const [defaultId, setDefaultId] = useState<string>(
-    defaults.defaultProductProfileId && initial.some(p => p.id === defaults.defaultProductProfileId)
-      ? defaults.defaultProductProfileId
+    initialDefaultId && initial.some(p => p.id === initialDefaultId)
+      ? initialDefaultId
       : (initial[0]?.id ?? ""),
   )
   const [saving, setSaving] = useState(false)
@@ -48,8 +50,8 @@ export function ProductProfileSection({ defaults, onPatch }: {
     setSaving(true)
     try {
       const did = profiles.some(p => p.id === defaultId) ? defaultId : (profiles[0]?.id ?? "")
-      await onPatch({ productProfiles: profiles, defaultProductProfileId: did })
-      toast.success("Профиль продукта сохранён")
+      await onSave(profiles, did)
+      toast.success("Продукты сохранены")
     } catch { toast.error("Не удалось сохранить") }
     finally { setSaving(false) }
   }
@@ -57,8 +59,8 @@ export function ProductProfileSection({ defaults, onPatch }: {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2"><Package className="w-5 h-5 text-primary" /> Профиль продукта (для найма)</CardTitle>
-        <CardDescription>Что и кому вы продаёте. Найм использует это для генерации анкет и критериев оценки под продажников и клиентоориентированные роли.</CardDescription>
+        <CardTitle className="flex items-center gap-2 text-base"><Package className="w-4 h-4 text-primary" /> {title ?? "Продукты компании"}</CardTitle>
+        {description && <CardDescription>{description}</CardDescription>}
       </CardHeader>
       <CardContent className="space-y-4">
         {profiles.map((p, i) => (

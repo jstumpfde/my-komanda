@@ -224,8 +224,12 @@ export interface CompanyHiringDefaults {
   }
   // ТЗ №1: профиль продукта/продаж для найма (ручное заполнение). Без миграции —
   // живёт внутри hiring_defaults_json. Seed для генерации анкет/Портрета — отд. ТЗ.
+  // productProfiles — продукты ОСНОВНОЙ компании (№1). Продукты доп.брендов
+  // (мультикомпания) — в brandProductProfiles по id бренда из brandCompanies.
   productProfiles?: ProductProfile[]
   defaultProductProfileId?: string
+  brandProductProfiles?: Record<string, ProductProfile[]>
+  brandDefaultProductProfileIds?: Record<string, string>
 }
 
 // ── CompanyLegalContact (drizzle/0177) ──
