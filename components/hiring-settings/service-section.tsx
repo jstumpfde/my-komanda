@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, type ReactNode } from "react"
 import {
   ShieldAlert, Save, Loader2, ChevronDown, ChevronUp, GripVertical, Plus, Trash2,
   Upload, X, ExternalLink, Building2,
@@ -293,9 +293,12 @@ export function BitrixBlock({ defaults, onPatch }: {
 // 4. Мультикомпания / выбор компании в анкете
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function MultiCompanyBlock({ defaults, onPatch }: {
+export function MultiCompanyBlock({ defaults, onPatch, renderProducts }: {
   defaults: CompanyHiringDefaults
   onPatch: (patch: Partial<CompanyHiringDefaults>) => Promise<void>
+  // ТЗ Option B: вкладывает редактор продуктов внутрь карточки каждой компании.
+  // companyKey: "" — основная (productProfiles), иначе id бренда.
+  renderProducts?: (companyKey: string) => ReactNode
 }) {
   const [showCompanySelector, setShowCompanySelector] = useState<boolean>(!!defaults.showCompanySelector)
   const [brandCompanies, setBrandCompanies] = useState<BrandCompany[]>(
@@ -592,6 +595,9 @@ export function MultiCompanyBlock({ defaults, onPatch }: {
                 </Button>
               </div>
             </div>
+
+            {/* Продукты основной компании — вложены в её карточку */}
+            {renderProducts && <div className="pt-1 border-t">{renderProducts("")}</div>}
           </div>
         )}
 
@@ -812,6 +818,9 @@ export function MultiCompanyBlock({ defaults, onPatch }: {
                     <Save className="w-3.5 h-3.5" />Сохранить
                   </Button>
                 </div>
+
+                {/* Продукты этого бренда — вложены в его карточку (после ввода названия) */}
+                {renderProducts && c.name.trim() !== "" && <div className="pt-1 border-t">{renderProducts(c.id)}</div>}
               </div>
             ))}
           </div>
