@@ -15,6 +15,7 @@ export interface CardDisplaySettings {
   showSalaryFull: boolean
   showScore: boolean          // колонка «AI-оцен.» (оценка анкеты)
   showResumeScore?: boolean   // колонка «AI-резм.» (скоринг резюме); undefined = показывать
+  showPortraitScore?: boolean // колонка «AI-Порт» (оценка по Портрету, ai_score_v2); undefined = показывать
   showRubricScore?: boolean   // колонка «Рубрика» (новый shadow-движок); undefined = показывать
   showTestScore?: boolean     // колонка «Тест» (балл/статус теста); undefined = показывать
   showNextInterview?: boolean // колонка «Интервью» (ближайшее); undefined = показывать
@@ -36,6 +37,7 @@ export interface CardDisplaySettings {
 export const CANDIDATE_COLUMN_TOGGLES: Array<{ key: keyof CardDisplaySettings; label: string }> = [
   { key: "showProgress",     label: "Прогресс демо" },
   { key: "showResumeScore",  label: "AI резюме" },
+  { key: "showPortraitScore", label: "AI-Портрет" },
   { key: "showScore",        label: "AI оценка" },
   { key: "showRubricScore",  label: "Рубрика" },
   { key: "showTestScore",    label: "Тест" },

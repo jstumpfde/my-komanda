@@ -242,6 +242,7 @@ export function ListView({
   const showCity         = settings.showCity
   const showScore        = settings.showScore          // AI-оцен. (оценка анкеты)
   const showResumeScore  = settings.showResumeScore !== false  // AI-резм. (undefined = вкл)
+  const showPortraitScore = settings.showPortraitScore !== false  // AI-Порт (undefined = вкл)
   const showRubricScore  = settings.showRubricScore !== false  // Рубрика (по умолчанию вкл, как AI-резм)
   const showTestScore    = settings.showTestScore !== false    // Тест (балл/статус; по умолчанию вкл)
   const showNextInterview = settings.showNextInterview !== false // Интервью (ближайшее; по умолчанию вкл)
@@ -469,30 +470,32 @@ export function ListView({
       })
     }
 
-    // AI-Порт — оценка по Портрету (новый скоринг по критериям Портрета, ai_score_v2).
-    // Отдельно от старого AI-балла; для старых вакансий заполняется по мере пересчёта.
-    list.push({
-      id: "portraitScore",
-      gridWidth: "56px",
-      header: <SortHeader label="AI-Порт" sortKey="portraitScore" sort={sort} onToggle={handleSort} align="center" />,
-      renderCell: (candidate) => (
-        <div className="flex items-center justify-center" title="Оценка по Портрету (скоринг по критериям «Что хотим видеть»)">
-          {candidate.aiScoreV2 != null ? (
-            <Badge
-              variant="outline"
-              className={cn(
-                "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
-                getScoreColor(candidate.aiScoreV2),
-              )}
-            >
-              {Math.round(candidate.aiScoreV2)}
-            </Badge>
-          ) : (
-            <span className="text-muted-foreground/40 text-xs">—</span>
-          )}
-        </div>
-      ),
-    })
+    if (showPortraitScore) {
+      // AI-Порт — оценка по Портрету (новый скоринг по критериям Портрета, ai_score_v2).
+      // Отдельно от старого AI-балла; для старых вакансий заполняется по мере пересчёта.
+      list.push({
+        id: "portraitScore",
+        gridWidth: "56px",
+        header: <SortHeader label="AI-Порт" sortKey="portraitScore" sort={sort} onToggle={handleSort} align="center" />,
+        renderCell: (candidate) => (
+          <div className="flex items-center justify-center" title="Оценка по Портрету (скоринг по критериям «Что хотим видеть»)">
+            {candidate.aiScoreV2 != null ? (
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
+                  getScoreColor(candidate.aiScoreV2),
+                )}
+              >
+                {Math.round(candidate.aiScoreV2)}
+              </Badge>
+            ) : (
+              <span className="text-muted-foreground/40 text-xs">—</span>
+            )}
+          </div>
+        ),
+      })
+    }
 
     if (showScore) {
       // AI-оцен.
