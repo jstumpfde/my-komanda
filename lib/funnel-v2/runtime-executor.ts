@@ -25,6 +25,7 @@ import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
 import { startPrequalification } from "@/lib/prequalification/start"
 import { renderTemplate } from "@/lib/template-renderer"
 import type { FunnelV2State } from "@/lib/db/schema"
+import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
 
 // ── Минимальные срезы строк БД, чтобы не тащить весь Drizzle InferSelect ───────
 
@@ -133,20 +134,58 @@ async function scheduleV2Dozhim(
 
   if (chain.length === 0) return
 
-  // Ищем существующую кампанию вакансии для FK
-  const [campaign] = await db
+  // Ищем существующую кампанию вакансии для FK.
+  // Приоритет: sentinel-кампания v2 (preset='funnel_v2') → любая enabled → создаём sentinel.
+  let campaign: { id: string } | undefined
+
+  const [sentinelCampaign] = await db
     .select({ id: followUpCampaigns.id })
     .from(followUpCampaigns)
     .where(and(
       eq(followUpCampaigns.vacancyId, candidate.vacancyId),
-      eq(followUpCampaigns.enabled, true),
+      eq(followUpCampaigns.preset, "funnel_v2"),
     ))
     .limit(1)
 
+  if (sentinelCampaign) {
+    campaign = sentinelCampaign
+  } else {
+    // Пробуем переиспользовать существующую enabled-кампанию
+    const [existingCampaign] = await db
+      .select({ id: followUpCampaigns.id })
+      .from(followUpCampaigns)
+      .where(and(
+        eq(followUpCampaigns.vacancyId, candidate.vacancyId),
+        eq(followUpCampaigns.enabled, true),
+      ))
+      .limit(1)
+
+    if (existingCampaign) {
+      campaign = existingCampaign
+    } else {
+      // Создаём служебную sentinel-кампанию v2 для этой вакансии.
+      // enabled=false — не участвует в обычном дожиме, только для FK.
+      const [inserted] = await db
+        .insert(followUpCampaigns)
+        .values({
+          vacancyId:   candidate.vacancyId,
+          preset:      "funnel_v2",
+          enabled:     false,
+          stopOnReply: true,
+          stopOnVacancyClosed: true,
+        })
+        .returning({ id: followUpCampaigns.id })
+      campaign = inserted
+      console.log("[funnel-v2/executor] создана sentinel-кампания v2", {
+        campaignId:  inserted?.id,
+        vacancyId:   candidate.vacancyId,
+      })
+    }
+  }
+
   if (!campaign) {
-    // Дожим невозможен без кампании (FK NOT NULL); логируем и выходим.
-    // TODO (Фаза 2): создавать sentinel-кампанию v2 или отдельную таблицу.
-    console.warn("[funnel-v2/executor] дожим пропущен — нет кампании для вакансии", {
+    // Не удалось ни найти, ни создать кампанию — пропускаем дожим.
+    console.warn("[funnel-v2/executor] дожим пропущен — не удалось создать кампанию", {
       candidateId: candidate.id,
       vacancyId:   candidate.vacancyId,
       stageId:     stage.id,
@@ -182,7 +221,7 @@ async function scheduleV2Dozhim(
     const scheduledAt = new Date(now.getTime() + delayMs)
     // Подставляем имя и ссылку на демо ({{name}}, {{demo_link}})
     const tokenForUrl = candidate.token
-    const demoUrl = `https://company24.pro/demo/${tokenForUrl}`
+    const demoUrl = `${getAppBaseUrl()}/demo/${tokenForUrl}`
     const messageText = renderTemplate(touch.text, {
       name:      candidate.name.split(" ")[0] || candidate.name,
       demo_link: demoUrl,
@@ -232,7 +271,8 @@ export async function executeStageEntry(
   const companyId = vacancy.companyId ?? ""
   const { firstName } = await getCandidateFirstName(candidate.id)
   const tokenForUrl = candidate.token
-  const demoUrl = `https://company24.pro/demo/${tokenForUrl}`
+  const baseUrl = getAppBaseUrl()
+  const demoUrl = `${baseUrl}/demo/${tokenForUrl}`
 
   let result: StageEntryResult
 
@@ -240,11 +280,11 @@ export async function executeStageEntry(
 
     // ── Сообщение / касание ────────────────────────────────────────────────
     case "message": {
-      // Текст из messagePresetId или стандартный
-      // TODO (Фаза 2): резолвить broadcastTemplates по messagePresetId.
-      // Пока используем contentBlockId как fallback или стандартный текст.
-      const text = stage.messagePresetId
-        ? `[Шаблон ${stage.messagePresetId}] — TODO Фаза 2: загрузить из broadcastTemplates`
+      // Текст стадии («Сообщение кандидату» из редактора) — это тело сообщения.
+      // Если HR его задал — рендерим с токенами, иначе стандартный текст.
+      const customMsg = (stage.messagePresetId ?? "").trim()
+      const text = customMsg
+        ? renderTemplate(customMsg, { name: firstName, vacancy: vacancy.title ?? "" })
         : renderTemplate(
             `${firstName}, добрый день! Хотели уточнить — актуальна ли для вас вакансия «${vacancy.title ?? ""}»?`,
             { name: firstName, vacancy: vacancy.title ?? "" },
@@ -276,17 +316,15 @@ export async function executeStageEntry(
     // ── Демонстрация ───────────────────────────────────────────────────────
     case "demo": {
       // Отправляем ссылку на /demo/<token> — контент отдаётся через resolveCurrentStageContent
-      const inviteText = stage.messagePresetId
-        ? renderTemplate(
-            `${firstName}, подготовили для вас демонстрацию должности — посмотрите 15 минут, узнаете всё о задачах и команде.`,
-            { name: firstName, vacancy: vacancy.title ?? "", demo_link: demoUrl },
-          )
+      const customDemo = (stage.messagePresetId ?? "").trim()
+      const inviteText = customDemo
+        ? renderTemplate(customDemo, { name: firstName, vacancy: vacancy.title ?? "", demo_link: demoUrl })
         : renderTemplate(
             `${firstName}, здравствуйте! Подготовили демонстрацию — 15 минут, и вы узнаете всё о задачах, команде и доходе.\n\n${demoUrl}`,
             { name: firstName, vacancy: vacancy.title ?? "", demo_link: demoUrl },
           )
       // Убеждаемся, что URL в сообщении есть
-      const finalText = inviteText.includes("company24.pro/demo")
+      const finalText = inviteText.includes("/demo/")
         ? inviteText
         : inviteText + "\n\n" + demoUrl
 
@@ -331,7 +369,7 @@ export async function executeStageEntry(
     // текущей стадии (contentBlockId), а не легаси kind='test'.
     case "test":
     case "task": {
-      const testUrl = `https://company24.pro/test/${tokenForUrl}`
+      const testUrl = `${baseUrl}/test/${tokenForUrl}`
 
       // Текст приглашения: из messagePresetId (TODO Фаза 4: broadcastTemplates)
       // или стандартный в зависимости от action (тест-вопросы vs тест-задание).
@@ -340,15 +378,13 @@ export async function executeStageEntry(
         ? `${firstName}, следующий шаг — практическое задание. Выполните и пришлите ответ по ссылке:\n\n${testUrl}`
         : `${firstName}, следующий шаг — небольшой тест. Займёт несколько минут. Пройдите по ссылке:\n\n${testUrl}`
 
-      const testText = stage.messagePresetId
-        ? renderTemplate(
-            `${firstName}, следующий шаг — ${isTask ? "задание" : "тест"}. Ссылка: ${testUrl}`,
-            { name: firstName, vacancy: vacancy.title ?? "", test_link: testUrl },
-          )
+      const customTest = (stage.messagePresetId ?? "").trim()
+      const testText = customTest
+        ? renderTemplate(customTest, { name: firstName, vacancy: vacancy.title ?? "", test_link: testUrl })
         : renderTemplate(inviteBody, { name: firstName, vacancy: vacancy.title ?? "", test_link: testUrl })
 
       // Убеждаемся, что ссылка на тест в сообщении есть
-      const finalTestText = testText.includes("company24.pro/test")
+      const finalTestText = testText.includes("/test/")
         ? testText
         : testText + "\n\n" + testUrl
 
@@ -384,20 +420,17 @@ export async function executeStageEntry(
       const hasScheduling = Array.isArray(stage.scheduling) && stage.scheduling.length > 0
       const hasSelfLink = hasScheduling && stage.scheduling!.includes("self_link")
 
-      // Если есть ссылка-самозапись и она задана в messagePresetId — используем.
+      // Текст стадии («Сообщение кандидату») — тело приглашения. Если HR его
+      // задал — рендерим с токенами (HR сам впишет ссылку-самозапись, если нужна).
       // Иначе — стандартный текст с просьбой написать удобное время.
-      let interviewText: string
-      if (hasSelfLink && stage.messagePresetId) {
-        interviewText = renderTemplate(
-          `${firstName}, следующий шаг — собеседование ${modeLabel[mode]}. Запишитесь на удобное время: ${stage.messagePresetId}`,
-          { name: firstName, vacancy: vacancy.title ?? "" },
-        )
-      } else {
-        interviewText = renderTemplate(
-          `${firstName}, поздравляем! Следующий шаг — собеседование ${modeLabel[mode]} по вакансии «${vacancy.title ?? ""}».\n\nНапишите, пожалуйста, когда вам удобно встретиться (дата и время).`,
-          { name: firstName, vacancy: vacancy.title ?? "" },
-        )
-      }
+      const customInterview = (stage.messagePresetId ?? "").trim()
+      const interviewText = customInterview
+        ? renderTemplate(customInterview, { name: firstName, vacancy: vacancy.title ?? "" })
+        : renderTemplate(
+            `${firstName}, поздравляем! Следующий шаг — собеседование ${modeLabel[mode]} по вакансии «${vacancy.title ?? ""}».\n\nНапишите, пожалуйста, когда вам удобно встретиться (дата и время).`,
+            { name: firstName, vacancy: vacancy.title ?? "" },
+          )
+      void hasSelfLink
 
       const sentInterview = await sendHhMessageToCandidate(candidate.id, companyId, interviewText)
       if (!sentInterview) {
@@ -419,11 +452,9 @@ export async function executeStageEntry(
     // ── Оффер ───────────────────────────────────────────────────────────────
     // Фаза 3: отправляем текст оффера. Документ — Фаза 4.
     case "offer": {
-      const offerText = stage.messagePresetId
-        ? renderTemplate(
-            `${firstName}, рады сделать вам предложение о работе. HR свяжется с вами для обсуждения деталей.`,
-            { name: firstName, vacancy: vacancy.title ?? "" },
-          )
+      const customOffer = (stage.messagePresetId ?? "").trim()
+      const offerText = customOffer
+        ? renderTemplate(customOffer, { name: firstName, vacancy: vacancy.title ?? "" })
         : renderTemplate(
             `${firstName}, поздравляем! Мы готовы сделать вам оффер по вакансии «${vacancy.title ?? ""}». HR напишет вам с деталями в ближайшее время.`,
             { name: firstName, vacancy: vacancy.title ?? "" },
