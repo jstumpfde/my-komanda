@@ -59,7 +59,7 @@ import {
 } from "@/lib/core/spec/types"
 import { computeRealism, REALISM_TONE_CLASS } from "./spec-editor-helpers"
 import { useVacancySectionRegister, useVacancySettings } from "./vacancy-settings-context"
-import { VacancyAdvisor } from "./vacancy-advisor"
+import { PortraitAdvisor } from "./portrait-advisor"
 
 // ─── Константы ───────────────────────────────────────────────────────────────
 
@@ -1749,17 +1749,11 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
     </div>
 
     {/* ── AI-советчик зоны «Портрет» — правая колонка ────────────────────────
-        На широком экране (lg+) стоит справа рядом с формой (как на странице
-        Вакансия). На узком — скрывается внутри VacancyAdvisor как mobile-кнопка. */}
-    {vacancyAnketaData && (
-      <div className="hidden lg:block w-[340px] shrink-0 self-stretch">
-        <VacancyAdvisor
-          vacancyId={vacancyId}
-          vacancyData={vacancyAnketaData}
-          zone="portrait"
-        />
-      </div>
-    )}
+        На широком экране (lg+) стоит справа рядом с формой. Читает ТОЛЬКО сам
+        Портрет (spec) — критерии/стоп-факторы/эталон, а не поля вакансии
+        (раньше тут стоял VacancyAdvisor с vacancyData → показывал «40 навыков»
+        и «стоп-факторы критично» из вакансии; Юрий 26.06: только по Портрету). */}
+    <PortraitAdvisor spec={spec} />
     </div>
   )
 }

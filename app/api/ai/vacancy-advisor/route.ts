@@ -154,7 +154,9 @@ function staticAnalysis(body: Record<string, unknown>): AdvisorResponse {
   const stopFactors = (d.stopFactors as Array<{ enabled: boolean }>) || []
   const enabledStops = stopFactors.filter(f => f.enabled).length
   if (unacceptable.length === 0 && aiStops.length === 0 && enabledStops === 0) {
-    sections.push({ id: "stopFactors", status: "error", title: "Стоп-факторы", message: "Добавьте стоп-факторы — без них AI-скрининг не сможет отсеивать неподходящих кандидатов", priority: 2 })
+    // Стоп-факторы — НЕ критично, а рекомендовано: без них на этом этапе
+    // пропускаем всех (Юрий, 26.06). Поэтому warning, не error.
+    sections.push({ id: "stopFactors", status: "warning", title: "Стоп-факторы", message: "Стоп-факторы не заданы — это не критично, но с ними AI-скрининг сразу отсеет явно неподходящих кандидатов", priority: 5 })
   } else {
     sections.push({ id: "stopFactors", status: "ok", title: "Стоп-факторы", message: `${unacceptable.length + aiStops.length + enabledStops} стоп-факторов`, priority: 10 })
     filled++
@@ -389,11 +391,16 @@ ${AI_SAFETY_PROMPT}`,
     {
       const unFilled = Array.isArray(vacancyData.unacceptableSkills) && (vacancyData.unacceptableSkills as unknown[]).length > 0
       const aiFilled = Array.isArray(vacancyData.aiStopFactors) && (vacancyData.aiStopFactors as unknown[]).length > 0
-      if ((unFilled || aiFilled) && Array.isArray(parsed.sections)) {
+      if (Array.isArray(parsed.sections)) {
         for (const s of parsed.sections) {
-          if (s && (s.id === "stopFactors" || /стоп-фактор/i.test(s.title || "")) && s.status === "error") {
+          if (!s || !(s.id === "stopFactors" || /стоп-фактор/i.test(s.title || ""))) continue
+          if ((unFilled || aiFilled) && s.status === "error") {
             s.status = "ok"
             s.message = "Заполнено («Неприемлемо»)"
+          } else if (s.status === "error") {
+            // Стоп-факторы НИКОГДА не критично — необязательный пред-фильтр, а не
+            // блокер (Юрий, 26.06). Пустые → максимум рекомендация (warning).
+            s.status = "warning"
           }
         }
       }

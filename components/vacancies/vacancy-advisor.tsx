@@ -63,8 +63,11 @@ interface AdvisorResult {
 //   undefined  — все секции (поведение до разделения, обратная совместимость).
 export type AdvisorZone = "vacancy" | "portrait"
 
-// Какие id секций относятся к зоне Портрета.
-const PORTRAIT_SECTION_IDS = new Set(["stopFactors", "skills"])
+// Какие id секций «прятать» из зоны Вакансии (раньше — портретные).
+// Пусто: Портрет теперь обслуживает отдельный PortraitAdvisor (по spec), а
+// секции skills/stopFactors относятся к полям ВАКАНСИИ и должны показываться
+// на вкладке «Вакансия» (Юрий, 26.06). zone='portrait' здесь больше не зовётся.
+const PORTRAIT_SECTION_IDS = new Set<string>([])
 
 interface VacancyAdvisorProps {
   vacancyId?: string
