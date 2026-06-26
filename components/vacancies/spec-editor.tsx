@@ -667,9 +667,18 @@ function GoodEditor({
 
   return (
     <div className="space-y-2.5">
-      <div className="flex items-baseline justify-between">
+      <div className="flex items-baseline justify-between gap-2">
         <Label className="text-sm font-medium">Что хотим видеть</Label>
-        <ListCounter count={rows.length} max={10} />
+        <div className="flex items-center gap-2 shrink-0">
+          {rows.length > 0 && (
+            <button type="button"
+              onClick={() => { if (rows.length <= 1 || confirm(`Удалить все критерии (${rows.length})?`)) commit([]) }}
+              className="text-[11px] text-muted-foreground hover:text-red-600 underline decoration-dotted underline-offset-2">
+              Очистить всё
+            </button>
+          )}
+          <ListCounter count={rows.length} max={10} />
+        </div>
       </div>
       <p className="text-xs text-muted-foreground">
         Есть в резюме → плюс к баллу. Нет → балл ниже, но <b>не отказ</b>. Цвет справа = важность:{" "}
