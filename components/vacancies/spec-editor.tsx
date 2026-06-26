@@ -614,6 +614,12 @@ function GoodEditor({
   }
   const setLevel = (i: number, level: GoodLevel) => commit(rows.map((r, idx) => idx === i ? { ...r, level } : r))
   const remove   = (i: number) => commit(rows.filter((_, idx) => idx !== i))
+  // Убрать ОДИН синоним (часть критерия после запятой), сохранив основной термин.
+  const removeSynonym = (i: number, syn: string) => commit(rows.map((r, idx) => {
+    if (idx !== i) return r
+    const parts = r.text.split(",").map(s => s.trim()).filter(Boolean)
+    return { ...r, text: parts.filter(p => p !== syn).join(", ") }
+  }))
 
   const [draft, setDraft] = useState("")
   const add = () => {
@@ -673,7 +679,26 @@ function GoodEditor({
         {rows.map((r, i) => (
           <div key={i} className="rounded-md border p-2">
             <div className="flex items-center gap-2">
-              <span className="flex-1 text-sm min-w-0 break-words">{r.text}</span>
+              <div className="flex-1 min-w-0">
+                {(() => {
+                  const parts = r.text.split(",").map(s => s.trim()).filter(Boolean)
+                  const main = parts[0] ?? r.text
+                  const syns = parts.slice(1)
+                  return (
+                    <div className="flex flex-wrap items-center gap-1">
+                      <span className="text-sm break-words">{main}</span>
+                      {syns.map((s, si) => (
+                        <span key={si} className="inline-flex items-center gap-0.5 text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
+                          {s}
+                          <button type="button" onClick={() => removeSynonym(i, s)} className="hover:text-foreground" aria-label={`Убрать синоним «${s}»`}>
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )
+                })()}
+              </div>
               <div className="flex items-center gap-1 shrink-0" role="group" aria-label="Важность пункта">
                 {GOOD_LEVELS.map(l => {
                   const active = r.level === l.value
