@@ -50,6 +50,32 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
 function actionMeta(type: StageActionType) { return STAGE_ACTIONS.find(a => a.type === type) ?? STAGE_ACTIONS[0] }
 const SCORING_ACTIONS: StageActionType[] = ["prequalification", "test", "task"]
 const CONTENT_ACTIONS: StageActionType[] = ["demo", "test", "task", "prequalification"]
+
+// Результат «сухого прогона» воронки (lib/funnel-v2/simulate.ts → SimResult)
+interface SimTraceEntry {
+  step: number
+  stageId: string
+  title?: string
+  action: string
+  contentBlock: { demoKind: string; title: string | null; lessons: number } | null
+  decision?: string
+  scoring?: {
+    questions: number
+    gradedObjective: number
+    hasAiQuestions: boolean
+    strong: { scorePercent: number; decision: string }
+    weak: { scorePercent: number; decision: string }
+  }
+  nextStageId: string | null
+}
+interface SimResult {
+  ok: boolean
+  error?: string
+  vacancy?: { id: string; title: string | null; funnelV2RuntimeEnabled: boolean }
+  funnelEnabled?: boolean
+  stageCount?: number
+  trace?: SimTraceEntry[]
+}
 const INTERVIEW_MODES: Array<{ v: InterviewMode; label: string }> = [
   { v: "phone", label: "Телефон" }, { v: "zoom", label: "Zoom" }, { v: "office", label: "Офис" },
 ]
@@ -334,6 +360,21 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait }: { vacancyId: stri
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }))
 
+  // Сухой прогон воронки (read-only диагностика — без записи в БД)
+  const [simOpen, setSimOpen] = useState(false)
+  const [simLoading, setSimLoading] = useState(false)
+  const [simResult, setSimResult] = useState<SimResult | null>(null)
+  const runSim = useCallback(async () => {
+    setSimOpen(true); setSimLoading(true); setSimResult(null)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/funnel-v2-sim`, { method: "POST" })
+      const data = await res.json() as SimResult
+      setSimResult(data)
+    } catch {
+      setSimResult({ ok: false, error: "Не удалось выполнить прогон" })
+    } finally { setSimLoading(false) }
+  }, [vacancyId])
+
   useEffect(() => {
     let cancelled = false
     fetch(`/api/modules/hr/vacancies/${vacancyId}/funnel-v2`).then(r => r.ok ? r.json() : null)
@@ -407,14 +448,21 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait }: { vacancyId: stri
         <div>
           <div className="flex items-center gap-2">
             <h3 className="text-base font-semibold">Воронка v2 — стадии</h3>
-            <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400">beta · только для вас</span>
+            <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400">beta</span>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">Конструктор пути кандидата. Клик по стадии — настройки в панели. Пока не ведёт кандидатов.</p>
         </div>
-        <span className="text-[11px] text-muted-foreground shrink-0 mt-1">
-          {saveState === "saving" ? <span className="inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> сохранение…</span>
-            : saveState === "saved" ? <span className="inline-flex items-center gap-1 text-emerald-600"><Check className="w-3 h-3" /> сохранено</span> : null}
-        </span>
+        <div className="flex items-center gap-2 shrink-0 mt-0.5">
+          <span className="text-[11px] text-muted-foreground">
+            {saveState === "saving" ? <span className="inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> сохранение…</span>
+              : saveState === "saved" ? <span className="inline-flex items-center gap-1 text-emerald-600"><Check className="w-3 h-3" /> сохранено</span> : null}
+          </span>
+          <button type="button" onClick={runSim} disabled={stages.length === 0}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs hover:bg-muted/50 disabled:opacity-40 transition-colors"
+            title="Сухой прогон: пройти воронку тест-кандидатом без записи в БД">
+            <PlayCircle className="w-3.5 h-3.5 text-primary" /> Сухой прогон
+          </button>
+        </div>
       </div>
 
       <PortraitStageCard summary={summary} loading={specLoading} onOpen={onOpenPortrait} />
@@ -444,6 +492,51 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait }: { vacancyId: stri
       {stages.length === 0 && <p className="text-xs text-muted-foreground text-center pt-1">Стадия 1 (Портрет) уже есть. Добавьте следующие — приветствие, демо, тест, интервью, оффер…</p>}
 
       <StageSheet stage={editing} index={editingIndex} allStages={stages} content={content} onChange={changeStage} onClose={() => setEditingId(null)} />
+
+      <Sheet open={simOpen} onOpenChange={setSimOpen}>
+        <SheetContent className="w-full sm:max-w-xl">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2"><PlayCircle className="w-4 h-4 text-primary" /> Сухой прогон воронки</SheetTitle>
+          </SheetHeader>
+          <SheetBody>
+            {simLoading ? (
+              <div className="flex items-center justify-center py-16 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Прогоняю тест-кандидата…</div>
+            ) : !simResult ? null : !simResult.ok ? (
+              <p className="text-sm text-red-600">{simResult.error ?? "Ошибка"}</p>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Тест-кандидат проходит {simResult.stageCount} стадий. Ничего не пишется в БД — это проверка «как сработает воронка».
+                  {" "}Движок {simResult.vacancy?.funnelV2RuntimeEnabled ? "включён" : "выключен (флаг)"}.
+                </p>
+                {(simResult.trace ?? []).map(t => (
+                  <div key={t.stageId} className="rounded-lg border p-2.5 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{t.step}</span>
+                      <span className="text-sm font-medium">{t.title ?? t.stageId}</span>
+                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{t.action}</span>
+                    </div>
+                    {t.contentBlock && (
+                      <p className="text-[11px] text-muted-foreground">Контент: «{t.contentBlock.title}» · {t.contentBlock.lessons} {t.contentBlock.lessons === 1 ? "блок" : "блоков"}</p>
+                    )}
+                    {t.scoring ? (
+                      <div className="text-[11px] space-y-0.5">
+                        <p className="text-muted-foreground">Вопросов: {t.scoring.questions} (объект.: {t.scoring.gradedObjective}{t.scoring.hasAiQuestions ? " + AI" : ""})</p>
+                        <p><span className="text-emerald-600">Сильные ответы {t.scoring.strong.scorePercent}%</span> → {t.scoring.strong.decision}</p>
+                        <p><span className="text-red-600">Слабые ответы {t.scoring.weak.scorePercent}%</span> → {t.scoring.weak.decision}</p>
+                      </div>
+                    ) : (
+                      <p className="text-[11px]"><span className="text-muted-foreground">Решение:</span> {t.decision}</p>
+                    )}
+                    {t.nextStageId && <p className="text-[10px] text-muted-foreground">→ дальше: {t.nextStageId}</p>}
+                  </div>
+                ))}
+                {(simResult.trace ?? []).length === 0 && <p className="text-sm text-muted-foreground">В воронке пока нет стадий для прогона.</p>}
+              </div>
+            )}
+          </SheetBody>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

@@ -1029,7 +1029,6 @@ export default function VacancyPage() {
     rawUrlSection === "general" ? "page" :
     rawUrlSection === "automation" ? "ai" :
     rawUrlSection && (LEGACY_SECTIONS_REDIRECT_TO_FUNNEL_BUILDER as readonly string[]).includes(rawUrlSection) ? "funnel-builder" :
-    rawUrlSection === "funnel-v2" && !isOwnerEmail(user?.email) ? "page" :
     rawUrlSection && (SETTINGS_SECTION_IDS as readonly string[]).includes(rawUrlSection)
       ? (rawUrlSection as SettingsSectionId)
       : "page"
@@ -2974,8 +2973,8 @@ export default function VacancyPage() {
                   s.kind === "tab" ? activeTab === s.value : activeTab === "settings" && settingsSection === s.section
                 // Разбиваем: на lg+ все 10 в строке; на <lg первые 5 видны, 6-10 в «Ещё»
                 // Если активный пункт попал в «скрытые» — добавляем его перед «Ещё» (на мобильных)
-                // «Воронка v2» (beta) — только владельцу (j.stumpf@yandex.ru)
-                const subTabs = settingsSubTabs.filter(s => s.section !== "funnel-v2" || isOwnerEmail(user?.email))
+                // «Воронка v2» (beta) видна всем пользователям (Юрий 26.06).
+                const subTabs = settingsSubTabs
                 const VISIBLE_COUNT_SM = 5
                 const visibleTabs = subTabs.slice(0, VISIBLE_COUNT_SM)
                 const overflowTabs = subTabs.slice(VISIBLE_COUNT_SM)
@@ -4092,8 +4091,8 @@ export default function VacancyPage() {
                 </div>
                 )}
 
-                {/* ───────── Воронка v2 (beta, только владельцу) ───────── */}
-                {settingsSection === "funnel-v2" && isOwnerEmail(user?.email) && (
+                {/* ───────── Воронка v2 (beta, видна всем) ───────── */}
+                {settingsSection === "funnel-v2" && (
                 <div className="space-y-6">
                   <FunnelV2Builder vacancyId={id} onOpenPortrait={() => {
                     setSettingsSection("spec")
