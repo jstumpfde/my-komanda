@@ -27,8 +27,9 @@ async function handle(req: NextRequest) {
   const run = await startCronRun(CRON_NAME).catch(() => null)
   try {
     const result = await collectAndStore()
-    if (run) await finishCronRun(run.id, "ok", { ...result })
-    return NextResponse.json({ ok: true, ...result })
+    const hadError = result.some(r => r.error)
+    if (run) await finishCronRun(run.id, hadError ? "error" : "ok", { projects: result }, result.find(r => r.error)?.error)
+    return NextResponse.json({ ok: !hadError, projects: result })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     if (run) await finishCronRun(run.id, "error", null, msg)

@@ -7,14 +7,14 @@
 
 import { execFile } from "child_process"
 import { promisify } from "util"
-import { REPOS, LOOKBACK_DAYS, PERSON, getSshConfig } from "./config"
+import { LOOKBACK_DAYS, type ProjectConfig, type RepoConfig } from "./config"
 import type { CollectResult, RepoSnapshot, RawCommit } from "./types"
 
 const execFileAsync = promisify(execFile)
 
 // Маркеры секций — маловероятны в выводе git, ловим их в начале строки.
-function buildRemoteScript(): string {
-  const entries = REPOS.map(r => `${r.key}::${r.path}`).join(" ")
+function buildRemoteScript(repos: RepoConfig[]): string {
+  const entries = repos.map(r => `${r.key}::${r.path}`).join(" ")
   return `
 REPOS="${entries}"
 for entry in $REPOS; do
@@ -52,8 +52,8 @@ function isGenerated(file: string): boolean {
   return GENERATED.some(re => re.test(file))
 }
 
-export function parseCollectOutput(stdout: string): RepoSnapshot[] {
-  const byKey = new Map(REPOS.map(r => [r.key, r]))
+export function parseCollectOutput(stdout: string, repoCfgs: RepoConfig[]): RepoSnapshot[] {
+  const byKey = new Map(repoCfgs.map(r => [r.key, r]))
   const repos: RepoSnapshot[] = []
   let cur: RepoSnapshot | null = null
   let inLog = false
@@ -121,23 +121,30 @@ export function parseCollectOutput(stdout: string): RepoSnapshot[] {
   return repos
 }
 
-export async function collect(): Promise<CollectResult> {
-  const ssh = getSshConfig()
-  const args = [
-    "-i", ssh.keyPath,
-    "-o", "BatchMode=yes",
-    "-o", "ConnectTimeout=10",
-    "-o", "StrictHostKeyChecking=accept-new",
-    `${ssh.user}@${ssh.host}`,
-    buildRemoteScript(),
-  ]
-  const { stdout } = await execFileAsync("ssh", args, {
-    timeout:   90_000,
-    maxBuffer: 20 * 1024 * 1024,
-  })
+export async function collect(project: ProjectConfig): Promise<CollectResult> {
+  const script = buildRemoteScript(project.repos)
+  const opts = { timeout: 90_000, maxBuffer: 20 * 1024 * 1024 }
+
+  let stdout: string
+  if (project.ssh) {
+    const { host, user, keyPath } = project.ssh
+    const args = [
+      "-i", keyPath,
+      "-o", "BatchMode=yes",
+      "-o", "ConnectTimeout=10",
+      "-o", "StrictHostKeyChecking=accept-new",
+      `${user}@${host}`,
+      script,
+    ]
+    ;({ stdout } = await execFileAsync("ssh", args, opts))
+  } else {
+    // Локальный режим: репозитории на том же боксе, что и крон.
+    ;({ stdout } = await execFileAsync("bash", ["-c", script], opts))
+  }
+
   return {
-    person:      PERSON,
+    project:     project.key,
     collectedAt: new Date().toISOString(),
-    repos:       parseCollectOutput(stdout),
+    repos:       parseCollectOutput(stdout, project.repos),
   }
 }

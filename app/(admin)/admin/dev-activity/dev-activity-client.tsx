@@ -15,6 +15,8 @@ import { median, verdictFor } from "@/lib/dev-activity/scoring"
 
 interface RepoState { label: string; branch: string | null; wip: number; unpushed: number; commits: number }
 interface SeriesData {
+  project: string
+  label: string
   person: string
   days: DevActivityDay[]
   repoStates: RepoState[]
@@ -59,16 +61,24 @@ function fmtDuration(min: number): string {
   return m === 0 ? `${h}ч` : `${h}ч ${m}м`
 }
 
+// Интервал «с HH:MM по HH:MM» (первый→последний коммит дня).
+function fmtSpan(firstAt: string | null, lastAt: string | null): string | null {
+  if (!firstAt || !lastAt) return null
+  const hm = (iso: string) => new Date(iso).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+  return `с ${hm(firstAt)} по ${hm(lastAt)}`
+}
+
 function VerdictBadge({ v }: { v: Verdict | null }) {
   const meta = VERDICT[v ?? "warmup"]
   return <Badge variant="outline" className={cn("font-medium", meta.badge)}>{meta.label}</Badge>
 }
 
-export function DevActivityClient({ initial, personLabel }: { initial: SeriesData; personLabel: string }) {
-  const [data, setData] = useState<SeriesData>(initial)
+export function DevActivityClient({ projects: initial }: { projects: SeriesData[] }) {
+  const [projects, setProjects] = useState<SeriesData[]>(initial)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [project, setProject] = useState<string>("__all__")
+  const [active, setActive] = useState(0)
+  const cur = projects[active] ?? projects[0]
 
   async function collectNow() {
     setLoading(true); setError(null)
@@ -76,7 +86,7 @@ export function DevActivityClient({ initial, personLabel }: { initial: SeriesDat
       const res = await fetch("/api/platform/dev-activity", { method: "POST" })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Ошибка сбора")
-      setData(json.data as SeriesData)
+      setProjects(json.projects as SeriesData[])
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -84,9 +94,48 @@ export function DevActivityClient({ initial, personLabel }: { initial: SeriesDat
     }
   }
 
+  return (
+    <div className="p-6 max-w-6xl space-y-5">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">Dev-активность — {cur?.label ?? ""}</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Журнал продуктивности по коммитам и работе на сервере. Обновлено: {fmtTime(cur?.lastCollectedAt ?? null)}
+          </p>
+        </div>
+        <Button onClick={collectNow} disabled={loading}>
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          {loading ? "Собираю…" : "Собрать сейчас"}
+        </Button>
+      </div>
+
+      {error && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4" /> {error}
+        </div>
+      )}
+
+      {/* Табы по проектам */}
+      <div className="flex flex-wrap gap-1 border-b">
+        {projects.map((p, i) => (
+          <button key={p.project} onClick={() => setActive(i)}
+            className={cn("px-4 py-2 text-sm border-b-2 -mb-px transition-colors",
+              i === active ? "border-primary text-foreground font-medium" : "border-transparent text-muted-foreground hover:text-foreground")}>
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      {cur && <ProjectView key={cur.project} data={cur} />}
+    </div>
+  )
+}
+
+function ProjectView({ data }: { data: SeriesData }) {
+  const [repoFilter, setRepoFilter] = useState<string>("__all__")
   const days = data.days
   const today = days.length ? days[days.length - 1] : null
-  const projects = useMemo(() => {
+  const repoOptions = useMemo(() => {
     const set = new Set<string>()
     for (const d of days) for (const r of d.repos) set.add(r.repo)
     return [...set].sort()
@@ -128,34 +177,14 @@ export function DevActivityClient({ initial, personLabel }: { initial: SeriesDat
   // Журнал: дни с активностью, по убыванию; при фильтре — только нужный проект.
   const journal = useMemo(() => {
     const active = days.filter(d => d.commitCount > 0).slice().reverse()
-    if (project === "__all__") return active
+    if (repoFilter === "__all__") return active
     return active
-      .filter(d => d.repos.some(r => r.repo === project))
-      .map(d => ({ ...d, tasks: d.tasks.filter(t => t.repo === project), repos: d.repos.filter(r => r.repo === project) }))
-  }, [days, project])
+      .filter(d => d.repos.some(r => r.repo === repoFilter))
+      .map(d => ({ ...d, tasks: d.tasks.filter(t => t.repo === repoFilter), repos: d.repos.filter(r => r.repo === repoFilter) }))
+  }, [days, repoFilter])
 
   return (
-    <div className="p-6 max-w-6xl space-y-5">
-      {/* Шапка */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">Dev-активность — {personLabel}</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Журнал продуктивности по коммитам и работе на сервере. Обновлено: {fmtTime(data.lastCollectedAt)}
-          </p>
-        </div>
-        <Button onClick={collectNow} disabled={loading}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          {loading ? "Собираю…" : "Собрать сейчас"}
-        </Button>
-      </div>
-
-      {error && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4" /> {error}
-        </div>
-      )}
-
+    <div className="space-y-5">
       {!today ? (
         <Card>
           <CardContent className="py-10 text-center text-muted-foreground">
@@ -177,7 +206,7 @@ export function DevActivityClient({ initial, personLabel }: { initial: SeriesDat
                   балл <b className="text-foreground">{today.score}</b>
                   {baseline != null && <> · норма ≈ {Math.round(baseline * 10) / 10}</>} ·
                   коммитов {today.commitCount} ·
-                  ≈ {fmtDuration(today.workMinutes)} работы ·
+                  ≈ {fmtDuration(today.workMinutes)} работы{fmtSpan(today.firstAt, today.lastAt) ? ` (${fmtSpan(today.firstAt, today.lastAt)})` : ""} ·
                   <span className="text-emerald-600"> +{today.linesAdded}</span>/<span className="text-red-500">−{today.linesRemoved}</span>
                 </span>
                 {today.wipFiles > 0 && (
@@ -261,9 +290,9 @@ export function DevActivityClient({ initial, personLabel }: { initial: SeriesDat
 
           {/* Фильтр по проекту */}
           <div className="flex flex-wrap gap-1.5">
-            <FilterChip active={project === "__all__"} onClick={() => setProject("__all__")}>Все проекты</FilterChip>
-            {projects.map(p => (
-              <FilterChip key={p} active={project === p} onClick={() => setProject(p)}>{p}</FilterChip>
+            <FilterChip active={repoFilter === "__all__"} onClick={() => setRepoFilter("__all__")}>Все репозитории</FilterChip>
+            {repoOptions.map(p => (
+              <FilterChip key={p} active={repoFilter === p} onClick={() => setRepoFilter(p)}>{p}</FilterChip>
             ))}
           </div>
 
@@ -389,6 +418,7 @@ function RecentFeed({ items }: { items: RecentCommit[] }) {
 function DayCard({ day }: { day: DevActivityDay }) {
   const tasks: DayTask[] = day.tasks
   const repos: RepoDayStat[] = day.repos
+  const span = fmtSpan(day.firstAt, day.lastAt)
   return (
     <Card>
       <CardContent className="py-4 space-y-2.5">
@@ -397,7 +427,7 @@ function DayCard({ day }: { day: DevActivityDay }) {
           <VerdictBadge v={day.verdict} />
           <span className="text-xs text-muted-foreground">
             задач {day.taskCount} · балл {day.score} · коммитов {day.commitCount} ·
-            ≈ {fmtDuration(day.workMinutes)} ·
+            ≈ {fmtDuration(day.workMinutes)}{span ? ` · ${span}` : ""} ·
             <span className="text-emerald-600"> +{day.linesAdded}</span>/<span className="text-red-500">−{day.linesRemoved}</span>
           </span>
         </div>

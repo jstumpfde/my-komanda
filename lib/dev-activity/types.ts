@@ -43,7 +43,7 @@ export interface RepoSnapshot {
 }
 
 export interface CollectResult {
-  person:      string
+  project:     string
   collectedAt: string
   repos:       RepoSnapshot[]
 }
@@ -77,6 +77,8 @@ export interface DevActivityDay {
   linesRemoved: number
   wipFiles:     number
   workMinutes:  number
+  firstAt:      string | null   // ISO первого коммита дня
+  lastAt:       string | null   // ISO последнего коммита дня
   taskCount:    number
   score:        number
   substance:    Substance | null

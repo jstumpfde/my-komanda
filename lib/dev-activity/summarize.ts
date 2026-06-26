@@ -7,7 +7,6 @@
 
 import Anthropic from "@anthropic-ai/sdk"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
-import { PERSON_LABEL } from "./config"
 import type { DaySummary, DayTask, Substance } from "./types"
 
 const anthropic = new Anthropic({
@@ -33,12 +32,12 @@ function normalizeKind(k: unknown): Substance {
   return VALID_KINDS.includes(k as Substance) ? (k as Substance) : "normal"
 }
 
-function buildPrompt(day: string, commits: CommitForSummary[]): string {
+function buildPrompt(day: string, commits: CommitForSummary[], who: string): string {
   const lines = commits
     .map(c => `- [${c.repo}] ${c.subject}  (+${c.added}/-${c.removed})`)
     .join("\n")
 
-  return `Ты — техлид, который ведёт журнал продуктивности разработчика по имени ${PERSON_LABEL}.
+  return `Ты — техлид, который ведёт журнал продуктивности (исполнитель: ${who}).
 Ниже коммиты за один день (${day}) по нескольким проектам. Темы коммитов на русском (conventional commits).
 
 Коммиты:
@@ -63,7 +62,7 @@ ${lines}
 }`
 }
 
-export async function summarizeDay(day: string, commits: CommitForSummary[]): Promise<DaySummary> {
+export async function summarizeDay(day: string, commits: CommitForSummary[], who = "разработчик"): Promise<DaySummary> {
   if (commits.length === 0) {
     return { summary: "", tasks: [], taskCount: 0, substance: "trivial" }
   }
@@ -72,7 +71,7 @@ export async function summarizeDay(day: string, commits: CommitForSummary[]): Pr
     model:       "claude-sonnet-4-6",
     max_tokens:  2000,
     temperature: 0,
-    messages:    [{ role: "user", content: buildPrompt(day, commits) }],
+    messages:    [{ role: "user", content: buildPrompt(day, commits, who) }],
   })
   const block = msg.content.find(b => b.type === "text")
   if (!block || block.type !== "text") throw new Error("AI не ответил")

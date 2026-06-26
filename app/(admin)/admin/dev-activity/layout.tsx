@@ -9,7 +9,7 @@ export default async function DevActivityLayout({
   children: React.ReactNode
 }) {
   const session = await auth()
-  if (!canSeeDevActivity(session?.user?.email)) {
+  if (!canSeeDevActivity(session?.user?.email, session?.user?.role as string)) {
     notFound()
   }
   return <>{children}</>

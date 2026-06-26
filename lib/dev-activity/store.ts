@@ -1,7 +1,7 @@
-// Оркестратор: собрать → дедупнуть коммиты по SHA → разобрать новые дни через
-// Claude → записать в dev_activity_days → пересчитать норму/вердикты по всему
-// ряду. Ресуммаризируем только изменившиеся дни (по отпечатку списка SHA),
-// чтобы не жечь токены на каждый запуск.
+// Оркестратор: по каждому ПРОЕКТУ собрать → дедупнуть коммиты по SHA → разобрать
+// новые дни через Claude → записать в dev_activity_days (ключ строки = project+day)
+// → пересчитать норму/вердикты. Ресуммаризируем только изменившиеся дни (по
+// отпечатку списка SHA), чтобы не жечь токены на каждый запуск.
 
 import { eq, and, asc } from "drizzle-orm"
 import { db } from "@/lib/db"
@@ -9,15 +9,13 @@ import { devActivityDays } from "@/lib/db/schema"
 import { collect } from "./collect"
 import { summarizeDay, type CommitForSummary } from "./summarize"
 import { computeSeries, scoreTasks, estimateWorkMinutes } from "./scoring"
-import { PERSON, WINDOW_DAYS } from "./config"
+import { PROJECTS, getProject, WINDOW_DAYS, type ProjectConfig } from "./config"
 import type {
   DevActivityDay, DayTask, RepoDayStat, Substance, Verdict, CollectResult, RecentCommit,
 } from "./types"
 
-// Окно ленты «что катит сейчас».
 const RECENT_HOURS = 48
 
-// Текущая дата в МСК (UTC+3, без перехода на летнее время).
 function mskToday(): string {
   return new Date(Date.now() + 3 * 3600_000).toISOString().slice(0, 10)
 }
@@ -28,11 +26,11 @@ function mskDayOffset(deltaDays: number): string {
 interface DedupCommit { repo: string; sha: string; at: string; subject: string; added: number; removed: number }
 
 // Сводит сырьё сбора к коммитам по дням, дедуплицируя по SHA (staging и основной
-// чекаут market-radar делят одну ветку — без дедупа было бы двойной счёт).
+// чекаут делят одну ветку — без дедупа был бы двойной счёт).
 function dedupByDay(res: CollectResult): Map<string, DedupCommit[]> {
   const byDay = new Map<string, DedupCommit[]>()
-  const seen = new Set<string>()   // sha, чтобы коммит учитывался один раз
-  for (const repo of res.repos) {        // репо идут в порядке config (дев раньше staging)
+  const seen = new Set<string>()
+  for (const repo of res.repos) {
     for (const c of repo.commits) {
       if (!c.sha || !c.day || seen.has(c.sha)) continue
       seen.add(c.sha)
@@ -58,31 +56,48 @@ function fingerprint(commits: DedupCommit[]): string {
   return commits.map(c => c.sha).sort().join(",")
 }
 
-export interface CollectStoreResult {
-  person:    string
-  daysTotal: number
-  resummarized: number
-  reused:    number
+// Первый/последний коммит дня (по времени).
+function firstLast(commits: DedupCommit[]): { first: Date | null; last: Date | null } {
+  const ts = commits.map(c => new Date(c.at).getTime()).filter(n => Number.isFinite(n))
+  if (ts.length === 0) return { first: null, last: null }
+  return { first: new Date(Math.min(...ts)), last: new Date(Math.max(...ts)) }
 }
 
-export async function collectAndStore(): Promise<CollectStoreResult> {
-  const res = await collect()
+export interface CollectStoreResult {
+  project:      string
+  daysTotal:    number
+  resummarized: number
+  reused:       number
+  error?:       string
+}
+
+// Сбор+запись всех проектов (используется cron'ом и ручным «Собрать сейчас»).
+export async function collectAndStore(): Promise<CollectStoreResult[]> {
+  const out: CollectStoreResult[] = []
+  for (const project of PROJECTS) {
+    try {
+      out.push(await collectStoreProject(project))
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      out.push({ project: project.key, daysTotal: 0, resummarized: 0, reused: 0, error: msg } as CollectStoreResult)
+    }
+  }
+  return out
+}
+
+async function collectStoreProject(project: ProjectConfig): Promise<CollectStoreResult> {
+  const res = await collect(project)
   const byDay = dedupByDay(res)
   const today = mskToday()
 
-  // Дни, которым гарантируем строку: все дни с коммитами + последние WINDOW_DAYS.
   const days = new Set<string>(byDay.keys())
   for (let i = 0; i < WINDOW_DAYS; i++) days.add(mskDayOffset(-i))
 
-  // Текущее состояние проектов (для панели «Проекты сейчас») — кладём в raw
-  // сегодняшней строки.
   const repoStates = res.repos.map(r => ({
     label: r.label, branch: r.branch, wip: r.wipFiles, unpushed: r.unpushed, commits: r.commits.length,
   }))
   const wipTotal = res.repos.reduce((s, r) => s + r.wipFiles, 0)
 
-  // Лента «что катит сейчас» — дедуплицированные коммиты за последние RECENT_HOURS,
-  // по убыванию времени. Кладём в raw сегодняшней строки.
   const cutoff = Date.now() - RECENT_HOURS * 3600_000
   const recent: RecentCommit[] = [...byDay.values()].flat()
     .filter(c => c.at && new Date(c.at).getTime() >= cutoff)
@@ -99,9 +114,10 @@ export async function collectAndStore(): Promise<CollectStoreResult> {
     const commitCount  = commits.length
     const linesAdded   = commits.reduce((s, c) => s + c.added, 0)
     const linesRemoved = commits.reduce((s, c) => s + c.removed, 0)
+    const { first, last } = firstLast(commits)
 
     const [existing] = await db.select().from(devActivityDays)
-      .where(and(eq(devActivityDays.person, PERSON), eq(devActivityDays.day, day))).limit(1)
+      .where(and(eq(devActivityDays.project, project.key), eq(devActivityDays.day, day))).limit(1)
 
     let tasks: DayTask[] = []
     let summary: string | null = null
@@ -111,7 +127,6 @@ export async function collectAndStore(): Promise<CollectStoreResult> {
     if (commitCount > 0) {
       const rawFp = (existing?.raw as { fingerprint?: string } | null)?.fingerprint
       if (existing && existing.summary != null && rawFp === fp) {
-        // Ничего не изменилось — переиспользуем разбор, экономим токены.
         tasks     = (existing.tasks as DayTask[] | null) ?? []
         summary   = existing.summary
         taskCount = existing.taskCount
@@ -121,7 +136,7 @@ export async function collectAndStore(): Promise<CollectStoreResult> {
         const forAi: CommitForSummary[] = commits.map(c => ({
           repo: c.repo, subject: c.subject, added: c.added, removed: c.removed,
         }))
-        const s = await summarizeDay(day, forAi)
+        const s = await summarizeDay(day, forAi, project.person)
         tasks = s.tasks; summary = s.summary; taskCount = s.taskCount; substance = s.substance
         resummarized++
       }
@@ -133,30 +148,33 @@ export async function collectAndStore(): Promise<CollectStoreResult> {
     const raw = day === today ? { fingerprint: fp, repoStates, recent } : { fingerprint: fp }
 
     const values = {
-      person: PERSON, day, commitCount, linesAdded, linesRemoved, wipFiles, workMinutes,
+      project: project.key, person: project.person, day,
+      commitCount, linesAdded, linesRemoved, wipFiles, workMinutes,
+      firstAt: first, lastAt: last,
       taskCount, score, substance, summary,
       tasks: tasks as unknown, repos: stats as unknown, raw: raw as unknown,
       updatedAt: new Date(),
     }
     await db.insert(devActivityDays).values(values as typeof devActivityDays.$inferInsert)
       .onConflictDoUpdate({
-        target: [devActivityDays.person, devActivityDays.day],
+        target: [devActivityDays.project, devActivityDays.day],
         set: {
-          commitCount, linesAdded, linesRemoved, wipFiles, workMinutes, taskCount, score,
+          person: project.person, commitCount, linesAdded, linesRemoved, wipFiles, workMinutes,
+          firstAt: first, lastAt: last, taskCount, score,
           substance, summary, tasks: tasks as unknown, repos: stats as unknown,
           raw: raw as unknown, updatedAt: new Date(),
         },
       })
   }
 
-  await recomputeVerdicts()
-  return { person: PERSON, daysTotal: days.size, resummarized, reused }
+  await recomputeVerdicts(project.key)
+  return { project: project.key, daysTotal: days.size, resummarized, reused }
 }
 
-// Пересчитывает baseline+verdict по всему ряду (норма зависит от истории).
-export async function recomputeVerdicts(): Promise<void> {
+// Пересчитывает baseline+verdict по ряду проекта (норма зависит от истории).
+export async function recomputeVerdicts(projectKey: string): Promise<void> {
   const rows = await db.select().from(devActivityDays)
-    .where(eq(devActivityDays.person, PERSON)).orderBy(asc(devActivityDays.day))
+    .where(eq(devActivityDays.project, projectKey)).orderBy(asc(devActivityDays.day))
 
   const series = computeSeries(rows.map(r => ({ day: r.day, score: r.score })))
   const byDay = new Map(series.map(s => [s.day, s]))
@@ -172,17 +190,25 @@ export async function recomputeVerdicts(): Promise<void> {
 }
 
 export interface DevActivitySeries {
-  person: string
-  days:   DevActivityDay[]
+  project: string
+  label:   string
+  person:  string
+  days:    DevActivityDay[]
   repoStates: Array<{ label: string; branch: string | null; wip: number; unpushed: number; commits: number }>
   recent: RecentCommit[]
   lastCollectedAt: string | null
 }
 
-// Чтение ряда для страницы (последние WINDOW_DAYS + дни с активностью).
-export async function getSeries(): Promise<DevActivitySeries> {
+function iso(d: Date | string | null): string | null {
+  if (!d) return null
+  return new Date(d).toISOString()
+}
+
+// Чтение ряда одного проекта для страницы.
+export async function getSeries(projectKey: string): Promise<DevActivitySeries> {
+  const project = getProject(projectKey)
   const rows = await db.select().from(devActivityDays)
-    .where(eq(devActivityDays.person, PERSON)).orderBy(asc(devActivityDays.day))
+    .where(eq(devActivityDays.project, projectKey)).orderBy(asc(devActivityDays.day))
 
   const today = mskToday()
   const todayRow = rows.find(r => r.day === today)
@@ -197,6 +223,8 @@ export async function getSeries(): Promise<DevActivitySeries> {
     linesRemoved: r.linesRemoved,
     wipFiles: r.wipFiles,
     workMinutes: r.workMinutes,
+    firstAt: iso(r.firstAt),
+    lastAt: iso(r.lastAt),
     taskCount: r.taskCount,
     score: r.score,
     substance: (r.substance as Substance | null) ?? null,
@@ -211,5 +239,15 @@ export async function getSeries(): Promise<DevActivitySeries> {
     ? new Date(todayRow.collectedAt).toISOString()
     : (rows.length ? new Date(rows[rows.length - 1].updatedAt).toISOString() : null)
 
-  return { person: PERSON, days, repoStates, recent, lastCollectedAt }
+  return {
+    project: projectKey,
+    label:   project?.label ?? projectKey,
+    person:  project?.person ?? "",
+    days, repoStates, recent, lastCollectedAt,
+  }
+}
+
+// Чтение всех проектов (для табов страницы).
+export async function getAllSeries(): Promise<DevActivitySeries[]> {
+  return Promise.all(PROJECTS.map(p => getSeries(p.key)))
 }

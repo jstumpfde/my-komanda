@@ -3230,13 +3230,16 @@ export const cronRuns = pgTable("cron_runs", {
 // /admin/dev-activity. Подробности — lib/dev-activity/*.
 export const devActivityDays = pgTable("dev_activity_days", {
   id:           uuid("id").primaryKey().defaultRandom(),
-  person:       text("person").notNull(),                       // ключ человека, напр. 'maria'
+  project:      text("project").notNull().default("market-radar"), // ключ проекта (таба)
+  person:       text("person").notNull(),                       // ярлык исполнителя
   day:          date("day").notNull(),                          // календарный день (МСК)
   commitCount:  integer("commit_count").notNull().default(0),
   linesAdded:   integer("lines_added").notNull().default(0),
   linesRemoved: integer("lines_removed").notNull().default(0),
   wipFiles:     integer("wip_files").notNull().default(0),      // незакоммичено на момент сбора
   workMinutes:  integer("work_minutes").notNull().default(0),   // оценка времени работы по коммитам
+  firstAt:      timestamp("first_at", { withTimezone: true }),  // первый коммит дня
+  lastAt:       timestamp("last_at", { withTimezone: true }),   // последний коммит дня
   taskCount:    integer("task_count").notNull().default(0),     // осмысленные задачи (Claude)
   score:        doublePrecision("score").notNull().default(0),  // взвешенная продуктивность дня
   substance:    text("substance"),                              // 'trivial'|'normal'|'substantial'
@@ -3249,7 +3252,7 @@ export const devActivityDays = pgTable("dev_activity_days", {
   collectedAt:  timestamp("collected_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:    timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
-  unique("dev_activity_person_day").on(t.person, t.day),
+  unique("dev_activity_project_day").on(t.project, t.day),
   index("dev_activity_day_idx").on(t.day),
 ])
 
