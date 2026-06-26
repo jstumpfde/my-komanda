@@ -606,6 +606,7 @@ function stage(action: StageActionType, seed: string, over: Partial<FunnelV2Stag
 export const MARKETER_FUNNEL: FunnelV2Stage[] = [
   stage("demo", "mkt-1-demo-short", {
     title: "Короткое демо (хук)",
+    messagePresetId: "Здравствуйте, {{name}}! Спасибо за отклик на «{{vacancy}}». Подготовили короткую демонстрацию должности — 15 минут, и вы узнаете о продукте, задачах и команде: {{demo_link}}",
     contentBlockId: null,  // apply.ts подставит id короткого demo
     // _demoTemplateId — apply.ts подставит реальный id после сида.
     // При вызове buildMarketerFunnelWithIds() поле заполняется.
@@ -629,6 +630,7 @@ export const MARKETER_FUNNEL: FunnelV2Stage[] = [
       autoReject: true,
       threshold: 20,
       rejectDelayMinutes: 60,
+      rejectText: "{{name}}, спасибо за интерес к вакансии «{{vacancy}}» и за ваши ответы. На данный момент мы остановимся на других кандидатах — профиль пока не совсем совпадает с тем, что мы ищем. Желаем успехов и будем рады видеть ваш отклик в будущем!",
       passCriteria:
         "Короткий квалиф-фильтр: опыт, форматы, AI-инструменты. " +
         "Ниже 20 баллов → авто-отказ (явное несоответствие). " +
@@ -637,6 +639,7 @@ export const MARKETER_FUNNEL: FunnelV2Stage[] = [
   }),
   stage("demo", "mkt-3-demo-deep", {
     title: "Углублённое демо (продукт + роль)",
+    messagePresetId: "{{name}}, отличные ответы — спасибо! Подготовили для вас углублённую демонстрацию: подробно о продукте, реальных задачах маркетолога и о том, как мы работаем с AI: {{demo_link}}",
     contentBlockId: null,  // apply.ts подставит id углублённого demo
     // _demoTemplateId — apply.ts подставит реальный id углублённого демо.
     _demoTemplateId: null,
@@ -650,6 +653,7 @@ export const MARKETER_FUNNEL: FunnelV2Stage[] = [
   }),
   stage("test", "mkt-4-wave2", {
     title: "Анкета волна 2 (полная)",
+    messagePresetId: `${MARKETER_WAVE2_INTRO}\n\nЗаполнить анкету: {{test_link}}`,
     // _questionnaireTemplateId — apply.ts подставит реальный id анкеты волны 2.
     _questionnaireTemplateId: null,
     dozhim: "standard",
@@ -666,6 +670,7 @@ export const MARKETER_FUNNEL: FunnelV2Stage[] = [
   }),
   stage("interview", "mkt-5-interview", {
     title: "Интервью (знакомство)",
+    messagePresetId: "{{name}}, поздравляем — вы прошли на следующий этап! Предлагаем познакомиться лично: короткий разговор о роли, задачах и условиях. Напишите, пожалуйста, когда вам удобно (день и время).",
     interviewMode: "phone",
     scheduling: ["bot", "self_link"],
     dozhim: "soft",
@@ -678,6 +683,7 @@ export const MARKETER_FUNNEL: FunnelV2Stage[] = [
   }),
   stage("offer", "mkt-6-offer", {
     title: "Решение / оффер",
+    messagePresetId: "{{name}}, рады сообщить: мы готовы сделать вам предложение по вакансии «{{vacancy}}»! HR свяжется с вами, чтобы обсудить детали и условия. Поздравляем!",
     dozhim: "off",
     rule: {
       autoAdvance: false,
