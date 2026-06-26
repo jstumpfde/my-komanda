@@ -197,6 +197,7 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     aiSummary: c.aiSummary ?? undefined,
     aiVerdict: c.aiScore != null ? (c.aiScore >= 70 ? "подходит" : c.aiScore >= 40 ? "возможно" : "не подходит") : undefined,
     resumeScore: c.resumeScore ?? null,
+    aiScoreV2: c.aiScoreV2 ?? null,
     rubricScore: c.rubricScore ?? null,
     testScore: c.testScore ?? null,
     testStatus: c.testStatus ?? null,

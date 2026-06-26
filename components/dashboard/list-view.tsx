@@ -33,7 +33,7 @@ import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ListFilter,
 import { DemoProgressBar, calcDemoPercent, calcDemoFraction } from "@/components/hr/demo-progress-bar"
 import { getStageLabel, getStageColorClasses } from "@/lib/stages"
 
-export type ListSortKey = "favorite" | "name" | "aiScore" | "resumeScore" | "rubricScore" | "testScore" | "progress" | "salary" | "responseDate" | "status" | "city" | "source" | "nextInterview"
+export type ListSortKey = "favorite" | "name" | "aiScore" | "resumeScore" | "portraitScore" | "rubricScore" | "testScore" | "progress" | "salary" | "responseDate" | "status" | "city" | "source" | "nextInterview"
 export type ListSortDir = "asc" | "desc"
 export interface ListSortState {
   key: ListSortKey
@@ -117,6 +117,7 @@ const DEFAULT_DIR: Record<ListSortKey, ListSortDir> = {
   name:         "asc",
   aiScore:      "desc",
   resumeScore:  "desc",
+  portraitScore: "desc",
   rubricScore:  "desc",
   testScore:    "desc",
   progress:     "desc",
@@ -278,6 +279,9 @@ export function ListView({
         }
         case "resumeScore": {
           return mul * ((a.resumeScore ?? -1) - (b.resumeScore ?? -1))
+        }
+        case "portraitScore": {
+          return mul * ((a.aiScoreV2 ?? -1) - (b.aiScoreV2 ?? -1))
         }
         case "rubricScore": {
           return mul * ((a.rubricScore ?? -1) - (b.rubricScore ?? -1))
@@ -464,6 +468,31 @@ export function ListView({
         ),
       })
     }
+
+    // AI-Порт — оценка по Портрету (новый скоринг по критериям Портрета, ai_score_v2).
+    // Отдельно от старого AI-балла; для старых вакансий заполняется по мере пересчёта.
+    list.push({
+      id: "portraitScore",
+      gridWidth: "56px",
+      header: <SortHeader label="AI-Порт" sortKey="portraitScore" sort={sort} onToggle={handleSort} align="center" />,
+      renderCell: (candidate) => (
+        <div className="flex items-center justify-center" title="Оценка по Портрету (скоринг по критериям «Что хотим видеть»)">
+          {candidate.aiScoreV2 != null ? (
+            <Badge
+              variant="outline"
+              className={cn(
+                "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
+                getScoreColor(candidate.aiScoreV2),
+              )}
+            >
+              {Math.round(candidate.aiScoreV2)}
+            </Badge>
+          ) : (
+            <span className="text-muted-foreground/40 text-xs">—</span>
+          )}
+        </div>
+      ),
+    })
 
     if (showScore) {
       // AI-оцен.

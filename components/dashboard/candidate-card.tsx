@@ -33,6 +33,8 @@ export interface Candidate {
   aiVerdict?: string
   // AI-скор резюме (выставляется при приёме hh-отклика, до демо).
   resumeScore?: number | null
+  // AI-Портрет: оценка резюме по критериям Портрета (ai_score_v2).
+  aiScoreV2?: number | null
   // Рубричный балл (новый shadow-движок).
   rubricScore?: number | null
   interviewDate?: Date
