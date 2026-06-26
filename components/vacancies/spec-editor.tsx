@@ -609,7 +609,10 @@ function GoodEditor({
   ]
   const commit = (next: { text: string; level: GoodLevel }[]) => {
     const niceToHave = next.map(r => ({ text: r.text, importance: r.level as NiceImportance }))
-    if (niceToHave.length > 10) { toast.error("Не больше 10 пунктов"); return }
+    // Блокируем только ДОБАВЛЕНИЕ сверх 10. Удаление/правку существующих
+    // (в т.ч. когда пунктов уже >10 из старых данных) всегда разрешаем — иначе
+    // переполненный список нельзя почистить через ✕ (Юрий 26.06).
+    if (niceToHave.length > 10 && niceToHave.length > rows.length) { toast.error("Не больше 10 пунктов"); return }
     onChange({ mustHave: [], niceToHave })
   }
   const setLevel = (i: number, level: GoodLevel) => commit(rows.map((r, idx) => idx === i ? { ...r, level } : r))
