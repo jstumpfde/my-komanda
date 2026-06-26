@@ -66,10 +66,15 @@ import { PortraitAdvisor } from "./portrait-advisor"
 // 🟢 «Подходит» — важность на пункте. ТРИ уровня (согласованный дизайн): 🟢 только
 // поднимает балл, НИКОГДА не отсекает. Отсев — это 🔴 (стоп-фактор / точные требования).
 // Цвет = важность: оранжевый → светло-зелёный → тёмно-зелёный. Подпись — по наведению.
+// Мягкие «прозрачные» уровни важности (в стиле приложения): тинт-фон + цветная
+// рамка + цветная галочка, без плотной заливки. «Обязательно» — фирменным
+// primary (фиолетовый) + кольцо, чтобы ЧЁТКО выделялся среди остальных
+// (раньше были два почти одинаковых зелёных). Ни один уровень НЕ отсекает —
+// отсев живёт в 🔴 «Не подходит» (решение Юрия 26.06).
 const GOOD_LEVELS = [
-  { value: "nice",      label: "Желательно",  solid: "bg-orange-500",  text: "text-orange-600 dark:text-orange-400"   },
-  { value: "important", label: "Важно",       solid: "bg-emerald-500", text: "text-emerald-600 dark:text-emerald-400" },
-  { value: "very",      label: "Обязательно", solid: "bg-emerald-700", text: "text-emerald-700 dark:text-emerald-300" },
+  { value: "nice",      label: "Желательно",  soft: "bg-amber-500/15 border-amber-500/50 text-amber-600 dark:text-amber-400"   },
+  { value: "important", label: "Важно",       soft: "bg-emerald-500/15 border-emerald-500/50 text-emerald-600 dark:text-emerald-400" },
+  { value: "very",      label: "Обязательно", soft: "bg-primary/15 border-primary/60 text-primary ring-1 ring-inset ring-primary/40" },
 ] as const
 type GoodLevel = (typeof GOOD_LEVELS)[number]["value"]
 
@@ -659,9 +664,9 @@ function GoodEditor({
       </div>
       <p className="text-xs text-muted-foreground">
         Есть в резюме → плюс к баллу. Нет → балл ниже, но <b>не отказ</b>. Цвет справа = важность:{" "}
-        <span className="text-orange-600 dark:text-orange-400">оранжевый — желательно</span>,{" "}
-        <span className="text-emerald-600 dark:text-emerald-400">светло-зелёный — важно</span>,{" "}
-        <span className="text-emerald-700 dark:text-emerald-300">тёмно-зелёный — обязательно</span> (сильнее влияет). Наведите — увидите подпись.
+        <span className="text-amber-600 dark:text-amber-400">жёлтый — желательно</span>,{" "}
+        <span className="text-emerald-600 dark:text-emerald-400">зелёный — важно</span>,{" "}
+        <span className="text-primary font-medium">фиолетовый — обязательно</span> (сильнее всего влияет на балл; отсев — только в «Не подходит»). Наведите — увидите подпись.
       </p>
       <OverRecommendedHint count={rows.length} />
       <div className="space-y-1.5">
@@ -676,9 +681,10 @@ function GoodEditor({
                     <button key={l.value} type="button" title={l.label} aria-label={l.label} aria-pressed={active}
                       onClick={() => setLevel(i, l.value)}
                       className={cn(
-                        "w-7 h-[22px] rounded-md border border-transparent flex items-center justify-center text-white transition-all",
-                        l.solid,
-                        active ? "opacity-100 shadow-sm" : "opacity-30 hover:opacity-60",
+                        "w-7 h-[22px] rounded-md border flex items-center justify-center transition-all",
+                        active
+                          ? cn(l.soft, "shadow-sm")
+                          : "border-border/50 text-muted-foreground/30 hover:text-muted-foreground/70 hover:border-border",
                       )}
                     >
                       {active && <Check className="w-3.5 h-3.5" />}
