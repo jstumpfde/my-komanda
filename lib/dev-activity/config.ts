@@ -33,6 +33,9 @@ export const REPOS: RepoConfig[] = [
 
 export const PERSON = process.env.DEV_ACTIVITY_PERSON ?? "maria"
 export const PERSON_LABEL = process.env.DEV_ACTIVITY_PERSON_LABEL ?? "Мария"
+// Заголовок страницы (продукт/проект, а не человек). PERSON_LABEL выше остаётся
+// для контекста AI-разбора.
+export const DISPLAY_LABEL = process.env.DEV_ACTIVITY_DISPLAY_LABEL ?? "Маркет Радар"
 
 export interface SshConfig {
   host:    string
