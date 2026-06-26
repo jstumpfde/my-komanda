@@ -22,9 +22,14 @@ export interface CommitForSummary {
 }
 
 function parseJsonFromText<T>(text: string): T {
-  const match = text.match(/\{[\s\S]*\}/)
-  if (!match) throw new Error("Ответ AI не содержит JSON")
-  return JSON.parse(match[0]) as T
+  let s = text.trim()
+  // снять markdown-обёртку ```json ... ``` если есть
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (fence) s = fence[1].trim()
+  // вырезать от первой { до последней }
+  const start = s.indexOf("{"), end = s.lastIndexOf("}")
+  if (start === -1 || end === -1) throw new Error("Ответ AI не содержит JSON")
+  return JSON.parse(s.slice(start, end + 1)) as T
 }
 
 const VALID_KINDS: Substance[] = ["trivial", "normal", "substantial"]

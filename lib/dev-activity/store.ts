@@ -136,9 +136,15 @@ async function collectStoreProject(project: ProjectConfig): Promise<CollectStore
         const forAi: CommitForSummary[] = commits.map(c => ({
           repo: c.repo, subject: c.subject, added: c.added, removed: c.removed,
         }))
-        const s = await summarizeDay(day, forAi, project.person)
-        tasks = s.tasks; summary = s.summary; taskCount = s.taskCount; substance = s.substance
-        resummarized++
+        try {
+          const s = await summarizeDay(day, forAi, project.person)
+          tasks = s.tasks; summary = s.summary; taskCount = s.taskCount; substance = s.substance
+          resummarized++
+        } catch {
+          // Один кривой ответ AI не должен ронять весь проект — день оставляем
+          // без разбора (summary=null), до-разберётся в следующий сбор.
+          summary = null; tasks = []; taskCount = 0; substance = null
+        }
       }
     }
 
