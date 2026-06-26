@@ -3223,6 +3223,35 @@ export const cronRuns = pgTable("cron_runs", {
   index("cron_runs_name_started_idx").on(t.cronName, t.startedAt),
 ])
 
+// Dev-activity tracker — журнал продуктивности подрядчика по его репозиториям
+// на отдельном сервере. Одна строка = один день одного человека (агрегат по
+// всем его репо; разбивка по репо и список задач — в jsonb). Заполняется
+// cron'ом /api/cron/dev-activity (SSH → git → Claude). Читается страницей
+// /admin/dev-activity. Подробности — lib/dev-activity/*.
+export const devActivityDays = pgTable("dev_activity_days", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  person:       text("person").notNull(),                       // ключ человека, напр. 'maria'
+  day:          date("day").notNull(),                          // календарный день (МСК)
+  commitCount:  integer("commit_count").notNull().default(0),
+  linesAdded:   integer("lines_added").notNull().default(0),
+  linesRemoved: integer("lines_removed").notNull().default(0),
+  wipFiles:     integer("wip_files").notNull().default(0),      // незакоммичено на момент сбора
+  taskCount:    integer("task_count").notNull().default(0),     // осмысленные задачи (Claude)
+  score:        doublePrecision("score").notNull().default(0),  // взвешенная продуктивность дня
+  substance:    text("substance"),                              // 'trivial'|'normal'|'substantial'
+  verdict:      text("verdict"),                                // 'silence'|'below'|'normal'|'above'|'warmup'
+  baseline:     doublePrecision("baseline"),                    // скользящая норма для сравнения
+  summary:      text("summary"),                                // журнал дня человеческим языком
+  tasks:        jsonb("tasks"),                                 // [{repo,title,kind}]
+  repos:        jsonb("repos"),                                 // [{repo,commits,added,removed,wip}]
+  raw:          jsonb("raw"),                                   // сырьё сбора (для пере-разбора)
+  collectedAt:  timestamp("collected_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:    timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  unique("dev_activity_person_day").on(t.person, t.day),
+  index("dev_activity_day_idx").on(t.day),
+])
+
 // Group 15: библиотека пер-компанийных шаблонов воронки.
 // config_json хранит массив { type, order, enabled } — тот же формат, что в
 // vacancies.funnel_config_json. При применении копируется в вакансию.
