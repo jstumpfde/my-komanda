@@ -2091,7 +2091,7 @@ export default function VacancyPage() {
   const RESCORE_LABELS: Record<string, string> = {
     resume: "AI-резюме", ai: "AI-оценка", rubric: "AI-рубрика", test: "AI-тест", all: "все параметры",
   }
-  const rescoreSelected = async (dimension: "resume" | "ai" | "rubric" | "test" | "all") => {
+  const rescoreSelected = async (dimension: "resume" | "ai" | "rubric" | "test" | "portrait" | "all") => {
     if (rescoring) return
     const ids = Array.from(selectedCandidateIds)
     if (ids.length === 0) { toast.info("Выделите кандидатов галочками — переоценка идёт по выделенным"); return }
@@ -2829,6 +2829,9 @@ export default function VacancyPage() {
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => rescoreSelected("resume")} disabled={!!rescoring}>
                           <ClipboardList className="w-3.5 h-3.5 mr-2" /> AI-резюме
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => rescoreSelected("portrait")} disabled={!!rescoring}>
+                          <Target className="w-3.5 h-3.5 mr-2" /> AI-Портрет (по критериям)
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => rescoreSelected("ai")} disabled={!!rescoring}>
                           <BarChart3 className="w-3.5 h-3.5 mr-2" /> AI-оценка

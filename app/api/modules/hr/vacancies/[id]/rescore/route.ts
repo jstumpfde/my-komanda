@@ -12,6 +12,7 @@ import { candidates, vacancies, testSubmissions } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { screenResume } from "@/lib/ai-screen-resume"
 import { scoreCandidateById } from "@/lib/ai-score-candidate"
+import { scoreCandidateV2 } from "@/lib/ai-score-candidate-v2"
 import { scoreResumeRubric } from "@/lib/scoring/rubric"
 import { buildSpecFromAnketa, buildResumeText } from "@/lib/scoring/vacancy-spec"
 import { scoreTestSubmission } from "@/lib/ai-score-test"
@@ -21,8 +22,8 @@ import { getSpec } from "@/lib/core/spec/store"
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
-type Dim = "resume" | "ai" | "rubric" | "test" | "all"
-const ALL_DIMS: Exclude<Dim, "all">[] = ["resume", "ai", "rubric", "test"]
+type Dim = "resume" | "ai" | "rubric" | "test" | "portrait" | "all"
+const ALL_DIMS: Exclude<Dim, "all">[] = ["resume", "ai", "rubric", "test", "portrait"]
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -73,7 +74,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       .where(and(eq(candidates.vacancyId, vacancyId), inArray(candidates.id, ids)))
 
     const dims = dimension === "all" ? ALL_DIMS : [dimension]
-    const result = { resume: 0, ai: 0, rubric: 0, test: 0, skipped: 0, errors: 0 }
+    const result = { resume: 0, ai: 0, rubric: 0, test: 0, portrait: 0, skipped: 0, errors: 0 }
 
     // Портрет (spec) для переоценки резюме — тот же путь, что у живого пайплайна:
     // если заполнен и включён, оцениваем ПО НЕМУ (а не по legacy-анкете).
@@ -123,6 +124,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           } else if (d === "ai") {
             await scoreCandidateById({ candidateId: c.id, vacancyId, skipIfScored: false })
             result.ai++
+          } else if (d === "portrait") {
+            // AI-Портрет: двухпроходная оценка по критериям Портрета (ai_score_v2).
+            // Требует непустой requirementsJson.must_have (Портрет настроен) — иначе
+            // scoreCandidateV2 вернёт null (скип).
+            const v2 = await scoreCandidateV2({ candidateId: c.id, vacancyId, skipIfScored: false })
+            if (v2) result.portrait++; else result.skipped++
           } else if (d === "rubric") {
             const spec = buildSpecFromAnketa(anketa)
             const resumeText = buildResumeText(c)
