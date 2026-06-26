@@ -72,9 +72,9 @@ import { PortraitAdvisor } from "./portrait-advisor"
 // (раньше были два почти одинаковых зелёных). Ни один уровень НЕ отсекает —
 // отсев живёт в 🔴 «Не подходит» (решение Юрия 26.06).
 const GOOD_LEVELS = [
-  { value: "nice",      label: "Желательно",  soft: "bg-amber-500/15 border-amber-500/50 text-amber-600 dark:text-amber-400"   },
-  { value: "important", label: "Важно",       soft: "bg-emerald-500/15 border-emerald-500/50 text-emerald-600 dark:text-emerald-400" },
-  { value: "very",      label: "Обязательно", soft: "bg-primary/15 border-primary/60 text-primary ring-1 ring-inset ring-primary/40" },
+  { value: "nice",      label: "Желательно",    soft: "bg-orange-500/15 border-orange-500/50 text-orange-600 dark:text-orange-400" },
+  { value: "important", label: "Средне важный", soft: "bg-lime-500/15 border-lime-500/55 text-lime-600 dark:text-lime-400"        },
+  { value: "very",      label: "Важный",        soft: "bg-green-600/15 border-green-600/60 text-green-700 dark:text-green-400"     },
 ] as const
 type GoodLevel = (typeof GOOD_LEVELS)[number]["value"]
 
@@ -664,9 +664,9 @@ function GoodEditor({
       </div>
       <p className="text-xs text-muted-foreground">
         Есть в резюме → плюс к баллу. Нет → балл ниже, но <b>не отказ</b>. Цвет справа = важность:{" "}
-        <span className="text-amber-600 dark:text-amber-400">жёлтый — желательно</span>,{" "}
-        <span className="text-emerald-600 dark:text-emerald-400">зелёный — важно</span>,{" "}
-        <span className="text-primary font-medium">фиолетовый — обязательно</span> (сильнее всего влияет на балл; отсев — только в «Не подходит»). Наведите — увидите подпись.
+        <span className="text-orange-600 dark:text-orange-400">оранжевый — желательно</span>,{" "}
+        <span className="text-lime-600 dark:text-lime-400">салатовый — средне важный</span>,{" "}
+        <span className="text-green-700 dark:text-green-400">зелёный — важный</span> (сильнее влияет на балл; отсев — только в «Не подходит»). Наведите — увидите подпись.
       </p>
       <OverRecommendedHint count={rows.length} />
       <div className="space-y-1.5">
