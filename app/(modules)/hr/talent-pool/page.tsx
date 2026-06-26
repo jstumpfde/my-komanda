@@ -90,6 +90,19 @@ function scoreToStatus(score: number): TalentStatus {
 
 const CHANNEL_LABELS: Record<string, string> = { tg: "Telegram", whatsapp: "WhatsApp", email: "Email" }
 
+// Структурный чип источника — чтобы было видно, ОТКУДА кандидат (Юрий 26.06).
+// _type="candidate" = пришёл из отбора по вакансии; "entry" = ручное/CSV/форма/реферал.
+function sourceChip(c: { _type?: "candidate" | "entry"; source?: string }): { label: string; cls: string; detail?: string } {
+  if (c._type === "candidate") return { label: "Из вакансии", cls: "bg-primary/10 text-primary" }
+  const s = (c.source || "").toLowerCase()
+  if (/реферал|referral/.test(s)) return { label: "Реферал", cls: "bg-violet-500/10 text-violet-700 dark:text-violet-400" }
+  if (/форм|form/.test(s))        return { label: "Форма", cls: "bg-blue-500/10 text-blue-700 dark:text-blue-400" }
+  if (/csv|импорт|import/.test(s)) return { label: "Импорт", cls: "bg-muted text-muted-foreground" }
+  if (/исходящ|outbound/.test(s))  return { label: "Исходящий", cls: "bg-amber-500/10 text-amber-700 dark:text-amber-400" }
+  if (!c.source || c.source === "—") return { label: "Вручную", cls: "bg-muted text-muted-foreground" }
+  return { label: "Вручную", cls: "bg-muted text-muted-foreground", detail: c.source }
+}
+
 // ─── Component ──────────────────────────────────────────
 
 type TalentTabKey = "base" | "campaigns" | "referrals" | "analytics" | "forms"
@@ -437,8 +450,11 @@ export function TalentPoolView({ embedded = false }: { embedded?: boolean }) {
                               <DataCell className="text-muted-foreground">{c.position}</DataCell>
                               <DataCell className="text-muted-foreground">{c.company}</DataCell>
                               <DataCell>
-                                <div className="flex items-center gap-1.5">
-                                  <span>{c.source}</span>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {(() => { const sc = sourceChip(c); return (<>
+                                    <Badge variant="outline" className={cn("text-[10px] border-transparent", sc.cls)}>{sc.label}</Badge>
+                                    {sc.detail && <span className="text-[11px] text-muted-foreground">{sc.detail}</span>}
+                                  </>) })()}
                                   {c.referralName && (
                                     <>
                                       <span className="text-[11px] text-muted-foreground">· {c.referralName}</span>
