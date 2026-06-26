@@ -343,7 +343,11 @@ export default function IntegratorDetailPage({ params }: { params: Promise<{ id:
                             const st = LINK_STATUS[c.status ?? "active"] ?? LINK_STATUS.active
                             const isCancelled = c.status === "cancelled"
                             return (
-                              <DataRow key={c.id} className={cn(isCancelled && "opacity-60")}>
+                              <DataRow
+                                key={c.id}
+                                className={cn("cursor-pointer hover:bg-muted/40 transition-colors", isCancelled && "opacity-60")}
+                                onClick={() => router.push(`/admin/clients/${c.clientCompanyId}`)}
+                              >
                                 <DataCell className="font-medium">{c.companyName || "—"}</DataCell>
                                 <DataCell className="text-xs text-muted-foreground font-mono">{c.clientCompanyId}</DataCell>
                                 <DataCell align="center">
@@ -358,7 +362,7 @@ export default function IntegratorDetailPage({ params }: { params: Promise<{ id:
                                       size="sm" variant="ghost"
                                       className="h-8 gap-1.5 text-destructive hover:text-destructive"
                                       disabled={unlinkingId === c.id}
-                                      onClick={() => unlinkClient(c.id)}
+                                      onClick={(e) => { e.stopPropagation(); unlinkClient(c.id) }}
                                     >
                                       {unlinkingId === c.id
                                         ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
