@@ -103,6 +103,9 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose }: {
   const isInterview = stage.action === "interview"
   const isScoring = SCORING_ACTIONS.includes(stage.action)
   const isContent = CONTENT_ACTIONS.includes(stage.action)
+  // Предквалификация = чат-бот ведёт диалог сам (startPrequalification), поле
+  // «Сообщение кандидату» там не используется → не показываем его (Юрий 26.06).
+  const isPrequal = stage.action === "prequalification"
   const chain: DozhimTouch[] = stage.dozhimChain ?? dozhimChainFor(stage.dozhim, stage.action)
 
   const patch = (p: Partial<FunnelV2Stage>) => onChange({ ...stage, ...p })
@@ -147,16 +150,21 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose }: {
           {/* Сообщение / контент */}
           <section className="space-y-2 border-t pt-4">
             <Label className="text-sm font-medium flex items-center gap-1.5"><Link2 className="w-4 h-4" /> Сообщение / контент</Label>
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Сообщение кандидату (текст)</Label>
-              <Textarea value={stage.messagePresetId ?? ""} onChange={e => patch({ messagePresetId: e.target.value || null })} placeholder="напр. «Добрый день, {{name}}! …»" className="min-h-[150px] text-base md:text-base" />
-              <div className="flex flex-wrap gap-1 pt-0.5">
-                {["{{name}}", (stage.action === "test" || stage.action === "task") ? "{{test_link}}" : "{{demo_link}}", "{{vacancy}}", "{{company}}"].map(ph => (
-                  <button key={ph} type="button" onClick={() => patch({ messagePresetId: `${stage.messagePresetId ?? ""}${ph}` })} className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:bg-muted/50 font-mono">{ph}</button>
-                ))}
+            {!isPrequal && (
+              <div className="space-y-1">
+                <Label className="text-[11px] text-muted-foreground">Сообщение кандидату (текст)</Label>
+                <Textarea value={stage.messagePresetId ?? ""} onChange={e => patch({ messagePresetId: e.target.value || null })} placeholder="напр. «Добрый день, {{name}}! …»" className="min-h-[150px] text-base md:text-base" />
+                <div className="flex flex-wrap gap-1 pt-0.5">
+                  {["{{name}}", (stage.action === "test" || stage.action === "task") ? "{{test_link}}" : "{{demo_link}}", "{{vacancy}}", "{{company}}"].map(ph => (
+                    <button key={ph} type="button" onClick={() => patch({ messagePresetId: `${stage.messagePresetId ?? ""}${ph}` })} className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:bg-muted/50 font-mono">{ph}</button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-muted-foreground/70"><b className="font-mono">{(stage.action === "test" || stage.action === "task") ? "{{test_link}}" : "{{demo_link}}"}</b> — индивидуальная ссылка кандидату, формируется автоматически.</p>
               </div>
-              <p className="text-[11px] text-muted-foreground/70"><b className="font-mono">{(stage.action === "test" || stage.action === "task") ? "{{test_link}}" : "{{demo_link}}"}</b> — индивидуальная ссылка кандидату, формируется автоматически.</p>
-            </div>
+            )}
+            {isPrequal && (
+              <p className="text-[11px] text-muted-foreground/70">Предквалификация — бот сам ведёт диалог с кандидатом (вопросы из подключённого блока). Отдельное «Сообщение кандидату» здесь не требуется.</p>
+            )}
             {isContent && (
               <div className="space-y-1">
                 <Label className="text-[11px] text-muted-foreground">Подключить блок из «Контента»</Label>
