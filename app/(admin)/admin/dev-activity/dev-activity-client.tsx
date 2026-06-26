@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils"
 import { RefreshCw, Loader2, AlertTriangle, GitBranch, ChevronRight } from "lucide-react"
 import type { DevActivityDay, DayTask, RepoDayStat, Substance, Verdict, RecentCommit } from "@/lib/dev-activity/types"
 import { pagesForProject, type ProjectPage } from "@/lib/dev-activity/project-pages"
+import { median, verdictFor } from "@/lib/dev-activity/scoring"
 
 interface RepoState { label: string; branch: string | null; wip: number; unpushed: number; commits: number }
 interface SeriesData {
@@ -97,6 +98,24 @@ export function DevActivityClient({ initial, personLabel }: { initial: SeriesDat
     return null
   }, [days])
 
+  // Сводка за неделю: сумма за последние 7 дней vs медиана прошлых 7-дневок.
+  const weekly = useMemo(() => {
+    const sumScore = (arr: DevActivityDay[]) => arr.reduce((s, d) => s + d.score, 0)
+    const last7 = days.slice(-7)
+    const priors = [days.slice(-14, -7), days.slice(-21, -14), days.slice(-28, -21)]
+      .map(sumScore).filter(v => v > 0)
+    const score = Math.round(sumScore(last7) * 10) / 10
+    const base = priors.length >= 2 ? Math.round(median(priors) * 10) / 10 : null
+    return {
+      score,
+      tasks: last7.reduce((s, d) => s + d.taskCount, 0),
+      commits: last7.reduce((s, d) => s + d.commitCount, 0),
+      activeDays: last7.filter(d => d.commitCount > 0).length,
+      baseline: base,
+      verdict: verdictFor(score, base),
+    }
+  }, [days])
+
   // Журнал: дни с активностью, по убыванию; при фильтре — только нужный проект.
   const journal = useMemo(() => {
     const active = days.filter(d => d.commitCount > 0).slice().reverse()
@@ -160,6 +179,28 @@ export function DevActivityClient({ initial, personLabel }: { initial: SeriesDat
               {today.summary
                 ? <p className="text-sm">{today.summary}</p>
                 : <p className="text-sm text-muted-foreground">Сегодня коммитов ещё не было.</p>}
+            </CardContent>
+          </Card>
+
+          {/* Сводка за неделю — общий вердикт, без сложения дней вручную */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm text-muted-foreground">За неделю (последние 7 дней)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-3 flex-wrap">
+                <VerdictBadge v={weekly.verdict} />
+                <span className="text-sm text-muted-foreground">
+                  Задач за неделю: <b className="text-foreground">{weekly.tasks}</b> ·
+                  балл <b className="text-foreground">{weekly.score}</b>
+                  {weekly.baseline != null && <> · норма недели ≈ {weekly.baseline}</>} ·
+                  активных дней {weekly.activeDays}/7 ·
+                  коммитов {weekly.commits}
+                </span>
+              </div>
+              {weekly.baseline == null && (
+                <p className="text-xs text-muted-foreground mt-2">Норму недели посчитаем, когда накопится больше истории.</p>
+              )}
             </CardContent>
           </Card>
 
