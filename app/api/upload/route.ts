@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
-import { writeFile, mkdir, unlink } from "fs/promises"
+import { writeFile, mkdir, unlink, stat } from "fs/promises"
 import path from "path"
 import { execFile } from "child_process"
 import { promisify } from "util"
@@ -76,17 +76,51 @@ export async function POST(req: NextRequest) {
       .replace(/[^a-zA-Z0-9а-яА-ЯёЁ._-]/g, "_")
       .slice(0, 80) || "file"
 
-  // 1) Браузер показывает напрямую — сохраняем как есть (прежнее поведение).
+  // 1) Браузер показывает напрямую. Фото/видео ДОПОЛНИТЕЛЬНО сжимаем на сервере
+  //    (ffmpeg уже есть), чтобы не хранить и не отдавать тяжёлые оригиналы:
+  //    фото → WebP q80 (ширина ≤1280), видео → H.264 -crf 28 (ширина ≤1280).
+  //    GIF (анимация), аудио и PDF — как есть. При сбое ffmpeg ИЛИ если результат
+  //    не меньше оригинала — сохраняем оригинал (загрузка не ломается).
   if (RENDERABLE.has(file.type)) {
-    const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin"
-    const filename = `${timestamp}-${safeBase}.${ext}`
-    await writeFile(path.join(dir, filename), buffer)
-    return NextResponse.json({
-      url: `/uploads/${companyId}/${filename}`,
-      filename: file.name,
-      size: file.size,
-      type: file.type,
-    })
+    const origExt = (file.name.split(".").pop()?.toLowerCase() ?? "bin").replace(/[^a-z0-9]/g, "") || "bin"
+    const isCompressibleImage = file.type === "image/jpeg" || file.type === "image/png" || file.type === "image/webp"
+    const isCompressibleVideo = file.type === "video/mp4" || file.type === "video/webm"
+
+    const saveOriginal = async () => {
+      const filename = `${timestamp}-${safeBase}.${origExt}`
+      await writeFile(path.join(dir, filename), buffer)
+      return NextResponse.json({ url: `/uploads/${companyId}/${filename}`, filename: file.name, size: file.size, type: file.type })
+    }
+
+    if (isCompressibleImage || isCompressibleVideo) {
+      const srcPath = path.join(dir, `${timestamp}-src-${safeBase}.${origExt}`)
+      await writeFile(srcPath, buffer)
+      const outName = isCompressibleImage ? `${timestamp}-${safeBase}.webp` : `${timestamp}-${safeBase}.mp4`
+      const outPath = path.join(dir, outName)
+      const outType = isCompressibleImage ? "image/webp" : "video/mp4"
+      try {
+        if (isCompressibleImage) {
+          await execFileAsync("ffmpeg", ["-y", "-i", srcPath, "-vf", "scale='min(1280,iw)':-1", "-c:v", "libwebp", "-quality", "80", outPath], { timeout: 60_000 })
+        } else {
+          await execFileAsync("ffmpeg", ["-y", "-i", srcPath, "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-vf", "scale='min(1280,iw)':-2", "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", outPath], { timeout: 110_000 })
+        }
+        const outStat = await stat(outPath).catch(() => null)
+        await unlink(srcPath).catch(() => {})
+        // Сжатый меньше оригинала → отдаём его, иначе откатываемся на оригинал.
+        if (outStat && outStat.size > 0 && outStat.size < buffer.length) {
+          return NextResponse.json({ url: `/uploads/${companyId}/${outName}`, filename: file.name, size: outStat.size, type: outType, compressed: true })
+        }
+        await unlink(outPath).catch(() => {})
+        return await saveOriginal()
+      } catch {
+        await unlink(srcPath).catch(() => {})
+        await unlink(outPath).catch(() => {})
+        return await saveOriginal()
+      }
+    }
+
+    // GIF / аудио / PDF — сохраняем как есть.
+    return await saveOriginal()
   }
 
   // 2) Иначе — конвертируем. Исходник пишем с оригинальным расширением, чтобы
