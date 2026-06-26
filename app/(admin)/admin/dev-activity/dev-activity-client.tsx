@@ -51,6 +51,14 @@ function fmtClock(iso: string): string {
   return new Date(iso).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
 }
 
+// Минуты → «Xч Yм» (оценка времени работы по коммитам).
+function fmtDuration(min: number): string {
+  if (!min || min <= 0) return "—"
+  const h = Math.floor(min / 60), m = Math.round(min % 60)
+  if (h === 0) return `${m}м`
+  return m === 0 ? `${h}ч` : `${h}ч ${m}м`
+}
+
 function VerdictBadge({ v }: { v: Verdict | null }) {
   const meta = VERDICT[v ?? "warmup"]
   return <Badge variant="outline" className={cn("font-medium", meta.badge)}>{meta.label}</Badge>
@@ -110,6 +118,7 @@ export function DevActivityClient({ initial, personLabel }: { initial: SeriesDat
       score,
       tasks: last7.reduce((s, d) => s + d.taskCount, 0),
       commits: last7.reduce((s, d) => s + d.commitCount, 0),
+      minutes: last7.reduce((s, d) => s + (d.workMinutes ?? 0), 0),
       activeDays: last7.filter(d => d.commitCount > 0).length,
       baseline: base,
       verdict: verdictFor(score, base),
@@ -168,6 +177,7 @@ export function DevActivityClient({ initial, personLabel }: { initial: SeriesDat
                   балл <b className="text-foreground">{today.score}</b>
                   {baseline != null && <> · норма ≈ {Math.round(baseline * 10) / 10}</>} ·
                   коммитов {today.commitCount} ·
+                  ≈ {fmtDuration(today.workMinutes)} работы ·
                   <span className="text-emerald-600"> +{today.linesAdded}</span>/<span className="text-red-500">−{today.linesRemoved}</span>
                 </span>
                 {today.wipFiles > 0 && (
@@ -195,12 +205,14 @@ export function DevActivityClient({ initial, personLabel }: { initial: SeriesDat
                   балл <b className="text-foreground">{weekly.score}</b>
                   {weekly.baseline != null && <> · норма недели ≈ {weekly.baseline}</>} ·
                   активных дней {weekly.activeDays}/7 ·
+                  ≈ {fmtDuration(weekly.minutes)} работы ·
                   коммитов {weekly.commits}
                 </span>
               </div>
               {weekly.baseline == null && (
                 <p className="text-xs text-muted-foreground mt-2">Норму недели посчитаем, когда накопится больше истории.</p>
               )}
+              <p className="text-[11px] text-muted-foreground/70 mt-2">Часы — оценка по времени коммитов, не точный табель.</p>
             </CardContent>
           </Card>
 
@@ -385,6 +397,7 @@ function DayCard({ day }: { day: DevActivityDay }) {
           <VerdictBadge v={day.verdict} />
           <span className="text-xs text-muted-foreground">
             задач {day.taskCount} · балл {day.score} · коммитов {day.commitCount} ·
+            ≈ {fmtDuration(day.workMinutes)} ·
             <span className="text-emerald-600"> +{day.linesAdded}</span>/<span className="text-red-500">−{day.linesRemoved}</span>
           </span>
         </div>

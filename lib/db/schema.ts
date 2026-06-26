@@ -3236,6 +3236,7 @@ export const devActivityDays = pgTable("dev_activity_days", {
   linesAdded:   integer("lines_added").notNull().default(0),
   linesRemoved: integer("lines_removed").notNull().default(0),
   wipFiles:     integer("wip_files").notNull().default(0),      // незакоммичено на момент сбора
+  workMinutes:  integer("work_minutes").notNull().default(0),   // оценка времени работы по коммитам
   taskCount:    integer("task_count").notNull().default(0),     // осмысленные задачи (Claude)
   score:        doublePrecision("score").notNull().default(0),  // взвешенная продуктивность дня
   substance:    text("substance"),                              // 'trivial'|'normal'|'substantial'

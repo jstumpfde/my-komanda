@@ -76,6 +76,7 @@ export interface DevActivityDay {
   linesAdded:   number
   linesRemoved: number
   wipFiles:     number
+  workMinutes:  number
   taskCount:    number
   score:        number
   substance:    Substance | null

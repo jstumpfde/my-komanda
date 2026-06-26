@@ -8,7 +8,7 @@ import { db } from "@/lib/db"
 import { devActivityDays } from "@/lib/db/schema"
 import { collect } from "./collect"
 import { summarizeDay, type CommitForSummary } from "./summarize"
-import { computeSeries, scoreTasks } from "./scoring"
+import { computeSeries, scoreTasks, estimateWorkMinutes } from "./scoring"
 import { PERSON, WINDOW_DAYS } from "./config"
 import type {
   DevActivityDay, DayTask, RepoDayStat, Substance, Verdict, CollectResult, RecentCommit,
@@ -128,11 +128,12 @@ export async function collectAndStore(): Promise<CollectStoreResult> {
     }
 
     const score = scoreTasks(tasks)
+    const workMinutes = estimateWorkMinutes(commits.map(c => c.at))
     const wipFiles = day === today ? wipTotal : 0
     const raw = day === today ? { fingerprint: fp, repoStates, recent } : { fingerprint: fp }
 
     const values = {
-      person: PERSON, day, commitCount, linesAdded, linesRemoved, wipFiles,
+      person: PERSON, day, commitCount, linesAdded, linesRemoved, wipFiles, workMinutes,
       taskCount, score, substance, summary,
       tasks: tasks as unknown, repos: stats as unknown, raw: raw as unknown,
       updatedAt: new Date(),
@@ -141,7 +142,7 @@ export async function collectAndStore(): Promise<CollectStoreResult> {
       .onConflictDoUpdate({
         target: [devActivityDays.person, devActivityDays.day],
         set: {
-          commitCount, linesAdded, linesRemoved, wipFiles, taskCount, score,
+          commitCount, linesAdded, linesRemoved, wipFiles, workMinutes, taskCount, score,
           substance, summary, tasks: tasks as unknown, repos: stats as unknown,
           raw: raw as unknown, updatedAt: new Date(),
         },
@@ -195,6 +196,7 @@ export async function getSeries(): Promise<DevActivitySeries> {
     linesAdded: r.linesAdded,
     linesRemoved: r.linesRemoved,
     wipFiles: r.wipFiles,
+    workMinutes: r.workMinutes,
     taskCount: r.taskCount,
     score: r.score,
     substance: (r.substance as Substance | null) ?? null,

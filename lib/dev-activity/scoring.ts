@@ -75,3 +75,24 @@ export function dayOffset(day: string, deltaDays: number): string {
   d.setUTCDate(d.getUTCDate() + deltaDays)
   return d.toISOString().slice(0, 10)
 }
+
+// Оценка отработанного времени по таймстампам коммитов (эвристика git-hours):
+// внутри сессии складываем промежутки между коммитами; разрыв больше порога =
+// новая сессия со «временем на разгон» до её первого коммита.
+// ЭТО ОЦЕНКА ПО КОММИТАМ, не табель: при редких коммитах занижает.
+export const MAX_SESSION_GAP_MIN = 120  // разрыв > 2ч = новая сессия
+export const SESSION_LEAD_MIN     = 60  // время «до первого коммита» в сессии
+
+export function estimateWorkMinutes(isoTimes: string[]): number {
+  const ts = isoTimes
+    .map(t => new Date(t).getTime())
+    .filter(n => Number.isFinite(n))
+    .sort((a, b) => a - b)
+  if (ts.length === 0) return 0
+  let total = SESSION_LEAD_MIN
+  for (let i = 1; i < ts.length; i++) {
+    const gap = (ts[i] - ts[i - 1]) / 60000
+    total += gap <= MAX_SESSION_GAP_MIN ? gap : SESSION_LEAD_MIN
+  }
+  return Math.round(total)
+}

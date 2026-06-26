@@ -9,9 +9,28 @@ import {
   verdictFor,
   computeSeries,
   dayOffset,
+  estimateWorkMinutes,
+  SESSION_LEAD_MIN,
   KIND_WEIGHT,
   type SeriesPoint,
 } from "./scoring"
+
+test("estimateWorkMinutes: эвристика git-hours", () => {
+  assert.equal(estimateWorkMinutes([]), 0)
+  // один коммит → только время на разгон
+  assert.equal(estimateWorkMinutes(["2026-06-25T10:00:00+03:00"]), SESSION_LEAD_MIN)
+  // три коммита подряд с разрывом 30м → разгон + 30 + 30 = 120
+  assert.equal(estimateWorkMinutes([
+    "2026-06-25T10:00:00+03:00",
+    "2026-06-25T10:30:00+03:00",
+    "2026-06-25T11:00:00+03:00",
+  ]), SESSION_LEAD_MIN + 60)
+  // разрыв > 2ч → новая сессия (ещё +разгон), порядок не важен
+  assert.equal(estimateWorkMinutes([
+    "2026-06-25T15:00:00+03:00",
+    "2026-06-25T10:00:00+03:00",
+  ]), SESSION_LEAD_MIN * 2)
+})
 
 test("scoreTasks взвешивает по содержательности", () => {
   assert.equal(scoreTasks([]), 0)
