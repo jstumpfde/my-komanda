@@ -44,6 +44,11 @@ const PUBLIC_PREFIXES = [
   "/api/auth",          // sign-in/out + forgot-password/reset-password
   "/api/cron/",         // cron-эндпоинты — защищены X-Cron-Secret в самом роуте,
                         // а не сессией NextAuth.
+  "/api/platform",      // платформенные эндпоинты — каждый САМ защищён
+                        // X-Platform-Admin-Key (requirePlatformKey) ИЛИ
+                        // session-email из PLATFORM_ADMIN_EMAILS (presence/deadlines).
+                        // Без этого middleware редиректил curl на /login (302),
+                        // ломая задокументированный curl-доступ (seed/emergency/migrations).
   "/api/access-requests",
   "/api/visit-log",
   "/api/modules",
