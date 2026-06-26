@@ -126,7 +126,13 @@ export async function GET(
     }
 
     const spec = buildSpecFromLegacy(legacyInput)
-    return apiSuccess<SpecApiResponse>({ spec, source: "legacy" })
+    // Портрет стартует ЧИСТО: не вываливаем легаси-навыки вакансии в «Что хотим
+    // видеть» (раньше там оказывалось 15-20 навыков). HR заполняет осмысленными
+    // критериями кнопкой «Сгенерировать критерии». Стоп-факторы/эталон/«Не
+    // подходит» — оставляем (Юрий 26.06). Скоринг legacy-контура использует
+    // requirementsJson напрямую и этим не затрагивается.
+    const cleanSpec = { ...spec, mustHave: [], niceToHave: [] }
+    return apiSuccess<SpecApiResponse>({ spec: cleanSpec, source: "legacy" })
   } catch (err) {
     if (err instanceof Response) return err
     return apiError("Ошибка сервера", 500)

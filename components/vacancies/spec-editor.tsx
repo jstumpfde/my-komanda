@@ -630,7 +630,9 @@ function GoodEditor({
     if (!t) return
     if (rows.some(r => r.text.toLowerCase() === t.toLowerCase())) { toast.error("Уже есть такой пункт"); return }
     if (rows.length >= 10) { toast.error("Максимум 10"); return }
-    commit([...rows, { text: t, level: "nice" }])
+    // По умолчанию критерий — «средне важный» (равный вес): все критерии
+    // равнозначны, кто хочет — усилит/ослабит вручную (Юрий 26.06).
+    commit([...rows, { text: t, level: "important" }])
     setDraft("")
   }
   const ph = LIST_PLACEHOLDERS.must[rows.length % LIST_PLACEHOLDERS.must.length] || ""
@@ -1114,11 +1116,12 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
   const applySuggestion = () => {
     if (!editedSuggestion || !spec) return
     // Контур «Портрет»: 🟢 «Подходит» не отсеивает → mustHave всегда пуст.
-    // Сильные требования AI → niceToHave «Очень важно», прочие плюсы → «Желательно».
+    // 3-5 ключевых критериев-«соли», ВСЕ равнозначные (средний вес) — кто хочет,
+    // усилит/ослабит вручную (Юрий 26.06).
     const niceToHave = [
-      ...editedSuggestion.must_have.map(text => ({ text, importance: "very" as NiceImportance })),
-      ...editedSuggestion.nice_to_have.map(text => ({ text, importance: "nice" as NiceImportance })),
-    ].slice(0, 10)
+      ...editedSuggestion.must_have,
+      ...editedSuggestion.nice_to_have,
+    ].slice(0, 5).map(text => ({ text, importance: "important" as NiceImportance }))
     const dealBreakers = editedSuggestion.deal_breakers.slice(0, 10).map(text => ({ text, hard: false }))
     patch({
       idealProfile: editedSuggestion.ideal_profile.slice(0, 500),
@@ -1254,7 +1257,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
             <Button type="button" size="sm" onClick={requestSuggestion} disabled={suggesting}>
               {suggesting
                 ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Анализ…</>
-                : <><Sparkles className="w-4 h-4 mr-1.5" /> Заполнить из вакансии</>}
+                : <><Sparkles className="w-4 h-4 mr-1.5" /> Сгенерировать критерии</>}
             </Button>
           )}
           {source === "legacy" && (
