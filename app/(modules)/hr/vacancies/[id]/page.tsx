@@ -1024,9 +1024,10 @@ export default function VacancyPage() {
   // general → page (стартовая вкладка с брендингом), automation → ai.
   const SETTINGS_SECTION_IDS = ["page", "sources", "messages", "funnel", "funnel-builder", "funnel-v2", "spec", "followup", "aichatbot", "ai", "integrations"] as const
   type SettingsSectionId = typeof SETTINGS_SECTION_IDS[number]
-  // Скрытые legacy-секции: при прямой ссылке (?section=funnel|messages|followup|aichatbot)
-  // перенаправляем на funnel-builder — их контент теперь живёт внутри Конструктора воронки.
-  const LEGACY_SECTIONS_REDIRECT_TO_FUNNEL_BUILDER = ["funnel", "messages", "followup", "aichatbot"] as const
+  // Скрытые legacy-секции: при прямой ссылке (?section=funnel|followup|aichatbot)
+  // перенаправляем на funnel-builder. «messages» ВЕРНУЛИ отдельным табом (Юрий не мог
+  // найти первичные сообщения — таб был убран, а редактор остался недостижим).
+  const LEGACY_SECTIONS_REDIRECT_TO_FUNNEL_BUILDER = ["funnel", "followup", "aichatbot"] as const
   const initialSettingsSection: SettingsSectionId =
     rawUrlSection === "general" ? "page" :
     rawUrlSection === "automation" ? "ai" :
@@ -2953,6 +2954,7 @@ export default function VacancyPage() {
                   { kind: "section", value: "settings", label: "Портрет",          icon: Target,        section: "spec"           },
                   { kind: "tab",     value: "content" , label: "Контент",          icon: BookOpen,      section: null             },
                   { kind: "section", value: "settings", label: "Воронка",          icon: Workflow,      section: "funnel-builder" },
+                  { kind: "section", value: "settings", label: "Сообщения",        icon: MessageSquare, section: "messages"       },
                   { kind: "section", value: "settings", label: "Воронка v2",       icon: Workflow,      section: "funnel-v2"      },
                   { kind: "section", value: "settings", label: "Источники",        icon: Link2,         section: "sources"        },
                   { kind: "section", value: "settings", label: "Расписание",       icon: Clock,         section: "ai"             },
