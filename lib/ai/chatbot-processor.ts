@@ -62,15 +62,12 @@ export interface RejectionMessages {
   unstable?:     string  // признаки эмоциональной нестабильности
 }
 
-export const DEFAULT_REJECTION_MESSAGES: Required<RejectionMessages> = {
-  injection:     "В связи с нарушением правил общения мы вынуждены прекратить рассмотрение вашей кандидатуры.",
-  severeAbuse:   "Мы вынуждены прекратить общение в связи с нарушением норм общения.",
-  repeatedAbuse: "К сожалению, мы решили прекратить общение.",
-  unstable:      "По итогам нашего общения мы решили пока не двигаться дальше. Спасибо за интерес к нашей компании.",
-}
-
-export const FIRST_WARNING_MESSAGE =
-  "Прошу общаться корректно. Готов продолжить обсуждение вакансии."
+// Сид-константы вынесены в lib/ai/chatbot-defaults-seed.ts (единый источник для
+// платформенного редактируемого слоя). Ре-экспортируем для backward-compat.
+export { DEFAULT_REJECTION_MESSAGES, FIRST_WARNING_MESSAGE, DEFAULT_SHORT_MESSAGES } from "@/lib/ai/chatbot-defaults-seed"
+import { DEFAULT_SHORT_MESSAGES } from "@/lib/ai/chatbot-defaults-seed"
+import { getEffectiveChatbotDefaults } from "@/lib/messaging/effective-chatbot-defaults"
+import type { ChatbotDefaults } from "@/lib/db/schema"
 
 // Группа 33: настройки реалистичности ответа. Хранятся в
 // aiChatbotSettings.responseTiming. Все задержки — на стороне scan-incoming
@@ -88,15 +85,6 @@ export interface ResponseTimingSettings {
   shortToMainDelaySeconds?:    number
 }
 
-export const DEFAULT_SHORT_MESSAGES: string[] = [
-  "Минутку, сейчас посмотрю...",
-  "Секунду, проверю информацию",
-  "Сейчас уточню, минутку...",
-  "Один момент...",
-  "Подождите немного, отвечу подробно",
-  "Сейчас отвечу",
-  "Минутку",
-]
 
 export const DEFAULT_RESPONSE_TIMING: Required<ResponseTimingSettings> = {
   delaySeconds:               10,
@@ -106,7 +94,10 @@ export const DEFAULT_RESPONSE_TIMING: Required<ResponseTimingSettings> = {
   shortToMainDelaySeconds:    8,
 }
 
-function getResponseTiming(s: ChatbotSettings | undefined): Required<ResponseTimingSettings> {
+function getResponseTiming(
+  s: ChatbotSettings | undefined,
+  fallbackShort: string[] = DEFAULT_SHORT_MESSAGES,
+): Required<ResponseTimingSettings> {
   const raw = s?.responseTiming ?? {}
   const delaySeconds = clampInt(raw.delaySeconds, 1, 300, DEFAULT_RESPONSE_TIMING.delaySeconds)
   const enableShortMessages = typeof raw.enableShortMessages === "boolean"
@@ -114,7 +105,7 @@ function getResponseTiming(s: ChatbotSettings | undefined): Required<ResponseTim
     : DEFAULT_RESPONSE_TIMING.enableShortMessages
   const shortMessages = Array.isArray(raw.shortMessages) && raw.shortMessages.length > 0
     ? raw.shortMessages.filter(s => typeof s === "string" && s.trim().length > 0)
-    : DEFAULT_SHORT_MESSAGES
+    : fallbackShort
   const maxShortMessagesPerDialog = clampInt(
     raw.maxShortMessagesPerDialog, 1, 10, DEFAULT_RESPONSE_TIMING.maxShortMessagesPerDialog,
   )
@@ -573,10 +564,18 @@ async function autoRejectAndNotify(args: {
 function getRejectionMessage(
   settings: ChatbotSettings,
   key: keyof RejectionMessages,
+  fallback: ChatbotDefaults,
 ): string {
   const custom = settings.rejectionMessages?.[key]
   if (typeof custom === "string" && custom.trim().length > 0) return custom.trim()
-  return DEFAULT_REJECTION_MESSAGES[key]
+  // Эффективный дефолт (платформа→компания) вместо хардкода.
+  const map: Record<keyof RejectionMessages, string> = {
+    injection:     fallback.rejectionInjection,
+    severeAbuse:   fallback.rejectionSevereAbuse,
+    repeatedAbuse: fallback.rejectionRepeatedAbuse,
+    unstable:      fallback.rejectionUnstable,
+  }
+  return map[key]
 }
 
 // Группа 33: случайный выбор «короткого» сообщения, исключая последний
@@ -602,6 +601,9 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
   const settings = (vacancy.aiChatbotSettings ?? {}) as ChatbotSettings
   const prompt = vacancy.aiChatbotPrompt ?? ""
   const companyId = vacancy.companyId
+  // Эффективные дефолтные тексты бота (платформа→компания; вакансия перебивает
+  // через settings.rejectionMessages). Fail-safe: пусто → сид = текущее поведение.
+  const effBot = await getEffectiveChatbotDefaults(companyId)
   const vacancyTitle = vacancy.title ?? "—"
   const telegramChannel = settings.telegramChannel?.trim() || undefined
 
@@ -690,7 +692,7 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
     return {
       handled: true,
       action:  "rejected",
-      reply:   getRejectionMessage(settings, "injection"),
+      reply:   getRejectionMessage(settings, "injection", effBot),
       confidence: incomingSec.confidence,
       escalationReason: "security_injection",
       replyDelayMs: getResponseTiming(settings).delaySeconds * 1000,
@@ -726,7 +728,7 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
         return {
           handled: true,
           action:  "rejected",
-          reply:   getRejectionMessage(settings, "repeatedAbuse"),
+          reply:   getRejectionMessage(settings, "repeatedAbuse", effBot),
           confidence: incomingSec.confidence,
           escalationReason: "security_repeated_abuse",
           replyDelayMs: getResponseTiming(settings).delaySeconds * 1000,
@@ -735,7 +737,7 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
       await log({
         candidateId, vacancyId, incoming: incomingText,
         category: "other", confidence: incomingSec.confidence,
-        reply: FIRST_WARNING_MESSAGE, sent: true, escalated: true,
+        reply: effBot.firstWarning, sent: true, escalated: true,
         reason: "security_severe_abuse_lenient_warning",
       })
       await esc({
@@ -748,7 +750,7 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
       return {
         handled: true,
         action:  "sent",
-        reply:   FIRST_WARNING_MESSAGE,
+        reply:   effBot.firstWarning,
         confidence: incomingSec.confidence,
         escalationReason: "security_severe_abuse_lenient_warning",
         replyDelayMs: getResponseTiming(settings).delaySeconds * 1000,
@@ -766,7 +768,7 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
     return {
       handled: true,
       action:  "rejected",
-      reply:   getRejectionMessage(settings, "severeAbuse"),
+      reply:   getRejectionMessage(settings, "severeAbuse", effBot),
       confidence: incomingSec.confidence,
       escalationReason: "security_severe_abuse",
       replyDelayMs: getResponseTiming(settings).delaySeconds * 1000,
@@ -796,7 +798,7 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
       return {
         handled: true,
         action:  "rejected",
-        reply:   getRejectionMessage(settings, "repeatedAbuse"),
+        reply:   getRejectionMessage(settings, "repeatedAbuse", effBot),
         confidence: incomingSec.confidence,
         escalationReason: "security_repeated_abuse",
         replyDelayMs: getResponseTiming(settings).delaySeconds * 1000,
@@ -808,7 +810,7 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
     await log({
       candidateId, vacancyId, incoming: incomingText,
       category: "other", confidence: incomingSec.confidence,
-      reply: FIRST_WARNING_MESSAGE, sent: true, escalated: true,
+      reply: effBot.firstWarning, sent: true, escalated: true,
       reason: "security_first_warning",
     })
     await esc({
@@ -821,7 +823,7 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
     return {
       handled: true,
       action:  "sent",
-      reply:   FIRST_WARNING_MESSAGE,
+      reply:   effBot.firstWarning,
       confidence: incomingSec.confidence,
       escalationReason: "security_first_warning",
       replyDelayMs: getResponseTiming(settings).delaySeconds * 1000,
@@ -841,7 +843,7 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
     return {
       handled: true,
       action:  "rejected",
-      reply:   getRejectionMessage(settings, "unstable"),
+      reply:   getRejectionMessage(settings, "unstable", effBot),
       confidence: incomingSec.confidence,
       escalationReason: "security_unstable_pattern",
       replyDelayMs: getResponseTiming(settings).delaySeconds * 1000,
@@ -1139,7 +1141,7 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
   // Группа 33: добавляем тайминги. Если включены «короткие» сообщения и
   // лимит за диалог не исчерпан — кладём preMessage. Иначе только
   // delaySeconds перед основным ответом.
-  const timing = getResponseTiming(settings)
+  const timing = getResponseTiming(settings, effBot.shortMessages)
   const shortAlreadySent = candidateInfo?.shortMessagesSentCount ?? 0
   let preMessage: string | undefined
   let preMessageDelayMs: number | undefined

@@ -128,6 +128,23 @@ export interface MessageDefaults {
   rejectMessage:            string  // текст отказа
 }
 
+// ── ChatbotDefaults — редактируемые дефолтные тексты AI чат-бота (НЕ хардкод) ──
+// Платформенный эталон в platform_settings['chatbot_defaults']; компания
+// перебивает в hiring_defaults_json.chatbotDefaults; вакансия — в своих настройках
+// бота (aiChatbotSettings) и предквалификации. Резолвинг —
+// lib/messaging/effective-chatbot-defaults.ts. SAFETY_RULES (security-гардрейлы)
+// сюда НЕ входят — они намеренно неизменны в коде.
+export interface ChatbotDefaults {
+  rejectionInjection:     string  // попытка перепрограммировать AI
+  rejectionSevereAbuse:   string  // мат / оскорбления / угрозы
+  rejectionRepeatedAbuse: string  // повторная грубость
+  rejectionUnstable:      string  // признаки нестабильности
+  firstWarning:           string  // первое предупреждение за тон
+  shortMessages:          string[] // «пишет…» имитация печати
+  prequalReminderD1:      string  // напоминание предквала, день 1
+  prequalReminderD3:      string  // напоминание предквала, день 3
+}
+
 // ── DripTemplates — редактируемые шаблоны дожима (НЕ хардкод) ──
 // Платформенный эталон в platform_settings['drip_templates'] (правит админ).
 // Конструктор воронки генерит цепочки касаний стадии из этих шаблонов; затем HR
@@ -155,6 +172,8 @@ export interface CompanyHiringDefaults {
   // Дефолтные тексты сообщений компании (перебивают платформенные; вакансия — эти).
   // Пустые/отсутствующие поля наследуются с уровня платформы.
   messageDefaults?: Partial<MessageDefaults>
+  // Дефолтные тексты AI чат-бота компании (перебивают платформенные).
+  chatbotDefaults?: Partial<ChatbotDefaults>
   schedule?: {
     slotDuration?:     string
     bufferTime?:       string

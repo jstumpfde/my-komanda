@@ -7,6 +7,7 @@ import { getPrequalConfig, daysSinceSent, finalizePrequalification } from "@/lib
 import { sendCandidateMessage } from "@/lib/prequalification/start"
 import { renderTemplate } from "@/lib/template-renderer"
 import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
+import { getEffectiveChatbotDefaults } from "@/lib/messaging/effective-chatbot-defaults"
 
 // POST /api/cron/prequalification
 //
@@ -76,6 +77,8 @@ export async function POST(req: NextRequest) {
 
         const cfg = await getPrequalConfig(cand.id)
         if (!cfg) { skipped++; continue }
+        // Эффективные дефолты напоминаний (платформа→компания), вакансия перебивает.
+        const effBot = await getEffectiveChatbotDefaults(cfg.companyId)
 
         // 1. Fallback по таймауту.
         if (days >= cfg.fallbackDays) {
@@ -88,7 +91,7 @@ export async function POST(req: NextRequest) {
         // 2. Д+3 reminder.
         if (days >= 3 && !sentReminders.has("prequalification_reminder_3")) {
           const { firstName } = await getCandidateFirstName(cand.id)
-          const text = renderReminder(cfg.reminderD3 || DEFAULT_REMINDER_D3, {
+          const text = renderReminder(cfg.reminderD3 || effBot.prequalReminderD3, {
             firstName, vacancyTitle: cfg.vacancyTitle,
           })
           const ok = await sendCandidateMessage(cand.id, text)
@@ -110,7 +113,7 @@ export async function POST(req: NextRequest) {
         // 3. Д+1 reminder.
         if (days >= 1 && !sentReminders.has("prequalification_reminder_1")) {
           const { firstName } = await getCandidateFirstName(cand.id)
-          const text = renderReminder(cfg.reminderD1 || DEFAULT_REMINDER_D1, {
+          const text = renderReminder(cfg.reminderD1 || effBot.prequalReminderD1, {
             firstName, vacancyTitle: cfg.vacancyTitle,
           })
           const ok = await sendCandidateMessage(cand.id, text)

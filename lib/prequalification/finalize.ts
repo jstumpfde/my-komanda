@@ -190,11 +190,13 @@ export async function getPrequalConfig(candidateId: string): Promise<{
   reminderD3?:   string
   fallbackDays:  number
   vacancyTitle:  string
+  companyId:     string
 } | null> {
   const [row] = await db
     .select({
       aiSettings:   vacancies.aiProcessSettings,
       vacancyTitle: vacancies.title,
+      companyId:    vacancies.companyId,
     })
     .from(candidates)
     .innerJoin(vacancies, eq(vacancies.id, candidates.vacancyId))
@@ -209,5 +211,6 @@ export async function getPrequalConfig(candidateId: string): Promise<{
                     ? Math.min(30, Math.round(ai.prequalification.fallbackDays))
                     : 5,
     vacancyTitle: row.vacancyTitle ?? "",
+    companyId:    row.companyId,
   }
 }

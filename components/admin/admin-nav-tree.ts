@@ -52,6 +52,7 @@ export const ADMIN_NAV_TREE: AdminNavCategory[] = [
       { label: "Миграции",      href: "/admin/platform/migrations", icon: Wrench },
       { label: "Тексты сообщений", href: "/admin/platform/message-defaults", icon: MessageSquare },
       { label: "Шаблоны дожима", href: "/admin/platform/drip-templates", icon: Repeat },
+      { label: "Тексты чат-бота", href: "/admin/platform/chatbot-defaults", icon: Bot },
       { label: "Демо-данные",   href: "/admin/platform/demo",       icon: Sparkles },
       { label: "Сроки / health", href: "/admin/platform/deadlines", icon: Activity },
       { label: "Cron-запуски",  href: "/admin/platform/cron",       icon: Wrench },

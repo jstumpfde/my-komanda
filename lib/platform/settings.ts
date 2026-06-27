@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { platformSettings, type MessageDefaults, type DripTemplates } from "@/lib/db/schema"
+import { platformSettings, type MessageDefaults, type DripTemplates, type ChatbotDefaults } from "@/lib/db/schema"
 import {
   DEFAULT_INVITE_MESSAGE,
   DEFAULT_OFF_HOURS_MESSAGE,
@@ -8,6 +8,7 @@ import {
   DEFAULT_FIRST_MESSAGE_DELAY_SECONDS,
 } from "@/lib/hh/default-messages"
 import { DRIP_TEMPLATES_SEED } from "@/lib/funnel-v2/dozhim-templates"
+import { CHATBOT_DEFAULTS_SEED } from "@/lib/ai/chatbot-defaults-seed"
 
 // Платформенные KV-настройки (таблица platform_settings, drizzle/0154).
 
@@ -216,4 +217,35 @@ export async function getPlatformDripTemplates(): Promise<DripTemplates> {
 /** Сохранить платформенные drip-шаблоны (админ). */
 export async function setPlatformDripTemplates(v: DripTemplates): Promise<void> {
   await setPlatformSetting(DRIP_TEMPLATES_KEY, v)
+}
+
+// ─── Дефолтные тексты AI чат-бота — редактируемые платформенные ───────────────
+export const CHATBOT_DEFAULTS_KEY = "chatbot_defaults"
+
+/** Платформенные дефолтные тексты бота. Никогда не падает; пустое → сид. */
+export async function getPlatformChatbotDefaults(): Promise<ChatbotDefaults> {
+  try {
+    const v = await getPlatformSetting<Partial<ChatbotDefaults>>(CHATBOT_DEFAULTS_KEY)
+    if (!v || typeof v !== "object") return CHATBOT_DEFAULTS_SEED
+    const s = (x: unknown, fb: string) => (typeof x === "string" && x.trim() ? x : fb)
+    const arr = (x: unknown, fb: string[]) =>
+      Array.isArray(x) && x.every(i => typeof i === "string") && x.length > 0 ? (x as string[]) : fb
+    return {
+      rejectionInjection:     s(v.rejectionInjection,     CHATBOT_DEFAULTS_SEED.rejectionInjection),
+      rejectionSevereAbuse:   s(v.rejectionSevereAbuse,   CHATBOT_DEFAULTS_SEED.rejectionSevereAbuse),
+      rejectionRepeatedAbuse: s(v.rejectionRepeatedAbuse, CHATBOT_DEFAULTS_SEED.rejectionRepeatedAbuse),
+      rejectionUnstable:      s(v.rejectionUnstable,      CHATBOT_DEFAULTS_SEED.rejectionUnstable),
+      firstWarning:           s(v.firstWarning,           CHATBOT_DEFAULTS_SEED.firstWarning),
+      shortMessages:          arr(v.shortMessages,        CHATBOT_DEFAULTS_SEED.shortMessages),
+      prequalReminderD1:      s(v.prequalReminderD1,      CHATBOT_DEFAULTS_SEED.prequalReminderD1),
+      prequalReminderD3:      s(v.prequalReminderD3,      CHATBOT_DEFAULTS_SEED.prequalReminderD3),
+    }
+  } catch {
+    return CHATBOT_DEFAULTS_SEED
+  }
+}
+
+/** Сохранить платформенные дефолтные тексты бота (админ). */
+export async function setPlatformChatbotDefaults(v: ChatbotDefaults): Promise<void> {
+  await setPlatformSetting(CHATBOT_DEFAULTS_KEY, v)
 }

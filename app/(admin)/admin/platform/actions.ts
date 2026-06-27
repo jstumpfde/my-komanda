@@ -37,10 +37,14 @@ import {
   MESSAGE_DEFAULTS_SEED,
   getPlatformDripTemplates,
   setPlatformDripTemplates,
+  getPlatformChatbotDefaults,
+  setPlatformChatbotDefaults,
 } from "@/lib/platform/settings"
 import { DRIP_TEMPLATES_SEED } from "@/lib/funnel-v2/dozhim-templates"
+import { CHATBOT_DEFAULTS_SEED } from "@/lib/ai/chatbot-defaults-seed"
 import { clearMessageDefaultsCache } from "@/lib/messaging/effective-message-defaults"
-import type { MessageDefaults, DripTemplates } from "@/lib/db/schema"
+import { clearChatbotDefaultsCache } from "@/lib/messaging/effective-chatbot-defaults"
+import type { MessageDefaults, DripTemplates, ChatbotDefaults } from "@/lib/db/schema"
 
 async function requireAdminEmail(): Promise<string> {
   const session = await auth()
@@ -265,6 +269,41 @@ export async function actionUpdateDripTemplates(input: DripTemplates) {
 
   await setPlatformDripTemplates({ stepWords, branchA, branchB, live, offer })
   revalidatePath("/admin/platform/drip-templates")
+  return { ok: true }
+}
+
+// ── Платформенные дефолтные тексты AI чат-бота ────────────────────────────────
+export async function actionGetChatbotDefaults(): Promise<{
+  current: ChatbotDefaults; seed: ChatbotDefaults
+}> {
+  await requireAdminEmail()
+  return { current: await getPlatformChatbotDefaults(), seed: CHATBOT_DEFAULTS_SEED }
+}
+
+export async function actionUpdateChatbotDefaults(input: ChatbotDefaults) {
+  await requireAdminEmail()
+  const s = (x: unknown, label: string): string => {
+    const v = String(x ?? "").trim()
+    if (!v) throw new Error(`«${label}» не может быть пустым`)
+    return v
+  }
+  const shortMessages = Array.isArray(input.shortMessages)
+    ? input.shortMessages.map(m => String(m ?? "").trim()).filter(m => m.length > 0)
+    : []
+  if (!shortMessages.length) throw new Error("Нужно хотя бы одно «короткое» сообщение")
+
+  await setPlatformChatbotDefaults({
+    rejectionInjection:     s(input.rejectionInjection,     "Отказ: попытка взлома"),
+    rejectionSevereAbuse:   s(input.rejectionSevereAbuse,   "Отказ: грубость/угрозы"),
+    rejectionRepeatedAbuse: s(input.rejectionRepeatedAbuse, "Отказ: повторная грубость"),
+    rejectionUnstable:      s(input.rejectionUnstable,      "Отказ: нестабильность"),
+    firstWarning:           s(input.firstWarning,           "Первое предупреждение"),
+    shortMessages,
+    prequalReminderD1:      s(input.prequalReminderD1,      "Напоминание день 1"),
+    prequalReminderD3:      s(input.prequalReminderD3,      "Напоминание день 3"),
+  })
+  clearChatbotDefaultsCache()
+  revalidatePath("/admin/platform/chatbot-defaults")
   return { ok: true }
 }
 
