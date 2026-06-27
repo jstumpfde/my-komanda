@@ -11,7 +11,6 @@ import { cn } from "@/lib/utils"
 import { RefreshCw, Loader2, AlertTriangle, GitBranch, ChevronRight } from "lucide-react"
 import type { DevActivityDay, DayTask, RepoDayStat, Substance, Verdict, RecentCommit } from "@/lib/dev-activity/types"
 import { pagesForProject, type ProjectPage } from "@/lib/dev-activity/project-pages"
-import { median, verdictFor } from "@/lib/dev-activity/scoring"
 
 interface RepoState { label: string; branch: string | null; wip: number; unpushed: number; commits: number }
 interface SeriesData {
@@ -36,6 +35,22 @@ const KIND: Record<Substance, { label: string; cls: string }> = {
   substantial: { label: "Крупная", cls: "bg-blue-50 text-blue-700 border-blue-200" },
   normal:      { label: "Обычная", cls: "bg-slate-50 text-slate-600 border-slate-200" },
   trivial:     { label: "Мелочь",  cls: "bg-slate-50 text-slate-400 border-slate-200" },
+}
+
+// Фиксированная норма: 40 часов в неделю (≈8 ч/день). Вердикт строим ОТ НЕЁ —
+// сразу видно, кто заметно перерабатывает или недорабатывает относительно
+// стандарта (а не относительно собственной истории). Пороги «заметного»
+// отклонения: ниже < 70% нормы, выше > 130%.
+const WEEKLY_NORM_HOURS = 40
+const DAILY_NORM_HOURS = WEEKLY_NORM_HOURS / 5
+const UNDER_RATIO = 0.7
+const OVER_RATIO = 1.3
+
+function hoursVerdict(hours: number, normHours: number): Verdict {
+  if (hours <= 0) return "silence"
+  if (hours < UNDER_RATIO * normHours) return "below"
+  if (hours > OVER_RATIO * normHours) return "above"
+  return "normal"
 }
 
 function ddmm(day: string): string {
@@ -141,36 +156,29 @@ function ProjectView({ data }: { data: SeriesData }) {
     return [...set].sort()
   }, [days])
 
-  // График: последние 30 дней.
-  const chart = useMemo(() => days.slice(-30).map(d => ({
-    label: ddmm(d.day),
-    score: d.score,
-    verdict: (d.verdict ?? "warmup") as Verdict,
-    tasks: d.taskCount,
-    commits: d.commitCount,
-  })), [days])
-
-  const baseline = useMemo(() => {
-    for (let i = days.length - 1; i >= 0; i--) if (days[i].baseline != null) return days[i].baseline
-    return null
-  }, [days])
-
-  // Сводка за неделю: сумма за последние 7 дней vs медиана прошлых 7-дневок.
-  const weekly = useMemo(() => {
-    const sumScore = (arr: DevActivityDay[]) => arr.reduce((s, d) => s + d.score, 0)
-    const last7 = days.slice(-7)
-    const priors = [days.slice(-14, -7), days.slice(-21, -14), days.slice(-28, -21)]
-      .map(sumScore).filter(v => v > 0)
-    const score = Math.round(sumScore(last7) * 10) / 10
-    const base = priors.length >= 2 ? Math.round(median(priors) * 10) / 10 : null
+  // График: часы работы за день (последние 30 дней) против нормы 8 ч/день.
+  const chart = useMemo(() => days.slice(-30).map(d => {
+    const hours = Math.round((d.workMinutes ?? 0) / 60 * 10) / 10
     return {
-      score,
+      label: ddmm(d.day),
+      hours,
+      verdict: hoursVerdict(hours, DAILY_NORM_HOURS),
+      tasks: d.taskCount,
+      commits: d.commitCount,
+    }
+  }), [days])
+
+  // Сводка за неделю: часы за последние 7 дней против нормы 40 ч.
+  const weekly = useMemo(() => {
+    const last7 = days.slice(-7)
+    const hours = Math.round(last7.reduce((s, d) => s + (d.workMinutes ?? 0), 0) / 60 * 10) / 10
+    return {
+      score: Math.round(last7.reduce((s, d) => s + d.score, 0) * 10) / 10,
       tasks: last7.reduce((s, d) => s + d.taskCount, 0),
       commits: last7.reduce((s, d) => s + d.commitCount, 0),
-      minutes: last7.reduce((s, d) => s + (d.workMinutes ?? 0), 0),
+      hours,
       activeDays: last7.filter(d => d.commitCount > 0).length,
-      baseline: base,
-      verdict: verdictFor(score, base),
+      verdict: hoursVerdict(hours, WEEKLY_NORM_HOURS),
     }
   }, [days])
 
@@ -200,13 +208,10 @@ function ProjectView({ data }: { data: SeriesData }) {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex items-center gap-3 flex-wrap">
-                <VerdictBadge v={today.verdict} />
+                <VerdictBadge v={hoursVerdict(today.workMinutes / 60, DAILY_NORM_HOURS)} />
                 <span className="text-sm text-muted-foreground">
-                  Задач: <b className="text-foreground">{today.taskCount}</b> ·
-                  балл <b className="text-foreground">{today.score}</b>
-                  {baseline != null && <> · норма ≈ {Math.round(baseline * 10) / 10}</>} ·
-                  коммитов {today.commitCount} ·
-                  ≈ {fmtDuration(today.workMinutes)} работы{fmtSpan(today.firstAt, today.lastAt) ? ` (${fmtSpan(today.firstAt, today.lastAt)})` : ""} ·
+                  ≈ <b className="text-foreground">{fmtDuration(today.workMinutes)}</b> из {DAILY_NORM_HOURS}ч{fmtSpan(today.firstAt, today.lastAt) ? ` (${fmtSpan(today.firstAt, today.lastAt)})` : ""} ·
+                  задач {today.taskCount} · коммитов {today.commitCount} ·
                   <span className="text-emerald-600"> +{today.linesAdded}</span>/<span className="text-red-500">−{today.linesRemoved}</span>
                 </span>
                 {today.wipFiles > 0 && (
@@ -230,18 +235,12 @@ function ProjectView({ data }: { data: SeriesData }) {
               <div className="flex items-center gap-3 flex-wrap">
                 <VerdictBadge v={weekly.verdict} />
                 <span className="text-sm text-muted-foreground">
-                  Задач за неделю: <b className="text-foreground">{weekly.tasks}</b> ·
-                  балл <b className="text-foreground">{weekly.score}</b>
-                  {weekly.baseline != null && <> · норма недели ≈ {weekly.baseline}</>} ·
+                  ≈ <b className="text-foreground">{weekly.hours}ч</b> из {WEEKLY_NORM_HOURS}ч за неделю ·
                   активных дней {weekly.activeDays}/7 ·
-                  ≈ {fmtDuration(weekly.minutes)} работы ·
-                  коммитов {weekly.commits}
+                  задач {weekly.tasks} · коммитов {weekly.commits}
                 </span>
               </div>
-              {weekly.baseline == null && (
-                <p className="text-xs text-muted-foreground mt-2">Норму недели посчитаем, когда накопится больше истории.</p>
-              )}
-              <p className="text-[11px] text-muted-foreground/70 mt-2">Часы — оценка по времени коммитов, не точный табель.</p>
+              <p className="text-[11px] text-muted-foreground/70 mt-2">Норма — {WEEKLY_NORM_HOURS} ч/нед (≈{DAILY_NORM_HOURS} ч/день). Часы — оценка по времени коммитов, не точный табель.</p>
             </CardContent>
           </Card>
 
@@ -251,19 +250,17 @@ function ProjectView({ data }: { data: SeriesData }) {
           {/* График + проекты сейчас */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
             <Card className="lg:col-span-2">
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Продуктивность за 30 дней</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Часы работы по дням (30 дней)</CardTitle></CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={220}>
                   <BarChart data={chart} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
                     <XAxis dataKey="label" tick={{ fontSize: 10 }} interval="preserveStartEnd" className="text-muted-foreground" />
-                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} className="text-muted-foreground" />
-                    {baseline != null && (
-                      <ReferenceLine y={baseline} stroke="#10b981" strokeDasharray="4 4"
-                        label={{ value: "норма", position: "right", fontSize: 10, fill: "#10b981" }} />
-                    )}
+                    <YAxis tick={{ fontSize: 11 }} unit="ч" className="text-muted-foreground" />
+                    <ReferenceLine y={DAILY_NORM_HOURS} stroke="#10b981" strokeDasharray="4 4"
+                      label={{ value: `норма ${DAILY_NORM_HOURS}ч`, position: "right", fontSize: 10, fill: "#10b981" }} />
                     <Tooltip content={<ChartTip />} cursor={{ fill: "rgba(0,0,0,0.04)" }} />
-                    <Bar dataKey="score" radius={[3, 3, 0, 0]}>
+                    <Bar dataKey="hours" radius={[3, 3, 0, 0]}>
                       {chart.map((c, i) => <Cell key={i} fill={VERDICT[c.verdict].fill} />)}
                     </Bar>
                   </BarChart>
@@ -309,13 +306,13 @@ function ProjectView({ data }: { data: SeriesData }) {
   )
 }
 
-function ChartTip({ active, payload, label }: { active?: boolean; payload?: Array<{ payload: { verdict: Verdict; score: number; tasks: number; commits: number } }>; label?: string }) {
+function ChartTip({ active, payload, label }: { active?: boolean; payload?: Array<{ payload: { verdict: Verdict; hours: number; tasks: number; commits: number } }>; label?: string }) {
   if (!active || !payload?.length) return null
   const p = payload[0].payload
   return (
     <div className="rounded-md border bg-background px-3 py-2 text-xs shadow-sm">
       <div className="font-medium mb-0.5">{label} · {VERDICT[p.verdict].label}</div>
-      <div className="text-muted-foreground">балл {p.score} · задач {p.tasks} · коммитов {p.commits}</div>
+      <div className="text-muted-foreground">≈ {p.hours}ч · задач {p.tasks} · коммитов {p.commits}</div>
     </div>
   )
 }
@@ -424,10 +421,10 @@ function DayCard({ day }: { day: DevActivityDay }) {
       <CardContent className="py-4 space-y-2.5">
         <div className="flex items-center gap-3 flex-wrap">
           <span className="font-semibold">{ddmm(day.day)}</span>
-          <VerdictBadge v={day.verdict} />
+          <VerdictBadge v={hoursVerdict(day.workMinutes / 60, DAILY_NORM_HOURS)} />
           <span className="text-xs text-muted-foreground">
-            задач {day.taskCount} · балл {day.score} · коммитов {day.commitCount} ·
-            ≈ {fmtDuration(day.workMinutes)}{span ? ` · ${span}` : ""} ·
+            ≈ {fmtDuration(day.workMinutes)} из {DAILY_NORM_HOURS}ч{span ? ` · ${span}` : ""} ·
+            задач {day.taskCount} · коммитов {day.commitCount} ·
             <span className="text-emerald-600"> +{day.linesAdded}</span>/<span className="text-red-500">−{day.linesRemoved}</span>
           </span>
         </div>
