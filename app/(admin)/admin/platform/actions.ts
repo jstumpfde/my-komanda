@@ -35,9 +35,12 @@ import {
   getPlatformMessageDefaults,
   setPlatformMessageDefaults,
   MESSAGE_DEFAULTS_SEED,
+  getPlatformDripTemplates,
+  setPlatformDripTemplates,
 } from "@/lib/platform/settings"
+import { DRIP_TEMPLATES_SEED } from "@/lib/funnel-v2/dozhim-templates"
 import { clearMessageDefaultsCache } from "@/lib/messaging/effective-message-defaults"
-import type { MessageDefaults } from "@/lib/db/schema"
+import type { MessageDefaults, DripTemplates } from "@/lib/db/schema"
 
 async function requireAdminEmail(): Promise<string> {
   const session = await auth()
@@ -237,6 +240,31 @@ export async function actionUpdateMessageDefaults(input: MessageDefaults) {
   await setPlatformMessageDefaults({ inviteMessage, offHoursMessage, rejectMessage, firstMessageDelaySeconds })
   clearMessageDefaultsCache() // сбросить кэш всех компаний — подхватят новый платформенный эталон
   revalidatePath("/admin/platform/message-defaults")
+  return { ok: true }
+}
+
+// ── Платформенные drip-шаблоны дожима ─────────────────────────────────────────
+export async function actionGetDripTemplates(): Promise<{
+  current: DripTemplates; seed: DripTemplates
+}> {
+  await requireAdminEmail()
+  return { current: await getPlatformDripTemplates(), seed: DRIP_TEMPLATES_SEED }
+}
+
+export async function actionUpdateDripTemplates(input: DripTemplates) {
+  await requireAdminEmail()
+  const cleanArr = (a: unknown): string[] =>
+    Array.isArray(a) ? a.map(s => String(s ?? "").trim()).filter(s => s.length > 0) : []
+  const branchA = cleanArr(input.branchA)
+  const branchB = cleanArr(input.branchB)
+  const live    = cleanArr(input.live)
+  const offer   = cleanArr(input.offer)
+  if (!branchA.length) throw new Error("Ветка А не может быть пустой")
+  // stepWords — оставляем как пришли (валидируем минимально: объект)
+  const stepWords = (input.stepWords && typeof input.stepWords === "object") ? input.stepWords : DRIP_TEMPLATES_SEED.stepWords
+
+  await setPlatformDripTemplates({ stepWords, branchA, branchB, live, offer })
+  revalidatePath("/admin/platform/drip-templates")
   return { ok: true }
 }
 

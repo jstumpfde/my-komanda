@@ -41,6 +41,7 @@ import {
   type FunnelV2Config, type FunnelV2Stage, type StageActionType,
   type DozhimPreset, type InterviewMode, type DozhimTouch,
 } from "@/lib/funnel-v2/types"
+import type { DripTemplates } from "@/lib/db/schema"
 import { renderTemplate } from "@/lib/template-renderer"
 import { guardOutgoingMessage } from "@/lib/messaging/outgoing-guard"
 
@@ -140,13 +141,14 @@ function StageCard({ stage, index, onOpen, onRemove }: {
 }
 
 // ── Sheet редактирования стадии ──────────────────────────────────────────────
-function StageSheet({ stage, index, allStages, content, onChange, onClose }: {
+function StageSheet({ stage, index, allStages, content, onChange, onClose, dripTemplates }: {
   stage: FunnelV2Stage | null
   index: number
   allStages: FunnelV2Stage[]
   content: ContentBlock[]
   onChange: (s: FunnelV2Stage) => void
   onClose: () => void
+  dripTemplates?: DripTemplates
 }) {
   const [expanded, setExpanded] = useState(false)
   if (!stage) return null
@@ -158,13 +160,13 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose }: {
   // Предквалификация = чат-бот ведёт диалог сам (startPrequalification), поле
   // «Сообщение кандидату» там не используется → не показываем его (Юрий 26.06).
   const isPrequal = stage.action === "prequalification"
-  const chain: DozhimTouch[] = stage.dozhimChain ?? dozhimChainFor(stage.dozhim, stage.action)
+  const chain: DozhimTouch[] = stage.dozhimChain ?? dozhimChainFor(stage.dozhim, stage.action, dripTemplates)
 
   const patch = (p: Partial<FunnelV2Stage>) => onChange({ ...stage, ...p })
   const patchRule = (p: Partial<FunnelV2Stage["rule"]>) => onChange({ ...stage, rule: { ...stage.rule, ...p } })
   const setChain = (next: DozhimTouch[]) => onChange({ ...stage, dozhimChain: next })
   // Ветка Б — «открыл, но не досмотрел» (переключается при открытии демо/теста).
-  const chainOpened: DozhimTouch[] = stage.dozhimChainOpened ?? dozhimChainForOpened(stage.dozhim, stage.action)
+  const chainOpened: DozhimTouch[] = stage.dozhimChainOpened ?? dozhimChainForOpened(stage.dozhim, stage.action, dripTemplates)
   const setChainOpened = (next: DozhimTouch[]) => onChange({ ...stage, dozhimChainOpened: next })
 
   // «куда зовёт»: следующая стадия + остальные стадии (ветвление). Номер = реальный индекс.
@@ -282,7 +284,7 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose }: {
             </div>
             <div className="flex gap-1">
               {DOZHIM_OPTS.map(d => (
-                <button key={d} type="button" onClick={() => onChange({ ...stage, dozhim: d, dozhimChain: dozhimChainFor(d, stage.action), dozhimChainOpened: dozhimChainForOpened(d, stage.action) })}
+                <button key={d} type="button" onClick={() => onChange({ ...stage, dozhim: d, dozhimChain: dozhimChainFor(d, stage.action, dripTemplates), dozhimChainOpened: dozhimChainForOpened(d, stage.action, dripTemplates) })}
                   className={cn("text-[11px] px-2 py-1 rounded-md border flex-1", stage.dozhim === d ? "bg-blue-500/10 border-blue-400 text-blue-700 dark:text-blue-300 font-medium" : "border-border text-muted-foreground hover:bg-muted/50")}>{DOZHIM_LABEL[d]}</button>
               ))}
             </div>
@@ -411,6 +413,16 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait }: { vacancyId: stri
 
   // Предпросмотр сообщений «как видит кандидат» (client-side, через страж)
   const [previewOpen, setPreviewOpen] = useState(false)
+
+  // Редактируемые платформенные drip-шаблоны (для генерации дефолтных цепочек
+  // дожима при выборе пресета). undefined → buildDozhimChain использует код-сид.
+  const [dripTemplates, setDripTemplates] = useState<DripTemplates | undefined>(undefined)
+  useEffect(() => {
+    fetch("/api/modules/hr/company/drip-templates")
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { templates?: DripTemplates } | null) => { if (d?.templates) setDripTemplates(d.templates) })
+      .catch(() => {})
+  }, [])
 
   // Сухой прогон воронки (read-only диагностика — без записи в БД)
   const [simOpen, setSimOpen] = useState(false)
@@ -548,7 +560,7 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait }: { vacancyId: stri
 
       {stages.length === 0 && <p className="text-xs text-muted-foreground text-center pt-1">Стадия 1 (Портрет) уже есть. Добавьте следующие — приветствие, демо, тест, интервью, оффер…</p>}
 
-      <StageSheet stage={editing} index={editingIndex} allStages={stages} content={content} onChange={changeStage} onClose={() => setEditingId(null)} />
+      <StageSheet stage={editing} index={editingIndex} allStages={stages} content={content} onChange={changeStage} onClose={() => setEditingId(null)} dripTemplates={dripTemplates} />
 
       <Sheet open={previewOpen} onOpenChange={setPreviewOpen}>
         <SheetContent className="w-full sm:max-w-2xl p-0 flex flex-col gap-0">

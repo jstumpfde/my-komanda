@@ -5,6 +5,7 @@
 // Фаза 1 — КОНСТРУКТОР (настраиваешь и видишь); рантайм (исполнение) — позже.
 
 import { buildDozhimChain } from "./dozhim-templates"
+import type { DripTemplates } from "@/lib/db/schema"
 
 export type StageActionType =
   | "message"          // просто сообщение/касание
@@ -45,14 +46,14 @@ export interface DozhimTouch { text: string; delayDays: number }
 /** Цепочка касаний ветки А («не открыл/не начал») — унифицированные шаблоны на
  *  переменных, этап подставляется через STEP_WORDS (бриф Юрия 27.06,
  *  lib/funnel-v2/dozhim-templates.ts). */
-export function dozhimChainFor(preset: DozhimPreset, action?: StageActionType): DozhimTouch[] {
-  return buildDozhimChain(action, preset, "A")
+export function dozhimChainFor(preset: DozhimPreset, action?: StageActionType, templates?: DripTemplates): DozhimTouch[] {
+  return buildDozhimChain(action, preset, "A", templates)
 }
 
 /** Цепочка касаний ветки Б («открыл, но не завершил») — для dozhimChainOpened.
  *  Пустая для живых этапов (verb_done=null: interview/offer). */
-export function dozhimChainForOpened(preset: DozhimPreset, action?: StageActionType): DozhimTouch[] {
-  return buildDozhimChain(action, preset, "B")
+export function dozhimChainForOpened(preset: DozhimPreset, action?: StageActionType, templates?: DripTemplates): DozhimTouch[] {
+  return buildDozhimChain(action, preset, "B", templates)
 }
 
 /** Статусы hh/Avito (маппинг «вход в стадию → статус»). Сработает при рантайме. */

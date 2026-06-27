@@ -1,12 +1,13 @@
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { platformSettings, type MessageDefaults } from "@/lib/db/schema"
+import { platformSettings, type MessageDefaults, type DripTemplates } from "@/lib/db/schema"
 import {
   DEFAULT_INVITE_MESSAGE,
   DEFAULT_OFF_HOURS_MESSAGE,
   DEFAULT_REJECT_MESSAGE,
   DEFAULT_FIRST_MESSAGE_DELAY_SECONDS,
 } from "@/lib/hh/default-messages"
+import { DRIP_TEMPLATES_SEED } from "@/lib/funnel-v2/dozhim-templates"
 
 // Платформенные KV-настройки (таблица platform_settings, drizzle/0154).
 
@@ -185,4 +186,34 @@ export async function getPlatformMessageDefaults(): Promise<MessageDefaults> {
 /** Сохранить платформенные дефолтные тексты (админ). */
 export async function setPlatformMessageDefaults(v: MessageDefaults): Promise<void> {
   await setPlatformSetting(MESSAGE_DEFAULTS_KEY, v)
+}
+
+// ─── Шаблоны дожима (drip) — редактируемые платформенные ──────────────────────
+// Эталон для генерации цепочек касаний в конструкторе воронки. Сид —
+// DRIP_TEMPLATES_SEED (код). Правит админ; HR перебивает на стадии.
+
+export const DRIP_TEMPLATES_KEY = "drip_templates"
+
+/** Платформенные drip-шаблоны. Никогда не падает; недостающее → сид. */
+export async function getPlatformDripTemplates(): Promise<DripTemplates> {
+  try {
+    const v = await getPlatformSetting<Partial<DripTemplates>>(DRIP_TEMPLATES_KEY)
+    if (!v || typeof v !== "object") return DRIP_TEMPLATES_SEED
+    const arr = (x: unknown, fb: string[]) =>
+      Array.isArray(x) && x.every(s => typeof s === "string") && x.length > 0 ? (x as string[]) : fb
+    return {
+      stepWords: (v.stepWords && typeof v.stepWords === "object") ? { ...DRIP_TEMPLATES_SEED.stepWords, ...v.stepWords } : DRIP_TEMPLATES_SEED.stepWords,
+      branchA:   arr(v.branchA, DRIP_TEMPLATES_SEED.branchA),
+      branchB:   arr(v.branchB, DRIP_TEMPLATES_SEED.branchB),
+      live:      arr(v.live,    DRIP_TEMPLATES_SEED.live),
+      offer:     arr(v.offer,   DRIP_TEMPLATES_SEED.offer),
+    }
+  } catch {
+    return DRIP_TEMPLATES_SEED
+  }
+}
+
+/** Сохранить платформенные drip-шаблоны (админ). */
+export async function setPlatformDripTemplates(v: DripTemplates): Promise<void> {
+  await setPlatformSetting(DRIP_TEMPLATES_KEY, v)
 }

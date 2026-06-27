@@ -128,6 +128,25 @@ export interface MessageDefaults {
   rejectMessage:            string  // текст отказа
 }
 
+// ── DripTemplates — редактируемые шаблоны дожима (НЕ хардкод) ──
+// Платформенный эталон в platform_settings['drip_templates'] (правит админ).
+// Конструктор воронки генерит цепочки касаний стадии из этих шаблонов; затем HR
+// перебивает на стадии. Сид — lib/funnel-v2/dozhim-templates.ts (последний фолбэк).
+export interface DripStepWords {
+  noun:      string         // обзор/тест/задание/встречу/вопросы
+  verb:      string | null  // ветка А: посмотрите/пройдите/… (null → особый блок, оффер)
+  verb_done: string | null  // ветка Б: досмотрите/завершите (null → ветка Б не генерится)
+  time:      string | null  // «5–7 минут» (null → строки со {{step_time}} пропускаются)
+  link:      string         // demo_link / test_link / ""
+}
+export interface DripTemplates {
+  stepWords: Record<string, DripStepWords>  // ключи: demo/test/task/prequalification/interview/offer
+  branchA:   string[]  // «не открыл» (универсальные, со {{step_*}})
+  branchB:   string[]  // «открыл, не завершил»
+  live:      string[]  // живые этапы (интервью)
+  offer:     string[]  // оффер
+}
+
 // ── CompanyHiringDefaults (drizzle/0156) ──
 // Дефолты компании для всех вакансий (HR → Настройки найма).
 // Хранится в companies.hiring_defaults_json. VacancyStopFactors определён ниже

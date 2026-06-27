@@ -6,6 +6,7 @@
 // глаголы всегда в середине/конце фразы.
 
 import type { DozhimTouch, DozhimPreset, StageActionType } from "./types"
+import type { DripTemplates } from "@/lib/db/schema"
 
 interface StepWords {
   noun:      string         // винительный: обзор / тест / анкету / задание / встречу
@@ -98,18 +99,30 @@ const PRESET_MAP: Record<DozhimPreset, "off" | "soft" | "standard" | "aggressive
  *  {{name}}/{{vacancy}}/{{<link>}} для рантайма). Пустой массив, если ветка
  *  не применима (preset=off, или branch B при verb_done=null).
  */
+// Платформенный СИД (последний фолбэк). Редактируемый эталон — в
+// platform_settings['drip_templates']; конструктор воронки передаёт его сюда
+// параметром `templates`. Тесты/рантайм без параметра используют этот сид.
+export const DRIP_TEMPLATES_SEED: DripTemplates = {
+  stepWords: STEP_WORDS,
+  branchA:   BRANCH_A_TEMPLATES,
+  branchB:   BRANCH_B_TEMPLATES,
+  live:      LIVE_TEMPLATES,
+  offer:     OFFER_TEMPLATES,
+}
+
 export function buildDozhimChain(
   action: StageActionType | undefined,
   preset: DozhimPreset,
   branch: "A" | "B",
+  templates: DripTemplates = DRIP_TEMPLATES_SEED,
 ): DozhimTouch[] {
   if (preset === "off") return []
-  const w = (action && STEP_WORDS[action]) || FALLBACK
+  const w = (action && templates.stepWords[action]) || FALLBACK
 
   // Оффер — отдельный блок, без step-переменных, только ветка А.
   if (action === "offer") {
     if (branch === "B") return []
-    return withDays(OFFER_TEMPLATES, preset)
+    return withDays(templates.offer, preset)
   }
 
   // Ветка Б недоступна для живых этапов (verb_done=null).
@@ -118,9 +131,9 @@ export function buildDozhimChain(
   let pool: string[]
   if (action === "interview") {
     if (branch === "B") return []
-    pool = LIVE_TEMPLATES.map(t => resolveStepVars(t, w))
+    pool = templates.live.map(t => resolveStepVars(t, w))
   } else {
-    const base = branch === "A" ? BRANCH_A_TEMPLATES : BRANCH_B_TEMPLATES
+    const base = branch === "A" ? templates.branchA : templates.branchB
     // Если time=null — пропускаем строки со {{step_time}} (в ядре это только А-№1).
     const filtered = w.time ? base : base.filter(t => !t.includes("{{step_time}}"))
     pool = filtered.map(t => resolveStepVars(t, w))
