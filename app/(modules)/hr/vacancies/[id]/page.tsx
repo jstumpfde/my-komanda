@@ -3870,35 +3870,40 @@ export default function VacancyPage() {
                             )}
                           </div>
 
-                          {/* — Привязка вакансии — */}
-                          <div className="border-t pt-3">
-                            {apiVacancy?.hhVacancyId ? (
-                              <>
-                                <div className="flex items-center gap-3 flex-wrap">
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-[11px] text-muted-foreground">
-                                      Вакансия привязана · ID{" "}
-                                      <a href={apiVacancy.hhUrl ?? `https://hh.ru/vacancy/${apiVacancy.hhVacancyId}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-mono">{apiVacancy.hhVacancyId}</a>
-                                    </p>
-                                  </div>
-                                  <a href={apiVacancy.hhUrl ?? `https://hh.ru/vacancy/${apiVacancy.hhVacancyId}`} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline shrink-0 flex items-center gap-1">
-                                    Открыть на hh.ru <ExternalLink className="w-3 h-3" />
-                                  </a>
-                                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 shrink-0" onClick={() => setHhUnlinkOpen(true)}>Отвязать</Button>
-                                </div>
-                                <div className="mt-2 flex items-center gap-2 flex-wrap">
-                                  <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded-full bg-muted text-[11px] text-muted-foreground"><span aria-hidden>📥</span><span>Откликов:</span><span className="font-medium text-foreground">{hhStats ? (hhStats.totalResponses > 0 ? hhStats.totalResponses : "—") : "…"}</span></span>
-                                  <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded-full bg-muted text-[11px] text-muted-foreground"><span aria-hidden>🆕</span><span>Необраб.:</span><span className="font-medium text-foreground">{hhStats ? (hhStats.newResponses > 0 ? hhStats.newResponses : "—") : "…"}</span></span>
-                                  <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded-full bg-muted text-[11px] text-muted-foreground"><span aria-hidden>🔄</span><span>Синк:</span><span className="font-medium text-foreground">{hhStats ? formatHhSyncDate(hhStats.lastSyncAt) : "…"}</span></span>
-                                </div>
-                              </>
-                            ) : (
+                          {/* — Привязка вакансии. Ровно ОДНО действие за раз:
+                              привязка появляется только когда аккаунт подключён
+                              (или вакансия уже привязана). Пока аккаунта нет —
+                              «Привязать» нечем (вакансию выбирают из аккаунта). */}
+                          {apiVacancy?.hhVacancyId ? (
+                            <div className="border-t pt-3">
                               <div className="flex items-center gap-3 flex-wrap">
-                                <p className="flex-1 min-w-0 text-[11px] text-muted-foreground">Вакансия не привязана к hh.ru — нажмите «Привязать», чтобы выбрать вакансию из аккаунта.</p>
-                                <Button size="sm" className="h-8 text-xs shrink-0" onClick={() => { setHhImportBind(true); setHhImportDialogOpen(true) }}>Привязать</Button>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-[11px] text-muted-foreground">
+                                    Вакансия привязана · ID{" "}
+                                    <a href={apiVacancy.hhUrl ?? `https://hh.ru/vacancy/${apiVacancy.hhVacancyId}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-mono">{apiVacancy.hhVacancyId}</a>
+                                  </p>
+                                </div>
+                                <a href={apiVacancy.hhUrl ?? `https://hh.ru/vacancy/${apiVacancy.hhVacancyId}`} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline shrink-0 flex items-center gap-1">
+                                  Открыть на hh.ru <ExternalLink className="w-3 h-3" />
+                                </a>
+                                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 shrink-0" onClick={() => setHhUnlinkOpen(true)}>Отвязать</Button>
                               </div>
-                            )}
-                          </div>
+                              <div className="mt-2 flex items-center gap-2 flex-wrap">
+                                <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded-full bg-muted text-[11px] text-muted-foreground"><span aria-hidden>📥</span><span>Откликов:</span><span className="font-medium text-foreground">{hhStats ? (hhStats.totalResponses > 0 ? hhStats.totalResponses : "—") : "…"}</span></span>
+                                <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded-full bg-muted text-[11px] text-muted-foreground"><span aria-hidden>🆕</span><span>Необраб.:</span><span className="font-medium text-foreground">{hhStats ? (hhStats.newResponses > 0 ? hhStats.newResponses : "—") : "…"}</span></span>
+                                <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded-full bg-muted text-[11px] text-muted-foreground"><span aria-hidden>🔄</span><span>Синк:</span><span className="font-medium text-foreground">{hhStats ? formatHhSyncDate(hhStats.lastSyncAt) : "…"}</span></span>
+                              </div>
+                            </div>
+                          ) : hhConnected === true ? (
+                            <div className="border-t pt-3 flex items-center gap-3 flex-wrap">
+                              <p className="flex-1 min-w-0 text-[11px] text-muted-foreground">Вакансия не привязана — нажмите «Привязать», чтобы выбрать её из аккаунта.</p>
+                              <Button size="sm" className="h-8 text-xs shrink-0" onClick={() => { setHhImportBind(true); setHhImportDialogOpen(true) }}>Привязать</Button>
+                            </div>
+                          ) : (
+                            <div className="border-t pt-3">
+                              <p className="text-[11px] text-muted-foreground">Шаг 2 — после подключения аккаунта здесь появится кнопка «Привязать вакансию».</p>
+                            </div>
+                          )}
                         </div>
                       {/* Авито Работа — карточка источника */}
                       {avitoCompanyConnected ? (
