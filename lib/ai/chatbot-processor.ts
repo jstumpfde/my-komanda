@@ -36,6 +36,7 @@ import { classifyIncomingMessage, validateAiReply } from "@/lib/ai/security-filt
 export type IntentCategory =
   | "salary" | "schedule" | "location" | "requirements"
   | "call_request" | "demo_check_in" | "interview_scheduling"
+  | "status_reminder" | "technical_issue"
   | "rejection_signal" | "other"
 
 // Группа 30: устаревшие типы — сохранены для backward-compat с уже
@@ -221,6 +222,8 @@ const TRIGGER_TO_CATEGORY: Record<string, IntentCategory> = {
   callRequest:         "call_request",
   demoCheckIn:         "demo_check_in",
   interviewScheduling: "interview_scheduling",
+  statusReminder:      "status_reminder",
+  technicalIssue:      "technical_issue",
 }
 
 const ESCALATION_REASON_LABEL: Record<string, string> = {
@@ -410,6 +413,8 @@ async function classifyIntent(message: string): Promise<{ category: IntentCatego
 - call_request (просит позвонить или хочет звонок)
 - demo_check_in (упоминает демо: «посмотрел», «изучил», «не успел»)
 - interview_scheduling (хочет назначить интервью)
+- status_reminder (напоминает о себе / спрашивает статус: «есть новости?», «вы посмотрели?», «когда ответите»)
+- technical_issue (технические проблемы со ссылкой/этапом: «не открывается», «ошибка», «ссылка не работает»)
 - rejection_signal (кандидат отказывается)
 - other (что-то ещё)
 

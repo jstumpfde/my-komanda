@@ -25,10 +25,12 @@ import { toast } from "sonner"
 interface Triggers {
   salary: boolean; schedule: boolean; location: boolean; requirements: boolean
   callRequest: boolean; demoCheckIn: boolean; interviewScheduling: boolean
+  statusReminder: boolean; technicalIssue: boolean
 }
 const DEFAULT_TRIGGERS: Triggers = {
   salary: true, schedule: true, location: true, requirements: true,
   callRequest: true, demoCheckIn: true, interviewScheduling: false,
+  statusReminder: true, technicalIssue: true,
 }
 const TRIGGER_LIST: { key: keyof Triggers; label: string }[] = [
   { key: "salary",              label: "Вопросы о зарплате" },
@@ -37,6 +39,8 @@ const TRIGGER_LIST: { key: keyof Triggers; label: string }[] = [
   { key: "requirements",        label: "Вопросы о требованиях к опыту" },
   { key: "callRequest",         label: "Просьбы о звонке (перенаправление на демо)" },
   { key: "demoCheckIn",         label: "Вопросы «удалось посмотреть демо?»" },
+  { key: "statusReminder",      label: "Кандидат напоминает о себе / спрашивает статус" },
+  { key: "technicalIssue",      label: "Технические проблемы со ссылкой / этапом" },
   { key: "interviewScheduling", label: "Согласование времени интервью (осторожно)" },
 ]
 
