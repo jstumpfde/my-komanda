@@ -1516,6 +1516,8 @@ export default function VacancyPage() {
   }
 
   // ── Действия жизненного цикла (см. lib/vacancies/lifecycle.ts) ──
+  // Запуск из черновика: статус → active. Появляются «Кандидаты» + разбор откликов.
+  const handleLaunchVacancy  = () => { updateVacancyStatus("active");                 toast.success("Вакансия запущена") }
   const handlePauseVacancy   = () => { updateVacancyStatus(VACANCY_STATUS_ON_PAUSE);   toast.warning("Вакансия приостановлена") }
   const handleResumeVacancy  = () => { updateVacancyStatus(VACANCY_STATUS_ON_RESUME);  toast.success("Вакансия возобновлена") }
   const handleCloseVacancy   = () => { updateVacancyStatus(VACANCY_STATUS_ON_CLOSE);   toast("Вакансия закрыта и отправлена в архив") }
@@ -2699,6 +2701,18 @@ export default function VacancyPage() {
                   >
                     <Sparkles className="w-3 h-3" />Применить шаблон роли
                   </Button>
+                </div>
+                {/* Запуск из черновика — статус active, появляются «Кандидаты» + разбор */}
+                <div className="mt-3 pt-2 border-t">
+                  <Button
+                    className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={handleLaunchVacancy}
+                  >
+                    <Zap className="w-4 h-4" /> Запустить вакансию
+                  </Button>
+                  <p className="text-[11px] text-muted-foreground mt-1.5 text-center">
+                    Вакансия станет активной — появятся «Кандидаты» и разбор откликов.
+                  </p>
                 </div>
               </div>
             )}
