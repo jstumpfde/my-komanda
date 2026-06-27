@@ -86,6 +86,13 @@ export function ChatbotDefaultsClient({ initial, seed }: { initial: ChatbotDefau
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader><CardTitle className="text-base">Плейбук сценариев ответов</CardTitle>
+          <p className="text-xs text-muted-foreground">Типовые ответы бота (зарплата, локация, прокрастинация, возражения, запрос человека и т.д.). Вставляется в системный промпт после нерушимых правил. Переменные: {"{{name}}"}, {"{{vacancy}}"}, {"{{step_noun}}"}, {"{{step_verb}}"}, {"{{step_link}}"}.</p>
+        </CardHeader>
+        <CardContent><Field label="Сценарии" k="responsePlaybook" rows={20} /></CardContent>
+      </Card>
+
       <div className="flex items-center gap-3 sticky bottom-2 bg-background/80 backdrop-blur py-2 rounded-lg">
         <Button onClick={save} disabled={saving} className="gap-2">
           {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Сохранить

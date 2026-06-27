@@ -239,6 +239,7 @@ export async function getPlatformChatbotDefaults(): Promise<ChatbotDefaults> {
       shortMessages:          arr(v.shortMessages,        CHATBOT_DEFAULTS_SEED.shortMessages),
       prequalReminderD1:      s(v.prequalReminderD1,      CHATBOT_DEFAULTS_SEED.prequalReminderD1),
       prequalReminderD3:      s(v.prequalReminderD3,      CHATBOT_DEFAULTS_SEED.prequalReminderD3),
+      responsePlaybook:       s(v.responsePlaybook,       CHATBOT_DEFAULTS_SEED.responsePlaybook),
     }
   } catch {
     return CHATBOT_DEFAULTS_SEED

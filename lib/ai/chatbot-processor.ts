@@ -1077,9 +1077,12 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
       "──────────────────────────\n"
     : ""
 
+  // Плейбук сценариев (редактируемый платформенный дефолт) — после SAFETY_RULES,
+  // перед промптом вакансии. Даёт боту типовые ответы (зарплата/локация/возражения…).
+  const playbookBlock = effBot.responsePlaybook?.trim() ? "\n\n" + effBot.responsePlaybook.trim() + "\n" : ""
   const armoredSystemPrompt = offtopicHint
-    ? SAFETY_RULES + "\n" + OFFTOPIC_REDIRECT_HINT + candidateContextBlock + funnelGuidance + clarifyGuidance + "\n\n" + prompt
-    : SAFETY_RULES + candidateContextBlock + funnelGuidance + clarifyGuidance + "\n\n" + prompt
+    ? SAFETY_RULES + playbookBlock + "\n" + OFFTOPIC_REDIRECT_HINT + candidateContextBlock + funnelGuidance + clarifyGuidance + "\n\n" + prompt
+    : SAFETY_RULES + playbookBlock + candidateContextBlock + funnelGuidance + clarifyGuidance + "\n\n" + prompt
 
   // История диалога (последние пары) + текущее сообщение — как messages[], чтобы
   // Executor видел предыдущие реплики, а не отвечал в вакууме.

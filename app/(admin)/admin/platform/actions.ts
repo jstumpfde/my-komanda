@@ -301,6 +301,7 @@ export async function actionUpdateChatbotDefaults(input: ChatbotDefaults) {
     shortMessages,
     prequalReminderD1:      s(input.prequalReminderD1,      "Напоминание день 1"),
     prequalReminderD3:      s(input.prequalReminderD3,      "Напоминание день 3"),
+    responsePlaybook:       s(input.responsePlaybook,       "Плейбук сценариев"),
   })
   clearChatbotDefaultsCache()
   revalidatePath("/admin/platform/chatbot-defaults")
