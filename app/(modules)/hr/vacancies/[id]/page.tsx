@@ -40,7 +40,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquare, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, Plus, RefreshCw, Bot, Workflow, FilePlus, UserSearch, Trash2, Target, Inbox, CalendarDays} from "lucide-react"
+import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquare, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, Plus, RefreshCw, Bot, Workflow, FilePlus, UserSearch, Trash2, Target, Inbox, CalendarDays, Plug} from "lucide-react"
 import { InterviewsView } from "@/app/(modules)/hr/interviews/page"
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-factors-settings"
@@ -1145,6 +1145,9 @@ export default function VacancyPage() {
 
   // HH.ru integration state
   const [hhConnected, setHhConnected] = useState<boolean | null>(null)
+  // Под каким hh-аккаунтом (employer) подключена компания — чтобы было честно видно
+  // ЧЕЙ это аккаунт (а не просто «Подключено»). Критично для партнёров/клиентов.
+  const [hhEmployerName, setHhEmployerName] = useState<string | null>(null)
   const [hhPublished, setHhPublished] = useState<{ hhVacancyId: string; views: number; responses: number; publishedAt: string } | null>(null)
   const [hhPublishing, setHhPublishing] = useState(false)
   const [hhImporting, setHhImporting] = useState(false)
@@ -1432,7 +1435,7 @@ export default function VacancyPage() {
     // Fetch hh.ru connection status
     fetch("/api/integrations/hh/status")
       .then((r) => r.json())
-      .then((data) => setHhConnected(data.connected))
+      .then((data) => { setHhConnected(data.connected); setHhEmployerName(data.employerName ?? null) })
       .catch(() => setHhConnected(false))
 
     // Fetch published status for this vacancy
@@ -3840,6 +3843,33 @@ export default function VacancyPage() {
                     <h3 className="text-lg font-semibold text-foreground mb-1">Источники кандидатов</h3>
                     <p className="text-sm text-muted-foreground mb-3">Подключение сервисов для импорта откликов</p>
                     <div className="space-y-3">
+                        {/* ЕДИНАЯ точка подключения hh-аккаунта компании (OAuth).
+                            Честный статус + ПОД КАКИМ аккаунтом (employer) — критично
+                            для партнёров: подключать надо аккаунт, где живёт вакансия. */}
+                        <div className={cn("rounded-lg border p-4", hhConnected === true ? "bg-emerald-500/5 border-emerald-300/60" : hhConnected === false ? "bg-amber-500/5 border-amber-300/70" : "bg-card")}>
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold" style={{ backgroundColor: "#D6001C" }}>hh</div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium">Аккаунт hh.ru</p>
+                              {hhConnected === true ? (
+                                <p className="text-[11px] text-emerald-700 dark:text-emerald-400">Подключён · аккаунт: <b>{hhEmployerName ?? "—"}</b></p>
+                              ) : hhConnected === false ? (
+                                <p className="text-[11px] text-amber-700 dark:text-amber-400">Не подключён — отклики тянуться не будут. Войдите под тем hh-аккаунтом, где опубликована вакансия.</p>
+                              ) : (
+                                <p className="text-[11px] text-muted-foreground">Проверяем подключение…</p>
+                              )}
+                            </div>
+                            {hhConnected === true ? (
+                              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 shrink-0" asChild>
+                                <a href="/api/integrations/hh/connect"><RefreshCw className="w-3.5 h-3.5" /> Переподключить</a>
+                              </Button>
+                            ) : (
+                              <Button size="sm" className="h-8 text-xs gap-1.5 shrink-0 text-white" style={{ backgroundColor: "#D6001C" }} asChild>
+                                <a href="/api/integrations/hh/connect"><Plug className="w-3.5 h-3.5" /> Подключить hh.ru</a>
+                              </Button>
+                            )}
+                          </div>
+                        </div>
                         {apiVacancy?.hhVacancyId ? (
                           <div className="rounded-lg border bg-card p-4">
                             <div className="flex items-center gap-3">
@@ -3858,7 +3888,7 @@ export default function VacancyPage() {
                                   </a>
                                 </p>
                               </div>
-                              <Badge variant="outline" className="text-xs h-6 bg-emerald-500/10 text-emerald-700 border-emerald-200 shrink-0">Подключено</Badge>
+                              <Badge variant="outline" className={cn("text-xs h-6 shrink-0", hhConnected === true ? "bg-emerald-500/10 text-emerald-700 border-emerald-200" : "bg-amber-500/10 text-amber-700 border-amber-200")}>{hhConnected === true ? "Подключено" : "ID привязан"}</Badge>
                               <a
                                 href={apiVacancy.hhUrl ?? `https://hh.ru/vacancy/${apiVacancy.hhVacancyId}`}
                                 target="_blank"
