@@ -208,13 +208,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       session.user.isPlatformAdmin = isPlatformAdminEmail(session.user.email)
       session.user.permissions = (token.permissions as Record<string, boolean> | null) ?? null
 
-      // ── Impersonation: партнёр «Войти как клиент» ──────────────────────────
-      // Ранний выход для НЕ-партнёров — нулевая стоимость для остального трафика.
-      // Реальная личность партнёра остаётся в token; эффективный companyId —
-      // только в session. Любая осечка валидации (подпись/БД/владение) →
-      // getActingAs() вернёт null и acting-as НЕ применяется (companyId
-      // остаётся партнёрским) — fail-safe.
-      if (token.role === "partner" || token.role === "platform_admin" || token.role === "admin") {
+      // ── Impersonation: партнёр «Войти как клиент» / админ «Войти в компанию» ──
+      // Ранний выход для НЕ-партнёров/НЕ-админов — нулевая стоимость для остального
+      // трафика. Реальная личность остаётся в token; эффективный companyId — только
+      // в session. Любая осечка валидации (подпись/БД/владение) → getActingAs()
+      // вернёт null и acting-as НЕ применяется — fail-safe.
+      // ВАЖНО: платформ-админ часто имеет роль 'director' (директор своей компании),
+      // а админство определяется по email-белому списку (isPlatformAdmin). Без этой
+      // ветки его «Войти в компанию» молча игнорировалось — оставался в своей компании.
+      if (token.role === "partner" || token.role === "platform_admin" || token.role === "admin" || session.user.isPlatformAdmin) {
         const acting = await getActingAs()
         // Сверка: кука принадлежит ИМЕННО текущему пользователю сессии
         // (defense-in-depth против реплея украденной чужой acting-as куки).
