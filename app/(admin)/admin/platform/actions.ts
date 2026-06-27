@@ -32,7 +32,12 @@ import {
   FAVICON_URLS_KEY,
   FAVICON_URLS_DEFAULT,
   PUBLIC_SEO_DEFAULTS_KEY,
+  getPlatformMessageDefaults,
+  setPlatformMessageDefaults,
+  MESSAGE_DEFAULTS_SEED,
 } from "@/lib/platform/settings"
+import { clearMessageDefaultsCache } from "@/lib/messaging/effective-message-defaults"
+import type { MessageDefaults } from "@/lib/db/schema"
 
 async function requireAdminEmail(): Promise<string> {
   const session = await auth()
@@ -205,6 +210,33 @@ export async function actionUpdatePlatformBranding(input: {
 
   revalidatePath("/")
   revalidatePath("/admin/platform")
+  return { ok: true }
+}
+
+// ── Платформенные дефолтные тексты сообщений ──────────────────────────────────
+// Эталон для всех компаний. Компания перебивает в Настройках найма, вакансия —
+// в своих полях. НЕ хардкод — правится здесь.
+export async function actionGetMessageDefaults(): Promise<{
+  current: MessageDefaults; seed: MessageDefaults
+}> {
+  await requireAdminEmail()
+  return { current: await getPlatformMessageDefaults(), seed: MESSAGE_DEFAULTS_SEED }
+}
+
+export async function actionUpdateMessageDefaults(input: MessageDefaults) {
+  await requireAdminEmail()
+  const inviteMessage   = (input.inviteMessage ?? "").trim()
+  const offHoursMessage = (input.offHoursMessage ?? "").trim()
+  const rejectMessage   = (input.rejectMessage ?? "").trim()
+  if (!inviteMessage)   throw new Error("Первичное сообщение (рабочее) не может быть пустым")
+  if (!offHoursMessage) throw new Error("Сообщение нерабочего времени не может быть пустым")
+  if (!rejectMessage)   throw new Error("Текст отказа не может быть пустым")
+  const delay = Number(input.firstMessageDelaySeconds)
+  const firstMessageDelaySeconds = Number.isFinite(delay) && delay >= 0 && delay <= 3600 ? Math.floor(delay) : 300
+
+  await setPlatformMessageDefaults({ inviteMessage, offHoursMessage, rejectMessage, firstMessageDelaySeconds })
+  clearMessageDefaultsCache() // сбросить кэш всех компаний — подхватят новый платформенный эталон
+  revalidatePath("/admin/platform/message-defaults")
   return { ok: true }
 }
 

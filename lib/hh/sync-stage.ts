@@ -17,7 +17,7 @@ import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
 import { getValidToken } from "@/lib/hh-helpers"
 import { changeNegotiationState } from "@/lib/hh-api"
 import { getStageHhAction, parsePipeline, type StageSlug } from "@/lib/stages"
-import { DEFAULT_REJECT_MESSAGE, DEFAULT_INVITE_MESSAGE } from "@/lib/hh/default-messages"
+import { getEffectiveMessageDefaults } from "@/lib/messaging/effective-message-defaults"
 import { renderTemplate } from "@/lib/template-renderer"
 
 interface CandidateContext {
@@ -125,7 +125,7 @@ export async function trySyncRejectToHh(candidateId: string, customMessage?: str
         vacancy: ctx.vac.title,
       })
     } else {
-      const tpl = ctx.vac.aiProcessSettings.rejectMessage?.trim() || DEFAULT_REJECT_MESSAGE
+      const tpl = ctx.vac.aiProcessSettings.rejectMessage?.trim() || (await getEffectiveMessageDefaults(ctx.vac.companyId)).rejectMessage
       message = renderTemplate(tpl, {
         name:    firstName,
         vacancy: ctx.vac.title,
@@ -159,7 +159,7 @@ export async function trySyncInviteToHh(candidateId: string): Promise<boolean> {
     const demoLink  = `https://company24.pro/demo/${demoToken}`
 
     const { firstName } = await getCandidateFirstName(ctx.cand.id)
-    const tpl = ctx.vac.aiProcessSettings.inviteMessage?.trim() || DEFAULT_INVITE_MESSAGE
+    const tpl = ctx.vac.aiProcessSettings.inviteMessage?.trim() || (await getEffectiveMessageDefaults(ctx.vac.companyId)).inviteMessage
     let message = renderTemplate(tpl, {
       name:      firstName,
       vacancy:   ctx.vac.title,
@@ -243,7 +243,7 @@ export async function trySyncStageToHh(candidateId: string, newStage: string): P
     const { firstName } = await getCandidateFirstName(ctx.cand.id)
 
     if (action === "discard") {
-      const tpl = ctx.vac.aiProcessSettings.rejectMessage?.trim() || DEFAULT_REJECT_MESSAGE
+      const tpl = ctx.vac.aiProcessSettings.rejectMessage?.trim() || (await getEffectiveMessageDefaults(ctx.vac.companyId)).rejectMessage
       const message = renderTemplate(tpl, {
         name:    firstName,
         vacancy: ctx.vac.title,
@@ -262,7 +262,7 @@ export async function trySyncStageToHh(candidateId: string, newStage: string): P
     // invitation
     const demoToken = ctx.cand.shortId ?? ctx.cand.id
     const demoLink  = `https://company24.pro/demo/${demoToken}`
-    const tpl = ctx.vac.aiProcessSettings.inviteMessage?.trim() || DEFAULT_INVITE_MESSAGE
+    const tpl = ctx.vac.aiProcessSettings.inviteMessage?.trim() || (await getEffectiveMessageDefaults(ctx.vac.companyId)).inviteMessage
     let message = renderTemplate(tpl, {
       name:      firstName,
       vacancy:   ctx.vac.title,

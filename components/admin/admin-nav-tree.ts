@@ -10,7 +10,7 @@
 import {
   LayoutDashboard, Building2, Package, Library, ShieldAlert, Shield, Handshake,
   Inbox, Bot, BookOpen, Activity, Wrench, Palette, Sparkles, UserPlus, Ticket,
-  GitCommitHorizontal, Briefcase,
+  GitCommitHorizontal, Briefcase, MessageSquare,
   type LucideIcon,
 } from "lucide-react"
 
@@ -50,6 +50,7 @@ export const ADMIN_NAV_TREE: AdminNavCategory[] = [
       { label: "Emergency",     href: "/admin/platform/emergency",  icon: ShieldAlert },
       { label: "Логи действий", href: "/admin/platform/logs",       icon: Activity },
       { label: "Миграции",      href: "/admin/platform/migrations", icon: Wrench },
+      { label: "Тексты сообщений", href: "/admin/platform/message-defaults", icon: MessageSquare },
       { label: "Демо-данные",   href: "/admin/platform/demo",       icon: Sparkles },
       { label: "Сроки / health", href: "/admin/platform/deadlines", icon: Activity },
       { label: "Cron-запуски",  href: "/admin/platform/cron",       icon: Wrench },

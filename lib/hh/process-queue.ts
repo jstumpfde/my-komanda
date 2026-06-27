@@ -29,11 +29,11 @@ import { isBlockEnabled } from "@/lib/funnel-builder/runtime"
 import { sendWebhook } from "@/lib/webhooks"
 import { resolveVacancyWebhook } from "@/lib/integrations/resolve"
 import { shouldDeferFirstMessage } from "@/lib/messaging/first-messages-chain"
-import { DEFAULT_INVITE_MESSAGE, DEFAULT_OFF_HOURS_MESSAGE } from "@/lib/hh/default-messages"
+import { getEffectiveMessageDefaults } from "@/lib/messaging/effective-message-defaults"
 
-// Платформенный дефолт приглашения (единый источник) — для всех вакансий без
-// своего inviteMessage. Старые вакансии истекли и не шлют, поэтому применяем ко всем.
-const DEMO_INVITE_MESSAGE = DEFAULT_INVITE_MESSAGE
+// Дефолтные тексты (приглашение/автоответ) — НЕ хардкод: резолвятся по компании
+// (платформа→компания), редактируются в UI. Эффективные значения — в `md` ниже,
+// после получения companyId. Вакансия перебивает своими полями (vac.X || md.X).
 
 // Контур «Портрет»: строка-подсказка следующего этапа (inviteNextStep ≠ demo)
 // добавляется в начало приглашения. Глубокая маршрутизация (запись в календарь,
@@ -113,8 +113,11 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
     scopedAiSettings = (localVac.aiProcessSettings as VacancyAiProcessSettings | null) ?? {}
   }
 
+  // Эффективные дефолтные тексты компании (платформа→компания; вакансия перебивает).
+  const md = await getEffectiveMessageDefaults(companyId)
+
   const effDelayMs = Math.max(0, (reqDelaySeconds ?? 30) * 1000)
-  const effInviteMsg = scopedAiSettings.inviteMessage?.trim() || DEMO_INVITE_MESSAGE
+  const effInviteMsg = scopedAiSettings.inviteMessage?.trim() || md.inviteMessage
 
   // P0-53: исключаем "застрявшие" отклики — те, чей привязанный кандидат уже
   // в терминальной стадии (rejected/hired) или с auto_processing_stopped=true.
@@ -233,10 +236,10 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
     if (respectWorkingHours && localVac) {
       const check = canSendNow(localVac)
       if (!check.allowed) {
-        // Текст автоответа: свой или платформенный дефолт (DEFAULT_OFF_HOURS_MESSAGE).
+        // Текст автоответа: свой или эффективный дефолт компании (md.offHoursMessage).
         const offText = (typeof localVac.firstMessageOffHoursText === "string" && localVac.firstMessageOffHoursText.trim())
           ? localVac.firstMessageOffHoursText.trim()
-          : DEFAULT_OFF_HOURS_MESSAGE
+          : md.offHoursMessage
         if (
           localVac.firstMessageOffHoursEnabled === true &&
           offText.length > 0 &&
@@ -263,7 +266,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
     // (firstMessagesChain[0].delaySeconds) или платформенный дефолт (5 мин).
     // off-hours-режим не задерживаем (у него своя задержка при отправке мягкого
     // сообщения). Старые/повторные отклики (createdAt давно) проходят сразу.
-    if (!offHoursSoftMode && localVac && shouldDeferFirstMessage(resp.createdAt, localVac.firstMessagesChain, new Date())) {
+    if (!offHoursSoftMode && localVac && shouldDeferFirstMessage(resp.createdAt, localVac.firstMessagesChain, new Date(), md.firstMessageDelaySeconds)) {
       results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "deferred_first_message_delay" })
       continue
     }
@@ -991,7 +994,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             vacancyId:    localVac.id,
             text:         (typeof localVac.firstMessageOffHoursText === "string" && localVac.firstMessageOffHoursText.trim())
                             ? localVac.firstMessageOffHoursText
-                            : DEFAULT_OFF_HOURS_MESSAGE,
+                            : md.offHoursMessage,
             delaySeconds: typeof localVac.firstMessageOffHoursDelaySeconds === "number" ? localVac.firstMessageOffHoursDelaySeconds : 15,
           })
         } catch (offErr) {
@@ -1171,7 +1174,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
         const messageText =
           (previouslyInvited && recoveryEnabled && recoveryText.length > 0)
             ? recoveryText
-            : (aiSettings.inviteMessage?.trim() || DEMO_INVITE_MESSAGE)
+            : (aiSettings.inviteMessage?.trim() || md.inviteMessage)
 
         const replaced = renderTemplate(messageText, {
           name:      candidateName,

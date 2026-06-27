@@ -16,17 +16,19 @@ import { AdaptationSection } from "@/components/hiring-settings/adaptation-secti
 import { StopFactorsSection } from "@/components/hiring-settings/stop-factors-section"
 import { ServiceSection } from "@/components/hiring-settings/service-section"
 import { CompaniesProductsSection } from "@/components/hiring-settings/companies-products-section"
+import { MessagesSection } from "@/components/hiring-settings/messages-section"
 import type { CompanyHiringDefaults } from "@/lib/db/schema"
 
 // ─── Константы ─────────────────────────────────────────────────────────────
 
 const HIRING_DEFAULTS_URL = "/api/modules/hr/company/hiring-defaults"
 
-type TabKey = "funnel" | "companies" | "interview" | "adaptation" | "ai" | "stop-factors" | "service" | "integrations"
+type TabKey = "funnel" | "companies" | "messages" | "interview" | "adaptation" | "ai" | "stop-factors" | "service" | "integrations"
 
 const TABS: { value: TabKey; label: string; icon: typeof Settings }[] = [
   { value: "funnel",        label: "Воронка и автоматизация", icon: GitBranch },
   { value: "companies",     label: "Компании и продукты",     icon: Building2 },
+  { value: "messages",      label: "Сообщения",               icon: MessageSquare },
   { value: "interview",     label: "Интервью",                icon: Clock },
   { value: "adaptation",    label: "Адаптация",               icon: Heart },
   { value: "stop-factors",  label: "Стоп-факторы",           icon: ShieldAlert },
@@ -154,6 +156,10 @@ export default function HiringSettingsPage() {
 
               {activeTab === "companies" && (
                 <CompaniesProductsSection defaults={defaults} onPatch={onPatch} />
+              )}
+
+              {activeTab === "messages" && (
+                <MessagesSection defaults={defaults} onPatch={onPatch} />
               )}
 
               {activeTab === "interview" && (

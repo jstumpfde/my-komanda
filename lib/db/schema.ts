@@ -115,11 +115,27 @@ export interface FunnelV2State {
   dozhimStartedAt:          string | null
 }
 
+// ── MessageDefaults — редактируемые дефолтные тексты сообщений ──
+// НЕ хардкод: наследование платформа → компания → вакансия. Платформенный
+// эталон в platform_settings['message_defaults'] (правит админ в /admin),
+// компания перебивает в hiring_defaults_json.messageDefaults (директор),
+// вакансия — в своих полях (aiProcessSettings.inviteMessage / firstMessagesChain).
+// Резолвинг — lib/messaging/effective-message-defaults.ts.
+export interface MessageDefaults {
+  inviteMessage:            string  // первичное сообщение, рабочее время ({{name}}/{{vacancy}}/{{demo_link}})
+  offHoursMessage:          string  // первичное сообщение, нерабочее время (автоответ)
+  firstMessageDelaySeconds: number  // «человеческая» пауза перед первым сообщением (сек)
+  rejectMessage:            string  // текст отказа
+}
+
 // ── CompanyHiringDefaults (drizzle/0156) ──
 // Дефолты компании для всех вакансий (HR → Настройки найма).
 // Хранится в companies.hiring_defaults_json. VacancyStopFactors определён ниже
 // в этом же модуле (типы хойстятся, порядок объявления не важен).
 export interface CompanyHiringDefaults {
+  // Дефолтные тексты сообщений компании (перебивают платформенные; вакансия — эти).
+  // Пустые/отсутствующие поля наследуются с уровня платформы.
+  messageDefaults?: Partial<MessageDefaults>
   schedule?: {
     slotDuration?:     string
     bufferTime?:       string

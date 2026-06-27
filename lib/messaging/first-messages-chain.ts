@@ -26,13 +26,17 @@ export interface ChainStep {
 }
 
 // «Человеческая» пауза перед ПЕРВЫМ сообщением (сек): своя на вакансии
-// (firstMessagesChain[0].delaySeconds) или платформенный дефолт (5 мин).
-// Применяется ко всем вакансиям (старые истекли и не шлют).
-export function firstMessageDelaySeconds(chain: unknown): number {
+// (firstMessagesChain[0].delaySeconds) или дефолт. Дефолт НЕ хардкод — caller
+// передаёт эффективный (платформа→компания) через fallbackSeconds; код-константа
+// DEFAULT_FIRST_MESSAGE_DELAY_SECONDS остаётся лишь последним сидом.
+export function firstMessageDelaySeconds(
+  chain: unknown,
+  fallbackSeconds: number = DEFAULT_FIRST_MESSAGE_DELAY_SECONDS,
+): number {
   const c = Array.isArray(chain) ? chain : []
   const first = c[0] as { delaySeconds?: unknown } | undefined
   const d = first && typeof first.delaySeconds === "number" ? first.delaySeconds : null
-  return d ?? DEFAULT_FIRST_MESSAGE_DELAY_SECONDS
+  return d ?? fallbackSeconds
 }
 
 // Свежий отклик ещё не дорос до задержки → отложить обработку (process-queue
@@ -42,9 +46,10 @@ export function shouldDeferFirstMessage(
   createdAt: Date | string | null | undefined,
   chain: unknown,
   now: Date,
+  fallbackSeconds: number = DEFAULT_FIRST_MESSAGE_DELAY_SECONDS,
 ): boolean {
   if (!createdAt) return false
-  const delaySec = firstMessageDelaySeconds(chain)
+  const delaySec = firstMessageDelaySeconds(chain, fallbackSeconds)
   if (delaySec <= 0) return false
   const ageMs = now.getTime() - new Date(createdAt).getTime()
   return ageMs < delaySec * 1000

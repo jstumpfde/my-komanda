@@ -1,6 +1,12 @@
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { platformSettings } from "@/lib/db/schema"
+import { platformSettings, type MessageDefaults } from "@/lib/db/schema"
+import {
+  DEFAULT_INVITE_MESSAGE,
+  DEFAULT_OFF_HOURS_MESSAGE,
+  DEFAULT_REJECT_MESSAGE,
+  DEFAULT_FIRST_MESSAGE_DELAY_SECONDS,
+} from "@/lib/hh/default-messages"
 
 // Платформенные KV-настройки (таблица platform_settings, drizzle/0154).
 
@@ -141,4 +147,42 @@ export async function getPublicSeoDefaults(): Promise<PublicSeoDefaults> {
   } catch {
     return PUBLIC_SEO_DEFAULTS_DEFAULT
   }
+}
+
+// ─── Дефолтные тексты сообщений (редактируемые платформенные) ─────────────────
+// НЕ хардкод: платформенный эталон правит админ в /admin. Код-константы из
+// lib/hh/default-messages.ts — лишь СИД при пустой БД (последний фолбэк), а не
+// источник правды. Наследование платформа→компания→вакансия — в
+// lib/messaging/effective-message-defaults.ts.
+
+export const MESSAGE_DEFAULTS_KEY = "message_defaults"
+
+export const MESSAGE_DEFAULTS_SEED: MessageDefaults = {
+  inviteMessage:            DEFAULT_INVITE_MESSAGE,
+  offHoursMessage:          DEFAULT_OFF_HOURS_MESSAGE,
+  firstMessageDelaySeconds: DEFAULT_FIRST_MESSAGE_DELAY_SECONDS,
+  rejectMessage:            DEFAULT_REJECT_MESSAGE,
+}
+
+/** Платформенные дефолтные тексты. Никогда не падает; пустые поля → сид. */
+export async function getPlatformMessageDefaults(): Promise<MessageDefaults> {
+  try {
+    const v = await getPlatformSetting<Partial<MessageDefaults>>(MESSAGE_DEFAULTS_KEY)
+    if (!v || typeof v !== "object") return MESSAGE_DEFAULTS_SEED
+    const str = (x: unknown, fb: string) => (typeof x === "string" && x.trim() ? x : fb)
+    const num = (x: unknown, fb: number) => (typeof x === "number" && Number.isFinite(x) && x >= 0 ? x : fb)
+    return {
+      inviteMessage:            str(v.inviteMessage,   MESSAGE_DEFAULTS_SEED.inviteMessage),
+      offHoursMessage:          str(v.offHoursMessage, MESSAGE_DEFAULTS_SEED.offHoursMessage),
+      firstMessageDelaySeconds: num(v.firstMessageDelaySeconds, MESSAGE_DEFAULTS_SEED.firstMessageDelaySeconds),
+      rejectMessage:            str(v.rejectMessage,   MESSAGE_DEFAULTS_SEED.rejectMessage),
+    }
+  } catch {
+    return MESSAGE_DEFAULTS_SEED
+  }
+}
+
+/** Сохранить платформенные дефолтные тексты (админ). */
+export async function setPlatformMessageDefaults(v: MessageDefaults): Promise<void> {
+  await setPlatformSetting(MESSAGE_DEFAULTS_KEY, v)
 }
