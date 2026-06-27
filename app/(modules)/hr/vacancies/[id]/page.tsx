@@ -1431,6 +1431,19 @@ export default function VacancyPage() {
     finally { setEditSaving(false) }
   }
 
+  // Вернулись с подключения hh ИЗ этой вакансии (callback дал ?hhConnected=1):
+  // сразу открываем «Привязать», чтобы для пользователя это был один поток —
+  // подключил аккаунт → тут же выбрал вакансию, без поиска второй кнопки.
+  useEffect(() => {
+    if (searchParams?.get("hhConnected") !== "1") return
+    setHhImportBind(true)
+    setHhImportDialogOpen(true)
+    const sp = new URLSearchParams(searchParams?.toString() ?? "")
+    sp.delete("hhConnected")
+    router.replace(`/hr/vacancies/${id}${sp.toString() ? `?${sp.toString()}` : ""}`)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     // Fetch hh.ru connection status
     fetch("/api/integrations/hh/status")
@@ -3861,11 +3874,11 @@ export default function VacancyPage() {
                             </div>
                             {hhConnected === true ? (
                               <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 shrink-0" asChild>
-                                <a href="/api/integrations/hh/connect"><RefreshCw className="w-3.5 h-3.5" /> Переподключить</a>
+                                <a href={`/api/integrations/hh/connect?vacancyId=${id}`}><RefreshCw className="w-3.5 h-3.5" /> Переподключить</a>
                               </Button>
                             ) : (
                               <Button size="sm" className="h-8 text-xs gap-1.5 shrink-0 text-white" style={{ backgroundColor: "#D6001C" }} asChild>
-                                <a href="/api/integrations/hh/connect"><Plug className="w-3.5 h-3.5" /> Подключить hh.ru</a>
+                                <a href={`/api/integrations/hh/connect?vacancyId=${id}`}><Plug className="w-3.5 h-3.5" /> Подключить hh.ru</a>
                               </Button>
                             )}
                           </div>

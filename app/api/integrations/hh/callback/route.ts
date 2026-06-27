@@ -15,10 +15,12 @@ export async function GET(req: NextRequest) {
 
   let companyId: string
   let userId: string
+  let vacancyId: string | undefined
   try {
     const parsed = JSON.parse(Buffer.from(state, "base64url").toString())
     companyId = parsed.companyId
     userId = parsed.userId
+    vacancyId = parsed.vacancyId || undefined
   } catch {
     return NextResponse.redirect(new URL("/hr/hiring-settings?tab=integrations&error=invalid_state", req.url))
   }
@@ -66,6 +68,11 @@ export async function GET(req: NextRequest) {
         })
     }
 
+    // Подключались со страницы вакансии — возвращаемся туда и сразу
+    // открываем «Привязать» (флаг hhConnected=1), чтобы шаг был один.
+    if (vacancyId) {
+      return NextResponse.redirect(new URL(`/hr/vacancies/${vacancyId}?hhConnected=1`, req.url))
+    }
     return NextResponse.redirect(new URL("/hr/hiring-settings?tab=integrations&connected=hh", req.url))
   } catch (err) {
     console.error("[hh/callback]", err)
