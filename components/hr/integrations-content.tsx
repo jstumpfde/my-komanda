@@ -217,11 +217,13 @@ export function IntegrationsContent() {
                 </Button>
               </>
             ) : (
-              <Button size="sm" className="gap-1.5" asChild>
-                <a href="/api/integrations/hh/connect">
-                  <Plug className="w-3.5 h-3.5" />Подключить hh.ru
-                </a>
-              </Button>
+              // Точка подключения одна — на странице вакансии (раздел «Источники»).
+              // Аккаунт hh общий для всей компании: подключив из любой вакансии,
+              // подключаешь всю компанию. Поэтому здесь не дублируем «Подключить»,
+              // а показываем, где это сделать.
+              <span className="text-xs text-muted-foreground max-w-[280px] text-right leading-snug">
+                Подключается из любой вакансии — раздел «Источники». Аккаунт станет общим для всех вакансий компании.
+              </span>
             )}
               </div>
             </div>
