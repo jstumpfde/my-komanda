@@ -6,7 +6,7 @@
     "dev": "next dev --webpack",
     "dev:tunnel": "ssh -N -L 5433:localhost:5432 root@5.42.125.91",
     "deploy": "git push origin main && ssh root@5.42.125.91 \"cd /var/www/my-komanda && git fetch origin && git reset --hard origin/main && pnpm build && pm2 reload my-komanda --update-env\"",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint .",
     "db:generate": "drizzle-kit generate",
