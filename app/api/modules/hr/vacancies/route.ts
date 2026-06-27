@@ -14,7 +14,7 @@ import {
   normalizeFunnelConfig,
 } from "@/lib/funnel-builder/blocks"
 import { buildDefaultAnketaQuestions } from "@/lib/funnel-builder/anketa-defaults"
-import { DEFAULT_INVITE_MESSAGE, DEFAULT_FIRST_MESSAGE_DELAY_SECONDS, DEFAULT_OFF_HOURS_MESSAGE } from "@/lib/hh/default-messages"
+import { getEffectiveMessageDefaults } from "@/lib/messaging/effective-message-defaults"
 import { buildSpecFromLegacy } from "@/lib/core/spec/from-legacy"
 import { saveSpec } from "@/lib/core/spec/store"
 
@@ -141,6 +141,10 @@ export async function POST(req: NextRequest) {
       companyId: user.companyId, userId: user.id, title: body.title.trim(), slug,
     })
 
+    // Эффективные дефолтные тексты компании (платформа→компания) — НЕ код-сид,
+    // чтобы правки в /admin → «Тексты сообщений» подхватывались новыми вакансиями.
+    const md = await getEffectiveMessageDefaults(user.companyId)
+
     // ТЗ-1 Часть 5 (P0-17): новые вакансии стартуют со всеми AI-фичами OFF.
     // Schema defaults уже OFF (aiScoringEnabled, autoProcessingEnabled — false).
     // aiProcessSettings задаём явно — там enabled=false и midRangeAction=direct_demo (P0-7).
@@ -157,19 +161,19 @@ export async function POST(req: NextRequest) {
         enabled: false,
         midRangeAction: "direct_demo",
         // Первое сообщение новой вакансии (рабочее время) — отправляется как msg1.
-        inviteMessage: DEFAULT_INVITE_MESSAGE,
+        inviteMessage: md.inviteMessage,
       },
       // Серия первых сообщений: 1 включённое с «человеческой» паузой 5 мин
       // (Сообщения 2/3 выключены). Предзаполняем, чтобы текст был виден/редактируем
       // в UI новой вакансии (тот же платформенный дефолт уходит и как fallback).
       firstMessagesChain: [
-        { enabled: true,  delaySeconds: DEFAULT_FIRST_MESSAGE_DELAY_SECONDS, text: DEFAULT_INVITE_MESSAGE },
+        { enabled: true,  delaySeconds: md.firstMessageDelaySeconds, text: md.inviteMessage },
         { enabled: false, delaySeconds: 60,  text: "" },
         { enabled: false, delaySeconds: 180, text: "" },
       ],
       // Автоответ нерабочего времени — включён, со своим текстом.
       firstMessageOffHoursEnabled: true,
-      firstMessageOffHoursText: DEFAULT_OFF_HOURS_MESSAGE,
+      firstMessageOffHoursText: md.offHoursMessage,
     }
 
     // Group 15: если у компании есть default-шаблон воронки — копируем его
