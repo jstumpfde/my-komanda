@@ -616,11 +616,12 @@ export async function POST(
     // ─── Sync hh_vacancies (upsert) so UI считает вакансию подключённой ────
     // ТОЛЬКО при привязке (shouldBind). Без привязки это «Заполнить из hh.ru» —
     // поля заполнили, но источник откликов не подключаем.
-    // Для черновиков (status=draft) НЕ проставляем localVacancyId:
-    // черновик ещё не готов, HR подключит источник сам когда вакансия будет готова.
-    // Для уже опубликованных/активных вакансий — связываем как раньше.
+    // ВСЕГДА проставляем localVacancyId (БАГ-ФИКС 27.06): раньше для черновиков
+    // ставили null «потому что не готова» — но тогда hh_vacancies оставалась без
+    // связи с локальной вакансией, и импорт её МОЛЧА пропускал (галочка «Привязать»
+    // визуально срабатывала, а отклики не шли). Импорт всё равно гейтит по
+    // autoProcessingEnabled, так что преждевременного разбора черновика не будет.
     if (shouldBind) {
-      const isDraft = existing.status === "draft"
       const hhValues = {
         companyId:       user.companyId,
         hhVacancyId,
@@ -631,7 +632,7 @@ export async function POST(
         salaryCurrency:  mappedData.salaryCurrency || null,
         status:          "active",
         url:             hhUrl,
-        localVacancyId:  isDraft ? null : id,
+        localVacancyId:  id,
         rawData:         mappedData as unknown as Record<string, unknown>,
         syncedAt:        now,
       }
