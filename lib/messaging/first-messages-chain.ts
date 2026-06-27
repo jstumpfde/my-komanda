@@ -17,11 +17,37 @@
 import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { followUpCampaigns, followUpMessages, vacancies } from "@/lib/db/schema"
+import { DEFAULT_FIRST_MESSAGE_DELAY_SECONDS } from "@/lib/hh/default-messages"
 
 export interface ChainStep {
   enabled:      boolean
   delaySeconds: number
   text:         string
+}
+
+// «Человеческая» пауза перед ПЕРВЫМ сообщением (сек): своя на вакансии
+// (firstMessagesChain[0].delaySeconds) или платформенный дефолт (5 мин).
+// Применяется ко всем вакансиям (старые истекли и не шлют).
+export function firstMessageDelaySeconds(chain: unknown): number {
+  const c = Array.isArray(chain) ? chain : []
+  const first = c[0] as { delaySeconds?: unknown } | undefined
+  const d = first && typeof first.delaySeconds === "number" ? first.delaySeconds : null
+  return d ?? DEFAULT_FIRST_MESSAGE_DELAY_SECONDS
+}
+
+// Свежий отклик ещё не дорос до задержки → отложить обработку (process-queue
+// оставит status='response', следующий cron подберёт). Старые/повторные —
+// проходят сразу. Используется в lib/hh/process-queue.ts (рабочее время).
+export function shouldDeferFirstMessage(
+  createdAt: Date | string | null | undefined,
+  chain: unknown,
+  now: Date,
+): boolean {
+  if (!createdAt) return false
+  const delaySec = firstMessageDelaySeconds(chain)
+  if (delaySec <= 0) return false
+  const ageMs = now.getTime() - new Date(createdAt).getTime()
+  return ageMs < delaySec * 1000
 }
 
 const CHAIN_BRANCH_BY_INDEX: Record<number, string> = {

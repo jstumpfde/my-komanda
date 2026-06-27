@@ -76,4 +76,11 @@ export async function markDemoOpened(candidateId: string): Promise<void> {
     console.error("[markDemoOpened] switchToBranchOpened failed:",
       err instanceof Error ? err.message : err)
   })
+
+  // То же для воронки v2 (branch=funnelv2:<stageId>). Внутри сам проверяет,
+  // что кандидат на v2 (funnelV2StateJson != null), иначе тихо выходит.
+  void import("@/lib/funnel-v2/runtime-executor").then(m => m.switchV2BranchOpened(candidateId)).catch((err) => {
+    console.error("[markDemoOpened] switchV2BranchOpened failed:",
+      err instanceof Error ? err.message : err)
+  })
 }

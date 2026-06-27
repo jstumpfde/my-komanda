@@ -49,6 +49,8 @@ import {
   Play,
   RotateCcw,
   Pencil,
+  EyeOff,
+  Eye,
   Maximize2,
   Minimize2,
   PhoneCall,
@@ -129,6 +131,39 @@ interface HhMessage {
   createdAt: string | null
   viewedByMe: boolean
   viewedByOpponent: boolean
+}
+
+// Быстрые шаблоны «поправки»: удалить сообщение из чата hh нельзя (API hh не даёт),
+// поэтому исправляем отправкой корректирующего сообщения вдогонку. Шаблон подставляется
+// в поле ввода — HR дополняет нужным и отправляет.
+const CORRECTION_TEMPLATES: { label: string; text: string }[] = [
+  { label: "Неактуальная ссылка", text: "Прошу прощения, в предыдущем сообщении была неактуальная ссылка. Актуальная ссылка: " },
+  { label: "Ошибка / опечатка",   text: "Прошу прощения за предыдущее сообщение — в нём была ошибка. Корректная информация: " },
+  { label: "Неверное обращение",  text: "Прошу прощения, в прошлом сообщении ошибочно указано имя. " },
+  { label: "Не то сообщение",     text: "Прошу прощения, предыдущее сообщение было отправлено по ошибке — его можно проигнорировать. " },
+]
+
+// Ключ localStorage для «скрыть у себя»: id скрытых сообщений чата (id у hh глобально
+// уникальны). Скрытие косметическое — на стороне нашей платформы; у кандидата в hh
+// сообщение остаётся (удалить его через API hh невозможно).
+const HIDDEN_CHAT_MSGS_LS_KEY = "mk_hidden_chat_msgs_v1"
+
+function loadHiddenMsgIds(): Set<string> {
+  try {
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem(HIDDEN_CHAT_MSGS_LS_KEY) : null
+    const arr = raw ? (JSON.parse(raw) as unknown) : []
+    return new Set(Array.isArray(arr) ? arr.filter((x): x is string => typeof x === "string") : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function persistHiddenMsgIds(ids: Set<string>): void {
+  try {
+    window.localStorage.setItem(HIDDEN_CHAT_MSGS_LS_KEY, JSON.stringify([...ids]))
+  } catch {
+    /* квота/недоступность localStorage — игнорируем, скрытие просто не сохранится */
+  }
 }
 
 interface DemoBlock {
@@ -678,6 +713,18 @@ export function CandidateDrawer({
   const [hhSending, setHhSending] = useState(false)
   // hh-токен жив? false → показываем сохранённую переписку + плашку «не подключён».
   const [hhConnected, setHhConnected] = useState(true)
+  // «Скрыть у себя»: косметическое скрытие сообщений чата (localStorage, на нашей стороне).
+  const [hiddenMsgIds, setHiddenMsgIds] = useState<Set<string>>(() => loadHiddenMsgIds())
+  const [showHiddenMsgs, setShowHiddenMsgs] = useState(false)
+  const toggleHiddenMsg = useCallback((id: string) => {
+    setHiddenMsgIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      persistHiddenMsgIds(next)
+      return next
+    })
+  }, [])
   const hhFetchRef = useRef<string | null>(null)
   const hhListRef = useRef<HTMLDivElement | null>(null)
   const tabScrollRef = useRef<HTMLDivElement | null>(null)
@@ -1677,43 +1724,89 @@ export function CandidateDrawer({
                         </p>
                       ) : (
                         <div ref={hhListRef} className="space-y-2 pt-1 max-h-[50vh] overflow-y-auto pr-1 -mr-1">
-                          {hhMessages.map((m) => {
-                            const mine = m.authorType === "employer"
+                          {(() => {
+                            const hiddenCount = hhMessages.reduce((n, m) => n + (hiddenMsgIds.has(m.id) ? 1 : 0), 0)
+                            const visible = showHiddenMsgs ? hhMessages : hhMessages.filter((m) => !hiddenMsgIds.has(m.id))
                             return (
-                              <div key={m.id} className={cn("flex", mine ? "justify-end" : "justify-start")}>
-                                <div
-                                  className={cn(
-                                    "max-w-[80%] rounded-lg px-3 py-2 text-xs space-y-1",
-                                    mine
-                                      ? "bg-indigo-500/10 text-foreground border border-indigo-500/20"
-                                      : "bg-muted/60 text-foreground border border-border/40"
-                                  )}
-                                >
-                                  <p className="whitespace-pre-wrap break-words">{m.text}</p>
-                                  <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground/80">
-                                    <span>
-                                      {m.createdAt
-                                        ? new Date(m.createdAt).toLocaleString("ru-RU", {
-                                            day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
-                                          })
-                                        : ""}
-                                    </span>
-                                    {mine && (
-                                      <span title={m.viewedByOpponent ? "прочитано" : "не прочитано"}>
-                                        {m.viewedByOpponent ? "✓✓" : "✓"}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
+                              <>
+                                {hiddenCount > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowHiddenMsgs((v) => !v)}
+                                    className="flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors mx-auto py-0.5"
+                                  >
+                                    {showHiddenMsgs ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                                    {showHiddenMsgs ? `Спрятать скрытые (${hiddenCount})` : `Показать скрытые (${hiddenCount})`}
+                                  </button>
+                                )}
+                                {visible.map((m) => {
+                                  const mine = m.authorType === "employer"
+                                  const isHidden = hiddenMsgIds.has(m.id)
+                                  return (
+                                    <div key={m.id} className={cn("flex group", mine ? "justify-end" : "justify-start", isHidden && "opacity-50")}>
+                                      <div
+                                        className={cn(
+                                          "max-w-[80%] rounded-lg px-3 py-2 text-xs space-y-1",
+                                          mine
+                                            ? "bg-indigo-500/10 text-foreground border border-indigo-500/20"
+                                            : "bg-muted/60 text-foreground border border-border/40"
+                                        )}
+                                      >
+                                        <p className="whitespace-pre-wrap break-words">{m.text}</p>
+                                        <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground/80">
+                                          <span>
+                                            {m.createdAt
+                                              ? new Date(m.createdAt).toLocaleString("ru-RU", {
+                                                  day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+                                                })
+                                              : ""}
+                                          </span>
+                                          <div className="flex items-center gap-1.5">
+                                            <button
+                                              type="button"
+                                              onClick={() => toggleHiddenMsg(m.id)}
+                                              title={isHidden ? "Вернуть в чат (у себя)" : "Скрыть у себя (у кандидата в hh останется)"}
+                                              className="opacity-0 group-hover:opacity-100 transition-opacity hover:text-foreground"
+                                            >
+                                              {isHidden ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                                            </button>
+                                            {mine && (
+                                              <span title={m.viewedByOpponent ? "прочитано" : "не прочитано"}>
+                                                {m.viewedByOpponent ? "✓✓" : "✓"}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </>
                             )
-                          })}
+                          })()}
                         </div>
                       )}
 
                       {/* Поле ввода при живом hh, иначе — плашка «не подключён» */}
                       {hhConnected ? (
                       <div className="pt-2 mt-1 border-t border-border/40 space-y-2">
+                        {/* «Поправка»: удалить сообщение в hh нельзя — отправляем корректирующее вдогонку */}
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="text-[10px] text-muted-foreground mr-0.5 inline-flex items-center gap-1">
+                            <Pencil className="w-3 h-3" /> Поправка:
+                          </span>
+                          {CORRECTION_TEMPLATES.map((t) => (
+                            <button
+                              key={t.label}
+                              type="button"
+                              disabled={hhSending}
+                              onClick={() => setHhDraft(t.text)}
+                              className="text-[10px] px-2 py-0.5 rounded-full border border-border/60 bg-muted/40 text-muted-foreground hover:text-foreground hover:border-border transition-colors disabled:opacity-50"
+                            >
+                              {t.label}
+                            </button>
+                          ))}
+                        </div>
                         <Textarea
                           value={hhDraft}
                           onChange={(e) => setHhDraft(e.target.value)}

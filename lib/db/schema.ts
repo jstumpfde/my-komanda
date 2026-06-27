@@ -253,6 +253,18 @@ export interface CompanyHiringDefaults {
   defaultProductProfileId?: string
   brandProductProfiles?: Record<string, ProductProfile[]>
   brandDefaultProductProfileIds?: Record<string, string>
+  // Резерв: срок хранения архивных записей до авто-перемещения в Корзину.
+  // Дефолт 5 месяцев. 0 = «никогда не удалять» (показываем предупреждение 152-ФЗ).
+  // После Корзины ещё ~1 месяц до авто-удаления (фикс). Cron talent-pool-cleanup.
+  reserveRetentionMonths?: number
+  // Страж исходящих: алерт в Telegram компании при проблемном сообщении (сырые
+  // переменные/пустое). Дефолт OFF — владелец компании включает сам; летит в её
+  // собственный бот (telegramBotToken/telegramChatId). Option 1, Юрий 27.06.
+  messageGuardAlert?: { enabled?: boolean }
+  // Страж исходящих: придержать подозрительное сообщение на проверку HR (вместо
+  // отправки). Дефолт OFF. При срабатывании — запись в held_messages + уведомление
+  // HR. Option 2, Юрий 27.06.
+  messageGuardHold?: { enabled?: boolean }
 }
 
 // ── CompanyLegalContact (drizzle/0177) ──
@@ -839,7 +851,7 @@ export const vacancies = pgTable("vacancies", {
   // Альтернативный текст Сообщения 1 для нерабочего времени (drizzle/0140).
   // Если кандидат откликнулся вне рабочих часов вакансии (canSendNow=false)
   // и off-hours включён — шлётся этот текст вместо основного, без Сообщений 2/3.
-  firstMessageOffHoursEnabled:      boolean("first_message_off_hours_enabled").notNull().default(false),
+  firstMessageOffHoursEnabled:      boolean("first_message_off_hours_enabled").notNull().default(true),
   firstMessageOffHoursDelaySeconds: integer("first_message_off_hours_delay_seconds").notNull().default(15),
   firstMessageOffHoursText:         text("first_message_off_hours_text"),
   // #15: AI чат-бот кандидатов.
@@ -881,10 +893,10 @@ export const vacancies = pgTable("vacancies", {
   // Логика — lib/schedule/can-send-now.ts.
   scheduleEnabled:            boolean("schedule_enabled").notNull().default(true),
   scheduleStart:              text("schedule_start").notNull().default("09:00"),
-  scheduleEnd:                text("schedule_end").notNull().default("19:30"),
+  scheduleEnd:                text("schedule_end").notNull().default("18:30"),
   scheduleTimezone:           text("schedule_timezone").notNull().default("Europe/Moscow"),
-  // 1=Пн ... 7=Вс. Default — Пн-Сб.
-  scheduleWorkingDays:        jsonb("schedule_working_days").$type<number[]>().notNull().default([1, 2, 3, 4, 5, 6]),
+  // 1=Пн ... 7=Вс. Default — Пн-Пт (рабочая неделя, решение Юрия 26.06).
+  scheduleWorkingDays:        jsonb("schedule_working_days").$type<number[]>().notNull().default([1, 2, 3, 4, 5]),
   // Идентификаторы из RU_HOLIDAYS — даты, в которые блокируется отправка.
   scheduleExcludedHolidayIds: jsonb("schedule_excluded_holiday_ids").$type<string[]>().notNull().default([
     "dec_31", "jan_1", "jan_2", "jan_3", "jan_4", "jan_5", "jan_6", "jan_7", "jan_8",
@@ -1177,6 +1189,9 @@ export const talentPoolEntries = pgTable("talent_pool_entries", {
   score:       integer("score").notNull().default(0),
   status:      text("status").notNull().default("cold"),  // cold|warming|hot|ideal
   createdAt:   timestamp("created_at").defaultNow(),
+  // Жизненный цикл (миграция 0228): «Не подходит» → archivedAt; Архив → Корзина → trashedAt.
+  archivedAt:  timestamp("archived_at"),
+  trashedAt:   timestamp("trashed_at"),
 })
 
 // ── Резерв (Talent Pool) → Формы (drizzle/0170) ──
@@ -2059,6 +2074,23 @@ export const notifications = pgTable("notifications", {
   href:       text("href"),                                 // ссылка для перехода
   isRead:     boolean("is_read").default(false),
   createdAt:  timestamp("created_at").defaultNow(),
+})
+
+// ─── Held Messages (страж исходящих, Option 2) ────────────────────────────────
+// Придержанные на проверку HR сообщения (миграция 0231). Когда у компании включён
+// messageGuardHold.enabled и страж нашёл серьёзную проблему — сообщение не уходит,
+// кладётся сюда, HR уведомляется и решает: отправить вручную / отклонить.
+export const heldMessages = pgTable("held_messages", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  companyId:    uuid("company_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  hhResponseId: text("hh_response_id"),
+  candidateId:  uuid("candidate_id").references(() => candidates.id, { onDelete: "set null" }),
+  messageText:  text("message_text").notNull(),
+  issues:       jsonb("issues").$type<string[]>().notNull().default([]),
+  source:       text("source"),
+  status:       text("status").notNull().default("held"), // held | sent | dismissed
+  createdAt:    timestamp("created_at").defaultNow().notNull(),
+  resolvedAt:   timestamp("resolved_at"),
 })
 
 // ─── Audit Log (ФЗ-152) ───────────────────────────────────────────────────────

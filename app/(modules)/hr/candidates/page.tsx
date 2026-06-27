@@ -57,6 +57,7 @@ interface GlobalCandidate {
   aiScore?: number | null
   resumeScore?: number | null
   rubricScore?: number | null
+  nameUncertain?: boolean
   testScore?: number | null
   testStatus?: "submitted" | "in_progress" | "opened" | "sent" | null
   nextInterviewAt?: string | null
@@ -114,6 +115,7 @@ function toListCandidate(c: GlobalCandidate): Candidate & { vacancyTitle: string
     aiScore: c.aiScore ?? undefined,
     resumeScore: c.resumeScore ?? null,
     rubricScore: c.rubricScore ?? null,
+    nameUncertain: c.nameUncertain === true,
     testScore: c.testScore ?? null,
     testStatus: c.testStatus ?? null,
     nextInterviewAt: c.nextInterviewAt ?? null,

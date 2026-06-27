@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { ArrowLeft, ShieldAlert, Loader2, X } from "lucide-react"
 import { useAuth } from "@/lib/auth"
 import { exitClientImpersonation } from "@/app/(partner)/partner/impersonation-actions"
+import { exitAdminImpersonation } from "@/app/(admin)/admin/admin-impersonation-actions"
 
 // Плавающий индикатор режима «Войти как клиент». Всплывает развёрнутым при входе,
 // через несколько секунд сворачивается в бок (торчит краешком-ярлыком справа).
@@ -40,7 +41,8 @@ export function ImpersonationBanner() {
     if (leaving) return
     setLeaving(true)
     try {
-      await exitClientImpersonation()
+      if (actingAs?.mode === "admin") await exitAdminImpersonation()
+      else await exitClientImpersonation()
       await updateSession({})
     } catch (e) {
       // NEXT_REDIRECT — штатный сигнал редиректа из server-action.

@@ -4,8 +4,7 @@
 // Хранение: vacancy.descriptionJson.funnelV2 (jsonb, без миграции).
 // Фаза 1 — КОНСТРУКТОР (настраиваешь и видишь); рантайм (исполнение) — позже.
 
-import { FOLLOWUP_PRESETS, type FollowUpPreset } from "@/lib/followup/presets"
-import { DEFAULT_FOLLOWUP_NOT_OPENED, DEFAULT_TEST_NOT_OPENED } from "@/lib/followup/default-messages"
+import { buildDozhimChain } from "./dozhim-templates"
 
 export type StageActionType =
   | "message"          // просто сообщение/касание
@@ -43,20 +42,37 @@ export const DOZHIM_LABEL: Record<DozhimPreset, string> = {
 /** Одно касание цепочки дожима — свой текст и через сколько дней слать. */
 export interface DozhimTouch { text: string; delayDays: number }
 
-// Маппинг пресета v2 → согласованный пресет дожима (lib/followup).
-const PRESET_MAP: Record<DozhimPreset, FollowUpPreset> = { off: "off", soft: "soft", standard: "standard", strong: "aggressive" }
-
-/** Цепочка касаний по пресету — РЕАЛЬНЫЕ согласованные тексты (lib/followup),
- *  с {{demo_link}}/{{test_link}}. Для тест-стадий — тексты по тесту. */
+/** Цепочка касаний ветки А («не открыл/не начал») — унифицированные шаблоны на
+ *  переменных, этап подставляется через STEP_WORDS (бриф Юрия 27.06,
+ *  lib/funnel-v2/dozhim-templates.ts). */
 export function dozhimChainFor(preset: DozhimPreset, action?: StageActionType): DozhimTouch[] {
-  const fp = FOLLOWUP_PRESETS[PRESET_MAP[preset]]
-  if (!fp || fp.messageIndexes.length === 0) return []
-  const texts = (action === "test" || action === "task") ? DEFAULT_TEST_NOT_OPENED : DEFAULT_FOLLOWUP_NOT_OPENED
-  return fp.messageIndexes.map((mi, i) => ({ text: texts[mi] ?? "", delayDays: fp.days[i] ?? i + 1 }))
+  return buildDozhimChain(action, preset, "A")
+}
+
+/** Цепочка касаний ветки Б («открыл, но не завершил») — для dozhimChainOpened.
+ *  Пустая для живых этапов (verb_done=null: interview/offer). */
+export function dozhimChainForOpened(preset: DozhimPreset, action?: StageActionType): DozhimTouch[] {
+  return buildDozhimChain(action, preset, "B")
 }
 
 /** Статусы hh/Avito (маппинг «вход в стадию → статус»). Сработает при рантайме. */
 export const STAGE_STATUSES = ["новый", "первичный контакт", "интервью", "тестовое задание", "оффер", "принят", "отказ"]
+
+/** Маппинг STAGE_STATUSES → действие hh-воронки (решение Юрия 26.06):
+ *   первичный контакт → invitation (phone_interview) · тестовое задание → assessment
+ *   интервью → interview · отказ → discard · остальные (новый/оффер/принят) → null (не менять).
+ *  null = текст уходит, но hh-папка кандидата не трогается. */
+export function hhActionForStatus(
+  status?: string | null,
+): "invitation" | "assessment" | "interview" | "discard" | null {
+  const t = (status ?? "").toLowerCase()
+  if (!t) return null
+  if (t.includes("отказ")) return "discard"
+  if (t.includes("тест")) return "assessment"
+  if (t.includes("интервью")) return "interview"
+  if (t.includes("первичн") || t.includes("контакт")) return "invitation"
+  return null
+}
 
 /** Правило прохода стадии. Решение (включён ли авто-отказ/приглашение, порог) —
  *  ВНУТРИ стадии; общие дефолты (задержка, шаблоны) — наследуются из библиотеки. */
@@ -87,7 +103,13 @@ export interface FunnelV2Stage {
   contentBlockId?: string | null  // подключённый блок из «Контента» (демо/тест)
   rule: StageRule
   dozhim: DozhimPreset
-  dozhimChain?: DozhimTouch[]      // редактируемая цепочка касаний (тексты)
+  // Две ветки дожима на стадию (решение Юрия 26.06):
+  //   dozhimChain        — «не открыл» (кандидат не открыл демо/тест стадии);
+  //   dozhimChainOpened  — «открыл, но не досмотрел/не заполнил» (переключается
+  //                        по событию открытия — switchV2BranchOpened).
+  // Если dozhimChainOpened пуст — после открытия ветка просто отменяется (как сейчас).
+  dozhimChain?: DozhimTouch[]
+  dozhimChainOpened?: DozhimTouch[]
   hhStatus?: string               // статус hh при входе в стадию
   reminders?: StageReminders      // только для стадий-встреч
 
@@ -133,6 +155,7 @@ export function makeStage(action: StageActionType, idSeed: string): FunnelV2Stag
     },
     dozhim: "standard",
     dozhimChain: dozhimChainFor("standard", action),
+    dozhimChainOpened: dozhimChainForOpened("standard", action),
     messagePresetId: null,
     contentBlockId: null,
   }

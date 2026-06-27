@@ -243,7 +243,7 @@ export function ListView({
   const showScore        = settings.showScore          // AI-оцен. (оценка анкеты)
   const showResumeScore  = settings.showResumeScore !== false  // AI-резм. (undefined = вкл)
   const showPortraitScore = settings.showPortraitScore !== false  // AI-Порт (undefined = вкл)
-  const showRubricScore  = settings.showRubricScore !== false  // Рубрика (по умолчанию вкл, как AI-резм)
+  const showRubricScore  = settings.showRubricScore === true  // Рубрика убрана из UI (консолидация на Портрет); код дремлет, по умолчанию скрыта
   const showTestScore    = settings.showTestScore !== false    // Тест (балл/статус; по умолчанию вкл)
   const showNextInterview = settings.showNextInterview !== false // Интервью (ближайшее; по умолчанию вкл)
   const showSalary       = settings.showSalary || settings.showSalaryFull
@@ -991,6 +991,13 @@ export function ListView({
                       <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" aria-label="Активен сейчас" />
                     )}
                     <span className="truncate">{candidate.name}</span>
+                    {candidate.nameUncertain && settings.showNameWarning !== false && (
+                      <span
+                        title="Имя под вопросом — бот напишет нейтрально («Здравствуйте»). Проверьте и при желании впишите имя вручную."
+                        aria-label="Имя под вопросом"
+                        className="shrink-0 text-[12px] text-amber-500 cursor-help"
+                      >⚠</span>
+                    )}
                   </p>
                   {settings.showExperience && (
                     <p

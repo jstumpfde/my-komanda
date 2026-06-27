@@ -14,6 +14,9 @@ export interface ActingAsPayload {
   integratorId: string
   realUserId: string
   issuedAt: number
+  // "partner" (по умолчанию) — вход партнёра в клиента; "admin" — вход
+  // платформ-админа в любую компанию (Юрий 27.06). Подписано HMAC.
+  mode?: "partner" | "admin"
 }
 
 function getSecret(): string {
@@ -79,6 +82,7 @@ export function verifyAndDecodeActingAs(raw: string | undefined | null): ActingA
         integratorId: obj.integratorId,
         realUserId: obj.realUserId,
         issuedAt: obj.issuedAt,
+        mode: obj.mode === "admin" ? "admin" : "partner",
       }
     }
     return null

@@ -57,7 +57,7 @@ declare module "next-auth" {
       // Реальная компания-партнёр (когда companyId подменён на клиентскую).
       realCompanyId?: string | null
       // Активная impersonation-сессия (null/undefined = обычный режим).
-      actingAs?: { clientCompanyId: string; clientName: string } | null
+      actingAs?: { clientCompanyId: string; clientName: string; mode?: "partner" | "admin" } | null
       // Эффективная роль при impersonation = "director" (полный доступ как клиент).
       effectiveRole?: UserRole
     }
@@ -214,7 +214,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // только в session. Любая осечка валидации (подпись/БД/владение) →
       // getActingAs() вернёт null и acting-as НЕ применяется (companyId
       // остаётся партнёрским) — fail-safe.
-      if (token.role === "partner") {
+      if (token.role === "partner" || token.role === "platform_admin" || token.role === "admin") {
         const acting = await getActingAs()
         // Сверка: кука принадлежит ИМЕННО текущему пользователю сессии
         // (defense-in-depth против реплея украденной чужой acting-as куки).
@@ -224,6 +224,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           session.user.actingAs = {
             clientCompanyId: acting.clientCompanyId,
             clientName: acting.clientName,
+            mode: acting.mode,
           }
           session.user.effectiveRole = "director"
         }

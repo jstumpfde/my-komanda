@@ -47,7 +47,7 @@ interface AuthContextValue {
   // null = обычный режим. Сайдбар/секции используют effectiveRole ?? role.
   effectiveRole: UserRole | null
   // Активная impersonation-сессия партнёра (плашка возврата).
-  actingAs: { clientCompanyId: string; clientName: string } | null
+  actingAs: { clientCompanyId: string; clientName: string; mode?: "partner" | "admin" } | null
   isLoggedIn: boolean
   isViewingAs: boolean
   setRole: (role: UserRole) => void

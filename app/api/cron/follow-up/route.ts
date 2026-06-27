@@ -293,12 +293,15 @@ async function processOneTouch(
     // ложился вторым/третьим сообщением поверх уже отправленного сегодня.
     // Если сегодня уже что-то ушло — оставляем pending (status/scheduled_at
     // НЕ трогаем), следующий день подберёт.
+    // Считаем 'sent' И 'sending' (в полёте у параллельного прохода) — иначе при
+    // наложении cron-прогонов второе касание не видит ещё-неоконченное первое и
+    // оба уходят в один день (флуд 08.06.2026). Включение 'sending' закрывает гонку.
     const [sentToday] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(followUpMessages)
       .where(and(
         eq(followUpMessages.candidateId, msg.candidateId),
-        eq(followUpMessages.status, "sent"),
+        inArray(followUpMessages.status, ["sent", "sending"]),
         gte(followUpMessages.sentAt, startOfTodayMsk()),
       ))
     if ((sentToday?.count ?? 0) > 0) {

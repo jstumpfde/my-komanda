@@ -7,6 +7,7 @@ import { isShortId } from "@/lib/short-id"
 import { buildCandidateDeepLink, generateInviteToken } from "@/lib/telegram/candidate-bot"
 import { normalizeFunnelV2 } from "@/lib/funnel-v2/types"
 import { resolveCurrentStageContent } from "@/lib/funnel-v2/resolve-content"
+import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
 
 // Достаём first/last/city из hh resume. У части записей raw_data — это сам
 // resume, у других обёрнут в { resume: ... }. Альтернативные ключи
@@ -127,7 +128,7 @@ export async function GET(
         if (currentStage.action === "test" || currentStage.action === "task") {
           // Редирект на /test/<token> — там кандидат и должен быть сейчас.
           const { NextResponse } = await import("next/server")
-          return NextResponse.redirect(`https://company24.pro/test/${token}`, { status: 302 })
+          return NextResponse.redirect(`${getAppBaseUrl()}/test/${token}`, { status: 302 })
         }
         // Любая другая стадия (interview, offer, hired и т.д.) — мягкий 410.
         return apiError(

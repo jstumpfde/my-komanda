@@ -56,6 +56,8 @@ export interface ApiCandidate {
   resumeScore?: number | null
   // Рубричный движок (shadow). Считается параллельно, для ранжирования/сравнения.
   rubricScore?: number | null
+  // Имя «под вопросом» — резолвер уйдёт в нейтральное «Здравствуйте». HR проверяет.
+  nameUncertain?: boolean
   // Группа 25: A/B сравнение v1 vs v2 (см. CandidateScoreV2 в schema.ts).
   aiScoreV1?: number | null
   aiScoreV2?: number | null

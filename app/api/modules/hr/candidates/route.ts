@@ -6,6 +6,7 @@ import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { generateCandidateToken } from "@/lib/candidate-tokens"
 import { generateCandidateShortId } from "@/lib/short-id"
 import { deriveCandidateName } from "@/lib/candidate-name"
+import { resolveGivenNameMeta } from "@/lib/messaging/candidate-name"
 
 type SortKey =
   | "favorite"
@@ -430,6 +431,7 @@ export async function GET(req: NextRequest) {
           hhCandidateName: hhResponses.candidateName,
           photoUrl: candidates.photoUrl,
           testInviteSentAt: candidates.testInviteSentAt,
+          firstNameOverride: candidates.firstNameOverride,
         })
         .from(candidates)
         .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
@@ -595,12 +597,18 @@ export async function GET(req: NextRequest) {
         }
         const testScore = test?.score ?? null
 
-        // Strip demoProgressJson + anketaAnswers + hhCandidateName — не нужны клиенту
-        const { demoProgressJson: _drop1, anketaAnswers: _drop2, hhCandidateName: _drop3, ...rest } = r
-        void _drop1; void _drop2; void _drop3
+        // Имя «под вопросом»: тот же резолвер, что и при отправке ({{name}}).
+        // confident=false → бот уйдёт в нейтральное «Здравствуйте» (фамилия/аноним/
+        // редкое имя) → HR стоит проверить и при желании вписать вручную.
+        const nameUncertain = !resolveGivenNameMeta({ override: r.firstNameOverride, fullName: r.name }).confident
+
+        // Strip служебные поля — не нужны клиенту
+        const { demoProgressJson: _drop1, anketaAnswers: _drop2, hhCandidateName: _drop3, firstNameOverride: _drop4, ...rest } = r
+        void _drop1; void _drop2; void _drop3; void _drop4
         return {
           ...rest,
           name: displayName,
+          nameUncertain,
           demoTotalBlocks,
           demoCompletedBlocks,
           progressPercent,
@@ -1110,10 +1118,13 @@ export async function GET(req: NextRequest) {
       const isActive = r.lastActivityAt != null
         && (Date.now() - new Date(r.lastActivityAt).getTime()) <= ACTIVE_THRESHOLD_MS
 
+      const nameUncertain = !resolveGivenNameMeta({ override: r.firstNameOverride, fullName: r.name }).confident
+
       return {
         ...r,
         birthDate: effectiveBirthDate,
         name: deriveCandidateName(r.name, r.anketaAnswers, hhNameByCandidateId.get(r.id) ?? null),
+        nameUncertain,
         demoTotalBlocks,
         demoCompletedBlocks,
         progressPercent,

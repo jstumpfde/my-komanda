@@ -71,7 +71,7 @@ const DEFAULT_WORKING_DAYS: number[] = [1, 2, 3, 4, 5]
 const DEFAULT_EXCLUDED_HOLIDAY_IDS: string[] = RU_HOLIDAYS.map((h) => h.id)
 const DEFAULTS = {
   start:    "09:00",
-  end:      "19:55",
+  end:      "18:30",
   timezone: "Europe/Moscow",
 }
 
@@ -191,10 +191,10 @@ export interface AdjustResult {
 const WEEKDAY_MAP: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 }
 
 // Дефолтное окно для случая, когда у вакансии scheduleEnabled=false.
-// Совпадает с продуктовым требованием Сессии 4 (09:00–20:00 МСК, Пн-Пт).
+// Рабочее окно по умолчанию: 09:00–18:30 МСК, Пн-Пт (решение Юрия 26.06).
 const FALLBACK_DEFAULTS = {
   start:    "09:00",
-  end:      "20:00",
+  end:      "18:30",
   timezone: "Europe/Moscow",
 }
 

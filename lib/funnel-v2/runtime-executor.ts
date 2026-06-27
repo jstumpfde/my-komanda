@@ -18,9 +18,9 @@ import {
   hhResponses,
 } from "@/lib/db/schema"
 import type { FunnelV2Stage } from "@/lib/funnel-v2/types"
-import { dozhimChainFor } from "@/lib/funnel-v2/types"
+import { dozhimChainFor, hhActionForStatus, normalizeFunnelV2 } from "@/lib/funnel-v2/types"
 import { getValidToken } from "@/lib/hh-helpers"
-import { changeNegotiationState } from "@/lib/hh-api"
+import { changeNegotiationState, sendNegotiationMessage } from "@/lib/hh-api"
 import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
 import { startPrequalification } from "@/lib/prequalification/start"
 import { renderTemplate } from "@/lib/template-renderer"
@@ -80,6 +80,7 @@ async function sendHhMessageToCandidate(
   candidateId: string,
   companyId: string,
   text: string,
+  hhStatus?: string | null,
 ): Promise<boolean> {
   try {
     const [hhRow] = await db
@@ -93,12 +94,14 @@ async function sendHhMessageToCandidate(
     if (!tokenResult) return false
 
     try {
-      await changeNegotiationState(
-        tokenResult.accessToken,
-        hhRow.hhResponseId,
-        "invitation",
-        text,
-      )
+      // hhStatus стадии → действие hh-воронки (первичный контакт/тест/интервью/отказ).
+      // null = «не менять»: текст уходит, hh-папка не трогается.
+      const action = hhActionForStatus(hhStatus)
+      if (action) {
+        await changeNegotiationState(tokenResult.accessToken, hhRow.hhResponseId, action, text, undefined, undefined, companyId)
+      } else {
+        await sendNegotiationMessage(tokenResult.accessToken, hhRow.hhResponseId, text, companyId)
+      }
       return true
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -124,13 +127,18 @@ async function scheduleV2Dozhim(
   candidate: CandidateForExecutor,
   vacancy: VacancyForExecutor,
   stage: FunnelV2Stage,
+  // Ветка дожима. По умолчанию — «не открыл» (dozhimChain, branch=funnelv2:<id>).
+  // Для ветки «открыл-не-досмотрел» передаём { chain: dozhimChainOpened, branchSuffix: ":opened" }.
+  opts?: { chain?: import("@/lib/funnel-v2/types").DozhimTouch[]; branchSuffix?: string },
 ): Promise<void> {
   if (stage.dozhim === "off") return
 
-  // Цепочка касаний из доzhimChain или по пресету
-  const chain = (stage.dozhimChain && stage.dozhimChain.length > 0)
-    ? stage.dozhimChain
-    : dozhimChainFor(stage.dozhim, stage.action)
+  // Цепочка касаний: явная (ветка «открыл») ИЛИ dozhimChain (ветка «не открыл») ИЛИ пресет.
+  const chain = (opts?.chain && opts.chain.length > 0)
+    ? opts.chain
+    : (stage.dozhimChain && stage.dozhimChain.length > 0)
+      ? stage.dozhimChain
+      : dozhimChainFor(stage.dozhim, stage.action)
 
   if (chain.length === 0) return
 
@@ -194,7 +202,7 @@ async function scheduleV2Dozhim(
   }
 
   const now = new Date()
-  const branch = `funnelv2:${stage.id}` as string
+  const branch = `funnelv2:${stage.id}${opts?.branchSuffix ?? ""}` as string
 
   // Проверяем дедуп: уже есть pending-касания с этим branch?
   const { isNull: drizzleIsNull, inArray } = await import("drizzle-orm")
@@ -215,6 +223,10 @@ async function scheduleV2Dozhim(
     return
   }
 
+  // Имя для {{name}} — безопасный резолвер (не наивный split, иначе кандидату
+  // уходит ФАМИЛИЯ или «Аноним»; см. lib/messaging/candidate-name.ts).
+  const { firstName } = await getCandidateFirstName(candidate.id)
+
   // Формируем касания по цепочке
   const touches = chain.map((touch, idx) => {
     const delayMs = touch.delayDays * 24 * 60 * 60 * 1000
@@ -223,7 +235,7 @@ async function scheduleV2Dozhim(
     const tokenForUrl = candidate.token
     const demoUrl = `${getAppBaseUrl()}/demo/${tokenForUrl}`
     const messageText = renderTemplate(touch.text, {
-      name:      candidate.name.split(" ")[0] || candidate.name,
+      name:      firstName,
       demo_link: demoUrl,
       vacancy:   vacancy.title || "",
     })
@@ -290,7 +302,7 @@ export async function executeStageEntry(
             { name: firstName, vacancy: vacancy.title ?? "" },
           )
 
-      const sent = await sendHhMessageToCandidate(candidate.id, companyId, text)
+      const sent = await sendHhMessageToCandidate(candidate.id, companyId, text, stage.hhStatus)
       if (!sent) {
         console.warn("[funnel-v2/executor] message не отправлено", {
           candidateId: candidate.id, stageId: stage.id,
@@ -328,7 +340,7 @@ export async function executeStageEntry(
         ? inviteText
         : inviteText + "\n\n" + demoUrl
 
-      const sent = await sendHhMessageToCandidate(candidate.id, companyId, finalText)
+      const sent = await sendHhMessageToCandidate(candidate.id, companyId, finalText, stage.hhStatus)
       if (!sent) {
         console.warn("[funnel-v2/executor] demo-ссылка не отправлена", {
           candidateId: candidate.id, stageId: stage.id, demoUrl,
@@ -388,7 +400,7 @@ export async function executeStageEntry(
         ? testText
         : testText + "\n\n" + testUrl
 
-      const sent = await sendHhMessageToCandidate(candidate.id, companyId, finalTestText)
+      const sent = await sendHhMessageToCandidate(candidate.id, companyId, finalTestText, stage.hhStatus)
       if (!sent) {
         console.warn("[funnel-v2/executor] test-ссылка не отправлена", {
           candidateId: candidate.id, stageId: stage.id, testUrl,
@@ -432,7 +444,7 @@ export async function executeStageEntry(
           )
       void hasSelfLink
 
-      const sentInterview = await sendHhMessageToCandidate(candidate.id, companyId, interviewText)
+      const sentInterview = await sendHhMessageToCandidate(candidate.id, companyId, interviewText, stage.hhStatus)
       if (!sentInterview) {
         console.warn("[funnel-v2/executor] интервью-приглашение не отправлено", {
           candidateId: candidate.id, stageId: stage.id,
@@ -460,7 +472,7 @@ export async function executeStageEntry(
             { name: firstName, vacancy: vacancy.title ?? "" },
           )
 
-      const sentOffer = await sendHhMessageToCandidate(candidate.id, companyId, offerText)
+      const sentOffer = await sendHhMessageToCandidate(candidate.id, companyId, offerText, stage.hhStatus)
       if (!sentOffer) {
         console.warn("[funnel-v2/executor] оффер не отправлен", {
           candidateId: candidate.id, stageId: stage.id,
@@ -537,4 +549,102 @@ export async function executeStageEntry(
   }))
 
   return result
+}
+
+/**
+ * Переключение ветки дожима v2 при ОТКРЫТИИ демо/теста кандидатом.
+ * Аналог legacy switchToBranchOpened, но для v2-веток (branch=funnelv2:<stageId>).
+ *
+ * Когда кандидат открывает /demo/<token>, касания ветки «не открыл» (текст
+ * «откройте демо») больше не актуальны. Отменяем pending-касания
+ * branch=`funnelv2:<stageId>` и, если у текущей стадии задана dozhimChainOpened,
+ * планируем ветку «открыл, но не досмотрел» (branch=`funnelv2:<stageId>:opened`)
+ * от текущего момента. Если dozhimChainOpened пуст — просто отменяем ветку А.
+ *
+ * Дёргается из app/api/public/demo/[token]/visit (рядом с legacy switchToBranchOpened),
+ * только для кандидатов на v2 (funnelV2StateJson != null).
+ */
+export async function switchV2BranchOpened(candidateId: string): Promise<{
+  switched: boolean
+  cancelled: number
+  scheduledOpened: number
+  reason?: string
+}> {
+  const [cand] = await db
+    .select({
+      id:                candidates.id,
+      token:             candidates.token,
+      name:              candidates.name,
+      email:             candidates.email,
+      phone:             candidates.phone,
+      vacancyId:         candidates.vacancyId,
+      funnelV2StateJson: candidates.funnelV2StateJson,
+    })
+    .from(candidates)
+    .where(eq(candidates.id, candidateId))
+    .limit(1)
+  if (!cand) return { switched: false, cancelled: 0, scheduledOpened: 0, reason: "candidate_not_found" }
+
+  const state = cand.funnelV2StateJson as FunnelV2State | null
+  if (!state?.stageId) return { switched: false, cancelled: 0, scheduledOpened: 0, reason: "not_on_v2" }
+
+  const [vac] = await db
+    .select({ title: vacancies.title, descriptionJson: vacancies.descriptionJson })
+    .from(vacancies)
+    .where(eq(vacancies.id, cand.vacancyId))
+    .limit(1)
+  if (!vac) return { switched: false, cancelled: 0, scheduledOpened: 0, reason: "vacancy_not_found" }
+
+  const descJson = vac.descriptionJson as { funnelV2?: unknown } | null
+  const funnelV2 = normalizeFunnelV2(descJson?.funnelV2)
+  const stage = funnelV2.stages.find(s => s.id === state.stageId)
+  if (!stage) return { switched: false, cancelled: 0, scheduledOpened: 0, reason: "stage_not_found" }
+
+  // Шаг 1: отменить ветку «не открыл» (branch=funnelv2:<stageId>, БЕЗ суффикса).
+  const cancelled = await db
+    .update(followUpMessages)
+    .set({ status: "cancelled", errorMessage: "v2_branch_switched" })
+    .where(and(
+      eq(followUpMessages.candidateId, candidateId),
+      eq(followUpMessages.branch, `funnelv2:${stage.id}`),
+      eq(followUpMessages.status, "pending"),
+    ))
+    .returning({ id: followUpMessages.id })
+
+  // Шаг 2: если есть ветка «открыл-не-досмотрел» — запланировать её от текущего момента.
+  let scheduledOpened = 0
+  if (stage.dozhimChainOpened && stage.dozhimChainOpened.length > 0) {
+    const candidateForExec: CandidateForExecutor = {
+      id: cand.id, token: cand.token, name: cand.name,
+      email: cand.email, phone: cand.phone, vacancyId: cand.vacancyId,
+      funnelV2StateJson: state,
+    }
+    const vacancyForExec = { id: cand.vacancyId, title: vac.title } as unknown as VacancyForExecutor
+    const before = await db
+      .select({ id: followUpMessages.id })
+      .from(followUpMessages)
+      .where(and(
+        eq(followUpMessages.candidateId, candidateId),
+        eq(followUpMessages.branch, `funnelv2:${stage.id}:opened`),
+        eq(followUpMessages.status, "pending"),
+      ))
+    await scheduleV2Dozhim(candidateForExec, vacancyForExec, stage, {
+      chain: stage.dozhimChainOpened,
+      branchSuffix: ":opened",
+    })
+    const after = await db
+      .select({ id: followUpMessages.id })
+      .from(followUpMessages)
+      .where(and(
+        eq(followUpMessages.candidateId, candidateId),
+        eq(followUpMessages.branch, `funnelv2:${stage.id}:opened`),
+        eq(followUpMessages.status, "pending"),
+      ))
+    scheduledOpened = Math.max(0, after.length - before.length)
+  }
+
+  console.log("[funnel-v2/branch-switch]", JSON.stringify({
+    candidateId, stageId: stage.id, cancelled: cancelled.length, scheduledOpened,
+  }))
+  return { switched: true, cancelled: cancelled.length, scheduledOpened }
 }

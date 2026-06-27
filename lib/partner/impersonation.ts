@@ -34,6 +34,7 @@ export interface ActingAsResolved {
   integratorId: string
   realUserId: string
   clientName: string
+  mode: "partner" | "admin"
 }
 
 // Читает куку, проверяет подпись, ПОТОМ перепроверяет владение в БД.
@@ -54,6 +55,28 @@ export async function getActingAs(): Promise<ActingAsResolved | null> {
   if (!payload) return null
 
   try {
+    // Режим ПЛАТФОРМ-АДМИНА: вход в ЛЮБУЮ компанию (Юрий 27.06). На каждом запросе
+    // перепроверяем, что реальный пользователь — платформ-админ, и компания есть.
+    if (payload.mode === "admin") {
+      const [adm] = await db
+        .select({ role: users.role, email: users.email })
+        .from(users)
+        .where(eq(users.id, payload.realUserId))
+        .limit(1)
+      const whitelist = (process.env.PLATFORM_ADMIN_EMAILS ?? "")
+        .split(",").map(s => s.trim().toLowerCase()).filter(Boolean)
+      const isAdmin = !!adm && (adm.role === "platform_admin" || adm.role === "admin" ||
+        (!!adm.email && whitelist.includes(adm.email.toLowerCase())))
+      if (!isAdmin) return null
+      const [company] = await db
+        .select({ name: companies.name })
+        .from(companies)
+        .where(eq(companies.id, payload.clientCompanyId))
+        .limit(1)
+      if (!company) return null
+      return { clientCompanyId: payload.clientCompanyId, integratorId: "", realUserId: payload.realUserId, clientName: company.name, mode: "admin" }
+    }
+
     // 1) Пользователь существует и роль 'partner'.
     const [user] = await db
       .select({ id: users.id, role: users.role })
@@ -95,6 +118,7 @@ export async function getActingAs(): Promise<ActingAsResolved | null> {
       integratorId: payload.integratorId,
       realUserId: payload.realUserId,
       clientName: company.name,
+      mode: "partner",
     }
   } catch {
     // БД-осечка → не применяем impersonation.

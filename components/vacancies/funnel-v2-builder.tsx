@@ -20,7 +20,7 @@ import {
   GripVertical, Trash2, Plus, Loader2, Target, ExternalLink, ChevronRight,
   ClipboardList, PlayCircle, ListChecks, ClipboardCheck, Calendar, FileText,
   ShieldCheck, Phone, MessageSquare, CircleCheck, Check, Link2, Route, Repeat, X,
-  Maximize2, Minimize2,
+  Maximize2, Minimize2, Eye, AlertTriangle,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -37,10 +37,36 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
   STAGE_ACTIONS, DOZHIM_LABEL, STAGE_STATUSES, makeStage, emptyFunnelV2,
-  normalizeFunnelV2, dozhimChainFor,
+  normalizeFunnelV2, dozhimChainFor, dozhimChainForOpened,
   type FunnelV2Config, type FunnelV2Stage, type StageActionType,
   type DozhimPreset, type InterviewMode, type DozhimTouch,
 } from "@/lib/funnel-v2/types"
+import { renderTemplate } from "@/lib/template-renderer"
+import { guardOutgoingMessage } from "@/lib/messaging/outgoing-guard"
+
+// Предпросмотр: тестовые данные для подстановки переменных (как увидит кандидат).
+const PREVIEW_VARS: Record<string, string> = {
+  name: "Иван", vacancy: "Менеджер по продажам", company: "Company24",
+  demo_link: "https://company24.pro/demo/пример",
+  test_link: "https://company24.pro/test/пример",
+}
+interface PreviewRow { stage: string; kind: string; text: string; issues: string[] }
+function buildFunnelPreview(stages: FunnelV2Stage[]): PreviewRow[] {
+  const rows: PreviewRow[] = []
+  const add = (stage: string, kind: string, raw: string) => {
+    if (!raw || !raw.trim()) return
+    const g = guardOutgoingMessage(renderTemplate(raw, PREVIEW_VARS))
+    rows.push({ stage, kind, text: g.text, issues: g.issues })
+  }
+  for (let i = 0; i < stages.length; i++) {
+    const s = stages[i]
+    const label = `Стадия ${i + 2} · ${s.title?.trim() || (STAGE_ACTIONS.find(a => a.type === s.action)?.label ?? s.action)}`
+    if (s.messagePresetId) add(label, "Сообщение", s.messagePresetId)
+    ;(s.dozhimChain ?? []).forEach((t, j) => add(label, `Дожим «не открыл» №${j + 1}`, t.text))
+    ;(s.dozhimChainOpened ?? []).forEach((t, j) => add(label, `Дожим «не завершил» №${j + 1}`, t.text))
+  }
+  return rows
+}
 
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   "clipboard-list": ClipboardList, "player-play": PlayCircle, "list-check": ListChecks,
@@ -137,6 +163,9 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose }: {
   const patch = (p: Partial<FunnelV2Stage>) => onChange({ ...stage, ...p })
   const patchRule = (p: Partial<FunnelV2Stage["rule"]>) => onChange({ ...stage, rule: { ...stage.rule, ...p } })
   const setChain = (next: DozhimTouch[]) => onChange({ ...stage, dozhimChain: next })
+  // Ветка Б — «открыл, но не досмотрел» (переключается при открытии демо/теста).
+  const chainOpened: DozhimTouch[] = stage.dozhimChainOpened ?? dozhimChainForOpened(stage.dozhim, stage.action)
+  const setChainOpened = (next: DozhimTouch[]) => onChange({ ...stage, dozhimChainOpened: next })
 
   // «куда зовёт»: следующая стадия + остальные стадии (ветвление). Номер = реальный индекс.
   const advanceOptions = [
@@ -248,12 +277,12 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose }: {
           {/* Дожим — цепочка касаний */}
           <section className="space-y-2 border-t pt-4">
             <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium flex items-center gap-1.5"><Repeat className="w-4 h-4" /> Дожим — цепочка касаний</Label>
+              <Label className="text-sm font-medium flex items-center gap-1.5"><Repeat className="w-4 h-4" /> Дожим · ветка «не открыл»</Label>
               <button onClick={() => setChain([...chain, { text: "", delayDays: 1 }])} className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-0.5"><Plus className="w-3 h-3" /> касание</button>
             </div>
             <div className="flex gap-1">
               {DOZHIM_OPTS.map(d => (
-                <button key={d} type="button" onClick={() => onChange({ ...stage, dozhim: d, dozhimChain: dozhimChainFor(d, stage.action) })}
+                <button key={d} type="button" onClick={() => onChange({ ...stage, dozhim: d, dozhimChain: dozhimChainFor(d, stage.action), dozhimChainOpened: dozhimChainForOpened(d, stage.action) })}
                   className={cn("text-[11px] px-2 py-1 rounded-md border flex-1", stage.dozhim === d ? "bg-blue-500/10 border-blue-400 text-blue-700 dark:text-blue-300 font-medium" : "border-border text-muted-foreground hover:bg-muted/50")}>{DOZHIM_LABEL[d]}</button>
               ))}
             </div>
@@ -268,6 +297,26 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose }: {
                   <button onClick={() => setChain(chain.filter((_, idx) => idx !== i))} className="ml-auto text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
                 </div>
                 <Textarea value={t.text} onChange={e => setChain(chain.map((x, idx) => idx === i ? { ...x, text: e.target.value } : x))} placeholder="Текст касания…" className="min-h-[110px] text-base md:text-base" />
+              </div>
+            ))}
+          </section>
+
+          {/* Дожим — ветка «открыл, но не досмотрел» (опционально) */}
+          <section className="space-y-2 border-t pt-4">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium flex items-center gap-1.5"><Repeat className="w-4 h-4" /> Дожим · ветка «открыл, не досмотрел»</Label>
+              <button onClick={() => setChainOpened([...chainOpened, { text: "", delayDays: 1 }])} className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-0.5"><Plus className="w-3 h-3" /> касание</button>
+            </div>
+            <p className="text-[11px] text-muted-foreground/70">Включается, когда кандидат открыл демо/тест, но не дошёл до конца — заменяет ветку «не открыл». Пусто = после открытия дожим просто прекращается.</p>
+            {chainOpened.map((t, i) => (
+              <div key={i} className="rounded-md border p-2 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-muted-foreground">Касание {i + 1} · через</span>
+                  <Input type="number" value={t.delayDays} onChange={e => setChainOpened(chainOpened.map((x, idx) => idx === i ? { ...x, delayDays: Math.max(0, Number(e.target.value) || 0) } : x))} className="w-16 h-12 text-base" />
+                  <span className="text-[11px] text-muted-foreground">дн.</span>
+                  <button onClick={() => setChainOpened(chainOpened.filter((_, idx) => idx !== i))} className="ml-auto text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
+                </div>
+                <Textarea value={t.text} onChange={e => setChainOpened(chainOpened.map((x, idx) => idx === i ? { ...x, text: e.target.value } : x))} placeholder="Текст касания (для тех, кто открыл, но не досмотрел)…" className="min-h-[110px] text-base md:text-base" />
               </div>
             ))}
           </section>
@@ -359,6 +408,9 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait }: { vacancyId: stri
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle")
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }))
+
+  // Предпросмотр сообщений «как видит кандидат» (client-side, через страж)
+  const [previewOpen, setPreviewOpen] = useState(false)
 
   // Сухой прогон воронки (read-only диагностика — без записи в БД)
   const [simOpen, setSimOpen] = useState(false)
@@ -457,6 +509,11 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait }: { vacancyId: stri
             {saveState === "saving" ? <span className="inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> сохранение…</span>
               : saveState === "saved" ? <span className="inline-flex items-center gap-1 text-emerald-600"><Check className="w-3 h-3" /> сохранено</span> : null}
           </span>
+          <button type="button" onClick={() => setPreviewOpen(true)} disabled={stages.length === 0}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs hover:bg-muted/50 disabled:opacity-40 transition-colors"
+            title="Предпросмотр: как сообщения увидит кандидат (на тестовых данных), с проверкой стража">
+            <Eye className="w-3.5 h-3.5 text-primary" /> Предпросмотр
+          </button>
           <button type="button" onClick={runSim} disabled={stages.length === 0}
             className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs hover:bg-muted/50 disabled:opacity-40 transition-colors"
             title="Сухой прогон: пройти воронку тест-кандидатом без записи в БД">
@@ -492,6 +549,36 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait }: { vacancyId: stri
       {stages.length === 0 && <p className="text-xs text-muted-foreground text-center pt-1">Стадия 1 (Портрет) уже есть. Добавьте следующие — приветствие, демо, тест, интервью, оффер…</p>}
 
       <StageSheet stage={editing} index={editingIndex} allStages={stages} content={content} onChange={changeStage} onClose={() => setEditingId(null)} />
+
+      <Sheet open={previewOpen} onOpenChange={setPreviewOpen}>
+        <SheetContent className="w-full sm:max-w-2xl p-0 flex flex-col gap-0">
+          <SheetHeader className="px-5 py-4 border-b">
+            <SheetTitle className="flex items-center gap-2"><Eye className="w-4 h-4 text-primary" /> Предпросмотр сообщений</SheetTitle>
+          </SheetHeader>
+          <SheetBody className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+            <p className="text-[11px] text-muted-foreground">Как сообщения увидит кандидат — на тестовых данных (Иван / «Менеджер по продажам» / пример-ссылка). Каждое прогнано через стража: ⚠ значит что-то не подставилось или текст битый.</p>
+            {(() => {
+              const rows = buildFunnelPreview(stages)
+              if (rows.length === 0) return <p className="text-sm text-muted-foreground py-6 text-center">Нет текстов сообщений в стадиях.</p>
+              const withIssues = rows.filter(r => r.issues.length > 0).length
+              return (<>
+                <div className={cn("text-xs rounded-md px-2.5 py-1.5", withIssues > 0 ? "bg-amber-500/10 text-amber-700 dark:text-amber-400" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400")}>
+                  {withIssues > 0 ? `⚠ Найдено проблем: ${withIssues} из ${rows.length} сообщений` : `✓ Все ${rows.length} сообщений корректны`}
+                </div>
+                {rows.map((r, i) => (
+                  <div key={i} className={cn("rounded-md border p-2.5", r.issues.length > 0 && "border-amber-400/60 bg-amber-500/5")}>
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className="text-[10px] text-muted-foreground">{r.stage} · {r.kind}</span>
+                      {r.issues.length > 0 && <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400"><AlertTriangle className="w-3 h-3" /> {r.issues.join("; ")}</span>}
+                    </div>
+                    <p className="text-sm whitespace-pre-wrap break-words">{r.text || <span className="text-muted-foreground italic">(пусто после чистки — не отправится)</span>}</p>
+                  </div>
+                ))}
+              </>)
+            })()}
+          </SheetBody>
+        </SheetContent>
+      </Sheet>
 
       <Sheet open={simOpen} onOpenChange={setSimOpen}>
         <SheetContent className="w-full sm:max-w-xl">

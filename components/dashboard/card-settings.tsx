@@ -27,6 +27,7 @@ export interface CardDisplaySettings {
   showActions: boolean
   showProgress?: boolean
   showResponseDate?: boolean
+  showNameWarning?: boolean   // бэйдж ⚠ «имя под вопросом» у имени; undefined = показывать
 }
 
 // ЕДИНЫЙ реестр тумблеров колонок СПИСКА кандидатов — источник правды для панели
@@ -39,7 +40,7 @@ export const CANDIDATE_COLUMN_TOGGLES: Array<{ key: keyof CardDisplaySettings; l
   { key: "showResumeScore",  label: "AI резюме" },
   { key: "showPortraitScore", label: "AI-Портрет" },
   { key: "showScore",        label: "AI оценка" },
-  { key: "showRubricScore",  label: "Рубрика" },
+  // «Рубрика» (shadow-движок) убрана из UI — консолидация скоринга на Портрет (26.06).
   { key: "showTestScore",    label: "Тест" },
   { key: "showNextInterview", label: "Интервью" },
   { key: "showSalaryFull",   label: "Зарплата" },

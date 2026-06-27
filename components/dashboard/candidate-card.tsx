@@ -37,6 +37,9 @@ export interface Candidate {
   aiScoreV2?: number | null
   // Рубричный балл (новый shadow-движок).
   rubricScore?: number | null
+  // Имя «под вопросом» — резолвер уйдёт в нейтральное «Здравствуйте» (фамилия/аноним/
+  // редкое имя). HR стоит проверить и при желании вписать имя вручную.
+  nameUncertain?: boolean
   interviewDate?: Date
   interviewTime?: string
   // Ближайшее запланированное интервью (ISO) — для колонки в списке.

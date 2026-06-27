@@ -195,6 +195,9 @@ export default auth(async (req) => {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico).*)",
+    // Исключаем статику Next + ЛЮБЫЕ публичные файлы с расширением (png/svg/css/…),
+    // иначе middleware редиректит их на /login (302) и они не грузятся —
+    // напр. /nancy-avatar.png показывался пустым кружком (Юрий 27.06).
+    "/((?!_next/static|_next/image|favicon.ico|.*\.(?:png|jpe?g|gif|svg|webp|ico|css|js|mp4|webm|woff2?|ttf|otf|pdf|txt|xml|json|map)).*)",
   ],
 }

@@ -14,6 +14,7 @@ import {
   normalizeFunnelConfig,
 } from "@/lib/funnel-builder/blocks"
 import { buildDefaultAnketaQuestions } from "@/lib/funnel-builder/anketa-defaults"
+import { DEFAULT_INVITE_MESSAGE, DEFAULT_FIRST_MESSAGE_DELAY_SECONDS, DEFAULT_OFF_HOURS_MESSAGE } from "@/lib/hh/default-messages"
 import { buildSpecFromLegacy } from "@/lib/core/spec/from-legacy"
 import { saveSpec } from "@/lib/core/spec/store"
 
@@ -155,7 +156,20 @@ export async function POST(req: NextRequest) {
       aiProcessSettings: {
         enabled: false,
         midRangeAction: "direct_demo",
+        // Первое сообщение новой вакансии (рабочее время) — отправляется как msg1.
+        inviteMessage: DEFAULT_INVITE_MESSAGE,
       },
+      // Серия первых сообщений: 1 включённое с «человеческой» паузой 5 мин
+      // (Сообщения 2/3 выключены). Предзаполняем, чтобы текст был виден/редактируем
+      // в UI новой вакансии (тот же платформенный дефолт уходит и как fallback).
+      firstMessagesChain: [
+        { enabled: true,  delaySeconds: DEFAULT_FIRST_MESSAGE_DELAY_SECONDS, text: DEFAULT_INVITE_MESSAGE },
+        { enabled: false, delaySeconds: 60,  text: "" },
+        { enabled: false, delaySeconds: 180, text: "" },
+      ],
+      // Автоответ нерабочего времени — включён, со своим текстом.
+      firstMessageOffHoursEnabled: true,
+      firstMessageOffHoursText: DEFAULT_OFF_HOURS_MESSAGE,
     }
 
     // Group 15: если у компании есть default-шаблон воронки — копируем его

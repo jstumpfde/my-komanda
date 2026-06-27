@@ -199,6 +199,7 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     resumeScore: c.resumeScore ?? null,
     aiScoreV2: c.aiScoreV2 ?? null,
     rubricScore: c.rubricScore ?? null,
+    nameUncertain: c.nameUncertain === true,
     testScore: c.testScore ?? null,
     testStatus: c.testStatus ?? null,
     isActive: (c as { isActive?: boolean }).isActive ?? false,

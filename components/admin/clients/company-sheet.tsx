@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
-  Building2, Ban, Unlock, CalendarPlus, Trash2, ExternalLink, Loader2,
+  Building2, Ban, Unlock, CalendarPlus, Trash2, ExternalLink, Loader2, LogIn,
   Phone, Mail, Globe, ChevronLeft, ChevronRight, ShieldCheck, User as UserIcon,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
 import { formatPrice, formatDate, ROLE_LABELS } from "@/components/admin/clients/shared"
+import { enterCompanyAsAdmin } from "@/app/(admin)/admin/admin-impersonation-actions"
 import { toast } from "sonner"
 
 // Строка списка — то, что есть мгновенно (без доп. запроса), для шапки.
@@ -333,6 +334,9 @@ export function CompanySheet({
 
             {/* Действия над компанией */}
             <div className="space-y-2 pt-1">
+              <Button className="w-full justify-start" variant="default" onClick={() => { void enterCompanyAsAdmin(client.id) }}>
+                <LogIn className="h-4 w-4 mr-2" />Войти в компанию
+              </Button>
               <Button className="w-full justify-start" variant="outline" onClick={() => router.push(`/admin/clients/${client.id}`)}>
                 <ExternalLink className="h-4 w-4 mr-2" />Открыть полную карточку
               </Button>

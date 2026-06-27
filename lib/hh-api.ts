@@ -1,6 +1,10 @@
 // ─── HeadHunter API Client ──────────────────────────────────────────────────
 // OAuth + API calls for hh.ru integration
 
+import { guardOutgoingMessage } from "@/lib/messaging/outgoing-guard"
+import { maybeAlertGuardIssue } from "@/lib/messaging/guard-alert"
+import { maybeHoldMessage } from "@/lib/messaging/message-hold"
+
 const HH_TOKEN_URL = "https://hh.ru/oauth/token"
 const HH_API_BASE = "https://api.hh.ru"
 const USER_AGENT = "Company24/1.0 (company24.pro)"
@@ -321,17 +325,38 @@ export async function fetchHhResume(
 export async function changeNegotiationState(
   accessToken: string,
   negotiationId: string,
-  action: "invitation" | "discard" | "assessment",
+  // invitation/assessment/discard — legacy 3 действия (обратная совместимость).
+  // interview/consider — добавлены для воронки v2 (стадии «Интервью»/«Первичный контакт»).
+  action: "invitation" | "discard" | "assessment" | "interview" | "consider",
   message?: string,
   _vacancyId?: string,
-  _resumeId?: string
+  _resumeId?: string,
+  companyId?: string,   // для per-company Telegram-алерта стража (необязателен)
 ): Promise<void> {
-  // assessment — стадия воронки hh «Тестовое задание» (PUT /negotiations/assessment/{id}).
+  // Маппинг на hh negotiation endpoints (PUT /negotiations/{action}/{id}):
+  //   invitation → phone_interview (Телефонное интервью / первый контакт)
+  //   assessment → assessment (Тестовое задание)
+  //   interview  → interview (Собеседование)
+  //   consider   → consider (Подумать / первичный контакт)
+  //   discard    → discard_by_employer (Отказ)
   const hhAction = action === "invitation" ? "phone_interview"
     : action === "assessment" ? "assessment"
+    : action === "interview" ? "interview"
+    : action === "consider" ? "consider"
     : "discard_by_employer"
+  // Финальный страж: чистим текст от неподставленных {{переменных}} и артефактов
+  // ПЕРЕД отправкой (Юрий 27.06). Битый/пустой текст — стадию меняем, но текст не шлём.
   const bodyParams = new URLSearchParams()
-  if (message) bodyParams.set("message", message)
+  if (message) {
+    const g = guardOutgoingMessage(message)
+    if (g.issues.length) {
+      console.warn("[outgoing-guard] changeNegotiationState", { hhAction, negotiationId, issues: g.issues })
+      void maybeAlertGuardIssue(g.issues, { source: "changeNegotiationState", negotiationId, companyId })
+      // Hold (Option 2): если включён — придерживаем, НЕ шлём и НЕ меняем стадию.
+      if (await maybeHoldMessage({ companyId, hhResponseId: negotiationId, text: g.text, issues: g.issues, source: "changeNegotiationState" })) return
+    }
+    if (g.safe) bodyParams.set("message", g.text)
+  }
   const url = `${HH_API_BASE}/negotiations/${hhAction}/${negotiationId}`
   const res = await fetch(url, {
     method: "PUT",
@@ -345,5 +370,40 @@ export async function changeNegotiationState(
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`HH ${hhAction} ${negotiationId} failed: ${res.status} ${text}`)
+  }
+}
+
+// Отправить сообщение кандидату БЕЗ смены стадии воронки hh
+// (POST /negotiations/{id}/messages). Используется воронкой v2, когда у стадии
+// hhStatus = «— не менять —»: текст уходит, hh-папка кандидата не трогается.
+export async function sendNegotiationMessage(
+  accessToken: string,
+  negotiationId: string,
+  message: string,
+  companyId?: string,   // для per-company Telegram-алерта стража (необязателен)
+): Promise<void> {
+  // Финальный страж текста перед отправкой. Пустой/битый после чистки — не шлём.
+  const g = guardOutgoingMessage(message)
+  if (g.issues.length) {
+    console.warn("[outgoing-guard] sendNegotiationMessage", { negotiationId, issues: g.issues })
+    void maybeAlertGuardIssue(g.issues, { source: "sendNegotiationMessage", negotiationId, companyId })
+    // Hold (Option 2): если включён — придерживаем, НЕ шлём.
+    if (await maybeHoldMessage({ companyId, hhResponseId: negotiationId, text: g.text, issues: g.issues, source: "sendNegotiationMessage" })) return
+  }
+  if (!g.safe) throw new Error(`HH message ${negotiationId} skipped: empty after guard`)
+  const body = new URLSearchParams()
+  body.set("message", g.text)
+  const res = await fetch(`${HH_API_BASE}/negotiations/${negotiationId}/messages`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "User-Agent": USER_AGENT,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: body.toString(),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`HH message ${negotiationId} failed: ${res.status} ${text}`)
   }
 }

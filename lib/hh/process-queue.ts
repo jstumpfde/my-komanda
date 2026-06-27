@@ -28,8 +28,12 @@ import { matchStopFactors, type StopFactorMatch } from "@/lib/funnel-builder/sto
 import { isBlockEnabled } from "@/lib/funnel-builder/runtime"
 import { sendWebhook } from "@/lib/webhooks"
 import { resolveVacancyWebhook } from "@/lib/integrations/resolve"
+import { shouldDeferFirstMessage } from "@/lib/messaging/first-messages-chain"
+import { DEFAULT_INVITE_MESSAGE, DEFAULT_OFF_HOURS_MESSAGE } from "@/lib/hh/default-messages"
 
-const DEMO_INVITE_MESSAGE = "Здравствуйте! Спасибо за отклик. Мы подготовили короткую демонстрацию должности — 15 минут, и вы узнаете всё о задачах, команде и доходе."
+// Платформенный дефолт приглашения (единый источник) — для всех вакансий без
+// своего inviteMessage. Старые вакансии истекли и не шлют, поэтому применяем ко всем.
+const DEMO_INVITE_MESSAGE = DEFAULT_INVITE_MESSAGE
 
 // Контур «Портрет»: строка-подсказка следующего этапа (inviteNextStep ≠ demo)
 // добавляется в начало приглашения. Глубокая маршрутизация (запись в календарь,
@@ -229,9 +233,10 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
     if (respectWorkingHours && localVac) {
       const check = canSendNow(localVac)
       if (!check.allowed) {
-        const offText = typeof localVac.firstMessageOffHoursText === "string"
+        // Текст автоответа: свой или платформенный дефолт (DEFAULT_OFF_HOURS_MESSAGE).
+        const offText = (typeof localVac.firstMessageOffHoursText === "string" && localVac.firstMessageOffHoursText.trim())
           ? localVac.firstMessageOffHoursText.trim()
-          : ""
+          : DEFAULT_OFF_HOURS_MESSAGE
         if (
           localVac.firstMessageOffHoursEnabled === true &&
           offText.length > 0 &&
@@ -249,6 +254,18 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
           continue
         }
       }
+    }
+
+    // «Человеческая» задержка первого сообщения (рабочее время): свежий отклик
+    // НЕ обрабатываем сразу — оставляем в очереди (status='response'), следующий
+    // cron-проход подберёт его, когда с момента появления прошло >= задержки.
+    // Так первый контакт не выглядит роботом. Источник задержки: своя на вакансии
+    // (firstMessagesChain[0].delaySeconds) или платформенный дефолт (5 мин).
+    // off-hours-режим не задерживаем (у него своя задержка при отправке мягкого
+    // сообщения). Старые/повторные отклики (createdAt давно) проходят сразу.
+    if (!offHoursSoftMode && localVac && shouldDeferFirstMessage(resp.createdAt, localVac.firstMessagesChain, new Date())) {
+      results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "deferred_first_message_delay" })
+      continue
     }
 
     // Атомарный claim: переводим hh_response в 'claimed' ДО реальной работы
@@ -972,7 +989,9 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
           await scheduleOffHoursFirstMessage({
             candidateId,
             vacancyId:    localVac.id,
-            text:         typeof localVac.firstMessageOffHoursText === "string" ? localVac.firstMessageOffHoursText : "",
+            text:         (typeof localVac.firstMessageOffHoursText === "string" && localVac.firstMessageOffHoursText.trim())
+                            ? localVac.firstMessageOffHoursText
+                            : DEFAULT_OFF_HOURS_MESSAGE,
             delaySeconds: typeof localVac.firstMessageOffHoursDelaySeconds === "number" ? localVac.firstMessageOffHoursDelaySeconds : 15,
           })
         } catch (offErr) {
@@ -1190,6 +1209,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             finalMessage,
             resp.hhVacancyId,
             rawResume,
+            companyId,
           )
         } catch (hhErr) {
           const msg = hhErr instanceof Error ? hhErr.message : String(hhErr)

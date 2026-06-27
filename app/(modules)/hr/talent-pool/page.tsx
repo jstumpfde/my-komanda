@@ -24,6 +24,7 @@ import {
   MoreHorizontal, Heart, Pause, Play, Sparkles, Send,
   TrendingUp, Eye, MessageSquare, UserPlus, Clock, Trash2, GripVertical,
   ClipboardList, ChevronDown, ChevronRight, FileText, ArrowUpDown,
+  Archive, RotateCcw,
 } from "lucide-react"
 import { ScoringBadge, type ScoreBreakdown } from "@/components/talent-pool/scoring-badge"
 import { ReferralTab } from "@/components/talent-pool/referral-tab"
@@ -51,6 +52,7 @@ interface TalentCandidate {
   score: number
   scoreBreakdown: ScoreBreakdown
   _type?: "entry" | "candidate"
+  lifecycle?: "active" | "archived" | "trashed"
 }
 
 interface CampaignStep {
@@ -128,6 +130,7 @@ export function TalentPoolView({ embedded = false }: { embedded?: boolean }) {
   const [campaignOpen, setCampaignOpen] = useState(false)
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [lifecycleTab, setLifecycleTab] = useState<"active" | "archived" | "trashed">("active")
   const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set())
   const [sources] = useState<SourceItem[]>(INITIAL_SOURCES)
 
@@ -161,12 +164,14 @@ export function TalentPoolView({ embedded = false }: { embedded?: boolean }) {
           comment: "", score: sc,
           scoreBreakdown: ZERO_BREAKDOWN,
           _type: "candidate" as const,
+          lifecycle: "active" as const,
         }
       })
       const fromEntries: TalentCandidate[] = (Array.isArray(eData?.entries) ? eData.entries : []).map((e: {
         id: string; name: string; position: string; company: string; source: string
         email: string; phone: string; telegram: string; comment: string
         score: number; status: string; createdAt: string | null
+        archivedAt: string | null; trashedAt: string | null
       }): TalentCandidate => ({
         id: e.id, name: e.name,
         position: e.position || "—", company: e.company || "—",
@@ -177,12 +182,30 @@ export function TalentPoolView({ embedded = false }: { embedded?: boolean }) {
         comment: e.comment || "", score: e.score || 0,
         scoreBreakdown: ZERO_BREAKDOWN,
         _type: "entry",
+        lifecycle: e.trashedAt ? "trashed" : e.archivedAt ? "archived" : "active",
       }))
       setCandidates([...fromEntries, ...fromCandidates])
     } catch { /* пусто */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   useEffect(() => { loadAll() }, [loadAll])
+
+  // Резерв: срок хранения архива до авто-корзины (мес). 0 = «никогда» (152-ФЗ на компании).
+  const [retentionMonths, setRetentionMonths] = useState<number | null>(null)
+  useEffect(() => {
+    fetch("/api/modules/hr/talent-pool/retention")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { retentionMonths?: number } | null) => { if (typeof d?.retentionMonths === "number") setRetentionMonths(d.retentionMonths) })
+      .catch(() => {})
+  }, [])
+  const saveRetention = async (m: number) => {
+    setRetentionMonths(m)
+    const res = await fetch("/api/modules/hr/talent-pool/retention", {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ retentionMonths: m }),
+    })
+    if (res.ok) toast.success("Срок хранения сохранён")
+    else toast.error("Не удалось сохранить")
+  }
   const [expandedFilterSources, setExpandedFilterSources] = useState<Set<string>>(new Set())
   const [thanked, setThanked] = useState<Set<string>>(new Set())
   const [colSort, setColSort] = useState<{ column: string; dir: "asc" | "desc" }>({ column: "name", dir: "asc" })
@@ -218,10 +241,26 @@ export function TalentPoolView({ embedded = false }: { embedded?: boolean }) {
 
   const handleDelete = async (c: TalentCandidate) => {
     if (c._type === "entry") {
+      if (!confirm(`Удалить «${c.name}» навсегда? Действие необратимо.`)) return
       const res = await fetch(`/api/modules/hr/talent-pool/entries/${c.id}`, { method: "DELETE" })
       if (!res.ok) { toast.error("Не удалось удалить"); return }
     }
     setCandidates((p) => p.filter((x) => x.id !== c.id))
+  }
+
+  // Жизненный цикл записи Резерва (только для ручных/CSV/форм записей — _type="entry").
+  // archive «Не подходит» → Архив · restore → активные · trash → Корзина · untrash → Архив.
+  const handleLifecycle = async (c: TalentCandidate, action: "archive" | "restore" | "trash" | "untrash") => {
+    if (c._type !== "entry") { toast.info("Жизненный цикл доступен для записей резерва, не для кандидатов из отбора"); return }
+    const res = await fetch(`/api/modules/hr/talent-pool/entries/${c.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    })
+    if (!res.ok) { toast.error("Не удалось"); return }
+    const next: TalentCandidate["lifecycle"] =
+      action === "archive" ? "archived" : action === "trash" ? "trashed" : action === "untrash" ? "archived" : "active"
+    setCandidates((p) => p.map((x) => x.id === c.id ? { ...x, lifecycle: next } : x))
+    toast.success({ archive: "В архиве", restore: "Восстановлен", trash: "В корзине", untrash: "Возвращён в архив" }[action])
   }
 
   // CSV-импорт: первая строка — заголовки (имя/должность/компания/источник/
@@ -268,7 +307,10 @@ export function TalentPoolView({ embedded = false }: { embedded?: boolean }) {
     toast.success("Кампания создана")
   }
 
+  const archivedCount = candidates.filter((c) => (c.lifecycle ?? "active") === "archived").length
+  const trashedCount = candidates.filter((c) => (c.lifecycle ?? "active") === "trashed").length
   const filtered = candidates.filter((c) => {
+    if ((c.lifecycle ?? "active") !== lifecycleTab) return false
     if (search && !c.name.toLowerCase().includes(search.toLowerCase()) && !c.position.toLowerCase().includes(search.toLowerCase())) return false
     if (statusFilter !== "all" && c.status !== statusFilter) return false
     if (selectedSources.size > 0) {
@@ -343,6 +385,55 @@ export function TalentPoolView({ embedded = false }: { embedded?: boolean }) {
 
               {/* ═══ TAB: База ═══ */}
               <TabsContent value="base" className="space-y-4">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="inline-flex items-center gap-0.5 rounded-lg bg-muted p-0.5 text-xs">
+                    {([
+                      ["active", "Активные", null],
+                      ["archived", "Архив", archivedCount],
+                      ["trashed", "Корзина", trashedCount],
+                    ] as const).map(([key, label, count]) => (
+                      <button
+                        key={key}
+                        onClick={() => setLifecycleTab(key)}
+                        className={cn(
+                          "px-3 py-1.5 rounded-md font-medium transition-colors",
+                          lifecycleTab === key ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {label}{count ? <span className="ml-1 text-[10px] opacity-70">{count}</span> : null}
+                      </button>
+                    ))}
+                  </div>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5 text-muted-foreground">
+                        <Clock className="w-3.5 h-3.5" />
+                        Хранение: {retentionMonths === 0 ? "никогда" : retentionMonths === null ? "…" : `${retentionMonths} мес`}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-72 space-y-3">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">Срок хранения в Резерве</p>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed">Через сколько месяцев архивная запись авто-уходит в Корзину. Из Корзины — ещё ~1 месяц до удаления.</p>
+                      </div>
+                      <Select value={String(retentionMonths ?? 5)} onValueChange={(v) => saveRetention(Number(v))}>
+                        <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {[3, 5, 6, 12, 24].map((m) => <SelectItem key={m} value={String(m)} className="text-sm">{m} мес</SelectItem>)}
+                          <SelectItem value="0" className="text-sm">Никогда не удалять</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {retentionMonths === 0 && (
+                        <p className="text-[11px] text-amber-700 bg-amber-500/10 rounded-md p-2 leading-relaxed">
+                          По 152-ФЗ хранить персональные данные без актуального основания некорректно. Включайте «никогда» осознанно.
+                        </p>
+                      )}
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                {lifecycleTab === "trashed" && (
+                  <p className="text-[11px] text-muted-foreground">Записи в корзине удаляются автоматически через ~1 месяц. Кандидаты из отбора здесь не показываются.</p>
+                )}
                 <div className="flex items-center gap-2 flex-wrap">
                   <div className="relative flex-1 max-w-md">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
@@ -473,8 +564,20 @@ export function TalentPoolView({ embedded = false }: { embedded?: boolean }) {
                               <DataCell>
                                 <div className="flex items-center gap-1">
                                   <Button variant="ghost" size="icon" className="h-7 w-7" title="Открыть профиль" onClick={(e) => { e.stopPropagation(); router.push(`/hr/candidates/${c.id}`) }}><Eye className="w-3 h-3" /></Button>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Написать" onClick={(e) => { e.stopPropagation(); toast.info("Открыть чат") }}><Send className="w-3 h-3" /></Button>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Удалить" onClick={(e) => { e.stopPropagation(); handleDelete(c) }}><Trash2 className="w-3 h-3" /></Button>
+                                  {lifecycleTab === "active" && (<>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7" title="Написать" onClick={(e) => { e.stopPropagation(); toast.info("Открыть чат") }}><Send className="w-3 h-3" /></Button>
+                                    {c._type === "entry" && (
+                                      <Button variant="ghost" size="icon" className="h-7 w-7" title="Не подходит → в Архив" onClick={(e) => { e.stopPropagation(); handleLifecycle(c, "archive") }}><Archive className="w-3 h-3" /></Button>
+                                    )}
+                                  </>)}
+                                  {lifecycleTab === "archived" && (<>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7" title="Восстановить в активные" onClick={(e) => { e.stopPropagation(); handleLifecycle(c, "restore") }}><RotateCcw className="w-3 h-3" /></Button>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7" title="В корзину" onClick={(e) => { e.stopPropagation(); handleLifecycle(c, "trash") }}><Trash2 className="w-3 h-3" /></Button>
+                                  </>)}
+                                  {lifecycleTab === "trashed" && (<>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7" title="Восстановить в Архив" onClick={(e) => { e.stopPropagation(); handleLifecycle(c, "untrash") }}><RotateCcw className="w-3 h-3" /></Button>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Удалить навсегда" onClick={(e) => { e.stopPropagation(); handleDelete(c) }}><Trash2 className="w-3 h-3" /></Button>
+                                  </>)}
                                 </div>
                               </DataCell>
                             </DataRow>
