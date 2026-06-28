@@ -1164,7 +1164,7 @@ export default function VacancyPage() {
     total: number; pending: number; freshCount: number;
     demoOpened: number; rejected: number;
     hhTotal: number; hhNew: number; inProgress: number;
-    anketaFilled: number; hired: number;
+    anketaFilled: number; demoAnswered: number; hired: number;
   } | null>(null)
   const loadHeaderStats = useCallback(async () => {
     if (!id) return
@@ -1177,7 +1177,7 @@ export default function VacancyPage() {
       const stats = await statsRes.json() as {
         total: number; hhTotal: number; hhNew: number;
         inProgress: number; rejected: number; hired: number;
-        demoOpened: number; anketaFilled: number;
+        demoOpened: number; anketaFilled: number; demoAnswered: number;
       }
       const cand = candRes.ok
         ? await candRes.json() as { pending: number; freshCount: number }
@@ -1192,6 +1192,7 @@ export default function VacancyPage() {
         hhNew:        stats.hhNew,
         inProgress:   stats.inProgress,
         anketaFilled: stats.anketaFilled,
+        demoAnswered: stats.demoAnswered,
         hired:        stats.hired,
       })
     } catch { /* silent */ }
@@ -2539,9 +2540,9 @@ export default function VacancyPage() {
                     <span>·</span>
                     <UITooltip>
                       <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.anketaFilled ?? "—"}</span> анкет заполнено</span>
+                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.demoAnswered ?? "—"}</span> ответили на вопросы</span>
                       </TooltipTrigger>
-                      <TooltipContent>Кандидаты, сдавшие финальную анкету (anketa_filled и далее)</TooltipContent>
+                      <TooltipContent>Кандидаты, ответившие на вопросы демо (посчитан балл по ответам)</TooltipContent>
                     </UITooltip>
                     <span>·</span>
                     <UITooltip>

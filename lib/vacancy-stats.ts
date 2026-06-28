@@ -4,7 +4,7 @@
 // (особенно аналитика — она использовала пагинированный клиентский
 // columns, в шапке был отдельный SQL, в дашборде — третий вариант).
 
-import { and, eq, inArray, sql } from "drizzle-orm"
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, hhResponses } from "@/lib/db/schema"
 import {
@@ -27,6 +27,8 @@ export interface VacancyStats {
   hired:          number
   demoOpened:     number
   anketaFilled:   number
+  // Кандидаты, ответившие на вопросы демо (demo_answers_score посчитан).
+  demoAnswered:   number
   // Детализация по стадиям (slug → count) — для аналитики/воронки.
   byStage:        Record<string, number>
   // Конверсии. Все в процентах [0..100], округлены до 1 знака.
@@ -84,6 +86,16 @@ export async function getVacancyStats(vacancyId: string): Promise<VacancyStats> 
   const demoOpened   = sumByGroup(DEMO_OPENED_STAGE_SLUGS)
   const anketaFilled = sumByGroup(ANKETA_FILLED_STAGE_SLUGS)
 
+  // Ответившие на вопросы демо — у кого посчитан demo_answers_score.
+  const [demoAnsweredRow] = await db
+    .select({ c: sql<number>`count(*)::int` })
+    .from(candidates)
+    .where(and(
+      eq(candidates.vacancyId, vacancyId),
+      isNotNull(candidates.demoAnswersScore),
+    ))
+  const demoAnswered = demoAnsweredRow?.c ?? 0
+
   // hh.ru данные — из hh_responses (кеш, обновляется через /api/cron/hh-import).
   let hhTotal = 0
   let hhNew   = 0
@@ -122,7 +134,7 @@ export async function getVacancyStats(vacancyId: string): Promise<VacancyStats> 
 
   return {
     hhTotal, hhNew, hhLastSyncAt,
-    total, inProgress, rejected, hired, demoOpened, anketaFilled,
+    total, inProgress, rejected, hired, demoOpened, anketaFilled, demoAnswered,
     byStage,
     conversions: {
       demoOpenRate:   pct(demoOpened, total),
@@ -151,6 +163,21 @@ export async function getVacancyStatsBulk(
     .where(inArray(candidates.vacancyId, vacancyIds))
     .groupBy(candidates.vacancyId, candidates.stage)
 
+  // Ответившие на вопросы демо — отдельный count по вакансиям.
+  const demoAnsweredRows = await db
+    .select({
+      vacancyId: candidates.vacancyId,
+      cnt:       sql<number>`count(*)::int`,
+    })
+    .from(candidates)
+    .where(and(
+      inArray(candidates.vacancyId, vacancyIds),
+      isNotNull(candidates.demoAnswersScore),
+    ))
+    .groupBy(candidates.vacancyId)
+  const demoAnsweredByVacancy = new Map<string, number>()
+  for (const r of demoAnsweredRows) demoAnsweredByVacancy.set(r.vacancyId, r.cnt)
+
   // hh-stats fetched per-vacancy on demand. Bulk-версия hh не делает,
   // чтобы не таскать все hh_responses в одном запросе. Возвращаем
   // hh-блок нулями (если caller хочет — отдельно дёрнет getVacancyStats
@@ -167,7 +194,7 @@ export async function getVacancyStatsBulk(
   }
 
   // Recompute grouped metrics for each vacancy.
-  for (const stats of out.values()) {
+  for (const [id, stats] of out.entries()) {
     const sumByGroup = (group: StageSlug[]) =>
       group.reduce((a, s) => a + (stats.byStage[s] ?? 0), 0)
     stats.inProgress   = sumByGroup(IN_PROGRESS_STAGE_SLUGS)
@@ -175,6 +202,7 @@ export async function getVacancyStatsBulk(
     stats.hired        = stats.byStage["hired"] ?? 0
     stats.demoOpened   = sumByGroup(DEMO_OPENED_STAGE_SLUGS)
     stats.anketaFilled = sumByGroup(ANKETA_FILLED_STAGE_SLUGS)
+    stats.demoAnswered = demoAnsweredByVacancy.get(id) ?? 0
     stats.conversions = {
       demoOpenRate:   pct(stats.demoOpened, stats.total),
       anketaFillRate: pct(stats.anketaFilled, stats.demoOpened),
@@ -191,7 +219,7 @@ function emptyStats(): VacancyStats {
   return {
     hhTotal: 0, hhNew: 0, hhLastSyncAt: null,
     total: 0, inProgress: 0, rejected: 0, hired: 0,
-    demoOpened: 0, anketaFilled: 0,
+    demoOpened: 0, anketaFilled: 0, demoAnswered: 0,
     byStage,
     conversions: { demoOpenRate: 0, anketaFillRate: 0, hiredRate: 0 },
   }
