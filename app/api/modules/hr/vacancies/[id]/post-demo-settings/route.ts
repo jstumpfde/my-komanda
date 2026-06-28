@@ -121,6 +121,10 @@ export async function PUT(
       settings.enabled = Boolean(body.enabled)
     }
 
+    if ((body as { anketaEnabled?: unknown }).anketaEnabled !== undefined) {
+      settings.anketaEnabled = Boolean((body as { anketaEnabled?: unknown }).anketaEnabled)
+    }
+
     if (body.mode !== undefined) {
       settings.mode = body.mode === "manual" ? "manual" : "auto"
     }

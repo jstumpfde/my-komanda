@@ -35,8 +35,6 @@ export interface Candidate {
   resumeScore?: number | null
   // AI-Портрет: оценка резюме по критериям Портрета (ai_score_v2).
   aiScoreV2?: number | null
-  // Рубричный балл (новый shadow-движок).
-  rubricScore?: number | null
   // Имя «под вопросом» — резолвер уйдёт в нейтральное «Здравствуйте» (фамилия/аноним/
   // редкое имя). HR стоит проверить и при желании вписать имя вручную.
   nameUncertain?: boolean
@@ -74,7 +72,7 @@ export interface Candidate {
   // Колонка «Тест»: балл последнего теста и статус-лесенка
   // (submitted/in_progress/opened/sent).
   testScore?: number | null
-  testStatus?: "submitted" | "in_progress" | "opened" | "sent" | null
+  testStatus?: "submitted" | "in_progress" | "opened" | "sent" | "failed" | null
   // «Активен сейчас» — проходит демо/тест в последние 30 минут.
   isActive?: boolean
   /** Название вакансии — показывается в глобальном списке кандидатов (showVacancyColumn). */

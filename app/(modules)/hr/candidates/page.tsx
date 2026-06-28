@@ -56,7 +56,6 @@ interface GlobalCandidate {
   isFavorite: boolean
   aiScore?: number | null
   resumeScore?: number | null
-  rubricScore?: number | null
   nameUncertain?: boolean
   testScore?: number | null
   testStatus?: "submitted" | "in_progress" | "opened" | "sent" | null
@@ -76,7 +75,6 @@ const DEFAULT_SETTINGS: CardDisplaySettings = {
   // Все колонки включены по умолчанию (решение Юрия). Таблица плотная — на
   // узких экранах горизонтальный скролл; лишнее можно выключить в «Вид».
   showScore: true,
-  showRubricScore: true,
   showAge: false,
   showSource: true,
   showCity: true,
@@ -114,7 +112,6 @@ function toListCandidate(c: GlobalCandidate): Candidate & { vacancyTitle: string
     lastSeen: new Date(c.createdAt),
     aiScore: c.aiScore ?? undefined,
     resumeScore: c.resumeScore ?? null,
-    rubricScore: c.rubricScore ?? null,
     nameUncertain: c.nameUncertain === true,
     testScore: c.testScore ?? null,
     testStatus: c.testStatus ?? null,

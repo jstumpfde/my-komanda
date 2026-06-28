@@ -23,12 +23,12 @@ export interface ScoringResult {
   details: ScoringDetail[]
 }
 
-interface NormalizedAnswer {
+export interface NormalizedAnswer {
   question: string
   answer: string
 }
 
-function buildBlockMap(lessons: unknown): Map<string, Block> {
+export function buildBlockMap(lessons: unknown): Map<string, Block> {
   const map = new Map<string, Block>()
   if (!Array.isArray(lessons)) return map
   for (const l of lessons as Lesson[]) {
@@ -40,7 +40,7 @@ function buildBlockMap(lessons: unknown): Map<string, Block> {
   return map
 }
 
-function blockQuestionText(block: Block | undefined, blockId: string): string {
+export function blockQuestionText(block: Block | undefined, blockId: string): string {
   if (!block) return blockId
   if (block.taskTitle) return block.taskTitle
   if (block.taskDescription) return block.taskDescription
@@ -55,7 +55,7 @@ function blockQuestionText(block: Block | undefined, blockId: string): string {
   return blockId
 }
 
-function answerToText(ans: unknown, block: Block | undefined): string {
+export function answerToText(ans: unknown, block: Block | undefined): string {
   if (ans == null) return ""
   if (typeof ans === "string") return ans
   if (typeof ans === "number" || typeof ans === "boolean") return String(ans)
@@ -81,7 +81,7 @@ function answerToText(ans: unknown, block: Block | undefined): string {
   return ""
 }
 
-function normalizeAnswers(raw: unknown, blockMap: Map<string, Block>): NormalizedAnswer[] {
+export function normalizeAnswers(raw: unknown, blockMap: Map<string, Block>): NormalizedAnswer[] {
   if (!Array.isArray(raw)) return []
   const out: NormalizedAnswer[] = []
   for (const entry of raw as unknown[]) {

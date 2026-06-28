@@ -129,7 +129,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             // Требует непустой requirementsJson.must_have (Портрет настроен) — иначе
             // scoreCandidateV2 вернёт null (скип).
             const v2 = await scoreCandidateV2({ candidateId: c.id, vacancyId, skipIfScored: false })
-            if (v2) result.portrait++; else result.skipped++
+            if (v2) {
+              await db.update(candidates).set({
+                aiScoreV2:        v2.score,
+                aiScoreV2Details: v2,
+                aiScoredAt:       new Date(),
+              }).where(eq(candidates.id, c.id))
+              result.portrait++
+            } else {
+              result.skipped++
+            }
           } else if (d === "rubric") {
             const spec = buildSpecFromAnketa(anketa)
             const resumeText = buildResumeText(c)

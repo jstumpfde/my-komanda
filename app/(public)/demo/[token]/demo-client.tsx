@@ -19,6 +19,8 @@ import { PdfSlidesViewer } from "@/components/vacancies/pdf-slides-viewer"
 
 interface PostDemoSettings {
   enabled?: boolean
+  // true/false = явно вкл/выкл анкету; undefined = legacy (анкета показывается).
+  anketaEnabled?: boolean
   mode?: "auto" | "manual"
   upperThreshold?: number
   lowerThreshold?: number
@@ -133,6 +135,9 @@ interface DemoData {
   answers: { blockId: string; answer: any }[] | null
   // aiScore удалён — внутренняя оценка не передаётся кандидату (security S-5)
   postDemoSettings: PostDemoSettings
+  // Умное правило финальной анкеты: true = у кандидата уже есть контакт
+  // (email/телефон, напр. из hh) → анкету пропускаем (её цель — собрать контакты).
+  candidateHasContacts?: boolean
   // Ф5: текст-обёртка финальной анкеты, vacancies.description_json.anketaIntro.
   // Пустые поля или null → показываем дефолты.
   anketaIntro?: { title: string; description: string } | null
@@ -960,10 +965,15 @@ export default function DemoPage() {
         // не проставится, кандидат увидит финальный экран, но HR может
         // не получить decision-стейдж до retry.
         await postCompleteMarker()
-        // Если HR выключил пост-демо блок — кандидат увидит экран «Спасибо»
-        // напрямую, минуя анкету. Чтобы фракция прогресса в HR не застряла на
-        // N/N+2, отмечаем оба виртуальных маркера сразу.
-        if (data?.postDemoSettings?.enabled === false) {
+        // Если анкета не будет показана (выключена тумблером ИЛИ у кандидата
+        // уже есть контакты) — кандидат видит статичный «спасибо», минуя анкету.
+        // Чтобы фракция прогресса в HR не застряла на N/N+2, отмечаем оба
+        // виртуальных маркера сразу. Логика совпадает с рендером ниже (skipAnketa).
+        const skipAnketaOnFinish =
+          data?.postDemoSettings?.enabled === false ||
+          data?.postDemoSettings?.anketaEnabled === false ||
+          data?.candidateHasContacts === true
+        if (skipAnketaOnFinish) {
           void postVirtualMarkers(["__anketa__", "__thanks__"])
         }
         if (typeof window !== "undefined") {
@@ -1076,7 +1086,17 @@ export default function DemoPage() {
     // Это даёт последовательность: уроки → промежуточный → анкета →
     // submit → финальный. Два разных «Спасибо» — оба редактируемые
     // через FinalScreensSettings в табе «Воронка».
-    if (data.postDemoSettings?.enabled === false) {
+    // Когда пропускаем анкету (показываем статичный «спасибо», минуя форму):
+    //   • postDemoSettings.enabled === false → весь пост-демо блок выключен (legacy);
+    //   • postDemoSettings.anketaEnabled === false → анкета выключена тумблером (полный оверрайд);
+    //   • candidateHasContacts === true → у кандидата уже есть email/телефон
+    //     (напр. из hh) — собирать контакты незачем (умное правило).
+    // Иначе (anketaEnabled !== false И контактов нет) — показываем анкету.
+    const skipAnketa =
+      data.postDemoSettings?.enabled === false ||
+      data.postDemoSettings?.anketaEnabled === false ||
+      data.candidateHasContacts === true
+    if (skipAnketa) {
       return (
         <div className="flex min-h-screen items-center justify-center px-4" style={{ backgroundColor: bgColor }}>
           <div className="text-center max-w-md space-y-4">

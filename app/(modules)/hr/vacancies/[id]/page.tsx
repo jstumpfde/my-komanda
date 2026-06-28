@@ -136,7 +136,7 @@ const defaultSettings: CardDisplaySettings = {
   showSource: true, showCity: true, showExperience: true, showSkills: true, showActions: true,
   showProgress: true, showResponseDate: true,
   // Все колонки списка ВКЛЮЧЕНЫ по умолчанию (решение Юрия) — пишем явно, без undefined.
-  showResumeScore: true, showRubricScore: true, showTestScore: true, showNextInterview: true,
+  showResumeScore: true, showTestScore: true, showNextInterview: true,
 }
 
 
@@ -198,7 +198,6 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     aiVerdict: c.aiScore != null ? (c.aiScore >= 70 ? "подходит" : c.aiScore >= 40 ? "возможно" : "не подходит") : undefined,
     resumeScore: c.resumeScore ?? null,
     aiScoreV2: c.aiScoreV2 ?? null,
-    rubricScore: c.rubricScore ?? null,
     nameUncertain: c.nameUncertain === true,
     testScore: c.testScore ?? null,
     testStatus: c.testStatus ?? null,
@@ -2236,9 +2235,10 @@ export default function VacancyPage() {
   const anketa = ((apiVacancy?.descriptionJson as Record<string, unknown>)?.anketa as Record<string, unknown>) || {}
 
   const handleCompare = async () => {
+    const scoreOf = (c: typeof apiCandidates[number]) => c.aiScoreV2 ?? c.resumeScore ?? null
     const top = apiCandidates
-      .filter(c => c.aiScore != null)
-      .sort((a, b) => (b.aiScore ?? 0) - (a.aiScore ?? 0))
+      .filter(c => scoreOf(c) != null)
+      .sort((a, b) => (scoreOf(b) ?? 0) - (scoreOf(a) ?? 0))
       .slice(0, 5)
     if (top.length < 2) { toast.error("Нужно минимум 2 кандидата с AI-скором"); return }
     setCompareOpen(true)
@@ -2248,7 +2248,7 @@ export default function VacancyPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          candidates: top.map(c => ({ id: c.id, name: c.name, skills: c.skills, experience: c.experience, aiScore: c.aiScore })),
+          candidates: top.map(c => ({ id: c.id, name: c.name, skills: c.skills, experience: c.experience, aiScore: scoreOf(c) })),
           vacancyRequirements: String(anketa.requirements || ""),
           vacancyId: id,
         }),
@@ -2832,11 +2832,6 @@ export default function VacancyPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-52">
-                        <DropdownMenuItem onClick={screenAllNew} disabled={bulkScreening}>
-                          {bulkScreening ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 mr-2" />}
-                          {bulkScreening ? "Скрининг..." : "AI-оценить новых"}
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
                         <DropdownMenuLabel className="flex items-center gap-2 py-1 text-xs font-medium text-muted-foreground">
                           {rescoring ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                           {rescoring ? "Переоценка…" : "Переоценить выделенных"}
@@ -2849,12 +2844,6 @@ export default function VacancyPage() {
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => rescoreSelected("portrait")} disabled={!!rescoring}>
                           <Target className="w-3.5 h-3.5 mr-2" /> AI-Портрет (по критериям)
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => rescoreSelected("ai")} disabled={!!rescoring}>
-                          <BarChart3 className="w-3.5 h-3.5 mr-2" /> AI-оценка
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => rescoreSelected("rubric")} disabled={!!rescoring}>
-                          <Target className="w-3.5 h-3.5 mr-2" /> AI-рубрика
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => rescoreSelected("test")} disabled={!!rescoring}>
                           <Check className="w-3.5 h-3.5 mr-2" /> AI-тест
@@ -3118,9 +3107,6 @@ export default function VacancyPage() {
               </TabsContent>
 
               <TabsContent value="candidates">
-                {/* Рубричный балл — в колонке «Рубрика»; запуск оценки — меню
-                    «Ещё → Переоценить → AI-рубрика». Отдельный баннер убран. */}
-
                 {/* Talent Pool radar */}
                 {talentMatches.length > 0 && !talentRadarHidden && (
                   <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-4">

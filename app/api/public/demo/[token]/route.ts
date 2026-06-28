@@ -48,6 +48,12 @@ export async function GET(
         id: candidates.id,
         name: candidates.name,
         vacancyId: candidates.vacancyId,
+        // Умное правило финальной анкеты: если у кандидата уже есть контакт
+        // (email или телефон, напр. из hh) — анкету пропускаем, её цель —
+        // собрать контакты, а они уже есть. Поля отдаём фронту флагом
+        // candidateHasContacts (сами значения наружу не светим).
+        email: candidates.email,
+        phone: candidates.phone,
         anketaAnswers: candidates.anketaAnswers,
         demoProgressJson: candidates.demoProgressJson,
         // aiScore намеренно НЕ выбирается — внутренняя AI-оценка не должна
@@ -67,6 +73,11 @@ export async function GET(
     }
 
     const candidate = candidateRows[0]
+
+    // Умное правило финальной анкеты: уже есть контакт (email ИЛИ телефон)?
+    const candidateHasContacts =
+      (candidate.email?.trim().length ?? 0) > 0 ||
+      (candidate.phone?.trim().length ?? 0) > 0
 
     // Find vacancy + company
     const vacancyRows = await db
@@ -171,6 +182,7 @@ export async function GET(
           progress:           candidate.demoProgressJson,
           answers:            candidate.anketaAnswers,
           postDemoSettings:   resolved.postDemoSettings ?? {},
+          candidateHasContacts,
           anketaIntro:        null,
           finalScreens:       null,
           prefill:            { first_name: null, last_name: null, city: null },
@@ -332,6 +344,7 @@ export async function GET(
       // aiScore намеренно НЕ включается в публичный ответ — внутренняя оценка
       // не должна быть видна кандидату в DevTools (security S-5).
       postDemoSettings: demo.postDemoSettings ?? {},
+      candidateHasContacts,
       anketaIntro,
       finalScreens,
       prefill,

@@ -16,7 +16,6 @@ export interface CardDisplaySettings {
   showScore: boolean          // колонка «AI-оцен.» (оценка анкеты)
   showResumeScore?: boolean   // колонка «AI-резм.» (скоринг резюме); undefined = показывать
   showPortraitScore?: boolean // колонка «AI-Порт» (оценка по Портрету, ai_score_v2); undefined = показывать
-  showRubricScore?: boolean   // колонка «Рубрика» (новый shadow-движок); undefined = показывать
   showTestScore?: boolean     // колонка «Тест» (балл/статус теста); undefined = показывать
   showNextInterview?: boolean // колонка «Интервью» (ближайшее); undefined = показывать
   showAge: boolean
@@ -40,7 +39,6 @@ export const CANDIDATE_COLUMN_TOGGLES: Array<{ key: keyof CardDisplaySettings; l
   { key: "showResumeScore",  label: "AI резюме" },
   { key: "showPortraitScore", label: "AI-Портрет" },
   { key: "showScore",        label: "AI оценка" },
-  // «Рубрика» (shadow-движок) убрана из UI — консолидация скоринга на Портрет (26.06).
   { key: "showTestScore",    label: "Тест" },
   { key: "showNextInterview", label: "Интервью" },
   { key: "showSalaryFull",   label: "Зарплата" },

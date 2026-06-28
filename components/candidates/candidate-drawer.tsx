@@ -562,6 +562,7 @@ export interface InitialCandidateSnapshot {
   city?: string | null
   source?: string | null
   aiScore?: number | null
+  aiScoreV2?: number | null
   resumeScore?: number | null
   isFavorite?: boolean
 }
@@ -1298,9 +1299,10 @@ export function CandidateDrawer({
                       </Badge>
                     )
                   })()}
-                  {initialCandidate.aiScore != null && (
-                    <AiScoreBadge score={initialCandidate.aiScore} onClick={() => {}} />
-                  )}
+                  {(() => {
+                    const mainScore = initialCandidate.aiScoreV2 ?? initialCandidate.resumeScore ?? null
+                    return mainScore != null ? <AiScoreBadge score={mainScore} onClick={() => {}} /> : null
+                  })()}
                   {/* Мини-спиннер — сигнал что детали ещё грузятся */}
                   <span className="ml-1 inline-flex items-center gap-1 text-xs text-muted-foreground/60">
                     <svg className="animate-spin size-3" viewBox="0 0 24 24" fill="none">
@@ -1357,7 +1359,7 @@ export function CandidateDrawer({
                     </Badge>
                   )}
                   <ScoreBadge score={candidate.score} />
-                  <AiScoreBadge score={candidate.aiScore ?? null} onClick={() => setActiveTab("ai")} />
+                  <AiScoreBadge score={candidate.aiScoreV2 ?? candidate.resumeScore ?? null} />
                 </div>
               </div>
             </div>
@@ -1381,8 +1383,7 @@ export function CandidateDrawer({
               <TabsTrigger value="answers" className="text-[10px] px-1 py-1.5">Ответы</TabsTrigger>
               <TabsTrigger value="test" className="text-[10px] px-1 py-1.5">Тест</TabsTrigger>
               <TabsTrigger value="chat" className="text-[10px] px-1 py-1.5">Чат hh</TabsTrigger>
-              <TabsTrigger value="ai" className="text-[10px] px-1 py-1.5">AI-оценка</TabsTrigger>
-              <TabsTrigger value="rubric" className="text-[10px] px-1 py-1.5">Рубрика</TabsTrigger>
+              <TabsTrigger value="rubric" className="text-[10px] px-1 py-1.5">AI-Портрет</TabsTrigger>
               <TabsTrigger value="channels" className="text-[10px] px-1 py-1.5">Каналы</TabsTrigger>
               <TabsTrigger value="history" className="text-[10px] px-1 py-1.5">История</TabsTrigger>
             </TabsList>
@@ -1888,37 +1889,10 @@ export function CandidateDrawer({
                 </div>
               </TabsContent>
 
-              {/* ── AI-оценка ────────────────────────────────────── */}
-              <TabsContent value="ai" className="px-6 py-4 pb-28 mt-0 space-y-4">
-                {/* VA4: критерии вакансии — контекст для HR */}
-                {vacancyAnketa && (vacancyAnketa.aiIdealProfile || (vacancyAnketa.aiRequiredHardSkills?.length ?? 0) > 0 || (vacancyAnketa.aiStopFactors?.length ?? 0) > 0) && (
-                  <section className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-2">
-                    <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Критерии оценки</h3>
-                    {vacancyAnketa.aiIdealProfile && (
-                      <p className="text-xs text-foreground leading-relaxed">{vacancyAnketa.aiIdealProfile}</p>
-                    )}
-                    {(vacancyAnketa.aiRequiredHardSkills?.length ?? 0) > 0 && (
-                      <div>
-                        <p className="text-[11px] font-medium text-muted-foreground mb-1">Hard-навыки:</p>
-                        <div className="flex flex-wrap gap-1">
-                          {vacancyAnketa.aiRequiredHardSkills!.map((s, i) => (
-                            <Badge key={i} variant="outline" className="text-[10px] py-0 px-1.5">{s}</Badge>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {(vacancyAnketa.aiStopFactors?.length ?? 0) > 0 && (
-                      <div>
-                        <p className="text-[11px] font-medium text-muted-foreground mb-1">Стоп-факторы:</p>
-                        <div className="flex flex-wrap gap-1">
-                          {vacancyAnketa.aiStopFactors!.map((s, i) => (
-                            <Badge key={i} variant="outline" className="text-[10px] py-0 px-1.5 bg-red-500/10 text-red-700 border-red-200">{s}</Badge>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </section>
-                )}
+
+
+              {/* ── Рубрика / AI-Портрет ─────────────────────────── */}
+              <TabsContent value="rubric" className="px-6 py-4 pb-28 mt-0 space-y-4">
                 {candidate.aiScoreV2Details && (
                   <AiMatchCardV2
                     details={candidate.aiScoreV2Details}
@@ -1926,89 +1900,6 @@ export function CandidateDrawer({
                     scoreV2={candidate.aiScoreV2 ?? null}
                   />
                 )}
-                {candidate.aiScore != null ? (
-                  <>
-                    <div className="flex flex-col items-center gap-2 py-4">
-                      <div
-                        className={cn(
-                          "w-24 h-24 rounded-full flex items-center justify-center text-4xl font-bold border-4",
-                          aiScoreColor(candidate.aiScore),
-                        )}
-                      >
-                        {candidate.aiScore}
-                      </div>
-                      <p className="text-xs text-muted-foreground">из 100</p>
-                    </div>
-
-                    {candidate.aiSummary && (
-                      <div className="p-3 rounded-lg bg-muted/40 border border-border/60">
-                        <p className="text-sm text-foreground whitespace-pre-wrap">{candidate.aiSummary}</p>
-                      </div>
-                    )}
-
-                    {Array.isArray(candidate.aiDetails) && candidate.aiDetails.length > 0 && (
-                      <section className="space-y-2">
-                        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Детали</h3>
-                        {candidate.aiDetails.map((detail, i) => {
-                          const detailColor =
-                            detail.score >= 70 ? "text-emerald-600 dark:text-emerald-400" :
-                            detail.score >= 40 ? "text-amber-600 dark:text-amber-400" :
-                            "text-destructive"
-                          return (
-                            <div key={i} className="p-2.5 rounded-lg bg-muted/40 border border-border/60 space-y-1">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-xs font-medium text-foreground">{detail.question}</span>
-                                <span className={cn("text-xs font-bold", detailColor)}>{detail.score}</span>
-                              </div>
-                              {detail.comment && (
-                                <p className="text-xs text-muted-foreground">{detail.comment}</p>
-                              )}
-                            </div>
-                          )
-                        })}
-                      </section>
-                    )}
-
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="w-full gap-2"
-                      disabled={scoringAi}
-                      onClick={handleAiScore}
-                    >
-                      {scoringAi ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                      Переоценить
-                    </Button>
-                  </>
-                ) : derived.hasAnswers ? (
-                  <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
-                    <Sparkles className="w-10 h-10 text-muted-foreground opacity-50" />
-                    <p className="text-sm text-muted-foreground">Кандидат ещё не оценён</p>
-                    <Button
-                      size="sm"
-                      className="gap-2 bg-purple-600 hover:bg-purple-700 text-white"
-                      disabled={scoringAi}
-                      onClick={handleAiScore}
-                    >
-                      {scoringAi ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                      Оценить сейчас
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
-                    <FileQuestion className="w-10 h-10 text-muted-foreground opacity-50" />
-                    <p className="text-sm text-muted-foreground">
-                      Нет ответов на анкету — оценивать пока нечего
-                    </p>
-                  </div>
-                )}
-              </TabsContent>
-
-              {/* ── Рубрика (новый shadow-движок, отдельно от старой AI-оценки) ── */}
-              <TabsContent value="rubric" className="px-6 py-4 pb-28 mt-0 space-y-4">
-                <p className="text-xs text-muted-foreground">
-                  Новая оценка соответствия по критериям анкеты. Считается параллельно старой AI-оценке и не влияет на стадию.
-                </p>
                 <RubricShadowSection candidateId={candidate.id} />
               </TabsContent>
 

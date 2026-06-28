@@ -33,7 +33,7 @@ import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ListFilter,
 import { DemoProgressBar, calcDemoPercent, calcDemoFraction } from "@/components/hr/demo-progress-bar"
 import { getStageLabel, getStageColorClasses } from "@/lib/stages"
 
-export type ListSortKey = "favorite" | "name" | "aiScore" | "resumeScore" | "portraitScore" | "rubricScore" | "testScore" | "progress" | "salary" | "responseDate" | "status" | "city" | "source" | "nextInterview"
+export type ListSortKey = "favorite" | "name" | "aiScore" | "resumeScore" | "portraitScore" | "testScore" | "progress" | "salary" | "responseDate" | "status" | "city" | "source" | "nextInterview"
 export type ListSortDir = "asc" | "desc"
 export interface ListSortState {
   key: ListSortKey
@@ -118,7 +118,6 @@ const DEFAULT_DIR: Record<ListSortKey, ListSortDir> = {
   aiScore:      "desc",
   resumeScore:  "desc",
   portraitScore: "desc",
-  rubricScore:  "desc",
   testScore:    "desc",
   progress:     "desc",
   salary:       "desc",
@@ -243,7 +242,6 @@ export function ListView({
   const showScore        = settings.showScore          // AI-оцен. (оценка анкеты)
   const showResumeScore  = settings.showResumeScore !== false  // AI-резм. (undefined = вкл)
   const showPortraitScore = settings.showPortraitScore !== false  // AI-Порт (undefined = вкл)
-  const showRubricScore  = settings.showRubricScore === true  // Рубрика убрана из UI (консолидация на Портрет); код дремлет, по умолчанию скрыта
   const showTestScore    = settings.showTestScore !== false    // Тест (балл/статус; по умолчанию вкл)
   const showNextInterview = settings.showNextInterview !== false // Интервью (ближайшее; по умолчанию вкл)
   const showSalary       = settings.showSalary || settings.showSalaryFull
@@ -283,9 +281,6 @@ export function ListView({
         }
         case "portraitScore": {
           return mul * ((a.aiScoreV2 ?? -1) - (b.aiScoreV2 ?? -1))
-        }
-        case "rubricScore": {
-          return mul * ((a.rubricScore ?? -1) - (b.rubricScore ?? -1))
         }
         case "testScore": {
           // Ранг тест-активности: сдан с баллом (по баллу) → сдан → заполняет →
@@ -497,53 +492,6 @@ export function ListView({
       })
     }
 
-    if (showScore) {
-      // AI-оцен.
-      list.push({
-        id: "aiScore",
-        gridWidth: "minmax(56px, 0.85fr)",
-        header: <SortHeader label="AI-оцен." sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />,
-        renderCell: (candidate, ctx) => (
-          <div className="text-center">
-            <Badge
-              variant="outline"
-              className={cn(
-                "text-[14px] border font-semibold",
-                ctx.aiActuallyRan ? getScoreColor(candidate.aiScore!) : "text-muted-foreground/50 bg-muted/30 border-muted"
-              )}
-            >
-              {ctx.aiActuallyRan ? candidate.aiScore : "—"}
-            </Badge>
-          </div>
-        ),
-      })
-    }
-
-    if (showRubricScore) {
-      // Рубрика — новый shadow-движок соответствия
-      list.push({
-        id: "rubricScore",
-        gridWidth: "60px",
-        header: <SortHeader label="Рубрика" sortKey="rubricScore" sort={sort} onToggle={handleSort} align="center" />,
-        renderCell: (candidate) => (
-          <div className="flex items-center justify-center" title="Соответствие по рубрике (тест)">
-            {candidate.rubricScore != null ? (
-              <Badge
-                variant="outline"
-                className={cn(
-                  "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
-                  getScoreColor(candidate.rubricScore),
-                )}
-              >
-                {candidate.rubricScore}
-              </Badge>
-            ) : (
-              <span className="text-muted-foreground/40 text-xs">—</span>
-            )}
-          </div>
-        ),
-      })
-    }
 
     if (showTestScore) {
       // Тест — лесенка: балл (бейдж) → «сдан» (отправил, балла ещё нет) →
@@ -722,7 +670,7 @@ export function ListView({
     return list
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    showVacancyColumn, showProgress, showResumeScore, showScore, showRubricScore,
+    showVacancyColumn, showProgress, showResumeScore, showScore,
     showTestScore, showNextInterview, showSalary, showCity, showResponseDate, showSource,
     sort, onVacancyClick, onOpenProfile,
   ])

@@ -697,8 +697,15 @@ export function QuestionEditor({ questions, onChange }: {
     onChange(next)
   }
 
+  const requiredCount = questions.filter(q => q.required).length
+
   return (
     <div className="space-y-2">
+      {requiredCount > 0 && (
+        <p className="text-xs text-muted-foreground text-right">
+          Обязательных: <span className="font-medium text-destructive">{requiredCount}</span> из {questions.length}
+        </p>
+      )}
       {questions.map((q, idx) => {
         const isOpen = expandedId === q.id
         const meta = ANKETA_QTYPES.find(t => t.type === q.answerType) ?? ANKETA_QTYPES[0]
@@ -713,7 +720,11 @@ export function QuestionEditor({ questions, onChange }: {
               <span className="text-xs text-muted-foreground font-mono w-5">{idx + 1}</span>
               <span className="flex-1 text-sm truncate">{q.text || "Новый вопрос"}</span>
               <Badge variant="outline" className="text-[10px] shrink-0">{meta.icon} {meta.label}</Badge>
-              {q.required && <span className="text-destructive text-xs font-bold">*</span>}
+              {q.required && (
+                <Badge className="text-[10px] shrink-0 bg-destructive/10 text-destructive border-destructive/30 hover:bg-destructive/10">
+                  Обязательный
+                </Badge>
+              )}
               <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform shrink-0", isOpen && "rotate-180")} />
             </button>
 
@@ -729,10 +740,16 @@ export function QuestionEditor({ questions, onChange }: {
                     <ChevronDown className="w-3 h-3" />
                   </Button>
                   <div className="flex-1" />
-                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Checkbox checked={q.required ?? false} onCheckedChange={v => updateQ(q.id, { required: !!v })} />
-                    Обязательный
-                  </label>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id={`required-${q.id}`}
+                      checked={q.required ?? false}
+                      onCheckedChange={v => updateQ(q.id, { required: v })}
+                    />
+                    <Label htmlFor={`required-${q.id}`} className={cn("text-xs cursor-pointer", q.required ? "text-destructive font-medium" : "text-muted-foreground")}>
+                      Обязательный
+                    </Label>
+                  </div>
                   <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => removeQ(q.id)}>
                     <Trash2 className="w-3 h-3" />
                   </Button>

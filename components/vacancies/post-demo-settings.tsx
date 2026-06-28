@@ -114,6 +114,10 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
   const [manualButton, setManualButton] = useState("Хорошо, жду!")
   const [manualButtonEnabled, setManualButtonEnabled] = useState(true)
 
+  // Тумблер анкеты: true/false = явно вкл/выкл; null = не задан (legacy = вкл).
+  // Хранится в postDemoSettings.anketaEnabled.
+  const [anketaEnabled, setAnketaEnabled] = useState<boolean | null>(null)
+
   // Final form fields
   const [formFields, setFormFields] = useState<FormFieldsState>(DEFAULT_FORM_FIELDS)
 
@@ -147,6 +151,7 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
         const data = json.settings ?? {}
         if (!data || typeof data !== "object") return
         if (typeof data.enabled === "boolean") setEnabled(data.enabled)
+        if (typeof data.anketaEnabled === "boolean") setAnketaEnabled(data.anketaEnabled)
         if (data.mode === "auto" || data.mode === "manual") setMode(data.mode)
         if (typeof data.upperThreshold === "number") setUpperThreshold(data.upperThreshold)
         if (typeof data.lowerThreshold === "number") setLowerThreshold(data.lowerThreshold)
@@ -224,6 +229,9 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
     try {
       const payload = {
         enabled,
+        // null = не задан ещё (legacy); передаём undefined чтобы бэкенд не менял поле.
+        // Явное true/false сохраняем.
+        ...(anketaEnabled !== null ? { anketaEnabled } : {}),
         mode,
         upperThreshold,
         lowerThreshold,
@@ -274,7 +282,7 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
     tabKey: "funnel",
     loaded,
     watchedValues: {
-      enabled, mode, upperThreshold, lowerThreshold,
+      enabled, anketaEnabled, mode, upperThreshold, lowerThreshold,
       greenTitle, meetPhone, meetOnline, meetOffice, officeAddress,
       yellowTitle, yellowText, redTitle, redText,
       manualTitle, manualText, manualButton, manualButtonEnabled,
@@ -523,15 +531,34 @@ export function PostDemoSettings({ vacancyId, sections }: PostDemoSettingsProps)
       /* Финальная анкета — настройка полей */
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <ClipboardList className="w-4 h-4" />
-            Финальная анкета
-          </CardTitle>
-          <p className="text-xs text-muted-foreground mt-1">
-            Поля, которые видит кандидат после демо. Можно скрыть и/или сделать необязательными.
-          </p>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <ClipboardList className="w-4 h-4" />
+              Финальная анкета
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                {anketaEnabled === false ? "Выключена" : "Включена"}
+              </span>
+              <Switch
+                checked={anketaEnabled !== false}
+                onCheckedChange={(v) => setAnketaEnabled(v)}
+              />
+            </div>
+          </div>
+          {anketaEnabled === false ? (
+            <p className="text-[11px] text-muted-foreground mt-2 bg-muted/40 rounded-md px-3 py-2 border">
+              Анкета выключена. После прохождения уроков кандидат увидит статичный экран «Спасибо».
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground mt-1">
+              Поля, которые видит кандидат после демо. Можно скрыть и/или сделать необязательными.
+              Анкета показывается только кандидатам без контактов — у кого уже есть телефон или
+              email (например, отклик с hh) её пропускают.
+            </p>
+          )}
         </CardHeader>
-        <CardContent>
+        <CardContent className={cn("", anketaEnabled === false && "opacity-50 pointer-events-none")}>
           <div className="space-y-2">
             <div className="grid grid-cols-[1fr_auto_auto] gap-3 px-2 pb-1 text-[11px] text-muted-foreground">
               <span>Поле</span>

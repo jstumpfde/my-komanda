@@ -1352,6 +1352,13 @@ export interface PostDemoSettings {
   manualButton?: string
   manualButtonEnabled?: boolean
   greenButtonEnabled?: boolean
+  // Финальная анкета — тумблер-оверрайд (полный выключатель).
+  // false = анкета НИКОГДА не показывается (после уроков сразу статичный «спасибо»).
+  // true / undefined = анкета РАЗРЕШЕНА; фактический показ решается «умным» правилом
+  //   на /demo/[token]: показываем только если у кандидата ЕЩЁ НЕТ контактов
+  //   (нет email и нет телефона). У кандидата с hh-контактами анкета пропускается —
+  //   её смысл собрать контакты, а они уже есть. Дефолт undefined = ВКЛ (умное правило).
+  anketaEnabled?: boolean
   // Финальная анкета — настройка полей
   formFields?: {
     firstName?: { enabled: boolean; required: boolean }

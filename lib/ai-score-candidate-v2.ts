@@ -10,13 +10,14 @@
 // score-candidate и /api/public/demo/[token]/answer (fire-and-forget).
 // Запускается ТОЛЬКО если vacancy.requirementsJson.must_have не пустой.
 
-import { eq, and } from "drizzle-orm"
+import { eq, and, desc } from "drizzle-orm"
 import Anthropic from "@anthropic-ai/sdk"
 import { db } from "@/lib/db"
 import {
   candidates,
   vacancies,
   companies,
+  demos,
   DEFAULT_SCORING_WEIGHTS,
   type CandidateScoreV2,
   type ScoringWeights,
@@ -25,6 +26,10 @@ import {
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import { buildExtractFactsPrompt } from "@/lib/ai/prompts/extract-facts"
 import { buildCompareRequirementsPrompt } from "@/lib/ai/prompts/compare-requirements"
+import {
+  buildBlockMap,
+  normalizeAnswers,
+} from "@/lib/ai-score-candidate"
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -82,6 +87,7 @@ function buildResumeText(args: {
   salaryMax:       number | null
   surveyResponses: unknown
   anketaAnswers:   unknown
+  blockMap:        ReturnType<typeof buildBlockMap>
 }): string {
   const lines: string[] = []
   lines.push(`Имя: ${args.name}`)
@@ -102,10 +108,13 @@ function buildResumeText(args: {
       lines.push(`Данные финальной анкеты:\n${JSON.stringify(args.surveyResponses, null, 2)}`)
     } catch { /* ignore */ }
   }
-  if (Array.isArray(args.anketaAnswers) && args.anketaAnswers.length > 0) {
-    try {
-      lines.push(`Ответы на квалификационные вопросы:\n${JSON.stringify(args.anketaAnswers, null, 2)}`)
-    } catch { /* ignore */ }
+  // Use normalizeAnswers to produce human-readable «вопрос → ответ» instead of raw blockId+object JSON
+  const normalizedAnketa = normalizeAnswers(args.anketaAnswers, args.blockMap)
+  if (normalizedAnketa.length > 0) {
+    const answersText = normalizedAnketa
+      .map(a => `  ${a.question}: ${a.answer}`)
+      .join("\n")
+    lines.push(`Ответы на квалификационные вопросы:\n${answersText}`)
   }
   return lines.join("\n")
 }
@@ -164,6 +173,15 @@ export async function scoreCandidateV2(
     .where(eq(companies.id, vacancy.companyId))
     .limit(1)
 
+  // Fetch demo lessons to build blockId→Block map for human-readable anketa answers
+  const [demoRow] = await db
+    .select({ lessonsJson: demos.lessonsJson })
+    .from(demos)
+    .where(and(eq(demos.vacancyId, vacancyId), eq(demos.kind, "demo")))
+    .orderBy(desc(demos.updatedAt))
+    .limit(1)
+  const blockMap = buildBlockMap(demoRow?.lessonsJson)
+
   const resumeText = buildResumeText({
     name:            candidate.name,
     city:            candidate.city,
@@ -179,6 +197,7 @@ export async function scoreCandidateV2(
     salaryMax:       candidate.salaryMax,
     surveyResponses: candidate.surveyResponses,
     anketaAnswers:   candidate.anketaAnswers,
+    blockMap,
   })
 
   // ── Pass 1: extract facts ───────────────────────────────────────────
