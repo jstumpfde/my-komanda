@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -235,11 +235,25 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
     resolveBlocks(blocks, benefits, { city: vacancyCity, salaryFrom }),
   )
   const [savingBlocks, setSavingBlocks] = useState(false)
+  // S3: авто-сохранение блоков. isUserEditRef отличает правки пользователя от
+  // синка из props (иначе синк триггерил бы лишний автосейв). autoSaved — бейдж.
+  const [autoSaved, setAutoSaved] = useState(false)
+  const isUserEditRef = useRef(false)
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Подхватываем блоки при загрузке/смене вакансии (родитель догружает async).
+  // Это НЕ правка пользователя → сбрасываем флаг, чтобы автосейв не сработал.
   useEffect(() => {
+    isUserEditRef.current = false
     setBlockList(resolveBlocks(blocks, benefits, { city: vacancyCity, salaryFrom }))
   }, [blocks, benefits, vacancyCity, salaryFrom])
+
+  // Правка пользователя: помечаем флаг, дальше сработает автосейв (debounce).
+  const editBlocks = (updater: (prev: LandingBlock[]) => LandingBlock[]) => {
+    isUserEditRef.current = true
+    setAutoSaved(false)
+    setBlockList(updater)
+  }
 
   useEffect(() => {
     const base = { ...getBrand() }
@@ -278,6 +292,31 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
       setSavingBlocks(false)
     }
   }
+
+  // S3: тихое авто-сохранение (без toast и БЕЗ onSaved — иначе refetch
+  // родителя перезатёр бы текст во время набора). Дёргается debounce-эффектом.
+  const autoSaveBlocks = useCallback(async () => {
+    if (!vacancyId) return
+    const clean = blockList.map(b => ({ icon: b.icon || "✓", text: b.text.trim() })).filter(b => b.text)
+    try {
+      const currentJson = descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null
+        ? (descriptionJson as Record<string, unknown>) : {}
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description_json: { ...currentJson, landingBlocks: clean, landingBenefits: [] } }),
+      })
+      if (!res.ok) throw new Error()
+      setAutoSaved(true)
+    } catch { /* молча — остаётся ручная кнопка «Сохранить» */ }
+  }, [vacancyId, blockList, descriptionJson])
+
+  useEffect(() => {
+    if (!isUserEditRef.current || !vacancyId) return
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
+    autoSaveTimer.current = setTimeout(() => { autoSaveBlocks() }, 1000)
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current) }
+  }, [blockList, vacancyId, autoSaveBlocks])
 
   const handleCopyCode = async () => {
     if (!brand) return
@@ -353,7 +392,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
                               "h-8 w-8 rounded-md text-lg leading-none hover:bg-muted transition-colors",
                               b.icon === ic && "bg-primary/10 ring-1 ring-primary",
                             )}
-                            onClick={() => setBlockList(prev => prev.map((x, j) => j === i ? { ...x, icon: ic } : x))}
+                            onClick={() => editBlocks(prev => prev.map((x, j) => j === i ? { ...x, icon: ic } : x))}
                           >
                             {ic}
                           </button>
@@ -364,7 +403,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
                   {/* Текст блока (многострочный) */}
                   <Textarea
                     value={b.text}
-                    onChange={(e) => setBlockList(prev => prev.map((x, j) => j === i ? { ...x, text: e.target.value } : x))}
+                    onChange={(e) => editBlocks(prev => prev.map((x, j) => j === i ? { ...x, text: e.target.value } : x))}
                     placeholder="Текст блока"
                     rows={1}
                     className="min-h-9 text-sm resize-y"
@@ -374,7 +413,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
                     variant="ghost"
                     size="icon"
                     className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
-                    onClick={() => setBlockList(prev => prev.filter((_, j) => j !== i))}
+                    onClick={() => editBlocks(prev => prev.filter((_, j) => j !== i))}
                     title="Удалить блок"
                   >
                     <X className="w-4 h-4" />
@@ -388,20 +427,25 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
                 variant="outline"
                 size="sm"
                 className="h-8 text-xs gap-1.5"
-                onClick={() => setBlockList(prev => [...prev, { icon: "✓", text: "" }])}
+                onClick={() => editBlocks(prev => [...prev, { icon: "✓", text: "" }])}
               >
                 <Plus className="w-3.5 h-3.5" /> Добавить текстовый блок
               </Button>
-              <Button
-                type="button"
-                size="sm"
-                className="h-8 text-xs gap-1.5"
-                onClick={handleSaveBlocks}
-                disabled={savingBlocks || cleanBlocks.length === 0}
-              >
-                <Save className="w-3.5 h-3.5" />
-                {savingBlocks ? "Сохранение…" : "Сохранить"}
-              </Button>
+              <div className="flex items-center gap-2">
+                {autoSaved && (
+                  <span className="flex items-center gap-1 text-[11px] text-emerald-600"><Check className="w-3 h-3" /> Сохранено автоматически</span>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8 text-xs gap-1.5"
+                  onClick={handleSaveBlocks}
+                  disabled={savingBlocks || cleanBlocks.length === 0}
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  {savingBlocks ? "Сохранение…" : "Сохранить"}
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
