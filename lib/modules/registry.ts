@@ -23,23 +23,16 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Настройки HR',     href: '/hr/hiring-settings',   icon: 'Settings' },
       // Адаптация
       { label: 'Ввод информации',         href: '/hr/onboarding',              icon: 'GraduationCap' },
-      { label: 'Назначения',             href: '/hr/assignments',             icon: 'ClipboardList' },
-      { label: 'Аналитика адаптации',    href: '/hr/adaptation-analytics',    icon: 'TrendingUp' },
       // Персонал
-      { label: 'Сотрудники',             href: '/hr/employees',               icon: 'Users' },
       { label: 'Обучение',               href: '/hr/courses',                 icon: 'BookOpen' },
-      { label: 'Развитие',               href: '/hr/development',             icon: 'Target' },
-      { label: 'Удержание',              href: '/hr/retention',               icon: 'Shield' },
-      { label: 'Аналитика персонала',    href: '/hr/people-analytics',        icon: 'PieChart' },
       // Оргструктура
       { label: 'Оргструктура',          href: '/hr/company-structure',       icon: 'Network' },
       // Редиректы (сохранены для обратной совместимости)
       { label: 'Отделы',               href: '/hr/departments',             icon: 'Building2' },
       { label: 'Должности',            href: '/hr/positions',               icon: 'Briefcase' },
       { label: 'Оргструктура',         href: '/hr/org-structure',           icon: 'Network' },
-      // Legacy (not in menu groups, but pages still exist)
-      { label: 'Обзор',          href: '/hr/overview',    icon: 'LayoutDashboard' },
-      { label: 'Overview2',      href: '/hr/overview2',   icon: 'LayoutDashboard' },
+      // Удалены 8 мёртвых записей (роутов нет): assignments, adaptation-analytics,
+      // development, retention, people-analytics, employees, overview, overview2.
       { label: 'Воронка',        href: '/hr/funnel',      icon: 'TrendingDown' },
       { label: 'Демо-редактор',  href: '/hr/demo-editor', icon: 'Layers' },
       { label: 'Уведомления',       href: '/hr/settings/notifications',  icon: 'Bell' },
