@@ -628,12 +628,10 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext, funnelV2RuntimeEna
       {/* Статус блока + переключатель «Боевой» */}
       {selectedBlock && (
         <div className="flex items-center justify-between -mt-1">
-          {/* Статус активности */}
+          {/* Дата изменения (метку «виден/не виден» убрали — Юрий 28.06:
+              если блок выбран/настроен, кандидаты его видят; статус только путал). */}
           <div className="text-[11px] leading-tight">
-            <span className={cn("font-medium", selectedBlock.isLiveBattle ? "text-emerald-600" : "text-amber-600")}>
-              {selectedBlock.isLiveBattle ? "● Виден кандидатам" : "○ Не виден"}
-            </span>
-            <span className="text-muted-foreground/60"> · изм. {fmtDate(selectedBlock.updatedAt)}</span>
+            <span className="text-muted-foreground/60">изм. {fmtDate(selectedBlock.updatedAt)}</span>
           </div>
 
           {/* Роль блока (Демо/Тест) + «Боевой» — только для block:* блоков.
