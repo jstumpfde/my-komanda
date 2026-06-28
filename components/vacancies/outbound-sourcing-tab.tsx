@@ -547,11 +547,18 @@ export function OutboundSourcingTab({
       })
       const data = await res.json()
       if (!res.ok) { toast.error(data.error ?? "Ошибка приглашения"); return }
+      const results = (data.results ?? []) as Array<{ hhResumeId: string; status: string; error?: string }>
       const ok = data.invited ?? 0
-      const limited = (data.results ?? []).filter((r: { status: string }) => r.status === "limit").length
-      toast.success(`Приглашено: ${ok}${limited ? `, упёрлись в лимит: ${limited}` : ""}`)
+      const limited = results.filter((r) => r.status === "limit").length
+      const errored = results.filter((r) => r.status === "error").length
+      toast.success(`Приглашено: ${ok}${limited ? `, лимит: ${limited}` : ""}${errored ? `, ошибок: ${errored}` : ""}`)
+      // M6: обновляем статусы выбранных INLINE из ответа — без переоценки и релоада.
+      const statusByResume = new Map(results.map((r) => [r.hhResumeId, r.status]))
+      setItems((prev) => prev.map((it) => {
+        const st = statusByResume.get(it.hhResumeId)
+        return st === "ok" || st === "skipped" ? { ...it, status: "invited" } : it
+      }))
       setSelected(new Set())
-      await runScore(undefined)   // подтянуть обновлённые статусы (без ids = все)
       await loadStatus()          // обновить квоту
     } catch {
       toast.error("Сеть недоступна при приглашении")
