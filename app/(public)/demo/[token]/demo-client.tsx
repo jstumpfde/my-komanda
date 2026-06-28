@@ -1366,21 +1366,15 @@ export default function DemoPage() {
     return false
   })
 
-  // Системная навигация плеера демо — управляется тумблером showSystemNav
-  // (postDemoSettings), решение Юрия 28.06:
-  //   false     → системной кнопки НЕТ вообще (ни нижней панели, ни инлайна);
-  //   true      → нижняя панель «Назад/Далее»;
+  // Системная навигация плеера демо — управляется ТОЛЬКО тумблером showSystemNav
+  // (postDemoSettings), решение Юрия 28.06. Никакой авто-магии:
+  //   true      → нижняя панель «Назад/Далее» показывается на КАЖДОЙ странице;
+  //   false     → системной кнопки НЕТ нигде (ни панели, ни инлайна);
   //   undefined → дефолт: панель при >1 уроке, иначе инлайн-кнопка финиша.
+  // Если HR не хочет дубль со своей кнопкой-CTA — просто выключает тумблер.
   const navMode = data.postDemoSettings?.showSystemNav            // true | false | undefined
   const showStickyNav = navMode === true || (navMode === undefined && totalLessons > 1)
   const showInlineNav = navMode === undefined && totalLessons <= 1
-  // Авто-дедуп: если в уроке уже есть своя кнопка-переход (блок «Кнопка» на
-  // следующую страницу, а не внешняя ссылка) — системную «Далее/Завершить» не
-  // дублируем (фикс двойной кнопки 28.06). «Назад» в нижней панели сохраняем.
-  const hasAdvancingButton = currentFlat.blocks.some((b) =>
-    b.type === "button" &&
-    !((b.buttonTarget === "url" || (!b.buttonTarget && !!b.buttonUrl)) && !!b.buttonUrl),
-  )
 
   return (
     <div className="flex min-h-screen flex-col" style={{ backgroundColor: bgColor }}>
@@ -1561,9 +1555,8 @@ export default function DemoPage() {
             ))}
 
             {/* Инлайн-кнопка финиша — только дефолтный одностраничный случай
-                (showInlineNav). При showSystemNav=false системной кнопки нет
-                вообще. Если в уроке есть своя кнопка-переход — не дублируем. */}
-            {showInlineNav && !hasAdvancingButton && (
+                (showInlineNav). При showSystemNav=false системной кнопки нет вообще. */}
+            {showInlineNav && (
               <div className="pt-4 flex justify-center">
                 <Button
                   onClick={handleNext}
@@ -1593,10 +1586,6 @@ export default function DemoPage() {
           или одностраничный дефолт) → панели нет. */}
       {(() => {
         if (!showStickyNav) return null
-        // Есть контентная кнопка-переход → системную «Далее/Завершить» не дублируем.
-        // Нижняя панель остаётся только ради «Назад» (на не-первой странице);
-        // на первой странице без forward-кнопки она пустая → скрываем целиком.
-        if (hasAdvancingButton && currentIndex === 0) return null
         return (
           <div className="sticky bottom-0 border-t bg-white/90 backdrop-blur-sm">
             <div className="mx-auto max-w-2xl px-4 py-4 flex gap-3">
@@ -1611,27 +1600,25 @@ export default function DemoPage() {
                   Назад
                 </Button>
               )}
-              {!hasAdvancingButton && (
-                <Button
-                  onClick={handleNext}
-                  disabled={hasRequiredUnanswered || saving || isAnyMediaUploading}
-                  title={isAnyMediaUploading ? "Дождитесь окончания загрузки видео" : undefined}
-                  className="flex-1 h-12 text-base font-medium"
-                  style={{ backgroundColor: navBtnColor, borderColor: navBtnColor }}
-                >
-                  {saving || isAnyMediaUploading ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  ) : currentIndex === totalLessons - 1 ? (
-                    // Заданное HR название приоритетно и на последней странице
-                    data.postDemoSettings?.navButtonText || "Завершить"
-                  ) : (
-                    <>
-                      {data.postDemoSettings?.navButtonText || "Далее"}
-                      <ChevronRight className="ml-1 h-5 w-5" />
-                    </>
-                  )}
-                </Button>
-              )}
+              <Button
+                onClick={handleNext}
+                disabled={hasRequiredUnanswered || saving || isAnyMediaUploading}
+                title={isAnyMediaUploading ? "Дождитесь окончания загрузки видео" : undefined}
+                className="flex-1 h-12 text-base font-medium"
+                style={{ backgroundColor: navBtnColor, borderColor: navBtnColor }}
+              >
+                {saving || isAnyMediaUploading ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : currentIndex === totalLessons - 1 ? (
+                  // Заданное HR название приоритетно и на последней странице
+                  data.postDemoSettings?.navButtonText || "Завершить"
+                ) : (
+                  <>
+                    {data.postDemoSettings?.navButtonText || "Далее"}
+                    <ChevronRight className="ml-1 h-5 w-5" />
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         )
