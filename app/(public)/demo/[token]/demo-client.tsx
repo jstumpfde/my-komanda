@@ -1357,10 +1357,17 @@ export default function DemoPage() {
     return false
   })
 
-  // Если в уроке есть контентная кнопка-переход (блок «Кнопка», ведущая на
-  // следующую страницу, а не внешняя ссылка) — она уже двигает кандидата дальше,
-  // поэтому системную нав-кнопку «Далее/Завершить» НЕ дублируем (фикс двойной
-  // кнопки 28.06). «Назад» в нижней панели при этом сохраняем.
+  // Системная навигация плеера демо — управляется тумблером showSystemNav
+  // (postDemoSettings), решение Юрия 28.06:
+  //   false     → системной кнопки НЕТ вообще (ни нижней панели, ни инлайна);
+  //   true      → нижняя панель «Назад/Далее»;
+  //   undefined → дефолт: панель при >1 уроке, иначе инлайн-кнопка финиша.
+  const navMode = data.postDemoSettings?.showSystemNav            // true | false | undefined
+  const showStickyNav = navMode === true || (navMode === undefined && totalLessons > 1)
+  const showInlineNav = navMode === undefined && totalLessons <= 1
+  // Авто-дедуп: если в уроке уже есть своя кнопка-переход (блок «Кнопка» на
+  // следующую страницу, а не внешняя ссылка) — системную «Далее/Завершить» не
+  // дублируем (фикс двойной кнопки 28.06). «Назад» в нижней панели сохраняем.
   const hasAdvancingButton = currentFlat.blocks.some((b) =>
     b.type === "button" &&
     !((b.buttonTarget === "url" || (!b.buttonTarget && !!b.buttonUrl)) && !!b.buttonUrl),
@@ -1544,12 +1551,10 @@ export default function DemoPage() {
               </div>
             ))}
 
-            {/* Панель навигации скрыта (showSystemNav=false) — финиш всё равно
-                обязателен: рендерим ОДНУ кнопку инлайн в потоке контента
-                (без «Назад» и sticky-бара), иначе кандидат не сможет завершить.
-                НО если в уроке есть своя кнопка-переход — инлайн не дублируем. */}
-            {!(data.postDemoSettings?.showSystemNav === true
-              || (data.postDemoSettings?.showSystemNav === undefined && totalLessons > 1)) && !hasAdvancingButton && (
+            {/* Инлайн-кнопка финиша — только дефолтный одностраничный случай
+                (showInlineNav). При showSystemNav=false системной кнопки нет
+                вообще. Если в уроке есть своя кнопка-переход — не дублируем. */}
+            {showInlineNav && !hasAdvancingButton && (
               <div className="pt-4 flex justify-center">
                 <Button
                   onClick={handleNext}
@@ -1575,11 +1580,10 @@ export default function DemoPage() {
         </div>
       </div>
 
-      {/* Navigation buttons */}
+      {/* Navigation buttons — нижняя панель. showStickyNav=false (тумблер выкл
+          или одностраничный дефолт) → панели нет. */}
       {(() => {
-        const showNav = data.postDemoSettings?.showSystemNav === true
-          || (data.postDemoSettings?.showSystemNav === undefined && totalLessons > 1)
-        if (!showNav) return null
+        if (!showStickyNav) return null
         // Есть контентная кнопка-переход → системную «Далее/Завершить» не дублируем.
         // Нижняя панель остаётся только ради «Назад» (на не-первой странице);
         // на первой странице без forward-кнопки она пустая → скрываем целиком.
