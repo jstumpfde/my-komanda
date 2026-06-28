@@ -87,7 +87,26 @@ export interface BuildReportOptions {
   to?: Date | null
 }
 
+// O4: лёгкий кэш отчёта в памяти (60с). Отчёт — аналитика, 60с устаревания
+// допустимо; зато повторные открытия и TV-авторефреш (раз в минуту) не гоняют
+// ~11 тяжёлых GROUP BY заново. Один PM2-процесс → in-memory достаточно.
+const _reportCache = new Map<string, { at: number; data: Awaited<ReturnType<typeof buildReportInner>> }>()
+const REPORT_CACHE_TTL_MS = 60_000
+
 export async function buildReport(companyId: string, opts: BuildReportOptions = {}) {
+  const key = `${companyId}|${JSON.stringify(opts ?? {})}`
+  const now = Date.now()
+  const hit = _reportCache.get(key)
+  if (hit && now - hit.at < REPORT_CACHE_TTL_MS) return hit.data
+  const data = await buildReportInner(companyId, opts)
+  _reportCache.set(key, { at: now, data })
+  if (_reportCache.size > 500) {
+    for (const [k, v] of _reportCache) if (now - v.at > REPORT_CACHE_TTL_MS) _reportCache.delete(k)
+  }
+  return data
+}
+
+async function buildReportInner(companyId: string, opts: BuildReportOptions = {}) {
   const vacancyId = opts.vacancyId && opts.vacancyId !== "all" ? opts.vacancyId : null
 
   // Кастомный диапазон с календаря перекрывает пресет.
