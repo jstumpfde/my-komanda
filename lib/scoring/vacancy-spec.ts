@@ -2,6 +2,7 @@
 // Чистый модуль (без серверных импортов) — типы из ./types.
 
 import type { ScoringSpec, WeightLevel, Criterion } from "./types"
+import { renderAnswerValue } from "@/lib/demo/resolve-questions"
 
 // Встроенные оси оценки ПРОФЕССИОНАЛЬНОЙ пригодности.
 //
@@ -145,11 +146,31 @@ export function buildResumeText(c: {
   if (c.workFormat) L.push(`Желаемый формат: ${FORMAT_LABELS[c.workFormat] ?? c.workFormat}`)
   if (Array.isArray(c.keySkills) && c.keySkills.length) L.push(`Навыки: ${c.keySkills.join(", ")}`)
 
-  // Ответы анкеты кандидата (если есть): [{question, answer}]
+  // Ответы анкеты кандидата (если есть): [{question, answer}] или [{blockId, answer}].
+  // Используем renderAnswerValue чтобы объекты (медиа, per-question maps, view-маркеры)
+  // не сериализовались в "[object Object]".
   if (Array.isArray(c.anketaAnswers)) {
-    const qa = (c.anketaAnswers as Array<{ question?: string; answer?: string }>)
-      .filter(x => x && (x.question || x.answer))
-      .map(x => `${x.question ?? ""}: ${x.answer ?? ""}`.trim())
+    const qa: string[] = []
+    for (const x of c.anketaAnswers as Array<{ question?: unknown; answer?: unknown; blockId?: unknown }>) {
+      if (!x || typeof x !== "object") continue
+      const entry = x as Record<string, unknown>
+      // Пропускаем view-маркеры: объект answer с только viewed/viewedAt/timeSpent
+      const ans = entry.answer
+      if (ans && typeof ans === "object" && !Array.isArray(ans)) {
+        const o = ans as Record<string, unknown>
+        const meaningful = Object.keys(o).filter(k => k !== "viewed" && k !== "viewedAt" && k !== "timeSpent")
+        if (meaningful.length === 0) continue
+      }
+      // Рендерим значение без "[object Object]"
+      const rendered = renderAnswerValue(ans, [])
+      if (!rendered) continue
+      const label = typeof entry.question === "string" && entry.question.trim()
+        ? entry.question.trim()
+        : typeof entry.blockId === "string" && entry.blockId.trim()
+          ? entry.blockId.trim()
+          : "Ответ"
+      qa.push(`${label}: ${rendered}`)
+    }
     if (qa.length) L.push(`\nОтветы анкеты:\n${qa.join("\n")}`)
   }
 

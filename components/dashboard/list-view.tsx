@@ -33,7 +33,7 @@ import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ListFilter,
 import { DemoProgressBar, calcDemoPercent, calcDemoFraction } from "@/components/hr/demo-progress-bar"
 import { getStageLabel, getStageColorClasses } from "@/lib/stages"
 
-export type ListSortKey = "favorite" | "name" | "aiScore" | "resumeScore" | "portraitScore" | "testScore" | "progress" | "salary" | "responseDate" | "status" | "city" | "source" | "nextInterview"
+export type ListSortKey = "favorite" | "name" | "aiScore" | "answersScore" | "resumeScore" | "portraitScore" | "testScore" | "progress" | "salary" | "responseDate" | "status" | "city" | "source" | "nextInterview"
 export type ListSortDir = "asc" | "desc"
 export interface ListSortState {
   key: ListSortKey
@@ -121,6 +121,7 @@ const DEFAULT_DIR: Record<ListSortKey, ListSortDir> = {
   favorite:     "desc",
   name:         "asc",
   aiScore:      "desc",
+  answersScore: "desc",
   resumeScore:  "desc",
   portraitScore: "desc",
   testScore:    "desc",
@@ -283,6 +284,9 @@ export function ListView({
         }
         case "aiScore": {
           return mul * ((a.aiScore ?? -1) - (b.aiScore ?? -1))
+        }
+        case "answersScore": {
+          return mul * ((a.demoAnswersScore ?? -1) - (b.demoAnswersScore ?? -1))
         }
         case "resumeScore": {
           return mul * ((a.resumeScore ?? -1) - (b.resumeScore ?? -1))
@@ -480,23 +484,24 @@ export function ListView({
     }
 
     if (showAnswersScore) {
-      // Демо1 — AI-балл ответов на вопросы анкеты демо (candidates.ai_score).
+      // AI-ан — AI-балл ответов на вопросы анкеты демо (candidates.demo_answers_score).
       // Вычисляется после прохождения демо на основании текстовых ответов кандидата.
+      // Отдельно от aiScore (туда пишут v1/v2-скоринг резюме — была бы гонка).
       list.push({
         id: "answersScore",
         gridWidth: "56px",
-        header: <SortHeader label="Демо1" sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />,
+        header: <SortHeader label="AI-ан" sortKey="answersScore" sort={sort} onToggle={handleSort} align="center" />,
         renderCell: (candidate) => (
           <div className="flex items-center justify-center" title="AI-балл ответов анкеты демо">
-            {candidate.aiScore != null ? (
+            {candidate.demoAnswersScore != null ? (
               <Badge
                 variant="outline"
                 className={cn(
                   "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
-                  getScoreColor(candidate.aiScore),
+                  getScoreColor(candidate.demoAnswersScore),
                 )}
               >
-                {candidate.aiScore}
+                {candidate.demoAnswersScore}
               </Badge>
             ) : (
               <span className="text-muted-foreground/40 text-xs">—</span>

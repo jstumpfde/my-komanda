@@ -18,11 +18,12 @@ import { buildSpecFromAnketa, buildResumeText } from "@/lib/scoring/vacancy-spec
 import { scoreTestSubmission } from "@/lib/ai-score-test"
 import { isSpecScoringEnabled, buildSpecResumeInput, specHasScoringContent } from "@/lib/core/spec/resume-input"
 import { getSpec } from "@/lib/core/spec/store"
+import { scoreDemoAnswers } from "@/lib/demo/score-answers"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
-type Dim = "resume" | "ai" | "rubric" | "test" | "portrait" | "all"
+type Dim = "resume" | "ai" | "rubric" | "test" | "portrait" | "answers" | "all"
 const ALL_DIMS: Exclude<Dim, "all">[] = ["resume", "ai", "rubric", "test", "portrait"]
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       .where(and(eq(candidates.vacancyId, vacancyId), inArray(candidates.id, ids)))
 
     const dims = dimension === "all" ? ALL_DIMS : [dimension]
-    const result = { resume: 0, ai: 0, rubric: 0, test: 0, portrait: 0, skipped: 0, errors: 0 }
+    const result = { resume: 0, ai: 0, rubric: 0, test: 0, portrait: 0, answers: 0, skipped: 0, errors: 0 }
 
     // Портрет (spec) для переоценки резюме — тот же путь, что у живого пайплайна:
     // если заполнен и включён, оцениваем ПО НЕМУ (а не по legacy-анкете).
@@ -147,6 +148,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
               .set({ rubricScore: rr.total, rubricDetails: rr, rubricScoredAt: new Date() })
               .where(eq(candidates.id, c.id))
             result.rubric++
+          } else if (d === "answers") {
+            const r = await scoreDemoAnswers({ candidateId: c.id, vacancyId, skipIfScored: false })
+            if (r != null) result.answers++
+            else result.skipped++
           } else if (d === "test") {
             const [sub] = await db
               .select({ id: testSubmissions.id, answerText: testSubmissions.answerText })

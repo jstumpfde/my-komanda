@@ -6,6 +6,7 @@ import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { isShortId } from "@/lib/short-id"
 import { scoreCandidateById } from "@/lib/ai-score-candidate"
 import { scoreCandidateV2 } from "@/lib/ai-score-candidate-v2"
+import { scoreDemoAnswers } from "@/lib/demo/score-answers"
 
 // Группа 25: fire-and-forget A/B скоринг при завершении демо.
 // Если у вакансии есть must_have — запускаем v1+v2 параллельно. Иначе —
@@ -289,6 +290,20 @@ export async function POST(
     // Группа 25: запускает v1+v2 параллельно, если у вакансии есть структурированные требования.
     if (txResult.isComplete && txResult.aiScoreNull) {
       void runAbScoring(txResult.candidateId, txResult.vacancyId)
+    }
+
+    // Балл по ответам демо — вычисляется ПОСЛЕ завершения, fire-and-forget.
+    // Работает независимо от A/B скоринга: оценивает task-вопросы с aiCriteria.
+    // Пишет в СВОЮ колонку candidates.demo_answers_score (не ai_score — иначе была
+    // бы гонка с runAbScoring). Только если у вакансии есть такие вопросы.
+    if (txResult.isComplete) {
+      void scoreDemoAnswers({
+        candidateId: txResult.candidateId,
+        vacancyId:   txResult.vacancyId,
+        skipIfScored: false,
+      }).catch((err: unknown) => {
+        console.error("[demo answer] score-answers failed:", err instanceof Error ? err.message : err)
+      })
     }
 
     return apiSuccess({ ok: true, stage: txResult.stage })

@@ -428,6 +428,7 @@ export async function GET(req: NextRequest) {
           score: candidates.score,
           aiScore: candidates.aiScore,
           aiScoreV2: candidates.aiScoreV2,
+          demoAnswersScore: candidates.demoAnswersScore,
           resumeScore: candidates.resumeScore,
           rubricScore: candidates.rubricScore,
           salaryMin: candidates.salaryMin,

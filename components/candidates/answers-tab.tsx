@@ -29,8 +29,10 @@ interface AnswersTabProps {
   answers: unknown
   demoLessons: unknown
   candidateId?: string
-  /** Общий AI-балл кандидата (демо-ответы). green ≥70 / amber ≥40 / red <40 */
+  /** Балл по ответам демо (candidates.demo_answers_score). green ≥70 / amber ≥40 / red <40 */
   aiScore?: number | null
+  /** Поразбивка по вопросам (candidates.demo_answers_details). */
+  answersDetails?: { questionText: string; awarded: number; max: number; comment: string }[] | null
 }
 
 interface QualificationAnswer {
@@ -711,7 +713,7 @@ function PrequalificationSection({ candidateId }: { candidateId?: string }) {
   )
 }
 
-export function AnswersTab({ answers, demoLessons, candidateId, aiScore }: AnswersTabProps) {
+export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answersDetails }: AnswersTabProps) {
   const entries = normalizeEntries(answers).filter(Boolean)
   const blockMap = buildBlockMap(demoLessons)
 
@@ -756,23 +758,41 @@ export function AnswersTab({ answers, demoLessons, candidateId, aiScore }: Answe
     }
   }
 
-  // Бэдж общей AI-оценки за ответы демо (зелёный ≥70, жёлтый ≥40, красный <40).
+  // Бэдж общей AI-оценки за ответы демо (зелёный ≥70, жёлтый ≥40, красный <40)
+  // + поразбивка по вопросам из demo_answers_details (если есть).
   const scoreBadge = aiScore != null ? (
-    <div className="flex items-center gap-2">
-      <span className="text-xs text-muted-foreground">AI-оценка ответов:</span>
-      <Badge
-        variant="outline"
-        className={cn(
-          "text-sm font-semibold px-2 py-0.5",
-          aiScore >= 70
-            ? "text-emerald-700 border-emerald-300 bg-emerald-50"
-            : aiScore >= 40
-            ? "text-amber-700 border-amber-300 bg-amber-50"
-            : "text-destructive border-destructive/40 bg-destructive/5",
-        )}
-      >
-        {aiScore} / 100
-      </Badge>
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground">AI-оценка ответов:</span>
+        <Badge
+          variant="outline"
+          className={cn(
+            "text-sm font-semibold px-2 py-0.5",
+            aiScore >= 70
+              ? "text-emerald-700 border-emerald-300 bg-emerald-50"
+              : aiScore >= 40
+              ? "text-amber-700 border-amber-300 bg-amber-50"
+              : "text-destructive border-destructive/40 bg-destructive/5",
+          )}
+        >
+          {aiScore} / 100
+        </Badge>
+      </div>
+      {Array.isArray(answersDetails) && answersDetails.length > 0 && (
+        <div className="space-y-1.5 rounded-lg border border-border bg-muted/30 p-3">
+          {answersDetails.map((d, i) => (
+            <div key={i} className="text-xs">
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-foreground/90 min-w-0">{d.questionText}</span>
+                <span className="shrink-0 font-semibold text-muted-foreground tabular-nums">
+                  {d.awarded} / {d.max}
+                </span>
+              </div>
+              {d.comment && <p className="text-muted-foreground mt-0.5">{d.comment}</p>}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   ) : null
 

@@ -1523,6 +1523,11 @@ export const candidates = pgTable("candidates", {
   aiSummary: text("ai_summary"),
   aiDetails: jsonb("ai_details"), // [{question, score, comment}]
   aiScoredAt: timestamp("ai_scored_at"),
+  // Балл по ответам демо (колонка «AI-ан»). Отдельно от ai_score, чтобы не было
+  // гонки: в ai_score пишут v1/v2-скоринг резюме, а сюда — lib/demo/score-answers.ts
+  // (оценка task-вопросов демо против aiCriteria). 0..100, NULL = не считали. Миграция 0234.
+  demoAnswersScore:   integer("demo_answers_score"),
+  demoAnswersDetails: jsonb("demo_answers_details"), // [{questionText, awarded, max, comment}]
   // Группа 25: A/B сравнение скоринга v1 (scoreCandidateById) vs v2
   // (scoreCandidateV2, двухпроходный со структурированными требованиями).
   // aiScore = v2 если доступен, иначе v1 — основной для UI/фильтров.

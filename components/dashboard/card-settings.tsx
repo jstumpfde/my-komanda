@@ -40,7 +40,7 @@ export interface CardDisplaySettings {
 export const CANDIDATE_COLUMN_TOGGLES: Array<{ key: keyof CardDisplaySettings; label: string }> = [
   { key: "showResumeScore",   label: "AI резюме" },
   { key: "showProgress",      label: "Прогресс демо" },
-  { key: "showAnswersScore",  label: "Демо1 (балл ответов)" },
+  { key: "showAnswersScore",  label: "AI-ан (балл ответов демо)" },
   { key: "showPortraitScore", label: "AI-Портрет" },
   { key: "showScore",         label: "AI оценка" },
   { key: "showTestScore",     label: "Тест" },

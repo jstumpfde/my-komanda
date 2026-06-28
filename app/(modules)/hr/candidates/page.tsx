@@ -56,6 +56,7 @@ interface GlobalCandidate {
   isActive: boolean
   isFavorite: boolean
   aiScore?: number | null
+  demoAnswersScore?: number | null
   resumeScore?: number | null
   nameUncertain?: boolean
   testScore?: number | null
@@ -115,6 +116,7 @@ function toListCandidate(c: GlobalCandidate): Candidate & { vacancyTitle: string
     lastSeen: new Date(c.createdAt),
     aiScore: c.aiScore ?? undefined,
     resumeScore: c.resumeScore ?? null,
+    demoAnswersScore: c.demoAnswersScore ?? null,
     nameUncertain: c.nameUncertain === true,
     testScore: c.testScore ?? null,
     testStatus: c.testStatus ?? null,

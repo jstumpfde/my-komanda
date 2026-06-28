@@ -35,6 +35,9 @@ export interface Candidate {
   resumeScore?: number | null
   // AI-Портрет: оценка резюме по критериям Портрета (ai_score_v2).
   aiScoreV2?: number | null
+  // AI-ан: балл по ответам демо (candidates.demo_answers_score). Отдельно от
+  // aiScore — туда пишут v1/v2-скоринг резюме, была бы гонка fire-and-forget.
+  demoAnswersScore?: number | null
   // Имя «под вопросом» — резолвер уйдёт в нейтральное «Здравствуйте» (фамилия/аноним/
   // редкое имя). HR стоит проверить и при желании вписать имя вручную.
   nameUncertain?: boolean
