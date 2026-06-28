@@ -68,6 +68,8 @@ export async function PUT(
       hiring_plan?: number
       employee_type?: string
       branding_override_enabled?: boolean
+      // M3: какие каналы откликов слушает вакансия (['hh'] / ['hh','avito']).
+      channel_sources?: Array<"hh" | "avito">
       // Уровень 3 интеграций: per-vacancy override webhooks/bitrix.
       integrations_override?: {
         enabled?: boolean
@@ -87,6 +89,11 @@ export async function PUT(
     if (body.category !== undefined) updates.category = body.category
     if (body.salary_min !== undefined) updates.salaryMin = body.salary_min
     if (body.salary_max !== undefined) updates.salaryMax = body.salary_max
+    if (body.channel_sources !== undefined && Array.isArray(body.channel_sources)) {
+      // hh всегда слушаем; avito — опционально (тумблер на вакансии, M3).
+      const av = body.channel_sources.includes("avito")
+      updates.channelSources = av ? ["hh", "avito"] : ["hh"]
+    }
     if (body.status !== undefined) {
       updates.status = body.status
       // Фиксируем дату нашего закрытия: при переходе в архив/закрыто — ставим

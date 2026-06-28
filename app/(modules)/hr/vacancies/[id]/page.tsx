@@ -1350,6 +1350,25 @@ export default function VacancyPage() {
     (apiVacancy as { channelSources?: Array<"hh" | "avito"> } | undefined)?.channelSources,
   ) && ((apiVacancy as { channelSources?: Array<"hh" | "avito"> }).channelSources ?? []).includes("avito")
 
+  // M3: тумблер канала Авито на уровне ЭТОЙ вакансии (channel_sources).
+  const [avitoToggleBusy, setAvitoToggleBusy] = useState(false)
+  const toggleVacancyAvito = async (on: boolean) => {
+    setAvitoToggleBusy(true)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${id}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channel_sources: on ? ["hh", "avito"] : ["hh"] }),
+      })
+      if (!res.ok) throw new Error()
+      await refetchVacancy()
+      toast.success(on ? "Авито включён для этой вакансии" : "Авито отключён для этой вакансии")
+    } catch {
+      toast.error("Не удалось переключить Авито")
+    } finally {
+      setAvitoToggleBusy(false)
+    }
+  }
+
   // Авито полностью подключено на уровне компании.
   const avitoCompanyConnected = avitoStatus?.configured && avitoStatus?.isEnabled && avitoStatus?.isActive
 
@@ -3931,12 +3950,10 @@ export default function VacancyPage() {
                                 : "Канал Авито отключён для этой вакансии"}
                             </p>
                           </div>
-                          {vacancyAvitoEnabled ? (
-                            <Badge variant="outline" className="text-xs h-6 bg-emerald-500/10 text-emerald-700 border-emerald-200 shrink-0">Активно</Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-xs h-6 text-muted-foreground shrink-0">Отключено</Badge>
-                          )}
-                          <span className="text-xs text-muted-foreground shrink-0">0 кандидатов</span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-[11px] text-muted-foreground">{vacancyAvitoEnabled ? "Активно" : "Отключено"}</span>
+                            <Switch checked={vacancyAvitoEnabled} onCheckedChange={toggleVacancyAvito} disabled={avitoToggleBusy} />
+                          </div>
                         </div>
                       ) : avitoStatus?.configured ? (
                         /* Настроено, но выключено */
