@@ -691,45 +691,11 @@ export default function VacancyPage() {
   const [status, setStatus] = useState<VacancyStatus>("draft")
   const [columns, setColumns] = useState<ColumnData[]>(emptyColumns())
 
-  // Load funnel stages from API. Таблица funnel_stages в БД может быть
-  // устаревшей (после расширения воронки в drizzle/0083 в ней нет
-  // primary_contact/demo_opened/anketa_filled). Поэтому всегда дополняем
-  // ответ API недостающими системными стейджами из COLUMN_ORDER —
-  // иначе кандидаты с этими стейджами теряются (filter c.stage===col.id
-  // не находит совпадения).
-  useEffect(() => {
-    fetch("/api/funnel-stages")
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then((stages: Array<{ slug: string; title: string; color: string; sortOrder: number }>) => {
-        if (stages.length > 0) {
-          const apiCols: ColumnData[] = stages.map(s => ({
-            id: s.slug,
-            title: s.title,
-            count: 0,
-            colorFrom: s.color,
-            colorTo: s.color,
-            candidates: [],
-          }))
-          const existing = new Set(apiCols.map(c => c.id))
-          const missing: ColumnData[] = COLUMN_ORDER
-            .filter(id => !existing.has(id))
-            .map(id => {
-              const c = defaultColumnColors[id]
-              return {
-                id,
-                title: c?.label ?? id,
-                count: 0,
-                colorFrom: c?.from ?? "#94a3b8",
-                colorTo:   c?.to   ?? "#64748b",
-                candidates: [],
-              }
-            })
-          // Сливаем: сначала API-порядок, потом недостающие в порядке COLUMN_ORDER.
-          setColumns([...apiCols, ...missing])
-        }
-      })
-      .catch(() => {})
-  }, [])
+  // Стадии воронки: колонки инициализируются из COLUMN_ORDER в emptyColumns()
+  // (см. useState выше). Раньше здесь был fetch("/api/funnel-stages") — но этот
+  // роут удалён (404 на каждой загрузке вакансии), а ответ всё равно проглатывался
+  // catch'ем и колонки не менялись. Мёртвый вызов убран (битая связка, найдена
+  // живым обходом сайта 28.06).
 
   // Однократный guard для авто-переключения таба при первой загрузке статуса:
   // после ручного клика юзера на «Анкета» refetch apiVacancy не должен снова
