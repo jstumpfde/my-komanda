@@ -30,9 +30,31 @@ const anthropic = new Anthropic({
 })
 
 function parseJsonFromText<T>(text: string): T {
-  const match = text.match(/\{[\s\S]*\}/)
-  if (!match) throw new Error("AI не вернул JSON")
-  return JSON.parse(match[0]) as T
+  // Убираем markdown-ограждения ```json ... ```
+  const t = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "")
+  const start = t.indexOf("{")
+  if (start === -1) throw new Error("AI не вернул JSON")
+  // Находим сбалансированную закрывающую скобку первого объекта (устойчиво к
+  // тексту/заметкам после JSON и к скобкам внутри строк).
+  let depth = 0
+  let inStr = false
+  let esc = false
+  for (let i = start; i < t.length; i++) {
+    const ch = t[i]
+    if (inStr) {
+      if (esc) esc = false
+      else if (ch === "\\") esc = true
+      else if (ch === '"') inStr = false
+    } else if (ch === '"') {
+      inStr = true
+    } else if (ch === "{") {
+      depth++
+    } else if (ch === "}") {
+      depth--
+      if (depth === 0) return JSON.parse(t.slice(start, i + 1)) as T
+    }
+  }
+  throw new Error("AI вернул незакрытый JSON")
 }
 
 export interface AnswerQuestionBreakdown {
