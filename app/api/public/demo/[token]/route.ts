@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import { eq, and, isNull, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, vacancies, demos, companies, hhResponses } from "@/lib/db/schema"
+import { candidates, vacancies, demos, companies, hhResponses, vacancySpecs } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { isShortId } from "@/lib/short-id"
 import { buildCandidateDeepLink, generateInviteToken } from "@/lib/telegram/candidate-bot"
@@ -184,21 +184,48 @@ export async function GET(
     }
     // ── /ГЕЙТ ВОРОНКИ V2 ────────────────────────────────────────────────────
 
-    // Find published demo for this vacancy
-    const demoRows = await db
-      .select({
-        id: demos.id,
-        title: demos.title,
-        lessonsJson: demos.lessonsJson,
-        postDemoSettings: demos.postDemoSettings,
-      })
-      .from(demos)
-      // kind='demo': кандидату отдаём только демонстрацию. Без фильтра запись
-      // с kind='test' (таб «Тест», Этап 2.5) могла оказаться новее и подменить
-      // демо → кандидат видел пустой тест (критический баг).
-      .where(and(eq(demos.vacancyId, vacancy.id), eq(demos.kind, "demo")))
-      .orderBy(sql`${demos.updatedAt} DESC`)
-      .limit(1)
+    // #2: какой блок показать. Если в Портрете (vacancy_specs) выбран конкретный
+    // демо-блок (resumeThresholds.inviteContentBlockId) → грузим его по id строки
+    // demos; иначе «боевой» kind='demo' (легаси-поведение).
+    let inviteBlockId: string | null = null
+    try {
+      const [specRow] = await db
+        .select({ spec: vacancySpecs.spec })
+        .from(vacancySpecs)
+        .where(eq(vacancySpecs.vacancyId, vacancy.id))
+        .limit(1)
+      const rt = (specRow?.spec as { resumeThresholds?: { inviteContentBlockId?: string | null } } | undefined)?.resumeThresholds
+      inviteBlockId = rt?.inviteContentBlockId ?? null
+    } catch { /* нет спеки — легаси-путь */ }
+
+    // Find published demo for this vacancy.
+    // inviteContentBlockId = id строки demos (ContentBlock.id), поэтому ищем
+    // выбранный блок ПО id (в kind='block:<uuid>' uuid — внутренний, ≠ id строки).
+    // kind='demo' fallback: кандидату отдаём только демонстрацию (без фильтра
+    // запись с kind='test' могла бы подменить демо — критический баг Этапа 2.5).
+    const demoCols = {
+      id: demos.id,
+      title: demos.title,
+      lessonsJson: demos.lessonsJson,
+      postDemoSettings: demos.postDemoSettings,
+    }
+    let demoRows = inviteBlockId
+      ? await db.select(demoCols).from(demos)
+          .where(and(eq(demos.vacancyId, vacancy.id), eq(demos.id, inviteBlockId)))
+          .limit(1)
+      : await db.select(demoCols).from(demos)
+          .where(and(eq(demos.vacancyId, vacancy.id), eq(demos.kind, "demo")))
+          .orderBy(sql`${demos.updatedAt} DESC`)
+          .limit(1)
+
+    // Фолбэк: выбранный блок удалён/не найден → «боевой» kind='demo',
+    // чтобы кандидат не получил 404.
+    if (demoRows.length === 0 && inviteBlockId) {
+      demoRows = await db.select(demoCols).from(demos)
+        .where(and(eq(demos.vacancyId, vacancy.id), eq(demos.kind, "demo")))
+        .orderBy(sql`${demos.updatedAt} DESC`)
+        .limit(1)
+    }
 
     if (demoRows.length === 0) {
       return apiError("Демо-курс не найден", 404)

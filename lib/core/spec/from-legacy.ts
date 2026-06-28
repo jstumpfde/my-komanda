@@ -205,6 +205,10 @@ export function buildSpecFromLegacy(vacancy: LegacyVacancyInput): CandidateSpec 
     lowerThreshold:       Math.max(0, Math.min(100, lower)),
     midRangeAction:       midRange,
     autoRejectEnabled:    autoReject,
+    autoInviteEnabled:    bool((ai as Record<string, unknown>).autoInviteEnabled, false),  // legacy не звал автоматически
+    inviteNextStep:       "demo",
+    inviteHhStage:        "phone_interview",
+    inviteContentBlockId: null,
     rejectionDelayMinutes: Math.max(0, rejDelay),
   }
 
@@ -248,6 +252,14 @@ export function buildSpecFromLegacy(vacancy: LegacyVacancyInput): CandidateSpec 
     portraitNiceSkills,
     portraitKnockouts,
     outboundSoftCriteria,
+    // (e) тексты кандидату (Портрет). inviteLetter подтягиваем из legacy
+    // inviteMessage, чтобы существующий текст приглашения сразу был виден в
+    // Портрете. rejectLetter/botClarify — нейтральные дефолты (как и раньше).
+    rejectLetter: "",
+    inviteLetter: typeof (ai as Record<string, unknown>).inviteMessage === "string"
+      ? ((ai as Record<string, unknown>).inviteMessage as string)
+      : "",
+    botClarifyAmbiguous: false,
     // метаданные
     // weightMode: legacy всегда использует строковые уровни весов (WeightLevel),
     // поэтому "level" — нейтральный дефолт этапа 2.

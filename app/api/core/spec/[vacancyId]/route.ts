@@ -84,6 +84,45 @@ async function mirrorSpecToLegacy(
     .where(eq(vacancies.id, vacancyId))
 }
 
+/**
+ * ВСЕГДА-включённый синк текста приглашения Портрета (inviteLetter) в legacy —
+ * НЕ за флагом SPEC_MIRROR_TO_LEGACY, потому что это текст, уходящий живым
+ * кандидатам, и он обязан быть единым во всех местах. Пишет:
+ *   - aiProcessSettings.inviteMessage (его читает крон process-queue),
+ *   - firstMessagesChain[0].text (редактор цепочки в табе «Сообщения»),
+ * чтобы Портрет, «Сообщения» и крон показывали/слали один текст.
+ * Пустой inviteLetter НЕ затирает существующий inviteMessage.
+ */
+async function syncInviteTextToLegacy(vacancyId: string, inviteLetter: string): Promise<void> {
+  const text = inviteLetter?.trim()
+  if (!text) return
+
+  const [cur] = await db
+    .select({
+      aiProcessSettings:  vacancies.aiProcessSettings,
+      firstMessagesChain: vacancies.firstMessagesChain,
+    })
+    .from(vacancies)
+    .where(eq(vacancies.id, vacancyId))
+    .limit(1)
+  if (!cur) return
+
+  const mergedAi: VacancyAiProcessSettings = {
+    ...((cur.aiProcessSettings ?? {}) as VacancyAiProcessSettings),
+    inviteMessage: text,
+  }
+
+  const updateSet: Record<string, unknown> = { aiProcessSettings: mergedAi }
+  const chain = cur.firstMessagesChain
+  if (Array.isArray(chain) && chain.length > 0) {
+    updateSet.firstMessagesChain = (chain as Array<Record<string, unknown>>).map(
+      (m, i) => (i === 0 ? { ...m, text } : m),
+    )
+  }
+
+  await db.update(vacancies).set(updateSet).where(eq(vacancies.id, vacancyId))
+}
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ vacancyId: string }> },
@@ -104,6 +143,15 @@ export async function GET(
     // Пробуем новый контур
     const specFromStore = await getSpec(vacancyId)
     if (specFromStore) {
+      // Бэкфилл: текст приглашения мог быть задан в legacy (таб «Сообщения»)
+      // до появления поля inviteLetter — показываем реальный текущий текст,
+      // а не пустоту/дефолт.
+      if (!specFromStore.inviteLetter?.trim()) {
+        const legacyInvite = (row.aiProcessSettings as { inviteMessage?: string } | null)?.inviteMessage
+        if (typeof legacyInvite === "string" && legacyInvite.trim()) {
+          specFromStore.inviteLetter = legacyInvite
+        }
+      }
       return apiSuccess<SpecApiResponse>({ spec: specFromStore, source: "spec" })
     }
 
@@ -174,6 +222,14 @@ export async function PUT(
     }
 
     await saveSpec(vacancyId, parsed.data, user.id)
+
+    // Текст приглашения синкаем в legacy ВСЕГДА (не за флагом) — это текст
+    // кандидату, обязан быть единым в Портрете, «Сообщениях» и кроне.
+    try {
+      await syncInviteTextToLegacy(vacancyId, parsed.data.inviteLetter)
+    } catch (mirrorErr) {
+      console.warn("[spec] syncInviteTextToLegacy failed:", mirrorErr)
+    }
 
     // Dual-write Spec → legacy ЗА ФЛАГОМ. По умолчанию SPEC_MIRROR_TO_LEGACY
     // не задан/не 'true' → НИЧЕГО не зеркалим (боевое поведение не меняется).

@@ -319,7 +319,9 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
     // владелец первый раз откроет страницу.
     const targetStage = "primary_contact"
     const baseMessage = effInviteMsg
-    const hhAction = "invitation"
+    // #3: стадия hh при авто-приглашении. Дефолт "invitation" (→ phone_interview =
+    // текущее поведение); Портрет может переопределить на consider/interview/assessment.
+    let hhAction: "invitation" | "consider" | "interview" | "assessment" = "invitation"
     const newStatus = "invited"
 
     // Per-vacancy AI settings — нужны для minScore-фильтра и сообщений
@@ -678,6 +680,9 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                 if (portraitOn && spec?.resumeThresholds) {
                   autoInviteOn   = spec.resumeThresholds.autoInviteEnabled === true
                   inviteNextStep = spec.resumeThresholds.inviteNextStep ?? "demo"
+                  // #3: целевая стадия hh (phone_interview = дефолт "invitation").
+                  const stage = spec.resumeThresholds.inviteHhStage ?? "phone_interview"
+                  hhAction = stage === "phone_interview" ? "invitation" : stage
                 }
               } catch (specErr) {
                 console.warn(`[spec-scoring] vacancy=${localVac.id} — ошибка чтения Spec, fallback на legacy:`, specErr)

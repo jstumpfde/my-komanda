@@ -117,6 +117,23 @@ export const ResumeThresholdsSchema = z.object({
    */
   inviteNextStep: z.enum(["demo", "interview", "video", "call"]).default("demo"),
   /**
+   * На какую стадию воронки hh переводить кандидата при авто-приглашении:
+   *   phone_interview — Телефонное интервью / первый контакт (дефолт = текущее поведение)
+   *   consider        — Подумать / первичный контакт
+   *   interview       — Собеседование
+   *   assessment      — Тестовое задание
+   * Маппится на действие changeNegotiationState в lib/hh/process-queue.ts
+   * (phone_interview → "invitation", остальные 1:1).
+   */
+  inviteHhStage: z.enum(["phone_interview", "consider", "interview", "assessment"]).default("phone_interview"),
+  /**
+   * Какой контент-блок показать приглашённому кандидату (id строки demos,
+   * kind='block:<id>'). null = «боевой» блок вакансии (kind='demo'/'test',
+   * текущее поведение). Используется публичными роутами /demo и /test
+   * и маршрутизацией ссылки в lib/hh/process-queue.ts.
+   */
+  inviteContentBlockId: z.string().nullable().default(null),
+  /**
    * Задержка отказа в минутах. 0 = мгновенно.
    * Дефолт 60 (1 ч) — решение Юрия.
    */
@@ -523,6 +540,17 @@ export const CandidateSpecSchema = z.object({
    * (юр. требование, [[legal-rejection-texts-neutral-keep-autoreject]]).
    */
   rejectLetter: z.string().max(2000).default(""),
+
+  /**
+   * Текст приглашения — уходит кандидату при АВТОМАТИЧЕСКОМ приглашении по баллу
+   * (resumeThresholds.autoInviteEnabled + score ≥ upper). Плейсхолдеры
+   * «{{name}}» / «{{vacancy}}» / «{{demo_link}}» подставляются. Пусто →
+   * DEFAULT_INVITE_MESSAGE. Это ЕДИНЫЙ источник: при сохранении зеркалится в
+   * aiProcessSettings.inviteMessage (его читает крон) и в шаг 1 цепочки первых
+   * сообщений (таб «Сообщения») — см. syncInviteTextToLegacy. Письмо отказа рядом
+   * (rejectLetter) — оба текста кандидату теперь в Портрете.
+   */
+  inviteLetter: z.string().max(2000).default(""),
 
   // ── Метаданные ────────────────────────────────────────────────────────────
   /**

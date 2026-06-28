@@ -60,6 +60,8 @@ import {
 import { computeRealism, REALISM_TONE_CLASS } from "./spec-editor-helpers"
 import { useVacancySectionRegister, useVacancySettings } from "./vacancy-settings-context"
 import { PortraitAdvisor } from "./portrait-advisor"
+import { useContentBlocks } from "@/hooks/use-content-blocks"
+import { DEFAULT_INVITE_MESSAGE } from "@/lib/hh/default-messages"
 
 // ─── Константы ───────────────────────────────────────────────────────────────
 
@@ -931,6 +933,10 @@ interface SpecEditorProps {
 }
 
 export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onNavigateNext, vacancyAnketaData }: SpecEditorProps) {
+  // #2: контент-блоки вакансии — для выбора, на какой блок отправлять приглашённого.
+  // v1: только презентационные (демо) блоки → ссылка /demo/, без правок движка.
+  const { blocks: contentBlocks } = useContentBlocks(vacancyId)
+  const inviteBlockChoices = contentBlocks.filter(b => b.contentType === "presentation")
   const [adopting, setAdopting] = useState(false)
   async function adoptPortrait() {
     setAdopting(true)
@@ -1743,8 +1749,21 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                 </div>
                 <Slider
                   value={[rt.upperThreshold]}
-                  onValueChange={([v]) => patch({ resumeThresholds: { ...rt, upperThreshold: Math.max(v, rt.lowerThreshold + 5) } })}
-                  min={10} max={100} step={5}
+                  onValueChange={([v]) => patch({ resumeThresholds: { ...rt, upperThreshold: rt.autoRejectEnabled ? Math.max(v, rt.lowerThreshold + 5) : v } })}
+                  min={0} max={100} step={5}
+                />
+                {rt.upperThreshold === 0 && (
+                  <p className="text-[11px] text-emerald-600 dark:text-emerald-400">Порог 0 — приглашаем всех (любой балл ≥ 0).</p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> Текст приглашения</Label>
+                <p className="text-[11px] text-muted-foreground">«{"{{name}}"}», «{"{{vacancy}}"}», «{"{{demo_link}}"}» подставятся сами. Это то же сообщение, что в табе «Сообщения» → цепочка (шаг 1) — правьте где удобно.</p>
+                <Textarea
+                  value={spec.inviteLetter || DEFAULT_INVITE_MESSAGE}
+                  onChange={e => patch({ inviteLetter: e.target.value.slice(0, 2000) })}
+                  rows={4}
+                  maxLength={2000}
                 />
               </div>
               <div className="space-y-1.5">
@@ -1764,6 +1783,40 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                 {(rt.inviteNextStep ?? "demo") !== "demo" && (
                   <p className="text-[11px] text-muted-foreground">Сейчас меняет текст приглашения; автозапись в календарь/видео — в доработке движка.</p>
                 )}
+              </div>
+              {inviteBlockChoices.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Демо-блок (что показать приглашённому)</Label>
+                  <Select
+                    value={rt.inviteContentBlockId ?? "__live__"}
+                    onValueChange={v => patch({ resumeThresholds: { ...rt, inviteContentBlockId: v === "__live__" ? null : v } })}
+                  >
+                    <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__live__">По умолчанию (боевой блок вакансии)</SelectItem>
+                      {inviteBlockChoices.map(b => (
+                        <SelectItem key={b.id} value={b.id}>{b.title}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">По умолчанию — блок, помеченный «боевым» в табе «Контент». Здесь можно отправить приглашённого на конкретный демо-блок из нескольких.</p>
+                </div>
+              )}
+              <div className="space-y-1.5">
+                <Label className="text-xs">Стадия в hh.ru при приглашении</Label>
+                <Select
+                  value={rt.inviteHhStage ?? "phone_interview"}
+                  onValueChange={v => patch({ resumeThresholds: { ...rt, inviteHhStage: v as "phone_interview" | "consider" | "interview" | "assessment" } })}
+                >
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="phone_interview">Телефонное интервью (первый контакт)</SelectItem>
+                    <SelectItem value="consider">Подумать / первичный контакт</SelectItem>
+                    <SelectItem value="interview">Собеседование</SelectItem>
+                    <SelectItem value="assessment">Тестовое задание</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">Куда кандидат попадёт в воронке работодателя на hh.ru. По умолчанию — «Телефонное интервью».</p>
               </div>
             </>)}
           </div>

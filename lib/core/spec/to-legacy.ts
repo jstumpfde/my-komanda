@@ -82,6 +82,10 @@ export function specToLegacy(spec: CandidateSpec): SpecLegacyPatches {
     autoRejectEnabled:     rt.autoRejectEnabled,
     rejectionDelayMinutes: rt.rejectionDelayMinutes,
   }
+  // NB: текст приглашения (inviteLetter → inviteMessage + цепочка) зеркалится
+  // ВСЕГДА отдельной функцией syncInviteTextToLegacy в spec-роуте, а НЕ здесь —
+  // полный specToLegacy mirror за флагом SPEC_MIRROR_TO_LEGACY (по умолч. выкл),
+  // а текст приглашения кандидату обязан синкаться независимо от флага.
 
   // ── stopFactorsJson ─────────────────────────────────────────────────────────
   // Структура Spec.stopFactors идентична VacancyStopFactors. Включаем только
