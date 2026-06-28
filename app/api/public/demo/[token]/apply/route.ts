@@ -143,18 +143,12 @@ export async function POST(
       // после анкеты» в табе «Сообщения» больше нет. Единственный канал
       // авто-сообщения после анкеты — scheduleAnketaAutoReply (ниже),
       // настраивается в табе «Воронка» через PostDemoSettings.
-      // ТЗ-3 Ч.1: автоответ с тестовым заданием — отдельный одиночный
-      // touch (branch=anketa_auto_reply). Конфиг в post_demo_settings.
-      void scheduleAnketaAutoReply({
-        candidateId: existing.id,
-        vacancyId:   existing.vacancyId,
-      })
-
-      // Воронка v2: если флаг включён и кандидат в v2-воронке — применяем StageRule.
+      // F2/F3: легаси-автоответ (scheduleAnketaAutoReply, branch=anketa_auto_reply)
+      // и v2-хук — ВЗАИМОИСКЛЮЧАЮЩИЕ. При активном движке v2 отвечает он; иначе —
+      // легаси. Раньше легаси вызывался безусловно → при v2 был двойной авто-ответ.
       // Fire-and-forget: ошибка здесь не блокирует ответ кандидату.
       void (async () => {
         try {
-          // Проверяем флаг вакансии перед тем, как грузить тяжёлый обработчик
           const [vac] = await db
             .select({ funnelV2RuntimeEnabled: vacancies.funnelV2RuntimeEnabled, funnelV2StateJson: candidates.funnelV2StateJson })
             .from(vacancies)
@@ -163,9 +157,11 @@ export async function POST(
             .limit(1)
           if (vac?.funnelV2RuntimeEnabled && vac?.funnelV2StateJson) {
             await onAnketaCompleted(existing.id)
+          } else {
+            void scheduleAnketaAutoReply({ candidateId: existing.id, vacancyId: existing.vacancyId })
           }
         } catch (err) {
-          console.error("[demo/apply] v2-хук onAnketaCompleted упал:", err instanceof Error ? err.message : err)
+          console.error("[demo/apply] анкета авто-ответ (v2/легаси) упал:", err instanceof Error ? err.message : err)
         }
       })()
 
@@ -241,16 +237,8 @@ export async function POST(
 
       await db.update(candidates).set(updates).where(eq(candidates.id, dup.id))
 
-      // ТЗ-3 Ч.1: автоответ и в dedup-ветке тоже (раньше пропускался).
-      // Совпадает с symmetric-fix к scheduleAnketaConfirmation выше.
-      if (!FINAL_STAGES.has(currentStage) && ANKETA_ELIGIBLE.has(currentStage)) {
-        void scheduleAnketaAutoReply({
-          candidateId: dup.id,
-          vacancyId:   demo.vacancyId,
-        })
-      }
-
-      // Воронка v2 (dedup-ветка): аналогично основной ветке выше.
+      // F2/F3 (dedup-ветка): легаси и v2 — ВЗАИМОИСКЛЮЧАЮЩИЕ (см. основную ветку).
+      // При активном v2 — только v2; иначе легаси (с прежним условием по стадии).
       void (async () => {
         try {
           const [vac] = await db
@@ -261,9 +249,11 @@ export async function POST(
             .limit(1)
           if (vac?.funnelV2RuntimeEnabled && vac?.funnelV2StateJson) {
             await onAnketaCompleted(dup.id)
+          } else if (!FINAL_STAGES.has(currentStage) && ANKETA_ELIGIBLE.has(currentStage)) {
+            void scheduleAnketaAutoReply({ candidateId: dup.id, vacancyId: demo.vacancyId })
           }
         } catch (err) {
-          console.error("[demo/apply] v2-хук onAnketaCompleted (dedup) упал:", err instanceof Error ? err.message : err)
+          console.error("[demo/apply] анкета авто-ответ dedup (v2/легаси) упал:", err instanceof Error ? err.message : err)
         }
       })()
 
