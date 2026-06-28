@@ -69,6 +69,10 @@ export interface Candidate {
   demoTotalBlocks?: number
   demoCompletedBlocks?: number
   progressPercent?: number | null
+  // «Демо пройдено по ответам» — ответил на все обязательные вопросы демо,
+  // даже если хвост декоративных блоков не пролистан (прогресс по страницам
+  // < 100%). Считается на сервере. Делает прогресс-бар зелёным/«готово».
+  demoCompletedByAnswers?: boolean
   // Колонка «Тест»: балл последнего теста и статус-лесенка
   // (submitted/in_progress/opened/sent).
   testScore?: number | null
@@ -198,6 +202,7 @@ export function CandidateCard({ candidate, settings, columnId, isLastColumn, onO
             totalBlocks={total}
             hasVideoVizitka={candidate.demoProgressJson?.hasVideoVizitka}
             stage={candidate.stage}
+            completedByAnswers={candidate.demoCompletedByAnswers}
           />
         )
       })()}

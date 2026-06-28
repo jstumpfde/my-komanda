@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Video as VideoIcon, Mic, Image as ImageIcon, FileText, FileQuestion, Loader2, PictureInPicture2 } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { cn } from "@/lib/utils"
 import type { Lesson, Block, Question } from "@/lib/course-types"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -27,6 +29,8 @@ interface AnswersTabProps {
   answers: unknown
   demoLessons: unknown
   candidateId?: string
+  /** Общий AI-балл кандидата (демо-ответы). green ≥70 / amber ≥40 / red <40 */
+  aiScore?: number | null
 }
 
 interface QualificationAnswer {
@@ -165,7 +169,19 @@ interface BlockMapEntry {
 function buildBlockMap(lessons: unknown): Map<string, BlockMapEntry> {
   const map = new Map<string, BlockMapEntry>()
   if (!Array.isArray(lessons)) return map
-  for (const l of lessons as Lesson[]) {
+
+  // demoLessons может быть:
+  //   - плоским массивом уроков: [{ id, blocks }, ...]          (старый формат)
+  //   - массивом массивов уроков: [[{ id, blocks }, ...], ...]  (новый: json_agg всех демо)
+  // Определяем формат по первому элементу и нормализуем в плоский массив.
+  let flat: unknown[]
+  if (lessons.length > 0 && Array.isArray(lessons[0])) {
+    flat = (lessons as unknown[][]).flat()
+  } else {
+    flat = lessons
+  }
+
+  for (const l of flat as Lesson[]) {
     if (!l || !Array.isArray(l.blocks)) continue
     for (const b of l.blocks) {
       if (b && typeof b.id === "string") map.set(b.id, { block: b, lesson: l })
@@ -635,9 +651,8 @@ function PrequalificationSection({ candidateId }: { candidateId?: string }) {
     return () => { cancelled = true }
   }, [candidateId])
 
-  // Если предкв не запускалась — раздел показываем как «не задействована»,
-  // но компактно (одна строка). Это даёт HR понять «у этого кандидата
-  // мидл-уровень не был, или ещё не дошло».
+  // Если предкв не запускалась — раздел не показываем совсем.
+  // «Не запускалась» — информация для HR избыточна и путает.
   if (loading) {
     return (
       <div className="rounded-md border bg-muted/30 p-3">
@@ -646,12 +661,8 @@ function PrequalificationSection({ candidateId }: { candidateId?: string }) {
     )
   }
   if (!data || !data.status || data.answers.length === 0) {
-    return (
-      <div className="rounded-md border bg-muted/30 p-3">
-        <p className="text-sm font-medium mb-1">Предквалификация</p>
-        <p className="text-xs text-muted-foreground">Не запускалась для этого кандидата.</p>
-      </div>
-    )
+    // Предквалификация не применялась к этому кандидату — скрываем раздел.
+    return null
   }
 
   const critical = data.answers.filter(a => a.isCritical)
@@ -700,7 +711,7 @@ function PrequalificationSection({ candidateId }: { candidateId?: string }) {
   )
 }
 
-export function AnswersTab({ answers, demoLessons, candidateId }: AnswersTabProps) {
+export function AnswersTab({ answers, demoLessons, candidateId, aiScore }: AnswersTabProps) {
   const entries = normalizeEntries(answers).filter(Boolean)
   const blockMap = buildBlockMap(demoLessons)
 
@@ -745,9 +756,30 @@ export function AnswersTab({ answers, demoLessons, candidateId }: AnswersTabProp
     }
   }
 
+  // Бэдж общей AI-оценки за ответы демо (зелёный ≥70, жёлтый ≥40, красный <40).
+  const scoreBadge = aiScore != null ? (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-muted-foreground">AI-оценка ответов:</span>
+      <Badge
+        variant="outline"
+        className={cn(
+          "text-sm font-semibold px-2 py-0.5",
+          aiScore >= 70
+            ? "text-emerald-700 border-emerald-300 bg-emerald-50"
+            : aiScore >= 40
+            ? "text-amber-700 border-amber-300 bg-amber-50"
+            : "text-destructive border-destructive/40 bg-destructive/5",
+        )}
+      >
+        {aiScore} / 100
+      </Badge>
+    </div>
+  ) : null
+
   if (visible.length === 0) {
     return (
       <div className="space-y-3 min-w-0">
+        {scoreBadge}
         {prequalSection}
         <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
           <FileQuestion className="w-10 h-10 mb-3 opacity-50" />
@@ -761,6 +793,7 @@ export function AnswersTab({ answers, demoLessons, candidateId }: AnswersTabProp
   // ширину и не ломал вертикальный скролл родителя.
   return (
     <div className="space-y-4 min-w-0">
+      {scoreBadge}
       {prequalSection}
 
       {/* F4: секция «Видео-интервью» — сгруппированные ответы _vi_N */}

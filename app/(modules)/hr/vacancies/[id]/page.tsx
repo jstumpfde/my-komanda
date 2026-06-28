@@ -207,6 +207,7 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     demoTotalBlocks: (c as { demoTotalBlocks?: number }).demoTotalBlocks,
     demoCompletedBlocks: (c as { demoCompletedBlocks?: number }).demoCompletedBlocks,
     progressPercent: (c as { progressPercent?: number | null }).progressPercent,
+    demoCompletedByAnswers: (c as { demoCompletedByAnswers?: boolean }).demoCompletedByAnswers,
     isFavorite: c.isFavorite ?? false,
     createdAt: c.createdAt,
     stage: c.stage ?? null,

@@ -1714,7 +1714,7 @@ export function CandidateDrawer({
                 {derived.surveyContacts ? (
                   <SurveyContactsBlock contacts={derived.surveyContacts} />
                 ) : null}
-                <AnswersTab answers={candidate.anketaAnswers} demoLessons={candidate.demoLessons} candidateId={candidate.id} />
+                <AnswersTab answers={candidate.anketaAnswers} demoLessons={candidate.demoLessons} candidateId={candidate.id} aiScore={candidate.aiScore} />
               </TabsContent>
 
               {/* ── Тест ─────────────────────────────────────────── */}

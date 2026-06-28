@@ -7,8 +7,8 @@ import { deriveCandidateName } from "@/lib/candidate-name"
 
 // Helper: verify candidate belongs to user's company.
 // За один SQL-запрос подтягиваем кандидата + вакансию + связку hh_responses
-// (если есть) + lessons_json последнего demo для этой вакансии (коррелированный
-// subquery — вся работа в одном round-trip).
+// (если есть) + ВСЕ lessons_json демо этой вакансии (kind='demo' И kind LIKE 'block:%')
+// в виде JSON-массива — объединяет все блоки, чтобы blk-... ids резолвились.
 async function getOwnedCandidate(candidateId: string, companyId: string) {
   const [row] = await db
     .select({
@@ -17,12 +17,14 @@ async function getOwnedCandidate(candidateId: string, companyId: string) {
       hhResponseId: hhResponses.hhResponseId,
       hhRawData: hhResponses.rawData,
       hhCandidateName: hhResponses.candidateName,
+      // Возвращаем JSON-массив lessons_json всех демо вакансии (kind='demo' и
+      // kind LIKE 'block:%'), чтобы answers-tab мог резолвить любой blk-... id.
+      // Коррелированный subquery, один round-trip.
       demoLessons: sql<unknown>`(
-        SELECT ${demos.lessonsJson}
+        SELECT json_agg(${demos.lessonsJson})
         FROM ${demos}
         WHERE ${demos.vacancyId} = ${candidates.vacancyId}
-        ORDER BY ${demos.updatedAt} DESC
-        LIMIT 1
+          AND (${demos.kind} = 'demo' OR ${demos.kind} LIKE 'block:%')
       )`,
     })
     .from(candidates)

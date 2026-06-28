@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { eq, ne, and, inArray, asc, desc, or, isNull, isNotNull, gte, sql, type SQL } from "drizzle-orm"
+import { eq, ne, and, inArray, asc, desc, or, like, isNull, isNotNull, gte, sql, type SQL } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, demos, hhResponses, testSubmissions, followUpMessages, calendarEvents } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
@@ -7,6 +7,7 @@ import { generateCandidateToken } from "@/lib/candidate-tokens"
 import { generateCandidateShortId } from "@/lib/short-id"
 import { deriveCandidateName } from "@/lib/candidate-name"
 import { resolveGivenNameMeta } from "@/lib/messaging/candidate-name"
+import { hasAnsweredAllRequired } from "@/lib/demo/resolve-questions"
 
 type SortKey =
   | "favorite"
@@ -463,22 +464,34 @@ export async function GET(req: NextRequest) {
       const totalsByVacancy = new Map<string, number>()
       // Map: vacancyId → Map<blockId, lessonIndex> для страничного прогресса
       const blockToLessonByVacancy = new Map<string, Map<string, number>>()
+      // Map: vacancyId → массив lessons_json ВСЕХ демо вакансии (kind='demo' и
+      // block:%) — для расчёта «демо пройдено по ответам» (hasAnsweredAllRequired).
+      const allLessonsByVacancy = new Map<string, unknown[]>()
       if (vacancyIds.length > 0) {
         const demoRows = await db
           .select({
             vacancyId: demos.vacancyId,
             lessonsJson: demos.lessonsJson,
+            kind: demos.kind,
             updatedAt: demos.updatedAt,
           })
           .from(demos)
-          .where(and(inArray(demos.vacancyId, vacancyIds), eq(demos.kind, "demo")))
+          .where(and(
+            inArray(demos.vacancyId, vacancyIds),
+            or(eq(demos.kind, "demo"), like(demos.kind, "block:%")),
+          ))
           .orderBy(desc(demos.updatedAt))
 
         const latestByVacancy = new Map<string, unknown>()
         for (const d of demoRows) {
-          if (!latestByVacancy.has(d.vacancyId)) {
+          // Для totalBlocks/страничного прогресса — только основное демо (kind='demo').
+          if (d.kind === "demo" && !latestByVacancy.has(d.vacancyId)) {
             latestByVacancy.set(d.vacancyId, d.lessonsJson)
           }
+          // Для «пройдено по ответам» — собираем lessons ВСЕХ демо вакансии.
+          const arr = allLessonsByVacancy.get(d.vacancyId) ?? []
+          arr.push(d.lessonsJson)
+          allLessonsByVacancy.set(d.vacancyId, arr)
         }
         for (const [vid, lessonsJson] of latestByVacancy.entries()) {
           const lessons = Array.isArray(lessonsJson) ? (lessonsJson as LessonShape[]) : []
@@ -585,6 +598,14 @@ export async function GET(req: NextRequest) {
           ? Math.min(100, Math.round((demoCompletedBlocks / demoTotalBlocks) * 100))
           : null
 
+        // «Демо пройдено по ответам»: кандидат ответил на все обязательные
+        // вопросы, даже если хвост декоративных блоков не пролистан (прогресс
+        // по страницам < 100%). Если у демо нет обязательных вопросов — false.
+        const demoCompletedByAnswers = hasAnsweredAllRequired(
+          allLessonsByVacancy.get(r.vacancyId) ?? [],
+          r.anketaAnswers,
+        )
+
         const stamps = completed
           .map((b) => (b.answeredAt ? new Date(b.answeredAt).getTime() : NaN))
           .filter((t) => !Number.isNaN(t))
@@ -631,6 +652,7 @@ export async function GET(req: NextRequest) {
           demoTotalBlocks,
           demoCompletedBlocks,
           progressPercent,
+          demoCompletedByAnswers,
           isActive,
           testScore,
           testStatus,
@@ -1067,27 +1089,36 @@ export async function GET(req: NextRequest) {
     }
 
     // Подгружаем структуру курса для расчёта прогресса по СТРАНИЦАМ
-    // (см. ту же логику в ветке без vacancyId выше).
+    // (см. ту же логику в ветке без vacancyId выше). Грузим ВСЕ демо вакансии
+    // (kind='demo' и block:%): основное (kind='demo') даёт totalBlocks/страницы,
+    // все вместе — обязательные вопросы для «пройдено по ответам».
     let demoTotalBlocks = 0
     const blockToLesson = new Map<string, number>()
+    const allLessonsForVacancy: unknown[] = []
     const demoRowsV2 = await db
-      .select({ lessonsJson: demos.lessonsJson, updatedAt: demos.updatedAt })
+      .select({ lessonsJson: demos.lessonsJson, kind: demos.kind, updatedAt: demos.updatedAt })
       .from(demos)
-      .where(and(eq(demos.vacancyId, vacancyId), eq(demos.kind, "demo")))
+      .where(and(
+        eq(demos.vacancyId, vacancyId),
+        or(eq(demos.kind, "demo"), like(demos.kind, "block:%")),
+      ))
       .orderBy(desc(demos.updatedAt))
-      .limit(1)
-    if (demoRowsV2.length > 0) {
-      const lessons = Array.isArray(demoRowsV2[0].lessonsJson)
-        ? (demoRowsV2[0].lessonsJson as LessonShape[])
-        : []
-      demoTotalBlocks = lessons.length + 1
-      lessons.forEach((lesson, lessonIdx) => {
-        const lessonBlocks = Array.isArray(lesson?.blocks) ? lesson.blocks : []
-        for (const b of lessonBlocks) {
-          const bid = (b as { id?: string })?.id
-          if (typeof bid === "string") blockToLesson.set(bid, lessonIdx)
-        }
-      })
+    let mainDemoTaken = false
+    for (const d of demoRowsV2) {
+      allLessonsForVacancy.push(d.lessonsJson)
+      // totalBlocks/страничный прогресс — по первому (свежайшему) kind='demo'.
+      if (d.kind === "demo" && !mainDemoTaken) {
+        mainDemoTaken = true
+        const lessons = Array.isArray(d.lessonsJson) ? (d.lessonsJson as LessonShape[]) : []
+        demoTotalBlocks = lessons.length + 1
+        lessons.forEach((lesson, lessonIdx) => {
+          const lessonBlocks = Array.isArray(lesson?.blocks) ? lesson.blocks : []
+          for (const b of lessonBlocks) {
+            const bid = (b as { id?: string })?.id
+            if (typeof bid === "string") blockToLesson.set(bid, lessonIdx)
+          }
+        })
+      }
     }
 
     // Имя + page-based прогресс
@@ -1112,6 +1143,11 @@ export async function GET(req: NextRequest) {
       const progressPercent = demoTotalBlocks > 0
         ? Math.min(100, Math.round((demoCompletedBlocks / demoTotalBlocks) * 100))
         : null
+
+      // «Демо пройдено по ответам»: ответил на все обязательные вопросы, даже
+      // если хвост декоративных блоков не пролистан. false, если у демо нет
+      // обязательных вопросов (тогда старое поведение прогресс-бара).
+      const demoCompletedByAnswers = hasAnsweredAllRequired(allLessonsForVacancy, r.anketaAnswers)
 
       // Эффективная дата рождения: birth_date или вытащенная из anketa_answers.
       // Нужно для клиентского фильтра по возрасту, который читает c.birthDate.
@@ -1158,6 +1194,7 @@ export async function GET(req: NextRequest) {
         demoTotalBlocks,
         demoCompletedBlocks,
         progressPercent,
+        demoCompletedByAnswers,
         testScore: test?.score ?? null,
         testStatus,
         isActive,

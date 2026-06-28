@@ -81,6 +81,11 @@ export interface ApiCandidate {
   demoTotalBlocks?: number
   demoCompletedBlocks?: number
   progressPercent?: number | null
+  // «Демо пройдено по ответам» — кандидат ответил на все обязательные вопросы
+  // демо, даже если хвост декоративных блоков не пролистан (прогресс по
+  // страницам < 100%). Считается на сервере (hasAnsweredAllRequired). false,
+  // если у демо нет обязательных вопросов.
+  demoCompletedByAnswers?: boolean
   // Колонка «Тест»: балл последнего test_submission (AI-оценка / автопроверка)
   // и статус-лесенка: submitted (сдан) / in_progress (пишет) / opened (перешёл) /
   // sent (отправлен) / failed (отправка упала) / null.

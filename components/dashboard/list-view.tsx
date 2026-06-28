@@ -472,6 +472,7 @@ export function ListView({
               totalBlocks={ctx.demoFraction.hasData ? ctx.demoFraction.total : undefined}
               hasVideoVizitka={candidate.demoProgressJson?.hasVideoVizitka}
               stage={candidate.stage}
+              completedByAnswers={candidate.demoCompletedByAnswers}
             />
           </div>
         ),

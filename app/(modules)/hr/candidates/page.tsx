@@ -52,6 +52,7 @@ interface GlobalCandidate {
   demoTotalBlocks: number
   demoCompletedBlocks: number
   progressPercent: number | null
+  demoCompletedByAnswers?: boolean
   isActive: boolean
   isFavorite: boolean
   aiScore?: number | null
@@ -123,6 +124,7 @@ function toListCandidate(c: GlobalCandidate): Candidate & { vacancyTitle: string
     demoTotalBlocks: c.demoTotalBlocks,
     demoCompletedBlocks: c.demoCompletedBlocks,
     progressPercent: c.progressPercent,
+    demoCompletedByAnswers: c.demoCompletedByAnswers,
     isFavorite: c.isFavorite,
     createdAt: c.createdAt,
     stage: c.stage,

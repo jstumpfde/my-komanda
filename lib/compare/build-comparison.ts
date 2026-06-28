@@ -1,10 +1,11 @@
 // Сборка данных сравнения кандидатов (тест + демо + анкета).
 // Используется HR-роутом (/api/modules/hr/vacancies/[id]/compare) и публичным
 // роутом по share-токену (/api/public/compare/[token]).
-import { and, eq, inArray, isNull, desc } from "drizzle-orm"
+import { and, eq, inArray, isNull, desc, or, like } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, demos, testSubmissions } from "@/lib/db/schema"
 import { collectTaskQuestions, resolveOptionPoints } from "@/lib/score-test-objective"
+import { renderAnswerValue } from "@/lib/demo/resolve-questions"
 import type { Question } from "@/lib/course-types"
 
 // Максимум баллов за вопрос (для шапки таблицы). single/multiple — из баллов
@@ -106,25 +107,37 @@ export async function buildComparison(vacancyId: string, ids: string[]): Promise
     .where(and(eq(demos.vacancyId, vacancyId), eq(demos.kind, "test")))
     .orderBy(desc(demos.updatedAt))
     .limit(1)
-  const [demoRow] = await db
-    .select({ lessonsJson: demos.lessonsJson })
+
+  // Загружаем ВСЕ демо вакансии с kind='demo' или kind LIKE 'block:%',
+  // чтобы задания из Funnel Builder (block:<uuid>) тоже попадали в матрицу.
+  const allDemoRows = await db
+    .select({ lessonsJson: demos.lessonsJson, kind: demos.kind })
     .from(demos)
-    .where(and(eq(demos.vacancyId, vacancyId), eq(demos.kind, "demo")))
+    .where(and(
+      eq(demos.vacancyId, vacancyId),
+      or(eq(demos.kind, "demo"), like(demos.kind, "block:%")),
+    ))
     .orderBy(desc(demos.updatedAt))
-    .limit(1)
 
   const testLessons = Array.isArray(testDemo?.lessonsJson)
     ? (testDemo!.lessonsJson as { blocks?: { type?: string; questions?: Question[] }[] }[])
     : []
   const testQuestions = collectTaskQuestions(testLessons)
 
-  const demoLessons = Array.isArray(demoRow?.lessonsJson)
-    ? (demoRow!.lessonsJson as { blocks?: { id?: string; type?: string; taskTitle?: string; questions?: Question[] }[] }[])
-    : []
-  const demoBlocks: { blockId: string; text: string }[] = []
-  for (const l of demoLessons) {
-    for (const b of l.blocks ?? []) {
-      if (b.type === "task" && b.id) demoBlocks.push({ blockId: b.id, text: demoBlockLabel(b) })
+  type RawLesson = { blocks?: { id?: string; type?: string; taskTitle?: string; taskDescription?: string; questions?: Question[] }[] }
+  const demoBlocks: { blockId: string; text: string; questions: Question[] }[] = []
+  for (const row of allDemoRows) {
+    if (!Array.isArray(row.lessonsJson)) continue
+    for (const l of row.lessonsJson as RawLesson[]) {
+      for (const b of l.blocks ?? []) {
+        if (b.type === "task" && b.id) {
+          demoBlocks.push({
+            blockId: b.id,
+            text: demoBlockLabel(b),
+            questions: Array.isArray(b.questions) ? b.questions : [],
+          })
+        }
+      }
     }
   }
 
@@ -179,22 +192,80 @@ export async function buildComparison(vacancyId: string, ids: string[]): Promise
     demoSection.answers[c.id] = byBlock
   }
 
-  const anketaSection: CompareSection = {
-    key: "anketa", title: "Анкета", scored: false,
-    questions: ANKETA_FIELDS.map((f) => ({ id: f.key, text: f.text })),
-    answers: {},
-  }
-  for (const c of cands) {
-    const sr = (c.surveyResponses && typeof c.surveyResponses === "object") ? c.surveyResponses as Record<string, unknown> : {}
-    const byField: Record<string, CompareAns> = {}
-    for (const f of ANKETA_FIELDS) {
-      const v = stringifyAnswer(sr[f.key])
-      if (v) byField[f.key] = { value: v }
+  // «Анкета»: если у вакансии есть демо-вопросы (task-блоки) — строим строки
+  // по каждому вопросу каждого блока (label = «taskTitle: текст вопроса»).
+  // Это нужно для вакансий, использующих Funnel Builder с блоками kind='block:...',
+  // где legacy-поля surveyResponses пусты. Fallback на ANKETA_FIELDS для вакансий
+  // без демо-вопросов (старый формат).
+  let anketaSection: CompareSection
+
+  if (demoBlocks.length > 0) {
+    // Разворачиваем каждый task-блок в отдельные строки по вопросам.
+    // Ключ строки: "<blockId>__<questionId>" — уникален в рамках вакансии.
+    type DemoQRow = { id: string; text: string; blockId: string; questionId: string; options: string[] }
+    const demoQRows: DemoQRow[] = []
+    for (const b of demoBlocks) {
+      if (b.questions.length === 0) {
+        // Блок без вопросов — одна строка с именем блока, ответ = всё содержимое
+        demoQRows.push({ id: `${b.blockId}__block`, text: b.text, blockId: b.blockId, questionId: "", options: [] })
+      } else {
+        for (const q of b.questions) {
+          const label = b.text ? `${b.text}: ${q.text}` : q.text
+          demoQRows.push({ id: `${b.blockId}__${q.id}`, text: label, blockId: b.blockId, questionId: q.id, options: Array.isArray(q.options) ? q.options : [] })
+        }
+      }
     }
-    anketaSection.answers[c.id] = byField
+    anketaSection = {
+      key: "anketa", title: "Анкета", scored: false,
+      questions: demoQRows.map((r) => ({ id: r.id, text: r.text })),
+      answers: {},
+    }
+    for (const c of cands) {
+      const arr = Array.isArray(c.anketaAnswers) ? (c.anketaAnswers as { blockId?: string; answer?: unknown }[]) : []
+      const byRow: Record<string, CompareAns> = {}
+      for (const row of demoQRows) {
+        const entry = arr.find((x) => x.blockId === row.blockId)
+        if (!entry) continue
+        let value: string | null = null
+        if (row.questionId === "") {
+          // Блок без отдельных вопросов — рендерим всё содержимое ответа
+          value = renderAnswerValue(entry.answer, row.options)
+        } else {
+          // Достаём ответ на конкретный вопрос из объекта ответа блока
+          const answerObj = entry.answer
+          if (answerObj && typeof answerObj === "object" && !Array.isArray(answerObj)) {
+            const perQ = (answerObj as Record<string, unknown>)[row.questionId]
+            value = renderAnswerValue(perQ, row.options)
+          } else {
+            value = renderAnswerValue(answerObj, row.options)
+          }
+        }
+        if (value) byRow[row.id] = { value }
+      }
+      anketaSection.answers[c.id] = byRow
+    }
+  } else {
+    // Fallback: legacy anketa fields из surveyResponses
+    anketaSection = {
+      key: "anketa", title: "Анкета", scored: false,
+      questions: ANKETA_FIELDS.map((f) => ({ id: f.key, text: f.text })),
+      answers: {},
+    }
+    for (const c of cands) {
+      const sr = (c.surveyResponses && typeof c.surveyResponses === "object") ? c.surveyResponses as Record<string, unknown> : {}
+      const byField: Record<string, CompareAns> = {}
+      for (const f of ANKETA_FIELDS) {
+        const v = stringifyAnswer(sr[f.key])
+        if (v) byField[f.key] = { value: v }
+      }
+      anketaSection.answers[c.id] = byField
+    }
   }
 
-  const sections = [testSection, demoSection, anketaSection].filter((s) => s.questions.length > 0)
+  // «Вопросы демонстрации» дублируют «Анкету» когда есть demo-блоки —
+  // оставляем только один из двух разделов. Если есть demo-вопросы,
+  // demoSection становится избыточным (anketa его заменяет).
+  const sections = [testSection, ...(demoBlocks.length === 0 ? [demoSection] : []), anketaSection].filter((s) => s.questions.length > 0)
 
   const byId = new Map(cands.map((c) => [c.id, c]))
   const orderedCandidates = ids
