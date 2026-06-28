@@ -632,15 +632,24 @@ function ButtonBlock({ block, onNext, nextDisabled }: { block: Block; onNext?: (
   // «Куда ведёт: Ссылка» — внешняя ссылка; иначе (next/по умолчанию) — переход
   // на следующую страницу демо (на последней — завершение), как настроено в редакторе.
   const isUrl = (block.buttonTarget === "url" || (!block.buttonTarget && !!block.buttonUrl)) && !!block.buttonUrl
+  // Иконки слева/справа (символы из редактора, поля buttonIconBefore/After) —
+  // рендерим как в превью редактора; раньше публичная кнопка их теряла.
+  const label = (
+    <>
+      {block.buttonIconBefore ? <span>{block.buttonIconBefore}</span> : null}
+      <span>{block.buttonText || (isUrl ? "Подробнее" : "Далее")}</span>
+      {block.buttonIconAfter ? <span>{block.buttonIconAfter}</span> : null}
+    </>
+  )
   return (
     <div className="flex justify-center">
       {isUrl ? (
         <a href={block.buttonUrl} target="_blank" rel="noopener noreferrer" className={cls} style={style}>
-          {block.buttonText || "Подробнее"}
+          {label}
         </a>
       ) : (
         <button type="button" onClick={onNext} disabled={nextDisabled || !onNext} className={cls} style={style}>
-          {block.buttonText || "Далее"}
+          {label}
         </button>
       )}
     </div>
