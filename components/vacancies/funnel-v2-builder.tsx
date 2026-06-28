@@ -439,14 +439,39 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait }: { vacancyId: stri
     } finally { setSimLoading(false) }
   }, [vacancyId])
 
+  // Флаг рантайма движка v2 (vacancies.funnel_v2_runtime_enabled). Тумблер в шапке.
+  const [runtimeEnabled, setRuntimeEnabled] = useState(false)
+  const [runtimeBusy, setRuntimeBusy] = useState(false)
+
   useEffect(() => {
     let cancelled = false
     fetch(`/api/modules/hr/vacancies/${vacancyId}/funnel-v2`).then(r => r.ok ? r.json() : null)
-      .then((d: { config?: FunnelV2Config } | null) => { if (!cancelled) setConfig(d?.config ? normalizeFunnelV2(d.config) : emptyFunnelV2()) })
+      .then((d: { config?: FunnelV2Config; runtimeEnabled?: boolean } | null) => {
+        if (cancelled) return
+        setConfig(d?.config ? normalizeFunnelV2(d.config) : emptyFunnelV2())
+        setRuntimeEnabled(d?.runtimeEnabled === true)
+      })
       .catch(() => { if (!cancelled) setConfig(emptyFunnelV2()) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [vacancyId])
+
+  // Переключить движок: пишем только флаг (конфиг не трогаем).
+  const toggleRuntime = useCallback(async (val: boolean) => {
+    setRuntimeBusy(true)
+    const prev = runtimeEnabled
+    setRuntimeEnabled(val) // оптимистично
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/funnel-v2`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ runtimeEnabled: val }),
+      })
+      if (!res.ok) throw new Error()
+      toast.success(val ? "Движок v2 включён для этой вакансии" : "Движок v2 выключен")
+    } catch {
+      setRuntimeEnabled(prev)
+      toast.error("Не удалось переключить движок")
+    } finally { setRuntimeBusy(false) }
+  }, [vacancyId, runtimeEnabled])
 
   // Список контент-блоков (для «подключить демо/тест»)
   useEffect(() => {
@@ -514,7 +539,7 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait }: { vacancyId: stri
             <h3 className="text-base font-semibold">Воронка v2 — стадии</h3>
             <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400">beta</span>
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5">Конструктор пути кандидата. Клик по стадии — настройки в панели. Пока не ведёт кандидатов.</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Конструктор пути кандидата. Клик по стадии — настройки в панели.{runtimeEnabled ? "" : " Пока не ведёт кандидатов."}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0 mt-0.5">
           <span className="text-[11px] text-muted-foreground">
@@ -531,6 +556,28 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait }: { vacancyId: stri
             title="Сухой прогон: пройти воронку тест-кандидатом без записи в БД">
             <PlayCircle className="w-3.5 h-3.5 text-primary" /> Сухой прогон
           </button>
+        </div>
+      </div>
+
+      {/* Тумблер движка v2: включает рантайм для ЭТОЙ вакансии. По умолчанию
+          выключен — кандидаты идут по легаси-пути. Включение = живая автоматика. */}
+      <div className={cn("rounded-xl border p-3 flex items-start gap-3", runtimeEnabled ? "border-emerald-300/60 bg-emerald-500/5" : "border-border bg-muted/30")}>
+        <Switch checked={runtimeEnabled} onCheckedChange={toggleRuntime} disabled={runtimeBusy || stages.length === 0} className="mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">Движок воронки v2</span>
+            {runtimeBusy && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+            {runtimeEnabled
+              ? <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">включён</span>
+              : <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-muted text-muted-foreground">выключен</span>}
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {stages.length === 0
+              ? "Добавьте хотя бы одну стадию, чтобы включить движок."
+              : runtimeEnabled
+                ? "Новые кандидаты этой вакансии идут по воронке v2 — авто-сообщения, движение по стадиям и дожим выполняются автоматически. Существующие кандидаты остаются на легаси-пути."
+                : "Кандидаты идут по легаси-пути. Включите, чтобы НОВЫЕ кандидаты этой вакансии пошли по воронке v2. Это живая автоматика — сообщения уходят кандидатам."}
+          </p>
         </div>
       </div>
 
