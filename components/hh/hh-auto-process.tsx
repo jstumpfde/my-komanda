@@ -344,6 +344,21 @@ export function HhAutoProcess({
           </>
         ) : (
           <>
+            {/* S2: «Синхронизировать» вынесена из ⚙️-поповера на видное место —
+                только синк (подтянуть новые отклики), без авто-разбора. */}
+            {onSync && (
+              <Button
+                onClick={() => { onSync() }}
+                disabled={syncing}
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1.5"
+                title={lastSyncLabel ? `Подтянуть новые отклики с hh.ru · ${lastSyncLabel}` : "Подтянуть новые отклики с hh.ru"}
+              >
+                {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                Синхр.
+              </Button>
+            )}
             <Button onClick={run} size="sm" className="h-8 text-xs gap-1.5">
               <Play className="w-3.5 h-3.5" />
               {labelButton}
@@ -372,7 +387,7 @@ export function HhAutoProcess({
                         title="Подтянуть отклики с hh.ru, затем разобрать по этим настройкам"
                       >
                         {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                        Синхронизировать
+                        Синхронизировать и разобрать
                       </Button>
                       {lastSyncLabel && (
                         <span className="text-[11px] text-muted-foreground truncate">{lastSyncLabel}</span>
