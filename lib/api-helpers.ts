@@ -33,9 +33,17 @@ export async function requireCompany() {
 // Допускаем: director (новое имя), client (legacy = директор), platform_admin/admin.
 // platform_manager и HR-роли (hr_lead/hr_manager/…) — НЕ могут.
 const DIRECTOR_ROLES = new Set<string>(["director", "client", "platform_admin", "admin"])
+// Партнёр/админ под impersonation («Войти как клиент») получает ЭФФЕКТИВНУЮ роль
+// "director" на клиентской компании (auth.ts session callback — после валидации
+// владения + подписи acting-as куки). При этом role остаётся "partner"/"admin",
+// поэтому проверять надо И effectiveRole, иначе партнёр не может править настройки
+// клиента (привязать hh и т.п.), хотя зашёл как директор клиента.
+function isDirectorLike(user: { role?: unknown; effectiveRole?: unknown }): boolean {
+  return DIRECTOR_ROLES.has(user.role as string) || user.effectiveRole === "director"
+}
 export async function requireDirector() {
   const user = await requireCompany()
-  if (!DIRECTOR_ROLES.has(user.role as string)) {
+  if (!isDirectorLike(user)) {
     throw apiError("Только директор компании может изменять эти настройки", 403)
   }
   return user
@@ -44,9 +52,8 @@ export async function requireDirector() {
 // Настройки оргструктуры (отделы/должности): директор ИЛИ пользователь с флагом manage_org_structure.
 export async function requireOrgManager() {
   const user = await requireCompany()
-  const isDirectorLike = DIRECTOR_ROLES.has(user.role as string)
   const perms = (user.permissions as Record<string, boolean> | null) ?? {}
-  if (!isDirectorLike && !perms["manage_org_structure"]) {
+  if (!isDirectorLike(user) && !perms["manage_org_structure"]) {
     throw apiError("Только директор компании или назначенный менеджер может изменять структуру компании", 403)
   }
   return user
