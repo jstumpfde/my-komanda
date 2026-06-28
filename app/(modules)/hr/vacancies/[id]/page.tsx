@@ -3914,7 +3914,7 @@ export default function VacancyPage() {
                             </div>
                           ) : (
                             <div className="border-t pt-3">
-                              <p className="text-[11px] text-muted-foreground">Шаг 2 — после подключения аккаунта здесь появится кнопка «Привязать вакансию».</p>
+                              <p className="text-[11px] text-muted-foreground">Шаг 2 — после подключения аккаунта откроется привязка вакансии (можно вставить ссылку или выбрать на hh.ru).</p>
                             </div>
                           )}
                         </div>
@@ -4411,16 +4411,29 @@ export default function VacancyPage() {
             <DialogTitle>Заполнить из hh.ru</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <p className="text-xs text-muted-foreground">Вставьте ссылку на вакансию с hh.ru — данные подтянутся и заполнят поля вакансии.</p>
-            <Input
-              value={hhImportUrl}
-              onChange={(e) => setHhImportUrl(e.target.value)}
-              placeholder="Ссылка на вакансию с hh.ru (например https://hh.ru/vacancy/12345678)"
-              className="h-10 text-sm"
-              autoFocus
-              disabled={hhImportBusy}
-              onKeyDown={(e) => { if (e.key === "Enter" && hhImportUrl.trim() && !hhImportBusy) handleHhVacancyImport() }}
-            />
+            <p className="text-xs text-muted-foreground">Вставьте ссылку на вакансию с hh.ru — или нажмите значок справа, чтобы открыть hh.ru и выбрать вакансию там.</p>
+            <div className="flex items-center gap-2">
+              <Input
+                value={hhImportUrl}
+                onChange={(e) => setHhImportUrl(e.target.value)}
+                placeholder="Ссылка на вакансию с hh.ru (например https://hh.ru/vacancy/12345678)"
+                className="h-10 text-sm flex-1"
+                autoFocus
+                disabled={hhImportBusy}
+                onKeyDown={(e) => { if (e.key === "Enter" && hhImportUrl.trim() && !hhImportBusy) handleHhVacancyImport() }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-10 w-10 shrink-0"
+                title="Открыть hh.ru — найти вакансию и скопировать ссылку"
+                onClick={() => window.open("https://hh.ru/employer/vacancies", "_blank", "noopener,noreferrer")}
+                disabled={hhImportBusy}
+              >
+                <ExternalLink className="size-4" />
+              </Button>
+            </div>
             <label className="flex items-start gap-2.5 rounded-md border p-3 cursor-pointer select-none">
               <Checkbox
                 checked={hhImportBind}
