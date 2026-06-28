@@ -33,7 +33,11 @@ export async function GET() {
         isNull(vacancies.deletedAt),
       ))
       .orderBy(desc(candidates.updatedAt))
-    return NextResponse.json({ candidates: rows })
+      // O5: потолок 1000 свежайших — чтобы огромный резерв не тянул всё разом.
+      // Поля и так лёгкие; усечение честно отдаём флагом truncated.
+      .limit(1001)
+    const truncated = rows.length > 1000
+    return NextResponse.json({ candidates: truncated ? rows.slice(0, 1000) : rows, truncated })
   } catch (e) {
     if (e instanceof Response) return e
     return NextResponse.json({ error: "internal" }, { status: 500 })
