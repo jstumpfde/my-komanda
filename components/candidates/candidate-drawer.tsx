@@ -1607,20 +1607,66 @@ export function CandidateDrawer({
 
               {/* ── Созвоны ──────────────────────────────────────── */}
               <TabsContent value="calls" className="px-6 py-4 pb-28 space-y-4 mt-0">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                    <PhoneCall className="w-3.5 h-3.5" />
-                    Лог контактов
-                  </h3>
-                  <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={() => {
-                    setContactChannel("call")
-                    setContactOutcome("pending")
-                    setContactReason("")
-                    setContactComment("")
-                    setContactDialogOpen(true)
-                  }}>
-                    <PhoneCall className="w-3 h-3" />Записать
-                  </Button>
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                  <PhoneCall className="w-3.5 h-3.5" />
+                  Лог контактов
+                </h3>
+                {/* M2: быстрый ввод контакта прямо в карточке — без модалки (1 клик). */}
+                <div className="rounded-lg border bg-muted/30 p-3 space-y-2.5">
+                  <div className="flex gap-2 flex-wrap items-center">
+                    <Select value={contactChannel} onValueChange={(v) => setContactChannel(v as ContactChannel)}>
+                      <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {CONTACT_CHANNELS.map((item) => (
+                          <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {CONTACT_OUTCOMES.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => { setContactOutcome(item.id as ContactOutcome); if (item.id !== "no_fit") setContactReason("") }}
+                          className={cn(
+                            "px-2.5 py-1 rounded-md text-xs border transition-colors",
+                            contactOutcome === item.id
+                              ? item.id === "fit"
+                                ? "bg-emerald-100 border-emerald-400 text-emerald-800 dark:bg-emerald-900/30 dark:border-emerald-600 dark:text-emerald-300"
+                                : item.id === "no_fit"
+                                ? "bg-red-100 border-red-400 text-red-800 dark:bg-red-900/30 dark:border-red-600 dark:text-red-300"
+                                : "bg-muted border-border text-foreground"
+                              : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30",
+                          )}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {contactOutcome === "no_fit" && (
+                    <Select value={contactReason} onValueChange={setContactReason}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Причина" /></SelectTrigger>
+                      <SelectContent>
+                        {REJECTION_REASONS.map((item) => (
+                          <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <div className="flex gap-2 items-end">
+                    <Textarea
+                      value={contactComment}
+                      onChange={(e) => setContactComment(e.target.value)}
+                      placeholder="Итоги разговора (необязательно)…"
+                      rows={1}
+                      className="resize-none text-xs min-h-8 flex-1"
+                    />
+                    <Button size="sm" className="h-8 text-xs shrink-0 gap-1.5" onClick={() => void submitContact()} disabled={savingContact}>
+                      {savingContact ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PhoneCall className="w-3.5 h-3.5" />}
+                      Записать
+                    </Button>
+                  </div>
                 </div>
                 {contactsLoading ? (
                   <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
