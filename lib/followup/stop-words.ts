@@ -25,7 +25,9 @@ export const DEFAULT_STOP_WORDS_V2 = [
   "отменяю", "отказ", "отказываюсь", "не рассматриваю",
 ]
 
-export function matchStopWord(text: string): boolean {
+// F6: word-boundary матч по ПЕРЕДАННОМУ списку (baseline настраивается на
+// платформе). matchStopWord ниже — обёртка на код-сиде STOP_WORDS (sync-фолбэк).
+export function matchStopWordWith(text: string, words: readonly string[]): boolean {
   // Нормализация: вся пунктуация → пробел, схлопываем пробелы.
   const norm = text
     .toLowerCase()
@@ -33,13 +35,17 @@ export function matchStopWord(text: string): boolean {
     .replace(/\s+/g, " ")
     .trim()
   if (!norm) return false
-  for (const w of STOP_WORDS) {
+  for (const w of words) {
     // Внутренние пробелы фразы становятся \s+ для устойчивости к множественным пробелам.
     const escaped = w.toLowerCase().replace(/\s+/g, "\\s+")
     const re = new RegExp(`(^|\\s)${escaped}(\\s|$)`, "u")
     if (re.test(norm)) return true
   }
   return false
+}
+
+export function matchStopWord(text: string): boolean {
+  return matchStopWordWith(text, STOP_WORDS)
 }
 
 // P0-22: editable список из vacancies.stop_words_json. Юрий явно попросил

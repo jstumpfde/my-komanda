@@ -9,6 +9,7 @@ import {
 } from "@/lib/hh/default-messages"
 import { DRIP_TEMPLATES_SEED } from "@/lib/funnel-v2/dozhim-templates"
 import { CHATBOT_DEFAULTS_SEED } from "@/lib/ai/chatbot-defaults-seed"
+import { STOP_WORDS as STOP_WORDS_SEED } from "@/lib/followup/stop-words"
 
 // Платформенные KV-настройки (таблица platform_settings, drizzle/0154).
 
@@ -249,4 +250,29 @@ export async function getPlatformChatbotDefaults(): Promise<ChatbotDefaults> {
 /** Сохранить платформенные дефолтные тексты бота (админ). */
 export async function setPlatformChatbotDefaults(v: ChatbotDefaults): Promise<void> {
   await setPlatformSetting(CHATBOT_DEFAULTS_KEY, v)
+}
+
+// ── F6: платформенный baseline стоп-слов ───────────────────────────────────
+// Раньше baseline был ЗАХАРДКОЖЕН (STOP_WORDS в lib/followup/stop-words.ts) и
+// применялся ко всем компаниям без возможности правки. Теперь — редактируемая
+// платформенная запись; код-константа = сид (дефолт, если запись пустая), так
+// что поведение не меняется, пока админ не отредактирует.
+const STOP_WORDS_BASELINE_KEY = "stop_words_baseline"
+
+/** Платформенный baseline стоп-слов (word-boundary матч). Дефолт — код-сид. */
+export async function getPlatformStopWordsBaseline(): Promise<string[]> {
+  try {
+    const v = await getPlatformSetting<unknown>(STOP_WORDS_BASELINE_KEY)
+    if (Array.isArray(v)) {
+      const list = v.filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+      if (list.length > 0) return list
+    }
+  } catch { /* fallthrough на сид */ }
+  return STOP_WORDS_SEED
+}
+
+/** Сохранить платформенный baseline стоп-слов (админ). */
+export async function setPlatformStopWordsBaseline(words: string[]): Promise<void> {
+  const clean = Array.from(new Set(words.map((w) => w.trim()).filter(Boolean))).slice(0, 500)
+  await setPlatformSetting(STOP_WORDS_BASELINE_KEY, clean)
 }

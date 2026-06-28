@@ -28,7 +28,8 @@ import { candidates, companies } from "@/lib/db/schema"
 import { callClaudeHaiku, callClaudeSonnetMessages, type ChatTurn } from "@/lib/ai/client"
 import { loadCandidateContext, formatCandidateContextBlock, type CandidateContext } from "@/lib/ai/candidate-context"
 import { decideFunnelNextStep, allowedActionsFromAutonomy, type FunnelDecision } from "@/lib/ai/funnel-decision"
-import { matchStopWord } from "@/lib/followup/stop-words"
+import { matchStopWordWith } from "@/lib/followup/stop-words"
+import { getBaselineStopWords } from "@/lib/followup/effective-stop-words"
 import { createNotification } from "@/lib/notifications"
 import { sendTelegramAlert } from "@/lib/notifications/telegram"
 import { classifyIncomingMessage, validateAiReply } from "@/lib/ai/security-filter"
@@ -884,7 +885,7 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
   // 0g. mild_negativity / normal — стандартный пайплайн.
 
   // 1. Стоп-слова перебивают AI: rejected без AI-вызова и без отправки сообщения.
-  if (stopwordsOn && matchStopWord(incomingText)) {
+  if (stopwordsOn && matchStopWordWith(incomingText, await getBaselineStopWords())) {
     if (!dryRun) {
       await db.update(candidates).set({
         stage:                       "rejected",

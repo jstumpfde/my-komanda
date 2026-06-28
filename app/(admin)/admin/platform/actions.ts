@@ -39,7 +39,11 @@ import {
   setPlatformDripTemplates,
   getPlatformChatbotDefaults,
   setPlatformChatbotDefaults,
+  getPlatformStopWordsBaseline,
+  setPlatformStopWordsBaseline,
 } from "@/lib/platform/settings"
+import { STOP_WORDS as STOP_WORDS_SEED } from "@/lib/followup/stop-words"
+import { clearStopWordsCache } from "@/lib/followup/effective-stop-words"
 import { DRIP_TEMPLATES_SEED } from "@/lib/funnel-v2/dozhim-templates"
 import { CHATBOT_DEFAULTS_SEED } from "@/lib/ai/chatbot-defaults-seed"
 import { clearMessageDefaultsCache } from "@/lib/messaging/effective-message-defaults"
@@ -391,4 +395,19 @@ export async function actionGetYuliaConversation(conversationId: string) {
       created_at:     m.createdAt ? m.createdAt.toISOString() : null,
     })),
   }
+}
+
+// ── F6: платформенный baseline стоп-слов (редактируемый, не хардкод) ────────
+export async function actionGetStopWordsBaseline(): Promise<{ current: string[]; seed: string[] }> {
+  await requireAdminEmail()
+  const current = await getPlatformStopWordsBaseline()
+  return { current, seed: [...STOP_WORDS_SEED] }
+}
+
+export async function actionUpdateStopWordsBaseline(words: string[]) {
+  await requireAdminEmail()
+  await setPlatformStopWordsBaseline(Array.isArray(words) ? words : [])
+  clearStopWordsCache()
+  revalidatePath("/admin/platform")
+  return { ok: true }
 }

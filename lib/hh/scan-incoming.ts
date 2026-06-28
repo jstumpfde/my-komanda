@@ -34,7 +34,8 @@ import { isBlockEnabled } from "@/lib/funnel-builder/runtime"
 import { saveCandidatePhoto } from "@/lib/hh/save-candidate-photo"
 import { extractHhResumeFields } from "@/lib/hh/extract-resume-fields"
 import { matchCallIntentKeyword, renderInsistTemplate } from "@/lib/messaging/call-intent"
-import { matchStopWord, matchStopWordList } from "@/lib/followup/stop-words"
+import { matchStopWordList, matchStopWordWith } from "@/lib/followup/stop-words"
+import { getBaselineStopWords } from "@/lib/followup/effective-stop-words"
 import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
 import { processPrequalificationAnswer } from "@/lib/prequalification/process-answer"
 
@@ -561,7 +562,7 @@ export async function scanIncomingMessages(opts: {
           const vacStopWords = (candVac?.stopWordsJson ?? []).filter((s): s is string => typeof s === "string")
           const matched = vacStopWords.length > 0
             ? matchStopWordList(text, vacStopWords) !== null
-            : matchStopWord(text)
+            : matchStopWordWith(text, await getBaselineStopWords())
           if (matched) {
             const sent = await applyRejection({
               candidateId,

@@ -1,7 +1,8 @@
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, followUpCampaigns } from "@/lib/db/schema"
-import { STOP_WORDS, matchStopWord, matchStopWordList } from "@/lib/followup/stop-words"
+import { STOP_WORDS, matchStopWordList, matchStopWordWith } from "@/lib/followup/stop-words"
+import { getBaselineStopWords } from "@/lib/followup/effective-stop-words"
 import { isBlockEnabled } from "@/lib/funnel-builder/runtime"
 
 export type StopReason =
@@ -128,10 +129,12 @@ export async function shouldStopFollowUp(
       }
     } catch { /* silent — fallback ниже */ }
 
+    // F6: baseline стоп-слов — из платформенной (редактируемой) записи, не хардкод.
+    const baseline = await getBaselineStopWords()
     const matchAny = (text: string): boolean =>
       vacancyStopWords
         ? matchStopWordList(text, vacancyStopWords) !== null
-        : matchStopWord(text)
+        : matchStopWordWith(text, baseline)
 
     const answers = candidate.anketaAnswers
     if (Array.isArray(answers)) {

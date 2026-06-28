@@ -40,7 +40,8 @@ import { avitoIntegrations, candidates, followUpMessages, vacancies } from "@/li
 import { classifyCandidateResponse } from "@/lib/ai/classify-candidate-response"
 import { processChatbotMessage } from "@/lib/ai/chatbot-processor"
 import { isBlockEnabled } from "@/lib/funnel-builder/runtime"
-import { matchStopWord, matchStopWordList } from "@/lib/followup/stop-words"
+import { matchStopWordList, matchStopWordWith } from "@/lib/followup/stop-words"
+import { getBaselineStopWords } from "@/lib/followup/effective-stop-words"
 import { getAvitoToken } from "@/lib/channels/avito"
 import { avitoAdapter } from "@/lib/channels/avito"
 
@@ -425,7 +426,7 @@ export async function processAvitoInbound(
       const vacStopWords = (candVac.stopWordsJson ?? []).filter((s): s is string => typeof s === "string")
       const matched = vacStopWords.length > 0
         ? matchStopWordList(text, vacStopWords) !== null
-        : matchStopWord(text)
+        : matchStopWordWith(text, await getBaselineStopWords())
       if (matched) {
         const sent = await applyRejection({
           candidateId,
