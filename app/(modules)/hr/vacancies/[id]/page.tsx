@@ -2093,7 +2093,7 @@ export default function VacancyPage() {
   // Переоценить выделенных кандидатов по параметру (или всем сразу). Реальные
   // AI-вызовы → только по выделенным (selectedCandidateIds).
   const RESCORE_LABELS: Record<string, string> = {
-    resume: "AI-резюме", ai: "AI-оценка", rubric: "AI-рубрика", test: "AI-тест", all: "все параметры",
+    resume: "AI-резюме", ai: "AI-оценка", rubric: "AI-рубрика", test: "AI-тест", portrait: "AI-Портрет", all: "все параметры",
   }
   const rescoreSelected = async (dimension: "resume" | "ai" | "rubric" | "test" | "portrait" | "all") => {
     if (rescoring) return

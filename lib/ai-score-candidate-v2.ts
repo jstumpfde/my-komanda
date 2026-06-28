@@ -8,7 +8,8 @@
 //
 // Используется параллельно с v1 (scoreCandidateById) в /api/vacancies/[id]/
 // score-candidate и /api/public/demo/[token]/answer (fire-and-forget).
-// Запускается ТОЛЬКО если vacancy.requirementsJson.must_have не пустой.
+// Для portrait-scoring вакансий читает критерии из Spec (vacancy_specs),
+// для остальных — из requirementsJson.must_have (legacy путь, без изменений).
 
 import { eq, and, desc } from "drizzle-orm"
 import Anthropic from "@anthropic-ai/sdk"
@@ -30,6 +31,12 @@ import {
   buildBlockMap,
   normalizeAnswers,
 } from "@/lib/ai-score-candidate"
+import { getSpec } from "@/lib/core/spec/store"
+import {
+  mustHaveTexts,
+  niceToHaveTexts,
+  dealBreakerTexts,
+} from "@/lib/core/spec/types"
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -152,20 +159,65 @@ export async function scoreCandidateV2(
       title:            vacancies.title,
       companyId:        vacancies.companyId,
       requirementsJson: vacancies.requirementsJson,
+      portraitScoring:  vacancies.portraitScoring,
     })
     .from(vacancies)
     .where(eq(vacancies.id, vacancyId))
     .limit(1)
   if (!vacancy) throw new Error("Вакансия не найдена")
 
-  const req = (vacancy.requirementsJson ?? {}) as VacancyRequirements
-  const mustHave = req.must_have ?? []
-  if (mustHave.length === 0) return null
+  // ── Выбираем источник критериев ─────────────────────────────────────────────
+  // Для portrait-scoring вакансий критерии живут в Spec (vacancy_specs.spec),
+  // а не в requirementsJson. Для остальных — только legacy requirementsJson.
+  let mustHave:   string[]
+  let niceToHave: string[]
+  let dealBreakers: string[]
+  let idealProfile: string
+  let weights: ScoringWeights
 
-  const niceToHave   = req.nice_to_have ?? []
-  const dealBreakers = req.deal_breakers ?? []
-  const idealProfile = req.ideal_profile ?? ""
-  const weights      = req.scoring_weights ?? DEFAULT_SCORING_WEIGHTS
+  if (vacancy.portraitScoring) {
+    // ── Portrait path: читаем Spec ─────────────────────────────────────────
+    const spec = await getSpec(vacancyId)
+
+    if (spec) {
+      // Нормализуем union-типы (string | { text, ... }) в плоские строки.
+      mustHave    = mustHaveTexts(spec.mustHave)
+      // niceToHave в Spec: spec.niceToHave + spec.customCriteria[].label +
+      // portraitRequiredSkills (fallback для portrait v1 без v2-mustHave).
+      niceToHave  = [
+        ...niceToHaveTexts(spec.niceToHave),
+        // customCriteria — произвольные HR-оси, передаём как nice-to-have
+        ...(spec.customCriteria ?? []).map(c => c.label),
+        // portraitRequiredSkills — v1-навыки; если mustHave не пустой они
+        // уже включены туда, дублирование не страшно — AI проигнорирует.
+        ...(mustHave.length === 0 ? spec.portraitRequiredSkills : []),
+      ]
+      dealBreakers = dealBreakerTexts(spec.dealBreakers)
+      idealProfile = spec.idealProfile ?? ""
+      weights      = spec.scoringWeights ?? DEFAULT_SCORING_WEIGHTS
+
+      // Гейт: пропускаем только если вообще нет ни одного критерия.
+      // Portrait-вакансия с только nice-to-have / customCriteria — тоже скорим.
+      const hasAnyCriteria =
+        mustHave.length > 0 ||
+        niceToHave.length > 0 ||
+        dealBreakers.length > 0
+      if (!hasAnyCriteria) return null
+    } else {
+      // Spec не сохранён → нет данных для portrait-скоринга, пропускаем.
+      return null
+    }
+  } else {
+    // ── Legacy path: requirementsJson (без изменений) ──────────────────────
+    const req = (vacancy.requirementsJson ?? {}) as VacancyRequirements
+    mustHave = req.must_have ?? []
+    if (mustHave.length === 0) return null
+
+    niceToHave   = req.nice_to_have ?? []
+    dealBreakers = req.deal_breakers ?? []
+    idealProfile = req.ideal_profile ?? ""
+    weights      = req.scoring_weights ?? DEFAULT_SCORING_WEIGHTS
+  }
 
   const [company] = await db
     .select({ industry: companies.industry })
