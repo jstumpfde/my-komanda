@@ -167,7 +167,9 @@ export async function POST(req: Request) {
           city: full.area?.name ?? null,
           source: "hh_outbound",
           stage: "new",
-          score: target.aiScore ?? 50,
+          // F10: не подставляем фейковые 50 — если оценки нет, score=null
+          // («не оценён»), как и resumeScore. Иначе искажалась реальная картина.
+          score: target.aiScore ?? null,
           resumeScore: target.aiScore ?? null,
           token: nanoid(32),
           shortId: short?.shortId ?? null,

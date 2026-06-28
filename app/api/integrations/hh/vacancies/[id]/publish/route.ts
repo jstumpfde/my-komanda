@@ -54,6 +54,20 @@ export async function POST(
       schedule = "fullDay",
     } = body
 
+    // F7: не публикуем неполную вакансию на hh — проверяем обязательное.
+    const missing: string[] = []
+    if (!vacancy.title?.trim()) missing.push("название")
+    if (!vacancy.city?.trim()) missing.push("город")
+    const hasDescription = vacancy.descriptionJson && typeof vacancy.descriptionJson === "object"
+      && Object.keys(vacancy.descriptionJson as Record<string, unknown>).length > 0
+    if (!hasDescription) missing.push("описание")
+    if (missing.length > 0) {
+      return NextResponse.json(
+        { error: `Заполните перед публикацией на hh.ru: ${missing.join(", ")}` },
+        { status: 400 },
+      )
+    }
+
     // Check if already published
     const existingHhVac = await db
       .select()
