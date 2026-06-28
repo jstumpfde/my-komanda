@@ -77,6 +77,7 @@ import { cn } from "@/lib/utils"
 import {
   getStageLabel,
   getStageColorClasses,
+  ALL_STAGE_SLUGS,
   type VacancyPipelineV2,
 } from "@/lib/stages"
 import {
@@ -2212,43 +2213,37 @@ export function CandidateDrawer({
           </Tabs>
         ) : null}
 
-        {/* ── Sticky footer: 2 equal buttons (Отказать + Пригласить) + ⋯ ─── */}
-        {candidate && !isHired && !isRejected && (
+        {/* ── M1: единый список «Стадия» + «Запланировать». Показывается ВСЕГДА
+            (в т.ч. на «найнят»/«отказ» — можно вернуть в воронку). Выбор стадии
+            сохраняет процессы: «Отказ» → диалог причины+hh-discard, «Интервью» →
+            подтверждение приглашения; остальные — прямой перевод. ─── */}
+        {candidate && (
           <div className="border-t bg-background px-6 py-3 shrink-0 flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-10 flex-1 gap-2 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+            <Select
+              value={candidate.stage ?? "new"}
               disabled={!!changingStage}
-              onClick={openRejectDialog}
+              onValueChange={(slug) => {
+                if (slug === (candidate.stage ?? "")) return
+                if (slug === "rejected") { openRejectDialog(); return }
+                if (slug === "interview") { setConfirmInterviewOpen(true); return }
+                void handleStageChange(slug)
+              }}
             >
-              {changingStage === "rejected" ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
-              Отказать
-            </Button>
+              <SelectTrigger className="h-10 flex-1">
+                <span className="flex items-center gap-1.5 min-w-0">
+                  {changingStage ? <Loader2 className="w-4 h-4 animate-spin shrink-0" /> : null}
+                  <span className="text-muted-foreground shrink-0">Стадия:</span>
+                  <span className="font-medium truncate">{getStageLabel(candidate.stage ?? "new", vacancyPipeline)}</span>
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                {ALL_STAGE_SLUGS.map((slug) => (
+                  <SelectItem key={slug} value={slug}>{getStageLabel(slug, vacancyPipeline)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-            {candidate.stage !== "interview" && candidate.stage !== "final_decision" && candidate.stage !== "hired" ? (
-              <Button
-                size="sm"
-                className="h-10 flex-[1.5] gap-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold shadow-md shadow-purple-600/25"
-                disabled={!!changingStage}
-                onClick={() => setConfirmInterviewOpen(true)}
-              >
-                {changingStage === "interview" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calendar className="w-4 h-4" />}
-                Пригласить на интервью
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                className="flex-1 gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
-                disabled={!!changingStage}
-                onClick={() => handleStageChange("hired")}
-              >
-                {changingStage === "hired" ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                Нанять
-              </Button>
-            )}
-
-            {/* #1: запланировать интервью с датой → событие в табе «Интервью» */}
+            {/* Запланировать интервью с датой → событие в табе «Интервью» */}
             <Button
               size="sm"
               variant="outline"
@@ -2259,7 +2254,6 @@ export function CandidateDrawer({
               <CalendarPlus className="w-4 h-4" />
               <span className="hidden sm:inline">Запланировать</span>
             </Button>
-
           </div>
         )}
       </SheetContent>
