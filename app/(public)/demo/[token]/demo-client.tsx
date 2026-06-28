@@ -1357,6 +1357,15 @@ export default function DemoPage() {
     return false
   })
 
+  // Если в уроке есть контентная кнопка-переход (блок «Кнопка», ведущая на
+  // следующую страницу, а не внешняя ссылка) — она уже двигает кандидата дальше,
+  // поэтому системную нав-кнопку «Далее/Завершить» НЕ дублируем (фикс двойной
+  // кнопки 28.06). «Назад» в нижней панели при этом сохраняем.
+  const hasAdvancingButton = currentFlat.blocks.some((b) =>
+    b.type === "button" &&
+    !((b.buttonTarget === "url" || (!b.buttonTarget && !!b.buttonUrl)) && !!b.buttonUrl),
+  )
+
   return (
     <div className="flex min-h-screen flex-col" style={{ backgroundColor: bgColor }}>
       {/* Header + Progress */}
@@ -1537,9 +1546,10 @@ export default function DemoPage() {
 
             {/* Панель навигации скрыта (showSystemNav=false) — финиш всё равно
                 обязателен: рендерим ОДНУ кнопку инлайн в потоке контента
-                (без «Назад» и sticky-бара), иначе кандидат не сможет завершить. */}
+                (без «Назад» и sticky-бара), иначе кандидат не сможет завершить.
+                НО если в уроке есть своя кнопка-переход — инлайн не дублируем. */}
             {!(data.postDemoSettings?.showSystemNav === true
-              || (data.postDemoSettings?.showSystemNav === undefined && totalLessons > 1)) && (
+              || (data.postDemoSettings?.showSystemNav === undefined && totalLessons > 1)) && !hasAdvancingButton && (
               <div className="pt-4 flex justify-center">
                 <Button
                   onClick={handleNext}
@@ -1570,6 +1580,10 @@ export default function DemoPage() {
         const showNav = data.postDemoSettings?.showSystemNav === true
           || (data.postDemoSettings?.showSystemNav === undefined && totalLessons > 1)
         if (!showNav) return null
+        // Есть контентная кнопка-переход → системную «Далее/Завершить» не дублируем.
+        // Нижняя панель остаётся только ради «Назад» (на не-первой странице);
+        // на первой странице без forward-кнопки она пустая → скрываем целиком.
+        if (hasAdvancingButton && currentIndex === 0) return null
         return (
           <div className="sticky bottom-0 border-t bg-white/90 backdrop-blur-sm">
             <div className="mx-auto max-w-2xl px-4 py-4 flex gap-3">
@@ -1584,25 +1598,27 @@ export default function DemoPage() {
                   Назад
                 </Button>
               )}
-              <Button
-                onClick={handleNext}
-                disabled={hasRequiredUnanswered || saving || isAnyMediaUploading}
-                title={isAnyMediaUploading ? "Дождитесь окончания загрузки видео" : undefined}
-                className="flex-1 h-12 text-base font-medium"
-                style={{ backgroundColor: navBtnColor, borderColor: navBtnColor }}
-              >
-                {saving || isAnyMediaUploading ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : currentIndex === totalLessons - 1 ? (
-                  // Заданное HR название приоритетно и на последней странице
-                  data.postDemoSettings?.navButtonText || "Завершить"
-                ) : (
-                  <>
-                    {data.postDemoSettings?.navButtonText || "Далее"}
-                    <ChevronRight className="ml-1 h-5 w-5" />
-                  </>
-                )}
-              </Button>
+              {!hasAdvancingButton && (
+                <Button
+                  onClick={handleNext}
+                  disabled={hasRequiredUnanswered || saving || isAnyMediaUploading}
+                  title={isAnyMediaUploading ? "Дождитесь окончания загрузки видео" : undefined}
+                  className="flex-1 h-12 text-base font-medium"
+                  style={{ backgroundColor: navBtnColor, borderColor: navBtnColor }}
+                >
+                  {saving || isAnyMediaUploading ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : currentIndex === totalLessons - 1 ? (
+                    // Заданное HR название приоритетно и на последней странице
+                    data.postDemoSettings?.navButtonText || "Завершить"
+                  ) : (
+                    <>
+                      {data.postDemoSettings?.navButtonText || "Далее"}
+                      <ChevronRight className="ml-1 h-5 w-5" />
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           </div>
         )
