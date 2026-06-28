@@ -144,28 +144,10 @@ const CORRECTION_TEMPLATES: { label: string; text: string }[] = [
   { label: "Не то сообщение",     text: "Прошу прощения, предыдущее сообщение было отправлено по ошибке — его можно проигнорировать. " },
 ]
 
-// Ключ localStorage для «скрыть у себя»: id скрытых сообщений чата (id у hh глобально
-// уникальны). Скрытие косметическое — на стороне нашей платформы; у кандидата в hh
-// сообщение остаётся (удалить его через API hh невозможно).
-const HIDDEN_CHAT_MSGS_LS_KEY = "mk_hidden_chat_msgs_v1"
-
-function loadHiddenMsgIds(): Set<string> {
-  try {
-    const raw = typeof window !== "undefined" ? window.localStorage.getItem(HIDDEN_CHAT_MSGS_LS_KEY) : null
-    const arr = raw ? (JSON.parse(raw) as unknown) : []
-    return new Set(Array.isArray(arr) ? arr.filter((x): x is string => typeof x === "string") : [])
-  } catch {
-    return new Set()
-  }
-}
-
-function persistHiddenMsgIds(ids: Set<string>): void {
-  try {
-    window.localStorage.setItem(HIDDEN_CHAT_MSGS_LS_KEY, JSON.stringify([...ids]))
-  } catch {
-    /* квота/недоступность localStorage — игнорируем, скрытие просто не сохранится */
-  }
-}
+// F8: «скрыть у себя» — id скрытых сообщений чата теперь хранятся на сервере
+// (candidates.hidden_chat_msg_ids), а не в localStorage. Косметическое скрытие на
+// нашей стороне (у кандидата в hh сообщение остаётся). Инициализация — из данных
+// кандидата; запись — PUT /candidates/[id]/hidden-messages.
 
 interface DemoBlock {
   blockId: string
@@ -714,18 +696,29 @@ export function CandidateDrawer({
   const [hhSending, setHhSending] = useState(false)
   // hh-токен жив? false → показываем сохранённую переписку + плашку «не подключён».
   const [hhConnected, setHhConnected] = useState(true)
-  // «Скрыть у себя»: косметическое скрытие сообщений чата (localStorage, на нашей стороне).
-  const [hiddenMsgIds, setHiddenMsgIds] = useState<Set<string>>(() => loadHiddenMsgIds())
+  // F8: «скрыть у себя» — серверное хранение (постоянно, на всех устройствах).
+  const [hiddenMsgIds, setHiddenMsgIds] = useState<Set<string>>(new Set())
   const [showHiddenMsgs, setShowHiddenMsgs] = useState(false)
   const toggleHiddenMsg = useCallback((id: string) => {
+    if (!candidateId) return
     setHiddenMsgIds((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
-      persistHiddenMsgIds(next)
+      // Оптимистично + сохраняем полный набор на сервере (fire-and-forget).
+      fetch(`/api/modules/hr/candidates/${candidateId}/hidden-messages`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [...next] }),
+      }).catch(() => {})
       return next
     })
-  }, [])
+  }, [candidateId])
+  // F8: при загрузке/смене кандидата подхватываем скрытые id с сервера.
+  useEffect(() => {
+    const ids = candidate?.hiddenChatMsgIds
+    setHiddenMsgIds(new Set(Array.isArray(ids) ? ids : []))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidate?.id])
   const hhFetchRef = useRef<string | null>(null)
   const hhListRef = useRef<HTMLDivElement | null>(null)
   const tabScrollRef = useRef<HTMLDivElement | null>(null)

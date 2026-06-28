@@ -43,6 +43,8 @@ export interface ApiCandidate {
   // Реальный формат в БД — массив [{ blockId, answer, ... }] или legacy [{ question, answer }].
   // Внутренние тулзы рендеринга нормализуют тип, поэтому здесь — `unknown`.
   anketaAnswers: unknown
+  // F8: id скрытых сообщений чата (косметическое «скрыть у себя», серверное).
+  hiddenChatMsgIds?: string[] | null
   // Снимок данных кандидата из анкетной формы (firstName/lastName/phone/
   // email/city/birthDate/telegram/portfolioUrl/...). Отдельно от
   // anketa_answers (там массив демо-блоков). Не перезаписывает основные

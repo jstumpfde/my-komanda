@@ -1504,6 +1504,8 @@ export const candidates = pgTable("candidates", {
   sequenceNumber: integer("sequence_number"),         // порядковый номер в рамках вакансии (0 = preview)
   demoProgressJson: jsonb("demo_progress_json"),
   anketaAnswers: jsonb("anketa_answers"), // [{question, answer}]
+  // F8: «скрыть у себя» в чате — id скрытых сообщений (косметически, на нашей стороне).
+  hiddenChatMsgIds: jsonb("hidden_chat_msg_ids").$type<string[]>().notNull().default([]),
   // Снимок данных, которые кандидат сам указал в анкетной форме по
   // демо-токену (firstName/lastName/phone/email/city/birthDate/telegram
   // /portfolioUrl/hhUrl/otherLinks/experienceSummary/employmentPreference
