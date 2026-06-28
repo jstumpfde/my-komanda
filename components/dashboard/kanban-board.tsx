@@ -59,6 +59,10 @@ interface KanbanBoardProps {
   hhBroadcastMode?: boolean
   /** Колбэк одиночной рассылки через hh по конкретному кандидату (list view). */
   onBroadcast?: (candidateId: string) => void
+  /** Стадии воронки v2 текущей вакансии (для отображения кастомного лейбла в list-view). */
+  funnelV2Stages?: { id: string; title?: string | null }[]
+  /** Pipeline текущей вакансии (для кастомных лейблов legacy-стадий в list-view). */
+  vacancyPipeline?: import("@/lib/stages").VacancyPipelineV2 | null
 }
 
 const VIEW_BUTTONS: { mode: ViewMode; icon: React.ElementType; label: string }[] = [
@@ -70,7 +74,7 @@ const VIEW_BUTTONS: { mode: ViewMode; icon: React.ElementType; label: string }[]
 
 const PRESET_COLORS = ["#94a3b8", "#3b82f6", "#ef4444", "#8b5cf6", "#f97316", "#22c55e", "#ec4899", "#06b6d4", "#f59e0b", "#10b981"]
 
-export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = [], onColumnsChange, onOpenProfile, onAction, onToggleFavorite, hideViewSwitcher, onAddCustomColumn, onRemoveColumn, sortMode = "date_desc", listSort, onListSortChange, selectedIds, onSelectionChange, listStartIndex, listServerSorted = false, hhBroadcastMode, onBroadcast }: KanbanBoardProps) {
+export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = [], onColumnsChange, onOpenProfile, onAction, onToggleFavorite, hideViewSwitcher, onAddCustomColumn, onRemoveColumn, sortMode = "date_desc", listSort, onListSortChange, selectedIds, onSelectionChange, listStartIndex, listServerSorted = false, hhBroadcastMode, onBroadcast, funnelV2Stages, vacancyPipeline }: KanbanBoardProps) {
   const [addColOpen, setAddColOpen] = useState(false)
   const [newColName, setNewColName] = useState("")
   const [newColColor, setNewColColor] = useState("#3b82f6")
@@ -320,6 +324,8 @@ export function KanbanBoard({ settings, viewMode, onViewModeChange, columns = []
           serverSorted={listServerSorted}
           hhBroadcastMode={hhBroadcastMode}
           onBroadcast={onBroadcast}
+          funnelV2Stages={funnelV2Stages}
+          vacancyPipeline={vacancyPipeline}
         />
       )}
 

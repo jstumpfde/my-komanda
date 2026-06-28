@@ -18,11 +18,23 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     if (!vac) return NextResponse.json({ error: "vacancy not found" }, { status: 404 })
 
     // Аггрегируем по дню недели и часу (МСК = UTC+3)
-    // Используем company_id (а не одну вакансию) — статистика по всем вакансиям компании достовернее
+    // Используем company_id (а не одну вакансию) — статистика по всем вакансиям компании достовернее.
+    //
+    // Берём РЕАЛЬНОЕ время отклика на hh.ru — negotiation.created_at из raw_data.
+    // Это поле хранится в raw_data как строка ISO 8601 и совпадает с тем временем,
+    // которое hh.ru показывает в «Чате hh» (напр. «27.06, 20:35»).
+    // Fallback на hh_responses.created_at только если raw_data-поле отсутствует
+    // (не-hh кандидаты, ранние записи без сохранённого raw_data).
     const rows = await db.execute(sql`
-      SELECT 
-        EXTRACT(DOW FROM created_at AT TIME ZONE 'Europe/Moscow')::int AS dow,
-        EXTRACT(HOUR FROM created_at AT TIME ZONE 'Europe/Moscow')::int AS hour,
+      SELECT
+        EXTRACT(DOW FROM COALESCE(
+          NULLIF(raw_data->>'created_at', '')::timestamptz,
+          created_at
+        ) AT TIME ZONE 'Europe/Moscow')::int AS dow,
+        EXTRACT(HOUR FROM COALESCE(
+          NULLIF(raw_data->>'created_at', '')::timestamptz,
+          created_at
+        ) AT TIME ZONE 'Europe/Moscow')::int AS hour,
         COUNT(*)::int AS cnt
       FROM hh_responses
       WHERE company_id = ${vac.companyId}

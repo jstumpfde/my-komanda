@@ -23,13 +23,6 @@ function blockHasScoredContent(lessons: Lesson[]): boolean {
   return lessons.some(l => Array.isArray(l.blocks) && l.blocks.some(b => b.type === "task" || b.type === "media"))
 }
 
-/** Блок «привязан к воронке» (используется в обработке кандидатов). Фаза 1: легаси
- *  demo/test реально читает рантайм → «Активно». Новые block:* пока не подключены
- *  → «Черновик». Фаза 2 будет считать это из реальных связей с этапами воронки. */
-function blockIsLinked(kind: string): boolean {
-  return kind === "demo" || kind === "test"
-}
-
 /** Дата последнего изменения: ДД.ММ.ГГГГ ЧЧ:ММ */
 function fmtDate(iso: string): string {
   const d = new Date(iso)
@@ -637,8 +630,8 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext, funnelV2RuntimeEna
         <div className="flex items-center justify-between -mt-1">
           {/* Статус активности */}
           <div className="text-[11px] leading-tight">
-            <span className={cn("font-medium", blockIsLinked(selectedBlock.kind) ? "text-emerald-600" : "text-amber-600")}>
-              {blockIsLinked(selectedBlock.kind) ? "● Активно" : "○ Черновик"}
+            <span className={cn("font-medium", selectedBlock.isLiveBattle ? "text-emerald-600" : "text-amber-600")}>
+              {selectedBlock.isLiveBattle ? "● Виден кандидатам" : "○ Не виден"}
             </span>
             <span className="text-muted-foreground/60"> · изм. {fmtDate(selectedBlock.updatedAt)}</span>
           </div>

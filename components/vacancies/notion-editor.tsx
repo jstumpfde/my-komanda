@@ -2746,11 +2746,20 @@ function TaskEditorBlock({ block, onUpdate }: { block: Block; onUpdate: (patch: 
                   <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 font-medium shrink-0">{points}б</span>
                 )}
                 <button
-                  title={q.required ? "Обязательный" : "Не обязательный"}
+                  title={q.required ? "Обязательный (нажмите, чтобы снять)" : "Не обязательный (нажмите, чтобы сделать обязательным)"}
                   onClick={(e) => { e.stopPropagation(); updateQ(qi, { required: !q.required }) }}
-                  className={cn("shrink-0 w-5 h-5 rounded flex items-center justify-center text-sm font-bold transition-colors",
-                    q.required ? "text-destructive" : "text-muted-foreground/25 hover:text-muted-foreground")}
-                >*</button>
+                  className="shrink-0"
+                >
+                  {q.required ? (
+                    <Badge className="text-[10px] px-1.5 py-0 h-4 bg-destructive/10 text-destructive border-destructive/30 hover:bg-destructive/20 font-medium">
+                      Обязательный
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground/40 border-muted-foreground/20 hover:text-muted-foreground hover:border-muted-foreground/50 font-normal">
+                      Необязательный
+                    </Badge>
+                  )}
+                </button>
                 <button className="text-muted-foreground/40 hover:text-destructive shrink-0"
                   onClick={(e) => { e.stopPropagation(); removeQuestion(qi) }}
                 ><X className="w-3.5 h-3.5" /></button>

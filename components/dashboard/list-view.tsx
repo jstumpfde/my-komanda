@@ -79,6 +79,11 @@ interface ListViewProps {
    *  после optimistic-апдейта isFavorite, и кандидат «пропадает» из текущей
    *  позиции (на самом деле — едет в favorites-группу). */
   serverSorted?: boolean
+  /** Стадии воронки v2 текущей вакансии. Если кандидат имеет funnelV2StateJson.stageId
+   *  и совпадение найдено — используется title стадии вместо платформенного лейбла. */
+  funnelV2Stages?: { id: string; title?: string | null }[]
+  /** Pipeline текущей вакансии (кастомные лейблы legacy-стадий через parsePipeline). */
+  vacancyPipeline?: import("@/lib/stages").VacancyPipelineV2 | null
 }
 
 // Тип строки-кандидата после обогащения columnId/columnTitle/цветами.
@@ -233,6 +238,8 @@ export function ListView({
   selectedIds, onSelectionChange,
   serverSorted = false,
   showVacancyColumn = false,
+  funnelV2Stages,
+  vacancyPipeline,
 }: ListViewProps) {
   const lastSelectedIdRef = useRef<string | null>(null)
   const selectionEnabled = !!selectedIds && !!onSelectionChange
@@ -644,7 +651,14 @@ export function ListView({
             style={candidate.stage ? undefined : { background: `linear-gradient(135deg, ${candidate.colorFrom}, ${candidate.colorTo})`, color: "#fff" }}
           >
             {candidate.stage
-              ? getStageLabel(candidate.stage)
+              ? (() => {
+                  const fv2Id = (candidate.funnelV2StateJson as { stageId?: string | null } | null)?.stageId
+                  if (fv2Id && funnelV2Stages) {
+                    const fv2Stage = funnelV2Stages.find((s) => s.id === fv2Id)
+                    if (fv2Stage?.title) return fv2Stage.title
+                  }
+                  return getStageLabel(candidate.stage, vacancyPipeline ?? undefined)
+                })()
               : (candidate.columnTitle === "Демонстрация" ? "Демо" : candidate.columnTitle)}
           </span>
         </div>

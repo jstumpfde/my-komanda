@@ -54,6 +54,8 @@ export interface FilterState {
   hideNoSalary: boolean
   /** Показать только активных сейчас (активность демо/тест за 30 мин). */
   activeNow: boolean
+  /** Фильтр по анкете: "filled" = заполнили форму; "not_filled" = открыли демо, но не заполнили. */
+  anketaFilled?: "filled" | "not_filled"
   demoProgress: string[]
   dateRange: string
   dateFrom: string
@@ -258,6 +260,7 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
     // отказы ПОКАЗАНЫ (!hideRejected). Иначе бейдж горел бы на чистом экране.
     !filters.hideRejected ? 1 : 0,
     (filters.demoProgress?.length ?? 0) > 0 ? 1 : 0,
+    filters.anketaFilled ? 1 : 0,
     filters.dateRange || filters.dateFrom || filters.dateTo ? 1 : 0,
     (filters.ageMin ?? 18) > 18 || (filters.ageMax ?? 65) < 65 ? 1 : 0,
     (filters.education?.length ?? 0) > 0 ? 1 : 0,
@@ -516,7 +519,7 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
             <CollapsibleTrigger className="flex w-full items-center justify-between text-sm font-medium [&[data-state=open]>svg]:rotate-180">
               <span className="flex items-center gap-2">
                 Статус и этап
-                {((filters.funnelStatuses?.length ?? 0) > 0 || !filters.hideRejected || (filters.demoProgress?.length ?? 0) > 0) && (
+                {((filters.funnelStatuses?.length ?? 0) > 0 || !filters.hideRejected || (filters.demoProgress?.length ?? 0) > 0 || !!filters.anketaFilled) && (
                   <span className="text-[10px] rounded-full bg-primary/15 text-primary px-1.5 py-0.5">активны</span>
                 )}
               </span>
@@ -582,6 +585,27 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
                         onCheckedChange={() => onFiltersChange({ ...filters, demoProgress: toggleArray(filters.demoProgress, s) })}
                       />
                       <label htmlFor={`demo-${s}`} className="text-sm cursor-pointer">{s}</label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* Анкета (контактная форма после демо) */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Анкета (контактная форма)</label>
+                <div className="space-y-1">
+                  {([
+                    ["not_filled", "Анкета не заполнена"],
+                    ["filled",     "Анкета заполнена"],
+                  ] as const).map(([val, label]) => (
+                    <div key={val} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`anketa-${val}`}
+                        checked={filters.anketaFilled === val}
+                        onCheckedChange={(checked) =>
+                          onFiltersChange({ ...filters, anketaFilled: checked ? val : undefined })
+                        }
+                      />
+                      <label htmlFor={`anketa-${val}`} className="text-sm cursor-pointer">{label}</label>
                     </div>
                   ))}
                 </div>

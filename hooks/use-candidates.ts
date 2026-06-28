@@ -40,6 +40,9 @@ export interface ApiCandidate {
   photoUrl?: string | null
   token: string
   demoProgressJson: unknown
+  // Состояние кандидата в воронке v2 (стадия funnel-v2, если активна).
+  // Возвращается только в ответе пер-вакансионного списка.
+  funnelV2StateJson?: unknown
   // Реальный формат в БД — массив [{ blockId, answer, ... }] или legacy [{ question, answer }].
   // Внутренние тулзы рендеринга нормализуют тип, поэтому здесь — `unknown`.
   anketaAnswers: unknown
@@ -129,6 +132,11 @@ export interface CandidatesFilters {
   hideRejected?: boolean              // сервер: stage != 'rejected'
   hideNoSalary?: boolean              // сервер: исключить кандидатов без указанной ЗП
   activeNow?: boolean                 // сервер: активность за последние 30 мин (демо/тест)
+  /** Фильтр по статусу заполнения анкеты:
+   *  "filled"     — кандидат отправил контактную форму (survey_responses IS NOT NULL)
+   *  "not_filled" — открыл демо, но форму не заполнил (demo_opened_at IS NOT NULL AND survey_responses IS NULL)
+   *  undefined    — без фильтра */
+  anketaFilled?: "filled" | "not_filled"
 }
 
 export interface CandidatesSortParams {
@@ -228,6 +236,7 @@ export function useCandidates(
         if (filters.search && filters.search.trim()) {
           params.set("search", filters.search.trim())
         }
+        if (filters.anketaFilled) params.set("anketaFilled", filters.anketaFilled)
       }
       const res = await fetch(`/api/modules/hr/candidates?${params.toString()}`)
       if (!res.ok) {
@@ -449,6 +458,7 @@ export function usePaginatedCandidates({
         if (filters.hideNoSalary) params.set("hideNoSalary", "true")
         if (filters.activeNow) params.set("activeNow", "true")
         if (filters.search && filters.search.trim()) params.set("search", filters.search.trim())
+        if (filters.anketaFilled) params.set("anketaFilled", filters.anketaFilled)
         // demoProgress в paginated режиме теперь применяется на сервере через
         // SQL (см. route.ts: pre-fetch demoTotalBlocks → SQL WHERE с COUNT
         // подзапросом). count(*) корректен — фильтр в WHERE, а не post-fetch.

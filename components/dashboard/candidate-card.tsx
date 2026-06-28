@@ -77,6 +77,10 @@ export interface Candidate {
   isActive?: boolean
   /** Название вакансии — показывается в глобальном списке кандидатов (showVacancyColumn). */
   vacancyTitle?: string | null
+  /** Состояние кандидата в воронке v2 (stageId — текущая стадия funnel-v2).
+   *  Возвращается только пер-вакансионным API. Используется в ListView для
+   *  отображения кастомного лейбла стадии вместо платформенного дефолта. */
+  funnelV2StateJson?: { stageId?: string | null } | null
 }
 
 interface CandidateCardProps {

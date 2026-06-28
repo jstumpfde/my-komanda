@@ -344,6 +344,8 @@ export default function CandidatesPage() {
     // Диапазон дат
     if (filters.dateFrom) ps.set("dateFrom", filters.dateFrom)
     if (filters.dateTo) ps.set("dateTo", filters.dateTo)
+    // Анкета (контактная форма после демо)
+    if (filters.anketaFilled) ps.set("anketaFilled", filters.anketaFilled)
     return ps
   }, [debouncedSearch, vacancyFilter, filters])
 

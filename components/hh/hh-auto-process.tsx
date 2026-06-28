@@ -353,7 +353,9 @@ export function HhAutoProcess({
                 variant="outline"
                 size="sm"
                 className="h-8 text-xs gap-1.5"
-                title={lastSyncLabel ? `Подтянуть новые отклики с hh.ru · ${lastSyncLabel}` : "Подтянуть новые отклики с hh.ru"}
+                title={lastSyncLabel
+                  ? `Подтянуть отклики с hh.ru (без отправки сообщений кандидатам) · ${lastSyncLabel}`
+                  : "Подтянуть отклики с hh.ru (без отправки сообщений кандидатам)"}
               >
                 {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                 Синхр.

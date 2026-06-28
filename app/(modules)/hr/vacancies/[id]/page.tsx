@@ -219,6 +219,7 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     relocationReady: c.relocationReady ?? null,
     businessTripsReady: c.businessTripsReady ?? null,
     photoUrl: c.photoUrl ?? null,
+    funnelV2StateJson: (c.funnelV2StateJson as { stageId?: string | null } | null) ?? null,
   }
 }
 
@@ -615,7 +616,29 @@ export default function VacancyPage() {
     hideRejected: filters.hideRejected,
     hideNoSalary: filters.hideNoSalary,
     activeNow: filters.activeNow,
+    anketaFilled: filters.anketaFilled,
   }), [filters]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Legacy pipeline текущей вакансии — для кастомных лейблов стадий в ListView. */
+  const vacancyPipeline = useMemo(
+    () => parsePipeline(
+      (apiVacancy?.descriptionJson as { pipeline?: unknown } | undefined)?.pipeline,
+      companyHhActions,
+      companyPalette,
+    ),
+    [apiVacancy?.descriptionJson, companyHhActions, companyPalette],
+  )
+
+  /** Стадии funnel-v2 текущей вакансии (id + title) — для отображения в ListView. */
+  const funnelV2Stages = useMemo(() => {
+    const raw = (apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.funnelV2
+    if (!raw || typeof raw !== "object") return undefined
+    const stages = (raw as { stages?: unknown }).stages
+    if (!Array.isArray(stages)) return undefined
+    return (stages as Array<{ id?: string; title?: string | null }>)
+      .filter((s) => typeof s.id === "string")
+      .map((s) => ({ id: s.id as string, title: s.title ?? null }))
+  }, [apiVacancy?.descriptionJson])
 
   // viewMode поднят сюда (выше хуков), чтобы useCandidates умел пропускать
   // запрос в режиме list-paginated и не дублировал usePaginatedCandidates.
@@ -1202,35 +1225,6 @@ export default function VacancyPage() {
     if (hhConnected !== true || !apiVacancy?.hhVacancyId) return
     loadHhSyncMeta()
   }, [hhConnected, apiVacancy?.hhVacancyId, loadHhSyncMeta])
-
-  const handleHhSync = async () => {
-    setHhSyncing(true)
-    try {
-      // GET /api/integrations/hh/responses — это серверный синк с hh API
-      // (тянет negotiations + резюме). Запускаем только по явному клику кнопки.
-      await Promise.all([
-        fetch("/api/integrations/hh/vacancies"),
-        fetch("/api/integrations/hh/responses"),
-      ])
-
-      // P0-54: cron делает 2 шага (импорт + processQueue), но ручной handleHhSync
-      // раньше делал только импорт. В результате свежие hh_responses оставались
-      // в status='response' до следующего cron-прогона, и первое сообщение
-      // не уходило сразу после нажатия «Синхронизировать». Дёргаем разбор
-      // fire-and-forget — endpoint async, отдаёт {jobId, status:queued}
-      // мгновенно; реальная обработка идёт в фоне.
-      void fetch("/api/integrations/hh/process-queue", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ vacancyId: id, limit: 50, delaySeconds: 2 }),
-      }).catch(() => { /* silent — основной toast о синке всё равно покажем */ })
-
-      await Promise.all([loadHhSyncMeta(), loadHeaderStats()])
-      refetchCandidates(); refetchVacancy()
-      toast.success("Синхронизировано с hh.ru. Разбор запущен в фоне.")
-    } catch { toast.error("Ошибка синхронизации") }
-    finally { setHhSyncing(false) }
-  }
 
   // #16: синк БЕЗ разбора — для кнопки «Синхронизировать» в поповере «Настройки
   // разбора». Сам разбор после синка запускает HhAutoProcess по своим настройкам
@@ -3155,6 +3149,8 @@ export default function VacancyPage() {
                   listServerSorted={useListPaginated}
                   hhBroadcastMode={hhBroadcastMode}
                   onBroadcast={openHhBroadcastForCandidate}
+                  funnelV2Stages={funnelV2Stages}
+                  vacancyPipeline={vacancyPipeline}
                 />
                 {useListPaginated && (
                   <div className="mt-3">

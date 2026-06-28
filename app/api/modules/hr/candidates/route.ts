@@ -352,6 +352,17 @@ export async function GET(req: NextRequest) {
         listConds.push(ne(candidates.stage, "rejected"))
       }
 
+      // Фильтр по статусу анкеты (контактная форма после демо).
+      // "filled"     → survey_responses IS NOT NULL (кандидат отправил форму).
+      // "not_filled" → demo_opened_at IS NOT NULL AND survey_responses IS NULL
+      //               (открыл демо, но форму не заполнил).
+      const anketaFilledParam = url.searchParams.get("anketaFilled")
+      if (anketaFilledParam === "filled") {
+        listConds.push(isNotNull(candidates.surveyResponses))
+      } else if (anketaFilledParam === "not_filled") {
+        listConds.push(and(isNotNull(candidates.demoOpenedAt), isNull(candidates.surveyResponses)) as SQL)
+      }
+
       // Порог AI-скора по анкете (aiScore >= scoreMinAnketa)
       const scoreMinAnketa = url.searchParams.get("scoreMinAnketa")
       if (scoreMinAnketa && Number(scoreMinAnketa) > 0) {
@@ -859,6 +870,17 @@ export async function GET(req: NextRequest) {
     // сравниваем в той же зоне, что и defaultNow()).
     if (url.searchParams.get("activeNow") === "true") {
       filterConds.push(sql`(${candidates.lastActivityAt} IS NOT NULL AND ${candidates.lastActivityAt} > (now()::timestamp - interval '15 minutes'))`)
+    }
+
+    // Фильтр по статусу анкеты (контактная форма после демо).
+    // "filled"     → survey_responses IS NOT NULL (кандидат отправил форму).
+    // "not_filled" → demo_opened_at IS NOT NULL AND survey_responses IS NULL
+    //               (открыл демо, но форму не заполнил).
+    const anketaFilledPerVac = url.searchParams.get("anketaFilled")
+    if (anketaFilledPerVac === "filled") {
+      filterConds.push(isNotNull(candidates.surveyResponses))
+    } else if (anketaFilledPerVac === "not_filled") {
+      filterConds.push(and(isNotNull(candidates.demoOpenedAt), isNull(candidates.surveyResponses)) as SQL)
     }
 
     // Поиск по имени/email/телефону (ILIKE). %/_/\ экранируем, чтобы юзер
