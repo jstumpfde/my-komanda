@@ -26,6 +26,11 @@ const MODULE_GROUP_DEFS: Partial<Record<ModuleId, { label: string; hrefs: string
   //   /marketing/analytics, /marketing/budget
   marketing: [],
 
+  // email_marketing (S6, 28.06): «База» рабочая (owner-only), но модуль ещё
+  // допиливается — прячем под «Скоро» (пустые группы → бейдж «Скоро», без
+  // под-пунктов). Роуты /email-marketing/* доступны напрямую по deep-link.
+  email_marketing: [],
+
   // logistics: весь модуль — нет ни одного API-вызова, только хардкод
   //   /logistics/dashboard, /logistics/requests, /logistics/quotes,
   //   /logistics/shipments, /logistics/carriers, /logistics/settings

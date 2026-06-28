@@ -155,13 +155,29 @@ function ShareButton({ period, vacancyId, from, to }: {
 // ─── Страница ──────────────────────────────────────────────────────────────────
 
 function ReportContent() {
-  const [period, setPeriod] = useState<Period>("all")
+  // S7: помним последний выбор фильтра (период + вакансия) между заходами.
+  const [period, setPeriod] = useState<Period>(() => {
+    if (typeof window === "undefined") return "all"
+    const v = localStorage.getItem("hr-report-period")
+    // "custom" не восстанавливаем (диапазон не храним) → "all".
+    return v && v !== "custom" ? (v as Period) : "all"
+  })
   const [customFrom, setCustomFrom] = useState<Date | null>(null)
   const [customTo, setCustomTo] = useState<Date | null>(null)
-  const [vacancyId, setVacancyId] = useState<string>("all")
+  const [vacancyId, setVacancyId] = useState<string>(() => {
+    if (typeof window === "undefined") return "all"
+    return localStorage.getItem("hr-report-vacancy") || "all"
+  })
   const [data, setData] = useState<ReportData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Сохраняем выбор фильтра (период не-custom + вакансия) для следующего захода.
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    if (period !== "custom") localStorage.setItem("hr-report-period", period)
+    localStorage.setItem("hr-report-vacancy", vacancyId)
+  }, [period, vacancyId])
 
   const loadData = useCallback((p: Period, v: string, cf: Date | null, ct: Date | null) => {
     let cancelled = false
