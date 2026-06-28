@@ -5,19 +5,13 @@ import { and, eq, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, talentPoolEntries, referralLinks } from "@/lib/db/schema"
 import { requireCompany } from "@/lib/api-helpers"
+import { scoreToStatus as statusFromScore } from "@/lib/talent-pool/score-status"
 
 const PALETTE = ["#6366f1", "#06b6d4", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#ec4899"]
 const BAR_COLORS = ["bg-amber-500", "bg-cyan-500", "bg-emerald-500", "bg-indigo-500", "bg-red-500", "bg-purple-500"]
 const MONTHS_RU = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"]
 
 type Member = { source: string; score: number; createdAt: Date | null; status: string }
-
-function statusFromScore(s: number): string {
-  if (s >= 80) return "ideal"
-  if (s >= 65) return "hot"
-  if (s >= 40) return "warming"
-  return "cold"
-}
 
 export async function GET() {
   try {

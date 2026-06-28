@@ -8,17 +8,11 @@ import { desc, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { talentPoolEntries } from "@/lib/db/schema"
 import { requireCompany } from "@/lib/api-helpers"
+import { scoreToStatus } from "@/lib/talent-pool/score-status"
 
 type EntryInput = {
   name?: string; position?: string; company?: string; source?: string
   email?: string; phone?: string; telegram?: string; comment?: string; score?: number
-}
-
-function scoreToStatus(s: number): string {
-  if (s >= 80) return "ideal"
-  if (s >= 65) return "hot"
-  if (s >= 40) return "warming"
-  return "cold"
 }
 
 function clean(e: EntryInput, companyId: string) {
