@@ -789,10 +789,12 @@ export default function DemoPage() {
   const progress = getProgress(allBlocks, taskAnswers, mediaUploaded, mediaSkipped, viewedBlockIds)
   const progressPercent = progress.percent
 
-  // ВСЕГО шагов прогресса = реальные блоки уроков + 2 виртуальных:
-  // __anketa__ (анкета финального этапа) и __thanks__ (экран «Спасибо»).
-  // Используется и при отправке batch'ей уроков, и при пост-финальных маркерах.
-  const totalBlocksWithVirtual = allBlocks.length + 2
+  // ВСЕГО шагов прогресса = реальные блоки уроков + 1 виртуальный (__anketa__).
+  // Ранее было +2 (Анкета + Спасибо), что давало знаменатель N+2 и создавало
+  // путаницу («15/17» у кандидата, прошедшего все уроки но не сдавшего анкету).
+  // «Спасибо» — не самостоятельный шаг, а следствие анкеты.
+  // При skipAnketa клиент постит ОБА маркера, но сервер clamped'ит до total → full/full.
+  const totalBlocksWithVirtual = allBlocks.length + 1
 
   // Single-block POST. Используется только для финального "__complete__".
   // Прогресс по уроку отправляется батчем через postLessonBatch.

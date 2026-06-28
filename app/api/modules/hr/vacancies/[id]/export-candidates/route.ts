@@ -294,7 +294,7 @@ async function buildXlsx(
     .limit(1)
   if (demoRow) {
     const lessons = Array.isArray(demoRow.lessonsJson) ? (demoRow.lessonsJson as LessonShape[]) : []
-    demoTotalPages = lessons.length + 2
+    demoTotalPages = lessons.length + 1
     lessons.forEach((lesson, idx) => {
       for (const b of (Array.isArray(lesson?.blocks) ? lesson.blocks : [])) {
         if (typeof b?.id === "string") blockToLesson.set(b.id, idx)

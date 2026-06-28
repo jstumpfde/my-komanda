@@ -386,7 +386,14 @@ function TaskAnswerView({ block, answer }: { block: Block; answer: Record<string
           ? (v as { duration?: number }).duration
           : undefined
         const text = !media
-          ? (v == null ? "" : Array.isArray(v) ? v.join(", ") : typeof v === "object" ? "" : String(v))
+          ? (v == null ? ""
+              : Array.isArray(v) ? v.join(", ")
+              : typeof v === "object" ? ""
+              : (() => {
+                  const s = String(v)
+                  // multiple-choice ответы хранятся через ||| — показываем через запятую
+                  return s.includes("|||") ? s.split("|||").filter(Boolean).join(", ") : s
+                })())
           : ""
         return (
           <div key={q.id} className="space-y-1" data-question-id={q.id}>
@@ -575,7 +582,34 @@ function EntryCard({ entry, blockMap }: { entry: AnketaEntry; blockMap: Map<stri
       ) : ans && typeof ans === "object" ? (
         block
           ? <TaskAnswerView block={block} answer={ans as Record<string, unknown>} />
-          : <p className="text-xs text-muted-foreground/60 italic">нет ответа</p>
+          : (() => {
+              // Блок не найден в карте (демо обновилось/id изменился), но ответы есть —
+              // рендерим пары ключ→значение, технические q-... ключи подписываем «Ответ N».
+              const pairs = Object.entries(ans as Record<string, unknown>).filter(([, v]) => v != null && v !== "")
+              if (pairs.length === 0) return <p className="text-xs text-muted-foreground/60 italic">нет ответа</p>
+              return (
+                <div className="space-y-1.5">
+                  {pairs.map(([k, v], idx) => {
+                    const media = coerceMedia(v)
+                    // Значения, разделённые ||| — множественный выбор (multiple-choice).
+                    const textVal = typeof v === "string" && v.includes("|||")
+                      ? v.split("|||").filter(Boolean).join(", ")
+                      : typeof v === "string" ? v : Array.isArray(v) ? v.join(", ") : String(v ?? "")
+                    const label = isTechnicalQuestionId(k) ? `Ответ ${idx + 1}` : k
+                    return (
+                      <div key={k} className="text-sm break-words" data-question-id={k}>
+                        <span className="text-xs font-medium text-foreground">{label}: </span>
+                        {media ? (
+                          <div className="mt-1"><MediaList media={media} /></div>
+                        ) : (
+                          <span className="text-muted-foreground whitespace-pre-wrap break-words">{textVal}</span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })()
       ) : (
         <p className="text-xs text-muted-foreground/60 italic">нет ответа</p>
       )}

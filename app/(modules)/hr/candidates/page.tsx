@@ -85,6 +85,8 @@ const DEFAULT_SETTINGS: CardDisplaySettings = {
   showProgress: true,
   showResponseDate: true,
   showResumeScore: true,
+  showPortraitScore: true,
+  showAnswersScore: true,
   showTestScore: true,
   showNextInterview: true,
 }

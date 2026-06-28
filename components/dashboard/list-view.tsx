@@ -249,6 +249,7 @@ export function ListView({
   const showScore        = settings.showScore          // AI-оцен. (оценка анкеты)
   const showResumeScore  = settings.showResumeScore !== false  // AI-резм. (undefined = вкл)
   const showPortraitScore = settings.showPortraitScore !== false  // AI-Порт (undefined = вкл)
+  const showAnswersScore = settings.showAnswersScore !== false   // Демо1 — AI-балл ответов анкеты (undefined = вкл)
   const showTestScore    = settings.showTestScore !== false    // Тест (балл/статус; по умолчанию вкл)
   const showNextInterview = settings.showNextInterview !== false // Интервью (ближайшее; по умолчанию вкл)
   const showSalary       = settings.showSalary || settings.showSalaryFull
@@ -423,28 +424,9 @@ export function ListView({
       })
     }
 
-    if (showProgress) {
-      // Демо — сегменты-«шаги»
-      list.push({
-        id: "progress",
-        gridWidth: "minmax(72px, 0.9fr)",
-        header: <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} align="center" />,
-        renderCell: (candidate, ctx) => (
-          <div className="flex items-center justify-center">
-            <DemoProgressBar
-              variant="list"
-              progressPercent={ctx.demoFraction.hasData && ctx.demoFraction.total > 0
-                ? Math.min(100, Math.round((ctx.demoFraction.current / ctx.demoFraction.total) * 100))
-                : null}
-              completedBlocks={ctx.demoFraction.hasData ? ctx.demoFraction.current : undefined}
-              totalBlocks={ctx.demoFraction.hasData ? ctx.demoFraction.total : undefined}
-              hasVideoVizitka={candidate.demoProgressJson?.hasVideoVizitka}
-              stage={candidate.stage}
-            />
-          </div>
-        ),
-      })
-    }
+    // Порядок колонок по умолчанию (слева → вправо):
+    // ФИО (закреплена) → AI-резм. → Демо → Демо1 → AI-Порт → Тест → Интервью → …
+    // Пользователь может перетаскивать колонки; сброс возвращает этот порядок.
 
     if (showResumeScore) {
       // AI-резм. — AI-скор резюме (фикс, w-8 badge)
@@ -463,6 +445,57 @@ export function ListView({
                 )}
               >
                 {candidate.resumeScore}
+              </Badge>
+            ) : (
+              <span className="text-muted-foreground/40 text-xs">—</span>
+            )}
+          </div>
+        ),
+      })
+    }
+
+    if (showProgress) {
+      // Демо — сегменты-«шаги». Ширина намеренно узкая: DemoProgressBar сам
+      // ограничен max-w-[105px] и адаптируется под количество точек (tot).
+      list.push({
+        id: "progress",
+        gridWidth: "minmax(56px, 0.7fr)",
+        header: <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} align="center" />,
+        renderCell: (candidate, ctx) => (
+          <div className="flex items-center justify-center">
+            <DemoProgressBar
+              variant="list"
+              progressPercent={ctx.demoFraction.hasData && ctx.demoFraction.total > 0
+                ? Math.min(100, Math.round((ctx.demoFraction.current / ctx.demoFraction.total) * 100))
+                : null}
+              completedBlocks={ctx.demoFraction.hasData ? ctx.demoFraction.current : undefined}
+              totalBlocks={ctx.demoFraction.hasData ? ctx.demoFraction.total : undefined}
+              hasVideoVizitka={candidate.demoProgressJson?.hasVideoVizitka}
+              stage={candidate.stage}
+            />
+          </div>
+        ),
+      })
+    }
+
+    if (showAnswersScore) {
+      // Демо1 — AI-балл ответов на вопросы анкеты демо (candidates.ai_score).
+      // Вычисляется после прохождения демо на основании текстовых ответов кандидата.
+      list.push({
+        id: "answersScore",
+        gridWidth: "56px",
+        header: <SortHeader label="Демо1" sortKey="aiScore" sort={sort} onToggle={handleSort} align="center" />,
+        renderCell: (candidate) => (
+          <div className="flex items-center justify-center" title="AI-балл ответов анкеты демо">
+            {candidate.aiScore != null ? (
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
+                  getScoreColor(candidate.aiScore),
+                )}
+              >
+                {candidate.aiScore}
               </Badge>
             ) : (
               <span className="text-muted-foreground/40 text-xs">—</span>
@@ -498,7 +531,6 @@ export function ListView({
         ),
       })
     }
-
 
     if (showTestScore) {
       // Тест — лесенка: балл (бейдж) → «сдан» (отправил, балла ещё нет) →
@@ -684,7 +716,7 @@ export function ListView({
     return list
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    showVacancyColumn, showProgress, showResumeScore, showScore,
+    showVacancyColumn, showProgress, showResumeScore, showPortraitScore, showAnswersScore, showScore,
     showTestScore, showNextInterview, showSalary, showCity, showResponseDate, showSource,
     sort, onVacancyClick, onOpenProfile,
   ])

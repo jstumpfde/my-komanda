@@ -136,7 +136,8 @@ const defaultSettings: CardDisplaySettings = {
   showSource: true, showCity: true, showExperience: true, showSkills: true, showActions: true,
   showProgress: true, showResponseDate: true,
   // Все колонки списка ВКЛЮЧЕНЫ по умолчанию (решение Юрия) — пишем явно, без undefined.
-  showResumeScore: true, showTestScore: true, showNextInterview: true,
+  showResumeScore: true, showPortraitScore: true, showAnswersScore: true,
+  showTestScore: true, showNextInterview: true,
 }
 
 

@@ -16,6 +16,7 @@ export interface CardDisplaySettings {
   showScore: boolean          // колонка «AI-оцен.» (оценка анкеты)
   showResumeScore?: boolean   // колонка «AI-резм.» (скоринг резюме); undefined = показывать
   showPortraitScore?: boolean // колонка «AI-Порт» (оценка по Портрету, ai_score_v2); undefined = показывать
+  showAnswersScore?: boolean  // колонка «Демо1» (AI-оценка ответов анкеты, ai_score); undefined = показывать
   showTestScore?: boolean     // колонка «Тест» (балл/статус теста); undefined = показывать
   showNextInterview?: boolean // колонка «Интервью» (ближайшее); undefined = показывать
   showAge: boolean
@@ -34,18 +35,21 @@ export interface CardDisplaySettings {
 // list-view.tsx (слева→направо). Системные колонки (★ Избранное, Кандидат/ФИО,
 // Статус) сюда НЕ входят — они всегда видны. Добавил колонку с новым ключом в
 // list-view — добавь сюда строку, и тумблер появится автоматически (и наоборот).
+// Порядок строго совпадает с порядком колонок в list-view.tsx (слева→направо):
+// AI-резм. → Демо → Демо1 → AI-Порт → AI-оцен. → Тест → Интервью → Зарплата → …
 export const CANDIDATE_COLUMN_TOGGLES: Array<{ key: keyof CardDisplaySettings; label: string }> = [
-  { key: "showProgress",     label: "Прогресс демо" },
-  { key: "showResumeScore",  label: "AI резюме" },
+  { key: "showResumeScore",   label: "AI резюме" },
+  { key: "showProgress",      label: "Прогресс демо" },
+  { key: "showAnswersScore",  label: "Демо1 (балл ответов)" },
   { key: "showPortraitScore", label: "AI-Портрет" },
-  { key: "showScore",        label: "AI оценка" },
-  { key: "showTestScore",    label: "Тест" },
+  { key: "showScore",         label: "AI оценка" },
+  { key: "showTestScore",     label: "Тест" },
   { key: "showNextInterview", label: "Интервью" },
-  { key: "showSalaryFull",   label: "Зарплата" },
-  { key: "showCity",         label: "Город" },
-  { key: "showResponseDate", label: "Дата отклика" },
-  { key: "showSource",       label: "Источник" },
-  { key: "showActions",      label: "Кнопки действий" },
+  { key: "showSalaryFull",    label: "Зарплата" },
+  { key: "showCity",          label: "Город" },
+  { key: "showResponseDate",  label: "Дата отклика" },
+  { key: "showSource",        label: "Источник" },
+  { key: "showActions",       label: "Кнопки действий" },
 ]
 
 interface CardSettingsProps {

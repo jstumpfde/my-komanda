@@ -482,8 +482,15 @@ export async function GET(req: NextRequest) {
         }
         for (const [vid, lessonsJson] of latestByVacancy.entries()) {
           const lessons = Array.isArray(lessonsJson) ? (lessonsJson as LessonShape[]) : []
-          // Total = lessons.length + 2 (страницы Анкеты и Спасибо в конце)
-          totalsByVacancy.set(vid, lessons.length + 2)
+          // Total = lessons.length + 1 (одна виртуальная страница «Анкета»).
+          // Ранее было +2 (Анкета + Спасибо), что давало «15/17» у кандидата,
+          // прошедшего все уроки но не заполнившего анкету, и создавало путаницу.
+          // «Спасибо» — не самостоятельный шаг для кандидата, а следствие анкеты.
+          // Клиент (demo-client.tsx) при skipAnketa постит ОБА маркера (__anketa__ +
+          // __thanks__), completed тоже считает оба, но clamped min(completed, total),
+          // поэтому «15+1+1 = 17» → min(17,16) = «16/16» — корректно.
+          // При нормальном прохождении: уроки + __anketa__ = lessons+1 / lessons+1.
+          totalsByVacancy.set(vid, lessons.length + 1)
           // Map: blockId → lessonIndex
           const blockMap = new Map<string, number>()
           lessons.forEach((lesson, lessonIdx) => {
@@ -920,7 +927,7 @@ export async function GET(req: NextRequest) {
         const lessons = Array.isArray(earlyDemoRows[0].lessonsJson)
           ? (earlyDemoRows[0].lessonsJson as LessonShape[])
           : []
-        paginatedDemoTotalBlocks = lessons.length + 2
+        paginatedDemoTotalBlocks = lessons.length + 1
       }
     }
 
@@ -1073,7 +1080,7 @@ export async function GET(req: NextRequest) {
       const lessons = Array.isArray(demoRowsV2[0].lessonsJson)
         ? (demoRowsV2[0].lessonsJson as LessonShape[])
         : []
-      demoTotalBlocks = lessons.length + 2
+      demoTotalBlocks = lessons.length + 1
       lessons.forEach((lesson, lessonIdx) => {
         const lessonBlocks = Array.isArray(lesson?.blocks) ? lesson.blocks : []
         for (const b of lessonBlocks) {
