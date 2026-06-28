@@ -61,7 +61,7 @@ import { computeRealism, REALISM_TONE_CLASS } from "./spec-editor-helpers"
 import { useVacancySectionRegister, useVacancySettings } from "./vacancy-settings-context"
 import { PortraitAdvisor } from "./portrait-advisor"
 import { useContentBlocks } from "@/hooks/use-content-blocks"
-import { DEFAULT_INVITE_MESSAGE } from "@/lib/hh/default-messages"
+import { DEFAULT_INVITE_MESSAGE, DEFAULT_OFF_HOURS_MESSAGE } from "@/lib/hh/default-messages"
 
 // ─── Константы ───────────────────────────────────────────────────────────────
 
@@ -1766,27 +1766,30 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                   maxLength={2000}
                 />
               </div>
+              {/* #1 Задержка перед приглашением (синк с цепочкой первых сообщений) */}
               <div className="space-y-1.5">
-                <Label className="text-xs">Следующий этап</Label>
+                <Label className="text-xs">Задержка перед приглашением</Label>
                 <Select
-                  value={rt.inviteNextStep ?? "demo"}
-                  onValueChange={v => patch({ resumeThresholds: { ...rt, inviteNextStep: v as "demo" | "interview" | "video" | "call" } })}
+                  value={String(rt.inviteDelaySeconds ?? 180)}
+                  onValueChange={v => patch({ resumeThresholds: { ...rt, inviteDelaySeconds: Number(v) } })}
                 >
                   <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="demo">Демо-страница</SelectItem>
-                    <SelectItem value="interview">Запись на интервью (календарь)</SelectItem>
-                    <SelectItem value="video">Видео-интервью</SelectItem>
-                    <SelectItem value="call">Телефонный звонок</SelectItem>
+                    <SelectItem value="15">15 секунд</SelectItem>
+                    <SelectItem value="30">30 секунд</SelectItem>
+                    <SelectItem value="60">1 минута</SelectItem>
+                    <SelectItem value="180">3 минуты</SelectItem>
+                    <SelectItem value="900">15 минут</SelectItem>
+                    <SelectItem value="1800">30 минут</SelectItem>
+                    <SelectItem value="3600">1 час</SelectItem>
                   </SelectContent>
                 </Select>
-                {(rt.inviteNextStep ?? "demo") !== "demo" && (
-                  <p className="text-[11px] text-muted-foreground">Сейчас меняет текст приглашения; автозапись в календарь/видео — в доработке движка.</p>
-                )}
+                <p className="text-[11px] text-muted-foreground">«Человеческая» пауза перед автоматическим приглашением. То же поле, что «Задержка перед отправкой» в табе «Сообщения».</p>
               </div>
+              {/* Демо-блок: что реально увидит приглашённый */}
               {inviteBlockChoices.length > 0 && (
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Демо-блок (что показать приглашённому)</Label>
+                  <Label className="text-xs">Что покажем приглашённому (демо-блок)</Label>
                   <Select
                     value={rt.inviteContentBlockId ?? "__live__"}
                     onValueChange={v => patch({ resumeThresholds: { ...rt, inviteContentBlockId: v === "__live__" ? null : v } })}
@@ -1799,25 +1802,67 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-[11px] text-muted-foreground">По умолчанию — блок, помеченный «боевым» в табе «Контент». Здесь можно отправить приглашённого на конкретный демо-блок из нескольких.</p>
+                  <p className="text-[11px] text-muted-foreground">По умолчанию — блок, помеченный «боевым» в табе «Контент». Можно отправить на конкретный демо-блок из нескольких.</p>
                 </div>
               )}
+              {/* #4 hh-стадия: одиночные метки, дефолт «Первичный контакт» */}
               <div className="space-y-1.5">
                 <Label className="text-xs">Стадия в hh.ru при приглашении</Label>
                 <Select
-                  value={rt.inviteHhStage ?? "phone_interview"}
+                  value={rt.inviteHhStage ?? "consider"}
                   onValueChange={v => patch({ resumeThresholds: { ...rt, inviteHhStage: v as "phone_interview" | "consider" | "interview" | "assessment" } })}
                 >
                   <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="phone_interview">Телефонное интервью (первый контакт)</SelectItem>
-                    <SelectItem value="consider">Подумать / первичный контакт</SelectItem>
+                    <SelectItem value="consider">Первичный контакт</SelectItem>
+                    <SelectItem value="phone_interview">Телефонное интервью</SelectItem>
                     <SelectItem value="interview">Собеседование</SelectItem>
                     <SelectItem value="assessment">Тестовое задание</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-[11px] text-muted-foreground">Куда кандидат попадёт в воронке работодателя на hh.ru. По умолчанию — «Телефонное интервью».</p>
+                <p className="text-[11px] text-muted-foreground">Куда кандидат попадёт в воронке работодателя на hh.ru. По умолчанию — «Первичный контакт».</p>
               </div>
+              {/* #2 Нерабочее время */}
+              <div className="rounded-md border p-2.5 space-y-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <Label className="text-xs font-medium">Сообщение в нерабочее время</Label>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Отклик вне рабочих часов — шлём мягкое подтверждение без демо-ссылки. Само приглашение уйдёт в рабочее время.</p>
+                  </div>
+                  <Switch
+                    checked={rt.offHoursEnabled ?? true}
+                    onCheckedChange={v => patch({ resumeThresholds: { ...rt, offHoursEnabled: v } })}
+                  />
+                </div>
+                {(rt.offHoursEnabled ?? true) && (<>
+                  <Textarea
+                    value={spec.offHoursLetter || DEFAULT_OFF_HOURS_MESSAGE}
+                    onChange={e => patch({ offHoursLetter: e.target.value.slice(0, 2000) })}
+                    rows={3}
+                    maxLength={2000}
+                  />
+                  <div className="flex items-center gap-2">
+                    <Label className="text-[11px] shrink-0">Задержка</Label>
+                    <Select
+                      value={String(rt.offHoursDelaySeconds ?? 15)}
+                      onValueChange={v => patch({ resumeThresholds: { ...rt, offHoursDelaySeconds: Number(v) } })}
+                    >
+                      <SelectTrigger className="h-8 w-36 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0">Сразу</SelectItem>
+                        <SelectItem value="15">15 секунд</SelectItem>
+                        <SelectItem value="30">30 секунд</SelectItem>
+                        <SelectItem value="60">1 минута</SelectItem>
+                        <SelectItem value="180">3 минуты</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>)}
+              </div>
+              {/* #3 Итог: куда реально переводится кандидат */}
+              <p className="text-[11px] text-muted-foreground rounded-md bg-muted/40 px-2.5 py-1.5 leading-relaxed">
+                Итог: приглашённый получит ссылку на <b>{rt.inviteContentBlockId ? (inviteBlockChoices.find(b => b.id === rt.inviteContentBlockId)?.title ?? "выбранный блок") : "боевой демо-блок"}</b> и перейдёт в воронке hh.ru в стадию <b>{({ consider: "Первичный контакт", phone_interview: "Телефонное интервью", interview: "Собеседование", assessment: "Тестовое задание" } as Record<string, string>)[rt.inviteHhStage ?? "consider"]}</b>.
+              </p>
             </>)}
           </div>
         </CardContent>

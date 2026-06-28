@@ -35,6 +35,11 @@ const LEGACY_SELECT = {
   aiProcessSettings:  vacancies.aiProcessSettings,
   stopFactorsJson:    vacancies.stopFactorsJson,
   descriptionJson:    vacancies.descriptionJson,
+  // Для бэкфилла задержки/off-hours в Портрет (поля живут в legacy).
+  firstMessagesChain:               vacancies.firstMessagesChain,
+  firstMessageOffHoursEnabled:      vacancies.firstMessageOffHoursEnabled,
+  firstMessageOffHoursDelaySeconds: vacancies.firstMessageOffHoursDelaySeconds,
+  firstMessageOffHoursText:         vacancies.firstMessageOffHoursText,
 } as const
 
 /**
@@ -85,17 +90,26 @@ async function mirrorSpecToLegacy(
 }
 
 /**
- * ВСЕГДА-включённый синк текста приглашения Портрета (inviteLetter) в legacy —
- * НЕ за флагом SPEC_MIRROR_TO_LEGACY, потому что это текст, уходящий живым
- * кандидатам, и он обязан быть единым во всех местах. Пишет:
- *   - aiProcessSettings.inviteMessage (его читает крон process-queue),
- *   - firstMessagesChain[0].text (редактор цепочки в табе «Сообщения»),
- * чтобы Портрет, «Сообщения» и крон показывали/слали один текст.
- * Пустой inviteLetter НЕ затирает существующий inviteMessage.
+ * ВСЕГДА-включённый синк МЕССЕДЖИНГА Портрета (текст приглашения + задержка +
+ * нерабочее время) в legacy — НЕ за флагом SPEC_MIRROR_TO_LEGACY, потому что это
+ * напрямую влияет на сообщения живым кандидатам и обязано быть единым во всех
+ * местах (Портрет / таб «Сообщения» / крон). Пишет:
+ *   - aiProcessSettings.inviteMessage      ← inviteLetter (читает крон)
+ *   - firstMessagesChain[0].text/delay     ← inviteLetter / inviteDelaySeconds (редактор цепочки)
+ *   - first_message_off_hours_enabled/_delay_seconds/_text ← off-hours поля Портрета
+ * Пустые тексты НЕ затирают существующие.
  */
-async function syncInviteTextToLegacy(vacancyId: string, inviteLetter: string): Promise<void> {
-  const text = inviteLetter?.trim()
-  if (!text) return
+async function syncPortraitMessagingToLegacy(
+  vacancyId: string,
+  spec: {
+    inviteLetter: string
+    offHoursLetter: string
+    resumeThresholds: { inviteDelaySeconds: number; offHoursEnabled: boolean; offHoursDelaySeconds: number }
+  },
+): Promise<void> {
+  const text = spec.inviteLetter?.trim()
+  const offText = spec.offHoursLetter?.trim()
+  const rt = spec.resumeThresholds
 
   const [cur] = await db
     .select({
@@ -107,18 +121,32 @@ async function syncInviteTextToLegacy(vacancyId: string, inviteLetter: string): 
     .limit(1)
   if (!cur) return
 
-  const mergedAi: VacancyAiProcessSettings = {
-    ...((cur.aiProcessSettings ?? {}) as VacancyAiProcessSettings),
-    inviteMessage: text,
+  const updateSet: Record<string, unknown> = {}
+
+  // Текст приглашения → inviteMessage (крон).
+  if (text) {
+    updateSet.aiProcessSettings = {
+      ...((cur.aiProcessSettings ?? {}) as VacancyAiProcessSettings),
+      inviteMessage: text,
+    }
   }
 
-  const updateSet: Record<string, unknown> = { aiProcessSettings: mergedAi }
+  // Цепочка первых сообщений: шаг 1 — текст + задержка. Если цепочки нет —
+  // создаём минимальную, чтобы задержка/текст из Портрета реально применялись.
   const chain = cur.firstMessagesChain
   if (Array.isArray(chain) && chain.length > 0) {
     updateSet.firstMessagesChain = (chain as Array<Record<string, unknown>>).map(
-      (m, i) => (i === 0 ? { ...m, text } : m),
+      (m, i) => (i === 0 ? { ...m, ...(text ? { text } : {}), delaySeconds: rt.inviteDelaySeconds } : m),
     )
+  } else if (text) {
+    updateSet.firstMessagesChain = [{ enabled: true, delaySeconds: rt.inviteDelaySeconds, text }]
   }
+
+  // Нерабочее время → vacancy-колонки. enabled/delay — всегда (тумблеры),
+  // текст — только непустой (не затираем существующий).
+  updateSet.firstMessageOffHoursEnabled = rt.offHoursEnabled
+  updateSet.firstMessageOffHoursDelaySeconds = rt.offHoursDelaySeconds
+  if (offText) updateSet.firstMessageOffHoursText = offText
 
   await db.update(vacancies).set(updateSet).where(eq(vacancies.id, vacancyId))
 }
@@ -151,6 +179,21 @@ export async function GET(
         if (typeof legacyInvite === "string" && legacyInvite.trim()) {
           specFromStore.inviteLetter = legacyInvite
         }
+      }
+      // Задержка приглашения ← firstMessagesChain[0].delaySeconds (реальное значение).
+      const chain0 = Array.isArray(row.firstMessagesChain) ? (row.firstMessagesChain as Array<{ delaySeconds?: number }>)[0] : null
+      if (chain0 && typeof chain0.delaySeconds === "number") {
+        specFromStore.resumeThresholds.inviteDelaySeconds = chain0.delaySeconds
+      }
+      // Нерабочее время ← vacancy-колонки.
+      if (typeof row.firstMessageOffHoursEnabled === "boolean") {
+        specFromStore.resumeThresholds.offHoursEnabled = row.firstMessageOffHoursEnabled
+      }
+      if (typeof row.firstMessageOffHoursDelaySeconds === "number") {
+        specFromStore.resumeThresholds.offHoursDelaySeconds = row.firstMessageOffHoursDelaySeconds
+      }
+      if (!specFromStore.offHoursLetter?.trim() && typeof row.firstMessageOffHoursText === "string" && row.firstMessageOffHoursText.trim()) {
+        specFromStore.offHoursLetter = row.firstMessageOffHoursText
       }
       return apiSuccess<SpecApiResponse>({ spec: specFromStore, source: "spec" })
     }
@@ -223,12 +266,13 @@ export async function PUT(
 
     await saveSpec(vacancyId, parsed.data, user.id)
 
-    // Текст приглашения синкаем в legacy ВСЕГДА (не за флагом) — это текст
-    // кандидату, обязан быть единым в Портрете, «Сообщениях» и кроне.
+    // Месседжинг (текст приглашения + задержка + нерабочее время) синкаем в
+    // legacy ВСЕГДА (не за флагом) — это влияет на сообщения кандидатам, обязано
+    // быть единым в Портрете, «Сообщениях» и кроне.
     try {
-      await syncInviteTextToLegacy(vacancyId, parsed.data.inviteLetter)
+      await syncPortraitMessagingToLegacy(vacancyId, parsed.data)
     } catch (mirrorErr) {
-      console.warn("[spec] syncInviteTextToLegacy failed:", mirrorErr)
+      console.warn("[spec] syncPortraitMessagingToLegacy failed:", mirrorErr)
     }
 
     // Dual-write Spec → legacy ЗА ФЛАГОМ. По умолчанию SPEC_MIRROR_TO_LEGACY

@@ -207,8 +207,11 @@ export function buildSpecFromLegacy(vacancy: LegacyVacancyInput): CandidateSpec 
     autoRejectEnabled:    autoReject,
     autoInviteEnabled:    bool((ai as Record<string, unknown>).autoInviteEnabled, false),  // legacy не звал автоматически
     inviteNextStep:       "demo",
-    inviteHhStage:        "phone_interview",
+    inviteHhStage:        "consider",   // дефолт «Первичный контакт» (решение Юрия 28.06)
     inviteContentBlockId: null,
+    inviteDelaySeconds:   180,          // реальное значение подтянет GET-бэкфилл из цепочки
+    offHoursEnabled:      true,
+    offHoursDelaySeconds: 15,
     rejectionDelayMinutes: Math.max(0, rejDelay),
   }
 
@@ -259,6 +262,7 @@ export function buildSpecFromLegacy(vacancy: LegacyVacancyInput): CandidateSpec 
     inviteLetter: typeof (ai as Record<string, unknown>).inviteMessage === "string"
       ? ((ai as Record<string, unknown>).inviteMessage as string)
       : "",
+    offHoursLetter: "",   // реальное значение подтянет GET-бэкфилл из vacancy-колонки
     botClarifyAmbiguous: false,
     // метаданные
     // weightMode: legacy всегда использует строковые уровни весов (WeightLevel),

@@ -117,15 +117,16 @@ export const ResumeThresholdsSchema = z.object({
    */
   inviteNextStep: z.enum(["demo", "interview", "video", "call"]).default("demo"),
   /**
-   * На какую стадию воронки hh переводить кандидата при авто-приглашении:
-   *   phone_interview — Телефонное интервью / первый контакт (дефолт = текущее поведение)
-   *   consider        — Подумать / первичный контакт
+   * На какую стадию воронки hh переводить кандидата при авто-приглашении
+   * (по одной чистой метке, см. UI):
+   *   consider        — Первичный контакт (ДЕФОЛТ — решение Юрия)
+   *   phone_interview — Телефонное интервью
    *   interview       — Собеседование
    *   assessment      — Тестовое задание
    * Маппится на действие changeNegotiationState в lib/hh/process-queue.ts
    * (phone_interview → "invitation", остальные 1:1).
    */
-  inviteHhStage: z.enum(["phone_interview", "consider", "interview", "assessment"]).default("phone_interview"),
+  inviteHhStage: z.enum(["phone_interview", "consider", "interview", "assessment"]).default("consider"),
   /**
    * Какой контент-блок показать приглашённому кандидату (id строки demos,
    * kind='block:<id>'). null = «боевой» блок вакансии (kind='demo'/'test',
@@ -133,6 +134,18 @@ export const ResumeThresholdsSchema = z.object({
    * и маршрутизацией ссылки в lib/hh/process-queue.ts.
    */
   inviteContentBlockId: z.string().nullable().default(null),
+  /**
+   * Задержка перед приглашением, СЕКУНДЫ (набор 15/30/60/180/900/1800/3600).
+   * Зеркалится в firstMessagesChain[0].delaySeconds (см. syncPortraitMessagingToLegacy).
+   */
+  inviteDelaySeconds: z.number().int().default(180),
+  /**
+   * Нерабочее время: слать ли мягкое подтверждение вместо приглашения, его
+   * задержка (секунды, 0/15/30/60/180). Зеркалятся в vacancy-колонки
+   * first_message_off_hours_enabled / _delay_seconds. Текст — в spec.offHoursLetter.
+   */
+  offHoursEnabled: z.boolean().default(true),
+  offHoursDelaySeconds: z.number().int().default(15),
   /**
    * Задержка отказа в минутах. 0 = мгновенно.
    * Дефолт 60 (1 ч) — решение Юрия.
@@ -551,6 +564,14 @@ export const CandidateSpecSchema = z.object({
    * (rejectLetter) — оба текста кандидату теперь в Портрете.
    */
   inviteLetter: z.string().max(2000).default(""),
+
+  /**
+   * Текст подтверждения в НЕРАБОЧЕЕ время — мягкое сообщение вместо приглашения,
+   * когда отклик пришёл вне рабочих часов (без демо-ссылки). Плейсхолдеры
+   * «{{name}}» / «{{vacancy}}» / «{{company}}». Пусто → платформенный дефолт.
+   * Зеркалится в vacancy.first_message_off_hours_text (см. syncPortraitMessagingToLegacy).
+   */
+  offHoursLetter: z.string().max(2000).default(""),
 
   // ── Метаданные ────────────────────────────────────────────────────────────
   /**

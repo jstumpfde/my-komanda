@@ -680,8 +680,9 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                 if (portraitOn && spec?.resumeThresholds) {
                   autoInviteOn   = spec.resumeThresholds.autoInviteEnabled === true
                   inviteNextStep = spec.resumeThresholds.inviteNextStep ?? "demo"
-                  // #3: целевая стадия hh (phone_interview = дефолт "invitation").
-                  const stage = spec.resumeThresholds.inviteHhStage ?? "phone_interview"
+                  // #3: целевая стадия hh. Дефолт "consider" (Первичный контакт,
+                  // решение Юрия 28.06); phone_interview маппится на legacy "invitation".
+                  const stage = spec.resumeThresholds.inviteHhStage ?? "consider"
                   hhAction = stage === "phone_interview" ? "invitation" : stage
                 }
               } catch (specErr) {
