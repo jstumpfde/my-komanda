@@ -956,6 +956,8 @@ function MotivationAnalysisCard({ salaryMin, salaryMax, bonuses, payFrequency, c
 interface PublishTimeData {
   enough: boolean
   total: number
+  periodDays?: number
+  firstAt?: string | null
   topDays?: { name: string; pct: number }[]
   topHours?: { range: string; pct: number }[]
 }
@@ -977,6 +979,18 @@ function BestPublishTimeCard({ vacancyId, city }: { vacancyId?: string; city?: s
 
   if (loading || !data) return null
   const cityLabel = city?.trim() ? `, ${city.trim()}` : ""
+  // Момент первого отклика (МСК) — «с 26.06.26 15:43».
+  const firstAtLabel = data.firstAt
+    ? (() => {
+        try {
+          return new Date(data.firstAt).toLocaleString("ru-RU", {
+            timeZone: "Europe/Moscow",
+            day: "2-digit", month: "2-digit", year: "2-digit",
+            hour: "2-digit", minute: "2-digit",
+          }).replace(",", "")
+        } catch { return null }
+      })()
+    : null
 
   return (
     <div className="rounded-lg border p-3 space-y-2">
@@ -1002,7 +1016,7 @@ function BestPublishTimeCard({ vacancyId, city }: { vacancyId?: string; city?: s
             )}
           </div>
           <p className="text-[10px] text-muted-foreground">
-            По откликам вашей компании (время МСК{cityLabel ? ` · вакансия${cityLabel}` : ""}). Опирается на {data.total} откликов.
+            По откликам вашей компании (время МСК{cityLabel ? ` · вакансия${cityLabel}` : ""}). Опирается на {data.total} откликов{data.periodDays ? ` за ${data.periodDays}д.` : ""}{firstAtLabel ? ` · с ${firstAtLabel}` : ""}.
           </p>
         </>
       )}

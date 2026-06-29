@@ -57,6 +57,24 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       return NextResponse.json({ enough: false, total })
     }
 
+    // Срок, за который собраны эти отклики: от ПЕРВОГО отклика (реальное время hh)
+    // до сейчас. Возвращаем и сам момент первого отклика — показываем «за Nд. с …».
+    const spanRes = await db.execute(sql`
+      SELECT
+        EXTRACT(EPOCH FROM (now() - MIN(COALESCE(
+          NULLIF(raw_data->>'created_at', '')::timestamptz, created_at
+        ))))::float8 AS secs,
+        MIN(COALESCE(
+          NULLIF(raw_data->>'created_at', '')::timestamptz, created_at
+        )) AS first_at
+      FROM hh_responses WHERE company_id = ${vac.companyId}
+    `)
+    const spanRaw = spanRes as unknown as { rows?: unknown[] } | unknown[]
+    const spanRows = (Array.isArray(spanRaw) ? spanRaw : spanRaw.rows ?? []) as Array<{ secs: unknown; first_at: unknown }>
+    const periodDays = Math.max(1, Math.ceil(Number(spanRows[0]?.secs ?? 0) / 86400))
+    const firstAtRaw = spanRows[0]?.first_at
+    const firstAt = firstAtRaw ? new Date(firstAtRaw as string | number | Date).toISOString() : null
+
     // Группируем по дням недели
     const byDay = new Map<number, number>()
     const byHour = new Map<number, number>()
@@ -76,7 +94,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       .slice(0, 3)
       .map(([h, cnt]) => ({ range: `${String(h).padStart(2, "0")}:00–${String((h + 1) % 24).padStart(2, "0")}:00`, pct: Math.round((cnt / total) * 100) }))
 
-    return NextResponse.json({ enough: true, total, topDays, topHours })
+    return NextResponse.json({ enough: true, total, periodDays, firstAt, topDays, topHours })
   } catch (e) {
     console.error("[best-publish-time]", e)
     return NextResponse.json({ error: "server error" }, { status: 500 })
