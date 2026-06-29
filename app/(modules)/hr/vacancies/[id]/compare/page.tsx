@@ -3,7 +3,7 @@
 // Страница сравнения ответов кандидатов: /hr/vacancies/[id]/compare?ids=a,b,c
 // Два режима: «Матрица» (вопросы × кандидаты) и «По вопросам» (один вопрос —
 // ответы всех). Данные — GET /api/modules/hr/vacancies/[id]/compare.
-import { Suspense, useEffect, useMemo, useRef, useState } from "react"
+import { Fragment, Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -12,7 +12,7 @@ import { toast } from "sonner"
 import { ArrowLeft, Columns3, Rows3, Loader2, Star, Check, X, ExternalLink, Ban, ChevronDown, Download, Share2, SlidersHorizontal, ChevronsUpDown, ChevronsDownUp, Sparkles } from "lucide-react"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
 
-interface QItem { id: string; text: string; points?: number; answerType?: string }
+interface QItem { id: string; text: string; points?: number; answerType?: string; groupId?: string; groupLabel?: string }
 interface Ans { value: string | null; awarded?: number | null; max?: number | null; correct?: boolean | null }
 interface Section {
   key: "test" | "demo" | "anketa"
@@ -678,8 +678,18 @@ function CompareInner() {
                       </tr>
                     </thead>
                     <tbody>
-                      {section.questions.map((q, qi) => (
-                        <tr key={q.id} className="border-t align-top">
+                      {section.questions.map((q, qi) => {
+                        const newGroup = q.groupLabel && (qi === 0 || section.questions[qi - 1].groupId !== q.groupId)
+                        return (
+                        <Fragment key={q.id}>
+                        {newGroup && (
+                          <tr className="border-t bg-muted">
+                            <td colSpan={visible.length + 1} className="p-0">
+                              <div className="sticky left-0 inline-block px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-foreground/70">{q.groupLabel}</div>
+                            </td>
+                          </tr>
+                        )}
+                        <tr className="border-t align-top">
                           <td className={cn(
                             "p-2.5 sticky left-0 z-10 border-r shadow-[2px_0_4px_rgba(0,0,0,0.04)] w-[300px] min-w-[300px] max-w-[300px]",
                             qi % 2 ? "bg-muted" : "bg-card",
@@ -700,15 +710,22 @@ function CompareInner() {
                             </td>
                           )})}
                         </tr>
-                      ))}
+                        </Fragment>
+                        )})}
                     </tbody>
                   </table>
                 </div>
               ) : (
                 /* ─── По вопросам: вопрос → ответы всех ─── */
                 <div className="space-y-4">
-                  {section.questions.map((q) => (
-                    <div key={q.id} className="rounded-lg border overflow-hidden">
+                  {section.questions.map((q, qi) => {
+                    const newGroup = q.groupLabel && (qi === 0 || section.questions[qi - 1].groupId !== q.groupId)
+                    return (
+                    <Fragment key={q.id}>
+                    {newGroup && (
+                      <div className="pt-2 text-[11px] font-semibold uppercase tracking-wide text-foreground/70">{q.groupLabel}</div>
+                    )}
+                    <div className="rounded-lg border overflow-hidden">
                       <div className="bg-muted/40 p-2.5 font-medium text-[13px] flex items-center gap-2">
                         {q.text}
                         {typeof q.points === "number" && q.points > 0 && (
@@ -728,7 +745,8 @@ function CompareInner() {
                         )})}
                       </div>
                     </div>
-                  ))}
+                    </Fragment>
+                    )})}
                 </div>
               )}
               </>)}

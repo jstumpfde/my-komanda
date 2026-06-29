@@ -1,7 +1,7 @@
 // Сборка данных сравнения кандидатов (тест + демо + анкета).
 // Используется HR-роутом (/api/modules/hr/vacancies/[id]/compare) и публичным
 // роутом по share-токену (/api/public/compare/[token]).
-import { and, eq, inArray, isNull, desc, or, like } from "drizzle-orm"
+import { and, eq, inArray, isNull, desc, asc, or, like } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, demos, testSubmissions } from "@/lib/db/schema"
 import { collectTaskQuestions, resolveOptionPoints } from "@/lib/score-test-objective"
@@ -21,7 +21,7 @@ function questionMaxPoints(q: Question): number | undefined {
   return typeof q.points === "number" && q.points > 0 ? q.points : undefined
 }
 
-export interface CompareQItem { id: string; text: string; points?: number; answerType?: string }
+export interface CompareQItem { id: string; text: string; points?: number; answerType?: string; groupId?: string; groupLabel?: string }
 export interface CompareAns { value: string | null; awarded?: number | null; max?: number | null; correct?: boolean | null }
 export interface CompareSection {
   key: "test" | "demo" | "anketa"
@@ -110,14 +110,17 @@ export async function buildComparison(vacancyId: string, ids: string[]): Promise
 
   // Загружаем ВСЕ демо вакансии с kind='demo' или kind LIKE 'block:%',
   // чтобы задания из Funnel Builder (block:<uuid>) тоже попадали в матрицу.
+  // Порядок — как в воронке (sort_order, затем дата создания): тот же, что в
+  // списке блоков (/api/modules/hr/demos), чтобы вопросы шли по очерёдности
+  // воронки (сначала Демо 1, затем Демо 2, затем Анкета), а не вперемешку.
   const allDemoRows = await db
-    .select({ lessonsJson: demos.lessonsJson, kind: demos.kind })
+    .select({ id: demos.id, title: demos.title, lessonsJson: demos.lessonsJson, kind: demos.kind })
     .from(demos)
     .where(and(
       eq(demos.vacancyId, vacancyId),
       or(eq(demos.kind, "demo"), like(demos.kind, "block:%")),
     ))
-    .orderBy(desc(demos.updatedAt))
+    .orderBy(asc(demos.sortOrder), asc(demos.createdAt))
 
   const testLessons = Array.isArray(testDemo?.lessonsJson)
     ? (testDemo!.lessonsJson as { blocks?: { type?: string; questions?: Question[] }[] }[])
@@ -125,9 +128,13 @@ export async function buildComparison(vacancyId: string, ids: string[]): Promise
   const testQuestions = collectTaskQuestions(testLessons)
 
   type RawLesson = { blocks?: { id?: string; type?: string; taskTitle?: string; taskDescription?: string; questions?: Question[] }[] }
-  const demoBlocks: { blockId: string; text: string; questions: Question[] }[] = []
+  // demoId/demoTitle = строка-блок воронки (как названа в табе «Контент»,
+  // напр. «Презентация», «Путь менеджера», «Анкета») — её используем ярлыком
+  // группы-разделителя. text — taskTitle конкретного task-блока внутри (fallback).
+  const demoBlocks: { blockId: string; text: string; questions: Question[]; demoId: string; demoTitle: string }[] = []
   for (const row of allDemoRows) {
     if (!Array.isArray(row.lessonsJson)) continue
+    const demoTitle = (row.title || "").trim()
     for (const l of row.lessonsJson as RawLesson[]) {
       for (const b of l.blocks ?? []) {
         if (b.type === "task" && b.id) {
@@ -135,6 +142,8 @@ export async function buildComparison(vacancyId: string, ids: string[]): Promise
             blockId: b.id,
             text: demoBlockLabel(b),
             questions: Array.isArray(b.questions) ? b.questions : [],
+            demoId: row.id,
+            demoTitle: demoTitle || demoBlockLabel(b),
           })
         }
       }
@@ -202,7 +211,10 @@ export async function buildComparison(vacancyId: string, ids: string[]): Promise
   if (demoBlocks.length > 0) {
     // Разворачиваем каждый task-блок в отдельные строки по вопросам.
     // Ключ строки: "<blockId>__<questionId>" — уникален в рамках вакансии.
-    type DemoQRow = { id: string; text: string; blockId: string; questionId: string; options: string[] }
+    // groupId/groupLabel = блок воронки (demos.title, как в табе «Контент»):
+    // его название — строка-разделитель над своими вопросами (фронт рисует один
+    // заголовок группы), а сам вопрос — без повторяющегося префикса «taskTitle: …».
+    type DemoQRow = { id: string; text: string; blockId: string; questionId: string; options: string[]; groupId?: string; groupLabel?: string }
     const demoQRows: DemoQRow[] = []
     for (const b of demoBlocks) {
       if (b.questions.length === 0) {
@@ -210,14 +222,14 @@ export async function buildComparison(vacancyId: string, ids: string[]): Promise
         demoQRows.push({ id: `${b.blockId}__block`, text: b.text, blockId: b.blockId, questionId: "", options: [] })
       } else {
         for (const q of b.questions) {
-          const label = b.text ? `${b.text}: ${q.text}` : q.text
-          demoQRows.push({ id: `${b.blockId}__${q.id}`, text: label, blockId: b.blockId, questionId: q.id, options: Array.isArray(q.options) ? q.options : [] })
+          const text = (q.text || "").trim() || b.text
+          demoQRows.push({ id: `${b.blockId}__${q.id}`, text, blockId: b.blockId, questionId: q.id, options: Array.isArray(q.options) ? q.options : [], groupId: b.demoId, groupLabel: b.demoTitle })
         }
       }
     }
     anketaSection = {
       key: "anketa", title: "Анкета", scored: false,
-      questions: demoQRows.map((r) => ({ id: r.id, text: r.text })),
+      questions: demoQRows.map((r) => ({ id: r.id, text: r.text, groupId: r.groupId, groupLabel: r.groupLabel })),
       answers: {},
     }
     for (const c of cands) {

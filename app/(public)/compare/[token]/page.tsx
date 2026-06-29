@@ -2,14 +2,14 @@
 
 // Публичная страница сравнения по share-токену (без логина, только чтение).
 // Данные — GET /api/public/compare/[token].
-import { useEffect, useMemo, useState } from "react"
+import { Fragment, useEffect, useMemo, useState } from "react"
 import { useParams } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { Columns3, Rows3, Loader2, ChevronDown } from "lucide-react"
 
-interface QItem { id: string; text: string; points?: number }
+interface QItem { id: string; text: string; points?: number; groupId?: string; groupLabel?: string }
 interface Ans { value: string | null; awarded?: number | null; max?: number | null; correct?: boolean | null }
 interface Section { key: string; title: string; scored: boolean; questions: QItem[]; answers: Record<string, Record<string, Ans>> }
 interface Head { id: string; name: string | null; aiScore: number | null; resumeScore: number | null; testScore?: number | null; testPoints?: { got: number; max: number } | null; demoPercent?: number | null }
@@ -119,8 +119,18 @@ export default function PublicComparePage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {section.questions.map((q, qi) => (
-                        <tr key={q.id} className="border-t align-top">
+                      {section.questions.map((q, qi) => {
+                        const newGroup = q.groupLabel && (qi === 0 || section.questions[qi - 1].groupId !== q.groupId)
+                        return (
+                        <Fragment key={q.id}>
+                        {newGroup && (
+                          <tr className="border-t bg-muted">
+                            <td colSpan={candidates.length + 1} className="p-0">
+                              <div className="sticky left-0 inline-block px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-foreground/70">{q.groupLabel}</div>
+                            </td>
+                          </tr>
+                        )}
+                        <tr className="border-t align-top">
                           <td className={cn("p-2.5 sticky left-0 z-10 border-r shadow-[2px_0_4px_rgba(0,0,0,0.04)] w-[300px] min-w-[300px] max-w-[300px]", qi % 2 ? "bg-muted" : "bg-card")}>
                             <div className="font-medium text-[13px]">{q.text}</div>
                             {typeof q.points === "number" && q.points > 0 && <div className="text-[11px] text-muted-foreground">макс. {q.points} б</div>}
@@ -129,14 +139,21 @@ export default function PublicComparePage() {
                             <td key={c.id} className={cn("p-2.5 border-l align-top w-[260px] min-w-[260px]", qi % 2 && "bg-muted/30")}><AnswerCell a={section.answers[c.id]?.[q.id]} /></td>
                           ))}
                         </tr>
-                      ))}
+                        </Fragment>
+                        )})}
                     </tbody>
                   </table>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {section.questions.map((q) => (
-                    <div key={q.id} className="rounded-lg border overflow-hidden">
+                  {section.questions.map((q, qi) => {
+                    const newGroup = q.groupLabel && (qi === 0 || section.questions[qi - 1].groupId !== q.groupId)
+                    return (
+                    <Fragment key={q.id}>
+                    {newGroup && (
+                      <div className="pt-2 text-[11px] font-semibold uppercase tracking-wide text-foreground/70">{q.groupLabel}</div>
+                    )}
+                    <div className="rounded-lg border overflow-hidden">
                       <div className="bg-muted/40 p-2.5 font-medium text-[13px] flex items-center gap-2">{q.text}{typeof q.points === "number" && q.points > 0 && <Badge variant="outline" className="text-[10px] h-4 px-1">макс. {q.points} б</Badge>}</div>
                       <div className="divide-y">
                         {candidates.map((c) => (
@@ -147,7 +164,8 @@ export default function PublicComparePage() {
                         ))}
                       </div>
                     </div>
-                  ))}
+                    </Fragment>
+                    )})}
                 </div>
               ))}
             </section>
