@@ -1864,18 +1864,21 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
               <div className="space-y-1.5">
                 <Label className="text-xs">Стадия в hh.ru при приглашении</Label>
                 <Select
-                  value={rt.inviteHhStage ?? "consider"}
+                  value={rt.inviteHhStage ?? "phone_interview"}
                   onValueChange={v => patch({ resumeThresholds: { ...rt, inviteHhStage: v as "phone_interview" | "consider" | "interview" | "assessment" } })}
                 >
                   <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="consider">Первичный контакт</SelectItem>
-                    <SelectItem value="phone_interview">Телефонное интервью</SelectItem>
+                    {/* Подписи строго по hh API: phone_interview = «Первичный контакт»,
+                        consider = «Подумать». Раньше были перепутаны — приглашённые
+                        уезжали в «Подумать» (снижает индекс вежливости hh). */}
+                    <SelectItem value="phone_interview">Первичный контакт</SelectItem>
+                    <SelectItem value="consider">Подумать</SelectItem>
                     <SelectItem value="interview">Собеседование</SelectItem>
                     <SelectItem value="assessment">Тестовое задание</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-[11px] text-muted-foreground">Куда кандидат попадёт в воронке работодателя на hh.ru. По умолчанию — «Первичный контакт».</p>
+                <p className="text-[11px] text-muted-foreground">Куда кандидат попадёт в воронке работодателя на hh.ru. По умолчанию — «Первичный контакт». «Подумать» лучше не использовать для приглашения — hh снижает за неё индекс вежливости.</p>
               </div>
               {/* #3 Итог: куда реально переводится кандидат */}
               <p className="text-[11px] text-muted-foreground rounded-md bg-muted/40 px-2.5 py-1.5 leading-relaxed">
