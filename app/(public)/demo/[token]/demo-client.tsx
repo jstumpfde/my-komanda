@@ -714,6 +714,30 @@ export default function DemoPage() {
   const [formEmployment, setFormEmployment] = useState("")
   const [formNiches, setFormNiches] = useState("")
 
+  // ── Присутствие: гасим маяк на ФИНАЛЬНОМ экране ───────────────────────────
+  // На «Спасибо» / после отправки анкеты / прощании изучать нечего — кандидат
+  // часто просто оставляет вкладку открытой. Выставляем глобальный флаг, и
+  // PresenceBeacon перестаёт пинговать → кандидат уходит из «Кто на сайте» и
+  // из гейта присутствия за пару минут. Промежуточные экраны (видео-интро,
+  // сама форма анкеты) — НЕ финал, там присутствие считаем как обычно.
+  const onFinalScreen =
+    finished &&
+    (
+      // статичный «Спасибо», минуя анкету (та же логика, что в рендере ниже)
+      data?.postDemoSettings?.enabled === false ||
+      data?.postDemoSettings?.anketaEnabled === false ||
+      data?.candidateHasContacts === true ||
+      // прощальный экран после клика «Хорошо, жду!»
+      showFarewell ||
+      // финальное «Спасибо» после отправки анкеты
+      formSubmitted
+    )
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    window.__mykPresenceSuppressed = onFinalScreen
+    return () => { window.__mykPresenceSuppressed = false }
+  }, [onFinalScreen])
+
   // Fetch demo data
   useEffect(() => {
     fetch(`/api/public/demo/${token}`)

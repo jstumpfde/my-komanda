@@ -11,6 +11,18 @@ import { useEffect } from "react"
 
 const SID_KEY = "myk_presence_sid"
 
+// Глобальный флаг паузы присутствия. Демо-клиент выставляет его на финальном
+// экране («Спасибо» / анкета отправлена / прощание): на этом экране изучать
+// нечего, кандидат часто просто оставляет вкладку открытой. Пока флаг true —
+// маяк не пингует, поэтому ни visit_log, ни (в проде) candidates.last_activity_at
+// не обновляются, и кандидат уходит из «Кто на сайте» и из гейта присутствия.
+// Флаг читается ВНУТРИ ping() в момент вызова — реактивность/перемонтаж не нужны.
+declare global {
+  interface Window {
+    __mykPresenceSuppressed?: boolean
+  }
+}
+
 function getSessionId(): string {
   try {
     let s = localStorage.getItem(SID_KEY)
@@ -31,6 +43,8 @@ export function PresenceBeacon({ page }: { page?: string }) {
   useEffect(() => {
     const sid = getSessionId()
     const ping = () => {
+      // Финальный экран демо выставляет этот флаг — присутствие не считаем.
+      if (typeof window !== "undefined" && window.__mykPresenceSuppressed) return
       const path = page ?? (typeof window !== "undefined" ? window.location.pathname : "")
       if (!path) return
       fetch("/api/visit-log", {

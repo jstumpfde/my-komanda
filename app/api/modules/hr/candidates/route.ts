@@ -613,7 +613,8 @@ export async function GET(req: NextRequest) {
           .sort((a, b) => a - b)
         const lastAnswerAt =
           stamps.length > 0 ? new Date(stamps[stamps.length - 1]).toISOString() : null
-        const isActive = lastAnswerAt
+        // Завершившие демо (есть completedAt) не считаются «на сайте».
+        const isActive = (lastAnswerAt && !progress?.completedAt)
           ? now - new Date(lastAnswerAt).getTime() <= ACTIVE_THRESHOLD_MS
           : false
 
@@ -902,6 +903,9 @@ export async function GET(req: NextRequest) {
     // зоне, что и defaultNow().
     if (url.searchParams.get("activeNow") === "true") {
       filterConds.push(sql`(${candidates.lastActivityAt} IS NOT NULL AND ${candidates.lastActivityAt} > (now()::timestamp - interval '2 minutes'))`)
+      // Завершившие демо (есть completedAt) — НЕ «на сайте»: на финальном
+      // экране изучать нечего, даже если вкладка открыта и маяк пингует.
+      filterConds.push(sql`(${candidates.demoProgressJson}->>'completedAt' IS NULL)`)
     }
 
     // Фильтр по статусу анкеты (контактная форма после демо).
@@ -1126,7 +1130,7 @@ export async function GET(req: NextRequest) {
 
     // Имя + page-based прогресс
     const withDisplayName = rows.map((r) => {
-      const progress = r.demoProgressJson as { blocks?: DemoBlockProgress[] } | null
+      const progress = r.demoProgressJson as { blocks?: DemoBlockProgress[]; completedAt?: string | null } | null
       const blocks = Array.isArray(progress?.blocks) ? progress.blocks : []
       const completedLessons = new Set<number>()
       let hasAnketa = false
@@ -1184,7 +1188,9 @@ export async function GET(req: NextRequest) {
       }
 
       // «Активен сейчас» — активность (демо/тест) за последние 30 минут.
+      // Завершившие демо (есть completedAt) не считаются «на сайте».
       const isActive = r.lastActivityAt != null
+        && !progress?.completedAt
         && (Date.now() - new Date(r.lastActivityAt).getTime()) <= ACTIVE_THRESHOLD_MS
 
       const nameUncertain = !resolveGivenNameMeta({ override: r.firstNameOverride, fullName: r.name }).confident
