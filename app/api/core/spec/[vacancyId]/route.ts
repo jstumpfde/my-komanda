@@ -258,6 +258,10 @@ export async function PUT(
     const parsed = CandidateSpecSchema.safeParse(body)
     if (!parsed.success) {
       const firstIssue = parsed.error.issues[0]
+      // Логируем ВСЕ проблемы — иначе 400 на сохранении Портрета не диагностируем
+      // (видно только размер ответа в access-логе). Сообщение уходит и клиенту.
+      console.warn(`[spec PUT] валидация не прошла vacancy=${vacancyId}:`,
+        JSON.stringify(parsed.error.issues.map(i => ({ path: i.path.join("."), msg: i.message, code: i.code }))))
       return apiError(
         `Ошибка валидации: ${firstIssue?.path?.join(".") ?? ""} — ${firstIssue?.message ?? "неверные данные"}`,
         400,
