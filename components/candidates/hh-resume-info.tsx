@@ -8,6 +8,7 @@ import {
   Lock, Train, Globe, FileBadge,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 
 // ─── Types — описывают только нужные поля сырого hh resume ────────────────────
 //
@@ -321,17 +322,40 @@ function ProfilePhoto({
   initials: string
 }) {
   const [imgError, setImgError] = useState(false)
+  const [zoomOpen, setZoomOpen] = useState(false)
   const showImg = photoUrl && !imgError
 
   if (showImg) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={photoUrl}
-        alt={fullName || "Фото"}
-        onError={() => setImgError(true)}
-        className="w-48 h-48 rounded-lg object-cover shrink-0 border border-border/40 bg-muted"
-      />
+      <>
+        {/* Клик по фото — открывает его крупно (лайтбокс), как раньше/в Орлинке */}
+        <button
+          type="button"
+          onClick={() => setZoomOpen(true)}
+          className="shrink-0 cursor-zoom-in rounded-lg"
+          aria-label="Открыть фото крупно"
+          title="Открыть фото"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={photoUrl}
+            alt={fullName || "Фото"}
+            onError={() => setImgError(true)}
+            className="w-48 h-48 rounded-lg object-cover border border-border/40 bg-muted transition-opacity hover:opacity-90"
+          />
+        </button>
+        <Dialog open={zoomOpen} onOpenChange={setZoomOpen}>
+          <DialogContent className="max-w-3xl border-0 bg-transparent p-2 shadow-none">
+            <DialogTitle className="sr-only">{fullName || "Фото кандидата"}</DialogTitle>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={photoUrl}
+              alt={fullName || "Фото"}
+              className="mx-auto h-auto max-h-[85vh] w-auto max-w-full rounded-lg object-contain"
+            />
+          </DialogContent>
+        </Dialog>
+      </>
     )
   }
 
