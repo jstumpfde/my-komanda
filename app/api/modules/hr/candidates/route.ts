@@ -240,7 +240,7 @@ interface LessonShape {
   blocks?: { id?: string }[]
 }
 
-const ACTIVE_THRESHOLD_MS = 15 * 60 * 1000  // «активен сейчас» — активность за 15 мин
+const ACTIVE_THRESHOLD_MS = 2 * 60 * 1000  // «на сайте сейчас» — активность за 2 мин (маяк пингует раз в ~45 сек)
 
 // Стадии, в которых тест уже отправлен кандидату (см. lib/stages.ts).
 // Используется для колонки «Тест»: если submission ещё нет, но кандидат
@@ -895,11 +895,13 @@ export async function GET(req: NextRequest) {
       filterConds.push(sql`(${candidates.stage} IS DISTINCT FROM 'rejected')`)
     }
 
-    // «Активны сейчас» — кандидаты с активностью (демо/тест) за последние 15 мин.
-    // last_activity_at дёргают demo/answer и test/answer|open (now()::timestamp —
-    // сравниваем в той же зоне, что и defaultNow()).
+    // «Кто на сайте» — кандидаты с активностью (демо/тест) за последние 2 мин.
+    // last_activity_at дёргают demo/answer, test/answer|open И маяк присутствия
+    // через /api/visit-log (раз в ~45 сек, пока кандидат на странице) — 2 мин
+    // надёжно перекрывают интервал маяка. now()::timestamp — сравниваем в той же
+    // зоне, что и defaultNow().
     if (url.searchParams.get("activeNow") === "true") {
-      filterConds.push(sql`(${candidates.lastActivityAt} IS NOT NULL AND ${candidates.lastActivityAt} > (now()::timestamp - interval '15 minutes'))`)
+      filterConds.push(sql`(${candidates.lastActivityAt} IS NOT NULL AND ${candidates.lastActivityAt} > (now()::timestamp - interval '2 minutes'))`)
     }
 
     // Фильтр по статусу анкеты (контактная форма после демо).
