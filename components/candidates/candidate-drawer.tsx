@@ -942,7 +942,8 @@ export function CandidateDrawer({
     if (el) el.scrollTop = el.scrollHeight
   }, [activeTab, hhMessages])
 
-  // ── Lazy-load channel stages when «Каналы» tab opens ─────────────────────
+  // ── Lazy-load channel stages when «История» tab opens (стадии hh/авито
+  //    показываются в Истории; отдельного таба «Каналы» больше нет) ──────────
   const loadChannelStages = useCallback(async (candidateId: string) => {
     setChannelStagesLoading(true)
     setChannelStagesError(null)
@@ -959,7 +960,7 @@ export function CandidateDrawer({
   }, [])
 
   useEffect(() => {
-    if (activeTab !== "channels") return
+    if (activeTab !== "history") return
     const id = candidate?.id
     if (!id) return
     // Only auto-fetch once per candidate; manual refresh re-fetches
@@ -1458,7 +1459,6 @@ export function CandidateDrawer({
               <TabsTrigger value="answers" className="text-[10px] px-1 py-1.5">Анкета</TabsTrigger>
               <TabsTrigger value="test" className="text-[10px] px-1 py-1.5">Тест</TabsTrigger>
               <TabsTrigger value="calls" className="text-[10px] px-1 py-1.5">Коммуникация</TabsTrigger>
-              <TabsTrigger value="channels" className="text-[10px] px-1 py-1.5">Каналы</TabsTrigger>
               <TabsTrigger value="history" className="text-[10px] px-1 py-1.5">История</TabsTrigger>
             </TabsList>
 
@@ -1777,6 +1777,171 @@ export function CandidateDrawer({
                     ))}
                   </div>
                 )}
+
+                {/* ── Каналы связи (Telegram / WhatsApp / Email) ── */}
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 pt-2">
+                  <Send className="w-3.5 h-3.5" />
+                  Каналы связи
+                </h3>
+
+                {/* Telegram */}
+                <div className="rounded-lg border border-border/60 p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-sky-500/10 flex items-center justify-center text-sky-500">
+                        <Send className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Telegram</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {candidate?.telegramOptOut
+                            ? "Отписался (/stop)"
+                            : candidate?.telegramChatId
+                              ? `Подключён${candidate.telegramUsername ? ` · @${candidate.telegramUsername}` : ""}`
+                              : "Не подключён"
+                          }
+                        </p>
+                      </div>
+                    </div>
+                    {candidate?.telegramOptOut ? (
+                      <span className="text-[10px] text-amber-600 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200">отписался</span>
+                    ) : candidate?.telegramChatId ? (
+                      <span className="text-[10px] text-emerald-700 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200">связан</span>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground/60 px-2 py-0.5 rounded-full bg-muted/40">не связан</span>
+                    )}
+                  </div>
+
+                  {/* Ссылка-приглашение */}
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] text-muted-foreground">
+                      Кандидат начинает диалог сам — по ссылке-приглашению. Отправьте её в hh-чате.
+                    </p>
+                    {tgInviteLink ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          readOnly
+                          value={tgInviteLink}
+                          className="flex-1 text-xs font-mono bg-muted/50 border border-border rounded px-2 py-1.5 truncate"
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-xs shrink-0"
+                          onClick={() => {
+                            navigator.clipboard.writeText(tgInviteLink)
+                            toast.success("Ссылка скопирована")
+                          }}
+                        >
+                          Скопировать
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs gap-1.5"
+                        onClick={loadTgInvite}
+                        disabled={tgInviteLoading}
+                      >
+                        {tgInviteLoading
+                          ? <Loader2 className="w-3 h-3 animate-spin" />
+                          : <Send className="w-3 h-3" />
+                        }
+                        Получить ссылку-приглашение
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* История сообщений + поле отправки — только если кандидат связан */}
+                  {candidate?.telegramChatId && !candidate.telegramOptOut && (
+                    <>
+                      {tgMessages.length > 0 && (
+                        <div className="space-y-1.5 max-h-56 overflow-y-auto">
+                          {tgMessages.map((m, i) => (
+                            <div
+                              key={i}
+                              className={cn(
+                                "text-xs rounded-lg px-2.5 py-1.5 max-w-[85%]",
+                                m.role === "hr"
+                                  ? "ml-auto bg-primary text-primary-foreground"
+                                  : "mr-auto bg-muted text-foreground",
+                              )}
+                            >
+                              <p>{m.text}</p>
+                              <p className={cn("text-[10px] mt-0.5 opacity-70", m.role === "hr" ? "text-right" : "")}>
+                                {formatDateTime(m.sentAt)}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex gap-2 pt-1">
+                        <Textarea
+                          value={tgDraft}
+                          onChange={e => setTgDraft(e.target.value)}
+                          placeholder="Написать в Telegram…"
+                          className="min-h-[60px] text-sm resize-none"
+                          onKeyDown={e => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault()
+                              sendTgMessage()
+                            }
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          className="self-end shrink-0"
+                          onClick={sendTgMessage}
+                          disabled={tgSending || !tgDraft.trim()}
+                        >
+                          {tgSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                        </Button>
+                      </div>
+                    </>
+                  )}
+
+                  {candidate?.telegramOptOut && (
+                    <p className="text-xs text-amber-600 bg-amber-50 rounded px-2 py-1.5">
+                      Кандидат отправил /stop — отписался от бота. Отправка сообщений недоступна.
+                    </p>
+                  )}
+                </div>
+
+                {/* WhatsApp — скоро */}
+                <div className="rounded-lg border border-border/60 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                        <MessageSquare className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-foreground">WhatsApp</p>
+                        <p className="text-[11px] text-muted-foreground">Бизнес-чат</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground/60 px-2 py-0.5 rounded-full bg-muted/40">скоро</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground italic">WhatsApp Business API — для коротких уточнений и приглашений</p>
+                </div>
+
+                {/* Email — скоро */}
+                <div className="rounded-lg border border-border/60 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500">
+                        <Mail className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Email</p>
+                        <p className="text-[11px] text-muted-foreground">Корпоративная почта</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground/60 px-2 py-0.5 rounded-full bg-muted/40">скоро</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground italic">Отправка офферов, документов и приглашений</p>
+                </div>
               </TabsContent>
 
               {/* ── Ответы ───────────────────────────────────────── */}
@@ -2004,13 +2169,12 @@ export function CandidateDrawer({
                 <RubricShadowSection candidateId={candidate.id} />
               </TabsContent>
 
-              {/* ── Каналы ───────────────────────────────────────── */}
-              <TabsContent value="channels" className="px-6 py-4 pb-28 mt-0 space-y-3">
-
-                {/* ── Стадии каналов ── */}
-                <div className="rounded-lg border border-border/60 p-3 space-y-2">
+              {/* ── История ──────────────────────────────────────── */}
+              <TabsContent value="history" className="px-6 py-4 pb-28 mt-0">
+                {/* Стадии каналов (hh/авито) — текущая стадия кандидата вживую. */}
+                <div className="rounded-lg border border-border/60 p-3 space-y-2 mb-4">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-medium text-foreground">Стадии каналов</p>
+                    <p className="text-xs font-medium text-foreground">Стадии каналов (hh / авито)</p>
                     <Button
                       size="sm"
                       variant="ghost"
@@ -2047,169 +2211,6 @@ export function CandidateDrawer({
                     </div>
                   )}
                 </div>
-
-                {/* Telegram */}
-                <div className="rounded-lg border border-border/60 p-3 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-sky-500/10 flex items-center justify-center text-sky-500">
-                        <Send className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-foreground">Telegram</p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {candidate?.telegramOptOut
-                            ? "Отписался (/stop)"
-                            : candidate?.telegramChatId
-                              ? `Подключён${candidate.telegramUsername ? ` · @${candidate.telegramUsername}` : ""}`
-                              : "Не подключён"
-                          }
-                        </p>
-                      </div>
-                    </div>
-                    {candidate?.telegramOptOut ? (
-                      <span className="text-[10px] text-amber-600 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200">отписался</span>
-                    ) : candidate?.telegramChatId ? (
-                      <span className="text-[10px] text-emerald-700 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200">связан</span>
-                    ) : (
-                      <span className="text-[10px] text-muted-foreground/60 px-2 py-0.5 rounded-full bg-muted/40">не связан</span>
-                    )}
-                  </div>
-
-                  {/* Ссылка-приглашение */}
-                  <div className="space-y-1.5">
-                    <p className="text-[11px] text-muted-foreground">
-                      Кандидат начинает диалог сам — по ссылке-приглашению. Отправьте её в hh-чате.
-                    </p>
-                    {tgInviteLink ? (
-                      <div className="flex items-center gap-2">
-                        <input
-                          readOnly
-                          value={tgInviteLink}
-                          className="flex-1 text-xs font-mono bg-muted/50 border border-border rounded px-2 py-1.5 truncate"
-                        />
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-xs shrink-0"
-                          onClick={() => {
-                            navigator.clipboard.writeText(tgInviteLink)
-                            toast.success("Ссылка скопирована")
-                          }}
-                        >
-                          Скопировать
-                        </Button>
-                      </div>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-xs gap-1.5"
-                        onClick={loadTgInvite}
-                        disabled={tgInviteLoading}
-                      >
-                        {tgInviteLoading
-                          ? <Loader2 className="w-3 h-3 animate-spin" />
-                          : <Send className="w-3 h-3" />
-                        }
-                        Получить ссылку-приглашение
-                      </Button>
-                    )}
-                  </div>
-
-                  {/* История сообщений + поле отправки — только если кандидат связан */}
-                  {candidate?.telegramChatId && !candidate.telegramOptOut && (
-                    <>
-                      {tgMessages.length > 0 && (
-                        <div className="space-y-1.5 max-h-56 overflow-y-auto">
-                          {tgMessages.map((m, i) => (
-                            <div
-                              key={i}
-                              className={cn(
-                                "text-xs rounded-lg px-2.5 py-1.5 max-w-[85%]",
-                                m.role === "hr"
-                                  ? "ml-auto bg-primary text-primary-foreground"
-                                  : "mr-auto bg-muted text-foreground",
-                              )}
-                            >
-                              <p>{m.text}</p>
-                              <p className={cn("text-[10px] mt-0.5 opacity-70", m.role === "hr" ? "text-right" : "")}>
-                                {formatDateTime(m.sentAt)}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="flex gap-2 pt-1">
-                        <Textarea
-                          value={tgDraft}
-                          onChange={e => setTgDraft(e.target.value)}
-                          placeholder="Написать в Telegram…"
-                          className="min-h-[60px] text-sm resize-none"
-                          onKeyDown={e => {
-                            if (e.key === "Enter" && !e.shiftKey) {
-                              e.preventDefault()
-                              sendTgMessage()
-                            }
-                          }}
-                        />
-                        <Button
-                          size="sm"
-                          className="self-end shrink-0"
-                          onClick={sendTgMessage}
-                          disabled={tgSending || !tgDraft.trim()}
-                        >
-                          {tgSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                        </Button>
-                      </div>
-                    </>
-                  )}
-
-                  {candidate?.telegramOptOut && (
-                    <p className="text-xs text-amber-600 bg-amber-50 rounded px-2 py-1.5">
-                      Кандидат отправил /stop — отписался от бота. Отправка сообщений недоступна.
-                    </p>
-                  )}
-                </div>
-
-                {/* WhatsApp — скоро */}
-                <div className="rounded-lg border border-border/60 p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500">
-                        <MessageSquare className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-foreground">WhatsApp</p>
-                        <p className="text-[11px] text-muted-foreground">Бизнес-чат</p>
-                      </div>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground/60 px-2 py-0.5 rounded-full bg-muted/40">скоро</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground italic">WhatsApp Business API — для коротких уточнений и приглашений</p>
-                </div>
-
-                {/* Email — скоро */}
-                <div className="rounded-lg border border-border/60 p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500">
-                        <Mail className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-foreground">Email</p>
-                        <p className="text-[11px] text-muted-foreground">Корпоративная почта</p>
-                      </div>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground/60 px-2 py-0.5 rounded-full bg-muted/40">скоро</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground italic">Отправка офферов, документов и приглашений</p>
-                </div>
-              </TabsContent>
-
-              {/* ── История ──────────────────────────────────────── */}
-              <TabsContent value="history" className="px-6 py-4 pb-28 mt-0">
                 {derived.timeline.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-12">Событий пока нет</p>
                 ) : (
