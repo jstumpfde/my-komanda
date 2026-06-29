@@ -1016,7 +1016,7 @@ function BestPublishTimeCard({ vacancyId, city }: { vacancyId?: string; city?: s
             )}
           </div>
           <p className="text-[10px] text-muted-foreground">
-            По откликам вашей компании (время МСК{cityLabel ? ` · вакансия${cityLabel}` : ""}). Опирается на {data.total} откликов{data.periodDays ? ` за ${data.periodDays}д.` : ""}{firstAtLabel ? ` · с ${firstAtLabel}` : ""}.
+            {data.total} откликов{data.periodDays ? ` за ${data.periodDays}д.` : ""}{firstAtLabel ? ` · с ${firstAtLabel}` : ""} · МСК{cityLabel}
           </p>
         </>
       )}
