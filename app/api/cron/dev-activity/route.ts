@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { collectAndStore } from "@/lib/dev-activity/store"
+import { maybeSendDailyDigest } from "@/lib/dev-activity/digest"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
@@ -29,7 +30,9 @@ async function handle(req: NextRequest) {
     const result = await collectAndStore()
     const hadError = result.some(r => r.error)
     if (run) await finishCronRun(run.id, hadError ? "error" : "ok", { projects: result }, result.find(r => r.error)?.error)
-    return NextResponse.json({ ok: !hadError, projects: result })
+    // Раз в сутки после 20:00 МСК — выжимка в Telegram (best-effort, не валит крон).
+    const digest = await maybeSendDailyDigest()
+    return NextResponse.json({ ok: !hadError, projects: result, digest })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     if (run) await finishCronRun(run.id, "error", null, msg)
