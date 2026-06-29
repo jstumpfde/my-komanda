@@ -45,9 +45,7 @@ function fmtH(min: number): string {
 export function buildDigestText(series: DevActivitySeries[], dayStr: string): string {
   const [, m, d] = dayStr.split("-")
   const norm = normActive()
-  const lines: string[] = [`📊 Dev-активность · выжимка за ${d}.${m}`]
-  if (!norm) lines.push("(калибровка — норму/вердикт включим позже)")
-  lines.push("")
+  const lines: string[] = [`📊 Dev-активность · выжимка за ${d}.${m}`, ""]
 
   for (const s of series) {
     const today = s.days.length ? s.days[s.days.length - 1] : null
