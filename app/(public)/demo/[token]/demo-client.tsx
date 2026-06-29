@@ -277,6 +277,65 @@ function getProgress(
   return { completed, skipped, total, percent }
 }
 
+// «Демо пройдено по ответам»: кандидат ответил на ВСЕ обязательные вопросы
+// (тот же признак, что красит «Демо» в 12/12 зелёным на карточке/в списке).
+// Зеркалит серверную resolve-questions.hasAnsweredAllRequired и клиентскую
+// валидацию в handleNext: обязательные task-вопросы + обязательные media-блоки.
+// Если обязательных нет вовсе — false (нечему «загораться зелёным»).
+function hasAnsweredAllRequired(
+  allBlocks: Block[],
+  taskAnswers: Record<string, Record<string, string>>,
+  mediaUploaded: Record<string, MediaAnswer>,
+  videoIntroQuestionsCount: number,
+): boolean {
+  let hasAnyRequired = false
+  for (const b of allBlocks) {
+    if (b.type === "task" && b.questions.length > 0) {
+      const answers = taskAnswers[b.id] || {}
+      for (const q of b.questions) {
+        if (!q.required) continue
+        hasAnyRequired = true
+        if (!answers[q.id]?.trim()) return false
+      }
+    } else if (b.type === "media" && b.mediaRequired) {
+      hasAnyRequired = true
+      if (videoIntroQuestionsCount > 0) {
+        for (let qi = 0; qi < videoIntroQuestionsCount; qi++) {
+          if (!mediaUploaded[`${b.id}_vi_${qi}`]) return false
+        }
+      } else if (!mediaUploaded[b.id]) {
+        return false
+      }
+    }
+  }
+  return hasAnyRequired
+}
+
+// Есть ли на уроке НЕзаполненные обязательные вопросы/медиа (зеркалит валидацию
+// handleNext по текущему уроку). false = на уроке делать больше нечего.
+function lessonHasPendingRequired(
+  blocks: Block[],
+  taskAnswers: Record<string, Record<string, string>>,
+  mediaUploaded: Record<string, MediaAnswer>,
+  videoIntroQuestionsCount: number,
+): boolean {
+  for (const b of blocks) {
+    if (b.type === "task" && b.questions.length > 0) {
+      const answers = taskAnswers[b.id] || {}
+      if (b.questions.some((q) => q.required && !answers[q.id]?.trim())) return true
+    } else if (b.type === "media" && b.mediaRequired) {
+      if (videoIntroQuestionsCount > 0) {
+        for (let qi = 0; qi < videoIntroQuestionsCount; qi++) {
+          if (!mediaUploaded[`${b.id}_vi_${qi}`]) return true
+        }
+      } else if (!mediaUploaded[b.id]) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
 // ─── Block Renderers ─────────────────────────────────────────────────────────
 
 // ─── Markdown-like table parser ──────────────────────────────────────────────
@@ -714,30 +773,6 @@ export default function DemoPage() {
   const [formEmployment, setFormEmployment] = useState("")
   const [formNiches, setFormNiches] = useState("")
 
-  // ── Присутствие: гасим маяк на ФИНАЛЬНОМ экране ───────────────────────────
-  // На «Спасибо» / после отправки анкеты / прощании изучать нечего — кандидат
-  // часто просто оставляет вкладку открытой. Выставляем глобальный флаг, и
-  // PresenceBeacon перестаёт пинговать → кандидат уходит из «Кто на сайте» и
-  // из гейта присутствия за пару минут. Промежуточные экраны (видео-интро,
-  // сама форма анкеты) — НЕ финал, там присутствие считаем как обычно.
-  const onFinalScreen =
-    finished &&
-    (
-      // статичный «Спасибо», минуя анкету (та же логика, что в рендере ниже)
-      data?.postDemoSettings?.enabled === false ||
-      data?.postDemoSettings?.anketaEnabled === false ||
-      data?.candidateHasContacts === true ||
-      // прощальный экран после клика «Хорошо, жду!»
-      showFarewell ||
-      // финальное «Спасибо» после отправки анкеты
-      formSubmitted
-    )
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    window.__mykPresenceSuppressed = onFinalScreen
-    return () => { window.__mykPresenceSuppressed = false }
-  }, [onFinalScreen])
-
   // Fetch demo data
   useEffect(() => {
     fetch(`/api/public/demo/${token}`)
@@ -812,6 +847,66 @@ export default function DemoPage() {
   const allBlocks = data ? flattenBlocks(data.lessons) : []
   const progress = getProgress(allBlocks, taskAnswers, mediaUploaded, mediaSkipped, viewedBlockIds)
   const progressPercent = progress.percent
+
+  // ── Присутствие: гасим маяк на ФИНАЛЬНОМ экране ───────────────────────────
+  // На «Спасибо» / после отправки анкеты / прощании изучать нечего — кандидат
+  // часто просто оставляет вкладку открытой. Выставляем глобальный флаг, и
+  // PresenceBeacon перестаёт пинговать → кандидат уходит из «Кто на сайте» и
+  // из гейта присутствия за пару минут.
+  //
+  // Кейс Юрия: кандидат сидит на ПОСЛЕДНЕМ уроке демо (экран «Спасибо», тип
+  // «Презентация → Вопросы → Спасибо») и НЕ жмёт финальную кнопку → finished
+  // ещё false, но изучать там уже нечего. Гасим присутствие, не дожидаясь клика,
+  // по двум сигналам (любой из них):
+  //   • кандидат ответил на все обязательные вопросы (тот же признак, что красит
+  //     «Демо» в 12/12 зелёным — hasAnsweredAllRequired); ИЛИ
+  //   • он на последнем уроке И на этом уроке не осталось незаполненных
+  //     обязательных вопросов (т.е. реально «припаркован», а не дозаполняет —
+  //     иначе экран «Вопросы» последним уроком ложно гасил бы присутствие).
+  // Промежуточные экраны (видео-интро, сама форма анкеты) — НЕ финал: видео-интро
+  // и форма не являются уроками демо, поэтому под эти условия не попадают.
+  const answeredAllRequired = hasAnsweredAllRequired(
+    allBlocks,
+    taskAnswers,
+    mediaUploaded,
+    data?.videoIntro?.questions?.length ?? 0,
+  )
+  // На последнем уроке не осталось незаполненных обязательных вопросов —
+  // кандидат «припаркован» на финале, а не дозаполняет.
+  // totalLessons > 1: у одноурочного демо «урок 0» — это весь контент, а не
+  // отдельный экран «Спасибо», поэтому его не гасим (иначе простое демо из
+  // одной презентации никогда не считалось бы «на сайте»).
+  const lastLessonReadyToFinish =
+    totalLessons > 1 &&
+    currentIndex === totalLessons - 1 &&
+    !!currentFlat &&
+    !lessonHasPendingRequired(
+      currentFlat.blocks,
+      taskAnswers,
+      mediaUploaded,
+      data?.videoIntro?.questions?.length ?? 0,
+    )
+  const onFinalScreen =
+    // финальный экран демо ещё ДО клика по кнопке (вкладка «Спасибо»)
+    lastLessonReadyToFinish ||
+    answeredAllRequired ||
+    // пост-финальные экраны после клика (прежнее поведение)
+    (finished &&
+      (
+        // статичный «Спасибо», минуя анкету (та же логика, что в рендере ниже)
+        data?.postDemoSettings?.enabled === false ||
+        data?.postDemoSettings?.anketaEnabled === false ||
+        data?.candidateHasContacts === true ||
+        // прощальный экран после клика «Хорошо, жду!»
+        showFarewell ||
+        // финальное «Спасибо» после отправки анкеты
+        formSubmitted
+      ))
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    window.__mykPresenceSuppressed = onFinalScreen
+    return () => { window.__mykPresenceSuppressed = false }
+  }, [onFinalScreen])
 
   // ВСЕГО шагов прогресса = реальные блоки уроков + 1 виртуальный (__anketa__).
   // Ранее было +2 (Анкета + Спасибо), что давало знаменатель N+2 и создавало
