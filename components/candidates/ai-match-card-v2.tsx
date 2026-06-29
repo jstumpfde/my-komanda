@@ -41,7 +41,7 @@ const DECISION_LABELS: Record<CandidateScoreV2["decision"], { label: string; cls
 function scoreColor(score: number): string {
   if (score >= 70) return "text-emerald-700 dark:text-emerald-400"
   if (score >= 40) return "text-amber-700 dark:text-amber-400"
-  return "text-destructive"
+  return "text-red-600 dark:text-red-400"
 }
 
 export function AiMatchCardV2({ details, scoreV1, scoreV2 }: AiMatchCardV2Props) {
@@ -125,7 +125,7 @@ export function AiMatchCardV2({ details, scoreV1, scoreV2 }: AiMatchCardV2Props)
               </li>
             ))}
             {details.missed_must_have.map((m, i) => (
-              <li key={`miss-${i}`} className="flex items-center gap-1.5 text-destructive">
+              <li key={`miss-${i}`} className="flex items-center gap-1.5 text-red-600 dark:text-red-400">
                 <XCircle className="w-3 h-3 shrink-0" /> {m}
               </li>
             ))}
@@ -136,12 +136,12 @@ export function AiMatchCardV2({ details, scoreV1, scoreV2 }: AiMatchCardV2Props)
       {/* Triggered deal-breakers */}
       {details.triggered_deal_breakers.length > 0 && (
         <div className="p-4 border-b border-border/60 space-y-2 bg-destructive/5">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-destructive flex items-center gap-1.5">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-red-600 dark:text-red-400 flex items-center gap-1.5">
             <XCircle className="w-3.5 h-3.5" /> Сработали deal-breakers
           </h4>
           <ul className="space-y-1 text-sm">
             {details.triggered_deal_breakers.map((d, i) => (
-              <li key={i} className="text-destructive">• {d}</li>
+              <li key={i} className="text-red-600 dark:text-red-400">• {d}</li>
             ))}
           </ul>
         </div>
@@ -190,7 +190,7 @@ export function AiMatchCardV2({ details, scoreV1, scoreV2 }: AiMatchCardV2Props)
           )}
           <FactList label="Hard skills" items={details.extracted_facts.hard_skills_mentioned} />
           <FactList label="Цифры результатов" items={details.extracted_facts.results_with_numbers} />
-          <FactList label="Red flags" items={details.extracted_facts.red_flags} cls="text-destructive" />
+          <FactList label="Red flags" items={details.extracted_facts.red_flags} cls="text-red-600 dark:text-red-400" />
           <FactList label="Green flags" items={details.extracted_facts.green_flags} cls="text-emerald-700 dark:text-emerald-400" />
         </div>
       )}
