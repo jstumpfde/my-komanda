@@ -72,7 +72,7 @@ export function ImpersonationBanner() {
           <Button
             size="sm"
             variant="outline"
-            className="h-7 gap-1 border-white bg-white text-xs font-semibold text-indigo-700 shadow-sm hover:bg-indigo-50 hover:border-indigo-100"
+            className="h-7 gap-1 border border-white bg-white text-xs font-bold text-indigo-700 shadow-md hover:bg-indigo-100 hover:border-white"
             onClick={() => void exit()}
             disabled={leaving}
           >
