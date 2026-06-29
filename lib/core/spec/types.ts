@@ -88,7 +88,7 @@ export const ResumeThresholdsSchema = z.object({
    *  (HR может отключить, чтобы не пользоваться). По умолчанию ВКЛ. */
   enabled:           z.boolean().default(true),
   /** Верхний порог: score >= upper → invite */
-  upperThreshold:    z.number().int().min(0).max(100).default(75),
+  upperThreshold:    z.number().int().min(0).max(100).default(40),
   /** Нижний порог: score < lower → reject/keep_new */
   lowerThreshold:    z.number().int().min(0).max(100).default(40),
   /** Действие для диапазона [lower, upper) */

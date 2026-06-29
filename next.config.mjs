@@ -72,6 +72,17 @@ const nextConfig = {
           },
         ],
       },
+      // GET /api/core/spec — Портрет: никогда не кэшировать, иначе после
+      // сохранения порогов перезагрузка отдаёт старый ответ («сброс настроек»).
+      {
+        source: "/api/core/spec/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "no-store, must-revalidate",
+          },
+        ],
+      },
     ]
   },
 }

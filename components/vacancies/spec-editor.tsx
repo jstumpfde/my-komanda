@@ -971,7 +971,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
 
   useEffect(() => {
     let cancelled = false
-    fetch(`/api/core/spec/${vacancyId}`)
+    fetch(`/api/core/spec/${vacancyId}`, { cache: "no-store" })
       .then(r => r.ok ? r.json() : null)
       .then((d: { spec?: CandidateSpec; source?: "spec" | "legacy" } | null) => {
         if (cancelled) return
@@ -1699,7 +1699,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                 </div>
                 <Slider
                   value={[rt.lowerThreshold]}
-                  onValueChange={([v]) => patch({ resumeThresholds: { ...rt, lowerThreshold: Math.min(v, rt.upperThreshold - 5) } })}
+                  onValueChange={([v]) => patch({ resumeThresholds: { ...rt, lowerThreshold: v } })}
                   min={0} max={95} step={5}
                 />
               </div>
@@ -1749,7 +1749,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                 </div>
                 <Slider
                   value={[rt.upperThreshold]}
-                  onValueChange={([v]) => patch({ resumeThresholds: { ...rt, upperThreshold: rt.autoRejectEnabled ? Math.max(v, rt.lowerThreshold + 5) : v } })}
+                  onValueChange={([v]) => patch({ resumeThresholds: { ...rt, upperThreshold: v } })}
                   min={0} max={100} step={5}
                 />
                 {rt.upperThreshold === 0 && (
