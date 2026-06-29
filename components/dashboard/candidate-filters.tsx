@@ -314,6 +314,20 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
             />
           </div>
 
+          {/* Кто на сайте — кандидаты, кто прямо сейчас проходит демо/тест
+              (активность за последние 30 минут). Наверху панели — частый фильтр. */}
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2">
+            <Label htmlFor="active-now" className="text-sm cursor-pointer flex items-center gap-1.5 font-medium">
+              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              Кто на сайте
+            </Label>
+            <Switch
+              id="active-now"
+              checked={filters.activeNow}
+              onCheckedChange={(on) => onFiltersChange({ ...filters, activeNow: on })}
+            />
+          </div>
+
           {/* Cities (dynamic) */}
           {cityCounts.length > 0 && (
             <div className="space-y-1.5">
@@ -557,19 +571,6 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
                     id="show-rejections"
                     checked={!filters.hideRejected}
                     onCheckedChange={(show) => onFiltersChange({ ...filters, hideRejected: !show })}
-                  />
-                </div>
-                {/* Активны сейчас — кандидаты, кто прямо сейчас проходит демо
-                    или тест (активность за последние 30 минут). */}
-                <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-border/40">
-                  <Label htmlFor="active-now" className="text-sm cursor-pointer flex items-center gap-1.5">
-                    <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
-                    Активны сейчас
-                  </Label>
-                  <Switch
-                    id="active-now"
-                    checked={filters.activeNow}
-                    onCheckedChange={(on) => onFiltersChange({ ...filters, activeNow: on })}
                   />
                 </div>
               </div>
