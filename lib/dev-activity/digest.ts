@@ -18,6 +18,11 @@ const DAILY_NORM_HOURS = 8
 const WEEKLY_NORM_HOURS = 40
 const UNDER_RATIO = 0.7, OVER_RATIO = 1.3
 
+// Калибровка: до этой даты норму/вердикт не показываем (копим базу, тренировочный
+// заход). После — включается сам. Переопределяется env DEV_ACTIVITY_NORM_FROM.
+const NORM_FROM = new Date(process.env.DEV_ACTIVITY_NORM_FROM ?? "2026-07-01T08:00:00+03:00")
+function normActive(): boolean { return Date.now() >= NORM_FROM.getTime() }
+
 function mskDayStr(): string {
   return new Date(Date.now() + 3 * 3600_000).toISOString().slice(0, 10)
 }
@@ -39,19 +44,29 @@ function fmtH(min: number): string {
 
 export function buildDigestText(series: DevActivitySeries[], dayStr: string): string {
   const [, m, d] = dayStr.split("-")
-  const lines: string[] = [`📊 Dev-активность · выжимка за ${d}.${m}`, ""]
+  const norm = normActive()
+  const lines: string[] = [`📊 Dev-активность · выжимка за ${d}.${m}`]
+  if (!norm) lines.push("(калибровка — норму/вердикт включим позже)")
+  lines.push("")
 
   for (const s of series) {
     const today = s.days.length ? s.days[s.days.length - 1] : null
     const last7 = s.days.slice(-7)
     const weekMin = last7.reduce((a, x) => a + (x.workMinutes ?? 0), 0)
     const weekDays = last7.filter(x => x.commitCount > 0).length
-    const hours = (today?.workMinutes ?? 0) / 60
-    const verdict = verdictEmoji(hours, today?.commitCount ?? 0)
+    const hours = Math.round(((today?.workMinutes ?? 0) / 60) * 10) / 10
+    const verdict = verdictEmoji((today?.workMinutes ?? 0) / 60, today?.commitCount ?? 0)
 
-    lines.push(`${verdict.split(" ")[0]} ${s.label.toUpperCase()} (${s.person})`)
-    lines.push(`Сегодня: ${verdict.split(" ").slice(1).join(" ")} · ≈${Math.round(hours * 10) / 10}ч из ${DAILY_NORM_HOURS}ч · задач ${today?.taskCount ?? 0}`)
-    lines.push(`Неделя: ≈${fmtH(weekMin)} / ${WEEKLY_NORM_HOURS}ч · активных дней ${weekDays}/7`)
+    if (norm) {
+      lines.push(`${verdict.split(" ")[0]} ${s.label.toUpperCase()}`)
+      lines.push(`Сегодня: ${verdict.split(" ").slice(1).join(" ")} · ≈${hours}ч из ${DAILY_NORM_HOURS}ч · задач ${today?.taskCount ?? 0}`)
+      lines.push(`Неделя: ≈${fmtH(weekMin)} / ${WEEKLY_NORM_HOURS}ч · активных дней ${weekDays}/7`)
+    } else {
+      // Калибровка: только факты, без вердикта и без «из Nч».
+      lines.push(`▫️ ${s.label.toUpperCase()}`)
+      lines.push(`Сегодня: ≈${hours}ч · задач ${today?.taskCount ?? 0}`)
+      lines.push(`Неделя: ≈${fmtH(weekMin)} · активных дней ${weekDays}/7`)
+    }
     if (today?.summary) lines.push(`└ ${today.summary}`)
     lines.push("")
   }
