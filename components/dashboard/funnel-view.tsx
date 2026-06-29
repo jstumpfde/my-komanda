@@ -26,12 +26,14 @@ interface FunnelViewProps {
   onAction?: (candidateId: string, columnId: string, action: CandidateAction) => void
 }
 
-/** Ширина полосы воронки (%) — конус: сверху широко (≈100%), книзу узко (≈14%),
- *  плюс лёгкий бамп от числа кандидатов. Минимум 12% (низ остаётся видимым/узким). */
-function funnelWidth(i: number, total: number, count: number, maxCount: number): number {
-  const positional = total <= 1 ? 100 : 100 - (i / (total - 1)) * 86 // верх 100% → низ ≈14%
-  const countBump  = maxCount > 0 ? (count / maxCount) * 12 : 0       // до +12% от количества
-  return Math.max(12, Math.min(100, positional + countBump))
+/** Ширина сегмента воронки (%) на позиции k — СТРОГО убывает сверху вниз
+ *  (верх 100% → низ ≈26%), монотонно: нижний сегмент НЕ может быть шире верхнего.
+ *  Ширина НЕ зависит от числа кандидатов (число показываем подписью) — иначе
+ *  получались «ступеньки» и нарушение формы воронки. */
+function funnelWidthAt(k: number, total: number): number {
+  if (total <= 1) return 100
+  const step = 74 / (total - 1) // верх 100% → низ ≈26%
+  return Math.max(18, 100 - k * step)
 }
 
 /** "Отказ" — терминальный статус, не часть основной последовательности воронки. */
@@ -56,7 +58,6 @@ export function FunnelView({ columns, settings, onOpenProfile, onAction }: Funne
   // Делим колонки: основная последовательность воронки vs терминальный статус "Отказ".
   const mainColumns = columns.filter((c) => !isRejected(c))
   const rejectedColumn = columns.find(isRejected)
-  const maxFunnelCount = Math.max(1, ...mainColumns.map((c) => c.count))
 
   const conversionRates = columns.map((col, i) => {
     if (columns[0].count === 0) return 0
@@ -70,9 +71,13 @@ export function FunnelView({ columns, settings, onOpenProfile, onAction }: Funne
       <div className="flex flex-row gap-4">
         <div className="flex-1 bg-card border border-border rounded-xl p-6">
           <h3 className="text-sm font-semibold text-foreground mb-6">Воронка найма</h3>
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col">
             {mainColumns.map((col, i) => {
-              const w = funnelWidth(i, mainColumns.length, col.count, maxFunnelCount)
+              // Трапеция: верх = ширина этой стадии, низ = ширина следующей →
+              // сегменты стыкуются в сплошную сужающуюся воронку.
+              const topW = funnelWidthAt(i, mainColumns.length)
+              const botW = funnelWidthAt(i + 1, mainColumns.length)
+              const clip = `polygon(${(50 - topW / 2).toFixed(2)}% 0%, ${(50 + topW / 2).toFixed(2)}% 0%, ${(50 + botW / 2).toFixed(2)}% 100%, ${(50 - botW / 2).toFixed(2)}% 100%)`
               const prevCount = i > 0 ? mainColumns[i - 1].count : null
               const passPct = prevCount === null
                 ? null
@@ -81,28 +86,28 @@ export function FunnelView({ columns, settings, onOpenProfile, onAction }: Funne
                   : Math.round((col.count / prevCount) * 100)
 
               return (
-                <div key={col.id} className="flex items-center gap-3 group py-0.5">
+                <div key={col.id} className="flex items-stretch gap-3 group">
                   {/* Подпись стадии — слева, фиксированно */}
-                  <div className="w-28 flex-shrink-0 text-right">
+                  <div className="w-28 flex-shrink-0 text-right self-center">
                     <span className="text-xs font-medium text-foreground">{col.title}</span>
                   </div>
 
-                  {/* Полоса — по центру, ширина = конус */}
-                  <div className="flex-1 flex justify-center">
+                  {/* Сегмент-трапеция — по центру, стыкуется со следующим */}
+                  <div className="flex-1">
                     <div
-                      className="h-9 rounded-md flex items-center justify-center px-2 transition-all duration-500 group-hover:brightness-110"
+                      className="h-11 flex items-center justify-center transition-all duration-300 group-hover:brightness-110"
                       style={{
-                        width: `${w}%`,
-                        minWidth: 44,
+                        clipPath: clip,
+                        WebkitClipPath: clip,
                         background: `linear-gradient(135deg, ${col.colorFrom}, ${col.colorTo})`,
                       }}
                     >
-                      <span className="text-white text-xs font-bold">{col.count}</span>
+                      <span className="text-white text-sm font-bold [text-shadow:0_1px_2px_rgba(0,0,0,0.35)]">{col.count}</span>
                     </div>
                   </div>
 
                   {/* Конверсия — справа, фиксированно */}
-                  <div className="w-14 flex-shrink-0">
+                  <div className="w-14 flex-shrink-0 self-center">
                     {passPct === null ? (
                       <div className="text-center">
                         <span className="text-[11px] font-semibold text-primary">100%</span>
