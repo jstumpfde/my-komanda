@@ -145,6 +145,22 @@ interface SynonymsResult {
   synonyms: string[]
 }
 
+/** Дифф из POST .../requirements/actualize (актуализация под изменившуюся вакансию). */
+interface ActualizeDiff {
+  add:            { good: string[]; bad: string[] }
+  maybe_outdated: { good: string[]; bad: string[] }
+}
+
+/** Локальное состояние диалога «Актуализировать» — отмеченность чекбоксов. */
+interface ActualizeSelection {
+  /** Какие из «предлагаем добавить» отмечены (по умолчанию все — добавить). */
+  addGood:      Record<string, boolean>
+  addBad:       Record<string, boolean>
+  /** Какие из «возможно устарело» оставлены (true) — снятые удаляются. */
+  keepGood:     Record<string, boolean>
+  keepBad:      Record<string, boolean>
+}
+
 /** Одна конфликтующая пара из .../portrait/check-conflicts */
 interface ConflictItem {
   good: string
@@ -456,6 +472,147 @@ function SuggestionDialog({
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Отмена</Button>
           <Button onClick={onApply}>Применить</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Диалог «Актуализировать» (аддитивный дифф под изменившуюся вакансию) ────
+
+/**
+ * Показывает дифф от .../requirements/actualize:
+ *   - «Предлагаем добавить» — чекбоксы, по умолчанию ОТМЕЧЕНЫ (добавятся).
+ *   - «Возможно устарело — проверьте» — чекбоксы, по умолчанию ОТМЕЧЕНЫ
+ *     (= оставить). Снять галочку = удалить пункт при применении.
+ * Применение делает MERGE на стороне родителя (existing НЕ затирается).
+ */
+function ActualizeDialog({
+  open, onOpenChange, diff, selection, onSelection, onApply, applying,
+}: {
+  open:         boolean
+  onOpenChange: (v: boolean) => void
+  diff:         ActualizeDiff | null
+  selection:    ActualizeSelection
+  onSelection:  (next: ActualizeSelection) => void
+  onApply:      () => void
+  applying:     boolean
+}) {
+  if (!diff) return null
+  const nothingToAdd =
+    diff.add.good.length === 0 && diff.add.bad.length === 0
+  const nothingOutdated =
+    diff.maybe_outdated.good.length === 0 && diff.maybe_outdated.bad.length === 0
+
+  const checkRow = (
+    text: string,
+    checked: boolean,
+    onToggle: (v: boolean) => void,
+    tone: "good" | "bad",
+  ) => (
+    <label
+      key={text}
+      className={cn(
+        "flex items-start gap-2.5 rounded-md border px-2.5 py-2 cursor-pointer transition-colors",
+        checked
+          ? tone === "good"
+            ? "border-emerald-300 bg-emerald-50/60 dark:bg-emerald-950/20"
+            : "border-red-300 bg-red-50/60 dark:bg-red-950/20"
+          : "border-border bg-muted/30",
+      )}
+    >
+      <Checkbox checked={checked} onCheckedChange={v => onToggle(Boolean(v))} className="mt-0.5" />
+      <span className={cn("flex-1 text-sm min-w-0 break-words", !checked && "text-muted-foreground line-through")}>
+        {text}
+      </span>
+    </label>
+  )
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Wand2 className="w-4 h-4 text-primary" /> Актуализация Портрета под вакансию
+          </DialogTitle>
+          <DialogDescription>
+            Текущие критерии <b>сохраняются</b>. Отметьте, что добавить, и снимите то, что устарело.
+            Ничего лишнего не сотрётся.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-5 py-2">
+          {nothingToAdd && nothingOutdated && (
+            <div className="flex items-center gap-2 rounded-lg border border-green-300 bg-green-50 dark:bg-green-950/20 px-3 py-2.5 text-sm text-green-800 dark:text-green-300">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-green-600" />
+              <span>Портрет уже соответствует вакансии — добавлять и убирать нечего.</span>
+            </div>
+          )}
+
+          {/* ── Предлагаем добавить ── */}
+          {!nothingToAdd && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Plus className="w-4 h-4 text-emerald-600" />
+                <Label className="text-sm font-medium">Предлагаем добавить</Label>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Новое из обновлённого описания. Отмеченные добавятся к текущим (✅ по умолчанию).
+              </p>
+              {diff.add.good.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">В «Подходит»</p>
+                  {diff.add.good.map(t =>
+                    checkRow(t, selection.addGood[t] ?? true,
+                      v => onSelection({ ...selection, addGood: { ...selection.addGood, [t]: v } }), "good"))}
+                </div>
+              )}
+              {diff.add.bad.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-red-700 dark:text-red-400">В «Не подходит»</p>
+                  {diff.add.bad.map(t =>
+                    checkRow(t, selection.addBad[t] ?? true,
+                      v => onSelection({ ...selection, addBad: { ...selection.addBad, [t]: v } }), "bad"))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Возможно устарело ── */}
+          {!nothingOutdated && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600" />
+                <Label className="text-sm font-medium">Возможно устарело — проверьте</Label>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Эти пункты под новое описание выглядят неактуальными. <b>Снимите галочку</b>, чтобы убрать; оставьте — сохранится.
+              </p>
+              {diff.maybe_outdated.good.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">В «Подходит»</p>
+                  {diff.maybe_outdated.good.map(t =>
+                    checkRow(t, selection.keepGood[t] ?? true,
+                      v => onSelection({ ...selection, keepGood: { ...selection.keepGood, [t]: v } }), "good"))}
+                </div>
+              )}
+              {diff.maybe_outdated.bad.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-red-700 dark:text-red-400">В «Не подходит»</p>
+                  {diff.maybe_outdated.bad.map(t =>
+                    checkRow(t, selection.keepBad[t] ?? true,
+                      v => onSelection({ ...selection, keepBad: { ...selection.keepBad, [t]: v } }), "bad"))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={applying}>Отмена</Button>
+          <Button onClick={onApply} disabled={applying || (nothingToAdd && nothingOutdated)}>
+            {applying ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Применяю…</> : "Применить"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -964,6 +1121,14 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
   const [editedSuggestion, setEditedSuggestion] = useState<SuggestionResult | null>(null)
   const [suggestUnavailable, setSuggestUnavailable] = useState(false)
 
+  // AI «Актуализировать» (POST /requirements/actualize → дифф-диалог, MERGE)
+  const [actualizing, setActualizing]       = useState(false)
+  const [actualizeOpen, setActualizeOpen]   = useState(false)
+  const [actualizeDiff, setActualizeDiff]   = useState<ActualizeDiff | null>(null)
+  const [actualizeSel, setActualizeSel]     = useState<ActualizeSelection>({
+    addGood: {}, addBad: {}, keepGood: {}, keepBad: {},
+  })
+
   // Проверка противоречий «Подходит» ↔ «Не подходит»
   const [conflictsChecking, setConflictsChecking]   = useState(false)
   const [conflictsResult, setConflictsResult]       = useState<ConflictItem[] | null>(null)
@@ -1151,6 +1316,106 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
     }
   }
 
+  // ── AI «Актуализировать» (аддитивный дифф под изменившуюся вакансию) ─────────
+  const requestActualize = async () => {
+    if (!spec) return
+    // Текущие тексты «Подходит» / «Не подходит» — отправляем AI для диффа.
+    const currentGood = normalizeNiceToHave(spec.niceToHave).map(n => n.text)
+    const currentBad  = normalizeDealBreakers(spec.dealBreakers).map(d => d.text)
+    setActualizing(true)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/requirements/actualize`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ currentGood, currentBad }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => null) as { error?: string } | null
+        toast.error(err?.error || "Не удалось актуализировать")
+        return
+      }
+      const json = await res.json() as { diff?: ActualizeDiff }
+      if (!json.diff) { toast.error("AI вернул пустой ответ"); return }
+      // Дефолты выбора: «добавить» — всё отмечено; «устарело» — всё оставлено.
+      const addGood:  Record<string, boolean> = {}
+      const addBad:   Record<string, boolean> = {}
+      const keepGood: Record<string, boolean> = {}
+      const keepBad:  Record<string, boolean> = {}
+      json.diff.add.good.forEach(t => { addGood[t] = true })
+      json.diff.add.bad.forEach(t => { addBad[t] = true })
+      json.diff.maybe_outdated.good.forEach(t => { keepGood[t] = true })
+      json.diff.maybe_outdated.bad.forEach(t => { keepBad[t] = true })
+      setActualizeDiff(json.diff)
+      setActualizeSel({ addGood, addBad, keepGood, keepBad })
+      setActualizeOpen(true)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ошибка актуализации")
+    } finally {
+      setActualizing(false)
+    }
+  }
+
+  /**
+   * MERGE: добавляет отмеченные в «Подходит/Не подходит», удаляет снятые
+   * «устаревшие», существующие НЕ затирает. Лимит ≤10 — при переборе
+   * предупреждает (не режет молча). Использует patch(), как applySuggestion.
+   */
+  const applyActualize = () => {
+    if (!actualizeDiff || !spec) return
+
+    // Тексты, помеченные «устарело» и СНЯТЫЕ (keep=false) → к удалению.
+    const removeGood = new Set(
+      actualizeDiff.maybe_outdated.good
+        .filter(t => !(actualizeSel.keepGood[t] ?? true))
+        .map(t => t.trim().toLowerCase()),
+    )
+    const removeBad = new Set(
+      actualizeDiff.maybe_outdated.bad
+        .filter(t => !(actualizeSel.keepBad[t] ?? true))
+        .map(t => t.trim().toLowerCase()),
+    )
+
+    // Текущие пункты минус удаляемые (порядок и важность/жёсткость сохранены).
+    const keptNice = normalizeNiceToHave(spec.niceToHave)
+      .filter(n => !removeGood.has(n.text.trim().toLowerCase()))
+    const keptDeal = normalizeDealBreakers(spec.dealBreakers)
+      .filter(d => !removeBad.has(d.text.trim().toLowerCase()))
+
+    // Отмеченные «добавить» (дедуп против оставшихся — на случай совпадений).
+    const keptNiceKeys = new Set(keptNice.map(n => n.text.trim().toLowerCase()))
+    const keptDealKeys = new Set(keptDeal.map(d => d.text.trim().toLowerCase()))
+    const addNice = actualizeDiff.add.good
+      .filter(t => (actualizeSel.addGood[t] ?? true) && !keptNiceKeys.has(t.trim().toLowerCase()))
+      // Новые — средний вес (как applySuggestion), HR усилит/ослабит вручную.
+      .map(text => ({ text, importance: "important" as NiceImportance }))
+    const addDeal = actualizeDiff.add.bad
+      .filter(t => (actualizeSel.addBad[t] ?? true) && !keptDealKeys.has(t.trim().toLowerCase()))
+      // Новые «не подходит» — мягкими (минус к баллу), как в applySuggestion.
+      .map(text => ({ text, hard: false }))
+
+    const nextNice: NiceToHaveItem[]   = [...keptNice, ...addNice]
+    const nextDeal: DealBreakerItem[]  = [...keptDeal, ...addDeal]
+
+    // Лимит ≤10 — НЕ режем молча: предупреждаем и не применяем переполненную часть.
+    if (nextNice.length > 10 || nextDeal.length > 10) {
+      const over: string[] = []
+      if (nextNice.length > 10) over.push(`«Подходит»: ${nextNice.length}/10`)
+      if (nextDeal.length > 10) over.push(`«Не подходит»: ${nextDeal.length}/10`)
+      toast.error(`Перебор лимита (${over.join(", ")}). Снимите часть добавляемых или уберите устаревшие.`)
+      return
+    }
+
+    patch({ niceToHave: nextNice, dealBreakers: nextDeal })
+    setActualizeOpen(false)
+    const addedCnt   = addNice.length + addDeal.length
+    const removedCnt = removeGood.size + removeBad.size
+    toast.success(
+      addedCnt || removedCnt
+        ? `Актуализировано: +${addedCnt}, −${removedCnt}. Проверьте и сохраните.`
+        : "Изменений не выбрано",
+    )
+  }
+
   // ── Проверка противоречий ──────────────────────────────────────────────────
   const checkConflicts = async (goodOverride?: string[], badOverride?: string[]) => {
     if (!spec) return
@@ -1261,13 +1526,27 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
             Опишите, кого ищете — по этим настройкам AI оценивает каждое резюме. Сначала эталон, затем плюсы и минусы.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-start gap-2 shrink-0">
+          {/* «Актуализировать» — обновить под изменившуюся вакансию БЕЗ затирания
+              текущих критериев (аддитивный дифф). Не путать с «Сгенерировать заново». */}
+          <Button type="button" size="sm" variant="outline" onClick={requestActualize}
+            disabled={actualizing || suggesting}
+            title="Дополнит и подчистит текущие критерии под обновлённую вакансию — ничего не сотрёт">
+            {actualizing
+              ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Анализ…</>
+              : <><Wand2 className="w-4 h-4 mr-1.5" /> Актуализировать</>}
+          </Button>
           {!suggestUnavailable && (
-            <Button type="button" size="sm" onClick={requestSuggestion} disabled={suggesting}>
-              {suggesting
-                ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Анализ…</>
-                : <><Sparkles className="w-4 h-4 mr-1.5" /> Сгенерировать критерии</>}
-            </Button>
+            <div className="flex flex-col items-stretch gap-0.5">
+              <Button type="button" size="sm" onClick={requestSuggestion} disabled={suggesting || actualizing}>
+                {suggesting
+                  ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Анализ…</>
+                  : <><Sparkles className="w-4 h-4 mr-1.5" /> Сгенерировать заново</>}
+              </Button>
+              <span className="text-[10px] text-amber-600 dark:text-amber-400 text-center leading-tight">
+                заменит текущие критерии
+              </span>
+            </div>
           )}
           {source === "legacy" && (
             <Badge variant="outline" className="border-amber-400 text-amber-700 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400">
@@ -1905,6 +2184,17 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
         edited={editedSuggestion}
         onEdited={setEditedSuggestion}
         onApply={applySuggestion}
+      />
+
+      {/* Диалог «Актуализировать» — аддитивный дифф под изменившуюся вакансию */}
+      <ActualizeDialog
+        open={actualizeOpen}
+        onOpenChange={setActualizeOpen}
+        diff={actualizeDiff}
+        selection={actualizeSel}
+        onSelection={setActualizeSel}
+        onApply={applyActualize}
+        applying={false}
       />
     </div>
 
