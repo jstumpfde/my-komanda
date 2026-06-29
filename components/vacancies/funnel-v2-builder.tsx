@@ -17,7 +17,7 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-  GripVertical, Trash2, Plus, Loader2, Target, ExternalLink, ChevronRight,
+  GripVertical, Trash2, Plus, Loader2, Target, ExternalLink, SlidersHorizontal,
   ClipboardList, PlayCircle, ListChecks, ClipboardCheck, Calendar, FileText,
   ShieldCheck, Phone, MessageSquare, CircleCheck, Check, Link2, Route, Repeat, X,
   Maximize2, Minimize2, Eye, AlertTriangle,
@@ -133,8 +133,9 @@ function StageCard({ stage, index, onOpen, onRemove }: {
             {stage.hhStatus && <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">hh: {stage.hhStatus}</span>}
           </div>
         </button>
-        <button onClick={onOpen} className="text-muted-foreground hover:text-foreground p-1" aria-label="Настроить"><ChevronRight className="w-4 h-4" /></button>
-        <button onClick={onRemove} className="text-muted-foreground hover:text-destructive p-1" aria-label="Удалить стадию"><Trash2 className="w-3.5 h-3.5" /></button>
+        <button onClick={onOpen} className="shrink-0 grid place-items-center w-8 h-8 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" aria-label="Настроить стадию"><SlidersHorizontal className="w-4 h-4" /></button>
+        {/* Удаление отделено от «Настроить» (отступ+разделитель) и приглушено, чтобы не промахнуться; подтверждение — в removeStage */}
+        <button onClick={onRemove} className="shrink-0 ml-1 pl-2 border-l border-border/60 text-muted-foreground/40 hover:text-destructive p-1 transition-colors" aria-label="Удалить стадию" title="Удалить стадию"><Trash2 className="w-3.5 h-3.5" /></button>
       </div>
     </div>
   )
@@ -526,7 +527,14 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait }: { vacancyId: stri
 
   const addStage = (action: StageActionType) => { if (!config) return; const st = makeStage(action, `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`); update({ ...config, stages: [...config.stages, st] }); setEditingId(st.id) }
   const changeStage = (s: FunnelV2Stage) => { if (!config) return; update({ ...config, stages: config.stages.map(x => x.id === s.id ? s : x) }) }
-  const removeStage = (id: string) => { if (!config) return; if (editingId === id) setEditingId(null); update({ ...config, stages: config.stages.filter(s => s.id !== id) }) }
+  const removeStage = (id: string) => {
+    if (!config) return
+    const st = config.stages.find(s => s.id === id)
+    // Подтверждение — отмены нет, защищаем от случайного клика
+    if (!confirm(`Удалить стадию «${st?.title?.trim() || "без названия"}»? Действие нельзя отменить.`)) return
+    if (editingId === id) setEditingId(null)
+    update({ ...config, stages: config.stages.filter(s => s.id !== id) })
+  }
   const onDragEnd = (e: DragEndEvent) => { if (!config) return; const { active, over } = e; if (!over || active.id === over.id) return; const from = config.stages.findIndex(s => s.id === active.id); const to = config.stages.findIndex(s => s.id === over.id); if (from < 0 || to < 0) return; update({ ...config, stages: arrayMove(config.stages, from, to) }) }
 
   if (loading) return <div className="flex items-center justify-center py-16 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Загрузка…</div>
