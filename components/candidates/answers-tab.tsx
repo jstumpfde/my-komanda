@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Video as VideoIcon, Mic, Image as ImageIcon, FileText, FileQuestion, Loader2, PictureInPicture2 } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
+import { AiScoreBadge } from "@/components/dashboard/ai-score-badge"
 import { cn } from "@/lib/utils"
 import type { Lesson, Block, Question } from "@/lib/course-types"
 
@@ -762,21 +762,9 @@ export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answers
   // + поразбивка по вопросам из demo_answers_details (если есть).
   const scoreBadge = aiScore != null ? (
     <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground">AI-оценка ответов:</span>
-        <Badge
-          variant="outline"
-          className={cn(
-            "text-sm font-semibold px-2 py-0.5",
-            aiScore >= 70
-              ? "text-emerald-700 border-emerald-300 bg-emerald-50"
-              : aiScore >= 40
-              ? "text-amber-700 border-amber-300 bg-amber-50"
-              : "text-destructive border-destructive/40 bg-destructive/5",
-          )}
-        >
-          {aiScore} / 100
-        </Badge>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs text-muted-foreground">AI-оценка ответов</span>
+        <AiScoreBadge score={aiScore} size="md" />
       </div>
       {Array.isArray(answersDetails) && answersDetails.length > 0 && (
         <div className="space-y-1.5 rounded-lg border border-border bg-muted/30 p-3">

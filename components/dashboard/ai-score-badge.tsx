@@ -4,6 +4,8 @@ import { cn } from "@/lib/utils"
 
 interface AiScoreBadgeProps {
   score?: number | null
+  /** sm — для колонок списка (по умолчанию); md — единый размер для шапок табов карточки. */
+  size?: "sm" | "md"
   className?: string
 }
 
@@ -14,12 +16,13 @@ function getScoreColor(score: number) {
   return "bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-900"
 }
 
-export function AiScoreBadge({ score, className }: AiScoreBadgeProps) {
+export function AiScoreBadge({ score, size = "sm", className }: AiScoreBadgeProps) {
   const has = score != null
   return (
     <span
       className={cn(
-        "inline-flex items-center justify-center rounded-md border px-1.5 h-6 min-w-[2rem] text-xs font-bold",
+        "inline-flex items-center justify-center rounded-md border font-bold",
+        size === "md" ? "px-2.5 h-8 min-w-[2.5rem] text-base" : "px-1.5 h-6 min-w-[2rem] text-xs",
         has ? getScoreColor(score!) : "bg-muted/40 text-muted-foreground/60 border-muted",
         className
       )}

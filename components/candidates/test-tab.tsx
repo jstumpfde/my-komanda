@@ -5,6 +5,7 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { AiScoreBadge } from "@/components/dashboard/ai-score-badge"
 import {
   ClipboardList, Sparkles, ChevronRight, CheckCircle2, XCircle,
   Loader2, FileQuestion, Check, X,
@@ -200,9 +201,7 @@ export function TestTab({ candidateId }: { candidateId?: string }) {
             )}
           </div>
           {sub.aiScore != null ? (
-            <div className={cn("flex items-center gap-1 px-2.5 py-1 rounded-full text-sm font-bold", scoreClasses(sub.aiScore))}>
-              <Sparkles className="w-3.5 h-3.5" /> {sub.aiScore}<span className="opacity-60 font-medium">/100</span>
-            </div>
+            <AiScoreBadge score={sub.aiScore} size="md" />
           ) : data.checkMode === "manual" ? (
             <span className="text-xs text-muted-foreground">Проверка вручную</span>
           ) : (

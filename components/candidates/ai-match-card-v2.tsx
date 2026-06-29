@@ -7,6 +7,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { AiScoreBadge } from "@/components/dashboard/ai-score-badge"
 import { ChevronDown, ChevronUp, CheckCircle2, XCircle, AlertTriangle, MessageSquare } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { CandidateScoreV2 } from "@/lib/db/schema"
@@ -59,9 +60,9 @@ export function AiMatchCardV2({ details, scoreV1, scoreV2 }: AiMatchCardV2Props)
           <Badge variant="outline" className={cn("text-xs", decision.cls)}>
             {decision.label}
           </Badge>
-          <div className="flex items-baseline gap-2">
+          <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">AI Match</span>
-            <span className={cn("text-3xl font-bold", scoreColor(details.score))}>{details.score}</span>
+            <AiScoreBadge score={details.score} size="md" />
           </div>
         </div>
       </div>
