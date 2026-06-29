@@ -685,7 +685,7 @@ function TaskBlock({
   )
 }
 
-function ButtonBlock({ block, onNext, nextDisabled }: { block: Block; onNext?: () => void; nextDisabled?: boolean }) {
+function ButtonBlock({ block, onNext, nextDisabled, token, isPreviewMode }: { block: Block; onNext?: () => void; nextDisabled?: boolean; token?: string; isPreviewMode?: boolean }) {
   const cls = `inline-flex items-center gap-2 rounded-lg px-6 py-3 font-medium transition-colors disabled:opacity-50 ${
     block.buttonVariant === "outline"
       ? "border border-gray-300 text-gray-700 hover:bg-gray-50"
@@ -705,10 +705,29 @@ function ButtonBlock({ block, onNext, nextDisabled }: { block: Block; onNext?: (
       {block.buttonIconAfter ? <span>{block.buttonIconAfter}</span> : null}
     </>
   )
+
+  // Клик по кнопке-ссылке: трекинг через sendBeacon (keepalive — обычный fetch
+  // не успевает при уходе на внешний сайт), ЗАТЕМ открываем URL. В режиме
+  // предпросмотра (HR/директор) ничего не трекаем. Открытие — через прямой
+  // <a> (target=_blank), поэтому здесь только посылаем маяк, навигацию не рвём.
+  const onUrlClick = () => {
+    if (isPreviewMode || !token) return
+    try {
+      const payload = JSON.stringify({ blockId: block.id })
+      const url = `/api/public/demo/${token}/cta-click`
+      if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+        navigator.sendBeacon(url, new Blob([payload], { type: "application/json" }))
+      } else {
+        // Fallback: keepalive-fetch (старые браузеры без sendBeacon).
+        void fetch(url, { method: "POST", body: payload, headers: { "Content-Type": "application/json" }, keepalive: true }).catch(() => {})
+      }
+    } catch { /* трекинг не должен мешать переходу */ }
+  }
+
   return (
     <div className="flex justify-center">
       {isUrl ? (
-        <a href={block.buttonUrl} target="_blank" rel="noopener noreferrer" className={cls} style={style}>
+        <a href={block.buttonUrl} target="_blank" rel="noopener noreferrer" className={cls} style={style} onClick={onUrlClick}>
           {label}
         </a>
       ) : (
@@ -1566,7 +1585,7 @@ export default function DemoPage() {
                 {block.type === "info" && <InfoBlock block={block} data={data} />}
                 {block.type === "video" && <VideoBlock block={block} />}
                 {block.type === "image" && <ImageBlock block={block} />}
-                {block.type === "button" && <ButtonBlock block={block} onNext={handleNext} nextDisabled={hasRequiredUnanswered || saving || isAnyMediaUploading} />}
+                {block.type === "button" && <ButtonBlock block={block} onNext={handleNext} nextDisabled={hasRequiredUnanswered || saving || isAnyMediaUploading} token={token} isPreviewMode={isPreviewMode} />}
                 {block.type === "task" && (
                   <TaskBlock
                     block={block}

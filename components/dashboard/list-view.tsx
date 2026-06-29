@@ -478,6 +478,7 @@ export function ListView({
               hasVideoVizitka={candidate.demoProgressJson?.hasVideoVizitka}
               stage={candidate.stage}
               completedByAnswers={candidate.demoCompletedByAnswers}
+              demoProgress={candidate.demoProgressJson}
             />
           </div>
         ),

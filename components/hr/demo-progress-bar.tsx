@@ -1,6 +1,6 @@
 "use client"
 
-import { Video } from "lucide-react"
+import { Video, Mic, ArrowUpRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 /** Структура demo_progress_json кандидата (минимум, необходимый компоненту). */
@@ -9,6 +9,46 @@ export interface DemoProgressData {
   totalBlocks?: number
   completedAt?: string | null
   hasVideoVizitka?: boolean
+  /** Кандидат записал аудио-ответ (media-блок с mediaType="audio"). */
+  hasAudioAnswer?: boolean
+  /** Клики по кнопкам-ссылкам (button-блок buttonTarget="url"). */
+  ctaClicks?: Array<{ blockId?: string; at?: string }>
+}
+
+/**
+ * Компактная строка значков справа в ячейке «Демо»: 🎥 видео-визитка,
+ * 🎙️ аудио-ответ, ↗︎ переход по кнопке-ссылке. Горит (цвет) = кандидат
+ * сделал шаг. Значок рендерится только когда шаг сделан — по
+ * demo_progress_json мы достоверно знаем только факт «сделано», поэтому
+ * приглушённые «шаг есть, но не сделан» не выдумываем (иначе врали бы).
+ * Источники: hasVideoVizitka / hasAudioAnswer считаются сервером в
+ * /api/public/demo/[token]/answer, ctaClicks — в .../cta-click.
+ */
+export function DemoBadges({ dp, className }: { dp: DemoProgressData | null | undefined; className?: string }) {
+  if (!dp) return null
+  const hasVideo = dp.hasVideoVizitka === true
+  const hasAudio = dp.hasAudioAnswer === true
+  const hasCta = Array.isArray(dp.ctaClicks) && dp.ctaClicks.length > 0
+  if (!hasVideo && !hasAudio && !hasCta) return null
+  return (
+    <span className={cn("inline-flex items-center gap-0.5", className)}>
+      {hasVideo && (
+        <Video className="w-3 h-3 text-indigo-500" aria-label="Видео-визитка записана">
+          <title>Видео-визитка записана</title>
+        </Video>
+      )}
+      {hasAudio && (
+        <Mic className="w-3 h-3 text-violet-500" aria-label="Аудио-ответ записан">
+          <title>Аудио-ответ записан</title>
+        </Mic>
+      )}
+      {hasCta && (
+        <ArrowUpRight className="w-3 h-3 text-emerald-500" aria-label="Перешёл по кнопке-ссылке">
+          <title>Перешёл по кнопке-ссылке</title>
+        </ArrowUpRight>
+      )}
+    </span>
+  )
 }
 
 export interface DemoProgressInfo {
@@ -100,6 +140,11 @@ interface DemoProgressBarProps {
    */
   completedByAnswers?: boolean
   /**
+   * Полный demo_progress_json кандидата — для строки значков (🎥/🎙️/↗︎)
+   * справа от числа в ячейке «Демо». Если не передан — значки не рисуем.
+   */
+  demoProgress?: DemoProgressData | null
+  /**
    * "list"   — узкая шкала ~80px справа подпись "{N}%" / "Не начато" / "Завершено".
    *             Цвета: пусто — серая, 1-99% — синяя, 100% — зелёная.
    * "kanban" — шкала во всю ширину, подпись "{c}/{t} · {pct}%" под шкалой.
@@ -116,6 +161,7 @@ export function DemoProgressBar({
   hasVideoVizitka,
   stage,
   completedByAnswers,
+  demoProgress,
   variant = "list",
   className,
 }: DemoProgressBarProps) {
@@ -158,11 +204,11 @@ export function DemoProgressBar({
             style={{ width: hasData ? `${effPct}%` : "0%" }}
           />
         </div>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          {label}
-          {hasVideoVizitka && (
-            <Video className="inline w-3 h-3 ml-1 text-muted-foreground" aria-label="Есть видео-визитка" />
-          )}
+        <p className="text-xs text-muted-foreground mt-0.5 inline-flex items-center gap-1">
+          <span>{label}</span>
+          {demoProgress
+            ? <DemoBadges dp={demoProgress} />
+            : (hasVideoVizitka && <Video className="w-3 h-3 text-indigo-500" aria-label="Есть видео-визитка" />)}
         </p>
       </div>
     )
@@ -228,11 +274,13 @@ export function DemoProgressBar({
 
   return (
     <div className={cn("flex flex-col items-center gap-1 w-full max-w-[105px] mx-auto", className)}>
-      <span className={cn("text-sm tabular-nums whitespace-nowrap font-medium inline-flex items-center", labelClass)}>
-        {label}
-        {hasVideoVizitka && (
-          <Video className="inline w-3 h-3 ml-1 text-muted-foreground" aria-label="Есть видео-визитка" />
-        )}
+      {/* Число слева, значки справа в той же строке (Юрий) — fallback на
+          hasVideoVizitka, если demoProgress не передан (legacy-вызовы). */}
+      <span className={cn("text-sm tabular-nums whitespace-nowrap font-medium inline-flex items-center justify-between gap-1 w-full", labelClass)}>
+        <span>{label}</span>
+        {demoProgress
+          ? <DemoBadges dp={demoProgress} />
+          : (hasVideoVizitka && <Video className="w-3 h-3 text-indigo-500" aria-label="Есть видео-визитка" />)}
       </span>
       {hasFraction && effTot > 0 ? (
         // Сегменты-«шаги»: effTot делений, первые cur — залиты цветом стадии,

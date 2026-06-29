@@ -1180,6 +1180,7 @@ export default function VacancyPage() {
     demoOpened: number; rejected: number;
     hhTotal: number; hhNew: number; inProgress: number;
     anketaFilled: number; demoAnswered: number; hired: number;
+    ctaClicked: number;
     aiTokensIn: number; aiTokensOut: number;
   } | null>(null)
   const loadHeaderStats = useCallback(async () => {
@@ -1194,6 +1195,7 @@ export default function VacancyPage() {
         total: number; hhTotal: number; hhNew: number;
         inProgress: number; rejected: number; hired: number;
         demoOpened: number; anketaFilled: number; demoAnswered: number;
+        ctaClicked: number;
         aiTokensIn: number; aiTokensOut: number;
       }
       const cand = candRes.ok
@@ -1210,6 +1212,7 @@ export default function VacancyPage() {
         inProgress:   stats.inProgress,
         anketaFilled: stats.anketaFilled,
         demoAnswered: stats.demoAnswered,
+        ctaClicked:   stats.ctaClicked ?? 0,
         hired:        stats.hired,
         aiTokensIn:   stats.aiTokensIn  ?? 0,
         aiTokensOut:  stats.aiTokensOut ?? 0,
@@ -2563,6 +2566,17 @@ export default function VacancyPage() {
                       </TooltipTrigger>
                       <TooltipContent>Кандидаты, ответившие на вопросы анкеты (посчитан балл «AI-ан» по ответам)</TooltipContent>
                     </UITooltip>
+                    {(headerStats?.ctaClicked ?? 0) > 0 && (
+                      <>
+                        <span>·</span>
+                        <UITooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.ctaClicked}</span> перешли по ссылке</span>
+                          </TooltipTrigger>
+                          <TooltipContent>Кандидаты, кликнувшие по кнопке-ссылке в демо (Telegram-канал / сайт)</TooltipContent>
+                        </UITooltip>
+                      </>
+                    )}
                     <span>·</span>
                     <UITooltip>
                       <TooltipTrigger asChild>

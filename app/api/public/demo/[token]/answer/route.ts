@@ -237,6 +237,14 @@ export async function POST(
         typeof (a.answer as any).url === "string" &&
         (a.answer as any).url.length > 0
       )
+      // hasAudioAnswer — аналогично, но для media-ответов типа audio (значок 🎙️
+      // в ячейке «Демо»). Считаем сервером, чтобы HR-таблица читала готовый флаг.
+      const hasAudioAnswer = existingAnswers.some((a: any) =>
+        a?.answer && typeof a.answer === "object" &&
+        (a.answer as any).mediaType === "audio" &&
+        typeof (a.answer as any).url === "string" &&
+        (a.answer as any).url.length > 0
+      )
 
       // Сервер сам считает completedCount по итоговым blocks (исключая __complete__).
       const completedCount = updatedBlocks.filter(
@@ -253,6 +261,7 @@ export async function POST(
         totalBlocks: totalBlocksFromClient ?? prevProgress.totalBlocks ?? 0,
         currentLesson: currentLesson ?? prevProgress.currentLesson ?? 0,
         hasVideoVizitka,
+        hasAudioAnswer,
         completedAt: isComplete ? now : (prevProgress.completedAt ?? null),
         lastUpdated: now,
       }

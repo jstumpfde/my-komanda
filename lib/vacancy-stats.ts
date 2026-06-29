@@ -29,6 +29,9 @@ export interface VacancyStats {
   anketaFilled:   number
   // Кандидаты, ответившие на вопросы демо (demo_answers_score посчитан).
   demoAnswered:   number
+  // Кандидаты, кликнувшие по кнопке-ссылке в демо (demo_progress_json.ctaClicks
+  // непустой). 0 — если в демо нет кнопки-ссылки или никто не переходил.
+  ctaClicked:     number
   // Детализация по стадиям (slug → count) — для аналитики/воронки.
   byStage:        Record<string, number>
   // Конверсии. Все в процентах [0..100], округлены до 1 знака.
@@ -104,6 +107,16 @@ export async function getVacancyStats(vacancyId: string): Promise<VacancyStats> 
     ))
   const demoAnswered = demoAnsweredRow?.c ?? 0
 
+  // Перешли по кнопке-ссылке — у кого demo_progress_json.ctaClicks непустой.
+  const [ctaClickedRow] = await db
+    .select({ c: sql<number>`count(*)::int` })
+    .from(candidates)
+    .where(and(
+      eq(candidates.vacancyId, vacancyId),
+      sql`jsonb_array_length(COALESCE(${candidates.demoProgressJson} -> 'ctaClicks', '[]'::jsonb)) > 0`,
+    ))
+  const ctaClicked = ctaClickedRow?.c ?? 0
+
   // hh.ru данные — из hh_responses (кеш, обновляется через /api/cron/hh-import).
   let hhTotal = 0
   let hhNew   = 0
@@ -143,6 +156,7 @@ export async function getVacancyStats(vacancyId: string): Promise<VacancyStats> 
   return {
     hhTotal, hhNew, hhLastSyncAt,
     total, inProgress, rejected, hired, demoOpened, anketaFilled, demoAnswered,
+    ctaClicked,
     byStage,
     conversions: {
       demoOpenRate:   pct(demoOpened, total),
@@ -189,6 +203,21 @@ export async function getVacancyStatsBulk(
   const demoAnsweredByVacancy = new Map<string, number>()
   for (const r of demoAnsweredRows) demoAnsweredByVacancy.set(r.vacancyId, r.cnt)
 
+  // Перешли по кнопке-ссылке — отдельный count по вакансиям.
+  const ctaClickedRows = await db
+    .select({
+      vacancyId: candidates.vacancyId,
+      cnt:       sql<number>`count(*)::int`,
+    })
+    .from(candidates)
+    .where(and(
+      inArray(candidates.vacancyId, vacancyIds),
+      sql`jsonb_array_length(COALESCE(${candidates.demoProgressJson} -> 'ctaClicks', '[]'::jsonb)) > 0`,
+    ))
+    .groupBy(candidates.vacancyId)
+  const ctaClickedByVacancy = new Map<string, number>()
+  for (const r of ctaClickedRows) ctaClickedByVacancy.set(r.vacancyId, r.cnt)
+
   // hh-stats fetched per-vacancy on demand. Bulk-версия hh не делает,
   // чтобы не таскать все hh_responses в одном запросе. Возвращаем
   // hh-блок нулями (если caller хочет — отдельно дёрнет getVacancyStats
@@ -214,6 +243,7 @@ export async function getVacancyStatsBulk(
     stats.demoOpened   = sumByGroup(DEMO_OPENED_STAGE_SLUGS)
     stats.anketaFilled = sumByGroup(ANKETA_FILLED_STAGE_SLUGS)
     stats.demoAnswered = demoAnsweredByVacancy.get(id) ?? 0
+    stats.ctaClicked   = ctaClickedByVacancy.get(id) ?? 0
     stats.conversions = {
       demoOpenRate:   pct(stats.demoOpened, stats.total),
       anketaFillRate: pct(stats.anketaFilled, stats.demoOpened),
@@ -230,7 +260,7 @@ function emptyStats(): VacancyStats {
   return {
     hhTotal: 0, hhNew: 0, hhLastSyncAt: null,
     total: 0, inProgress: 0, rejected: 0, hired: 0,
-    demoOpened: 0, anketaFilled: 0, demoAnswered: 0,
+    demoOpened: 0, anketaFilled: 0, demoAnswered: 0, ctaClicked: 0,
     byStage,
     conversions: { demoOpenRate: 0, anketaFillRate: 0, hiredRate: 0 },
     aiTokensIn: 0, aiTokensOut: 0,
