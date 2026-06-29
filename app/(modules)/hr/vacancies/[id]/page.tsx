@@ -3015,7 +3015,8 @@ export default function VacancyPage() {
                 // Разбиваем: на lg+ все 10 в строке; на <lg первые 5 видны, 6-10 в «Ещё»
                 // Если активный пункт попал в «скрытые» — добавляем его перед «Ещё» (на мобильных)
                 // «Воронка v2» (beta) видна всем пользователям (Юрий 26.06).
-                const subTabs = settingsSubTabs
+                // «Воронка» (старый funnel-builder) — только платформенному администратору.
+                const subTabs = settingsSubTabs.filter(s => isPlatformAdmin || s.section !== "funnel-builder")
                 const VISIBLE_COUNT_SM = 5
                 const visibleTabs = subTabs.slice(0, VISIBLE_COUNT_SM)
                 const overflowTabs = subTabs.slice(VISIBLE_COUNT_SM)
@@ -3211,11 +3212,13 @@ export default function VacancyPage() {
                   vacancyTitle={vacancyTitle}
                   funnelV2RuntimeEnabled={apiVacancy?.funnelV2RuntimeEnabled === true}
                   onNavigateNext={() => {
-                    // Далее → следующий этап после «Контент» = «Воронка» (section funnel-builder).
+                    // Далее → следующий этап после «Контент»: для платформенного
+                    // администратора — «Воронка» (funnel-builder), для остальных — «Воронка v2».
+                    const nextSection = isPlatformAdmin ? "funnel-builder" : "funnel-v2"
                     setActiveTab("settings")
-                    setSettingsSection("funnel-builder")
+                    setSettingsSection(nextSection)
                     const sp = new URLSearchParams(window.location.search)
-                    sp.set("tab", "settings"); sp.set("section", "funnel-builder")
+                    sp.set("tab", "settings"); sp.set("section", nextSection)
                     router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
                     window.scrollTo({ top: 0, behavior: "smooth" })
                   }}
@@ -3539,7 +3542,9 @@ export default function VacancyPage() {
                     { value: "integrations"   as const, label: "Интеграции",  icon: Settings },
                     // Скрыты (контент доступен по прямой ?section=, настройки — внутри блоков «Воронки»):
                     // funnel (старые стадии), messages, followup, aichatbot — покрыты блоками Конструктора.
-                  ] satisfies { value: VacancyTabKey; label: string; icon: typeof Globe }[]).map((s) => (
+                  ] satisfies { value: VacancyTabKey; label: string; icon: typeof Globe }[])
+                  .filter(s => isPlatformAdmin || s.value !== "funnel-builder")
+                  .map((s) => (
                     <SettingsSubNavButton
                       key={s.value}
                       tab={s.value}
@@ -4118,8 +4123,8 @@ export default function VacancyPage() {
                 </div>
                 )}
 
-                {/* ───────── ТАБ «Конструктор воронки [Beta]» ───────── */}
-                {settingsSection === "funnel-builder" && (
+                {/* ───────── ТАБ «Конструктор воронки [Beta]» — только для платформенного администратора ───────── */}
+                {settingsSection === "funnel-builder" && isPlatformAdmin && (
                 <div className="space-y-6 max-w-3xl">
                   <FunnelBuilder vacancyId={id} />
                 </div>
