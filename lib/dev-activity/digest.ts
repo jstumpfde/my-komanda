@@ -1,10 +1,10 @@
-// Ежедневная выжимка dev-активности в Telegram.
+// Выжимка dev-активности в Telegram.
 //
-// Шлётся раз в сутки после порога (20:00 МСК) из крона /api/cron/dev-activity.
-// Защита от повторов — запись в cron_runs (cronName 'dev-activity-digest' за
-// сегодня): если уже слали сегодня — пропускаем. Бот и чат — из env
-// (TELEGRAM_DEV_ACTIVITY_BOT_TOKEN / TELEGRAM_DEV_ACTIVITY_CHAT_ID); если не
-// заданы — тихо ничего не делаем.
+// Шлётся каждые 2 часа с 08:00 до 20:00 МСК (08,10,…,20 — 7 раз/день) из крона
+// /api/cron/dev-activity (висит на */15). Защита от повторов — запись в cron_runs
+// (cronName 'dev-activity-digest'): один раз в текущем 2-часовом слоте. Бот и чат
+// — из env (TELEGRAM_DEV_ACTIVITY_BOT_TOKEN / TELEGRAM_DEV_ACTIVITY_CHAT_ID);
+// если не заданы — тихо ничего не делаем.
 
 import { and, eq, gte } from "drizzle-orm"
 import { db } from "@/lib/db"
@@ -13,7 +13,7 @@ import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { getAllSeries, type DevActivitySeries } from "./store"
 
 const DIGEST_CRON = "dev-activity-digest"
-const SEND_AFTER_MSK_HOUR = 20          // не слать раньше 20:00 МСК
+const SEND_HOURS = [8, 10, 12, 14, 16, 18, 20]   // каждые 2 часа 08:00–20:00 МСК
 const DAILY_NORM_HOURS = 8
 const WEEKLY_NORM_HOURS = 40
 const UNDER_RATIO = 0.7, OVER_RATIO = 1.3
@@ -96,13 +96,15 @@ export async function maybeSendDailyDigest(): Promise<{ sent: boolean; reason?: 
     if (!process.env.TELEGRAM_DEV_ACTIVITY_BOT_TOKEN || !process.env.TELEGRAM_DEV_ACTIVITY_CHAT_ID) {
       return { sent: false, reason: "no telegram env" }
     }
-    if (mskHour() < SEND_AFTER_MSK_HOUR) return { sent: false, reason: "too early" }
+    const hour = mskHour()
+    if (!SEND_HOURS.includes(hour)) return { sent: false, reason: "not a send slot" }
 
     const dayStr = mskDayStr()
-    const cutoff = new Date(`${dayStr}T00:00:00+03:00`)
+    // Гард: один раз в текущем 2-часовом слоте — от начала текущего часа МСК.
+    const slotStart = new Date(`${dayStr}T${String(hour).padStart(2, "0")}:00:00+03:00`)
     const [already] = await db.select({ id: cronRuns.id }).from(cronRuns)
-      .where(and(eq(cronRuns.cronName, DIGEST_CRON), gte(cronRuns.startedAt, cutoff))).limit(1)
-    if (already) return { sent: false, reason: "already sent today" }
+      .where(and(eq(cronRuns.cronName, DIGEST_CRON), gte(cronRuns.startedAt, slotStart))).limit(1)
+    if (already) return { sent: false, reason: "already sent this slot" }
 
     const run = await startCronRun(DIGEST_CRON).catch(() => null)
     const series = await getAllSeries()
