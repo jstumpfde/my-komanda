@@ -1760,25 +1760,27 @@ export default function DemoPage() {
                   Назад
                 </Button>
               )}
-              <Button
-                onClick={handleNext}
-                disabled={hasRequiredUnanswered || saving || isAnyMediaUploading}
-                title={isAnyMediaUploading ? "Дождитесь окончания загрузки видео" : undefined}
-                className="flex-1 h-12 text-base font-medium"
-                style={{ backgroundColor: navBtnColor, borderColor: navBtnColor }}
-              >
-                {saving || isAnyMediaUploading ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : currentIndex === totalLessons - 1 ? (
-                  // Заданное HR название приоритетно и на последней странице
-                  data.postDemoSettings?.navButtonText || "Завершить"
-                ) : (
-                  <>
-                    {data.postDemoSettings?.navButtonText || "Далее"}
-                    <ChevronRight className="ml-1 h-5 w-5" />
-                  </>
-                )}
-              </Button>
+              {/* На последней странице системной кнопки «вперёд» нет (дальше
+                  страниц нет) — остаётся только «Назад». Завершение демо — через
+                  кнопку в контенте последнего урока (решение Юрия 30.06). */}
+              {currentIndex < totalLessons - 1 && (
+                <Button
+                  onClick={handleNext}
+                  disabled={hasRequiredUnanswered || saving || isAnyMediaUploading}
+                  title={isAnyMediaUploading ? "Дождитесь окончания загрузки видео" : undefined}
+                  className="flex-1 h-12 text-base font-medium"
+                  style={{ backgroundColor: navBtnColor, borderColor: navBtnColor }}
+                >
+                  {saving || isAnyMediaUploading ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <>
+                      {data.postDemoSettings?.navButtonText || "Далее"}
+                      <ChevronRight className="ml-1 h-5 w-5" />
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           </div>
         )

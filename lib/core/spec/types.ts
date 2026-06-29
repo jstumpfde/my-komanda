@@ -317,7 +317,7 @@ export const DEFAULT_REJECT_LETTER =
  * в { text, hard: true } через normalizeMustHave().
  */
 export const MustHaveItemSchema = z.object({
-  text: z.string().min(1).max(200),
+  text: z.string().min(1).max(1000),
   hard: z.boolean().default(true),
 })
 export type MustHaveItem = z.infer<typeof MustHaveItemSchema>
@@ -370,7 +370,7 @@ export const NiceImportanceSchema = z.enum(["nice", "important", "very"])
 export type NiceImportance = z.infer<typeof NiceImportanceSchema>
 
 export const NiceToHaveItemSchema = z.object({
-  text:       z.string().min(1).max(200),
+  text:       z.string().min(1).max(1000),
   importance: NiceImportanceSchema.default("nice"),
 })
 export type NiceToHaveItem = z.infer<typeof NiceToHaveItemSchema>
@@ -415,7 +415,7 @@ export function niceToHaveTexts(items: ReadonlyArray<NiceToHaveEntry> | null | u
  * в { text, hard: true } — поведение прежнее.
  */
 export const DealBreakerItemSchema = z.object({
-  text: z.string().min(1).max(200),
+  text: z.string().min(1).max(1000),
   hard: z.boolean().default(true),
 })
 export type DealBreakerItem = z.infer<typeof DealBreakerItemSchema>
@@ -470,14 +470,14 @@ export const CandidateSpecSchema = z.object({
    * обратную совместимость; для legacy-потребителей нормализуйте через
    * mustHaveTexts()/normalizeMustHave().
    */
-  mustHave:      z.array(z.union([z.string().min(1).max(200), MustHaveItemSchema])).max(10).default([]),
+  mustHave:      z.array(z.union([z.string().min(1).max(1000), MustHaveItemSchema])).max(10).default([]),
   /**
    * 🟢 «Подходит» — пункты, что повышают балл, но не дисквалифицируют (до 10).
    * Формат: строка (legacy) ИЛИ { text, importance } (важность на пункте,
    * перестройка 21.06). Нормализуйте через niceToHaveTexts()/normalizeNiceToHave().
    * Соответствует requirementsJson.nice_to_have.
    */
-  niceToHave:    z.array(z.union([z.string().min(1).max(200), NiceToHaveItemSchema])).max(10).default([]),
+  niceToHave:    z.array(z.union([z.string().min(1).max(1000), NiceToHaveItemSchema])).max(10).default([]),
   /**
    * 🔴 «Не подходит по смыслу» — дисквалификаторы (до 10).
    * Формат: строка (legacy = всегда стоп-фактор) ИЛИ { text, hard }
@@ -485,7 +485,7 @@ export const CandidateSpecSchema = z.object({
    * Нормализуйте через dealBreakerTexts()/normalizeDealBreakers().
    * Соответствует requirementsJson.deal_breakers.
    */
-  dealBreakers:  z.array(z.union([z.string().min(1).max(200), DealBreakerItemSchema])).max(10).default([]),
+  dealBreakers:  z.array(z.union([z.string().min(1).max(1000), DealBreakerItemSchema])).max(10).default([]),
   /**
    * Взвешенные критерии для v2-скоринга (9 осей Σ=100).
    * Соответствует requirementsJson.scoring_weights.

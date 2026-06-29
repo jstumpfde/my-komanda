@@ -259,7 +259,7 @@ function ListEditor({
           onChange={e => setDraft(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); add() } }}
           placeholder={ph}
-          maxLength={200}
+          maxLength={1000}
           disabled={items.length >= maxItems}
           className="h-9"
         />
@@ -365,7 +365,7 @@ function MustHaveEditor({
           onChange={e => setDraft(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); add() } }}
           placeholder={ph}
-          maxLength={200}
+          maxLength={1000}
           disabled={items.length >= maxItems}
           className="h-9"
         />
@@ -622,13 +622,14 @@ function ActualizeDialog({
 // ─── Блок синонимов под критерием ────────────────────────────────────────────
 
 function SynonymBlock({
-  text, side, vacancyId, onAdd, onAddMany,
+  text, side, vacancyId, onAdd, onAddMany, onRemove,
 }: {
   text:       string
   side:       "good" | "bad"
   vacancyId:  string
   onAdd:      (synonym: string) => void
   onAddMany?: (synonyms: string[]) => number
+  onRemove?:  (synonym: string) => void
 }) {
   const [state, setState] = useState<SynonymState>({ loading: false, synonyms: [], open: false })
   const [customDraft, setCustomDraft] = useState("")
@@ -659,6 +660,11 @@ function SynonymBlock({
   const addOne = (syn: string) => {
     onAdd(syn)
     toast.success(`Добавлено: ${syn}`)
+  }
+
+  const removeOne = (syn: string) => {
+    onRemove?.(syn)
+    toast.success(`Убрано: ${syn}`)
   }
 
   const addAll = () => {
@@ -706,16 +712,30 @@ function SynonymBlock({
             </button>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {state.synonyms.map((syn, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => addOne(syn)}
-                className="text-xs px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
-              >
-                {syn}
-              </button>
-            ))}
+            {(() => {
+              // Что уже добавлено в критерий (для серого вида + тоггла удаления)
+              const added = new Set(text.split(",").map(s => s.trim().toLowerCase()).filter(Boolean))
+              return state.synonyms.map((syn, i) => {
+                const isAdded = added.has(syn.trim().toLowerCase())
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => isAdded ? removeOne(syn) : addOne(syn)}
+                    title={isAdded ? "Добавлено — нажмите, чтобы убрать" : "Нажмите, чтобы добавить"}
+                    className={cn(
+                      "inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border transition-colors",
+                      isAdded
+                        ? "bg-muted text-muted-foreground/60 border-border hover:text-muted-foreground hover:bg-muted-foreground/10"
+                        : "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/50",
+                    )}
+                  >
+                    {isAdded && <Check className="w-3 h-3 shrink-0" />}
+                    {syn}
+                  </button>
+                )
+              })
+            })()}
           </div>
           <div className="flex gap-1.5">
             <Input
@@ -901,6 +921,7 @@ function GoodEditor({
               vacancyId={vacancyId}
               onAdd={syn => addSynonymToRow(i, syn)}
               onAddMany={syns => addSynonymsToRow(i, syns)}
+              onRemove={syn => removeSynonym(i, syn)}
             />
           </div>
         ))}
@@ -908,7 +929,7 @@ function GoodEditor({
       <div className="flex gap-2">
         <Input value={draft} onChange={e => setDraft(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); add() } }}
-          placeholder={ph} maxLength={200} disabled={rows.length >= 10} className="h-9" />
+          placeholder={ph} maxLength={1000} disabled={rows.length >= 10} className="h-9" />
         <Button type="button" size="icon" variant="outline" onClick={add}
           disabled={rows.length >= 10 || !draft.trim()}>
           <Plus className="w-4 h-4" />
@@ -1013,6 +1034,9 @@ function BadEditor({
               vacancyId={vacancyId}
               onAdd={syn => addSynonymToRow(i, syn)}
               onAddMany={syns => addSynonymsToRow(i, syns)}
+              onRemove={syn => onChange(rows.map((rr, idx) => idx === i
+                ? { ...rr, text: rr.text.split(",").map(s => s.trim()).filter(Boolean).filter(p => p !== syn).join(", ") }
+                : rr))}
             />
           </div>
         ))}
@@ -1020,7 +1044,7 @@ function BadEditor({
       <div className="flex gap-2">
         <Input value={draft} onChange={e => setDraft(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); add() } }}
-          placeholder={ph} maxLength={200} disabled={rows.length >= 10} className="h-9" />
+          placeholder={ph} maxLength={1000} disabled={rows.length >= 10} className="h-9" />
         <Button type="button" size="icon" variant="outline" onClick={add}
           disabled={rows.length >= 10 || !draft.trim()}>
           <Plus className="w-4 h-4" />
@@ -1526,7 +1550,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
             Опишите, кого ищете — по этим настройкам AI оценивает каждое резюме. Сначала эталон, затем плюсы и минусы.
           </p>
         </div>
-        <div className="flex flex-wrap items-start gap-2 shrink-0">
+        <div className="flex flex-wrap items-start justify-end gap-2 grow">
           {/* «Актуализировать» — обновить под изменившуюся вакансию БЕЗ затирания
               текущих критериев (аддитивный дифф). Не путать с «Сгенерировать заново». */}
           <Button type="button" size="sm" variant="outline" onClick={requestActualize}
@@ -1575,8 +1599,8 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
           <Button
             type="button"
             size="sm"
-            variant="outline"
             disabled={isSaving}
+            className="ml-auto"
             onClick={async () => {
               setIsSaving(true)
               try { await save() } finally { setIsSaving(false) }
