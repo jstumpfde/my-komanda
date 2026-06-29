@@ -1279,6 +1279,19 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
               Сохранённый Spec
             </Badge>
           )}
+          {/* «Проверить на противоречия» — в ряд с верхними кнопками, амбер-цвет (отличается от синей/нейтральной) */}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => checkConflicts()}
+            disabled={conflictsChecking}
+            className="border-amber-400 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+          >
+            {conflictsChecking
+              ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Проверяю…</>
+              : <><AlertTriangle className="w-4 h-4 mr-1.5" /> Проверить на противоречия</>}
+          </Button>
           {/* Кнопка «Сохранить» в шапке — зеркалит sticky-бар для удобства */}
           <Button
             type="button"
@@ -1364,21 +1377,6 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
           )}
         </div>
       )}
-      <div className="flex justify-end">
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => checkConflicts()}
-          disabled={conflictsChecking}
-          className="text-xs h-7"
-        >
-          {conflictsChecking
-            ? <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> Проверяю…</>
-            : <><AlertTriangle className="w-3 h-3 mr-1.5" /> Проверить на противоречия</>}
-        </Button>
-      </div>
-
       {/* Пояснение про бота */}
       <p className="text-xs text-muted-foreground -mt-2">
         Если бот включён — спорное он уточнит у кандидата и в «Подходит», и в «Не подходит», а не отрежет сразу.
