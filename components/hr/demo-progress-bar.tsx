@@ -271,12 +271,18 @@ export function DemoProgressBar({
       ? Math.min(100, Math.round((cur / tot) * 100))
       : (pct ?? 0)
   const fillWidth = noProgress ? "0%" : `${fillPct}%`
+  // Будут ли справа значки (видео/аудио/ссылка)? Та же логика, что в DemoBadges.
+  // Если значков нет — число центрируем; со значками — число слева, значки справа.
+  const hasBadges = demoProgress
+    ? (demoProgress.hasVideoVizitka === true
+        || demoProgress.hasAudioAnswer === true
+        || (Array.isArray(demoProgress.ctaClicks) && demoProgress.ctaClicks.length > 0))
+    : hasVideoVizitka === true
 
   return (
     <div className={cn("flex flex-col items-center gap-1 w-full max-w-[105px] mx-auto", className)}>
-      {/* Число слева, значки справа в той же строке (Юрий) — fallback на
-          hasVideoVizitka, если demoProgress не передан (legacy-вызовы). */}
-      <span className={cn("text-sm tabular-nums whitespace-nowrap font-medium inline-flex items-center justify-between gap-1 w-full", labelClass)}>
+      {/* Число слева, значки справа — только если значки есть; иначе число по центру. */}
+      <span className={cn("text-sm tabular-nums whitespace-nowrap font-medium inline-flex items-center gap-1 w-full", hasBadges ? "justify-between" : "justify-center", labelClass)}>
         <span>{label}</span>
         {demoProgress
           ? <DemoBadges dp={demoProgress} />
@@ -291,7 +297,9 @@ export function DemoProgressBar({
             <div
               key={i}
               className={cn(
-                "aspect-square flex-1 rounded-[2px] transition-colors",
+                // Фикс. высота (НЕ aspect-square): размер сегмента не зависит от
+                // их числа — иначе у 12/12 квадратики крупнее, чем у 16/17.
+                "h-1.5 flex-1 rounded-[2px] transition-colors",
                 (completedByAnswers === true || i < cur) ? fillColor : "bg-gray-200 dark:bg-gray-700/50",
               )}
             />
