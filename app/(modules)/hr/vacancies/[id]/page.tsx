@@ -341,8 +341,15 @@ export default function VacancyPage() {
         bonus: parsed.bonus ?? existingAnketa.bonus ?? "",
         responsibilities: parsed.responsibilities ?? existingAnketa.responsibilities ?? "",
         requirements: parsed.requirements ?? existingAnketa.requirements ?? "",
-        requiredSkills: parsed.requiredSkills ?? existingAnketa.requiredSkills ?? [],
-        desiredSkills: parsed.desiredSkills ?? existingAnketa.desiredSkills ?? [],
+        // vacancySkills: parse-vacancy уже объединяет requiredSkills+desiredSkills в vacancySkills.
+        // Мёрджим через Set, чтобы не затереть уже введённые вручную навыки.
+        vacancySkills: Array.from(new Set([
+          ...((existingAnketa.vacancySkills as string[]) ?? []),
+          ...((parsed.vacancySkills as string[]) ?? []),
+        ])),
+        // legacy-поля оставляем как есть (не перезаписываем, миграция склеит их позже)
+        requiredSkills: existingAnketa.requiredSkills ?? [],
+        desiredSkills: existingAnketa.desiredSkills ?? [],
         unacceptableSkills: parsed.unacceptableSkills ?? existingAnketa.unacceptableSkills ?? [],
         experienceMin: parsed.experienceMin ?? existingAnketa.experienceMin ?? "",
         experienceIdeal: parsed.experienceIdeal ?? existingAnketa.experienceIdeal ?? "",

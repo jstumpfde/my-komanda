@@ -553,7 +553,7 @@ export async function POST(
       ...(anketaConditionsText ? { conditionsText: anketaConditionsText } : {}),
       // Вступление вакансии → описание (показывается кандидату). Не теряем питч.
       ...(anketaAbout ? { companyDescription: anketaAbout } : {}),
-      ...(mappedData.skills.length ? { requiredSkills: mappedData.skills } : {}),
+      ...(mappedData.skills.length ? { vacancySkills: mappedData.skills } : {}),
       ...(mappedData.salaryFrom !== null ? { salaryFrom: String(mappedData.salaryFrom) } : {}),
       ...(mappedData.salaryTo !== null ? { salaryTo: String(mappedData.salaryTo) } : {}),
       ...(mappedData.payFrequency ? { payFrequency: [mappedData.payFrequency] } : {}),

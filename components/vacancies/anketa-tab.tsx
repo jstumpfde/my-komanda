@@ -1433,8 +1433,7 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
             bonus: data.bonus,
             responsibilities: data.responsibilities,
             requirements: data.requirements,
-            requiredSkills: data.requiredSkills,
-            desiredSkills: data.desiredSkills,
+            vacancySkills: data.vacancySkills,
             conditions: data.conditions,
             conditionsCustom: data.conditionsCustom,
             experienceMin: data.experienceMin,
@@ -2721,10 +2720,8 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
         if (field === "vacancyTitle") {
           set("vacancyTitle", value as string)
           onTitleChange?.(value as string)
-        } else if (field === "requiredSkills") {
-          set("requiredSkills", value as string[])
-        } else if (field === "unacceptableSkills") {
-          set("unacceptableSkills", value as string[])
+        } else if (field === "vacancySkills") {
+          set("vacancySkills", value as string[])
         } else if (field === "responsibilities") {
           set("responsibilities", value as string)
         } else if (field === "requirements") {

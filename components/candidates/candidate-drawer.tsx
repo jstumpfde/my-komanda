@@ -675,6 +675,7 @@ export function CandidateDrawer({
   const [noteText, setNoteText] = useState("")
   const [savingNote, setSavingNote] = useState(false)
   const [scoringAi, setScoringAi] = useState(false)
+  const [scoringPortrait, setScoringPortrait] = useState(false)
 
   // Лог контактов
   const [contacts, setContacts] = useState<CandidateContact[]>([])
@@ -1173,6 +1174,43 @@ export function CandidateDrawer({
       toast.error(err instanceof Error ? err.message : "Ошибка AI-скоринга")
     } finally {
       setScoringAi(false)
+    }
+  }
+
+  // ── Переоценить AI-Портрет (per-criteria, v2) ────────────────────────────
+  // Вызывает rescore-роут с dimension=portrait: он запускает scoreCandidateV2
+  // и персистирует aiScoreV2/aiScoreV2Details/aiScoredAt.
+  const handlePortraitRescore = async () => {
+    if (!candidate || scoringPortrait) return
+    setScoringPortrait(true)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${candidate.vacancyId}/rescore`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidateIds: [candidate.id], dimension: "portrait" }),
+      })
+      if (!res.ok) {
+        const data = await res.json() as { error?: string }
+        throw new Error(data.error || "Ошибка")
+      }
+      // Перезагружаем кандидата чтобы получить обновлённые aiScoreV2Details.
+      const refreshRes = await fetch(`/api/modules/hr/candidates/${candidate.id}`)
+      if (refreshRes.ok) {
+        const fresh = await refreshRes.json() as typeof candidate
+        setCandidate(prev => prev ? {
+          ...prev,
+          aiScoreV2:        fresh.aiScoreV2 ?? prev.aiScoreV2,
+          aiScoreV2Details: fresh.aiScoreV2Details ?? prev.aiScoreV2Details,
+          aiScoredAt:       fresh.aiScoredAt ?? prev.aiScoredAt,
+        } : prev)
+        toast.success(`AI-Портрет переоценён: ${fresh.aiScoreV2 ?? "?"}/100`)
+      } else {
+        toast.success("AI-Портрет переоценён")
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ошибка переоценки")
+    } finally {
+      setScoringPortrait(false)
     }
   }
 
@@ -1891,15 +1929,42 @@ export function CandidateDrawer({
 
 
 
-              {/* ── Рубрика / AI-Портрет ─────────────────────────── */}
+              {/* ── AI-Портрет ───────────────────────────────────── */}
               <TabsContent value="rubric" className="px-6 py-4 pb-28 mt-0 space-y-4">
-                {candidate.aiScoreV2Details && (
+                {/* Шапка с кнопкой переоценки */}
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">AI-Портрет</p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1.5 text-xs"
+                    disabled={scoringPortrait || !candidate.vacancyId}
+                    onClick={handlePortraitRescore}
+                  >
+                    {scoringPortrait
+                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Оценивается…</>
+                      : <><Sparkles className="w-3.5 h-3.5" /> {candidate.aiScoreV2Details ? "Переоценить" : "Оценить"}</>
+                    }
+                  </Button>
+                </div>
+
+                {/* Основной контент: персистированный результат */}
+                {candidate.aiScoreV2Details ? (
                   <AiMatchCardV2
                     details={candidate.aiScoreV2Details}
                     scoreV1={candidate.aiScoreV1 ?? null}
                     scoreV2={candidate.aiScoreV2 ?? null}
                   />
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+                    {scoringPortrait
+                      ? "Оцениваем кандидата по критериям Портрета…"
+                      : "Оценка ещё не готова — нажмите «Оценить» или дождитесь автоматического скоринга."
+                    }
+                  </div>
                 )}
+
+                {/* Рубрика-тень (устаревший непersisted-скоринг) — скрыта по умолчанию */}
                 <RubricShadowSection candidateId={candidate.id} />
               </TabsContent>
 

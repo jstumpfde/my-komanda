@@ -57,8 +57,7 @@ interface AnketaInput {
   bonus?: string
   responsibilities?: string
   requirements?: string
-  requiredSkills?: string[]
-  desiredSkills?: string[]
+  vacancySkills?: string[]
   conditions?: string[]
   conditionsCustom?: string[]
   experienceMin?: string
@@ -90,8 +89,7 @@ export async function POST(req: NextRequest) {
     if (a.experienceMin) lines.push(`Опыт: от ${a.experienceMin} лет`)
     if (a.responsibilities) lines.push(`\nОбязанности:\n${a.responsibilities}`)
     if (a.requirements) lines.push(`\nТребования:\n${a.requirements}`)
-    if (a.requiredSkills?.length) lines.push(`Обязательные навыки: ${a.requiredSkills.join(", ")}`)
-    if (a.desiredSkills?.length) lines.push(`Желательные навыки: ${a.desiredSkills.join(", ")}`)
+    if (a.vacancySkills?.length) lines.push(`Навыки: ${a.vacancySkills.join(", ")}`)
     const allConditions = [...(a.conditions || []), ...(a.conditionsCustom || [])]
     if (allConditions.length) lines.push(`Условия: ${allConditions.join(", ")}`)
 

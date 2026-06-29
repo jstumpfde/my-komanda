@@ -166,9 +166,7 @@ export function VacancyAdvisor({ vacancyId, vacancyData, companyDescription, foc
         st: vacancyData.salaryTo,
         r: vacancyData.responsibilities,
         rq: vacancyData.requirements,
-        rs: (vacancyData.requiredSkills as string[])?.length,
-        ds: (vacancyData.desiredSkills as string[])?.length,
-        us: (vacancyData.unacceptableSkills as string[])?.length,
+        vs: (vacancyData.vacancySkills as string[])?.length,
         c: (vacancyData.conditions as string[])?.length,
         cc: (vacancyData.conditionsCustom as string[])?.length,
         sf2: (vacancyData.stopFactors as Array<{ enabled: boolean }>)?.filter(f => f.enabled).length,
@@ -1084,9 +1082,9 @@ function SuggestionsPanel({ suggestions, onApply, vacancyData }: {
               <span className="text-xs font-medium">Рекомендуемые навыки</span>
               <button
                 onClick={() => {
-                  const current = (vacancyData.requiredSkills as string[]) || []
+                  const current = (vacancyData.vacancySkills as string[]) || []
                   // mergeSkills дедупит по канону (регистр/пробелы/дефисы) — без дублей.
-                  onApply("requiredSkills", mergeSkills(current, suggestions.skills))
+                  onApply("vacancySkills", mergeSkills(current, suggestions.skills))
                 }}
                 className="text-[10px] text-primary hover:underline flex items-center gap-0.5"
               >
@@ -1095,15 +1093,14 @@ function SuggestionsPanel({ suggestions, onApply, vacancyData }: {
             </div>
             <div className="flex flex-wrap gap-1">
               {suggestions.skills.map(skill => {
-                const alreadyHas = hasSkill((vacancyData.requiredSkills as string[]) || [], skill)
-                  || hasSkill((vacancyData.desiredSkills as string[]) || [], skill)
+                const alreadyHas = hasSkill((vacancyData.vacancySkills as string[]) || [], skill)
                 return (
                   <button
                     key={skill}
                     disabled={alreadyHas}
                     onClick={() => {
-                      const current = (vacancyData.requiredSkills as string[]) || []
-                      onApply("requiredSkills", mergeSkills(current, [skill]))
+                      const current = (vacancyData.vacancySkills as string[]) || []
+                      onApply("vacancySkills", mergeSkills(current, [skill]))
                     }}
                     className={cn(
                       "text-[11px] px-1.5 py-0.5 rounded border transition-colors",

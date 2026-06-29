@@ -20,7 +20,7 @@ function computeInputHash(vacancyData: Record<string, unknown> | undefined): str
     "vacancyTitle", "positionCategory", "positionCity",
     "workFormats", "employment", "salaryFrom", "salaryTo", "bonus",
     "responsibilities", "requirements",
-    "requiredSkills", "desiredSkills", "unacceptableSkills",
+    "vacancySkills",
     "stopFactors", "conditions", "conditionsCustom",
     "experienceMin", "experienceIdeal", "requiredExperience",
   ]
@@ -132,24 +132,25 @@ function staticAnalysis(body: Record<string, unknown>): AdvisorResponse {
     filled++
   }
 
-  // 5. Skills
-  const requiredSkills = (d.requiredSkills as string[]) || []
-  const desiredSkills = (d.desiredSkills as string[]) || []
-  const totalSkills = requiredSkills.length + desiredSkills.length
-  if (requiredSkills.length === 0) {
-    sections.push({ id: "skills", status: "error", title: "Навыки", message: "Добавьте обязательные навыки — минимум 3", priority: 3 })
-  } else if (totalSkills < 8) {
-    sections.push({ id: "skills", status: "warning", title: "Навыки", message: `${totalSkills} навыков — рекомендуется 8-12 (обязательные + желательные)`, priority: 5 })
+  // 5. Skills — читаем только поле «Навыки для hh» (vacancySkills), видимое
+  // пользователю на вкладке «Вакансия». requiredSkills/desiredSkills — легаси
+  // портретные поля, которые больше не отображаются на этой странице.
+  const vacancySkills = (d.vacancySkills as string[]) || []
+  const totalSkills = vacancySkills.length
+  if (totalSkills === 0) {
+    sections.push({ id: "skills", status: "warning", title: "Навыки", message: "Добавьте навыки для публикации на hh.ru — рекомендуется 5-12", priority: 5 })
+  } else if (totalSkills < 5) {
+    sections.push({ id: "skills", status: "warning", title: "Навыки", message: `${totalSkills} навыков — рекомендуется 5-12`, priority: 5 })
     filled += 0.5
   } else {
     sections.push({ id: "skills", status: "ok", title: "Навыки", message: `${totalSkills} навыков — отлично`, priority: 10 })
     filled++
   }
 
-  // 6. Stop factors. «Неприемлемо» (unacceptableSkills) и aiStopFactors кормят
-  // AI-нокауты — любой из них достаточен, чтобы скрининг отсеивал. Структурные
-  // stopFactors (город/возраст/…) — отдельный необязательный пред-фильтр.
-  const unacceptable = (d.unacceptableSkills as string[]) || []
+  // 6. Stop factors. aiStopFactors кормят AI-нокауты — любой из них достаточен,
+  // чтобы скрининг отсеивал. Структурные stopFactors (город/возраст/…) — отдельный
+  // необязательный пред-фильтр.
+  const unacceptable: string[] = []  // legacy field — no longer shown on Vacancy page
   const aiStops = (d.aiStopFactors as string[]) || []
   const stopFactors = (d.stopFactors as Array<{ enabled: boolean }>) || []
   const enabledStops = stopFactors.filter(f => f.enabled).length
@@ -383,13 +384,12 @@ ${AI_SAFETY_PROMPT}`,
       parsed.sections = fallback.sections
     }
 
-    // Пост-обработка: «Неприемлемо» (unacceptableSkills) и aiStopFactors кормят
-    // AI-нокауты (lib/scoring/vacancy-spec). Если они заполнены — AI-скрининг
-    // отсеивает по этим пунктам, поэтому НЕ показываем КРИТИЧНО «Стоп-факторы
-    // пустое». Структурные стоп-факторы (город/возраст/опыт) — отдельный
-    // необязательный пред-фильтр, не повод для ошибки.
+    // Пост-обработка: aiStopFactors кормят AI-нокауты (lib/scoring/vacancy-spec).
+    // Если они заполнены — AI-скрининг отсеивает по этим пунктам, поэтому
+    // НЕ показываем КРИТИЧНО «Стоп-факторы пустое». Структурные стоп-факторы
+    // (город/возраст/опыт) — отдельный необязательный пред-фильтр, не повод для ошибки.
     {
-      const unFilled = Array.isArray(vacancyData.unacceptableSkills) && (vacancyData.unacceptableSkills as unknown[]).length > 0
+      const unFilled = false  // unacceptableSkills legacy — не отображается на вкладке Вакансия
       const aiFilled = Array.isArray(vacancyData.aiStopFactors) && (vacancyData.aiStopFactors as unknown[]).length > 0
       if (Array.isArray(parsed.sections)) {
         for (const s of parsed.sections) {
@@ -513,9 +513,7 @@ function buildPrompt(d: Record<string, unknown>, body: Record<string, unknown>, 
   parts.push(`Бонусы: ${d.bonus || "(пусто)"}`)
   parts.push(`Обязанности:\n${d.responsibilities || "(пусто)"}`)
   parts.push(`Требования:\n${d.requirements || "(пусто)"}`)
-  parts.push(`Обязательные навыки: ${(d.requiredSkills as string[])?.join(", ") || "(пусто)"}`)
-  parts.push(`Желательные навыки: ${(d.desiredSkills as string[])?.join(", ") || "(пусто)"}`)
-  parts.push(`Неприемлемо: ${(d.unacceptableSkills as string[])?.join(", ") || "(пусто)"}`)
+  parts.push(`Навыки (для hh): ${(d.vacancySkills as string[])?.join(", ") || "(пусто)"}`)
 
   const stopFactors = (d.stopFactors as Array<{ id: string; label: string; enabled: boolean }>) || []
   const enabled = stopFactors.filter(f => f.enabled).map(f => f.label)
@@ -587,7 +585,7 @@ function buildPrompt(d: Record<string, unknown>, body: Record<string, unknown>, 
 - Для стоп-факторов: если пусто — обязательно error, т.к. без них AI-скрининг не работает
 - contextTip — только если focusedField указан, иначе null
 - suggestions.titles — 2-3 варианта названия, которые дают больше откликов на hh.ru. Если название содержит аббревиатуру — предложить полную расшифровку. Если нет формата работы — предложить добавить. Если нет ниши — предложить добавить.
-- suggestions.skills — 5-8 навыков, релевантных для должности, которых нет в анкете
+- suggestions.skills — 5-8 навыков, релевантных для должности, которых нет в поле «Навыки» (для hh)
 - suggestions.stopFactors — 2-4 стоп-фактора, критичных для этой должности
 - suggestions.duties — шаблон обязанностей (только если поле пустое или менее 3 пунктов)
 - suggestions.requirements — шаблон требований (только если поле пустое или менее 3 пунктов)

@@ -768,7 +768,7 @@ export function NancyAssistant() {
             if (action.requirements)       anketaPatch.requirements       = action.requirements
             if (action.conditions)         anketaPatch.conditions         = action.conditions
             if (action.companyDescription) anketaPatch.companyDescription = action.companyDescription
-            if (action.requiredSkills?.length) anketaPatch.requiredSkills = action.requiredSkills
+            if (action.requiredSkills?.length) anketaPatch.vacancySkills = action.requiredSkills
 
             const putRes = await fetch(`/api/modules/hr/vacancies/${vid}`, {
               method: "PUT",

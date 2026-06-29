@@ -7,16 +7,20 @@ import { isShortId } from "@/lib/short-id"
 import { scoreCandidateById } from "@/lib/ai-score-candidate"
 import { scoreCandidateV2 } from "@/lib/ai-score-candidate-v2"
 import { scoreDemoAnswers } from "@/lib/demo/score-answers"
+import { isPortraitConfigured } from "@/lib/core/spec/resume-input"
+import { getSpec } from "@/lib/core/spec/store"
 
 // Группа 25: fire-and-forget A/B скоринг при завершении демо.
-// Если у вакансии есть must_have — запускаем v1+v2 параллельно. Иначе —
-// только v1 (legacy). Не переоцениваем кандидатов с aiScoredAt != null.
+// Для Portrait-вакансий (критерии в Spec, а не в must_have) тоже запускаем
+// v2 — ранее гейт hasRequirements=(must_have.length>0) их блокировал.
+// Не переоцениваем кандидатов с aiScoredAt != null.
 async function runAbScoring(candidateId: string, vacancyId: string): Promise<void> {
   try {
     const [vac] = await db
       .select({
         requirementsJson:  vacancies.requirementsJson,
         aiProcessSettings: vacancies.aiProcessSettings,
+        portraitScoring:   vacancies.portraitScoring,
       })
       .from(vacancies)
       .where(eq(vacancies.id, vacancyId))
@@ -29,10 +33,20 @@ async function runAbScoring(candidateId: string, vacancyId: string): Promise<voi
     const funnelFlag = (vac?.aiProcessSettings as { aiAnketaScoreEnabled?: boolean } | null)?.aiAnketaScoreEnabled
     if (funnelFlag === false) return
 
-    const reqJson = (vac?.requirementsJson ?? {}) as VacancyRequirements
-    const hasRequirements = (reqJson.must_have?.length ?? 0) > 0
+    // Для Portrait-вакансий загружаем Spec чтобы корректно определить гейт
+    // (criteria живут в Spec, а не в requirementsJson.must_have).
+    let specForGate: import("@/lib/core/spec/types").CandidateSpec | null = null
+    if (vac?.portraitScoring === true) {
+      specForGate = await getSpec(vacancyId)
+    }
 
-    if (!hasRequirements) {
+    const portraitConfigured = vac ? isPortraitConfigured(vac, specForGate) : false
+
+    const reqJson = (vac?.requirementsJson ?? {}) as VacancyRequirements
+    const hasLegacyRequirements = (reqJson.must_have?.length ?? 0) > 0
+
+    if (!portraitConfigured) {
+      // Нет ни legacy must_have, ни Portrait-критериев — только v1 (legacy).
       const v1 = await scoreCandidateById({ candidateId, vacancyId, skipIfScored: true })
       if (v1) {
         await db.update(candidates).set({
@@ -43,10 +57,14 @@ async function runAbScoring(candidateId: string, vacancyId: string): Promise<voi
       return
     }
 
+    // Portrait настроен: запускаем v1 + v2 параллельно.
+    // Post-demo: skipIfScored=false для v2 — переоцениваем с ответами демо.
+    // Для v1: skipIfScored=true (legacy score не меняем, нет смысла).
+    const v1SkipIfScored = hasLegacyRequirements  // v1 нужен только в legacy-пути
     const [v1Result, v2Result] = await Promise.all([
-      scoreCandidateById({ candidateId, vacancyId, skipIfScored: true })
+      scoreCandidateById({ candidateId, vacancyId, skipIfScored: v1SkipIfScored })
         .catch((err: unknown) => { console.error("[demo answer] v1 failed:", err); return null }),
-      scoreCandidateV2({ candidateId, vacancyId, skipIfScored: true })
+      scoreCandidateV2({ candidateId, vacancyId, skipIfScored: false })
         .catch((err: unknown) => { console.error("[demo answer] v2 failed:", err); return null }),
     ])
 

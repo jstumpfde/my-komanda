@@ -183,8 +183,12 @@ function normalize(parsed: Record<string, unknown>) {
     bonus: String(parsed.bonus || ""),
     responsibilities: String(parsed.responsibilities || ""),
     requirements: String(parsed.requirements || ""),
-    requiredSkills: toStringArray(parsed.requiredSkills),
-    desiredSkills: toStringArray(parsed.desiredSkills),
+    // Объединяем requiredSkills + desiredSkills в единое поле vacancySkills (видимое «Навыки»).
+    // unacceptableSkills — стоп-факторы; они больше не отображаются в анкете отдельно.
+    vacancySkills: [...toStringArray(parsed.requiredSkills), ...toStringArray(parsed.desiredSkills)],
+    // Оставляем legacy-ключи пустыми — данные не теряются, миграция склеит старые записи.
+    requiredSkills: [] as string[],
+    desiredSkills: [] as string[],
     unacceptableSkills: toStringArray(parsed.unacceptableSkills),
     experienceMin: String(parsed.experienceMin || ""),
     experienceIdeal: String(parsed.experienceIdeal || ""),
@@ -270,7 +274,7 @@ function fallbackParse(text: string) {
     salaryFrom, salaryTo,
     bonus: "",
     responsibilities: "", requirements: "",
-    requiredSkills, desiredSkills: [], unacceptableSkills: [],
+    vacancySkills: requiredSkills, requiredSkills: [], desiredSkills: [], unacceptableSkills: [],
     experienceMin: expMatch?.[1] || "", experienceIdeal: "",
     conditions: [],
     screeningQuestions: [],

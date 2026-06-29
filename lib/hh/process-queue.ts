@@ -19,7 +19,8 @@ import { isFollowUpPreset } from "@/lib/followup/presets"
 import { canSendNow } from "@/lib/schedule/can-send-now"
 import { screenResume } from "@/lib/ai-screen-resume"
 import { getSpec } from "@/lib/core/spec/store"
-import { buildSpecResumeInput, isSpecScoringEnabled, specHasScoringContent } from "@/lib/core/spec/resume-input"
+import { buildSpecResumeInput, isSpecScoringEnabled, specHasScoringContent, isPortraitConfigured } from "@/lib/core/spec/resume-input"
+import { scoreCandidateV2 } from "@/lib/ai-score-candidate-v2"
 import { trySyncRejectToHh } from "@/lib/hh/sync-stage"
 import { scheduleRejection, rejectionDelayMinutes } from "@/lib/rejection/execute"
 import { startPrequalification } from "@/lib/prequalification/start"
@@ -1347,6 +1348,43 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       } // конец if (!funnelV2Handled) — легаси invite-путь
       } // конец else (обычный invite-путь; off-hours soft mode обработан выше)
       } // конец if (!belowThreshold && !stopFactorMatch) — отказ/keep_new/стоп-фактор обработан выше отдельной веткой
+
+      // AI-Портрет: двухпроходный скоринг v2 (per-criteria breakdown).
+      // Запускаем fire-and-forget ПОСЛЕ всех решений воронки — не влияет на
+      // resume_score-гейтинг. Только для Portrait-вакансий с заполненным Spec
+      // ИЛИ вакансий с requirementsJson.must_have (legacy v2-путь). skipIfScored=true
+      // → один раз, без повторной траты токенов. ~$0.01-0.02/кандидат.
+      if (candidateId && localVac && !stopFactorMatch) {
+        void (async () => {
+          try {
+            // Проверяем гейт с уже загруженным Spec (если был portraitOn — spec
+            // уже в памяти). Для legacy-пути достаточно requirementsJson.must_have.
+            let specForGate: import("@/lib/core/spec/types").CandidateSpec | null = null
+            if (localVac.portraitScoring === true) {
+              specForGate = await getSpec(localVac.id)
+            }
+            if (!isPortraitConfigured(localVac, specForGate)) return
+
+            const v2 = await scoreCandidateV2({
+              candidateId,
+              vacancyId: localVac.id,
+              skipIfScored: true,
+            })
+            if (v2) {
+              await db.update(candidates).set({
+                aiScoreV2:        v2.score,
+                aiScoreV2Details: v2,
+                aiScoredAt:       new Date(),
+              }).where(eq(candidates.id, candidateId))
+              console.log(`[PQ] portrait-v2 candidateId=${candidateId} score=${v2.score}`)
+            }
+          } catch (v2Err) {
+            console.warn("[PQ] portrait-v2 failed (non-critical):",
+              v2Err instanceof Error ? v2Err.message : v2Err)
+          }
+        })()
+      }
+
     } catch (err: unknown) {
       console.error("[PQ] FAIL", resp.candidateName, err instanceof Error ? err.message : err)
       results.push({

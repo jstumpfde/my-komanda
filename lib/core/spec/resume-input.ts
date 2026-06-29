@@ -181,3 +181,36 @@ export function specHasScoringContent(spec: CandidateSpec): boolean {
     structuralActive
   )
 }
+
+/**
+ * Настроен ли контур «AI-Портрет» для данной вакансии?
+ *
+ * Объединённый гейт для двухпроходного скоринга v2 (scoreCandidateV2):
+ *   - Portrait-вакансия (portraitScoring=true) с любым наполнением Spec, ИЛИ
+ *   - Любая вакансия с непустым requirementsJson.must_have (legacy-путь v2).
+ *
+ * Используется вместо hasRequirements=(must_have.length>0) в process-queue и
+ * answer/route — чтобы Portrait-вакансии (критерии в Spec, а не в must_have)
+ * тоже запускали автоматический ai_score_v2.
+ *
+ * Принимает данные вакансии (portraitScoring + requirementsJson) и опциональный
+ * Spec (не запрашивать повторно если уже есть, иначе null).
+ */
+export function isPortraitConfigured(
+  vacancy: {
+    portraitScoring?: boolean | null
+    requirementsJson?: unknown
+  },
+  spec?: import("@/lib/core/spec/types").CandidateSpec | null,
+): boolean {
+  // Legacy v2-путь: requirementsJson.must_have непустой.
+  const mustHave = ((vacancy.requirementsJson ?? {}) as { must_have?: string[] }).must_have
+  if ((mustHave?.length ?? 0) > 0) return true
+
+  // Portrait-путь: флаг включён И передан непустой Spec.
+  if (vacancy.portraitScoring === true && spec != null) {
+    return specHasScoringContent(spec)
+  }
+
+  return false
+}
