@@ -37,6 +37,9 @@ export interface VacancyStats {
     anketaFillRate:   number  // anketaFilled / demoOpened
     hiredRate:        number  // hired / total
   }
+  // Счётчики AI-токенов (суммарно по вакансии). 0 если колонки ещё не созданы.
+  aiTokensIn:  number
+  aiTokensOut: number
 }
 
 function pct(numerator: number, denominator: number): number {
@@ -47,7 +50,12 @@ function pct(numerator: number, denominator: number): number {
 // Серверная функция. Не имеет авторизации — auth/owner check делает caller.
 export async function getVacancyStats(vacancyId: string): Promise<VacancyStats> {
   const [vac] = await db
-    .select({ companyId: vacancies.companyId, hhVacancyId: vacancies.hhVacancyId })
+    .select({
+      companyId:   vacancies.companyId,
+      hhVacancyId: vacancies.hhVacancyId,
+      aiTokensIn:  vacancies.aiTokensIn,
+      aiTokensOut: vacancies.aiTokensOut,
+    })
     .from(vacancies)
     .where(eq(vacancies.id, vacancyId))
     .limit(1)
@@ -141,6 +149,9 @@ export async function getVacancyStats(vacancyId: string): Promise<VacancyStats> 
       anketaFillRate: pct(anketaFilled, demoOpened),
       hiredRate:      pct(hired, total),
     },
+    // bigint → number (safe for our scale)
+    aiTokensIn:  Number(vac.aiTokensIn  ?? 0),
+    aiTokensOut: Number(vac.aiTokensOut ?? 0),
   }
 }
 
@@ -222,5 +233,6 @@ function emptyStats(): VacancyStats {
     demoOpened: 0, anketaFilled: 0, demoAnswered: 0,
     byStage,
     conversions: { demoOpenRate: 0, anketaFillRate: 0, hiredRate: 0 },
+    aiTokensIn: 0, aiTokensOut: 0,
   }
 }

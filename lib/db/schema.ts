@@ -992,6 +992,11 @@ export const vacancies = pgTable("vacancies", {
     }>()
     .notNull()
     .default({}),
+  // Счётчики AI-токенов по всем вызовам, атрибутированным к вакансии.
+  // Обновляются атомично через addVacancyTokens (lib/ai/token-usage.ts).
+  // mode:"number" — безопасно при значениях до ~2^53 (хватит на много лет).
+  aiTokensIn:  bigint("ai_tokens_in",  { mode: "number" }).notNull().default(0),
+  aiTokensOut: bigint("ai_tokens_out", { mode: "number" }).notNull().default(0),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

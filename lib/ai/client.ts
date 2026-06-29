@@ -67,3 +67,48 @@ async function callMessages(
 
 export const callClaudeSonnetMessages = (messages: ChatTurn[], system?: string, maxTokens = 3000) =>
   callMessages(SONNET, messages, system, maxTokens)
+
+// ── Варианты с возвратом usage (для учёта токенов) ────────────────────────────
+// Используются там, где нужно fire-and-forget addVacancyTokens.
+
+export interface WithUsageResult {
+  text:  string
+  usage: { input_tokens: number; output_tokens: number }
+}
+
+async function callWithUsage(model: string, prompt: string, system?: string, maxTokens = 1500): Promise<WithUsageResult> {
+  return withRetry(async () => {
+    const resp = await client().messages.create({
+      model,
+      max_tokens: maxTokens,
+      system,
+      messages: [{ role: "user", content: prompt }],
+    })
+    const block = resp.content[0]
+    return {
+      text:  block?.type === "text" ? block.text : "",
+      usage: { input_tokens: resp.usage.input_tokens, output_tokens: resp.usage.output_tokens },
+    }
+  })
+}
+
+async function callMessagesWithUsage(
+  model: string, messages: ChatTurn[], system?: string, maxTokens = 1500,
+): Promise<WithUsageResult> {
+  return withRetry(async () => {
+    const resp = await client().messages.create({
+      model,
+      max_tokens: maxTokens,
+      system,
+      messages: messages.map(m => ({ role: m.role, content: m.content })),
+    })
+    const block = resp.content[0]
+    return {
+      text:  block?.type === "text" ? block.text : "",
+      usage: { input_tokens: resp.usage.input_tokens, output_tokens: resp.usage.output_tokens },
+    }
+  })
+}
+
+export const callClaudeHaikuWithUsage  = (prompt: string, system?: string, maxTokens = 800)  => callWithUsage(HAIKU, prompt, system, maxTokens)
+export const callClaudeSonnetMessagesWithUsage = (messages: ChatTurn[], system?: string, maxTokens = 3000) => callMessagesWithUsage(SONNET, messages, system, maxTokens)

@@ -22,6 +22,7 @@ import {
   buildBlockResolver,
   renderAnswerValue,
 } from "@/lib/demo/resolve-questions"
+import { addVacancyTokens } from "@/lib/ai/token-usage"
 
 // Cloned from ai-score-candidate-v2 — same proxy/model pattern
 const anthropic = new Anthropic({
@@ -249,6 +250,7 @@ ${questionsBlock}
     temperature: 0,
     messages:   [{ role: "user", content: prompt }],
   })
+  void addVacancyTokens(vacancyId, msg.usage)
 
   const textBlock = msg.content.find((b) => b.type === "text")
   if (!textBlock || textBlock.type !== "text") {

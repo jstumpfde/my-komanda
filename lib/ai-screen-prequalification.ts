@@ -9,6 +9,7 @@
 import Anthropic from "@anthropic-ai/sdk"
 import { AI_SAFETY_PROMPT } from "@/lib/ai-safety"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
+import { addVacancyTokens } from "@/lib/ai/token-usage"
 
 export type QualificationVerdict = "passed" | "failed" | "unclear"
 
@@ -42,6 +43,7 @@ const SYSTEM_PROMPT = `Ты — HR-аналитик. Оцени ответ ка�
 export async function screenPrequalificationAnswers(
   questions: QualificationQuestion[],
   candidateAnswer: string,
+  vacancyId?: string | null,
 ): Promise<QualificationResult[] | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return null
@@ -67,6 +69,7 @@ ${candidateAnswer.trim()}`
     })
     const content = response.content[0]
     if (content.type !== "text") return null
+    void addVacancyTokens(vacancyId, response.usage)
     raw = content.text.trim()
   } catch (err) {
     console.warn("[screen-prequalification] API call failed:", err instanceof Error ? err.message : err)

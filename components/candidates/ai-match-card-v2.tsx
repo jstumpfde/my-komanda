@@ -44,45 +44,31 @@ function scoreColor(score: number): string {
 }
 
 export function AiMatchCardV2({ details, scoreV1, scoreV2 }: AiMatchCardV2Props) {
-  const [expanded, setExpanded]   = useState(false)
-  const [showCriteria, setShowCriteria] = useState(false)
+  const [expanded, setExpanded]   = useState(true)
+  const [showCriteria, setShowCriteria] = useState(true)
 
   if (!details) return null
 
   const decision = DECISION_LABELS[details.decision]
-  const delta = scoreV1 != null && scoreV2 != null ? scoreV2 - scoreV1 : null
-  const deltaSign = delta == null ? "" : (delta > 0 ? "+" : "")
 
   return (
     <div className="rounded-lg border border-border/60 bg-card overflow-hidden">
-      {/* Header: score + decision + A/B */}
-      <div className="p-4 border-b border-border/60 space-y-2">
+      {/* Header: decision слева, балл справа */}
+      <div className="p-3 border-b border-border/60">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-baseline gap-2">
-            <span className={cn("text-3xl font-bold", scoreColor(details.score))}>{details.score}</span>
-            <span className="text-xs text-muted-foreground">AI Match v2</span>
-          </div>
           <Badge variant="outline" className={cn("text-xs", decision.cls)}>
             {decision.label}
           </Badge>
-        </div>
-
-        {(scoreV1 != null || scoreV2 != null) && (
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <span>v1: <span className="text-foreground font-medium">{scoreV1 ?? "—"}</span></span>
-            <span>v2: <span className="text-foreground font-medium">{scoreV2 ?? "—"}</span></span>
-            {delta != null && (
-              <span className={delta > 0 ? "text-emerald-600 dark:text-emerald-400" : delta < 0 ? "text-destructive" : "text-muted-foreground"}>
-                Δ {deltaSign}{delta}
-              </span>
-            )}
+          <div className="flex items-baseline gap-2">
+            <span className="text-xs text-muted-foreground">AI Match</span>
+            <span className={cn("text-3xl font-bold", scoreColor(details.score))}>{details.score}</span>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Pros */}
       {details.reasoning.pros.length > 0 && (
-        <div className="p-4 border-b border-border/60 space-y-2">
+        <div className="p-3 border-b border-border/60 space-y-1.5">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
             <CheckCircle2 className="w-3.5 h-3.5" /> Сильные стороны
           </h4>
@@ -96,7 +82,7 @@ export function AiMatchCardV2({ details, scoreV1, scoreV2 }: AiMatchCardV2Props)
 
       {/* Cons */}
       {details.reasoning.cons.length > 0 && (
-        <div className="p-4 border-b border-border/60 space-y-2">
+        <div className="p-3 border-b border-border/60 space-y-1.5">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
             <AlertTriangle className="w-3.5 h-3.5" /> Слабые места
           </h4>
@@ -110,9 +96,9 @@ export function AiMatchCardV2({ details, scoreV1, scoreV2 }: AiMatchCardV2Props)
 
       {/* Questions for interview */}
       {details.reasoning.questions_for_interview.length > 0 && (
-        <div className="p-4 border-b border-border/60 space-y-2">
+        <div className="p-3 border-b border-border/60 space-y-1.5">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-            <MessageSquare className="w-3.5 h-3.5" /> Вопросы для интервью
+            <MessageSquare className="w-3.5 h-3.5" /> Вопросы к кандидату
           </h4>
           <ul className="space-y-1 text-sm">
             {details.reasoning.questions_for_interview.map((q, i) => (
@@ -124,7 +110,7 @@ export function AiMatchCardV2({ details, scoreV1, scoreV2 }: AiMatchCardV2Props)
 
       {/* Must-have summary */}
       {(details.matched_must_have.length > 0 || details.missed_must_have.length > 0) && (
-        <div className="p-4 border-b border-border/60 space-y-2">
+        <div className="p-3 border-b border-border/60 space-y-1.5">
           <div className="flex items-baseline justify-between">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Must-have</h4>
             <span className="text-xs text-muted-foreground">

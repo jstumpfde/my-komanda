@@ -117,6 +117,14 @@ type VacancyStatus = "draft" | "active" | "published" | "paused" | "closed_succe
 // над defaultColumnColors не гарантирует порядок и включает rejected
 // (терминальный стейдж, не нужен в kanban). COLUMN_ORDER даёт явный порядок
 // и исключает rejected/wants_contact.
+
+// Компактное форматирование числа токенов: ≥1M → «1.2M», ≥1K → «350K», иначе число.
+function fmtTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000)     return `${Math.round(n / 1_000)}K`
+  return String(n)
+}
+
 function emptyColumns(): ColumnData[] {
   return COLUMN_ORDER.map((id) => {
     const c = defaultColumnColors[id]
@@ -1172,6 +1180,7 @@ export default function VacancyPage() {
     demoOpened: number; rejected: number;
     hhTotal: number; hhNew: number; inProgress: number;
     anketaFilled: number; demoAnswered: number; hired: number;
+    aiTokensIn: number; aiTokensOut: number;
   } | null>(null)
   const loadHeaderStats = useCallback(async () => {
     if (!id) return
@@ -1185,6 +1194,7 @@ export default function VacancyPage() {
         total: number; hhTotal: number; hhNew: number;
         inProgress: number; rejected: number; hired: number;
         demoOpened: number; anketaFilled: number; demoAnswered: number;
+        aiTokensIn: number; aiTokensOut: number;
       }
       const cand = candRes.ok
         ? await candRes.json() as { pending: number; freshCount: number }
@@ -1201,6 +1211,8 @@ export default function VacancyPage() {
         anketaFilled: stats.anketaFilled,
         demoAnswered: stats.demoAnswered,
         hired:        stats.hired,
+        aiTokensIn:   stats.aiTokensIn  ?? 0,
+        aiTokensOut:  stats.aiTokensOut ?? 0,
       })
     } catch { /* silent */ }
   }, [id])
@@ -2597,6 +2609,19 @@ export default function VacancyPage() {
                 />
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                {/* Счётчик AI-токенов — показываем если есть хоть один */}
+                {headerStats != null && (headerStats.aiTokensIn + headerStats.aiTokensOut) > 0 && (
+                  <UITooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-xs text-muted-foreground cursor-help select-none">
+                        токены: {fmtTokens(headerStats.aiTokensIn + headerStats.aiTokensOut)}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      AI-токены по этой вакансии: {headerStats.aiTokensIn.toLocaleString("ru")} вх. / {headerStats.aiTokensOut.toLocaleString("ru")} исх.
+                    </TooltipContent>
+                  </UITooltip>
+                )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">

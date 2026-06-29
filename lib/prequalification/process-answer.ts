@@ -84,7 +84,7 @@ export async function processPrequalificationAnswer(args: {
       }
     })
 
-    const verdicts = await screenPrequalificationAnswers(aiQuestions, args.answerText)
+    const verdicts = await screenPrequalificationAnswers(aiQuestions, args.answerText, cand.vacancyId)
     if (!verdicts) {
       // AI-вызов упал — лог и выход. Не помечаем как failed, ждём след. сообщение.
       console.warn("[prequalification] AI verdict failed for candidate", args.candidateId)

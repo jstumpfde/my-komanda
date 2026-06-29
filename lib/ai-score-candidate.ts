@@ -5,6 +5,7 @@ import { candidates, vacancies, demos } from "@/lib/db/schema"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import type { Lesson, Block } from "@/lib/course-types"
 import { buildScoreCandidatePrompt } from "@/lib/ai/prompts/score-candidate"
+import { addVacancyTokens } from "@/lib/ai/token-usage"
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -187,6 +188,7 @@ export async function scoreCandidateById(args: {
     temperature: 0,
     messages: [{ role: "user", content: prompt }],
   })
+  void addVacancyTokens(vacancyId, message.usage)
 
   const textBlock = message.content.find(b => b.type === "text")
   if (!textBlock || textBlock.type !== "text") {

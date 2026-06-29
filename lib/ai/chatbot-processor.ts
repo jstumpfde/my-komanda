@@ -25,7 +25,8 @@
 import { and, eq, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, companies } from "@/lib/db/schema"
-import { callClaudeHaiku, callClaudeSonnetMessages, type ChatTurn } from "@/lib/ai/client"
+import { callClaudeHaikuWithUsage, callClaudeSonnetMessagesWithUsage, type ChatTurn } from "@/lib/ai/client"
+import { addVacancyTokens } from "@/lib/ai/token-usage"
 import { loadCandidateContext, formatCandidateContextBlock, type CandidateContext } from "@/lib/ai/candidate-context"
 import { decideFunnelNextStep, allowedActionsFromAutonomy, type FunnelDecision } from "@/lib/ai/funnel-decision"
 import { matchStopWordWith } from "@/lib/followup/stop-words"
@@ -402,7 +403,7 @@ async function logMessage(args: {
   `)
 }
 
-async function classifyIntent(message: string): Promise<{ category: IntentCategory; confidence: number }> {
+async function classifyIntent(message: string, vacancyId: string): Promise<{ category: IntentCategory; confidence: number }> {
   const prompt = `Классифицируй сообщение кандидата:
 "${message}"
 
@@ -421,7 +422,8 @@ async function classifyIntent(message: string): Promise<{ category: IntentCatego
 
 Верни ТОЛЬКО JSON: { "category": "...", "confidence": 0.0-1.0 }
 Без markdown.`
-  const raw = await callClaudeHaiku(prompt, undefined, 200)
+  const { text: raw, usage } = await callClaudeHaikuWithUsage(prompt, undefined, 200)
+  void addVacancyTokens(vacancyId, usage)
   const m = raw.match(/\{[\s\S]*\}/)
   if (!m) return { category: "other", confidence: 0 }
   try {
@@ -970,7 +972,7 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
   let category: IntentCategory = "other"
   let confidence = 0
   try {
-    const cls = await classifyIntent(incomingText)
+    const cls = await classifyIntent(incomingText, vacancyId)
     category = cls.category
     confidence = cls.confidence
   } catch (err) {
@@ -1099,7 +1101,9 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
 
   let reply = ""
   try {
-    reply = (await callClaudeSonnetMessages(convo, armoredSystemPrompt, 800)).trim()
+    const genResult = await callClaudeSonnetMessagesWithUsage(convo, armoredSystemPrompt, 800)
+    reply = genResult.text.trim()
+    void addVacancyTokens(vacancyId, genResult.usage)
   } catch (err) {
     console.warn("[chatbot] generator failed:", err)
   }

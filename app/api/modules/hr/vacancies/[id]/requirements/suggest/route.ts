@@ -11,6 +11,7 @@ import { vacancies, companies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import { buildSuggestRequirementsPrompt } from "@/lib/ai/prompts/suggest-requirements"
+import { addVacancyTokens } from "@/lib/ai/token-usage"
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -97,6 +98,7 @@ export async function POST(
       messages:    [{ role: "user", content: prompt }],
     })
 
+    void addVacancyTokens(id, message.usage)
     const textBlock = message.content.find(b => b.type === "text")
     if (!textBlock || textBlock.type !== "text") {
       return apiError("AI не вернул ответ", 500)

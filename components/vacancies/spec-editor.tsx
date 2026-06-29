@@ -1729,11 +1729,11 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
             </>)}
           </div>
 
-          {/* Авто-приглашение сильных + выбор следующего этапа */}
+          {/* Авто-приглашение + выбор следующего этапа */}
           <div className="rounded-lg border p-3 space-y-3">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <Label className="text-sm font-medium">Авто-приглашение сильных</Label>
+                <Label className="text-sm font-medium">Авто-приглашение</Label>
                 <p className="text-[11px] text-muted-foreground mt-0.5">Балл ≥ {rt.upperThreshold} → система сама зовёт дальше. Выкл — сильные ждут вашего решения.</p>
               </div>
               <Switch
@@ -1786,10 +1786,47 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                 </Select>
                 <p className="text-[11px] text-muted-foreground">«Человеческая» пауза перед автоматическим приглашением. То же поле, что «Задержка перед отправкой» в табе «Сообщения».</p>
               </div>
-              {/* Демо-блок: что реально увидит приглашённый */}
+              {/* #2 Нерабочее время */}
+              <div className="rounded-md border p-2.5 space-y-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <Label className="text-xs font-medium">Сообщение в нерабочее время</Label>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Отклик вне рабочих часов — шлём приглашение с контент-блоком и переводим в выбранную стадию hh.ru, но другим текстом и задержкой.</p>
+                  </div>
+                  <Switch
+                    checked={rt.offHoursEnabled ?? true}
+                    onCheckedChange={v => patch({ resumeThresholds: { ...rt, offHoursEnabled: v } })}
+                  />
+                </div>
+                {(rt.offHoursEnabled ?? true) && (<>
+                  <Textarea
+                    value={spec.offHoursLetter || DEFAULT_OFF_HOURS_MESSAGE}
+                    onChange={e => patch({ offHoursLetter: e.target.value.slice(0, 2000) })}
+                    rows={3}
+                    maxLength={2000}
+                  />
+                  <div className="flex items-center gap-2">
+                    <Label className="text-[11px] shrink-0">Задержка</Label>
+                    <Select
+                      value={String(rt.offHoursDelaySeconds ?? 15)}
+                      onValueChange={v => patch({ resumeThresholds: { ...rt, offHoursDelaySeconds: Number(v) } })}
+                    >
+                      <SelectTrigger className="h-8 w-36 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0">Сразу</SelectItem>
+                        <SelectItem value="15">15 секунд</SelectItem>
+                        <SelectItem value="30">30 секунд</SelectItem>
+                        <SelectItem value="60">1 минута</SelectItem>
+                        <SelectItem value="180">3 минуты</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>)}
+              </div>
+              {/* Контент-блок: что реально увидит приглашённый */}
               {inviteBlockChoices.length > 0 && (
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Что покажем приглашённому (демо-блок)</Label>
+                  <Label className="text-xs">Что покажем приглашённому (контент-блок)</Label>
                   <Select
                     value={rt.inviteContentBlockId ?? "__live__"}
                     onValueChange={v => patch({ resumeThresholds: { ...rt, inviteContentBlockId: v === "__live__" ? null : v } })}
@@ -1821,43 +1858,6 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                   </SelectContent>
                 </Select>
                 <p className="text-[11px] text-muted-foreground">Куда кандидат попадёт в воронке работодателя на hh.ru. По умолчанию — «Первичный контакт».</p>
-              </div>
-              {/* #2 Нерабочее время */}
-              <div className="rounded-md border p-2.5 space-y-2.5">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <Label className="text-xs font-medium">Сообщение в нерабочее время</Label>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">Отклик вне рабочих часов — шлём мягкое подтверждение без демо-ссылки. Само приглашение уйдёт в рабочее время.</p>
-                  </div>
-                  <Switch
-                    checked={rt.offHoursEnabled ?? true}
-                    onCheckedChange={v => patch({ resumeThresholds: { ...rt, offHoursEnabled: v } })}
-                  />
-                </div>
-                {(rt.offHoursEnabled ?? true) && (<>
-                  <Textarea
-                    value={spec.offHoursLetter || DEFAULT_OFF_HOURS_MESSAGE}
-                    onChange={e => patch({ offHoursLetter: e.target.value.slice(0, 2000) })}
-                    rows={3}
-                    maxLength={2000}
-                  />
-                  <div className="flex items-center gap-2">
-                    <Label className="text-[11px] shrink-0">Задержка</Label>
-                    <Select
-                      value={String(rt.offHoursDelaySeconds ?? 15)}
-                      onValueChange={v => patch({ resumeThresholds: { ...rt, offHoursDelaySeconds: Number(v) } })}
-                    >
-                      <SelectTrigger className="h-8 w-36 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="0">Сразу</SelectItem>
-                        <SelectItem value="15">15 секунд</SelectItem>
-                        <SelectItem value="30">30 секунд</SelectItem>
-                        <SelectItem value="60">1 минута</SelectItem>
-                        <SelectItem value="180">3 минуты</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </>)}
               </div>
               {/* #3 Итог: куда реально переводится кандидат */}
               <p className="text-[11px] text-muted-foreground rounded-md bg-muted/40 px-2.5 py-1.5 leading-relaxed">

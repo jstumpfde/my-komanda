@@ -9,6 +9,7 @@ import { requireAuth, apiError, apiSuccess } from "@/lib/api-helpers"
 import { AI_SAFETY_PROMPT, checkAiRateLimit, handleAiError } from "@/lib/ai-safety"
 import { checkRateLimit } from "@/lib/rate-limit"
 import { findBenchmark, adjustBenchmark, assessSalary, formatSalary, suggestTitles, type SalaryBenchmark } from "@/lib/salary-benchmarks"
+import { addVacancyTokens } from "@/lib/ai/token-usage"
 
 // P0-28: ключевые поля анкеты, по которым считается inputHash. Любое
 // изменение из этого списка инвалидирует кеш AI-анализа. Не включаем
@@ -365,6 +366,7 @@ ${AI_SAFETY_PROMPT}`,
       messages: [{ role: "user", content: prompt }],
     })
 
+    void addVacancyTokens(vacancyId, response.usage)
     const text = response.content[0]?.type === "text" ? response.content[0].text : ""
 
     // Extract JSON from response

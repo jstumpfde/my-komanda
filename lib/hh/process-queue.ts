@@ -599,8 +599,8 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       // per-vacancy переопределяет по-фактору (вакансия главнее).
       // Spread корректен: каждый ключ верхнего уровня = целый фактор-объект,
       // поэтому { enabled: false } у вакансии полностью перекроет компанейский.
-      // Off-hours soft mode и funnel-флаг применяются к единому набору.
-      if (candidateId && localVac && !offHoursSoftMode && isBlockEnabled(localVac, "stop_factors_resume", aiSettings.stopFactorsEnabled !== false)) {
+      // Off-hours — тот же набор стопов, что в рабочее время.
+      if (candidateId && localVac && isBlockEnabled(localVac, "stop_factors_resume", aiSettings.stopFactorsEnabled !== false)) {
         const vacancyFactors = (localVac as { stopFactorsJson?: VacancyStopFactors | null }).stopFactorsJson
         const effective: VacancyStopFactors = {
           ...(companyStopFactorsApplyToAll && companyStopFactors ? companyStopFactors : {}),
@@ -615,7 +615,8 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       // приёме отклика. Если кандидат уже оценён ранее (resume_score IS NOT
       // NULL) — пропускаем, чтобы не тратить токены повторно. Полный AI-скор
       // (aiScore) считается отдельно после завершения демо.
-      if (candidateId && localVac && !stopFactorMatch && !offHoursSoftMode) {
+      // Off-hours — скоринг тот же, что в рабочее время.
+      if (candidateId && localVac && !stopFactorMatch) {
         try {
           const [scoreRow] = await db
             .select({ resumeScore: candidates.resumeScore })
@@ -703,7 +704,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                 aiWeights:            (anketa.aiWeights as Record<string, string> | undefined) ?? null,
                 customCriteria:       (anketa.aiCustomCriteria as { label: string; weight: string }[] | undefined) ?? null,
               },
-            })
+            }, localVac.id)
             if (result) {
               await db.update(candidates)
                 .set({ resumeScore: result.score })
@@ -988,32 +989,6 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       // в "rejected" с отправленным отказом, либо помечен ручным разбором.
       if (!belowThreshold && !stopFactorMatch) {
 
-      if (offHoursSoftMode && candidateId && localVac) {
-        // Off-hours: вместо демо-приглашения и серии Сообщений 2/3 планируем
-        // одно мягкое подтверждение через follow_up_messages
-        // (branch=first_msg_offhours) с задержкой. Cron /api/cron/follow-up
-        // отправит его даже вне рабочего окна. Демо/дожим/скоринг — НЕ запускаем,
-        // hh_response помечаем 'invited' (из очереди уходит), HR работает утром.
-        try {
-          const { scheduleOffHoursFirstMessage } = await import("@/lib/messaging/first-messages-chain")
-          await scheduleOffHoursFirstMessage({
-            candidateId,
-            vacancyId:    localVac.id,
-            text:         (typeof localVac.firstMessageOffHoursText === "string" && localVac.firstMessageOffHoursText.trim())
-                            ? localVac.firstMessageOffHoursText
-                            : md.offHoursMessage,
-            delaySeconds: typeof localVac.firstMessageOffHoursDelaySeconds === "number" ? localVac.firstMessageOffHoursDelaySeconds : 15,
-          })
-        } catch (offErr) {
-          console.error("[PQ] off-hours soft message schedule failed:",
-            offErr instanceof Error ? offErr.message : offErr)
-        }
-        await db.update(hhResponses)
-          .set({ status: "invited", localCandidateId: candidateId })
-          .where(eq(hhResponses.id, resp.id))
-        results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "off_hours_soft_message" })
-      } else {
-
       // ── ГЕЙТ ВОРОНКИ V2 ────────────────────────────────────────────────────
       // При флаге funnelV2RuntimeEnabled=true (default false):
       //   1. Нормализуем funnelV2 из descriptionJson
@@ -1178,8 +1153,14 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
         const recoveryText = typeof localVac?.recoveryMessageText === "string"
           ? localVac.recoveryMessageText.trim()
           : ""
-        const messageText =
-          (previouslyInvited && recoveryEnabled && recoveryText.length > 0)
+        // Off-hours: первое сообщение заменяем нерабочим текстом.
+        // Recovery-override в нерабочее время не применяем — отправляем
+        // именно off-hours текст (который HR сам сформулировал для вечера/ночи).
+        const messageText = offHoursSoftMode
+          ? ((typeof localVac.firstMessageOffHoursText === "string" && localVac.firstMessageOffHoursText.trim())
+              ? localVac.firstMessageOffHoursText
+              : md.offHoursMessage)
+          : (previouslyInvited && recoveryEnabled && recoveryText.length > 0)
             ? recoveryText
             : (aiSettings.inviteMessage?.trim() || md.inviteMessage)
 
@@ -1209,6 +1190,13 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       }
 
       if (hhAction && finalMessage) {
+        // Off-hours: «человеческая» пауза перед отправкой (зеркалится из
+        // spec.resumeThresholds.offHoursDelaySeconds через vacancy-колонку).
+        if (offHoursSoftMode) {
+          const offDelayMs = (typeof localVac?.firstMessageOffHoursDelaySeconds === "number"
+            ? localVac.firstMessageOffHoursDelaySeconds : 15) * 1000
+          if (offDelayMs > 0) await sleep(offDelayMs)
+        }
         const rawResumeRaw = raw?.resume?.["id"]
         const rawResume = typeof rawResumeRaw === "string" ? rawResumeRaw : undefined
         try {
@@ -1344,9 +1332,8 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       }
 
       invitedCount++
-      results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "invited" })
+      results.push({ id: resp.hhResponseId, name: resp.candidateName, action: offHoursSoftMode ? "off_hours_invite" : "invited" })
       } // конец if (!funnelV2Handled) — легаси invite-путь
-      } // конец else (обычный invite-путь; off-hours soft mode обработан выше)
       } // конец if (!belowThreshold && !stopFactorMatch) — отказ/keep_new/стоп-фактор обработан выше отдельной веткой
 
       // AI-Портрет: двухпроходный скоринг v2 (per-criteria breakdown).

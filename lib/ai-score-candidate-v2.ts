@@ -25,6 +25,7 @@ import {
   type VacancyRequirements,
 } from "@/lib/db/schema"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
+import { addVacancyTokens } from "@/lib/ai/token-usage"
 import { buildExtractFactsPrompt } from "@/lib/ai/prompts/extract-facts"
 import { buildCompareRequirementsPrompt } from "@/lib/ai/prompts/compare-requirements"
 import {
@@ -265,6 +266,7 @@ export async function scoreCandidateV2(
     temperature: 0,
     messages:    [{ role: "user", content: extractPrompt }],
   })
+  void addVacancyTokens(vacancyId, extractMsg.usage)
   const extractText = extractMsg.content.find(b => b.type === "text")
   if (!extractText || extractText.type !== "text") {
     throw new Error("v2 Pass 1: AI не ответил")
@@ -287,6 +289,7 @@ export async function scoreCandidateV2(
     temperature: 0,
     messages:    [{ role: "user", content: comparePrompt }],
   })
+  void addVacancyTokens(vacancyId, compareMsg.usage)
   const compareText = compareMsg.content.find(b => b.type === "text")
   if (!compareText || compareText.type !== "text") {
     throw new Error("v2 Pass 2: AI не ответил")
