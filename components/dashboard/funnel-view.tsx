@@ -26,11 +26,12 @@ interface FunnelViewProps {
   onAction?: (candidateId: string, columnId: string, action: CandidateAction) => void
 }
 
-/** Ширины ступеней воронки (в процентах) — от 100% (1-я колонка) до 60% и далее. */
-const STEP_WIDTHS = [100, 90, 80, 70, 60]
-const MIN_STEP_WIDTH = 60
-function getStepWidth(i: number): number {
-  return i < STEP_WIDTHS.length ? STEP_WIDTHS[i] : MIN_STEP_WIDTH
+/** Ширина полосы воронки (%) — конус: сверху широко (≈100%), книзу узко (≈14%),
+ *  плюс лёгкий бамп от числа кандидатов. Минимум 12% (низ остаётся видимым/узким). */
+function funnelWidth(i: number, total: number, count: number, maxCount: number): number {
+  const positional = total <= 1 ? 100 : 100 - (i / (total - 1)) * 86 // верх 100% → низ ≈14%
+  const countBump  = maxCount > 0 ? (count / maxCount) * 12 : 0       // до +12% от количества
+  return Math.max(12, Math.min(100, positional + countBump))
 }
 
 /** "Отказ" — терминальный статус, не часть основной последовательности воронки. */
@@ -55,6 +56,7 @@ export function FunnelView({ columns, settings, onOpenProfile, onAction }: Funne
   // Делим колонки: основная последовательность воронки vs терминальный статус "Отказ".
   const mainColumns = columns.filter((c) => !isRejected(c))
   const rejectedColumn = columns.find(isRejected)
+  const maxFunnelCount = Math.max(1, ...mainColumns.map((c) => c.count))
 
   const conversionRates = columns.map((col, i) => {
     if (columns[0].count === 0) return 0
@@ -70,7 +72,7 @@ export function FunnelView({ columns, settings, onOpenProfile, onAction }: Funne
           <h3 className="text-sm font-semibold text-foreground mb-6">Воронка найма</h3>
           <div className="flex flex-col gap-1">
             {mainColumns.map((col, i) => {
-              const stepWidth = getStepWidth(i)
+              const w = funnelWidth(i, mainColumns.length, col.count, maxFunnelCount)
               const prevCount = i > 0 ? mainColumns[i - 1].count : null
               const passPct = prevCount === null
                 ? null
@@ -79,53 +81,44 @@ export function FunnelView({ columns, settings, onOpenProfile, onAction }: Funne
                   : Math.round((col.count / prevCount) * 100)
 
               return (
-                <div
-                  key={col.id}
-                  className="mx-auto"
-                  style={{ maxWidth: `${stepWidth}%`, width: "100%" }}
-                >
-                  {/* Row */}
-                  <div className="flex items-center gap-4 group py-1">
-                    {/* Stage label */}
-                    <div className="w-28 flex-shrink-0 text-right">
-                      <span className="text-xs font-medium text-foreground">{col.title}</span>
-                    </div>
+                <div key={col.id} className="flex items-center gap-3 group py-0.5">
+                  {/* Подпись стадии — слева, фиксированно */}
+                  <div className="w-28 flex-shrink-0 text-right">
+                    <span className="text-xs font-medium text-foreground">{col.title}</span>
+                  </div>
 
-                    {/* Bar */}
-                    <div className="flex-1 flex items-center gap-3">
-                      <div className="flex-1 h-10 bg-muted/40 rounded-lg overflow-hidden relative">
-                        <div
-                          className="h-full w-full rounded-lg flex items-center justify-end pr-3 transition-all duration-500 group-hover:brightness-110"
-                          style={{
-                            background: `linear-gradient(135deg, ${col.colorFrom}, ${col.colorTo})`,
-                          }}
-                        >
-                          <span className="text-white text-xs font-bold">{col.count}</span>
-                        </div>
-                      </div>
-
-                      {/* Conversion */}
-                      <div className="w-16 flex-shrink-0">
-                        {passPct === null ? (
-                          <div className="text-center">
-                            <span className="text-[11px] font-semibold text-primary">100%</span>
-                            <p className="text-[10px] text-muted-foreground">вход</p>
-                          </div>
-                        ) : passPct === "empty" ? (
-                          <div className="text-center">
-                            <span className="text-[11px] font-semibold text-muted-foreground">—</span>
-                            <p className="text-[10px] text-muted-foreground">прошло</p>
-                          </div>
-                        ) : (
-                          <div className="text-center">
-                            <span className="text-[11px] font-semibold text-emerald-500">
-                              {passPct}%
-                            </span>
-                            <p className="text-[10px] text-muted-foreground">прошло</p>
-                          </div>
-                        )}
-                      </div>
+                  {/* Полоса — по центру, ширина = конус */}
+                  <div className="flex-1 flex justify-center">
+                    <div
+                      className="h-9 rounded-md flex items-center justify-center px-2 transition-all duration-500 group-hover:brightness-110"
+                      style={{
+                        width: `${w}%`,
+                        minWidth: 44,
+                        background: `linear-gradient(135deg, ${col.colorFrom}, ${col.colorTo})`,
+                      }}
+                    >
+                      <span className="text-white text-xs font-bold">{col.count}</span>
                     </div>
+                  </div>
+
+                  {/* Конверсия — справа, фиксированно */}
+                  <div className="w-14 flex-shrink-0">
+                    {passPct === null ? (
+                      <div className="text-center">
+                        <span className="text-[11px] font-semibold text-primary">100%</span>
+                        <p className="text-[10px] text-muted-foreground">вход</p>
+                      </div>
+                    ) : passPct === "empty" ? (
+                      <div className="text-center">
+                        <span className="text-[11px] font-semibold text-muted-foreground">—</span>
+                        <p className="text-[10px] text-muted-foreground">прошло</p>
+                      </div>
+                    ) : (
+                      <div className="text-center">
+                        <span className="text-[11px] font-semibold text-emerald-500">{passPct}%</span>
+                        <p className="text-[10px] text-muted-foreground">прошло</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )
