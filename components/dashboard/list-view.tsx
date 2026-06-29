@@ -29,6 +29,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils"
 import type { CandidateAction } from "@/lib/column-config"
 import { applySortMode, type CandidateSortMode } from "@/lib/candidate-sort"
+import { yearsRu } from "@/lib/plural-ru"
 import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ListFilter, ArrowUp, ArrowDown, Star, CalendarClock, CalendarPlus, MessageSquare, RotateCcw } from "lucide-react"
 import { DemoProgressBar, calcDemoPercent, calcDemoFraction } from "@/components/hr/demo-progress-bar"
 import { getStageLabel, getStageColorClasses } from "@/lib/stages"
@@ -1004,7 +1005,7 @@ export function ListView({
                       className="text-[13px] text-muted-foreground truncate"
                       title={candidate.experience}
                     >
-                      {candidate.experienceYears ? `Опыт ${candidate.experienceYears} лет` : (candidate.experience ? `Опыт ${candidate.experience}` : "")}
+                      {candidate.experienceYears ? `Опыт ${yearsRu(candidate.experienceYears)}` : (candidate.experience ? `Опыт ${candidate.experience}` : "")}
                     </p>
                   )}
                 </div>

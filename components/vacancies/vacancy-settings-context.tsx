@@ -317,7 +317,10 @@ export function VacancyTabPendingDot({ tab }: { tab: VacancyTabKey }) {
  */
 export function VacancyStickySaveBar() {
   const ctx = useVacancySettings()
-  if (!ctx || (!ctx.hasPending && !ctx.nextAction)) return null
+  // Рендерим всегда, когда есть контекст (бар монтируется только внутри
+  // VacancySettingsProvider, т.е. на вкладке «Настройки»). Это даёт единый
+  // вид на всех подтабах: «Сохранить настройки» всегда слева, «Далее» справа.
+  if (!ctx) return null
   const label = ctx.pendingCount > 1
     ? `Сохранить настройки (${ctx.pendingCount} изменения)`
     : "Сохранить настройки"
@@ -325,17 +328,15 @@ export function VacancyStickySaveBar() {
     <div className={cn(
       "sticky bottom-4 z-40 mt-6 max-w-3xl flex justify-end items-center gap-2 pointer-events-none",
     )}>
-      {/* Слева — «Сохранить настройки» (когда есть изменения), справа — «Далее». */}
-      {ctx.hasPending && (
-        <Button
-          onClick={() => { void ctx.saveAll() }}
-          disabled={ctx.saving}
-          className="pointer-events-auto gap-2 h-11 px-5 text-sm shadow-lg shadow-primary/20"
-        >
-          {ctx.saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          {label}
-        </Button>
-      )}
+      {/* «Сохранить настройки» — всегда, независимо от наличия изменений. */}
+      <Button
+        onClick={() => { void ctx.saveAll() }}
+        disabled={ctx.saving}
+        className="pointer-events-auto gap-2 h-11 px-5 text-sm shadow-lg shadow-primary/20"
+      >
+        {ctx.saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+        {label}
+      </Button>
       {ctx.nextAction && (
         <Button
           onClick={() => { void ctx.nextAction?.onClick() }}

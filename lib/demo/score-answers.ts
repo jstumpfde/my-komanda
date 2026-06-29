@@ -2,8 +2,11 @@
  * Скоринг ответов кандидата на task-вопросы демо.
  *
  * Читает все demos вакансии (kind='demo' OR kind LIKE 'block:%'),
- * собирает вопросы type="task", фильтрует view-маркеры из anketa_answers,
- * и вызывает AI для оценки ответов против aiCriteria каждого вопроса.
+ * определяет версию демо кандидата по перекрытию blockId-ов ответов,
+ * собирает вопросы type="task" с aiCriteria ТОЛЬКО из этой версии,
+ * и вызывает AI для оценки только отвеченных вопросов.
+ *
+ * Формула: score = round( sum(awarded, неотвеченные=0) / sum(points, все скорируемые) × 100 )
  *
  * Результат пишется в ОТДЕЛЬНЫЕ колонки (НЕ ai_score — туда пишут v1/v2-скоринг
  * резюме, была бы гонка fire-and-forget):
@@ -73,8 +76,80 @@ export interface ScoreDemoAnswersResult {
 export interface ScoreDemoAnswersArgs {
   candidateId: string
   vacancyId: string
-  /** Пропустить если балл уже есть (candidates.ai_score != null). */
+  /** Пропустить если балл уже есть (candidates.demo_answers_score != null). */
   skipIfScored?: boolean
+}
+
+interface TaskQuestion {
+  blockId: string
+  questionId: string
+  text: string
+  options: string[]
+  points: number
+  aiCriteria: string
+}
+
+interface DemoVersion {
+  lessonsJson: unknown
+  taskQuestions: TaskQuestion[]
+}
+
+/**
+ * Строим TaskQuestion[] из одного lessonsJson.
+ */
+function extractTaskQuestions(lessonsJson: unknown): TaskQuestion[] {
+  const result: TaskQuestion[] = []
+  const resolver = buildBlockResolver([lessonsJson])
+  for (const [blockId, block] of resolver.entries()) {
+    for (const q of block.questions) {
+      if (q.aiCriteria && q.aiCriteria.trim()) {
+        result.push({
+          blockId,
+          questionId: q.id,
+          text:       q.text,
+          options:    q.options,
+          points:     typeof q.points === "number" ? q.points : 5,
+          aiCriteria: q.aiCriteria.trim(),
+        })
+      }
+    }
+  }
+  return result
+}
+
+/**
+ * Определяем, к какой версии демо относятся ответы кандидата.
+ *
+ * Алгоритм: для каждой версии демо считаем, сколько blockId-ов из ответов
+ * кандидата совпадает с block-id-ами в этой версии. Версия с наибольшим
+ * перекрытием = версия кандидата.
+ *
+ * Фолбэк:
+ * - Если только одна версия — берём её.
+ * - Если перекрытие нулевое (нет ни одного совпадения ни в одной) — берём первую.
+ */
+function pickCandidateDemoVersion(
+  versions: DemoVersion[],
+  answeredBlockIds: Set<string>,
+): DemoVersion {
+  if (versions.length === 1) return versions[0]
+
+  let best: DemoVersion = versions[0]
+  let bestScore = -1
+
+  for (const version of versions) {
+    const blockIdsInVersion = new Set(version.taskQuestions.map((q) => q.blockId))
+    let overlap = 0
+    for (const bid of answeredBlockIds) {
+      if (blockIdsInVersion.has(bid)) overlap++
+    }
+    if (overlap > bestScore) {
+      bestScore = overlap
+      best = version
+    }
+  }
+
+  return best
 }
 
 /**
@@ -112,37 +187,17 @@ export async function scoreDemoAnswers(
 
   if (demoRows.length === 0) return null
 
-  const resolver = buildBlockResolver(demoRows.map((r) => r.lessonsJson))
+  // Строим версии демо (каждая строка в БД — отдельная версия)
+  const versions: DemoVersion[] = demoRows
+    .map((r) => ({
+      lessonsJson:   r.lessonsJson,
+      taskQuestions: extractTaskQuestions(r.lessonsJson),
+    }))
+    .filter((v) => v.taskQuestions.length > 0)
 
-  // Собираем все task-вопросы с aiCriteria из резолвера
-  interface TaskQuestion {
-    blockId: string
-    questionId: string
-    text: string
-    options: string[]
-    points: number
-    aiCriteria: string
-  }
-  const taskQuestions: TaskQuestion[] = []
-  for (const [blockId, block] of resolver.entries()) {
-    for (const q of block.questions) {
-      // Включаем вопрос только если у него есть aiCriteria — иначе нечего оценивать
-      if (q.aiCriteria && q.aiCriteria.trim()) {
-        taskQuestions.push({
-          blockId,
-          questionId: q.id,
-          text:       q.text,
-          options:    q.options,
-          points:     typeof q.points === "number" ? q.points : 5,
-          aiCriteria: q.aiCriteria.trim(),
-        })
-      }
-    }
-  }
+  if (versions.length === 0) return null
 
-  if (taskQuestions.length === 0) return null
-
-  // Индексируем ответы кандидата по blockId (берём последний ответ для блока)
+  // Индексируем ответы кандидата по blockId (берём все записи для блока)
   const rawAnswers: Array<{ blockId?: string; answer?: unknown }> = Array.isArray(candidate.anketaAnswers)
     ? (candidate.anketaAnswers as Array<{ blockId?: string; answer?: unknown }>)
     : []
@@ -157,14 +212,19 @@ export async function scoreDemoAnswers(
     answersByBlock.set(bid, list)
   }
 
-  // Для каждого task-вопроса находим реальный ответ (не view-маркер)
+  // Определяем версию демо кандидата по перекрытию blockId-ов
+  const answeredBlockIds = new Set(answersByBlock.keys())
+  const candidateVersion = pickCandidateDemoVersion(versions, answeredBlockIds)
+  const allScorable = candidateVersion.taskQuestions // весь знаменатель
+
+  // Для каждого scorable-вопроса находим реальный ответ (не view-маркер)
   interface AnsweredQuestion {
     question: TaskQuestion
     renderedAnswer: string
   }
   const answeredQuestions: AnsweredQuestion[] = []
 
-  for (const q of taskQuestions) {
+  for (const q of allScorable) {
     const blockAnswers = answersByBlock.get(q.blockId)
     if (!blockAnswers || blockAnswers.length === 0) continue
 
@@ -209,9 +269,7 @@ export async function scoreDemoAnswers(
   // Нет реальных ответов — не вызываем AI
   if (answeredQuestions.length === 0) return null
 
-  // Формируем промпт для AI
-  const totalMaxPoints = answeredQuestions.reduce((s, aq) => s + aq.question.points, 0)
-
+  // Отправляем в AI ТОЛЬКО отвеченные вопросы (экономия токенов)
   const questionsBlock = answeredQuestions.map((aq, i) => {
     return [
       `Вопрос ${i + 1}: ${aq.question.text}`,
@@ -261,15 +319,46 @@ ${questionsBlock}
     textBlock.text,
   )
 
-  const breakdown: AnswerQuestionBreakdown[] = (parsed.questions ?? []).map((item) => ({
+  // Строим карту AI-результатов по тексту вопроса (AI возвращает их в том же порядке)
+  const aiResults = (parsed.questions ?? []).map((item) => ({
     questionText: item.questionText ?? "",
     awarded:      Math.max(0, Number(item.awarded) || 0),
     max:          Math.max(1, Number(item.max) || 1),
     comment:      item.comment ?? "",
   }))
 
+  // Индексируем AI-результаты по позиции (AI отвечает в порядке отправки)
+  const answeredIndexMap = new Map<string, typeof aiResults[0]>()
+  answeredQuestions.forEach((aq, i) => {
+    const aiItem = aiResults[i]
+    if (aiItem) answeredIndexMap.set(`${aq.question.blockId}::${aq.question.questionId}`, aiItem)
+  })
+
+  // Собираем финальный breakdown по ВСЕМ scorable вопросам версии кандидата:
+  // отвеченные — с AI-оценкой; неотвеченные — awarded=0, comment="Не отвечено"
+  const breakdown: AnswerQuestionBreakdown[] = allScorable.map((q) => {
+    const key = `${q.blockId}::${q.questionId}`
+    const aiItem = answeredIndexMap.get(key)
+    if (aiItem) {
+      return {
+        questionText: q.text,
+        awarded:      Math.max(0, Math.min(q.points, aiItem.awarded)),
+        max:          q.points,
+        comment:      aiItem.comment,
+      }
+    }
+    // Неотвеченный вопрос: 0 баллов, учитывается в знаменателе
+    return {
+      questionText: q.text,
+      awarded:      0,
+      max:          q.points,
+      comment:      "Не отвечено",
+    }
+  })
+
+  // Знаменатель = сумма points ВСЕХ scorable вопросов версии кандидата
   const sumAwarded = breakdown.reduce((s, b) => s + b.awarded, 0)
-  const sumMax = breakdown.reduce((s, b) => s + b.max, 0)
+  const sumMax     = breakdown.reduce((s, b) => s + b.max, 0)
   const score = sumMax > 0 ? Math.max(0, Math.min(100, Math.round((sumAwarded / sumMax) * 100))) : 0
 
   // Запись в БД — в свои колонки (не ai_score, чтобы не было гонки с v1/v2).

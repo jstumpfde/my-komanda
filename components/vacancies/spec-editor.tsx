@@ -39,7 +39,7 @@ import { toast } from "sonner"
 import {
   Target, Plus, X, Loader2, ShieldAlert, FileText, Gauge,
   ArrowRightLeft, AlertTriangle, Sparkles, Wand2, CheckCircle2, Check,
-  Lightbulb,
+  Lightbulb, Save,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -955,6 +955,9 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
   // Излишки при переносе v1→v2 (то, что не влезло в лимиты must=10/nice=10/deal=6)
   const [overflow, setOverflow] = useState<{ must: string[]; nice: string[]; deal: string[] } | null>(null)
 
+  // Спиннер для кнопки «Сохранить» в шапке «Портрета»
+  const [isSaving, setIsSaving] = useState(false)
+
   // AI «Собрать из вакансии» (POST /requirements/suggest → подтверждающий диалог)
   const [suggesting, setSuggesting]         = useState(false)
   const [suggestionOpen, setSuggestionOpen] = useState(false)
@@ -1276,6 +1279,21 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
               Сохранённый Spec
             </Badge>
           )}
+          {/* Кнопка «Сохранить» в шапке — зеркалит sticky-бар для удобства */}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={isSaving}
+            onClick={async () => {
+              setIsSaving(true)
+              try { await save() } finally { setIsSaving(false) }
+            }}
+          >
+            {isSaving
+              ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Сохранение…</>
+              : <><Save className="w-4 h-4 mr-1.5" /> Сохранить</>}
+          </Button>
         </div>
       </div>
 

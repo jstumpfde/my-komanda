@@ -732,6 +732,13 @@ export function CandidateDrawer({
   const [tgSending,      setTgSending]      = useState(false)
   const [tgMessages,     setTgMessages]     = useState<import("@/lib/db/schema").TgMessage[]>([])
 
+  // ── Стадии каналов (hh и др.) — загружаются лениво при открытии таба «Каналы» ──
+  type ChannelStage = { channel: string; stageId: string; stageLabel: string }
+  const [channelStages,        setChannelStages]        = useState<ChannelStage[]>([])
+  const [channelStagesLoading, setChannelStagesLoading] = useState(false)
+  const [channelStagesError,   setChannelStagesError]   = useState<string | null>(null)
+  const channelStagesFetchedFor = useRef<string | null>(null)
+
   const fetchCandidate = useCallback(async (id: string) => {
     setLoadingCandidate(true)
     try {
@@ -805,6 +812,9 @@ export function CandidateDrawer({
       setTgInviteLink(null)
       setTgDraft("")
       setTgMessages([])
+      setChannelStages([])
+      setChannelStagesError(null)
+      channelStagesFetchedFor.current = null
       fetchCandidate(candidateId)
       loadContacts(candidateId)
     }
@@ -931,6 +941,32 @@ export function CandidateDrawer({
     const el = hhListRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [activeTab, hhMessages])
+
+  // ── Lazy-load channel stages when «Каналы» tab opens ─────────────────────
+  const loadChannelStages = useCallback(async (candidateId: string) => {
+    setChannelStagesLoading(true)
+    setChannelStagesError(null)
+    try {
+      const res = await fetch(`/api/modules/hr/candidates/${candidateId}/channel-stage`)
+      const data = await res.json() as { channels?: { channel: string; stageId: string; stageLabel: string }[]; error?: string }
+      setChannelStages(data.channels ?? [])
+      if (data.error) setChannelStagesError(data.error)
+    } catch (err) {
+      setChannelStagesError(err instanceof Error ? err.message : "Сетевая ошибка")
+    } finally {
+      setChannelStagesLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeTab !== "channels") return
+    const id = candidate?.id
+    if (!id) return
+    // Only auto-fetch once per candidate; manual refresh re-fetches
+    if (channelStagesFetchedFor.current === id) return
+    channelStagesFetchedFor.current = id
+    void loadChannelStages(id)
+  }, [activeTab, candidate?.id, loadChannelStages])
 
   // ── Reset tab scroll to top when switching tabs ──────────────────────────
   // Без этого пользователь может открыть Ответы после прокрутки длинных
@@ -1970,6 +2006,47 @@ export function CandidateDrawer({
 
               {/* ── Каналы ───────────────────────────────────────── */}
               <TabsContent value="channels" className="px-6 py-4 pb-28 mt-0 space-y-3">
+
+                {/* ── Стадии каналов ── */}
+                <div className="rounded-lg border border-border/60 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium text-foreground">Стадии каналов</p>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                      onClick={() => {
+                        if (!candidate?.id) return
+                        channelStagesFetchedFor.current = null
+                        void loadChannelStages(candidate.id)
+                      }}
+                      disabled={channelStagesLoading}
+                      title="Обновить"
+                    >
+                      <RotateCcw className={cn("w-3 h-3", channelStagesLoading && "animate-spin")} />
+                    </Button>
+                  </div>
+                  {channelStagesLoading ? (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Загружаем…
+                    </div>
+                  ) : channelStages.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic">
+                      {channelStagesError ? `Ошибка: ${channelStagesError}` : "Нет данных по каналам"}
+                    </p>
+                  ) : (
+                    <div className="space-y-1">
+                      {channelStages.map((cs) => (
+                        <div key={cs.channel} className="flex items-center gap-2 text-xs">
+                          <span className="font-medium text-foreground capitalize">{cs.channel}</span>
+                          <span className="text-muted-foreground">—</span>
+                          <span className="text-foreground">{cs.stageLabel}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                 {/* Telegram */}
                 <div className="rounded-lg border border-border/60 p-3 space-y-3">

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Calendar, Check, X, Star } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { yearsRu } from "@/lib/plural-ru"
 import { CandidateAvatar } from "./candidate-avatar"
 import type { CardDisplaySettings } from "./card-settings"
 import type { CandidateAction } from "@/lib/column-config"
@@ -257,7 +258,7 @@ export function CandidateCard({ candidate, settings, columnId, isLastColumn, onO
           age = now.getFullYear() - birth.getFullYear()
           if (now.getMonth() < birth.getMonth() || (now.getMonth() === birth.getMonth() && now.getDate() < birth.getDate())) age--
         }
-        return age != null ? <p className="text-xs text-muted-foreground mt-1">Возраст: {age} лет</p> : null
+        return age != null ? <p className="text-xs text-muted-foreground mt-1">Возраст: {yearsRu(age)}</p> : null
       })()}
 
       {/* AI screening badge */}
