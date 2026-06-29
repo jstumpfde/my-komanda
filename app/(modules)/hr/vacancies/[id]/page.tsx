@@ -2559,9 +2559,9 @@ export default function VacancyPage() {
                     <span>·</span>
                     <UITooltip>
                       <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.demoAnswered ?? "—"}</span> ответили на вопросы</span>
+                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.demoAnswered ?? "—"}</span> заполнили анкету</span>
                       </TooltipTrigger>
-                      <TooltipContent>Кандидаты, ответившие на вопросы демо (посчитан балл по ответам)</TooltipContent>
+                      <TooltipContent>Кандидаты, ответившие на вопросы анкеты (посчитан балл «AI-ан» по ответам)</TooltipContent>
                     </UITooltip>
                     <span>·</span>
                     <UITooltip>

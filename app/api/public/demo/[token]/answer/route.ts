@@ -295,9 +295,20 @@ export async function POST(
 
       await tx.update(candidates).set(updates).where(eq(candidates.id, candidate.id))
 
+      // Есть ли в этом батче реальный ответ на вопрос (не виртуальный маркер и
+      // не пустой объект) — сигнал пересчитать балл по ответам, даже если демо
+      // ещё не пройдено целиком.
+      const hasRealAnswer = incoming.some(
+        (b) =>
+          !VIRTUAL_MARKERS.has(b.blockId) &&
+          b.answer != null &&
+          !(typeof b.answer === "object" && !Array.isArray(b.answer) && Object.keys(b.answer as object).length === 0),
+      )
+
       return {
         stage: newStage ?? currentStage,
         isComplete,
+        hasRealAnswer,
         aiScoreNull: candidate.aiScore == null,
         vacancyId: candidate.vacancyId,
         candidateId: candidate.id,
@@ -310,11 +321,15 @@ export async function POST(
       void runAbScoring(txResult.candidateId, txResult.vacancyId)
     }
 
-    // Балл по ответам демо — вычисляется ПОСЛЕ завершения, fire-and-forget.
+    // Балл по ответам демо — fire-and-forget. Пересчитываем при завершении демо
+    // ИЛИ когда в этом батче кандидат ответил на реальные вопросы: многие
+    // отвечают на анкету, не долистав демо до конца (__complete__), и без этого
+    // у них «AI-ан» оставался пустым. Знаменатель — все оцениваемые вопросы
+    // версии демо (неотвеченные = 0), поэтому пересчёт по мере ответов корректен.
     // Работает независимо от A/B скоринга: оценивает task-вопросы с aiCriteria.
     // Пишет в СВОЮ колонку candidates.demo_answers_score (не ai_score — иначе была
     // бы гонка с runAbScoring). Только если у вакансии есть такие вопросы.
-    if (txResult.isComplete) {
+    if (txResult.isComplete || txResult.hasRealAnswer) {
       void scoreDemoAnswers({
         candidateId: txResult.candidateId,
         vacancyId:   txResult.vacancyId,
