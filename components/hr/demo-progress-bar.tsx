@@ -144,11 +144,12 @@ export function DemoProgressBar({
             : (at100 && !stagePassedDecision
                 ? "bg-blue-500"
                 : "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]")
+    const effTotK = completedByAnswers === true ? (completedBlocks ?? 0) : (totalBlocks ?? 0)
     const label = !hasData
       ? "Не начато"
-      // Знаменатель/число НЕ меняем — показываем реальные блоки, но процент
-      // отражает «пройдено по ответам» (100%), чтобы сигнал совпадал с цветом.
-      : `${completedBlocks ?? 0}/${totalBlocks ?? 0} · ${effPct}%`
+      // При «пройдено по ответам» знаменатель = пройденные блоки (12/12) —
+      // экраны после отправки ответов в счёт не идут.
+      : `${completedBlocks ?? 0}/${effTotK} · ${effPct}%`
     return (
       <div className={cn("mt-1.5 mb-1", className)}>
         <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
@@ -178,9 +179,12 @@ export function DemoProgressBar({
   // «Пройдено по ответам» приравниваем к завершённому, даже если cur < tot
   // (хвост декоративных блоков не пролистан).
   const completedFraction = (hasFraction && cur >= tot) || completedByAnswers === true
-  const isComplete = completedFraction && stagePassedDecision
+  // «Пройдено по ответам» = кандидат ответил на все вопросы → воронку прошёл,
+  // зелёный сразу (стадия могла не сдвинуться в decision, т.к. прощательные
+  // экраны после отправки ответов он не долистал — и не должен ради завершения).
+  const isComplete = completedFraction && (stagePassedDecision || completedByAnswers === true)
   // Кандидат досмотрел демо, но воронка ещё не двинулась — рендерим синим.
-  const isCompletedButNotPassed = completedFraction && !stagePassedDecision
+  const isCompletedButNotPassed = completedFraction && !stagePassedDecision && completedByAnswers !== true
   const isStarted = hasFraction && cur > 0 && cur < tot && !completedFraction
   const fillColor = isComplete
     ? "bg-emerald-500"
@@ -200,10 +204,14 @@ export function DemoProgressBar({
   // Показываем дробь "15/17" — page-based прогресс (знаменатель/число НЕ меняем
   // даже при «пройдено по ответам»). Если completedBlocks/totalBlocks не приходят
   // (legacy данные), fallback на процент.
+  // При «пройдено по ответам» знаменатель = пройденные блоки (12/12): экраны
+  // после отправки ответов («Спасибо» и пр.) в счёт не идут — кандидат прошёл
+  // всё нужное. Иначе показываем реальную дробь (12/16).
+  const effTot = completedByAnswers === true ? cur : tot
   const label = noProgress
     ? "Не начато"
     : hasFraction
-      ? `${cur}/${tot}`
+      ? `${cur}/${effTot}`
       : `${displayPct}%`
   const labelClass = noProgress
     ? "text-muted-foreground"
@@ -226,12 +234,12 @@ export function DemoProgressBar({
           <Video className="inline w-3 h-3 ml-1 text-muted-foreground" aria-label="Есть видео-визитка" />
         )}
       </span>
-      {hasFraction && tot > 0 ? (
-        // Сегменты-«шаги»: tot делений, первые cur — залиты цветом стадии,
+      {hasFraction && effTot > 0 ? (
+        // Сегменты-«шаги»: effTot делений, первые cur — залиты цветом стадии,
         // остальные серые. Наглядно показывает «N из M страниц пройдено».
-        // При «пройдено по ответам» заливаем все сегменты — сигнал «готово».
+        // При «пройдено по ответам» effTot = cur → все сегменты залиты (готово).
         <div className="flex w-full gap-[1px]" aria-label={`Прогресс демо: ${label}`}>
-          {Array.from({ length: tot }).map((_, i) => (
+          {Array.from({ length: effTot }).map((_, i) => (
             <div
               key={i}
               className={cn(

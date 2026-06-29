@@ -187,17 +187,6 @@ export function hasAnsweredAllRequired(
   allLessonsJsons: unknown[],
   anketaAnswers: unknown,
 ): boolean {
-  const resolver = buildBlockResolver(allLessonsJsons)
-
-  // Собираем обязательные вопросы по блокам.
-  const requiredByBlock: Array<{ blockId: string; questionIds: string[] }> = []
-  for (const [blockId, block] of resolver.entries()) {
-    const requiredIds = block.questions.filter((q) => q.required).map((q) => q.id)
-    if (requiredIds.length > 0) requiredByBlock.push({ blockId, questionIds: requiredIds })
-  }
-  // Нет обязательных вопросов — признак не применяется.
-  if (requiredByBlock.length === 0) return false
-
   const answers: AnketaAnswerEntry[] = Array.isArray(anketaAnswers)
     ? (anketaAnswers as AnketaAnswerEntry[])
     : anketaAnswers && typeof anketaAnswers === "object"
@@ -216,15 +205,33 @@ export function hasAnsweredAllRequired(
     answersByBlock.set(bid, arr)
   }
 
-  // Каждый обязательный вопрос должен иметь непустой ответ хотя бы в одной
-  // из записей этого блока.
-  for (const blk of requiredByBlock) {
-    const blockAnswers = answersByBlock.get(blk.blockId)
-    if (!blockAnswers || blockAnswers.length === 0) return false
-    for (const qid of blk.questionIds) {
-      const answered = blockAnswers.some((ba) => hasNonEmptyAnswerFor(ba, qid))
-      if (!answered) return false
+  // Проверка одного демо: ответил ли кандидат на ВСЕ его обязательные вопросы.
+  const demoFullyAnswered = (lessonsJson: unknown): boolean => {
+    const resolver = buildBlockResolver([lessonsJson])
+    const requiredByBlock: Array<{ blockId: string; questionIds: string[] }> = []
+    for (const [blockId, block] of resolver.entries()) {
+      const requiredIds = block.questions.filter((q) => q.required).map((q) => q.id)
+      if (requiredIds.length > 0) requiredByBlock.push({ blockId, questionIds: requiredIds })
     }
+    // У демо нет обязательных вопросов — оно не даёт признак «пройдено по ответам».
+    if (requiredByBlock.length === 0) return false
+    for (const blk of requiredByBlock) {
+      const blockAnswers = answersByBlock.get(blk.blockId)
+      if (!blockAnswers || blockAnswers.length === 0) return false
+      for (const qid of blk.questionIds) {
+        const answered = blockAnswers.some((ba) => hasNonEmptyAnswerFor(ba, qid))
+        if (!answered) return false
+      }
+    }
+    return true
   }
-  return true
+
+  // У вакансии может быть НЕСКОЛЬКО альтернативных демо (напр. «Презентация» и
+  // «Путь менеджера»). Кандидат проходит ОДНО из них. Поэтому «пройдено по
+  // ответам» = он ответил на все обязательные вопросы ХОТЯ БЫ ОДНОГО демо,
+  // а не сразу всех (иначе с двумя демо признак никогда не срабатывал).
+  for (const lessonsJson of allLessonsJsons) {
+    if (demoFullyAnswered(lessonsJson)) return true
+  }
+  return false
 }
