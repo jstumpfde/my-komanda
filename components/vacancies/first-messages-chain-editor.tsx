@@ -1,24 +1,25 @@
 "use client"
 
-// #21: редактор серии из до 3 первых сообщений.
+// #21: редактор напоминаний (Сообщения 2 и 3 серии первых сообщений).
 //
-// Сообщение 1 — всегда включено (не выключается), обязано содержать
-// плейсхолдер {{demo_link}} или {ссылка}. Сообщения 2 и 3 — опциональны.
-// Каждое сообщение: тумблер (msg1 disabled), задержка (15с/30с/1м/3м/15м/30м/1ч),
-// текстарея с шаблоном.
+// Сообщение 1 (приглашение) и текст для нерабочего времени редактируются в табе
+// «Портрет» (spec.inviteLetter / spec.offHoursLetter) — здесь НЕ показываются,
+// но chain[0] и off-hours держим в состоянии и отправляем при сохранении без
+// изменений (round-trip), чтобы не затереть. UI — только напоминания 2 и 3:
+// тумблер, задержка (15с/30с/1м/3м/15м/30м/1ч), текстарея с шаблоном.
 //
 // Сохраняется через PUT /api/modules/hr/vacancies/[id]/first-messages-chain.
 // При сохранении chain[0].text дублируется в ai_process_settings.inviteMessage
 // (backward compat) — это делает endpoint на сервере.
 
-import { Fragment, useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { PlaceholderBadges } from "@/components/ui/placeholder-badges"
-import { Loader2, Moon, Save, Send } from "lucide-react"
+import { Loader2, Save, Send } from "lucide-react"
 import { toast } from "sonner"
 
 export interface ChainStep {
@@ -51,22 +52,7 @@ const DELAY_OPTIONS: Array<{ value: number; label: string }> = [
   { value: 3600, label: "1 час" },
 ]
 
-// Off-hours: задержка перед мягким сообщением (включая «без задержки»).
-const OFF_HOURS_DELAY_OPTIONS: Array<{ value: number; label: string }> = [
-  { value: 0,   label: "Без задержки" },
-  { value: 15,  label: "15 секунд" },
-  { value: 30,  label: "30 секунд" },
-  { value: 60,  label: "1 минута" },
-  { value: 180, label: "3 минуты" },
-]
-
-const OFF_HOURS_PLACEHOLDER =
-  "Здравствуйте! Получили ваш отклик в нерабочее время. HR посмотрит вашу анкету " +
-  "в рабочие часы и пришлёт демо-должности. Спасибо за интерес к {{vacancy}}!"
-
 const PLACEHOLDER_TOKENS = ["name", "vacancy", "company", "demo_link"]
-// У off-hours-сообщения нет демо-ссылки — это «мягкое» подтверждение.
-const OFF_HOURS_TOKENS = ["name", "vacancy", "company"]
 
 interface OffHoursState {
   enabled:      boolean
@@ -116,7 +102,6 @@ export function FirstMessagesChainEditor({
   // #57: refs на 3 textarea — нужны для PlaceholderBadges, чтобы вставлять
   // токен в позицию курсора.
   const textareaRefs = useRef<Array<HTMLTextAreaElement | null>>([null, null, null])
-  const offTextareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   // Если внешние initial поменялись (refetch вакансии и т.п.) — догоняемся
   // только если у пользователя нет локальных правок.
@@ -186,7 +171,7 @@ export function FirstMessagesChainEditor({
       setOff(savedOffState)
       setSavedOff(savedOffState)
       onSaved?.(saved)
-      toast.success("Серия первых сообщений сохранена")
+      toast.success("Напоминания сохранены")
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Не удалось сохранить")
     } finally {
@@ -199,29 +184,29 @@ export function FirstMessagesChainEditor({
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
           <Send className="w-4 h-4" />
-          Серия первых сообщений
+          Напоминания, если кандидат не ответил
         </CardTitle>
         <p className="text-xs text-muted-foreground mt-1">
-          До 3 сообщений подряд с задержками — для ощущения «живого» общения.
-          Если кандидат ответит или откроет демо — следующие сообщения отменяются.
+          Авто-напоминания после приглашения, если кандидат не ответил и ещё не
+          открыл демо. Как только он ответит или откроет демо — отменяются.
+          Само приглашение и текст для нерабочего времени редактируются в табе «Портрет».
         </p>
       </CardHeader>
       <CardContent className="space-y-5">
         {chain.map((step, idx) => {
-          const isFirst = idx === 0
-          const delayLabel = idx === 0 ? "Задержка перед отправкой" : `Задержка после Сообщения ${idx}`
+          // Сообщение 1 (приглашение) и текст для нерабочего времени редактируются
+          // в табе «Портрет» (spec.inviteLetter / spec.offHoursLetter). Здесь —
+          // только напоминания 2 и 3; chain[0] и off-hours держим в состоянии и
+          // отправляем при сохранении без изменений, но не показываем.
+          if (idx === 0) return null
+          const delayLabel = idx === 1 ? "Задержка после приглашения" : `Задержка после напоминания ${idx - 1}`
           return (
-            <Fragment key={idx}>
-            <div className={!step.enabled && !isFirst ? "opacity-60" : ""}>
+            <div key={idx} className={!step.enabled ? "opacity-60" : ""}>
               <div className="flex items-center justify-between mb-2">
-                <Label className="text-sm font-medium">
-                  Сообщение {idx + 1}
-                  {isFirst && <span className="ml-2 text-[10px] text-muted-foreground">всегда включено</span>}
-                </Label>
+                <Label className="text-sm font-medium">Напоминание {idx}</Label>
                 <Switch
                   checked={step.enabled}
                   onCheckedChange={(v) => updateStep(idx, { enabled: v })}
-                  disabled={isFirst}
                 />
               </div>
               <div className="space-y-2">
@@ -248,9 +233,7 @@ export function FirstMessagesChainEditor({
                   className="w-full border rounded-lg p-3 text-sm resize-none h-28 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none leading-relaxed"
                   value={step.text}
                   onChange={(e) => updateStep(idx, { text: e.target.value })}
-                  placeholder={isFirst
-                    ? "{{name}}, привет! Видели ваш отклик на {{vacancy}}... {{demo_link}}"
-                    : `Текст Сообщения ${idx + 1} (плейсхолдер ссылки опционален)`}
+                  placeholder={`Текст напоминания ${idx} (плейсхолдер ссылки опционален)`}
                 />
                 <PlaceholderBadges
                   getTextarea={() => textareaRefs.current[idx]}
@@ -258,77 +241,8 @@ export function FirstMessagesChainEditor({
                   value={step.text}
                   onValueChange={(next) => updateStep(idx, { text: next })}
                 />
-                {isFirst && (
-                  <p className="text-[11px] text-muted-foreground">
-                    Сообщение 1 ОБЯЗАНО содержать{" "}
-                    <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{demo_link}}"}</code>{" "}
-                    или{" "}
-                    <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{ссылка}"}</code>.
-                  </p>
-                )}
               </div>
             </div>
-
-            {isFirst && (
-              <div className="rounded-lg border border-dashed p-3 space-y-3 bg-muted/30">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <Label className="text-sm font-medium flex items-center gap-1.5">
-                      <Moon className="w-3.5 h-3.5" />
-                      Сообщение для нерабочего времени
-                    </Label>
-                    <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
-                      Если кандидат откликнется вне рабочих часов вакансии (см. таб
-                      «Расписание»), отправится этот текст вместо основного.
-                      Сообщения 2 и 3 в этом случае не отправляются.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <Label className="text-sm">Использовать альтернативный текст</Label>
-                  <Switch
-                    checked={off.enabled}
-                    onCheckedChange={(v) => setOff(prev => ({ ...prev, enabled: v }))}
-                  />
-                </div>
-                {off.enabled && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <Label className="text-xs text-muted-foreground">Задержка перед отправкой</Label>
-                      <Select
-                        value={String(off.delaySeconds)}
-                        onValueChange={(v) => setOff(prev => ({ ...prev, delaySeconds: Number(v) }))}
-                      >
-                        <SelectTrigger className="w-[140px] h-8 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {OFF_HOURS_DELAY_OPTIONS.map(o => (
-                            <SelectItem key={o.value} value={String(o.value)} className="text-xs">
-                              {o.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <textarea
-                      ref={(el) => { offTextareaRef.current = el }}
-                      className="w-full border rounded-lg p-3 text-sm resize-none h-28 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none leading-relaxed"
-                      value={off.text}
-                      onChange={(e) => setOff(prev => ({ ...prev, text: e.target.value }))}
-                      placeholder={OFF_HOURS_PLACEHOLDER}
-                    />
-                    <PlaceholderBadges
-                      getTextarea={() => offTextareaRef.current}
-                      placeholders={OFF_HOURS_TOKENS}
-                      value={off.text}
-                      onValueChange={(next) => setOff(prev => ({ ...prev, text: next }))}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-            </Fragment>
           )
         })}
 
@@ -336,7 +250,7 @@ export function FirstMessagesChainEditor({
           <div className="flex justify-end pt-2 border-t">
             <Button size="sm" onClick={handleSave} disabled={saving}>
               {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-              {saving ? "Сохраняем..." : "Сохранить серию"}
+              {saving ? "Сохраняем..." : "Сохранить"}
             </Button>
           </div>
         )}

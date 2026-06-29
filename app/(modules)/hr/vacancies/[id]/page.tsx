@@ -4062,7 +4062,7 @@ export default function VacancyPage() {
                     // #60: чтобы блок «Минимальная задержка» мог скрыться,
                     // когда серия первых сообщений активна.
                     firstMessagesChain={(apiVacancy as { firstMessagesChain?: Array<{ enabled: boolean; delaySeconds: number; text: string }> } | undefined)?.firstMessagesChain ?? []}
-                    sections={["firstMessage", "callIntent", "templates"] satisfies AutomationSectionId[]}
+                    sections={["callIntent", "templates"] satisfies AutomationSectionId[]}
                     tabKey="messages"
                   />
                   {/* #46: «Аварийное повторное сообщение» — opt-in под спойлером. */}
