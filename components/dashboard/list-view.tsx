@@ -440,7 +440,7 @@ export function ListView({
         gridWidth: "56px",
         header: <SortHeader label="AI-резм." sortKey="resumeScore" sort={sort} onToggle={handleSort} align="center" />,
         renderCell: (candidate) => (
-          <div className="flex items-center justify-center" title="AI-скор резюме (до демо)">
+          <div className="flex items-center justify-center" title="AI-скор резюме по Портрету">
             {candidate.resumeScore != null ? (
               <Badge
                 variant="outline"
