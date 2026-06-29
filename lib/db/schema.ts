@@ -177,6 +177,9 @@ export interface CompanyHiringDefaults {
   messageDefaults?: Partial<MessageDefaults>
   // Дефолтные тексты AI чат-бота компании (перебивают платформенные).
   chatbotDefaults?: Partial<ChatbotDefaults>
+  // Drip-шаблоны дожима компании (перебивают платформенные; пустые поля наследуются).
+  // Резолвер — lib/funnel-v2/effective-drip-templates.ts.
+  dripTemplates?: Partial<DripTemplates>
   schedule?: {
     slotDuration?:     string
     bufferTime?:       string

@@ -11,7 +11,9 @@
 
 import { eq, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { platformSettingsMigrations } from "@/lib/db/schema"
+import { platformSettingsMigrations, platformSettings } from "@/lib/db/schema"
+import { DRIP_TEMPLATES_SEED } from "@/lib/funnel-v2/dozhim-templates"
+import { DRIP_TEMPLATES_KEY } from "@/lib/platform/settings"
 
 type Db = typeof db
 
@@ -42,6 +44,28 @@ export const SETTINGS_MIGRATIONS: SettingsMigration[] = [
         RETURNING id
       `)
       return { affectedCount: result.length }
+    },
+  },
+  {
+    // Материализуем платформенный эталон drip-шаблонов дожима в
+    // platform_settings['drip_templates'] из кода-сида — чтобы запись
+    // существовала и была видна/правима в /admin/platform/drip-templates.
+    // Идемпотентно: если запись уже есть (админ мог отредактировать), НЕ трогаем.
+    id: "2026-06-29-seed-drip-templates",
+    description: "Seed platform drip_templates from code seed (only if absent — preserves admin edits)",
+    apply: async (db) => {
+      const [existing] = await db
+        .select({ key: platformSettings.key })
+        .from(platformSettings)
+        .where(eq(platformSettings.key, DRIP_TEMPLATES_KEY))
+        .limit(1)
+      if (existing) return { affectedCount: 0 }
+      await db.insert(platformSettings).values({
+        key:       DRIP_TEMPLATES_KEY,
+        value:     DRIP_TEMPLATES_SEED,
+        updatedAt: new Date(),
+      })
+      return { affectedCount: 1 }
     },
   },
 ]

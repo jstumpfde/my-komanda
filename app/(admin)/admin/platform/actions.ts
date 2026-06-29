@@ -48,6 +48,7 @@ import { DRIP_TEMPLATES_SEED } from "@/lib/funnel-v2/dozhim-templates"
 import { CHATBOT_DEFAULTS_SEED } from "@/lib/ai/chatbot-defaults-seed"
 import { clearMessageDefaultsCache } from "@/lib/messaging/effective-message-defaults"
 import { clearChatbotDefaultsCache } from "@/lib/messaging/effective-chatbot-defaults"
+import { clearDripTemplatesCache } from "@/lib/funnel-v2/effective-drip-templates"
 import type { MessageDefaults, DripTemplates, ChatbotDefaults } from "@/lib/db/schema"
 
 async function requireAdminEmail(): Promise<string> {
@@ -272,6 +273,7 @@ export async function actionUpdateDripTemplates(input: DripTemplates) {
   const stepWords = (input.stepWords && typeof input.stepWords === "object") ? input.stepWords : DRIP_TEMPLATES_SEED.stepWords
 
   await setPlatformDripTemplates({ stepWords, branchA, branchB, live, offer })
+  clearDripTemplatesCache() // сбросить кэш всех компаний — подхватят новый эталон
   revalidatePath("/admin/platform/drip-templates")
   return { ok: true }
 }

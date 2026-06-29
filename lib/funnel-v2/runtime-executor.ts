@@ -134,11 +134,26 @@ async function scheduleV2Dozhim(
   if (stage.dozhim === "off") return
 
   // Цепочка касаний: явная (ветка «открыл») ИЛИ dozhimChain (ветка «не открыл») ИЛИ пресет.
+  // Фолбэк-пресет берём из РЕДАКТИРУЕМОГО эталона (platform_settings['drip_templates']
+  // → company override → код-сид), а не из хардкода. dozhimChain почти всегда задан
+  // конструктором (он тоже строит из эталона), так что это лишь последний рубеж.
+  let fallbackChain: import("@/lib/funnel-v2/types").DozhimTouch[] = []
+  if (!(opts?.chain && opts.chain.length > 0) && !(stage.dozhimChain && stage.dozhimChain.length > 0)) {
+    try {
+      const { getDripTemplates } = await import("@/lib/funnel-v2/effective-drip-templates")
+      const templates = await getDripTemplates(vacancy.companyId)
+      fallbackChain = dozhimChainFor(stage.dozhim, stage.action, templates)
+    } catch {
+      // осечка резолвера → код-сид (dozhimChainFor без templates)
+      fallbackChain = dozhimChainFor(stage.dozhim, stage.action)
+    }
+  }
+
   const chain = (opts?.chain && opts.chain.length > 0)
     ? opts.chain
     : (stage.dozhimChain && stage.dozhimChain.length > 0)
       ? stage.dozhimChain
-      : dozhimChainFor(stage.dozhim, stage.action)
+      : fallbackChain
 
   if (chain.length === 0) return
 
