@@ -782,6 +782,14 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                 belowThreshold = null
               }
 
+              // «Авто-отказ слабых» ВЫКЛ (autoRejectEnabled !== true): слабых
+              // (reject-зона) НЕ держим на ручном разборе — пропускаем дальше,
+              // их судьбу решает «Авто-приглашение» ниже (решение Юрия 29.06:
+              // выкл = «не отсеивать», а не «ждать ручного разбора»).
+              if (effAiSettings.autoRejectEnabled !== true && belowThreshold?.action === "reject") {
+                belowThreshold = null
+              }
+
               // Авто-приглашение выключено (контур «Портрет», autoInviteOn=false):
               // сами никого не зовём дальше. Прошедшие на демо/приглашение
               // (belowThreshold===null) и середину без явного reject уходят на
