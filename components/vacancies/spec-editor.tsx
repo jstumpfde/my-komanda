@@ -2190,6 +2190,66 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
 
       {/* «Оценка анкеты (после демо)» перенесена в настройки анкеты (блок «После демо»). */}
 
+      {/* ── После анкеты → 2-я часть «Путь менеджера» по баллу анкеты (Фаза 1; OFF by default) ── */}
+      {(() => {
+        const ap = spec.anketaPassInvite
+        return (
+          <Card>
+            <CardContent className="pt-5 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold">После анкеты → 2-я часть «Путь менеджера»</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Кто прошёл анкету (AI-балл ≥ порога) — авто-сообщение со ссылкой на второй демо-блок, через задержку.
+                  </p>
+                </div>
+                <Switch checked={ap.enabled} onCheckedChange={v => patch({ anketaPassInvite: { ...ap, enabled: v } })} />
+              </div>
+              {ap.enabled && (
+                <div className="space-y-3 pt-1">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Порог балла анкеты: <b>{ap.passThreshold}</b> (выше — приглашаем на 2-ю часть)</Label>
+                    <Slider min={0} max={100} step={1} value={[ap.passThreshold]} onValueChange={([v]) => patch({ anketaPassInvite: { ...ap, passThreshold: v } })} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Контент-блок 2-й части</Label>
+                    <Select value={ap.contentBlockId ?? "__none__"} onValueChange={v => patch({ anketaPassInvite: { ...ap, contentBlockId: v === "__none__" ? null : v } })}>
+                      <SelectTrigger className="h-9"><SelectValue placeholder="Выберите блок" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">— выберите блок «Путь менеджера» —</SelectItem>
+                        {contentBlocks.map(b => <SelectItem key={b.id} value={b.id}>{b.title}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Текст (подставятся {"{{name}}"}, {"{{vacancy}}"}, {"{{demo_link}}"})</Label>
+                    <Textarea
+                      value={ap.messageText}
+                      onChange={e => patch({ anketaPassInvite: { ...ap, messageText: e.target.value } })}
+                      placeholder="{{name}}, добрый день! Благодарим за ответы — вы нам подходите. Предлагаем 2-ю часть «Путь менеджера»: {{demo_link}}"
+                      rows={4} maxLength={2000}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Задержка перед отправкой</Label>
+                    <Select value={String(ap.delaySeconds)} onValueChange={v => patch({ anketaPassInvite: { ...ap, delaySeconds: Number(v) } })}>
+                      <SelectTrigger className="h-9 w-44"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="60">1 минута</SelectItem>
+                        <SelectItem value="180">3 минуты</SelectItem>
+                        <SelectItem value="900">15 минут</SelectItem>
+                        <SelectItem value="1800">30 минут</SelectItem>
+                        <SelectItem value="3600">1 час</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )
+      })()}
+
       {/* ── Дожим (напоминания) — встроен в Портрет, чтобы был под рукой (Юрий 30.06).
            Тот же компонент, что в табе «Дожим»; на новой вакансии показывает дефолтные
            тексты с переменными — подставлено и готово к запуску. ── */}
