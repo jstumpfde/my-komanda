@@ -508,7 +508,11 @@ async function processOneTouch(
     .limit(1)
   const { firstName } = await getCandidateFirstName(msg.candidateId)
   const tokenForUrl = cand?.shortId ?? cand?.token ?? msg.candidateId
-  const demoUrl      = `https://company24.pro/demo/${tokenForUrl}`
+  // «2-я часть демо»: ссылка по TOKEN (длинный), а не short_id — short_id ловит
+  // реферальный редирект в /demo/[token]/page.tsx (уводит на чужого/первое демо),
+  // а token его не триггерит → отдаётся override-блок «Путь менеджера».
+  const demoTokenForUrl = isSecondDemoInvite ? (cand?.token ?? cand?.shortId ?? msg.candidateId) : tokenForUrl
+  const demoUrl      = `https://company24.pro/demo/${demoTokenForUrl}`
   const testUrl      = `https://company24.pro/test/${tokenForUrl}`
   const scheduleUrl  = `https://company24.pro/schedule/${tokenForUrl}`
   const finalText = renderTemplate(msg.messageText, {
