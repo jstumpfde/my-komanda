@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { eq, and, lte, gte, ne, isNotNull, inArray, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { vacancies, candidates, followUpMessages, followUpCampaigns, hhResponses, companies, testSubmissions } from "@/lib/db/schema"
+import { vacancies, candidates, followUpMessages, followUpCampaigns, hhResponses, companies, testSubmissions, vacancySpecs } from "@/lib/db/schema"
+import { changeNegotiationState } from "@/lib/hh-api"
 import { getValidToken } from "@/lib/hh-helpers"
 import { shouldStopFollowUp } from "@/lib/followup/should-stop"
 import { canSendNow } from "@/lib/schedule/can-send-now"
@@ -541,6 +542,49 @@ async function processOneTouch(
   }
 
   try {
+    // «2-я часть демо»: одним вызовом текст + перевод hh-этапа (assessment =
+    // «Тестовое задание») и нашей стадии — параметры из spec.anketaPassInvite.
+    if (isSecondDemoInvite) {
+      const [specRow] = await db
+        .select({ spec: vacancySpecs.spec })
+        .from(vacancySpecs)
+        .where(eq(vacancySpecs.vacancyId, campaign.vacancyId))
+        .limit(1)
+      const ap = (specRow?.spec as { anketaPassInvite?: { hhAction?: string | null; advanceToStage?: string | null } } | undefined)?.anketaPassInvite
+      const hhAction = ap?.hhAction
+      if (hhAction === "assessment" || hhAction === "interview" || hhAction === "consider" || hhAction === "invitation") {
+        // changeNegotiationState шлёт текст И двигает hh-этап (PUT /negotiations/{action}/{id}).
+        await changeNegotiationState(tokenResult.accessToken, hhResp.hhResponseId, hhAction, finalText, campaign.vacancyId, undefined, vacancy.companyId)
+      } else {
+        // hh-этап не трогаем — только текст.
+        const f = new URLSearchParams(); f.set("message", finalText)
+        const r = await fetch(`https://api.hh.ru/negotiations/${hhResp.hhResponseId}/messages`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${tokenResult.accessToken}`, "User-Agent": "Company24.pro/1.0", "Content-Type": "application/x-www-form-urlencoded" },
+          body: f.toString(),
+        })
+        if (!r.ok) {
+          const e = await r.text()
+          await db.update(followUpMessages).set({ status: "failed", errorMessage: `hh_${r.status}: ${e.slice(0, 200)}` }).where(eq(followUpMessages.id, msg.id))
+          return { outcome: "failed", reason: `hh_${r.status}`, delayMs }
+        }
+      }
+      // Наша стадия (если задана и кандидат не в терминальной).
+      if (ap?.advanceToStage) {
+        const [c2] = await db.select({ stage: candidates.stage, stageHistory: candidates.stageHistory }).from(candidates).where(eq(candidates.id, msg.candidateId)).limit(1)
+        const cur = c2?.stage ?? "new"
+        if (c2 && cur !== ap.advanceToStage && cur !== "hired" && cur !== "rejected") {
+          const hist = (c2.stageHistory as Array<{ from: string | null; to: string; at: string; reason: string }> | null) ?? []
+          await db.update(candidates).set({
+            stage: ap.advanceToStage,
+            stageHistory: [...hist, { from: cur, to: ap.advanceToStage, at: new Date().toISOString(), reason: "second_demo_invite" }],
+          }).where(eq(candidates.id, msg.candidateId))
+        }
+      }
+      await db.update(followUpMessages).set({ status: "sent", sentAt: new Date() }).where(eq(followUpMessages.id, msg.id))
+      return { outcome: "sent", delayMs }
+    }
+
     const form = new URLSearchParams()
     form.set("message", finalText)
     const res = await fetch(`https://api.hh.ru/negotiations/${hhResp.hhResponseId}/messages`, {

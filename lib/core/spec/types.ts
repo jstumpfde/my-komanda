@@ -191,6 +191,16 @@ export const AnketaPassInviteSchema = z.object({
   messageText:    z.string().max(2000).default(""),
   /** Задержка перед отправкой, сек. Дефолт 900 (15 мин). */
   delaySeconds:   z.number().int().min(0).default(900),
+  /**
+   * Куда перевести нашу стадию при прохождении гейта (slug, напр. "test_task_sent").
+   * null = не менять. Настраивается per-вакансия (не хардкод).
+   */
+  advanceToStage: z.string().nullable().default(null),
+  /**
+   * Действие в hh при прохождении: "assessment" (Тестовое задание) / "interview" /
+   * "consider" / "invitation". null = только текст, hh-этап не трогаем.
+   */
+  hhAction:       z.enum(["assessment", "interview", "consider", "invitation"]).nullable().default(null),
 })
 export type AnketaPassInvite = z.infer<typeof AnketaPassInviteSchema>
 
