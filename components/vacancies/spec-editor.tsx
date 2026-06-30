@@ -35,6 +35,7 @@ import {
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
+import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
 import { toast } from "sonner"
 import {
   Target, Plus, X, Loader2, ShieldAlert, FileText, Gauge,
@@ -2188,6 +2189,23 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
       </Card>
 
       {/* «Оценка анкеты (после демо)» перенесена в настройки анкеты (блок «После демо»). */}
+
+      {/* ── Дожим (напоминания) — встроен в Портрет, чтобы был под рукой (Юрий 30.06).
+           Тот же компонент, что в табе «Дожим»; на новой вакансии показывает дефолтные
+           тексты с переменными — подставлено и готово к запуску. ── */}
+      <Card>
+        <CardContent className="pt-5 space-y-3">
+          <div>
+            <h3 className="text-base font-semibold">Дожим — напоминания</h3>
+            <p className="text-xs text-muted-foreground">
+              Автоматические напоминания тем, кто не открыл или не досмотрел демо. Те же
+              тексты с переменными ({"{{name}}"}, {"{{vacancy}}"}, {"{{demo_link}}"}), что
+              в табе «Дожим» — правьте где удобно.
+            </p>
+          </div>
+          <VacancyFollowupSettings vacancyId={vacancyId} />
+        </CardContent>
+      </Card>
 
       {/* ── (г) Реалистичность портрета ── */}
       <RealismIndicator spec={spec} />
