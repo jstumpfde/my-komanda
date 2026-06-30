@@ -3003,6 +3003,7 @@ export default function VacancyPage() {
                   { kind: "tab",     value: "content" , label: "Контент",          icon: BookOpen,      section: null             },
                   { kind: "section", value: "settings", label: "Воронка",          icon: Workflow,      section: "funnel-builder" },
                   { kind: "section", value: "settings", label: "Сообщения",        icon: MessageSquare, section: "messages"       },
+                  { kind: "section", value: "settings", label: "Дожим",            icon: RefreshCw,     section: "followup"       },
                   { kind: "section", value: "settings", label: "Воронка v2",       icon: Workflow,      section: "funnel-v2"      },
                   { kind: "section", value: "settings", label: "Источники",        icon: Link2,         section: "sources"        },
                   { kind: "section", value: "settings", label: "Расписание",       icon: Clock,         section: "ai"             },
