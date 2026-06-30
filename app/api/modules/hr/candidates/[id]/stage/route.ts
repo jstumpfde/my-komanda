@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { eq, and } from "drizzle-orm"
+import { eq, and, inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, companies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
@@ -91,8 +91,21 @@ export async function PUT(
             }
           : {}),
       })
-      .where(eq(candidates.id, id))
+      // TOCTOU-защита: UPDATE сам скоупим по компании (а не только SELECT выше),
+      // чтобы между проверкой и записью нельзя было подменить владельца.
+      // У candidates нет company_id — изоляция через вакансию компании.
+      .where(and(
+        eq(candidates.id, id),
+        inArray(
+          candidates.vacancyId,
+          db.select({ id: vacancies.id }).from(vacancies).where(eq(vacancies.companyId, user.companyId)),
+        ),
+      ))
       .returning()
+
+    if (!updated) {
+      return apiError("Candidate not found", 404)
+    }
 
     // Sync с hh.ru — fire-and-forget, ошибка не блокирует ответ.
     // Ф6: hh-action читается из pipeline вакансии (lib/hh/sync-stage.ts).

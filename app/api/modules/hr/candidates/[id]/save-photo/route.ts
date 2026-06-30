@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { eq, and } from "drizzle-orm"
+import { eq, and, inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
@@ -49,7 +49,15 @@ export async function POST(
     const local = await saveCandidatePhoto(id, photoUrl)
     if (!local) return apiError("Не удалось скачать фото", 502)
 
-    await db.update(candidates).set({ photoUrl: local }).where(eq(candidates.id, id))
+    // TOCTOU-защита: UPDATE скоупим по компании (а не только SELECT выше).
+    // У candidates нет company_id — изоляция через вакансию компании.
+    await db.update(candidates).set({ photoUrl: local }).where(and(
+      eq(candidates.id, id),
+      inArray(
+        candidates.vacancyId,
+        db.select({ id: vacancies.id }).from(vacancies).where(eq(vacancies.companyId, user.companyId)),
+      ),
+    ))
     return apiSuccess({ localUrl: local })
   } catch (err) {
     if (err instanceof Response) return err
