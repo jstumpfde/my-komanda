@@ -268,10 +268,15 @@ async function processOneTouch(
   // ссылкой {{schedule_link}}. Явное действие (кандидат дошёл до стадии
   // interview): пропускаем стоп-триггеры и rate-limit, рабочее окно соблюдаем.
   const isScheduleInvite = msg.branch === "schedule_invite"
+  // branch='second_demo_invite' — приглашение на 2-ю часть демо (Путь менеджера)
+  // тем, кто прошёл анкету с нужными ответами. Одиночное (не дожим): пропускаем
+  // стоп-триггеры и rate-limit, рабочее окно соблюдаем. Содержит {{demo_link}},
+  // указывающий на override-блок кандидата.
+  const isSecondDemoInvite = msg.branch === "second_demo_invite"
   const isOneOffPostAnketa =
     msg.branch === "anketa_confirmation" || msg.branch === "anketa_auto_reply"
     || isChainStep || isOffHoursFirst || isTestAfterMessage || isTestInvite || isTestReminder || isTestFollowup
-    || isScheduleInvite
+    || isScheduleInvite || isSecondDemoInvite
   if (!isOneOffPostAnketa) {
     // Стоп-триггеры (вакансия закрыта / демо пройдено / отказ /
     // автоматизация остановлена) — только для обычной цепочки дожима.

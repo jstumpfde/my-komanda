@@ -179,7 +179,11 @@ export type AnketaThresholds = z.infer<typeof AnketaThresholdsSchema>
 export const AnketaPassInviteSchema = z.object({
   /** Включена ли отправка 2-й части прошедшим анкету. */
   enabled:        z.boolean().default(false),
-  /** Порог балла анкеты (0–100), при котором шлём 2-ю часть. Дефолт 35. */
+  /**
+   * Порог ДЕТЕРМИНИРОВАННОГО балла по вопросам-выбора (0–100), при котором шлём
+   * 2-ю часть. Считается lib/score-test-objective (single/multiple/yesno/sort);
+   * открытые/AI-вопросы исключены — порог стабильный. Дефолт 35.
+   */
   passThreshold:  z.number().int().min(0).max(100).default(35),
   /** Какой контент-блок отправить (id «Путь менеджера»). null = боевой по умолчанию. */
   contentBlockId: z.string().nullable().default(null),

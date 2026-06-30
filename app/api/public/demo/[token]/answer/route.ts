@@ -7,6 +7,7 @@ import { isShortId } from "@/lib/short-id"
 import { scoreCandidateById } from "@/lib/ai-score-candidate"
 import { scoreCandidateV2 } from "@/lib/ai-score-candidate-v2"
 import { scoreDemoAnswers } from "@/lib/demo/score-answers"
+import { maybeScheduleSecondDemoInvite } from "@/lib/messaging/second-demo-invite"
 import { isPortraitConfigured } from "@/lib/core/spec/resume-input"
 import { getSpec } from "@/lib/core/spec/store"
 
@@ -345,6 +346,17 @@ export async function POST(
         skipIfScored: false,
       }).catch((err: unknown) => {
         console.error("[demo answer] score-answers failed:", err instanceof Error ? err.message : err)
+      })
+
+      // «2-я часть демо» (Путь менеджера): если в Портрете включён
+      // anketaPassInvite и кандидат прошёл детерминированный гейт по выбору —
+      // выставляем override-блок и ставим приглашение в очередь. OFF by default,
+      // дедуп внутри. Fire-and-forget: ошибка не блокирует ответ кандидату.
+      void maybeScheduleSecondDemoInvite({
+        candidateId: txResult.candidateId,
+        vacancyId:   txResult.vacancyId,
+      }).catch((err: unknown) => {
+        console.error("[demo answer] second-demo-invite failed:", err instanceof Error ? err.message : err)
       })
     }
 

@@ -63,6 +63,8 @@ export async function GET(
         telegramInviteToken: candidates.telegramInviteToken,
         // Воронка v2: состояние кандидата (stageId, completedAt и т.д.)
         funnelV2StateJson: candidates.funnelV2StateJson,
+        // «2-я часть демо»: per-candidate override блока (миграция 0236).
+        overrideContentBlockId: candidates.overrideContentBlockId,
       })
       .from(candidates)
       .where(isShortId(token) ? eq(candidates.shortId, token) : eq(candidates.token, token))
@@ -200,15 +202,21 @@ export async function GET(
     // демо-блок (resumeThresholds.inviteContentBlockId) → грузим его по id строки
     // demos; иначе «боевой» kind='demo' (легаси-поведение).
     let inviteBlockId: string | null = null
-    try {
-      const [specRow] = await db
-        .select({ spec: vacancySpecs.spec })
-        .from(vacancySpecs)
-        .where(eq(vacancySpecs.vacancyId, vacancy.id))
-        .limit(1)
-      const rt = (specRow?.spec as { resumeThresholds?: { inviteContentBlockId?: string | null } } | undefined)?.resumeThresholds
-      inviteBlockId = rt?.inviteContentBlockId ?? null
-    } catch { /* нет спеки — легаси-путь */ }
+    // «2-я часть демо»: per-candidate override (миграция 0236) перекрывает резолв
+    // на уровне вакансии. Прошедший анкету кандидат видит «Путь менеджера».
+    if (candidate.overrideContentBlockId) {
+      inviteBlockId = candidate.overrideContentBlockId
+    } else {
+      try {
+        const [specRow] = await db
+          .select({ spec: vacancySpecs.spec })
+          .from(vacancySpecs)
+          .where(eq(vacancySpecs.vacancyId, vacancy.id))
+          .limit(1)
+        const rt = (specRow?.spec as { resumeThresholds?: { inviteContentBlockId?: string | null } } | undefined)?.resumeThresholds
+        inviteBlockId = rt?.inviteContentBlockId ?? null
+      } catch { /* нет спеки — легаси-путь */ }
+    }
 
     // Find published demo for this vacancy.
     // inviteContentBlockId = id строки demos (ContentBlock.id), поэтому ищем

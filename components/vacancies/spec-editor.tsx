@@ -2202,7 +2202,9 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                 <div>
                   <h3 className="text-base font-semibold">После анкеты → 2-я часть «Путь менеджера»</h3>
                   <p className="text-xs text-muted-foreground">
-                    Кто прошёл анкету (AI-балл ≥ порога) — авто-сообщение со ссылкой на второй демо-блок, через задержку.
+                    Кто ответил на вопросы-выбора правильно (детерминированный балл ≥ порога) — авто-сообщение
+                    со ссылкой на второй демо-блок, через задержку. Открытые/AI-вопросы в балл не входят —
+                    порог стабильный. ✓-варианты в «Контенте» = эталон.
                   </p>
                 </div>
                 <Switch checked={ap.enabled} onCheckedChange={v => patch({ anketaPassInvite: { ...ap, enabled: v } })} />
@@ -2210,7 +2212,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
               {ap.enabled && (
                 <div className="space-y-3 pt-1">
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Порог балла анкеты: <b>{ap.passThreshold}</b> (выше — приглашаем на 2-ю часть)</Label>
+                    <Label className="text-xs">Порог балла по выбору: <b>{ap.passThreshold}</b> из 100 (≥ — приглашаем; ~70 = оба контрольных вопроса верно)</Label>
                     <Slider min={0} max={100} step={1} value={[ap.passThreshold]} onValueChange={([v]) => patch({ anketaPassInvite: { ...ap, passThreshold: v } })} />
                   </div>
                   <div className="space-y-1.5">

@@ -1536,6 +1536,12 @@ export const candidates = pgTable("candidates", {
   // (оценка task-вопросов демо против aiCriteria). 0..100, NULL = не считали. Миграция 0234.
   demoAnswersScore:   integer("demo_answers_score"),
   demoAnswersDetails: jsonb("demo_answers_details"), // [{questionText, awarded, max, comment}]
+  // «2-я часть демо» (Путь менеджера) после прохождения анкеты (миграция 0236).
+  // override_content_block_id — id строки demos, который показывать ИМЕННО этому
+  // кандидату в /demo/[token] (перекрывает резолв на уровне вакансии). NULL = нет
+  // override. second_demo_invited_at — когда отправлено приглашение (дедуп/аудит).
+  overrideContentBlockId: text("override_content_block_id"),
+  secondDemoInvitedAt:    timestamp("second_demo_invited_at"),
   // Группа 25: A/B сравнение скоринга v1 (scoreCandidateById) vs v2
   // (scoreCandidateV2, двухпроходный со структурированными требованиями).
   // aiScore = v2 если доступен, иначе v1 — основной для UI/фильтров.
