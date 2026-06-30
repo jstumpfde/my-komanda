@@ -77,9 +77,20 @@ export async function refreshAccessToken(refreshToken: string): Promise<HHTokenR
 
 // ─── API Fetch helper ───────────────────────────────────────────────────────
 
+// Таймаут на один hh-вызов. Без него fetch без AbortSignal может зависнуть
+// неограниченно: один «подвисший» negotiation-запрос (getNegotiationMessages
+// и т.п.) внутри последовательного цикла processHhQueue держал бы весь прогон
+// крона и единый advisory-lock, а следующий минутный cron возвращал бы 409 busy
+// → свежие отклики не разбираются. 20с с запасом покрывают здоровые ответы hh
+// (обычно <2с), но не дают одному битому вызову повесить прогон. На таймаут
+// бросаем ошибку — вызывающий код (legacy-ветка ловит getNegotiationMessages
+// в try/catch) деградирует штатно.
+const HH_FETCH_TIMEOUT_MS = 20_000
+
 async function hhFetch<T = unknown>(path: string, accessToken: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${HH_API_BASE}${path}`, {
     ...init,
+    signal: init?.signal ?? AbortSignal.timeout(HH_FETCH_TIMEOUT_MS),
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "User-Agent": USER_AGENT,

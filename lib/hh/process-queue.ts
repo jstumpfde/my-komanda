@@ -787,7 +787,18 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
               // (belowThreshold===null) и середину без явного reject уходят на
               // ручной разбор (keep_new). reject не трогаем — авто-отказ управляется
               // отдельным тумблером. autoInviteOn=true (явно включено HR) → блок ничего не делает.
-              if (!autoInviteOn) {
+              //
+              // ВАЖНО: этот гейт — ТОЛЬКО для контура «Портрет» (portraitOn).
+              // Для legacy-вакансий (portraitScoring !== true) autoInviteOn
+              // навсегда остаётся false (он выставляется лишь в ветке
+              // `if (portraitOn && spec?.resumeThresholds)` выше). Без проверки
+              // `portraitOn` ниже этот блок переводил В РУЧНОЙ РАЗБОР (keep_new)
+              // КАЖДОГО прошедшего скоринг кандидата на ЛЮБОЙ обычной вакансии →
+              // авто-крон hh-import создавал кандидата, но НЕ слал приглашение,
+              // result.invited=0 → в ответе крона {imported:N, processed:0}.
+              // (Регрессия релиза «Портрет» 23.06.2026.) Возвращаем legacy-поведение:
+              // обычные вакансии приглашают сразу (direct_demo), как и раньше.
+              if (portraitOn && !autoInviteOn) {
                 if (belowThreshold === null) {
                   belowThreshold = { score: result.score, threshold: upper || lower || 0, action: "keep_new" }
                 } else if (belowThreshold.action !== "reject") {
