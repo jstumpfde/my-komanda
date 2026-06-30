@@ -1,6 +1,9 @@
 import { NextRequest } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
-import { requireAuth, apiError, apiSuccess } from "@/lib/api-helpers"
+import { eq } from "drizzle-orm"
+import { db } from "@/lib/db"
+import { vacancies } from "@/lib/db/schema"
+import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { AI_SAFETY_PROMPT } from "@/lib/ai-safety"
 import { buildComparison, type CompareResult } from "@/lib/compare/build-comparison"
 
@@ -59,15 +62,25 @@ function enrichForPrompt(comp: CompareResult, id: string): string {
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAuth()
+    const user = await requireCompany()
     const body = (await req.json()) as CompareInput
     if (!body.candidates?.length) return apiError("Нужны кандидаты для сравнения", 400)
 
     // Подтягиваем тест/демо, если переданы id и вакансия (необязательно — при
     // отсутствии работает по-старому, только на резюме).
+    // IDOR-защита: buildComparison сам принадлежность НЕ проверяет (см. коммент
+    // в build-comparison.ts) — поэтому сверяем vacancy.companyId с компанией
+    // пользователя ДО выборки чужих анкет/оценок (паттерн как в vacancies/[id]/compare).
     let comp: CompareResult | null = null
     const ids = body.candidates.map((c) => c.id).filter((x): x is string => !!x)
     if (body.vacancyId && ids.length > 0) {
+      const [vac] = await db
+        .select({ companyId: vacancies.companyId })
+        .from(vacancies)
+        .where(eq(vacancies.id, body.vacancyId))
+        .limit(1)
+      if (!vac) return apiError("Vacancy not found", 404)
+      if (vac.companyId !== user.companyId) return apiError("Forbidden", 403)
       try { comp = await buildComparison(body.vacancyId, ids) } catch { comp = null }
     }
 
