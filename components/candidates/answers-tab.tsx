@@ -804,11 +804,28 @@ export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answers
       {scoreBadge}
       {prequalSection}
 
-      {/* F4: секция «Видео-интервью» — сгруппированные ответы _vi_N */}
+      {/* Порядок секций (решение Юрия 30.06): сначала текстовые ответы демо/анкеты
+          (вопросы первого этапа + финальная анкета — идут в том порядке, в котором
+          кандидат отвечал), затем видео-визитка/видео-интервью — всегда В КОНЦЕ. */}
+      {regularEntries.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Финальная анкета
+          </p>
+          <div className="space-y-3">
+            {regularEntries.map((entry, i) => (
+              <EntryCard key={i} entry={entry} blockMap={blockMap} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* F4: секция «Видео-визитка / видео-интервью» — сгруппированные ответы _vi_N.
+          Рендерится ПОСЛЕДНЕЙ, после финальной анкеты. */}
       {viGroups.size > 0 && Array.from(viGroups.entries()).map(([baseId, viEntries]) => (
         <div key={`vi-${baseId}`} className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Видео-интервью
+            Видео-визитка
           </p>
           <div className="space-y-3">
             {viEntries
@@ -829,19 +846,6 @@ export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answers
           </div>
         </div>
       ))}
-
-      {regularEntries.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Финальная анкета
-          </p>
-          <div className="space-y-3">
-            {regularEntries.map((entry, i) => (
-              <EntryCard key={i} entry={entry} blockMap={blockMap} />
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

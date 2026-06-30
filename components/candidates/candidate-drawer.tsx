@@ -1958,7 +1958,7 @@ export function CandidateDrawer({
 
               {/* ── Тест ─────────────────────────────────────────── */}
               <TabsContent value="test" className="px-6 py-4 pb-40 mt-0 space-y-4">
-                <TestTab candidateId={candidate.id} />
+                <TestTab candidateId={candidate.id} anketaScore={candidate.demoAnswersScore} anketaScoreDetails={candidate.demoAnswersDetails} />
               </TabsContent>
 
               {/* ── Чат (только hh) ──────────────────────────────── */}

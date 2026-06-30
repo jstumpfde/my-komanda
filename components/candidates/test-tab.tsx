@@ -103,7 +103,15 @@ const TECH_ID_RE = /^q-\d+(?:-[a-z0-9]+)*$/i
 
 // ─── Компонент ────────────────────────────────────────────────────────────────
 
-export function TestTab({ candidateId }: { candidateId?: string }) {
+interface TestTabProps {
+  candidateId?: string
+  /** Балл финальной анкеты (candidates.demo_answers_score, 0..100). NULL = не считали. */
+  anketaScore?: number | null
+  /** Поразбивка балла финальной анкеты (candidates.demo_answers_details). */
+  anketaScoreDetails?: { questionText: string; awarded: number; max: number; comment: string }[] | null
+}
+
+export function TestTab({ candidateId, anketaScore, anketaScoreDetails }: TestTabProps) {
   const [data, setData] = useState<TestSubmissionData | null>(null)
   const [loading, setLoading] = useState(false)
   const [reasoningExpanded, setReasoningExpanded] = useState(false)
@@ -150,6 +158,35 @@ export function TestTab({ candidateId }: { candidateId?: string }) {
     }
   }
 
+  // Балл финальной анкеты (отдельно от теста: demo_answers_score). Показываем
+  // в самом верху раздела «Тест», в т.ч. когда теста как такового не было.
+  const anketaScoreBlock = anketaScore != null ? (
+    <div className="rounded-lg border border-border p-3 space-y-2.5">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <ClipboardList className="w-4 h-4 text-muted-foreground" />
+          <span className="text-sm font-semibold text-foreground">Оценка финальной анкеты</span>
+        </div>
+        <AiScoreBadge score={anketaScore} size="md" />
+      </div>
+      {Array.isArray(anketaScoreDetails) && anketaScoreDetails.length > 0 && (
+        <div className="space-y-1.5 rounded-lg border border-border bg-muted/30 p-3">
+          {anketaScoreDetails.map((d, i) => (
+            <div key={i} className="text-xs">
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-foreground/90 min-w-0">{d.questionText}</span>
+                <span className="shrink-0 font-semibold text-muted-foreground tabular-nums">
+                  {d.awarded} / {d.max}
+                </span>
+              </div>
+              {d.comment && <p className="text-muted-foreground mt-0.5">{d.comment}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  ) : null
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12 text-muted-foreground">
@@ -160,13 +197,16 @@ export function TestTab({ candidateId }: { candidateId?: string }) {
 
   if (!data?.submission) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-        <ClipboardList className="w-10 h-10 mb-3 opacity-50" />
-        <p className="text-sm text-center">
-          {data?.stage && ["test_task_sent"].includes(data.stage)
-            ? "Тест отправлен — кандидат ещё не ответил"
-            : "Кандидат не проходил тест"}
-        </p>
+      <div className="space-y-4 min-w-0">
+        {anketaScoreBlock}
+        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+          <ClipboardList className="w-10 h-10 mb-3 opacity-50" />
+          <p className="text-sm text-center">
+            {data?.stage && ["test_task_sent"].includes(data.stage)
+              ? "Тест отправлен — кандидат ещё не ответил"
+              : "Кандидат не проходил тест"}
+          </p>
+        </div>
       </div>
     )
   }
@@ -187,6 +227,8 @@ export function TestTab({ candidateId }: { candidateId?: string }) {
 
   return (
     <div className="space-y-4 min-w-0">
+      {anketaScoreBlock}
+
       {/* ── Шапка: общий балл ─────────────────────────────────────── */}
       <div className="rounded-lg border border-border p-3 space-y-2.5">
         <div className="flex items-center justify-between gap-2 flex-wrap">
