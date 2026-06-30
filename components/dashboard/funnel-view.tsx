@@ -26,14 +26,15 @@ interface FunnelViewProps {
   onAction?: (candidateId: string, columnId: string, action: CandidateAction) => void
 }
 
-/** Ширина сегмента воронки (%) на позиции k — СТРОГО убывает сверху вниз
- *  (верх 100% → низ ≈26%), монотонно: нижний сегмент НЕ может быть шире верхнего.
- *  Ширина НЕ зависит от числа кандидатов (число показываем подписью) — иначе
- *  получались «ступеньки» и нарушение формы воронки. */
+/** Ширина сегмента воронки (%) на позиции k — СТРОГО убывает сверху вниз,
+ *  монотонно (нижний сегмент НЕ шире верхнего). Мягкий конус: верх ≈50% → низ ≈24%
+ *  (а не от 100%) — чтобы воронка не была слишком острой (Юрий 30.06).
+ *  Ширина НЕ зависит от числа кандидатов (число — подписью). */
 function funnelWidthAt(k: number, total: number): number {
-  if (total <= 1) return 100
-  const step = 74 / (total - 1) // верх 100% → низ ≈26%
-  return Math.max(18, 100 - k * step)
+  if (total <= 1) return 50
+  const top = 50, bottom = 24
+  const step = (top - bottom) / total // последний нижний край = bottom
+  return Math.max(bottom, top - k * step)
 }
 
 /** "Отказ" — терминальный статус, не часть основной последовательности воронки. */
@@ -71,7 +72,7 @@ export function FunnelView({ columns, settings, onOpenProfile, onAction }: Funne
       <div className="flex flex-row gap-4">
         <div className="flex-1 bg-card border border-border rounded-xl p-6">
           <h3 className="text-sm font-semibold text-foreground mb-6">Воронка найма</h3>
-          <div className="flex flex-col">
+          <div className="flex flex-col gap-[2mm]">
             {mainColumns.map((col, i) => {
               // Трапеция: верх = ширина этой стадии, низ = ширина следующей →
               // сегменты стыкуются в сплошную сужающуюся воронку.
