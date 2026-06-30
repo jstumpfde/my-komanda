@@ -285,6 +285,14 @@ export async function POST(
           newStage = "decision"
           stageReason = "demo_completed"
         }
+        // «Путь менеджера»/2-я часть (тест): кандидат на «Тест отправлен»
+        // завершил 2-й демо-блок → авто на «Задание выполнено» (test_task_done).
+        // ТОЛЬКО наша стадия на платформе — hh НЕ трогаем (решение Юрия 30.06).
+        // («Тест пройден»/test_passed по баллу — отдельно, когда задан критерий прохождения.)
+        if (isComplete && currentStage === "test_task_sent") {
+          newStage = "test_task_done"
+          stageReason = "second_demo_completed"
+        }
       }
 
       const stageHistory = (candidate.stageHistory as StageHistoryEntry[] | null) || []
