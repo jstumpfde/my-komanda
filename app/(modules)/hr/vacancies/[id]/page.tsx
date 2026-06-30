@@ -85,6 +85,7 @@ import { FunnelV2Builder } from "@/components/vacancies/funnel-v2-builder"
 import { SpecEditor } from "@/components/vacancies/spec-editor"
 import { FunnelTab } from "@/components/vacancies/funnel-tab"
 import { MessageQueueSection } from "@/components/vacancies/message-queue-section"
+import { OutboundPauseControl } from "@/components/vacancies/outbound-pause-control"
 import { parsePipeline, type CompanyStageHhActions, type CompanyStagePalette } from "@/lib/stages"
 import { BrandingOverrideSwitch } from "@/components/vacancies/branding-override-switch"
 import { VacancySettingsProvider, VacancyTabPendingDot, VacancyStickySaveBar, useVacancySectionRegister, useSafeSubTabSwitch, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
@@ -2635,6 +2636,13 @@ export default function VacancyPage() {
                       AI-токены по этой вакансии: {headerStats.aiTokensIn.toLocaleString("ru")} вх. / {headerStats.aiTokensOut.toLocaleString("ru")} исх.
                     </TooltipContent>
                   </UITooltip>
+                )}
+                {/* Заметная кнопка паузы дожимов (исходящая очередь).
+                    Останавливает только дожимы/приглашения; разбор новых
+                    откликов process-queue паузу не читает. Показываем для
+                    активных вакансий, где очередь реально работает. */}
+                {(status === "active" || status === "published" || status === "paused") && (
+                  <OutboundPauseControl vacancyId={id} />
                 )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
