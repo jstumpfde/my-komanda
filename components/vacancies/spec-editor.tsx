@@ -2192,7 +2192,9 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
 
       {/* ── После анкеты → 2-я часть «Путь менеджера» по баллу анкеты (Фаза 1; OFF by default) ── */}
       {(() => {
-        const ap = spec.anketaPassInvite
+        // getSpec отдаёт сырой спек без дефолтов → у старых вакансий поля нет.
+        // Fallback, иначе ap.enabled крашит Портрет (инцидент 30.06).
+        const ap = spec.anketaPassInvite ?? { enabled: false, passThreshold: 35, contentBlockId: null, messageText: "", delaySeconds: 900 }
         return (
           <Card>
             <CardContent className="pt-5 space-y-3">
