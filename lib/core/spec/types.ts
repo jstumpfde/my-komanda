@@ -171,6 +171,25 @@ export const AnketaThresholdsSchema = z.object({
 })
 export type AnketaThresholds = z.infer<typeof AnketaThresholdsSchema>
 
+/**
+ * Приглашение на 2-ю часть демо («Путь менеджера») для прошедших анкету.
+ * Если AI-балл анкеты ≥ passThreshold → через delaySeconds авто-сообщение
+ * со ссылкой на второй контент-блок (Фаза 1 консолидации, Юрий 30.06).
+ */
+export const AnketaPassInviteSchema = z.object({
+  /** Включена ли отправка 2-й части прошедшим анкету. */
+  enabled:        z.boolean().default(false),
+  /** Порог балла анкеты (0–100), при котором шлём 2-ю часть. Дефолт 35. */
+  passThreshold:  z.number().int().min(0).max(100).default(35),
+  /** Какой контент-блок отправить (id «Путь менеджера»). null = боевой по умолчанию. */
+  contentBlockId: z.string().nullable().default(null),
+  /** Текст сообщения; {{name}}, {{vacancy}}, {{demo_link}} подставляются. */
+  messageText:    z.string().max(2000).default(""),
+  /** Задержка перед отправкой, сек. Дефолт 900 (15 мин). */
+  delaySeconds:   z.number().int().min(0).default(900),
+})
+export type AnketaPassInvite = z.infer<typeof AnketaPassInviteSchema>
+
 // ─── Стоп-факторы ───────────────────────────────────────────────────────────
 
 /**
@@ -509,6 +528,8 @@ export const CandidateSpecSchema = z.object({
   resumeThresholds: ResumeThresholdsSchema.default({}),
   /** Пороги оценки анкеты (после демо). Дефолты 75/50. */
   anketaThresholds: AnketaThresholdsSchema.default({}),
+  /** Приглашение на 2-ю часть демо прошедшим анкету (балл ≥ порога). */
+  anketaPassInvite: AnketaPassInviteSchema.default({}),
 
   // ── (d) Профиль / текстовые описания ─────────────────────────────────────
   /**
