@@ -281,12 +281,17 @@ export function DemoProgressBar({
 
   return (
     <div className={cn("flex flex-col items-center gap-1 w-full max-w-[105px] mx-auto", className)}>
-      {/* Число слева, значки справа — только если значки есть; иначе число по центру. */}
-      <span className={cn("text-sm tabular-nums whitespace-nowrap font-medium inline-flex items-center gap-1 w-full", hasBadges ? "justify-between" : "justify-center", labelClass)}>
-        <span>{label}</span>
-        {demoProgress
-          ? <DemoBadges dp={demoProgress} />
-          : (hasVideoVizitka && <Video className="w-3 h-3 text-indigo-500" aria-label="Есть видео-визитка" />)}
+      {/* Число всегда по центру ячейки на фиксированном месте; значки висят
+          вплотную справа от него (absolute left-full + небольшой ml-gap),
+          поэтому их количество (0/1/2/3) НЕ сдвигает центрированное число —
+          в отличие от прежнего justify-between, который разносил число и значки. */}
+      <span className={cn("relative text-sm tabular-nums whitespace-nowrap font-medium inline-flex items-center justify-center w-full", labelClass)}>
+        <span className="relative inline-flex items-center">
+          <span>{label}</span>
+          {demoProgress
+            ? <DemoBadges dp={demoProgress} className="absolute left-full ml-1" />
+            : (hasVideoVizitka && <Video className="absolute left-full ml-1 w-3 h-3 text-indigo-500" aria-label="Есть видео-визитка" />)}
+        </span>
       </span>
       {hasFraction && effTot > 0 ? (
         // Сегменты-«шаги»: effTot делений, первые cur — залиты цветом стадии,

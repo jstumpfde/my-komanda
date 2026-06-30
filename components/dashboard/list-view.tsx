@@ -641,9 +641,9 @@ export function ListView({
       list.push({
         id: "city",
         gridWidth: "minmax(84px, 1.2fr)",
-        header: <SortHeader label="Город" sortKey="city" sort={sort} onToggle={handleSort} align="left" />,
+        header: <SortHeader label="Город" sortKey="city" sort={sort} onToggle={handleSort} align="center" />,
         renderCell: (candidate) => (
-          <div className="flex items-center gap-1 text-[14px] text-muted-foreground min-w-0">
+          <div className="flex items-center justify-center gap-1 text-[14px] text-muted-foreground min-w-0">
             <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
             <span className="truncate">{candidate.city}</span>
           </div>
