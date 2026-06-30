@@ -32,14 +32,16 @@ export const WeightLevelSchema = z.enum(["critical", "important", "nice", "irrel
  * Встроенные оси (5 штук из scoring/vacancy-spec.ts) + кастомные HR добавляет сам.
  */
 export const CriterionSchema = z.object({
-  /** snake_case-ключ, уникален внутри spec.criteria */
-  key:    z.string().min(1).max(80),
-  /** Отображаемое имя критерия */
-  label:  z.string().min(1).max(120),
+  /** snake_case-ключ, уникален внутри spec.criteria.
+   *  Лимит щедрый: legacy-ключи из anketa.aiCustomCriteria бывают длинными
+   *  (генерились из текста критерия) — узкий .max резал сохранение Портрета 400-кой. */
+  key:    z.string().min(1).max(300),
+  /** Отображаемое имя критерия. Свободный текст HR — лимит щедрый (см. key). */
+  label:  z.string().min(1).max(1000),
   /** Вес критерия (legacy-шкала). Этап 2 заменит на importance (0-100). */
   weight: WeightLevelSchema,
-  /** Подсказка AI: что именно проверять в резюме/анкете */
-  hint:   z.string().max(300).optional(),
+  /** Подсказка AI: что именно проверять в резюме/анкете. Свободный текст — щедро. */
+  hint:   z.string().max(2000).optional(),
   /**
    * Этап 2 («Портрет»): жёсткость критерия.
    * hard = нокаут при несоответствии, soft = только влияет на балл.
@@ -287,7 +289,7 @@ export const StopFactorsSchema = z.object({
    *  резюме): «Образование высшее», «Готовность к командировкам», «Без больших
    *  перерывов в стаже» и т.п. Каждое включённое уходит в стоп-факторы AI. */
   customFactors:      z.array(z.object({
-    label:   z.string().min(1).max(160),
+    label:   z.string().min(1).max(1000),
     enabled: z.boolean().default(true),
   })).max(15).optional(),
 })
@@ -350,7 +352,7 @@ export const DEFAULT_REJECT_LETTER =
  * в { text, hard: true } через normalizeMustHave().
  */
 export const MustHaveItemSchema = z.object({
-  text: z.string().min(1).max(1000),
+  text: z.string().min(1).max(2000),
   hard: z.boolean().default(true),
 })
 export type MustHaveItem = z.infer<typeof MustHaveItemSchema>
@@ -403,7 +405,7 @@ export const NiceImportanceSchema = z.enum(["nice", "important", "very"])
 export type NiceImportance = z.infer<typeof NiceImportanceSchema>
 
 export const NiceToHaveItemSchema = z.object({
-  text:       z.string().min(1).max(1000),
+  text:       z.string().min(1).max(2000),
   importance: NiceImportanceSchema.default("nice"),
 })
 export type NiceToHaveItem = z.infer<typeof NiceToHaveItemSchema>
@@ -448,7 +450,7 @@ export function niceToHaveTexts(items: ReadonlyArray<NiceToHaveEntry> | null | u
  * в { text, hard: true } — поведение прежнее.
  */
 export const DealBreakerItemSchema = z.object({
-  text: z.string().min(1).max(1000),
+  text: z.string().min(1).max(2000),
   hard: z.boolean().default(true),
 })
 export type DealBreakerItem = z.infer<typeof DealBreakerItemSchema>
@@ -503,14 +505,14 @@ export const CandidateSpecSchema = z.object({
    * обратную совместимость; для legacy-потребителей нормализуйте через
    * mustHaveTexts()/normalizeMustHave().
    */
-  mustHave:      z.array(z.union([z.string().min(1).max(1000), MustHaveItemSchema])).max(10).default([]),
+  mustHave:      z.array(z.union([z.string().min(1).max(2000), MustHaveItemSchema])).max(10).default([]),
   /**
    * 🟢 «Подходит» — пункты, что повышают балл, но не дисквалифицируют (до 10).
    * Формат: строка (legacy) ИЛИ { text, importance } (важность на пункте,
    * перестройка 21.06). Нормализуйте через niceToHaveTexts()/normalizeNiceToHave().
    * Соответствует requirementsJson.nice_to_have.
    */
-  niceToHave:    z.array(z.union([z.string().min(1).max(1000), NiceToHaveItemSchema])).max(10).default([]),
+  niceToHave:    z.array(z.union([z.string().min(1).max(2000), NiceToHaveItemSchema])).max(10).default([]),
   /**
    * 🔴 «Не подходит по смыслу» — дисквалификаторы (до 10).
    * Формат: строка (legacy = всегда стоп-фактор) ИЛИ { text, hard }
@@ -518,7 +520,7 @@ export const CandidateSpecSchema = z.object({
    * Нормализуйте через dealBreakerTexts()/normalizeDealBreakers().
    * Соответствует requirementsJson.deal_breakers.
    */
-  dealBreakers:  z.array(z.union([z.string().min(1).max(1000), DealBreakerItemSchema])).max(10).default([]),
+  dealBreakers:  z.array(z.union([z.string().min(1).max(2000), DealBreakerItemSchema])).max(10).default([]),
   /**
    * Взвешенные критерии для v2-скоринга (9 осей Σ=100).
    * Соответствует requirementsJson.scoring_weights.
@@ -551,7 +553,7 @@ export const CandidateSpecSchema = z.object({
    * Объединяет: requirementsJson.ideal_profile (v2) + anketa.aiIdealProfile (портрет v1).
    * При конфликте приоритет у requirementsJson.ideal_profile (актуальнее).
    */
-  idealProfile:  z.string().max(500).default(""),
+  idealProfile:  z.string().max(2000).default(""),
   /**
    * Жёсткие навыки из «Портрета кандидата» (anketa.aiRequiredHardSkills).
    * В Spec берётся как fallback для mustHave, если v2-поля не заполнены.
@@ -572,7 +574,7 @@ export const CandidateSpecSchema = z.object({
    * «Мягкие критерии» из outbound-кампании (outboundSearches.softCriteria).
    * Передаётся в AI как дополнительный контекст при outbound-скоринге.
    */
-  outboundSoftCriteria:    z.string().max(1000).default(""),
+  outboundSoftCriteria:    z.string().max(2000).default(""),
 
   /**
    * 🤖 Спорное уточняет бот: если AI не на 100% уверен (по dealBreakers/критериям) —
