@@ -12,7 +12,6 @@ export async function candidateLinkMetadata(token: string): Promise<Metadata> {
   let vacancyTitle = "Анкета кандидата"
   let companyName = ""
   let slogan = ""
-  let logoUrl: string | null = null
 
   try {
     const [cand] = await db
@@ -27,8 +26,6 @@ export async function candidateLinkMetadata(token: string): Promise<Metadata> {
           name: companies.name,
           brandName: companies.brandName,
           brandSlogan: companies.brandSlogan,
-          logoUrl: companies.logoUrl,
-          customTheme: companies.customTheme,
         })
         .from(vacancies)
         .innerJoin(companies, eq(vacancies.companyId, companies.id))
@@ -38,11 +35,6 @@ export async function candidateLinkMetadata(token: string): Promise<Metadata> {
         vacancyTitle = v.title?.trim() || vacancyTitle
         companyName = (v.brandName || v.name || "").trim()
         slogan = (v.brandSlogan || "").trim()
-        // Приоритет — авто-квадрат 256×256 (custom_theme.ogLogoUrl), чтобы превью
-        // показывалось маленьким значком, а не баннером. Иначе — обычный логотип.
-        const ct = v.customTheme as Record<string, unknown> | null
-        const ogLogo = ct && typeof ct.ogLogoUrl === "string" ? ct.ogLogoUrl : ""
-        logoUrl = ogLogo || v.logoUrl
       }
     }
   } catch {
@@ -64,15 +56,17 @@ export async function candidateLinkMetadata(token: string): Promise<Metadata> {
       title,
       description,
       ...(companyName ? { siteName: companyName } : {}),
-      // Пустой массив гасит платформенный og:image из layout; если у работодателя
-      // есть логотип — показываем квадрат 256×256 (маленьким значком, не баннером).
-      images: logoUrl ? [{ url: logoUrl, width: 256, height: 256 }] : [],
+      // Без og:image: hh/мессенджеры игнорируют заявленные 256×256 и рисуют
+      // огромный баннер из реального файла логотипа. Гасим картинку совсем —
+      // превью схлопывается в компактную текстовую карточку (вакансия + бренд +
+      // слоган). Пустой массив также глушит платформенный og:image из layout.
+      images: [],
     },
     twitter: {
       card: "summary",
       title,
       description,
-      images: logoUrl ? [logoUrl] : [],
+      images: [],
     },
   }
 }
