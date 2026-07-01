@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback, useMemo, Suspense } from "react"
+import { useState, useRef, useEffect, useCallback, useMemo, Suspense, type ReactNode } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth, isPlatformRole } from "@/lib/auth"
@@ -14,7 +14,7 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { KanbanBoard, type ViewMode } from "@/components/dashboard/kanban-board"
 import type { ListSortKey, ListSortState } from "@/components/dashboard/list-view"
-import { type CardDisplaySettings } from "@/components/dashboard/card-settings"
+import { type CardDisplaySettings, relevantColumnKeys } from "@/components/dashboard/card-settings"
 import { ViewSettings } from "@/components/dashboard/view-settings"
 import { CandidateFilters, DEFAULT_FUNNEL_STATUSES, type FilterState } from "@/components/dashboard/candidate-filters"
 import { applyCandidateFilters } from "@/lib/candidate-filter"
@@ -58,6 +58,7 @@ import { AutomationSettings, type AutomationSectionId } from "@/components/vacan
 import { ScheduleTab } from "@/components/vacancies/schedule-tab"
 import { PublishTab } from "@/components/vacancies/publish-tab"
 import { OutboundSourcingTab } from "@/components/vacancies/outbound-sourcing-tab"
+import { PublishTimeHeatmapCard } from "@/components/vacancies/publish-time-heatmap"
 import { VacancyActionsMenuItems } from "@/components/vacancies/vacancy-actions-menu"
 import { ExportCandidatesDialog } from "@/components/vacancies/export-candidates-dialog"
 import { PermanentDeleteDialog } from "@/components/vacancies/permanent-delete-dialog"
@@ -79,16 +80,17 @@ import { VacancyPrequalificationSettings } from "@/components/vacancies/vacancy-
 import { VacancyStopWordsSettings } from "@/components/vacancies/vacancy-stop-words-settings"
 import { FinalScreensSettings, type FinalScreensConfig } from "@/components/vacancies/final-screens-settings"
 import { RecoveryMessageSettings } from "@/components/vacancies/recovery-message-settings"
+import { ScheduleInviteSettings } from "@/components/vacancies/schedule-invite-settings"
 import { FirstMessagesChainEditor } from "@/components/vacancies/first-messages-chain-editor"
 import { FunnelBuilder } from "@/components/vacancies/funnel-builder"
 import { FunnelV2Builder } from "@/components/vacancies/funnel-v2-builder"
 import { SpecEditor } from "@/components/vacancies/spec-editor"
 import { FunnelTab } from "@/components/vacancies/funnel-tab"
 import { MessageQueueSection } from "@/components/vacancies/message-queue-section"
-import { OutboundPauseControl } from "@/components/vacancies/outbound-pause-control"
-import { parsePipeline, type CompanyStageHhActions, type CompanyStagePalette } from "@/lib/stages"
+import { OutboundPauseMenuItem } from "@/components/vacancies/outbound-pause-control"
+import { parsePipeline, resolveVacancyStageOptions, type CompanyStageHhActions, type CompanyStagePalette, type FunnelV2StageLite } from "@/lib/stages"
 import { BrandingOverrideSwitch } from "@/components/vacancies/branding-override-switch"
-import { VacancySettingsProvider, VacancyTabPendingDot, VacancyStickySaveBar, useVacancySectionRegister, useSafeSubTabSwitch, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
+import { VacancySettingsProvider, VacancyTabPendingDot, VacancyTabFooter, useVacancySectionRegister, useSafeSubTabSwitch, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
 import {
   ResponsiveContainer,
   BarChart,
@@ -232,6 +234,8 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     businessTripsReady: c.businessTripsReady ?? null,
     photoUrl: c.photoUrl ?? null,
     funnelV2StateJson: (c.funnelV2StateJson as { stageId?: string | null } | null) ?? null,
+    // «2-я часть демо»: override-блок → контекстный ярлык «2-я часть» в статусе.
+    overrideContentBlockId: (c as { overrideContentBlockId?: string | null }).overrideContentBlockId ?? null,
   }
 }
 
@@ -659,6 +663,50 @@ export default function VacancyPage() {
       .map((s) => ({ id: s.id as string, title: s.title ?? null }))
   }, [apiVacancy?.descriptionJson])
 
+  /**
+   * #42: ЕДИНЫЙ источник списка стадий вакансии — и для дропдауна «Стадия» в
+   * карточке кандидата, и для секции «Статус в воронке» фильтра. Приоритет:
+   * воронка v2 (funnelV2.stages) → legacy pipeline → дефолт-пресет.
+   * resolveVacancyStageOptions (lib/stages.ts) сам разбирает fallback-цепочку.
+   */
+  const stageOptions = useMemo(() => {
+    const raw = (apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.funnelV2
+    let v2: FunnelV2StageLite[] | null = null
+    if (raw && typeof raw === "object") {
+      const stages = (raw as { stages?: unknown }).stages
+      if (Array.isArray(stages)) {
+        v2 = (stages as Array<{ id?: unknown; action?: unknown; title?: unknown }>)
+          .filter((s) => typeof s.id === "string" && typeof s.action === "string")
+          .map((s) => ({
+            id: s.id as string,
+            action: s.action as string,
+            title: typeof s.title === "string" ? s.title : null,
+          }))
+      }
+    }
+    return resolveVacancyStageOptions(v2, vacancyPipeline)
+  }, [apiVacancy?.descriptionJson, vacancyPipeline])
+
+  /**
+   * #34: актуальные для ЭТОЙ вакансии тумблеры колонок «Вид → Настройки
+   * отображения». Считаем по конфигу воронки (funnel_config_json блоки +
+   * funnelV2-стадии) и legacy-флагам скоринга. null → показать все тумблеры
+   * (вакансия без сигнала о воронке — безопасный дефолт, прежнее поведение).
+   */
+  const availableColumnKeys = useMemo(
+    () =>
+      relevantColumnKeys(
+        apiVacancy as {
+          funnelConfigJson?: { blocks?: Array<{ type?: string; enabled?: boolean }> } | null
+          descriptionJson?: unknown
+          portraitScoring?: boolean
+          aiScoringEnabled?: boolean
+          aiChatbotEnabled?: boolean
+        } | null,
+      ),
+    [apiVacancy],
+  )
+
   // viewMode поднят сюда (выше хуков), чтобы useCandidates умел пропускать
   // запрос в режиме list-paginated и не дублировал usePaginatedCandidates.
   // Сеттер-обёртка setViewMode (с persist в user-prefs) объявлена ниже.
@@ -1063,6 +1111,53 @@ export default function VacancyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>(initialSettingsSection)
+
+  // #20 — единый канонический порядок табов вакансии для нижней панели действий.
+  // Совпадает с плоским рядом под-табов v2 (settingsSubTabs ниже). Каждый шаг —
+  // это либо верхний таб (kind:"tab"), либо секция настроек (kind:"section").
+  // Из этого ряда нижняя панель (VacancyTabFooter) вычисляет «Далее»/«Назад».
+  type VacancyStep = { kind: "tab" | "section"; value: string; section: SettingsSectionId | null; label: string }
+  const vacancySteps = useMemo<VacancyStep[]>(() => {
+    const all: VacancyStep[] = [
+      { kind: "tab",     value: "anketa",   section: null,             label: "Вакансия" },
+      { kind: "section", value: "settings", section: "spec",           label: "Портрет" },
+      { kind: "tab",     value: "content",  section: null,             label: "Контент" },
+      { kind: "section", value: "settings", section: "funnel-builder", label: "Воронка" },
+      { kind: "section", value: "settings", section: "messages",       label: "Сообщения" },
+      { kind: "section", value: "settings", section: "followup",       label: "Дожим" },
+      { kind: "section", value: "settings", section: "funnel-v2",      label: "Воронка v2" },
+      { kind: "section", value: "settings", section: "sources",        label: "Источники" },
+      { kind: "section", value: "settings", section: "ai",             label: "Расписание" },
+      { kind: "section", value: "settings", section: "integrations",   label: "Интеграции" },
+      { kind: "section", value: "settings", section: "page",           label: "Брендинг" },
+      { kind: "tab",     value: "outbound", section: null,             label: "Исходящий подбор" },
+      { kind: "tab",     value: "queue",    section: null,             label: "Очередь" },
+    ]
+    // «Воронка» (старый funnel-builder) видна только платформенному администратору.
+    return all.filter(s => isPlatformAdmin || s.section !== "funnel-builder")
+  }, [isPlatformAdmin])
+
+  // Переход к шагу канонического ряда (используется «Далее»/«Назад» нижней панели).
+  const goToVacancyStep = useCallback((step: VacancyStep) => {
+    if (step.kind === "section") {
+      setActiveTab("settings")
+      setSettingsSection(step.section as SettingsSectionId)
+      const sp = new URLSearchParams(window.location.search)
+      sp.set("tab", "settings")
+      sp.set("section", step.section as string)
+      router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+    } else {
+      setV2SettingsSub(step.value as typeof v2SettingsSub)
+      setActiveTab(step.value)
+      const sp = new URLSearchParams(window.location.search)
+      sp.set("tab", step.value)
+      sp.delete("section")
+      router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router])
+
   const [anPeriod, setAnPeriod] = useState("all")
   // Аналитика: серверная агрегация по ВСЕЙ вакансии (источник истины — БД,
   // а не выгруженный на клиент массив columns). Период anPeriod дёргает
@@ -1181,6 +1276,9 @@ export default function VacancyPage() {
     demoOpened: number; rejected: number;
     hhTotal: number; hhNew: number; inProgress: number;
     anketaFilled: number; demoAnswered: number; hired: number;
+    // #15: интервью (scheduled + interview + legacy interviewed) и оферы
+    // (offer_sent + legacy offer) — считаются из byStage стадий кандидатов.
+    interview: number; offer: number;
     ctaClicked: number;
     aiTokensIn: number; aiTokensOut: number;
   } | null>(null)
@@ -1197,11 +1295,18 @@ export default function VacancyPage() {
         inProgress: number; rejected: number; hired: number;
         demoOpened: number; anketaFilled: number; demoAnswered: number;
         ctaClicked: number;
+        byStage?: Record<string, number>;
         aiTokensIn: number; aiTokensOut: number;
       }
       const cand = candRes.ok
         ? await candRes.json() as { pending: number; freshCount: number }
         : { pending: 0, freshCount: 0 }
+      // #15: интервью и оферы из byStage. scheduled = «Интервью назначено»,
+      // interview = «Интервью прошло»; legacy-slug interviewed/offer — вторая
+      // система статусов (B9), учитываем чтобы не терять исторические числа.
+      const bs = stats.byStage ?? {}
+      const interviewCount = (bs["scheduled"] ?? 0) + (bs["interview"] ?? 0) + (bs["interviewed"] ?? 0)
+      const offerCount = (bs["offer_sent"] ?? 0) + (bs["offer"] ?? 0)
       setHeaderStats({
         total:        stats.total,
         pending:      cand.pending,
@@ -1213,6 +1318,8 @@ export default function VacancyPage() {
         inProgress:   stats.inProgress,
         anketaFilled: stats.anketaFilled,
         demoAnswered: stats.demoAnswered,
+        interview:    interviewCount,
+        offer:        offerCount,
         ctaClicked:   stats.ctaClicked ?? 0,
         hired:        stats.hired,
         aiTokensIn:   stats.aiTokensIn  ?? 0,
@@ -2523,73 +2630,116 @@ export default function VacancyPage() {
                     </DropdownMenu>
                   )}
                   <VacancyStatusBadge status={status} />
-                  {status === "active" && apiVacancy?.createdAt && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="size-3.5" />{Math.floor((Date.now() - new Date(apiVacancy.createdAt).getTime()) / 86400000)} дн.</span>}
+                  {/* «X дн.» — сколько вакансия висит на hh: считаем от даты ПЕРВОЙ
+                      публикации (vacancies.hh_published_at, заполняет крон
+                      hh-vacancy-sync). Fallback на created_at, если hh-даты ещё
+                      нет (вакансия без hh-привязки или синк не прошёл). */}
+                  {(() => {
+                    if (status !== "active") return null
+                    const hhPublishedAt = (apiVacancy as { hhPublishedAt?: string | null } | undefined)?.hhPublishedAt
+                    const since = hhPublishedAt ?? apiVacancy?.createdAt
+                    if (!since) return null
+                    const days = Math.floor((Date.now() - new Date(since).getTime()) / 86400000)
+                    return <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="size-3.5" />{days} дн.</span>
+                  })()}
                 </div>
                 <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
                   {activeTab === "candidates" && <>
-                    {/* #13: две логические группы метрик. Слева — hh.ru
-                        (синхрон с hh-кабинетом), вертикальная черта,
-                        справа — наши данные после разбора. Если вакансия
-                        не привязана к hh — hh-блок скрыт. */}
-                    {headerStats?.hhTotal !== undefined && headerStats.hhTotal + headerStats.hhNew > 0 && (
-                      <>
+                    {/* #15: счётчики шапки. Порядок: откликов → новых → демо →
+                        анкет → интервью → оферы → нанято → отказ.
+                        HIDE-AT-ZERO: всегда показываем «откликов всего»,
+                        «новых», «открыли демо» (даже 0); анкет/интервью/оферы/
+                        нанято/отказ — только если >0.
+                        Разделитель «·» рендерит каждый видимый элемент ПЕРЕД
+                        собой, кроме первого (isFirst), чтобы не было висячих
+                        точек при скрытых метриках. */}
+                    {(() => {
+                      const s = headerStats
+                      // hh-блок (откликов/новых) — только для hh-привязанных вакансий.
+                      const showHh = s?.hhTotal !== undefined
+                      const nodes: ReactNode[] = []
+                      const push = (key: string, node: ReactNode) => {
+                        if (nodes.length > 0) nodes.push(<span key={`sep-${key}`} aria-hidden="true">·</span>)
+                        nodes.push(<span key={key} className="inline-flex items-center">{node}</span>)
+                      }
+                      // Всегда (для hh-вакансий): откликов всего, новых.
+                      if (showHh) {
+                        push("hhTotal",
+                          <UITooltip>
+                            <TooltipTrigger asChild>
+                              <span className="cursor-help"><span className="font-medium text-foreground">{s!.hhTotal}</span> откликов всего</span>
+                            </TooltipTrigger>
+                            <TooltipContent>Всего откликов с hh.ru, синхронизировано с hh-кабинетом</TooltipContent>
+                          </UITooltip>)
+                        push("hhNew",
+                          <UITooltip>
+                            <TooltipTrigger asChild>
+                              <span className="cursor-help"><span className="font-medium text-foreground">{s!.hhNew}</span> новых</span>
+                            </TooltipTrigger>
+                            <TooltipContent>Новые отклики, ещё не разобраны (status = response)</TooltipContent>
+                          </UITooltip>)
+                      }
+                      // Всегда: открыли демо.
+                      push("demoOpened",
                         <UITooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-help">
-                              <span className="font-medium text-foreground">{headerStats.hhTotal}</span> откликов всего
-                            </span>
+                            <span className="cursor-help"><span className="font-medium text-foreground">{s?.demoOpened ?? 0}</span> демо</span>
                           </TooltipTrigger>
-                          <TooltipContent>Всего откликов с hh.ru, синхронизировано с hh-кабинетом</TooltipContent>
-                        </UITooltip>
-                        <span>·</span>
+                          <TooltipContent>Кандидаты, открывшие демо («demo_opened» и далее)</TooltipContent>
+                        </UITooltip>)
+                      // Только >0: анкет (demoAnswered).
+                      if ((s?.demoAnswered ?? 0) > 0) push("anketa",
                         <UITooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-help">
-                              <span className="font-medium text-foreground">{headerStats.hhNew}</span> новых
-                            </span>
+                            <span className="cursor-help"><span className="font-medium text-foreground">{s!.demoAnswered}</span> анкет</span>
                           </TooltipTrigger>
-                          <TooltipContent>Новые отклики, ещё не разобраны (status = response)</TooltipContent>
-                        </UITooltip>
-                        <span className="mx-1 inline-block h-3 w-px bg-border" aria-hidden="true" />
-                      </>
-                    )}
-                    {/* Блок наших данных после разбора */}
-                    <UITooltip>
-                      <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.demoOpened ?? "—"}</span> открыли демо</span>
-                      </TooltipTrigger>
-                      <TooltipContent>Кандидаты, добравшиеся до стадии «demo_opened» и далее</TooltipContent>
-                    </UITooltip>
-                    <span>·</span>
-                    <UITooltip>
-                      <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.demoAnswered ?? "—"}</span> заполнили анкету</span>
-                      </TooltipTrigger>
-                      <TooltipContent>Кандидаты, ответившие на вопросы анкеты (посчитан балл «AI-ан» по ответам)</TooltipContent>
-                    </UITooltip>
-                    {(headerStats?.ctaClicked ?? 0) > 0 && (
-                      <>
-                        <span>·</span>
+                          <TooltipContent>Кандидаты, ответившие на вопросы анкеты (посчитан балл «AI-ан» по ответам)</TooltipContent>
+                        </UITooltip>)
+                      // Только >0: перешли по ссылке (оставлено из прежней логики).
+                      if ((s?.ctaClicked ?? 0) > 0) push("cta",
                         <UITooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.ctaClicked}</span> перешли по ссылке</span>
+                            <span className="cursor-help"><span className="font-medium text-foreground">{s!.ctaClicked}</span> перешли по ссылке</span>
                           </TooltipTrigger>
                           <TooltipContent>Кандидаты, кликнувшие по кнопке-ссылке в демо (Telegram-канал / сайт)</TooltipContent>
-                        </UITooltip>
-                      </>
-                    )}
-                    <span>·</span>
-                    <UITooltip>
-                      <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.rejected ?? "—"}</span> отказ</span>
-                      </TooltipTrigger>
-                      <TooltipContent>Кандидаты со статусом «Отказ» в воронке</TooltipContent>
-                    </UITooltip>
-                    {/* P0-9: бейдж дельты «свежих» — оставлен (отдельная семантика
-                        «с прошлого захода»), но переехал в конец, чтобы не мешать
-                        основным метрикам. */}
+                        </UITooltip>)
+                      // Только >0: интервью, оферы, нанято.
+                      if ((s?.interview ?? 0) > 0) push("interview",
+                        <UITooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help"><span className="font-medium text-foreground">{s!.interview}</span> интервью</span>
+                          </TooltipTrigger>
+                          <TooltipContent>Кандидаты на стадии интервью (назначено + прошло)</TooltipContent>
+                        </UITooltip>)
+                      if ((s?.offer ?? 0) > 0) push("offer",
+                        <UITooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help"><span className="font-medium text-foreground">{s!.offer}</span> оферов</span>
+                          </TooltipTrigger>
+                          <TooltipContent>Кандидаты, которым отправлен оффер</TooltipContent>
+                        </UITooltip>)
+                      if ((s?.hired ?? 0) > 0) push("hired",
+                        <UITooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help"><span className="font-medium text-foreground">{s!.hired}</span> нанято</span>
+                          </TooltipTrigger>
+                          <TooltipContent>Кандидаты, нанятые по этой вакансии</TooltipContent>
+                        </UITooltip>)
+                      // Только >0: отказ.
+                      if ((s?.rejected ?? 0) > 0) push("rejected",
+                        <UITooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help"><span className="font-medium text-foreground">{s!.rejected}</span> отказ</span>
+                          </TooltipTrigger>
+                          <TooltipContent>Кандидаты со статусом «Отказ» в воронке</TooltipContent>
+                        </UITooltip>)
+                      return nodes
+                    })()}
+                    {/* P0-9: бейдж дельты «свежих» — отдельная семантика
+                        «с прошлого захода», в конце. Индикатор пагинации
+                        «Стр. N из M» из этой строки убран (#15). */}
                     {(headerStats?.freshCount ?? 0) > 0 && <>
-                      <span>·</span>
+                      <span aria-hidden="true">·</span>
                       <UITooltip>
                         <TooltipTrigger asChild>
                           <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 cursor-help">
@@ -2599,20 +2749,6 @@ export default function VacancyPage() {
                         <TooltipContent>Новые заполненные анкеты с прошлого захода в вакансию</TooltipContent>
                       </UITooltip>
                     </>}
-                    {useListPaginated && paginated.total > 0 && (
-                      <>
-                        <span>·</span>
-                        <span className="text-foreground">
-                          Стр. <span className="font-medium tabular-nums">{paginated.page}</span> из{" "}
-                          <span className="font-medium tabular-nums">{paginated.totalPages}</span>{" "}
-                          (<span className="tabular-nums">
-                            {(paginated.page - 1) * paginated.pageSize + 1}
-                            –
-                            {Math.min(paginated.total, paginated.page * paginated.pageSize)}
-                          </span>)
-                        </span>
-                      </>
-                    )}
                   </>}
                 </div>
                 <input
@@ -2637,13 +2773,9 @@ export default function VacancyPage() {
                     </TooltipContent>
                   </UITooltip>
                 )}
-                {/* Заметная кнопка паузы дожимов (исходящая очередь).
-                    Останавливает только дожимы/приглашения; разбор новых
-                    откликов process-queue паузу не читает. Показываем для
-                    активных вакансий, где очередь реально работает. */}
-                {(status === "active" || status === "published" || status === "paused") && (
-                  <OutboundPauseControl vacancyId={id} />
-                )}
+                {/* #17: пауза дожимов переехала в дропдаун «Ещё» тулбара над
+                    списком (пунктом OutboundPauseMenuItem). Отдельной кнопки в
+                    шапке больше нет. */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
@@ -2873,6 +3005,11 @@ export default function VacancyPage() {
                       // #18: серверные фасеты по ВСЕЙ вакансии (города/источники) —
                       // дропдауны показывают все значения, а не только из страницы.
                       facets={candidateFacets}
+                      // #18: pipeline вакансии → лейблы/fallback-список стадий.
+                      vacancyPipeline={vacancyPipeline}
+                      // #42: единый источник списка стадий (воронка v2 → pipeline)
+                      // — тот же, что и в дропдауне «Стадия» карточки кандидата.
+                      stageOptions={stageOptions}
                       candidates={useListPaginated ? (paginatedColumns?.[0]?.candidates ?? []) : columns.flatMap((c) => c.candidates)}
                     />
                     {false && <SortMenu sortMode={sortMode} onSortChange={setSortMode} />}
@@ -2914,6 +3051,12 @@ export default function VacancyPage() {
                           Поискать в базе
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
+                        {/* #17: пауза дожимов (исходящая очередь) переехала сюда
+                            из шапки. Показываем для активных/на паузе вакансий,
+                            где очередь реально работает. */}
+                        {(status === "active" || status === "published" || status === "paused") && (
+                          <OutboundPauseMenuItem vacancyId={id} />
+                        )}
                         {/* Режим рассылки hh: показывает иконку чата в каждой строке
                             списка для одиночной полу-ручной рассылки (архивные hh-вакансии).
                             onSelect+preventDefault — чтобы клик не закрывал меню. */}
@@ -2934,6 +3077,7 @@ export default function VacancyPage() {
                       onViewModeChange={setViewMode}
                       testTableHref={`/hr/vacancies/${id}/test-table`}
                       onReset={() => setCardSettings(defaultSettings)}
+                      availableKeys={availableColumnKeys}
                     />
                   </div>
                 )}
@@ -3541,6 +3685,11 @@ export default function VacancyPage() {
                           </div>
                         </CardContent>
                       </Card>
+
+                      {/* Тепловая карта «Лучшее время публикации» — heatmap 7×24
+                          + шкалы «Дни/Часы». Данные из best-publish-time (по всей
+                          компании, МСК). Сама скрывается, если мало откликов. */}
+                      <PublishTimeHeatmapCard vacancyId={id} />
                     </div>
                   )
                 })()}
@@ -4095,6 +4244,12 @@ export default function VacancyPage() {
                     initialText={(apiVacancy as { recoveryMessageText?: string } | undefined)?.recoveryMessageText ?? ""}
                     onSaved={() => refetchVacancy()}
                   />
+                  {/* Настраиваемый текст приглашения на интервью (ссылка /schedule/[token]). */}
+                  <ScheduleInviteSettings
+                    vacancyId={id}
+                    initialText={(apiVacancy as { scheduleInviteText?: string } | undefined)?.scheduleInviteText ?? ""}
+                    onSaved={() => refetchVacancy()}
+                  />
                 </div>
                 )}
 
@@ -4349,61 +4504,61 @@ export default function VacancyPage() {
                     tabKey="integrations"
                   />
 
-                  {/* Далее → следующий под-раздел настроек (Брендинг) */}
-                  <div className="flex justify-end pt-1">
-                    <Button size="sm" variant="default" className="gap-1.5 h-9 text-xs" onClick={() => {
-                      setSettingsSection("page")
-                      const sp = new URLSearchParams(window.location.search)
-                      sp.set("tab", "settings"); sp.set("section", "page")
-                      router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
-                      window.scrollTo({ top: 0, behavior: "smooth" })
-                    }}>
-                      Далее → Брендинг
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
                 </div>
                 )}
 
-                {/* Единая sticky-кнопка сохранения + beforeunload-защита */}
-                <VacancyStickySaveBar />
+                {/* #20 — ЕДИНАЯ нижняя панель настроек (эталон = таб «Вакансия»):
+                    СПРАВА [Сохранить настройки] · [Далее → {next}]; СЛЕВА крошки
+                    [‹ Все вакансии] · [‹ {prev}]. «Далее»/«Назад» — из канонического
+                    v2-ряда по текущему settingsSection. Заменяет прежний floating
+                    VacancyStickySaveBar + per-section «Далее». beforeunload-защита
+                    остаётся в самом провайдере. */}
+                {(() => {
+                  const idx = vacancySteps.findIndex(s => s.kind === "section" && s.section === settingsSection)
+                  const prevStep = idx > 0 ? vacancySteps[idx - 1] : null
+                  const nextStep = idx >= 0 && idx < vacancySteps.length - 1 ? vacancySteps[idx + 1] : null
+                  return (
+                    <VacancyTabFooter
+                      onAllVacancies={() => router.push("/hr/vacancies")}
+                      prevLabel={prevStep?.label ?? null}
+                      onPrev={prevStep ? () => goToVacancyStep(prevStep) : undefined}
+                      nextLabel={nextStep?.label ?? null}
+                      onNext={nextStep ? () => goToVacancyStep(nextStep) : undefined}
+                    />
+                  )
+                })()}
                 </VacancySettingsProvider>
               </TabsContent>
             </Tabs>
 
-            {/* ═══ Bottom tab navigation ══════════════════ */}
-            {(() => {
-              const tabOrder = status === "active"
-                ? ["candidates", "analytics", "content", "anketa", "settings"]
-                : ["anketa", "analytics", "candidates", "content", "settings"]
-              const tabLabels: Record<string, string> = { anketa: "Вакансия", content: "Контент", candidates: "Кандидаты", analytics: "Аналитика", settings: "Настройки" }
-              const idx = tabOrder.indexOf(activeTab)
-              const prevTab = idx > 0 ? tabOrder[idx - 1] : null
-              const nextTab = idx < tabOrder.length - 1 ? tabOrder[idx + 1] : null
-              const goTab = (tab: string) => { setActiveTab(tab); window.scrollTo({ top: 0, behavior: "smooth" }) }
+            {/* ═══ Единая нижняя панель — для табов ВНЕ настроек ═════════
+                #20: Настройки рендерят VacancyTabFooter ВНУТРИ провайдера
+                (там доступен saveAll). Здесь — глобальная панель для
+                верхних табов v2-ряда (Вакансия/Контент/Исходящий/Очередь) и
+                рабочих табов (Кандидаты/Аналитика/Интервью). «Сохранить» тут
+                НЕ показываем — этими табами владеет собственный редактор
+                (у него своя кнопка «Сохранить»), панель даёт крошки + «Далее».
+                Для activeTab==="settings" панель не рендерим — её показывает
+                внутренний футер настроек. */}
+            {activeTab !== "settings" && (() => {
+              // Позиция текущего верхнего таба в каноническом v2-ряду.
+              const idx = vacancySteps.findIndex(s => s.kind === "tab" && s.value === activeTab)
+              const prevStep = idx > 0 ? vacancySteps[idx - 1] : null
+              const nextStep = idx >= 0 && idx < vacancySteps.length - 1 ? vacancySteps[idx + 1] : null
+              // «Вакансия» и «Контент» рендерят собственную кнопку «Далее» внутри
+              // редактора (AnketaTab/ContentBlocksTab) — чтобы не задваивать, здесь
+              // «Далее» у них скрываем, оставляя только крошки навигации слева.
+              const ownsOwnNext = activeTab === "anketa" || activeTab === "content"
+              const showNext = !ownsOwnNext && !!nextStep
               return (
-                <div className="flex items-center justify-between mt-6 pt-4 border-t">
-                  <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={() => router.push("/hr/vacancies")}>
-                      <ChevronLeft className="w-3.5 h-3.5" />
-                      Все вакансии
-                    </Button>
-                    {prevTab && (
-                      <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={() => goTab(prevTab)}>
-                        <ChevronLeft className="w-3.5 h-3.5" />
-                        {tabLabels[prevTab]}
-                      </Button>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {nextTab && (
-                      <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => goTab(nextTab)}>
-                        {tabLabels[nextTab]}
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
+                <VacancyTabFooter
+                  onAllVacancies={() => router.push("/hr/vacancies")}
+                  prevLabel={prevStep?.label ?? null}
+                  onPrev={prevStep ? () => goToVacancyStep(prevStep) : undefined}
+                  nextLabel={showNext ? nextStep!.label : null}
+                  onNext={showNext ? () => goToVacancyStep(nextStep!) : undefined}
+                  showSave={false}
+                />
               )
             })()}
           </div>
@@ -4815,6 +4970,10 @@ export default function VacancyPage() {
         initialTab={drawerInitialTab}
         onToggleFavorite={handleToggleFavorite}
         vacancyAnketa={drawerAnketa}
+        vacancyPipeline={vacancyPipeline}
+        // #42: единый источник списка стадий (воронка v2 → pipeline) — тот же,
+        // что и в секции «Статус в воронке» фильтра.
+        stageOptions={stageOptions}
         onStageChange={(candidateId, newStage) => {
           // Sync kanban columns when stage changes in drawer
           setColumns((prev) => {

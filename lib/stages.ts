@@ -571,3 +571,85 @@ export function isTerminalStage(slug: string | null | undefined): boolean {
   if (!slug || !STAGE_SLUG_SET.has(slug as StageSlug)) return false
   return PLATFORM_STAGES[slug as StageSlug].isTerminal
 }
+
+// ───────────────────────────────────────────────────────────────────
+// Единый источник списка стадий вакансии (#42)
+// ───────────────────────────────────────────────────────────────────
+// И КАРТА кандидата (дропдаун «Стадия»), и ФИЛЬТР («Статус в воронке»)
+// берут список отсюда, чтобы не расходиться (было: карта = ALL_STAGE_SLUGS,
+// фильтр = pipeline/ALL). Приоритет источника:
+//   1) настроенная воронка v2 (descriptionJson.funnelV2) — её стадии по порядку;
+//   2) legacy pipeline (descriptionJson.pipeline) — enabled-стадии;
+//   3) дефолт-пресет "standard".
+// Единицы списка — StageSlug (совпадает с candidates.stage): «Отказ» сюда НЕ
+// входит (в UI он добавляется отдельными негативными пунктами Отказ/Отказался).
+
+/** Минимальная форма стадии воронки v2 для резолвера (id/action/title). */
+export interface FunnelV2StageLite {
+  id: string
+  action: string
+  title?: string | null
+}
+
+/**
+ * Маппинг action стадии воронки v2 → legacy StageSlug.
+ * Зеркалит mapActionToLegacyStage() из lib/funnel-v2/advance-stage.ts, но
+ * возвращает только slug'и, присутствующие в PLATFORM_STAGES (для дропдауна/
+ * фильтра, где значения — StageSlug). offer → decision (в advance-stage это
+ * legacy 'final_decision', но для UI-списка используем канонический decision).
+ */
+const FUNNEL_V2_ACTION_TO_SLUG: Record<string, StageSlug> = {
+  prequalification: "primary_contact",
+  message:          "primary_contact",
+  demo:             "demo_opened",
+  test:             "test_task_sent",
+  task:             "test_task_sent",
+  interview:        "interview",
+  security_check:   "interview",
+  reference_check:  "reference_check",
+  offer:            "offer_sent",
+  hired:            "hired",
+}
+
+/** Одна позиция единого списка стадий: slug (= candidates.stage) + читаемый лейбл. */
+export interface VacancyStageOption {
+  slug: StageSlug
+  label: string
+}
+
+/**
+ * Единый упорядоченный список стадий вакансии для карты и фильтра.
+ * Порядок: как в воронке v2 (или sortOrder для pipeline/дефолта).
+ * Дубли по slug убираются (несколько action могут маппиться в один slug),
+ * первый выигрывает и берёт свой title. «rejected» исключён.
+ *
+ * @param funnelV2Stages стадии descriptionJson.funnelV2.stages (id/action/title)
+ *                       или null/undefined, если воронка v2 не настроена
+ * @param pipeline       разобранный legacy pipeline (fallback), может быть null
+ */
+export function resolveVacancyStageOptions(
+  funnelV2Stages: FunnelV2StageLite[] | null | undefined,
+  pipeline?: VacancyPipelineV2 | null,
+): VacancyStageOption[] {
+  // Источник 1 — воронка v2 (если в ней есть стадии).
+  if (Array.isArray(funnelV2Stages) && funnelV2Stages.length > 0) {
+    const seen = new Set<StageSlug>()
+    const out: VacancyStageOption[] = []
+    for (const st of funnelV2Stages) {
+      const slug = FUNNEL_V2_ACTION_TO_SLUG[st.action]
+      if (!slug || slug === "rejected" || seen.has(slug)) continue
+      seen.add(slug)
+      const custom = typeof st.title === "string" && st.title.trim().length > 0
+        ? st.title.trim()
+        : null
+      out.push({ slug, label: custom ?? getStageLabel(slug, pipeline) })
+    }
+    if (out.length > 0) return out
+    // Если воронка есть, но ни один action не смапился — падаем на pipeline/дефолт.
+  }
+
+  // Источник 2/3 — legacy pipeline (enabled-стадии) или дефолт-пресет "standard".
+  return getEnabledStages(pipeline)
+    .filter(slug => slug !== "rejected")
+    .map(slug => ({ slug, label: getStageLabel(slug, pipeline) }))
+}
