@@ -1505,6 +1505,12 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
   const dbHardCnt = dbItems.filter(d => d.hard).length
   const dbSoftCnt = dbItems.length - dbHardCnt
 
+  // Есть ли вообще смысловые критерии для AI-оценки. Пусто → балл «плоский»,
+  // Портрет ничего не различает. Точные требования (город/возраст) сюда НЕ
+  // входят — это формальный отсев, а не то, по чему AI ставит балл 0–100.
+  const goodCount  = normalizeMustHave(spec.mustHave).length + normalizeNiceToHave(spec.niceToHave).length
+  const hasCriteria = goodCount > 0 || dbItems.length > 0
+
   return (
     <div className={vacancyAnketaData ? "flex items-start gap-6" : undefined}>
     <div className="space-y-6 min-w-0 flex-1">
@@ -1671,6 +1677,35 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
           )}
         </div>
       )}
+      {/* ── Заметная подсказка «критерии не заданы» ──────────────────────────
+          Пусто в «Подходит»/«Не подходит» → AI ставит всем почти одинаковый
+          балл (плоский, бесполезный). Показываем, только когда критериев нет,
+          и ведём прямо к кнопке «Сгенерировать» (AI соберёт из вакансии). */}
+      {!hasCriteria && (
+        <Alert className="border-amber-400 bg-amber-50 dark:bg-amber-950/30">
+          <Lightbulb className="w-4 h-4 text-amber-600" />
+          <AlertTitle className="text-amber-900 dark:text-amber-300">
+            Задайте критерии — иначе Портрет не сможет оценивать
+          </AlertTitle>
+          <AlertDescription className="space-y-2.5">
+            <p className="text-sm text-amber-800 dark:text-amber-400/90">
+              Пока «Подходит» и «Не подходит» пусты, AI ставит всем откликам почти
+              одинаковый балл — отбор не работает. Опишите 3–5 пунктов ниже или дайте
+              AI собрать их из названия и описания вакансии — вы проверите и поправите
+              перед сохранением.
+            </p>
+            {!suggestUnavailable && (
+              <Button type="button" size="sm" onClick={requestSuggestion} disabled={suggesting || actualizing}
+                className="bg-amber-600 hover:bg-amber-700 text-white">
+                {suggesting
+                  ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Анализ…</>
+                  : <><Sparkles className="w-4 h-4 mr-1.5" /> Предложить критерии</>}
+              </Button>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Пояснение про бота */}
       <p className="text-xs text-muted-foreground -mt-2">
         Если бот включён — спорное он уточнит у кандидата и в «Подходит», и в «Не подходит», а не отрежет сразу.
@@ -1683,7 +1718,9 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
             <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Подходит
           </CardTitle>
           <CardDescription>
-            Что хотим видеть в кандидате. Важность — на каждом пункте; всё учитывается вместе.
+            Что хотим видеть в кандидате — есть в резюме, плюс к баллу. Важность на каждом
+            пункте; всё учитывается вместе. Например: «Опыт B2B-продаж 3+ года», «Знание
+            Битрикс24», «Английский B1+».
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -1703,7 +1740,9 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
             <ShieldAlert className="w-4 h-4 text-red-500" /> Не подходит
           </CardTitle>
           <CardDescription>
-            Что отсекает кандидата или роняет балл.
+            Что отсекает кандидата или роняет балл. <b>Стоп-фактор</b> — сразу мимо, если AI
+            видит это в резюме (напр. «Только B2C без B2B-опыта»). <b>Минус к баллу</b> —
+            просто ниже балл, не отказ (напр. «Меньше 1 года в роли»).
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
