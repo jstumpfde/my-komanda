@@ -958,8 +958,8 @@ interface PublishTimeData {
   total: number
   periodDays?: number
   firstAt?: string | null
-  topDays?: { name: string; pct: number }[]
-  topHours?: { range: string; pct: number }[]
+  best?: { dow: number; dayName: string; hour: number; range: string; cnt: number; pct: number } | null
+  weekdayTops?: { dow: number; dayName: string; slots: { hour: number; range: string; cnt: number; pct: number }[] }[]
 }
 
 function BestPublishTimeCard({ vacancyId, city }: { vacancyId?: string; city?: string }) {
@@ -1001,22 +1001,37 @@ function BestPublishTimeCard({ vacancyId, city }: { vacancyId?: string; city?: s
         </p>
       ) : (
         <>
-          <div className="space-y-1">
-            {data.topDays && data.topDays.length > 0 && (
-              <div className="flex items-baseline gap-1.5 text-sm">
-                <span className="text-muted-foreground text-xs">Дни:</span>
-                <span className="font-medium">{data.topDays.map(d => `${d.name} (${d.pct}%)`).join(", ")}</span>
+          {data.best && (
+            <div className="rounded-md bg-primary/10 text-primary px-2.5 py-1.5 text-sm font-medium">
+              🎯 Лучше всего: {data.best.dayName}, {data.best.range}
+            </div>
+          )}
+
+          {data.weekdayTops && data.weekdayTops.length > 0 && (() => {
+            // Каждый будний день (Пн–Пт) со своим лучшим временем (топ-2 слота
+            // внутри дня, по времени). Порядок дней строго Пн→Пт. День без
+            // откликов — «—».
+            const short: Record<number, string> = { 1: "Пн", 2: "Вт", 3: "Ср", 4: "Чт", 5: "Пт" }
+            return (
+              <div className="space-y-0.5">
+                <p className="text-[10px] text-muted-foreground">% — доля откликов внутри дня</p>
+                {data.weekdayTops!.map(d => {
+                  const slots = [...d.slots].sort((a, b) => a.hour - b.hour)
+                  return (
+                    <div key={d.dow} className="flex items-baseline gap-1.5 text-sm">
+                      <span className="w-6 shrink-0 font-medium text-muted-foreground">{short[d.dow]}</span>
+                      <span className="text-foreground">
+                        {slots.length > 0 ? slots.map(s => `${s.range} — ${s.pct}%`).join(" · ") : "—"}
+                      </span>
+                    </div>
+                  )
+                })}
               </div>
-            )}
-            {data.topHours && data.topHours.length > 0 && (
-              <div className="flex items-baseline gap-1.5 text-sm">
-                <span className="text-muted-foreground text-xs">Часы:</span>
-                <span className="font-medium">{data.topHours.map(h => `${h.range} (${h.pct}%)`).join(", ")}</span>
-              </div>
-            )}
-          </div>
+            )
+          })()}
+
           <p className="text-[10px] text-muted-foreground">
-            {data.total} откликов{data.periodDays ? ` за ${data.periodDays}д.` : ""}{firstAtLabel ? ` · с ${firstAtLabel}` : ""} · МСК{cityLabel}
+            По {data.total} откликам вашей компании{data.periodDays ? ` за ${data.periodDays}д.` : ""}{firstAtLabel ? ` · с ${firstAtLabel}` : ""} · МСК{cityLabel}
           </p>
         </>
       )}

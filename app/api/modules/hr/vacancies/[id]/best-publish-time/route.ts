@@ -75,7 +75,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     const firstAtRaw = spanRows[0]?.first_at
     const firstAt = firstAtRaw ? new Date(firstAtRaw as string | number | Date).toISOString() : null
 
-    // Группируем по дням недели
+    const hourRange = (h: number) =>
+      `${String(h).padStart(2, "0")}:00–${String((h + 1) % 24).padStart(2, "0")}:00`
+
+    // ── Маргинальные шкалы ────────────────────────────────────────────────
+    // Дни: доля откликов по дню недели (сумма 7 дней = 100%, нормировка от total).
+    // Часы: доля откликов по часу (сумма = 100%). Обе шкалы нормированы к своей
+    // сумме = total, поэтому проценты внутри каждой складываются в ~100%.
     const byDay = new Map<number, number>()
     const byHour = new Map<number, number>()
     for (const r of data) {
@@ -83,18 +89,66 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       byHour.set(r.hour, (byHour.get(r.hour) ?? 0) + r.cnt)
     }
 
-    // Top-3 дни и часы
-    const topDays = Array.from(byDay.entries())
+    const days = Array.from(byDay.entries())
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([dow, cnt]) => ({ name: DAY_NAMES[dow], pct: Math.round((cnt / total) * 100) }))
+      .map(([dow, cnt]) => ({ dow, name: DAY_NAMES[dow], cnt, pct: Math.round((cnt / total) * 100) }))
 
-    const topHours = Array.from(byHour.entries())
+    const hours = Array.from(byHour.entries())
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([h, cnt]) => ({ range: `${String(h).padStart(2, "0")}:00–${String((h + 1) % 24).padStart(2, "0")}:00`, pct: Math.round((cnt / total) * 100) }))
+      .map(([hour, cnt]) => ({ hour, range: hourRange(hour), cnt, pct: Math.round((cnt / total) * 100) }))
 
-    return NextResponse.json({ enough: true, total, periodDays, firstAt, topDays, topHours })
+    // ── Совместный анализ ДЕНЬ×ЧАС ────────────────────────────────────────
+    // Каждая строка data — уже ячейка (dow,hour) с cnt (до маргинальной
+    // группировки). Это отвечает на «в какой день И в какой час пик».
+    const grid = data
+      .filter(r => r.cnt > 0)
+      .map(r => ({ dow: r.dow, hour: r.hour, cnt: r.cnt }))
+    const maxCell = grid.reduce((m, r) => Math.max(m, r.cnt), 0)
+
+    const cells = [...grid].sort((a, b) => b.cnt - a.cnt)
+    const toCombo = (c: { dow: number; hour: number; cnt: number }) => ({
+      dow: c.dow,
+      dayName: DAY_NAMES[c.dow],
+      hour: c.hour,
+      range: hourRange(c.hour),
+      cnt: c.cnt,
+      pct: Math.round((c.cnt / total) * 100),
+    })
+    const combos = cells.slice(0, 3).map(toCombo)
+
+    // ── Будние дни (Пн–Пт, dow 1..5) для карточки advisor ─────────────────
+    // Показываем КАЖДЫЙ будний день со своим лучшим временем (топ-2 ячейки
+    // внутри дня), а не глобальный топ, который у концентрированных данных
+    // схлопывается в один день. best = лучшая будняя ячейка среди всех будней.
+    const weekdayCells = cells.filter(c => c.dow >= 1 && c.dow <= 5)
+    const best = weekdayCells.length > 0 ? toCombo(weekdayCells[0]) : null
+    const weekdayTops = [1, 2, 3, 4, 5].map(dow => {
+      const dayCells = weekdayCells.filter(c => c.dow === dow) // cells уже отсортированы по cnt DESC
+      // Процент слота — доля ВНУТРИ этого дня недели (cnt / dayTotal), а не от
+      // общего total: числа крупнее и читаются как «когда в этот день пик».
+      const dayTotal = dayCells.reduce((s, c) => s + c.cnt, 0)
+      const slots = dayCells.slice(0, 2).map(c => ({
+        hour: c.hour,
+        range: hourRange(c.hour),
+        cnt: c.cnt,
+        pct: dayTotal > 0 ? Math.round((c.cnt / dayTotal) * 100) : 0,
+      }))
+      return { dow, dayName: DAY_NAMES[dow], slots }
+    })
+
+    return NextResponse.json({
+      enough: true,
+      total,
+      periodDays,
+      firstAt,
+      best,
+      combos,
+      weekdayTops,
+      grid,
+      maxCell,
+      days,
+      hours,
+    })
   } catch (e) {
     console.error("[best-publish-time]", e)
     return NextResponse.json({ error: "server error" }, { status: 500 })

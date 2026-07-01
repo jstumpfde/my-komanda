@@ -58,6 +58,7 @@ import { AutomationSettings, type AutomationSectionId } from "@/components/vacan
 import { ScheduleTab } from "@/components/vacancies/schedule-tab"
 import { PublishTab } from "@/components/vacancies/publish-tab"
 import { OutboundSourcingTab } from "@/components/vacancies/outbound-sourcing-tab"
+import { PublishTimeHeatmapCard } from "@/components/vacancies/publish-time-heatmap"
 import { VacancyActionsMenuItems } from "@/components/vacancies/vacancy-actions-menu"
 import { ExportCandidatesDialog } from "@/components/vacancies/export-candidates-dialog"
 import { PermanentDeleteDialog } from "@/components/vacancies/permanent-delete-dialog"
@@ -3541,6 +3542,11 @@ export default function VacancyPage() {
                           </div>
                         </CardContent>
                       </Card>
+
+                      {/* Тепловая карта «Лучшее время публикации» — heatmap 7×24
+                          + шкалы «Дни/Часы». Данные из best-publish-time (по всей
+                          компании, МСК). Сама скрывается, если мало откликов. */}
+                      <PublishTimeHeatmapCard vacancyId={id} />
                     </div>
                   )
                 })()}
