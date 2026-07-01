@@ -643,7 +643,7 @@ export function ListView({
       // Город — сужен
       list.push({
         id: "city",
-        gridWidth: "minmax(84px, 1.2fr)",
+        gridWidth: "minmax(84px, 130px)",
         header: <SortHeader label="Город" sortKey="city" sort={sort} onToggle={handleSort} align="center" />,
         renderCell: (candidate) => (
           <div className="flex items-center justify-center gap-1 text-[14px] text-muted-foreground min-w-0">
