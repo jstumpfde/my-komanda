@@ -202,19 +202,24 @@ export async function maybeScheduleSecondDemoInvite(args: {
 
     // 8. Выставляем override (ссылка {{demo_link}} теперь ведёт на 2-ю часть) и
     //    ставим приглашение в очередь. Override + invitedAt = дедуп-флаг.
-    await db.update(candidates)
-      .set({ overrideContentBlockId: blockId, secondDemoInvitedAt: new Date() })
-      .where(eq(candidates.id, args.candidateId))
+    //    Атомарно (транзакция): иначе сбой между update и insert оставлял бы
+    //    override без сообщения — «помечен приглашённым, но ссылка не ушла»
+    //    (часть корня инцидента 30.06). Оба шага либо есть, либо нет.
+    await db.transaction(async (tx) => {
+      await tx.update(candidates)
+        .set({ overrideContentBlockId: blockId, secondDemoInvitedAt: new Date() })
+        .where(eq(candidates.id, args.candidateId))
 
-    await db.insert(followUpMessages).values({
-      campaignId,
-      candidateId: args.candidateId,
-      scheduledAt,
-      touchNumber: 0,
-      channel:     "hh",
-      messageText,
-      status:      "pending",
-      branch:      "second_demo_invite",
+      await tx.insert(followUpMessages).values({
+        campaignId,
+        candidateId: args.candidateId,
+        scheduledAt,
+        touchNumber: 0,
+        channel:     "hh",
+        messageText,
+        status:      "pending",
+        branch:      "second_demo_invite",
+      })
     })
 
     console.log("[second-demo-invite]", JSON.stringify({
