@@ -114,3 +114,65 @@ export function generateSlotsForWindows(
   }
   return out
 }
+
+// ─── Per-вакансия окна записи (#21) ──────────────────────────────────────────
+// У вакансии могут быть свои окна (descriptionJson.interviewDaySchedule),
+// перекрывающие company-level. Если не заданы — company fallback (resolveDaySchedule).
+
+export const DAY_LABELS_RU: Record<DayId, string> = {
+  mon: "Пн", tue: "Вт", wed: "Ср", thu: "Чт", fri: "Пт", sat: "Сб", sun: "Вс",
+}
+
+/** Расписание окон по дням недели (per-вакансия). Ключ отсутствует/пустой массив = выходной. */
+export type InterviewDaySchedule = Partial<Record<DayId, InterviewTimeRange[]>>
+
+const HHMM_RE = /^([01]\d|2[0-3]):[0-5]\d$/
+
+/**
+ * Нормализует произвольный JSON к валидному InterviewDaySchedule: отбрасывает
+ * мусор, невалидный формат времени, диапазоны from>=to; сортирует по началу.
+ * Возвращает null, если ничего валидного нет.
+ */
+export function normalizeInterviewDaySchedule(raw: unknown): InterviewDaySchedule | null {
+  if (!raw || typeof raw !== "object") return null
+  const src = raw as Record<string, unknown>
+  const out: InterviewDaySchedule = {}
+  let hasAny = false
+  for (const day of DAY_IDS) {
+    const list = src[day]
+    if (!Array.isArray(list)) continue
+    const ranges: InterviewTimeRange[] = []
+    for (const r of list) {
+      if (!r || typeof r !== "object") continue
+      const from = (r as { from?: unknown }).from
+      const to   = (r as { to?: unknown }).to
+      if (typeof from !== "string" || !HHMM_RE.test(from)) continue
+      if (typeof to !== "string"   || !HHMM_RE.test(to))   continue
+      if (timeToMinutes(from) >= timeToMinutes(to)) continue
+      ranges.push({ from, to })
+    }
+    if (ranges.length > 0) {
+      ranges.sort((a, b) => timeToMinutes(a.from) - timeToMinutes(b.from))
+      out[day] = ranges
+      hasAny = true
+    }
+  }
+  return hasAny ? out : null
+}
+
+/**
+ * Окна записи для ВАКАНСИИ: если у вакансии заданы свои окна
+ * (descriptionJson.interviewDaySchedule) — берём их; иначе company-level fallback.
+ */
+export function resolveVacancyDaySchedule(
+  vacancyInterviewDaySchedule: unknown,
+  companySched: NonNullable<CompanyHiringDefaults["schedule"]> | undefined | null,
+): DaySchedule {
+  const perVacancy = normalizeInterviewDaySchedule(vacancyInterviewDaySchedule)
+  if (perVacancy) {
+    const out = emptySchedule()
+    for (const day of DAY_IDS) out[day] = perVacancy[day] ?? []
+    return out
+  }
+  return resolveDaySchedule(companySched)
+}

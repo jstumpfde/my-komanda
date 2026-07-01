@@ -10,10 +10,19 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Plus, Trash2, Clock, Calendar, Loader2 } from "lucide-react"
+import { Plus, Trash2, Clock, Calendar, CalendarClock, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { RU_HOLIDAYS } from "@/lib/schedule/holidays"
 import { COUNTRY_LABELS, getHolidaysForCountry, type CountryCode } from "@/lib/holidays"
+import {
+  DAY_IDS,
+  DAY_LABELS_RU,
+  normalizeInterviewDaySchedule,
+  timeToMinutes,
+  type DayId,
+  type InterviewDaySchedule,
+  type InterviewTimeRange,
+} from "@/lib/schedule/day-windows"
 import { useVacancySectionRegister } from "./vacancy-settings-context"
 
 interface CustomHoliday {
@@ -176,7 +185,7 @@ export function VacancyScheduleSettings({ vacancyId }: Props) {
             <Clock className="w-4 h-4" /> Рабочие дни и часы
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-5">
+        <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label className="text-sm font-medium">Соблюдать расписание</Label>
@@ -192,44 +201,41 @@ export function VacancyScheduleSettings({ vacancyId }: Props) {
 
           {data.scheduleEnabled && (
             <>
-              <div className="space-y-3">
-                <Label className="text-sm">Время</Label>
-                <div className="flex items-center gap-2">
-                  <Label className="text-sm text-muted-foreground">С</Label>
-                  <Input
-                    type="time"
-                    value={data.scheduleStart}
-                    onChange={(e) => setData({ ...data, scheduleStart: e.target.value })}
-                    className="w-[120px] h-9"
-                  />
-                  <Label className="text-sm text-muted-foreground">до</Label>
-                  <Input
-                    type="time"
-                    value={data.scheduleEnd}
-                    onChange={(e) => setData({ ...data, scheduleEnd: e.target.value })}
-                    className="w-[120px] h-9"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <Label className="text-sm text-muted-foreground shrink-0">Часовой пояс:</Label>
-                  <Select
-                    value={data.scheduleTimezone}
-                    onValueChange={(v) => setData({ ...data, scheduleTimezone: v })}
-                  >
-                    <SelectTrigger className="w-[260px] h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TIMEZONES.map((tz) => (
-                        <SelectItem key={tz.value} value={tz.value}>
-                          {tz.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              {/* Время + часовой пояс — в одну строку */}
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+                <Label className="text-sm text-muted-foreground">С</Label>
+                <Input
+                  type="time"
+                  value={data.scheduleStart}
+                  onChange={(e) => setData({ ...data, scheduleStart: e.target.value })}
+                  className="w-[110px] h-9"
+                />
+                <Label className="text-sm text-muted-foreground">до</Label>
+                <Input
+                  type="time"
+                  value={data.scheduleEnd}
+                  onChange={(e) => setData({ ...data, scheduleEnd: e.target.value })}
+                  className="w-[110px] h-9"
+                />
+                <Label className="text-sm text-muted-foreground shrink-0 ml-2">Часовой пояс</Label>
+                <Select
+                  value={data.scheduleTimezone}
+                  onValueChange={(v) => setData({ ...data, scheduleTimezone: v })}
+                >
+                  <SelectTrigger className="w-[220px] h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TIMEZONES.map((tz) => (
+                      <SelectItem key={tz.value} value={tz.value}>
+                        {tz.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
+              {/* Дни недели */}
               <div className="space-y-2">
                 <Label className="text-sm">Дни недели</Label>
                 <div className="flex flex-wrap gap-1.5">
@@ -252,6 +258,40 @@ export function VacancyScheduleSettings({ vacancyId }: Props) {
                     )
                   })}
                 </div>
+              </div>
+
+              {/* Обеденный перерыв — под-настройка внутри «Рабочие дни и часы» */}
+              <div className="rounded-lg border p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-medium">Блокировать отправку в обед</Label>
+                    <p className="text-xs text-muted-foreground">
+                      В указанный промежуток сообщения кандидатам не отправляются
+                    </p>
+                  </div>
+                  <Switch
+                    checked={data.scheduleLunchEnabled}
+                    onCheckedChange={(v) => setData({ ...data, scheduleLunchEnabled: v })}
+                  />
+                </div>
+                {data.scheduleLunchEnabled && (
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm text-muted-foreground">С</Label>
+                    <Input
+                      type="time"
+                      value={data.scheduleLunchFrom}
+                      onChange={(e) => setData({ ...data, scheduleLunchFrom: e.target.value })}
+                      className="w-[110px] h-9"
+                    />
+                    <Label className="text-sm text-muted-foreground">до</Label>
+                    <Input
+                      type="time"
+                      value={data.scheduleLunchTo}
+                      onChange={(e) => setData({ ...data, scheduleLunchTo: e.target.value })}
+                      className="w-[110px] h-9"
+                    />
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -373,46 +413,8 @@ export function VacancyScheduleSettings({ vacancyId }: Props) {
         </CardContent>
       </Card>
 
-      {/* Обеденный перерыв */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Clock className="w-4 h-4" /> Обеденный перерыв
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label className="text-sm font-medium">Блокировать отправку в обед</Label>
-              <p className="text-xs text-muted-foreground">
-                В указанный промежуток сообщения кандидатам не отправляются
-              </p>
-            </div>
-            <Switch
-              checked={data.scheduleLunchEnabled}
-              onCheckedChange={(v) => setData({ ...data, scheduleLunchEnabled: v })}
-            />
-          </div>
-          {data.scheduleLunchEnabled && (
-            <div className="flex items-center gap-2">
-              <Label className="text-sm text-muted-foreground">С</Label>
-              <Input
-                type="time"
-                value={data.scheduleLunchFrom}
-                onChange={(e) => setData({ ...data, scheduleLunchFrom: e.target.value })}
-                className="w-[120px] h-9"
-              />
-              <Label className="text-sm text-muted-foreground">до</Label>
-              <Input
-                type="time"
-                value={data.scheduleLunchTo}
-                onChange={(e) => setData({ ...data, scheduleLunchTo: e.target.value })}
-                className="w-[120px] h-9"
-              />
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* #21 — окна записи на интервью по дням недели (per-вакансия) */}
+      <InterviewWindowsSection vacancyId={vacancyId} />
 
       <CustomHolidayDialog
         open={customDialogOpen}
@@ -517,5 +519,172 @@ function CustomHolidayDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// ─── #21 Окна записи на интервью (per-вакансия) ───────────────────────────────
+//
+// Per-вакансия переопределение окон самозаписи на интервью по дням недели
+// (мульти-диапазон). Хранится в vacancy.descriptionJson.interviewDaySchedule,
+// сохраняется через общий PATCH-путь вакансии (description_json merge).
+// Если ничего не задано — генератор слотов берёт общие company-level настройки.
+
+function InterviewWindowsSection({ vacancyId }: { vacancyId: string }) {
+  const [loading, setLoading]   = useState(true)
+  const [schedule, setSchedule] = useState<InterviewDaySchedule>({})
+
+  // Загрузка текущих окон из descriptionJson вакансии
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/modules/hr/vacancies/${vacancyId}`)
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
+      .then((json) => {
+        if (cancelled) return
+        const vac = (json?.data ?? json) as { descriptionJson?: unknown }
+        const dj  = (vac?.descriptionJson && typeof vac.descriptionJson === "object")
+          ? vac.descriptionJson as Record<string, unknown>
+          : {}
+        setSchedule(normalizeInterviewDaySchedule(dj.interviewDaySchedule) ?? {})
+      })
+      .catch(() => { if (!cancelled) setSchedule({}) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [vacancyId])
+
+  const save = async () => {
+    const normalized = normalizeInterviewDaySchedule(schedule)
+    const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
+      method:  "PATCH",
+      headers: { "Content-Type": "application/json" },
+      // null — окна не заданы → генератор упадёт на company-level fallback.
+      body:    JSON.stringify({ description_json: { interviewDaySchedule: normalized } }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      throw new Error(body.error ?? `HTTP ${res.status}`)
+    }
+    toast.success("Окна записи на интервью сохранены")
+  }
+
+  useVacancySectionRegister({
+    sectionKey: `interview-windows:${vacancyId}`,
+    tabKey: "ai",
+    loaded: !loading,
+    watchedValues: schedule,
+    save,
+  })
+
+  const addRange = (day: DayId) => {
+    setSchedule((prev) => {
+      const list = prev[day] ?? []
+      // Новый диапазон по умолчанию — до обеда либо после последнего.
+      const next: InterviewTimeRange = list.length === 0
+        ? { from: "09:00", to: "13:00" }
+        : { from: "14:00", to: "18:00" }
+      return { ...prev, [day]: [...list, next] }
+    })
+  }
+
+  const updateRange = (day: DayId, idx: number, patch: Partial<InterviewTimeRange>) => {
+    setSchedule((prev) => {
+      const list = [...(prev[day] ?? [])]
+      list[idx] = { ...list[idx], ...patch }
+      return { ...prev, [day]: list }
+    })
+  }
+
+  const removeRange = (day: DayId, idx: number) => {
+    setSchedule((prev) => {
+      const list = (prev[day] ?? []).filter((_, i) => i !== idx)
+      const next = { ...prev }
+      if (list.length > 0) next[day] = list
+      else delete next[day]
+      return next
+    })
+  }
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="py-6 flex items-center justify-center text-muted-foreground text-sm">
+          <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Загрузка окон записи...
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <CalendarClock className="w-4 h-4" /> Окна записи на интервью
+        </CardTitle>
+        <p className="text-xs text-muted-foreground pt-1">
+          Окна этой вакансии; если не заданы — берутся общие компанийные (из настроек найма).
+          Можно задать несколько промежутков в день (до обеда / после обеда).
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {DAY_IDS.map((day) => {
+          const ranges = schedule[day] ?? []
+          return (
+            <div key={day} className="flex items-start gap-3">
+              <div className="w-10 shrink-0 pt-2 text-sm font-medium text-muted-foreground">
+                {DAY_LABELS_RU[day]}
+              </div>
+              <div className="flex-1 space-y-1.5">
+                {ranges.length === 0 ? (
+                  <div className="flex items-center gap-2 h-9">
+                    <span className="text-xs text-muted-foreground italic">Выходной / не задано</span>
+                  </div>
+                ) : (
+                  ranges.map((r, idx) => {
+                    const invalid = timeToMinutes(r.from) >= timeToMinutes(r.to)
+                    return (
+                      <div key={idx} className="flex items-center gap-2">
+                        <Input
+                          type="time"
+                          value={r.from}
+                          onChange={(e) => updateRange(day, idx, { from: e.target.value })}
+                          className={cn("w-[110px] h-9", invalid && "border-destructive")}
+                        />
+                        <span className="text-sm text-muted-foreground">–</span>
+                        <Input
+                          type="time"
+                          value={r.to}
+                          onChange={(e) => updateRange(day, idx, { to: e.target.value })}
+                          className={cn("w-[110px] h-9", invalid && "border-destructive")}
+                        />
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-destructive shrink-0"
+                          onClick={() => removeRange(day, idx)}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1 shrink-0 mt-0.5"
+                onClick={() => addRange(day)}
+              >
+                <Plus className="w-3.5 h-3.5" /> Окно
+              </Button>
+            </div>
+          )
+        })}
+      </CardContent>
+    </Card>
   )
 }

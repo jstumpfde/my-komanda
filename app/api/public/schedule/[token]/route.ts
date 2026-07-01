@@ -11,7 +11,7 @@ import { isShortId } from "@/lib/short-id"
 import type { CompanyHiringDefaults } from "@/lib/db/schema"
 import type { SchedulePageData, MethodConfig, SlotDay } from "@/lib/schedule-interview-types"
 import { sendToCompanyChannel } from "@/lib/telegram/send-to-company"
-import { resolveDaySchedule, generateSlotsForWindows, JS_TO_DAY_ID } from "@/lib/schedule/day-windows"
+import { resolveDaySchedule, resolveVacancyDaySchedule, generateSlotsForWindows, JS_TO_DAY_ID } from "@/lib/schedule/day-windows"
 
 export type { SchedulePageData, MethodConfig, SlotDay }
 
@@ -156,6 +156,8 @@ export async function GET(
         hiringDefaults:       companies.hiringDefaultsJson,
         // #3.4 Fallback адреса: companies.office_address
         companyOfficeAddress: companies.officeAddress,
+        // #21: per-вакансия окна записи (descriptionJson.interviewDaySchedule)
+        vacancyDescriptionJson: vacancies.descriptionJson,
       })
       .from(vacancies)
       .innerJoin(companies, eq(vacancies.companyId, companies.id))
@@ -167,8 +169,11 @@ export async function GET(
     const sched = (row.hiringDefaults as CompanyHiringDefaults)?.schedule ?? {}
 
     // 3. Разбираем настройки
-    // Окна доступности по дням недели (новый источник правды; legacy деривится).
-    const daySchedule = resolveDaySchedule(sched)
+    // Окна доступности по дням недели: сначала per-вакансия, иначе company-level.
+    const daySchedule = resolveVacancyDaySchedule(
+      (row.vacancyDescriptionJson as { interviewDaySchedule?: unknown } | null)?.interviewDaySchedule,
+      sched,
+    )
     const step      = sched.slotStep ?? DEFAULT_STEP
     const maxPerDay = Number(sched.maxPerDay ?? DEFAULT_MAX) || DEFAULT_MAX
     const timezone  = sched.timezone ?? "Europe/Moscow"
