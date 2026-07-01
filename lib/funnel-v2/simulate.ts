@@ -56,9 +56,19 @@ function buildAnswers(questions: Question[], blockId: string, mode: "good" | "we
   return out
 }
 
-function decide(rule: { autoReject?: boolean; autoAdvance?: boolean; threshold?: number }, scorePercent: number): string {
-  const threshold = typeof rule.threshold === "number" ? rule.threshold : 0
-  if (rule.autoReject && scorePercent < threshold) return `АВТО-ОТКАЗ (балл ${scorePercent} < порог ${threshold})`
+function decide(rule: { autoReject?: boolean; autoAdvance?: boolean; threshold?: number; objThreshold?: number }, scorePercent: number): string {
+  // Сухой прогон использует объективный балл (синтетические ответы, без AI),
+  // поэтому оба порога сравниваем с одним scorePercent.
+  const aiT  = typeof rule.threshold    === "number" ? rule.threshold    : undefined
+  const objT = typeof rule.objThreshold === "number" ? rule.objThreshold : undefined
+  const aiFail  = typeof aiT  === "number" && scorePercent < aiT
+  const objFail = typeof objT === "number" && scorePercent < objT
+  if (rule.autoReject && (aiFail || objFail)) {
+    const reasons: string[] = []
+    if (aiFail)  reasons.push(`AI ${scorePercent} < ${aiT}`)
+    if (objFail) reasons.push(`ответы ${scorePercent} < ${objT}`)
+    return `АВТО-ОТКАЗ (${reasons.join(", ")})`
+  }
   if (rule.autoAdvance) return "АВТО-ПЕРЕХОД"
   return "ЖДЁМ HR (ручное подтверждение)"
 }

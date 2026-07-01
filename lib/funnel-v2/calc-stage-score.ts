@@ -37,6 +37,16 @@ export interface StageScoreResult {
   gradedCount: number
   /** true если были AI-вопросы, которые НЕ были оценены (ждут async AI). */
   hasPendingAiQuestions?: boolean
+  /**
+   * Процент по ОБЪЕКТИВНЫМ вопросам (правильные ответы: single/multiple/yesno/sort),
+   * 0–100. null — объективных вопросов в блоке нет (по ним не гейтим).
+   */
+  objectivePercent?: number | null
+  /**
+   * Процент по AI-вопросам (short/long/text с textMatchMode='ai'), 0–100.
+   * null — AI-вопросов нет или AI не запускался (по AI-баллу не гейтим).
+   */
+  aiPercent?: number | null
 }
 
 /**
@@ -61,7 +71,7 @@ export function calcStageScore(
   const hasPendingAiQuestions = taskQuestions.some(q => isAiTextQuestion(q))
 
   if (taskQuestions.length === 0 || answers.length === 0) {
-    return { totalScore: 0, maxScore: 0, scorePercent: 100, gradedCount: 0, hasPendingAiQuestions }
+    return { totalScore: 0, maxScore: 0, scorePercent: 100, gradedCount: 0, hasPendingAiQuestions, objectivePercent: null, aiPercent: null }
   }
 
   // Объективный подсчёт (single/multiple/yesno/sort).
@@ -78,6 +88,8 @@ export function calcStageScore(
     scorePercent,
     gradedCount:          result.gradedCount,
     hasPendingAiQuestions,
+    objectivePercent:     result.maxPoints > 0 ? result.score : null,
+    aiPercent:            null,  // синхронный путь AI не считает
   }
 }
 
@@ -106,7 +118,7 @@ export async function calcStageScoreWithAI(
   const { taskQuestions, answersByQuestion } = prepareQuestions(lessonsJson, answers)
 
   if (taskQuestions.length === 0 || answers.length === 0) {
-    return { totalScore: 0, maxScore: 0, scorePercent: 100, gradedCount: 0 }
+    return { totalScore: 0, maxScore: 0, scorePercent: 100, gradedCount: 0, objectivePercent: null, aiPercent: null }
   }
 
   // Шаг 1: объективные вопросы
@@ -175,6 +187,8 @@ export async function calcStageScoreWithAI(
     scorePercent,
     gradedCount: objective.gradedCount + (aiScore !== null ? aiQuestions.length : 0),
     hasPendingAiQuestions: false,
+    objectivePercent: hasObjective ? objective.score : null,
+    aiPercent:        aiScore,  // number (0–100) или null, если AI-вопросов нет / не посчитан
   }
 }
 

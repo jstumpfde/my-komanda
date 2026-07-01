@@ -245,10 +245,24 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose, dripT
               <Label className="text-[11px] text-muted-foreground">Критерий прохода</Label>
               <Input value={stage.rule.passCriteria ?? ""} onChange={e => patchRule({ passCriteria: e.target.value || undefined })} placeholder={isScoring ? "напр. «ответил верно ≥ порога»" : "напр. «посмотрел демо»"} className="h-12 text-base" />
             </div>
-            {isScoring && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground shrink-0">Порог балла</span>
-                <Input type="number" value={stage.rule.threshold ?? ""} onChange={e => patchRule({ threshold: e.target.value === "" ? undefined : Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="w-24 h-11 text-base" placeholder="—" />
+            {isContent && (
+              <div className="rounded-lg bg-muted/40 p-3 space-y-2.5">
+                <span className="text-xs font-medium">Пороги отбора</span>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground">Порог AI-балла</span>
+                  <div className="flex items-center gap-1.5">
+                    <Input type="number" min={0} max={100} value={stage.rule.threshold ?? ""} onChange={e => patchRule({ threshold: e.target.value === "" ? undefined : Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="w-20 h-10 text-base" placeholder="—" />
+                    <span className="text-[11px] text-muted-foreground w-10">из 100</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground">Порог правильных ответов</span>
+                  <div className="flex items-center gap-1.5">
+                    <Input type="number" min={0} max={100} value={stage.rule.objThreshold ?? ""} onChange={e => patchRule({ objThreshold: e.target.value === "" ? undefined : Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="w-20 h-10 text-base" placeholder="—" />
+                    <span className="text-[11px] text-muted-foreground w-10">%</span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-muted-foreground/80">Отказ, если не пройден <b>любой</b> заданный порог (при включённом авто-отказе ниже). Пустое поле = по этому баллу не отбираем.</p>
               </div>
             )}
             <div className="flex items-center justify-between">

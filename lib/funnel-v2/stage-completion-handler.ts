@@ -120,13 +120,17 @@ async function loadStageLessons(contentBlockId: string): Promise<unknown> {
  *   - Применить StageRule: autoReject / autoAdvance / пометить completedAt.
  */
 async function applyStageRule(args: {
-  candidate:    CandidateForExecutor
-  vacancy:      VacancyForExecutor
-  stage:        FunnelV2Stage
-  scorePercent: number
-  totalScore:   number
+  candidate:        CandidateForExecutor
+  vacancy:          VacancyForExecutor
+  stage:            FunnelV2Stage
+  scorePercent:     number
+  totalScore:       number
+  objectivePercent?: number | null  // % правильных ответов (объективные вопросы)
+  aiPercent?:        number | null  // % AI-балла (AI-вопросы)
 }): Promise<void> {
   const { candidate, vacancy, stage, scorePercent, totalScore } = args
+  const objectivePercent = args.objectivePercent ?? null
+  const aiPercent        = args.aiPercent ?? null
   const now = new Date()
   const nowIso = now.toISOString()
 
@@ -154,10 +158,20 @@ async function applyStageRule(args: {
   }
 
   const rule = stage.rule
-  const threshold = typeof rule.threshold === "number" ? rule.threshold : 0
+  const aiThreshold  = typeof rule.threshold    === "number" ? rule.threshold    : undefined
+  const objThreshold = typeof rule.objThreshold === "number" ? rule.objThreshold : undefined
 
-  // Шаг 2: autoReject — если балл ниже порога
-  if (rule.autoReject && scorePercent < threshold) {
+  // Два независимых порога (решение Юрия 01.07): AI-балл и правильные ответы.
+  //  - AI-балл для гейта: реальный aiPercent, если AI-вопросы были; иначе итоговый
+  //    scorePercent (backward-compat со старым единственным «Порогом балла»).
+  //  - Правильные ответы: objectivePercent (объективные вопросы). Нет их — не гейтим.
+  // Отказ, если не пройден ЛЮБОЙ заданный порог. Пустой порог = по нему не отбираем.
+  const aiForGate = typeof aiPercent === "number" ? aiPercent : scorePercent
+  const aiFail  = typeof aiThreshold  === "number" && aiForGate < aiThreshold
+  const objFail = typeof objThreshold === "number" && typeof objectivePercent === "number" && objectivePercent < objThreshold
+
+  // Шаг 2: autoReject — если не пройден любой из заданных порогов
+  if (rule.autoReject && (aiFail || objFail)) {
     // Рендерим текст отказа ({{имя}} и пр.)
     const { firstName } = await getCandidateFirstName(candidate.id)
     const rawText = rule.rejectText ?? ""
@@ -180,7 +194,11 @@ async function applyStageRule(args: {
       candidateId:  candidate.id,
       stageId:      stage.id,
       scorePercent,
-      threshold,
+      aiPercent,
+      objectivePercent,
+      aiThreshold,
+      objThreshold,
+      failedBy:     aiFail && objFail ? "both" : aiFail ? "ai" : "objective",
       delayMinutes: rule.rejectDelayMinutes,
     }))
     return
@@ -251,14 +269,18 @@ export async function onAnketaCompleted(
   // Подсчёт балла: если у стадии есть contentBlockId — читаем lessonsJson
   let scorePercent = 100
   let totalScore = 0
+  let objectivePercent: number | null = null
+  let aiPercent: number | null = null
   if (stage.contentBlockId) {
     const lessonsJson = await loadStageLessons(stage.contentBlockId)
     const score = calcStageScore(lessonsJson, answersArg)
-    scorePercent = score.scorePercent
-    totalScore   = score.totalScore
+    scorePercent     = score.scorePercent
+    totalScore       = score.totalScore
+    objectivePercent = score.objectivePercent ?? null
+    aiPercent        = score.aiPercent ?? null
   }
 
-  await applyStageRule({ candidate, vacancy, stage, scorePercent, totalScore })
+  await applyStageRule({ candidate, vacancy, stage, scorePercent, totalScore, objectivePercent, aiPercent })
 }
 
 /**
@@ -303,6 +325,8 @@ export async function onTestSubmitted(
 
   let scorePercent = 100
   let totalScore = 0
+  let objectivePercent: number | null = null
+  let aiPercent: number | null = null
 
   if (stage.contentBlockId) {
     const lessonsJson = await loadStageLessons(stage.contentBlockId)
@@ -317,28 +341,35 @@ export async function onTestSubmitted(
       // calcStageScoreWithAI учтёт и объективные, и AI-вопросы.
       try {
         const fullScore = await calcStageScoreWithAI(lessonsJson, answersArg)
-        scorePercent = fullScore.scorePercent
-        totalScore   = fullScore.totalScore
+        scorePercent     = fullScore.scorePercent
+        totalScore       = fullScore.totalScore
+        objectivePercent = fullScore.objectivePercent ?? null
+        aiPercent        = fullScore.aiPercent ?? null
       } catch (err) {
         // AI упал — деградируем к объективному баллу (безопасно).
         console.warn("[funnel-v2/completion] onTestSubmitted: AI-скоринг упал, используем объективный балл:", err instanceof Error ? err.message : err)
-        scorePercent = typeof objectiveScore === "number" ? objectiveScore : quickScore.scorePercent
-        totalScore   = typeof objectiveScore === "number" ? objectiveScore : quickScore.totalScore
+        scorePercent     = typeof objectiveScore === "number" ? objectiveScore : quickScore.scorePercent
+        totalScore       = typeof objectiveScore === "number" ? objectiveScore : quickScore.totalScore
+        objectivePercent = quickScore.objectivePercent ?? (typeof objectiveScore === "number" ? objectiveScore : null)
+        aiPercent        = null  // AI не посчитан
       }
     } else if (typeof objectiveScore === "number") {
       // Нет AI-вопросов + объективный балл уже готов → используем напрямую.
-      scorePercent = objectiveScore
-      totalScore   = objectiveScore
+      scorePercent     = objectiveScore
+      totalScore       = objectiveScore
+      objectivePercent = objectiveScore
     } else {
       // Нет AI-вопросов + нет готового балла → считаем объективно.
-      scorePercent = quickScore.scorePercent
-      totalScore   = quickScore.totalScore
+      scorePercent     = quickScore.scorePercent
+      totalScore       = quickScore.totalScore
+      objectivePercent = quickScore.objectivePercent ?? null
     }
   } else if (typeof objectiveScore === "number") {
     // Нет contentBlockId, но есть переданный балл (редкий случай)
-    scorePercent = objectiveScore
-    totalScore   = objectiveScore
+    scorePercent     = objectiveScore
+    totalScore       = objectiveScore
+    objectivePercent = objectiveScore
   }
 
-  await applyStageRule({ candidate, vacancy, stage, scorePercent, totalScore })
+  await applyStageRule({ candidate, vacancy, stage, scorePercent, totalScore, objectivePercent, aiPercent })
 }
