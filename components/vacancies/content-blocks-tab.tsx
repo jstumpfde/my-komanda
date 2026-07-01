@@ -668,6 +668,37 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext, funnelV2RuntimeEna
         </div>
       )}
 
+      {/* ─── Гейт по блоку (Вариант Б, легаси-мост): авто-отказ по порогу этого блока.
+           Дефолт ВЫКЛ — пока HR не включит, никто не отсеивается. ─── */}
+      {selectedBlock && (() => {
+        const gate = (((selectedBlock.postDemoSettings as Record<string, unknown> | null | undefined)?.blockGate) ?? {}) as { enabled?: boolean; aiThreshold?: number; objThreshold?: number }
+        const setGate = (patch: Partial<typeof gate>) => saveSettings(selectedBlock.id, { blockGate: { ...gate, ...patch } })
+        const clamp = (v: string): number | undefined => v === "" ? undefined : Math.max(0, Math.min(100, Number(v) || 0))
+        return (
+          <div className="mb-3 rounded-lg border border-border/60 bg-muted/30 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <span className="text-sm font-medium">Авто-отказ по этому блоку</span>
+                <p className="text-xs text-muted-foreground mt-0.5">Не набрал порог → автоматически отказ. По умолчанию выключено.</p>
+              </div>
+              <Switch checked={!!gate.enabled} onCheckedChange={(v) => setGate({ enabled: v })} />
+            </div>
+            {gate.enabled && (
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <label className="space-y-1 block">
+                  <span className="text-xs text-muted-foreground">Порог AI-балла (0–100, пусто = не гейтить)</span>
+                  <input type="number" min={0} max={100} defaultValue={gate.aiThreshold ?? ""} onBlur={(e) => setGate({ aiThreshold: clamp(e.target.value) })} className="w-full h-9 rounded-md border border-border bg-background px-2 text-sm" />
+                </label>
+                <label className="space-y-1 block">
+                  <span className="text-xs text-muted-foreground">Порог правильных ответов (0–100, пусто = не гейтить)</span>
+                  <input type="number" min={0} max={100} defaultValue={gate.objThreshold ?? ""} onBlur={(e) => setGate({ objThreshold: clamp(e.target.value) })} className="w-full h-9 rounded-md border border-border bg-background px-2 text-sm" />
+                </label>
+              </div>
+            )}
+          </div>
+        )
+      })()}
+
       {/* ─── Редактор выбранного блока (во всю ширину, без своего тулбара/заголовка).
            Без фикс-высоты/overflow — превью кандидата прокручивается до кнопок «Назад/Далее». ─── */}
       <div className="min-h-0">
