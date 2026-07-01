@@ -896,6 +896,11 @@ export const vacancies = pgTable("vacancies", {
   // hhExpiresAt — срок публикации, если hh его отдаёт (часто null).
   hhArchived:  boolean("hh_archived"),
   hhExpiresAt: timestamp("hh_expires_at", { withTimezone: true }),
+  // Дата ПЕРВОЙ публикации вакансии на hh (published_at/created_at из детали
+  // /vacancies/{id}). Заполняет крон hh-vacancy-sync. Используется в шапке
+  // вакансии для счётчика «X дн.» (сколько вакансия висит на hh). Fallback на
+  // vacancies.created_at, если у вакансии нет hh-привязки или синк ещё не прошёл.
+  hhPublishedAt: timestamp("hh_published_at", { withTimezone: true }),
   // Дата, когда МЫ закрыли вакансию (status → archived/closed). Может отличаться
   // от hhArchived: на hh уже архив, а у нас ещё ведём кандидатов.
   closedAt:    timestamp("closed_at", { withTimezone: true }),

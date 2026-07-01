@@ -61,9 +61,20 @@ async function handle(req: NextRequest) {
           if (typeof detail.archived !== "boolean") { errors.push(`no_archived_field:${v.hhVacancyId}`); continue }
           // Счётчики воронки hh (точные числа из UI hh) — для отчёта.
           const counters = await getNegotiationCounters(token.accessToken, String(v.hhVacancyId)).catch(() => null)
+          // Дата ПЕРВОЙ публикации на hh: initial_created_at (не меняется при
+          // переподнятии) → published_at → created_at. Пишем, только если hh
+          // отдал валидную дату (иначе не трогаем колонку).
+          const rawPublished = detail.initial_created_at ?? detail.published_at ?? detail.created_at
+          const hhPublishedAt = rawPublished ? new Date(rawPublished) : null
+          const hhPublishedValid = hhPublishedAt && !Number.isNaN(hhPublishedAt.getTime()) ? hhPublishedAt : null
           await db
             .update(vacancies)
-            .set({ hhArchived: detail.archived, hhSyncedAt: new Date(), ...(counters ? { hhFunnelJson: counters } : {}) })
+            .set({
+              hhArchived: detail.archived,
+              hhSyncedAt: new Date(),
+              ...(counters ? { hhFunnelJson: counters } : {}),
+              ...(hhPublishedValid ? { hhPublishedAt: hhPublishedValid } : {}),
+            })
             .where(eq(vacancies.id, v.id))
           vacanciesUpdated += 1
           touched = true

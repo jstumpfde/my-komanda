@@ -128,6 +128,13 @@ export interface HHVacancyItem {
   // работодателей возвращает пустой список).
   archived?: boolean
   type?: { id: string; name: string }
+  // Даты публикации из детали /vacancies/{id}. initial_created_at — дата ПЕРВОЙ
+  // публикации (не меняется при переподнятии), published_at — последнего
+  // поднятия, created_at — создания. Для счётчика «сколько дней висит на hh»
+  // берём initial_created_at (fallback published_at → created_at).
+  initial_created_at?: string
+  published_at?: string
+  created_at?: string
 }
 
 export interface HHVacanciesResponse {

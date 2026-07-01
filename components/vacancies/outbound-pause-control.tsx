@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { Loader2, PauseCircle, PlayCircle } from "lucide-react"
 import { toast } from "sonner"
@@ -109,5 +110,76 @@ export function OutboundPauseControl({ vacancyId, onChanged }: Props) {
         <TooltipContent>{tip}</TooltipContent>
       </UITooltip>
     </div>
+  )
+}
+
+/**
+ * #17: пункт «Пауза дожимов» / «Возобновить дожимы» для дропдауна «Ещё»
+ * тулбара над списком кандидатов. Тот же контракт очереди, что и у
+ * OutboundPauseControl (message-queue GET + message-queue/pause POST).
+ *
+ * onSelect+preventDefault — чтобы клик по пункту не закрывал меню сразу
+ * (пользователь видит смену состояния/тост).
+ */
+export function OutboundPauseMenuItem({ vacancyId, onChanged }: Props) {
+  const [paused, setPaused] = useState<boolean | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  const fetchState = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/message-queue`)
+      if (!res.ok) return
+      const json = await res.json()
+      const data = json.data ?? json
+      if (typeof data?.paused === "boolean") setPaused(data.paused)
+    } catch {
+      /* тихо */
+    }
+  }, [vacancyId])
+
+  useEffect(() => {
+    fetchState()
+  }, [fetchState])
+
+  async function toggle() {
+    if (paused === null || saving) return
+    const next = !paused
+    setSaving(true)
+    try {
+      const res = await fetch(
+        `/api/modules/hr/vacancies/${vacancyId}/message-queue/pause`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paused: next }),
+        },
+      )
+      if (!res.ok) throw new Error("Ошибка")
+      setPaused(next)
+      toast.success(next ? "Дожимы поставлены на паузу" : "Дожимы возобновлены")
+      onChanged?.(next)
+    } catch {
+      toast.error("Не удалось изменить статус дожимов")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Пока статус не загружен — пункт неактивен (но виден, чтобы меню не «прыгало»).
+  const loading = paused === null
+
+  return (
+    <DropdownMenuItem
+      disabled={loading || saving}
+      onSelect={(e) => { e.preventDefault(); toggle() }}
+      title="Останавливает дожимы. Разбор новых откликов не трогает."
+    >
+      {saving
+        ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />
+        : paused
+          ? <PlayCircle className="w-3.5 h-3.5 mr-2" />
+          : <PauseCircle className="w-3.5 h-3.5 mr-2" />}
+      {paused ? "Возобновить дожимы" : "Пауза дожимов"}
+    </DropdownMenuItem>
   )
 }
