@@ -74,6 +74,7 @@ import {
   type ContactOutcome,
 } from "@/lib/hr/contacts"
 import { cn } from "@/lib/utils"
+import { EditableMessagePreview } from "@/components/candidates/editable-message-preview"
 import { useAuth } from "@/lib/auth"
 import {
   getStageLabel,
@@ -668,6 +669,20 @@ export function CandidateDrawer({
   const [confirmRestoreOpen, setConfirmRestoreOpen] = useState(false)
   const [restoreTargetStage, setRestoreTargetStage] = useState<string | null>(null)
   const [confirmInterviewOpen, setConfirmInterviewOpen] = useState(false)
+  // #30/#31: диалог приглашения на интервью с двумя режимами и редактируемым
+  // превью. mode 'link' — ссылка на самозапись (/schedule); mode 'slots' —
+  // HR выбирает 2-3 конкретных времени из окон вакансии.
+  const [inviteMode, setInviteMode] = useState<"link" | "slots">("link")
+  const [inviteText, setInviteText] = useState("")            // разовый текст для этого кандидата
+  const [inviteTemplate, setInviteTemplate] = useState("")    // текущий шаблон вакансии (для сравнения/сейва)
+  const [inviteDefaultText, setInviteDefaultText] = useState("")
+  const [inviteScheduleLink, setInviteScheduleLink] = useState("")
+  const [inviteVacancyTitle, setInviteVacancyTitle] = useState("")
+  const [inviteFirstName, setInviteFirstName] = useState("")
+  const [inviteTzLabel, setInviteTzLabel] = useState("")
+  const [inviteDays, setInviteDays] = useState<{ date: string; label: string; slots: string[] }[]>([])
+  const [inviteSelectedSlots, setInviteSelectedSlots] = useState<string[]>([]) // "YYYY-MM-DD|HH:MM"
+  const [inviteLoading, setInviteLoading] = useState(false)
   // #1: «Запланировать интервью» из карточки — создаёт событие календаря,
   // привязанное к кандидату+вакансии (появляется в табе «Интервью»).
   const [scheduleOpen, setScheduleOpen] = useState(false)
@@ -1132,14 +1147,18 @@ export function CandidateDrawer({
     } catch { toast.error("Не удалось запланировать интервью") } finally { setScheduling(false) }
   }
 
-  const handleStageChange = async (newStage: string) => {
+  const handleStageChange = async (newStage: string, messageOverride?: string) => {
     if (!candidate || changingStage) return
     setChangingStage(newStage)
     try {
       const res = await fetch(`/api/modules/hr/candidates/${candidate.id}/stage`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage: newStage }),
+        body: JSON.stringify(
+          messageOverride && messageOverride.trim().length > 0
+            ? { stage: newStage, messageOverride: messageOverride.trim() }
+            : { stage: newStage },
+        ),
       })
       if (!res.ok) throw new Error()
       setCandidate((prev) => prev ? { ...prev, stage: newStage } : prev)
@@ -1156,6 +1175,108 @@ export function CandidateDrawer({
       setChangingStage(null)
     }
   }
+
+  // #30/#31: открыть диалог приглашения на интервью. Грузим шаблон вакансии,
+  // дефолт, персональную ссылку самозаписи и доступные слоты интервью.
+  const openInviteDialog = useCallback(async () => {
+    if (!candidate) return
+    setInviteMode("link")
+    setInviteSelectedSlots([])
+    setInviteText("")
+    setInviteDays([])
+    setInviteLoading(true)
+    setConfirmInterviewOpen(true)
+    try {
+      const res = await fetch(`/api/modules/hr/candidates/${candidate.id}/interview-invite`)
+      const json = await res.json().catch(() => null)
+      const d = (json?.data ?? json) as {
+        scheduleInviteText?: string
+        defaultText?: string
+        scheduleLink?: string
+        vacancyTitle?: string
+        candidateFirstName?: string
+        timezoneLabel?: string
+        days?: { date: string; label: string; slots: string[] }[]
+      } | null
+      if (!res.ok || !d) throw new Error()
+      const tmpl = (d.scheduleInviteText && d.scheduleInviteText.trim().length > 0)
+        ? d.scheduleInviteText
+        : (d.defaultText ?? "")
+      setInviteTemplate(tmpl)
+      setInviteDefaultText(d.defaultText ?? "")
+      setInviteText(tmpl)
+      setInviteScheduleLink(d.scheduleLink ?? "")
+      setInviteVacancyTitle(d.vacancyTitle ?? "")
+      setInviteFirstName(d.candidateFirstName ?? "")
+      setInviteTzLabel(d.timezoneLabel ?? "")
+      setInviteDays(Array.isArray(d.days) ? d.days : [])
+    } catch {
+      toast.error("Не удалось загрузить данные приглашения")
+    } finally {
+      setInviteLoading(false)
+    }
+  }, [candidate])
+
+  // Переключить выбор конкретного слота (Режим Б). Максимум 3.
+  const toggleInviteSlot = useCallback((key: string) => {
+    setInviteSelectedSlots((prev) => {
+      if (prev.includes(key)) return prev.filter((k) => k !== key)
+      if (prev.length >= 3) { toast.info("Можно выбрать до 3 вариантов"); return prev }
+      return [...prev, key]
+    })
+  }, [])
+
+  // Человекочитаемая подпись слота: «Пн, 9 июн, 10:00».
+  const formatSlotKey = useCallback((key: string): string => {
+    const [date, time] = key.split("|")
+    const day = inviteDays.find((d) => d.date === date)
+    return day ? `${day.label}, ${time}` : `${date}, ${time}`
+  }, [inviteDays])
+
+  // Финальный текст, который уйдёт кандидату (override для стадии interview).
+  // Режим А: текст как есть (содержит {{schedule_link}}).
+  // Режим Б: к тексту дописываем строки с выбранными временами и просьбу ответить.
+  const buildInviteMessage = useCallback((): string => {
+    if (inviteMode === "link") return inviteText
+    const lines = inviteSelectedSlots.map((k) => `• ${formatSlotKey(k)}`)
+    const tz = inviteTzLabel ? ` (${inviteTzLabel})` : ""
+    return [
+      inviteText.trim(),
+      "",
+      `Предлагаю такие варианты времени${tz}:`,
+      ...lines,
+      "",
+      "Напишите, какой вам удобен?",
+    ].join("\n")
+  }, [inviteMode, inviteText, inviteSelectedSlots, formatSlotKey, inviteTzLabel])
+
+  // Отправить приглашение: перевод в стадию «Интервью» с messageOverride
+  // (стадия-роут ставит schedule_invite в очередь follow-up с этим текстом).
+  const submitInvite = useCallback(async () => {
+    if (!candidate) return
+    if (inviteMode === "slots" && inviteSelectedSlots.length === 0) {
+      toast.error("Выберите хотя бы одно время")
+      return
+    }
+    // Режим А: если {{schedule_link}} убрали из текста — кандидат не получит
+    // ссылку. Мягко предупреждаем, но не блокируем (HR мог намеренно).
+    setConfirmInterviewOpen(false)
+    await handleStageChange("interview", buildInviteMessage())
+  }, [candidate, inviteMode, inviteSelectedSlots, buildInviteMessage, handleStageChange])
+
+  // #31: сохранить текущий текст в шаблон вакансии (vacancies.schedule_invite_text).
+  const saveInviteTemplate = useCallback(async (text: string) => {
+    const vacancyId = (candidate as { vacancyId?: string | null } | null)?.vacancyId
+    if (!vacancyId) { toast.error("Вакансия не определена"); return }
+    const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ schedule_invite_text: text }),
+    })
+    if (!res.ok) { toast.error("Не удалось сохранить шаблон"); throw new Error() }
+    setInviteTemplate(text)
+    toast.success("Шаблон приглашения обновлён")
+  }, [candidate])
 
   // Восстановление кандидата из стадии "rejected". prevStage определяет
   // сервер (по stage_history), но для confirm-диалога рассчитываем тут же
@@ -2423,7 +2544,7 @@ export function CandidateDrawer({
               onValueChange={(slug) => {
                 if (slug === (candidate.stage ?? "")) return
                 if (slug === "rejected") { openRejectDialog(); return }
-                if (slug === "interview") { setConfirmInterviewOpen(true); return }
+                if (slug === "interview") { void openInviteDialog(); return }
                 void handleStageChange(slug)
               }}
             >
@@ -2517,29 +2638,119 @@ export function CandidateDrawer({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Подтверждение приглашения на интервью */}
-      <AlertDialog open={confirmInterviewOpen} onOpenChange={setConfirmInterviewOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Пригласить на интервью?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {candidate?.name ? <><b>{candidate.name}</b> будет переведён</> : "Кандидат будет переведён"} на стадию «Интервью».
-              {" "}Если в воронке для стадии «Интервью» настроено действие hh.ru «Пригласить» — кандидату автоматически уйдёт приглашение в hh-чат с текстом из настроек вакансии.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={!!changingStage}>Отмена</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={!!changingStage}
+      {/* #30/#31: Приглашение на интервью — два режима + редактируемый превью */}
+      <Dialog open={confirmInterviewOpen} onOpenChange={setConfirmInterviewOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Пригласить на интервью{candidate?.name ? ` — ${candidate.name}` : ""}</DialogTitle>
+          </DialogHeader>
+
+          {inviteLoading ? (
+            <div className="flex items-center justify-center py-10 text-muted-foreground">
+              <Loader2 className="w-5 h-5 animate-spin mr-2" /> Загрузка…
+            </div>
+          ) : (
+            <Tabs value={inviteMode} onValueChange={(v) => setInviteMode(v as "link" | "slots")} className="w-full">
+              <TabsList className="grid grid-cols-2 w-full">
+                <TabsTrigger value="link">Ссылка на самозапись</TabsTrigger>
+                <TabsTrigger value="slots">Предложить 2-3 времени</TabsTrigger>
+              </TabsList>
+
+              {/* Режим А — кандидат сам выбирает слот по ссылке /schedule */}
+              <TabsContent value="link" className="space-y-3 pt-3">
+                <p className="text-xs text-muted-foreground">
+                  Кандидату уйдёт ссылка на страницу самозаписи — он сам выберет удобное время.
+                  Плейсхолдер <code className="bg-muted px-1 rounded">{"{{schedule_link}}"}</code> заменится на персональную ссылку.
+                </p>
+                <EditableMessagePreview
+                  text={inviteText}
+                  onChange={setInviteText}
+                  vars={{ name: inviteFirstName, vacancy: inviteVacancyTitle, schedule_link: inviteScheduleLink }}
+                  placeholders={["name", "vacancy", "schedule_link"]}
+                  onSaveTemplate={saveInviteTemplate}
+                />
+              </TabsContent>
+
+              {/* Режим Б — HR выбирает 2-3 конкретных времени из окон вакансии */}
+              <TabsContent value="slots" className="space-y-3 pt-3">
+                <p className="text-xs text-muted-foreground">
+                  Выберите 2-3 времени из окон вакансии{inviteTzLabel ? ` (${inviteTzLabel})` : ""} — кандидат ответит, какое ему подходит.
+                </p>
+                {inviteDays.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Нет доступных слотов. Проверьте окна интервью в настройках вакансии, либо используйте режим «Ссылка на самозапись».
+                  </p>
+                ) : (
+                  <div className="max-h-56 overflow-y-auto space-y-2 pr-1">
+                    {inviteDays.map((day) => (
+                      <div key={day.date}>
+                        <div className="text-xs font-medium text-muted-foreground mb-1">{day.label}</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {day.slots.map((t) => {
+                            const key = `${day.date}|${t}`
+                            const active = inviteSelectedSlots.includes(key)
+                            return (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={() => toggleInviteSlot(key)}
+                                className={cn(
+                                  "px-2.5 py-1 rounded-md text-xs border transition-colors",
+                                  active
+                                    ? "bg-purple-600 border-purple-600 text-white"
+                                    : "bg-background hover:bg-muted border-border",
+                                )}
+                              >
+                                {t}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {inviteSelectedSlots.length > 0 && (
+                  <div className="text-[11px] text-muted-foreground">
+                    Выбрано: {inviteSelectedSlots.map(formatSlotKey).join("; ")}
+                  </div>
+                )}
+                {/* Базовый текст + превью итогового сообщения со слотами */}
+                <EditableMessagePreview
+                  label="Вступительный текст (перед списком времени)"
+                  text={inviteText}
+                  onChange={setInviteText}
+                  vars={{ name: inviteFirstName, vacancy: inviteVacancyTitle }}
+                  placeholders={["name", "vacancy"]}
+                  onSaveTemplate={saveInviteTemplate}
+                />
+                <div className="rounded-md border bg-muted/40 p-3">
+                  <div className="text-[11px] text-muted-foreground mb-1">Итоговое сообщение кандидату:</div>
+                  <div className="text-sm whitespace-pre-wrap break-words">
+                    {inviteSelectedSlots.length === 0
+                      ? "Выберите время выше — оно добавится в сообщение."
+                      : buildInviteMessage()
+                          .replace(/\{\{\s*name\s*\}\}/g, inviteFirstName)
+                          .replace(/\{\{\s*vacancy\s*\}\}/g, inviteVacancyTitle)}
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmInterviewOpen(false)} disabled={!!changingStage}>Отмена</Button>
+            <Button
+              disabled={!!changingStage || inviteLoading || (inviteMode === "slots" && inviteSelectedSlots.length === 0)}
               className="bg-purple-600 hover:bg-purple-700"
-              onClick={(e) => { e.preventDefault(); setConfirmInterviewOpen(false); void handleStageChange("interview") }}
+              onClick={() => void submitInvite()}
             >
               {changingStage === "interview" ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : null}
-              Пригласить
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+              Отправить приглашение
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Диалог записи контакта */}
       <Dialog open={contactDialogOpen} onOpenChange={setContactDialogOpen}>
