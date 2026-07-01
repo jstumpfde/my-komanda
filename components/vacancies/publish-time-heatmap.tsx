@@ -87,50 +87,49 @@ export function PublishTimeHeatmap({ data, city }: { data: PublishTimeHeatmapDat
 
   return (
     <div className="rounded-lg border p-3 space-y-3">
-      <p className="text-sm font-semibold">🕐 Лучшее время публикации</p>
+      <p className="text-sm font-semibold">
+        🕐 Лучшее время публикации
+        {data.best && (
+          <span className="text-primary"> — {data.best.dayName}, {data.best.range}</span>
+        )}
+      </p>
 
-      {data.best && (
-        <div className="rounded-md bg-primary/10 text-primary px-2.5 py-1.5 text-sm font-medium">
-          🎯 Лучше всего: {data.best.dayName}, {data.best.range}
-        </div>
-      )}
-
-      {grid.length > 0 && (
-        <div className="overflow-x-auto">
-          <div className="inline-block min-w-full">
-            {/* Шкала часов сверху — метки каждые 3 часа */}
-            <div className="flex pl-6">
-              {hoursAxis.map(h => (
-                <div key={h} className="w-[9px] text-center text-[7px] leading-none text-muted-foreground">
-                  {h % 3 === 0 ? h : ""}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 items-start">
+        {grid.length > 0 && (
+          <div className="lg:col-span-2 overflow-x-auto">
+            <div className="inline-block min-w-full">
+              {/* Шкала часов сверху — метки каждые 3 часа */}
+              <div className="flex pl-6">
+                {hoursAxis.map(h => (
+                  <div key={h} className="w-[14px] text-center text-[8px] leading-none text-muted-foreground">
+                    {h % 3 === 0 ? h : ""}
+                  </div>
+                ))}
+              </div>
+              {dowOrder.map(dow => (
+                <div key={dow} className="flex items-center">
+                  <div className="w-6 pr-1 text-right text-[10px] leading-none text-muted-foreground">
+                    {dayShort[dow]}
+                  </div>
+                  {hoursAxis.map(h => {
+                    const cnt = cellAt(dow, h)
+                    const isPeak = cnt > 0 && peakByDow.get(dow) === h
+                    return (
+                      <div
+                        key={h}
+                        title={`${dayShort[dow]} ${String(h).padStart(2, "0")}:00 — ${cnt} откл.`}
+                        className={`w-3 h-3 m-[1px] rounded-[2px] ${cellClass(cnt)} ${isPeak ? "ring-1 ring-primary ring-offset-0" : ""}`}
+                      />
+                    )
+                  })}
                 </div>
               ))}
             </div>
-            {dowOrder.map(dow => (
-              <div key={dow} className="flex items-center">
-                <div className="w-6 pr-1 text-right text-[9px] leading-none text-muted-foreground">
-                  {dayShort[dow]}
-                </div>
-                {hoursAxis.map(h => {
-                  const cnt = cellAt(dow, h)
-                  const isPeak = cnt > 0 && peakByDow.get(dow) === h
-                  return (
-                    <div
-                      key={h}
-                      title={`${dayShort[dow]} ${String(h).padStart(2, "0")}:00 — ${cnt} откл.`}
-                      className={`w-[9px] h-[9px] m-[0.5px] rounded-[1px] ${cellClass(cnt)} ${isPeak ? "ring-1 ring-primary ring-offset-0" : ""}`}
-                    />
-                  )
-                })}
-              </div>
-            ))}
           </div>
-        </div>
-      )}
+        )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {data.days && data.days.length > 0 && (
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <p className="text-[10px] font-medium text-muted-foreground">Дни (=100%)</p>
             {data.days.slice(0, 7).map(d => (
               <div key={d.dow} className="flex items-center gap-1.5">
@@ -143,8 +142,9 @@ export function PublishTimeHeatmap({ data, city }: { data: PublishTimeHeatmapDat
             ))}
           </div>
         )}
+
         {data.hours && data.hours.length > 0 && (
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <p className="text-[10px] font-medium text-muted-foreground">Часы (=100%)</p>
             {data.hours.slice(0, 7).map(h => (
               <div key={h.hour} className="flex items-center gap-1.5">
