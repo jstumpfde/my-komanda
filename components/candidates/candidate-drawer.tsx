@@ -516,6 +516,8 @@ function ScoresPanel({ candidate }: { candidate: ApiCandidate }) {
 
   const resumeHasDetails = resumeSummary.length > 0
   const portraitHasDetails = matchedMust.length > 0 || missedMust.length > 0 || dealBreakers.length > 0
+  // Балл есть, но сравнивать не с чем (нет matched/missed/deal-breakers) → критерии Портрета не заданы, балл не различает.
+  const portraitNoCriteria = portraitScore != null && !portraitHasDetails
   const answersHasDetails = answerDetails.length > 0
   const testStatusLabel: Record<string, string> = {
     submitted: "сдан", in_progress: "пишет", opened: "перешёл", sent: "отправлен", failed: "ошибка отправки",
@@ -540,7 +542,9 @@ function ScoresPanel({ candidate }: { candidate: ApiCandidate }) {
 
       <ScoreRow
         title="AI-Портрет"
-        measures="Совпадение кандидата с критериями Портрета (must-have / nice / deal-breakers)"
+        measures={portraitNoCriteria
+          ? "Критерии Портрета не заданы — балл справочный, не различает. Задайте must-have в табе «Портрет»."
+          : "Совпадение кандидата с критериями Портрета (must-have / nice / deal-breakers)"}
         score={portraitScore}
         hasDetails={portraitHasDetails}
       >
