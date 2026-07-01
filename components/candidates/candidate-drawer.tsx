@@ -58,6 +58,9 @@ import {
   Car,
   Globe2,
   Languages,
+  ChevronDown,
+  ChevronRight,
+  AlertTriangle,
 } from "lucide-react"
 import {
   Dialog,
@@ -429,6 +432,182 @@ function HeaderScores({
           <span className="font-bold tabular-nums">{it.value}</span>
         </Badge>
       ))}
+    </div>
+  )
+}
+
+// ─── Панель «Оценки» (вверху карточки) ────────────────────────────────────────
+// Все оценки кандидата в одном месте: НАЗВАНИЕ · БАЛЛ (цветной) · «что измеряет»
+// (одной фразой) · «почему» (детали из *_details, разворачиваются по клику).
+// Отсутствующие оценки не показываются. Цвета — success/warning/destructive.
+
+function scoreTone(score: number) {
+  if (score > 70) return "text-success"
+  if (score >= 40) return "text-warning"
+  return "text-destructive"
+}
+
+function ScoreRow({
+  title,
+  measures,
+  score,
+  hasDetails,
+  children,
+}: {
+  title: string
+  measures: string
+  score: number | null
+  hasDetails: boolean
+  children?: React.ReactNode
+}) {
+  const [open, setOpen] = useState(false)
+  if (score == null) return null
+  return (
+    <div className="rounded-md border border-border/60 bg-background/50">
+      <button
+        type="button"
+        disabled={!hasDetails}
+        onClick={() => hasDetails && setOpen((v) => !v)}
+        className={cn(
+          "w-full flex items-start gap-2.5 px-3 py-2 text-left",
+          hasDetails && "hover:bg-accent/40 transition-colors cursor-pointer",
+        )}
+      >
+        <span className={cn("shrink-0 text-lg font-bold tabular-nums leading-tight w-9 text-center", scoreTone(score))}>
+          {score}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-1.5">
+            <span className="text-sm font-medium text-foreground">{title}</span>
+            {hasDetails && (
+              open
+                ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            )}
+          </span>
+          <span className="block text-[11px] leading-snug text-muted-foreground">{measures}</span>
+        </span>
+      </button>
+      {hasDetails && open && (
+        <div className="px-3 pb-3 pt-0.5 space-y-2 text-sm border-t border-border/40">
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ScoresPanel({ candidate }: { candidate: ApiCandidate }) {
+  const resumeScore = candidate.resumeScore ?? null
+  const portraitScore = candidate.aiScoreV2 ?? null
+  const answersScore = candidate.demoAnswersScore ?? null
+  const testScore = candidate.testScore ?? null
+
+  const v2 = candidate.aiScoreV2Details ?? null
+  const matchedMust = Array.isArray(v2?.matched_must_have) ? v2!.matched_must_have : []
+  const missedMust = Array.isArray(v2?.missed_must_have) ? v2!.missed_must_have : []
+  const dealBreakers = Array.isArray(v2?.triggered_deal_breakers) ? v2!.triggered_deal_breakers : []
+  const answerDetails = Array.isArray(candidate.demoAnswersDetails) ? candidate.demoAnswersDetails : []
+  const resumeSummary = typeof candidate.aiSummary === "string" ? candidate.aiSummary.trim() : ""
+
+  // Ни одной оценки — панель не показываем.
+  if (resumeScore == null && portraitScore == null && answersScore == null && testScore == null) {
+    return null
+  }
+
+  const resumeHasDetails = resumeSummary.length > 0
+  const portraitHasDetails = matchedMust.length > 0 || missedMust.length > 0 || dealBreakers.length > 0
+  const answersHasDetails = answerDetails.length > 0
+  const testStatusLabel: Record<string, string> = {
+    submitted: "сдан", in_progress: "пишет", opened: "перешёл", sent: "отправлен", failed: "ошибка отправки",
+  }
+  const testHint = candidate.testStatus ? testStatusLabel[candidate.testStatus] : null
+
+  return (
+    <div className="mx-3 mt-3 shrink-0 rounded-lg border border-border/70 bg-muted/30 p-2.5 space-y-1.5">
+      <div className="flex items-center gap-1.5 px-1 pb-0.5">
+        <Sparkles className="w-3.5 h-3.5 text-muted-foreground" />
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Оценки</span>
+      </div>
+
+      <ScoreRow
+        title="AI-резюме"
+        measures="Насколько резюме подходит под требования (на входе)"
+        score={resumeScore}
+        hasDetails={resumeHasDetails}
+      >
+        {resumeSummary && <p className="text-foreground/90 whitespace-pre-wrap">{resumeSummary}</p>}
+      </ScoreRow>
+
+      <ScoreRow
+        title="AI-Портрет"
+        measures="Совпадение кандидата с критериями Портрета (must-have / nice / deal-breakers)"
+        score={portraitScore}
+        hasDetails={portraitHasDetails}
+      >
+        {matchedMust.length > 0 && (
+          <div className="space-y-1">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-success flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Совпало (must-have)
+            </div>
+            <ul className="space-y-0.5">
+              {matchedMust.map((m, i) => (
+                <li key={i} className="flex gap-1.5"><span className="text-success">•</span><span>{m}</span></li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {missedMust.length > 0 && (
+          <div className="space-y-1">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-warning flex items-center gap-1.5">
+              <XCircle className="w-3.5 h-3.5" /> Не хватает (must-have)
+            </div>
+            <ul className="space-y-0.5">
+              {missedMust.map((m, i) => (
+                <li key={i} className="flex gap-1.5"><span className="text-warning">•</span><span>{m}</span></li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {dealBreakers.length > 0 && (
+          <div className="space-y-1">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-destructive flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5" /> Сработали deal-breakers
+            </div>
+            <ul className="space-y-0.5">
+              {dealBreakers.map((m, i) => (
+                <li key={i} className="flex gap-1.5"><span className="text-destructive">•</span><span>{m}</span></li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </ScoreRow>
+
+      <ScoreRow
+        title="Анкета"
+        measures="Качество ответов кандидата в анкете демо"
+        score={answersScore}
+        hasDetails={answersHasDetails}
+      >
+        <ul className="space-y-2">
+          {answerDetails.map((d, i) => (
+            <li key={i} className="space-y-0.5">
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-foreground/90 min-w-0 flex-1">{d.questionText}</span>
+                <span className={cn("shrink-0 text-sm font-bold tabular-nums", scoreTone(Math.round((d.awarded / (d.max || 1)) * 100)))}>{d.awarded}/{d.max}</span>
+              </div>
+              {d.comment && <p className="text-[12px] text-muted-foreground">{d.comment}</p>}
+            </li>
+          ))}
+        </ul>
+      </ScoreRow>
+
+      <ScoreRow
+        title="Тест"
+        measures={testHint ? `Результат тестового задания (${testHint})` : "Результат тестового задания"}
+        score={testScore}
+        hasDetails={false}
+      />
     </div>
   )
 }
@@ -1697,6 +1876,7 @@ export function CandidateDrawer({
           </ScrollArea>
         ) : candidate && derived ? (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
+            <ScoresPanel candidate={candidate} />
             <TabsList className="flex flex-wrap justify-start gap-1 mx-3 mt-3 shrink-0 h-auto">
               <TabsTrigger value="contacts" className="text-[10px] px-1 py-1.5">Резюме</TabsTrigger>
               <TabsTrigger value="chat" className="text-[10px] px-1 py-1.5">Чат hh</TabsTrigger>
