@@ -585,7 +585,7 @@ export default function VacancyPage() {
   // Стадия из URL (?stage=slug,slug) — для перехода из отчёта по клику на число.
   const stageFromUrl = searchParams?.get("stage")
   const initialFunnelStatuses = stageFromUrl ? stageFromUrl.split(",").filter(Boolean) : DEFAULT_FUNNEL_STATUSES.slice()
-  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: initialFunnelStatuses, hideRejected: true, hideNoSalary: false, activeNow: false, demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
+  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: initialFunnelStatuses, hideRejected: true, hideNoSalary: false, activeNow: false, reviewQueue: false, demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
   // #18: фасеты фильтра (города/источники) по ВСЕЙ вакансии — серверная агрегация.
   const [candidateFacets, setCandidateFacets] = useState<{ cities: { city: string; count: number }[]; sources: { source: string; count: number }[] } | null>(null)
   useEffect(() => {
@@ -640,6 +640,7 @@ export default function VacancyPage() {
     hideNoSalary: filters.hideNoSalary,
     activeNow: filters.activeNow,
     anketaFilled: filters.anketaFilled,
+    reviewQueue: filters.reviewQueue,
   }), [filters]) // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Legacy pipeline текущей вакансии — для кастомных лейблов стадий в ListView. */
@@ -2999,6 +3000,31 @@ export default function VacancyPage() {
                         onProcessed={() => { refetchCandidates(); }}
                       />
                     )}
+                    {/* Воронка-v2 (Фаза 1г): быстрый чип «На разбор» — застрявшие
+                        после 1-й части (есть балл ответов демо, не приглашены на
+                        2-ю, не в отказе). Ручная проверка ДО любого авто-отказа:
+                        никакого автоматического действия, только видимость. Когда
+                        чип активен — рядом видно N (кол-во в выборке). */}
+                    <Button
+                      variant={filters.reviewQueue ? "default" : "outline"}
+                      size="sm"
+                      className="h-8 gap-1.5 text-xs"
+                      onClick={() => {
+                        setFilters((f) => ({ ...f, reviewQueue: !f.reviewQueue }))
+                        if (useListPaginated) paginated.setPage(1)
+                      }}
+                      title="Прошли 1-ю часть, но застряли: не приглашены на 2-ю и ещё не в отказе — проверить вручную"
+                    >
+                      <ClipboardList className="w-3.5 h-3.5" />
+                      На разбор
+                      {filters.reviewQueue && (
+                        <Badge className="ml-0.5 h-5 min-w-5 rounded-full px-1 flex items-center justify-center text-xs bg-primary-foreground text-primary">
+                          {useListPaginated
+                            ? paginated.total
+                            : columns.reduce((n, c) => n + c.candidates.length, 0)}
+                        </Badge>
+                      )}
+                    </Button>
                     <CandidateFilters
                       filters={filters}
                       onFiltersChange={(f) => { setFilters(f); if (useListPaginated) paginated.setPage(1) }}

@@ -58,6 +58,10 @@ export interface FilterState {
   activeNow: boolean
   /** Фильтр по анкете: "filled" = заполнили форму; "not_filled" = открыли демо, но не заполнили. */
   anketaFilled?: "filled" | "not_filled"
+  /** Пресет «На разбор» (воронка-v2, Фаза 1г): прошли 1-ю часть, но застряли —
+   *  есть балл ответов демо, не приглашены на 2-ю часть, не в отказе. Только
+   *  видимость для ручной проверки перед авто-отказом. */
+  reviewQueue: boolean
   demoProgress: string[]
   dateRange: string
   dateFrom: string
@@ -118,6 +122,7 @@ const DEFAULT_FILTERS: FilterState = {
   hideRejected: true,
   hideNoSalary: false,
   activeNow: false,
+  reviewQueue: false,
   demoProgress: [],
   dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [],
   skills: [], industries: [],
@@ -603,6 +608,23 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
                     checked={!filters.hideRejected}
                     onCheckedChange={(show) => onFiltersChange({ ...filters, hideRejected: !show })}
                   />
+                </div>
+                {/* Воронка-v2 (Фаза 1г): «Предварительный отказ» — отдельный
+                    негативный, но ОБРАТИМЫЙ исход (не прошли порог балла, ждут
+                    ручной проверки). resolveVacancyStageOptions исключает его из
+                    позитивного списка стадий, поэтому добавляем отдельным
+                    чекбоксом рядом с «отказами». Фильтруется как обычный
+                    funnelStatus (сервер: stage IN (...)). */}
+                <div className="flex items-center gap-2 mt-2">
+                  <Checkbox
+                    id="funnel-preliminary_reject"
+                    checked={filters.funnelStatuses.includes("preliminary_reject")}
+                    onCheckedChange={() => onFiltersChange({ ...filters, funnelStatuses: toggleArray(filters.funnelStatuses, "preliminary_reject") })}
+                  />
+                  <label htmlFor="funnel-preliminary_reject" className="text-sm cursor-pointer flex items-center gap-2">
+                    <span>{getStageLabel("preliminary_reject", vacancyPipeline)}</span>
+                    <span className="text-[10px] text-muted-foreground">обратимый</span>
+                  </label>
                 </div>
               </div>
               {/* Прогресс демо */}

@@ -229,7 +229,7 @@ export default function CandidatesPage() {
     funnelStatuses: [],
     // По умолчанию отказы скрыты — аналогично странице вакансии
     hideRejected: true,
-    hideNoSalary: false, activeNow: false, demoProgress: [],
+    hideNoSalary: false, activeNow: false, reviewQueue: false, demoProgress: [],
     dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65,
     education: [], languages: [], otherLanguages: [], skills: [], industries: [],
   })

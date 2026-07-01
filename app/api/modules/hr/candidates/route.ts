@@ -353,6 +353,19 @@ export async function GET(req: NextRequest) {
         listConds.push(ne(candidates.stage, "rejected"))
       }
 
+      // Пресет «На разбор» (воронка-v2, Фаза 1г) — тот же критерий, что и в
+      // ветке по вакансии ниже: прошли 1-ю часть (есть demo_answers_score),
+      // не приглашены на 2-ю (second_demo_invited_at IS NULL), не в отказе
+      // (ни жёстком, ни предварительном). Только видимость, без авто-действий.
+      if (url.searchParams.get("reviewQueue") === "true") {
+        listConds.push(sql`(
+          ${candidates.demoAnswersScore} IS NOT NULL
+          AND ${candidates.secondDemoInvitedAt} IS NULL
+          AND ${candidates.stage} IS DISTINCT FROM 'rejected'
+          AND ${candidates.stage} IS DISTINCT FROM 'preliminary_reject'
+        )`)
+      }
+
       // Фильтр по статусу анкеты (контактная форма после демо).
       // "filled"     → survey_responses IS NOT NULL (кандидат отправил форму).
       // "not_filled" → demo_opened_at IS NOT NULL AND survey_responses IS NULL
@@ -897,6 +910,22 @@ export async function GET(req: NextRequest) {
     const excludeRejectedParam = url.searchParams.get("excludeRejected")
     if (excludeRejectedParam === "true") {
       filterConds.push(sql`(${candidates.stage} IS DISTINCT FROM 'rejected')`)
+    }
+
+    // Пресет «На разбор» (воронка-v2, Фаза 1г): кандидаты, которые прошли
+    // 1-ю часть (есть балл ответов демо — demo_answers_score), но застряли —
+    // не приглашены на 2-ю часть (second_demo_invited_at IS NULL) и НЕ в отказе
+    // (ни жёстком 'rejected', ни предварительном 'preliminary_reject'). Это
+    // список для ручной проверки ДО любого авто-отказа. Никакого авто-действия
+    // тут нет — только видимость. Причина отдельного пресета, а не набора
+    // слайдеров: критерий комбинированный (три поля) и нужен «одной кнопкой».
+    if (url.searchParams.get("reviewQueue") === "true") {
+      filterConds.push(sql`(
+        ${candidates.demoAnswersScore} IS NOT NULL
+        AND ${candidates.secondDemoInvitedAt} IS NULL
+        AND ${candidates.stage} IS DISTINCT FROM 'rejected'
+        AND ${candidates.stage} IS DISTINCT FROM 'preliminary_reject'
+      )`)
     }
 
     // «Кто на сайте» — кандидаты с активностью (демо/тест) за последние 2 мин.
