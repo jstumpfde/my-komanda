@@ -49,6 +49,7 @@ import {
   Play,
   RotateCcw,
   Pencil,
+  Trash2,
   EyeOff,
   Eye,
   Maximize2,
@@ -774,6 +775,22 @@ export function CandidateDrawer({
   }, [candidate?.id])
   const hhFetchRef = useRef<string | null>(null)
   const hhListRef = useRef<HTMLDivElement | null>(null)
+  const hhInputRef = useRef<HTMLTextAreaElement | null>(null)
+  // «Изменить» отправленное: hh API НЕ даёт редактировать сообщение —
+  // единственный честный способ — отправить поправку вдогонку. Клик по «Изменить»
+  // подставляет корректирующий шаблон в поле ввода и ставит фокус; HR дополняет и шлёт.
+  const startCorrection = useCallback((msg: HhMessage) => {
+    const quoted = msg.text.length > 80 ? `${msg.text.slice(0, 80)}…` : msg.text
+    setHhDraft(`Прошу прощения, поправлю предыдущее сообщение («${quoted}»). Корректно: `)
+    // Даём React перерисовать, затем фокус + курсор в конец.
+    requestAnimationFrame(() => {
+      const el = hhInputRef.current
+      if (el) {
+        el.focus()
+        el.setSelectionRange(el.value.length, el.value.length)
+      }
+    })
+  }, [])
   const tabScrollRef = useRef<HTMLDivElement | null>(null)
 
   // F7: Telegram-канал — состояние
@@ -2338,13 +2355,38 @@ export function CandidateDrawer({
                                               : ""}
                                           </span>
                                           <div className="flex items-center gap-1.5">
+                                            {/* «Изменить»/«Удалить» — только на СВОИХ (исходящих) сообщениях.
+                                                hh API не даёт ни редактировать, ни удалять отправленное
+                                                (есть только POST нового сообщения). Поэтому:
+                                                • «Изменить» → подставляем поправку в поле ввода (отправим вдогонку);
+                                                • «Удалить» → скрываем у себя (у кандидата в hh сообщение остаётся). */}
+                                            {mine && hhConnected && !isHidden && (
+                                              <button
+                                                type="button"
+                                                onClick={() => startCorrection(m)}
+                                                title="hh не даёт редактировать отправленное — подставим поправку в поле ввода, отправите вдогонку"
+                                                className="opacity-0 group-hover:opacity-100 transition-opacity hover:text-foreground"
+                                              >
+                                                <Pencil className="w-3 h-3" />
+                                              </button>
+                                            )}
                                             <button
                                               type="button"
                                               onClick={() => toggleHiddenMsg(m.id)}
-                                              title={isHidden ? "Вернуть в чат (у себя)" : "Скрыть у себя (у кандидата в hh останется)"}
+                                              title={
+                                                isHidden
+                                                  ? "Вернуть в чат (у себя)"
+                                                  : mine
+                                                    ? "Удалить: hh не даёт удалять отправленное — скроем у вас, у кандидата в hh останется"
+                                                    : "Скрыть у себя (у кандидата в hh останется)"
+                                              }
                                               className="opacity-0 group-hover:opacity-100 transition-opacity hover:text-foreground"
                                             >
-                                              {isHidden ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                                              {isHidden
+                                                ? <Eye className="w-3 h-3" />
+                                                : mine
+                                                  ? <Trash2 className="w-3 h-3" />
+                                                  : <EyeOff className="w-3 h-3" />}
                                             </button>
                                             {mine && (
                                               <span title={m.viewedByOpponent ? "прочитано" : "не прочитано"}>
@@ -2384,6 +2426,7 @@ export function CandidateDrawer({
                           ))}
                         </div>
                         <Textarea
+                          ref={hhInputRef}
                           value={hhDraft}
                           onChange={(e) => setHhDraft(e.target.value)}
                           placeholder="Написать кандидату..."
