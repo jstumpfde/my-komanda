@@ -153,6 +153,9 @@ async function main() {
   const spec = descObj(specRow?.spec)
   const resumeT = descObj(pick(spec, "resumeThresholds"))
   const anketaPass = descObj(pick(spec, "anketaPassInvite"))
+  // Текст приглашения 1-го касания — spec.inviteLetter (Портрет), не resumeThresholds
+  // (там только пороги/флаги). Пусто → используем платформенный дефолт в рантайме.
+  const inviteLetterText = asStr(pick(spec, "inviteLetter")) ?? ""
 
   // 3) Демо-блоки (контент): «Презентация» (1-я часть) и «Путь менеджера» (2-я)
   const demoRows = await db
@@ -179,9 +182,9 @@ async function main() {
 
   const idSeed = (suffix: string) => `legacy-${suffix}`
 
-  // ── Стадия 1: «Отклик → скан резюме» (message + scoreGate resume) ──
+  // ── Стадия 1: «Отклик → приглашение на демо» (message + scoreGate resume) ──
   const respond = makeStage("message", idSeed("respond"))
-  respond.title = "Отклик → скан резюме"
+  respond.title = "Отклик → приглашение на демо"
   respond.color = "slate"
   respond.contentBlockId = inviteContentBlockId
   if (inviteHhStage) respond.hhStatus = inviteHhStage
@@ -192,6 +195,12 @@ async function main() {
   // Задержка приглашения — держим в дожиме/сообщении легаси; сохраняем в passCriteria-примечании нет,
   // фиксируем сам факт задержки в rule (движок v2 подтянет из firstMessagesChain).
   // (inviteDelaySeconds=${inviteDelaySeconds}s — легаси-задержка первого касания.)
+  // Сообщения 1-го касания (п.2+6): текст приглашения из Портрета (spec.inviteLetter)
+  // первым элементом + отдельная строка со ссылкой на демо вторым (если текст задан).
+  // Пусто → messages не проставляем, рантайм использует платформенный дефолт (messagePresetId остаётся null).
+  if (inviteLetterText) {
+    respond.messages = [inviteLetterText, "{{demo_link}}"]
+  }
 
   // ── Стадия 2: «Демонстрация» (1-я часть) — demo, блок «Презентация» ──
   const demo = makeStage("demo", idSeed("demo"))
@@ -214,21 +223,18 @@ async function main() {
   managerPath.rule.scoreGate = scoreGate("anketa", anketaPassThreshold || 45, "preliminary_reject")
   if (anketaHhAction) managerPath.hhStatus = anketaHhAction
   managerPath.rule.advanceTo = anketaAdvanceToStage ?? "test_task_sent"
-  // Текст приглашения на 2-ю часть — из anketaPassInvite.messageText. В модели v2
-  // текст касания живёт в dozhimChain/пресете, поэтому кладём его первым
-  // касанием ветки А, если задано (задержку из секунд → в дни).
+  // Текст приглашения на 2-ю часть — из anketaPassInvite.messageText (п.2+6: реальный
+  // легаси-текст стадии анкеты/предквалификации кладём в messages основным сообщением).
   if (anketaMessageText) {
-    const delayDays = anketaDelaySeconds > 0 ? Math.max(0, Math.round(anketaDelaySeconds / 86400)) : 0
-    managerPath.dozhimChain = [
-      { text: anketaMessageText, delayDays },
-      ...(managerPath.dozhimChain ?? []),
-    ]
+    managerPath.messages = [anketaMessageText]
   }
 
   // ── Стадия 4: «Интервью» — ВЗЯТЬ существующую из funnelV2 как есть ──
+  // Пустое название (легаси-стадии часто без title) → подставляем «Интервью», чтобы
+  // повторный прогон скрипта давал корректное название (п.6, Юрий).
   const existingInterview = existingFunnel.stages.find(s => s.action === "interview")
   const interview: FunnelV2Stage = existingInterview
-    ? { ...existingInterview }
+    ? { ...existingInterview, title: existingInterview.title?.trim() ? existingInterview.title : "Интервью" }
     : (() => {
         const it = makeStage("interview", idSeed("interview"))
         it.title = "Интервью"
@@ -266,9 +272,9 @@ async function main() {
   for (const d of demoRows) console.error(`  • ${d.title}  (kind=${d.kind}, contentType=${d.contentType}, id=${d.id})`)
   console.error(`Существующая стадия «Интервью»: ${existingInterview ? "взята из funnelV2 как есть" : "не найдена → создана дефолтная"}`)
   console.error("Маппинг стадий:")
-  console.error(`  1) Отклик → скан резюме  gate=resume/${respond.rule.scoreGate?.threshold} (autoEnabled=false), contentBlock=${respond.contentBlockId ?? "—"}, hh=${respond.hhStatus ?? "—"}`)
+  console.error(`  1) Отклик → приглашение на демо  gate=resume/${respond.rule.scoreGate?.threshold} (autoEnabled=false), contentBlock=${respond.contentBlockId ?? "—"}, hh=${respond.hhStatus ?? "—"}, messages=${respond.messages?.length ?? 0}`)
   console.error(`  2) Демонстрация          contentBlock=${demo.contentBlockId ?? "—"}`)
-  console.error(`  3) Путь менеджера        gate=anketa/${managerPath.rule.scoreGate?.threshold} (autoEnabled=false), contentBlock=${managerPath.contentBlockId ?? "—"}, hh=${managerPath.hhStatus ?? "—"}, advance=${managerPath.rule.advanceTo}`)
+  console.error(`  3) Путь менеджера        gate=anketa/${managerPath.rule.scoreGate?.threshold} (autoEnabled=false), contentBlock=${managerPath.contentBlockId ?? "—"}, hh=${managerPath.hhStatus ?? "—"}, advance=${managerPath.rule.advanceTo}, messages=${managerPath.messages?.length ?? 0}`)
   console.error(`  4) Интервью              ${existingInterview ? "(сохранена)" : "(дефолт)"}`)
   console.error(`  5) Оффер                 ручное`)
   console.error(`  6) Нанят                 terminal`)

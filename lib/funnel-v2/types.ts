@@ -139,7 +139,13 @@ export interface FunnelV2Stage {
   interviewMode?: InterviewMode
   scheduling?: SchedulingMode[]   // оба варианта по умолчанию
   // ссылка на пресет сообщения (broadcastTemplates) или null
+  // УСТАРЕВШЕЕ (не удалять — старые записи): единственный текст сообщения.
+  // Актуальное хранилище — `messages` ниже; читать через эффективный список
+  // `stage.messages ?? (stage.messagePresetId ? [stage.messagePresetId] : [])`.
   messagePresetId?: string | null
+  /** Упорядоченный список текстов сообщений стадии (замена messagePresetId).
+   *  undefined → эффективный список читаем из messagePresetId (см. выше). */
+  messages?: string[]
   contentBlockId?: string | null  // подключённый блок из «Контента» (демо/тест)
   rule: StageRule
   dozhim: DozhimPreset
@@ -151,6 +157,7 @@ export interface FunnelV2Stage {
   dozhimChain?: DozhimTouch[]
   dozhimChainOpened?: DozhimTouch[]
   hhStatus?: string               // статус hh при входе в стадию
+  avitoStatus?: string            // статус Avito при входе в стадию (отдельно от hh)
   reminders?: StageReminders      // только для стадий-встреч
 
   // ── Template-time метаданные (apply.ts) ──────────────────────────────────
@@ -181,6 +188,12 @@ export const DEFAULT_REJECT_DELAY_MIN = 60
 
 export function emptyFunnelV2(): FunnelV2Config {
   return { enabled: false, stages: [] }
+}
+
+/** Эффективный список сообщений стадии (обратная совместимость с messagePresetId).
+ *  Правило чтения: `stage.messages ?? (stage.messagePresetId ? [stage.messagePresetId] : [])`. */
+export function stageMessages(stage: Pick<FunnelV2Stage, "messages" | "messagePresetId">): string[] {
+  return stage.messages ?? (stage.messagePresetId ? [stage.messagePresetId] : [])
 }
 
 /** Дефолтная стадия для нового действия (разрешающее правило, дожим стандарт). */
@@ -244,6 +257,8 @@ export function normalizeFunnelV2(raw: unknown): FunnelV2Config {
         color: STAGE_COLORS.includes(st.color as StageColor) ? st.color : undefined,
         negative: st.negative === true ? true : undefined,
         terminal: st.terminal === true ? true : undefined,
+        messages: Array.isArray(st.messages) ? st.messages.filter((m): m is string => typeof m === "string") : undefined,
+        avitoStatus: typeof st.avitoStatus === "string" ? st.avitoStatus : undefined,
         rule: {
           autoAdvance: st.rule?.autoAdvance === true,
           autoReject: st.rule?.autoReject === true,

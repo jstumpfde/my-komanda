@@ -40,7 +40,7 @@ import { toast } from "sonner"
 import {
   STAGE_ACTIONS, DOZHIM_LABEL, STAGE_STATUSES, makeStage, emptyFunnelV2,
   normalizeFunnelV2, dozhimChainFor, dozhimChainForOpened,
-  defaultFunnelV2Stages,
+  defaultFunnelV2Stages, stageMessages,
   SCORE_GATE_TYPES, SCORE_GATE_FAIL_ACTIONS, DEFAULT_SCORE_GATE_THRESHOLD,
   type FunnelV2Config, type FunnelV2Stage, type StageActionType,
   type DozhimPreset, type InterviewMode, type DozhimTouch,
@@ -68,7 +68,8 @@ function buildFunnelPreview(stages: FunnelV2Stage[]): PreviewRow[] {
   for (let i = 0; i < stages.length; i++) {
     const s = stages[i]
     const label = `Стадия ${i + 1} · ${s.title?.trim() || (STAGE_ACTIONS.find(a => a.type === s.action)?.label ?? s.action)}`
-    if (s.messagePresetId) add(label, "Сообщение", s.messagePresetId)
+    const msgs = stageMessages(s)
+    msgs.forEach((m, j) => add(label, msgs.length > 1 ? `Сообщение №${j + 1}` : "Сообщение", m))
     ;(s.dozhimChain ?? []).forEach((t, j) => add(label, `Дожим «не открыл» №${j + 1}`, t.text))
     ;(s.dozhimChainOpened ?? []).forEach((t, j) => add(label, `Дожим «не завершил» №${j + 1}`, t.text))
   }
@@ -138,6 +139,17 @@ const SCORE_GATE_FAIL_LABEL: Record<ScoreGateFailAction, string> = {
   preliminary_reject: "Предварительный отказ", manual: "Ручное", reject: "Отказ", reserve: "В резерв",
 }
 
+// ── Единая сетка «подпись слева фикс.ширины + контрол» для секции «Переход
+// дальше» (п.3/4 замечаний Юрия) — одинаковый левый край контролов во всех строках.
+function FieldRow({ label, children, align = "center" }: { label: string; children: React.ReactNode; align?: "center" | "top" }) {
+  return (
+    <div className={cn("flex gap-3", align === "top" ? "items-start" : "items-center justify-between")}>
+      <span className={cn("text-xs text-muted-foreground shrink-0 w-[168px]", align === "top" && "pt-2.5")}>{label}</span>
+      <div className="flex-1 min-w-0">{children}</div>
+    </div>
+  )
+}
+
 interface ContentBlock { id: string; title: string; contentType: string }
 
 // Стадия «включена»? Признак хранится ad-hoc (survive-нормализацию через spread);
@@ -183,6 +195,7 @@ function StageCard({ stage, index, onOpen, onRemove, onToggleEnabled }: {
             {gateText && <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">{gateText}</span>}
             <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">дожим: {DOZHIM_LABEL[stage.dozhim].toLowerCase()}</span>
             {stage.hhStatus && <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">hh: {stage.hhStatus}</span>}
+            {stage.avitoStatus && <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">avito: {stage.avitoStatus}</span>}
           </div>
         </button>
         {/* Вкл/выкл стадии — тумблер прямо в реестре */}
@@ -219,6 +232,14 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose, dripT
 
   const patch = (p: Partial<FunnelV2Stage>) => onChange({ ...stage, ...p })
   const patchRule = (p: Partial<FunnelV2Stage["rule"]>) => onChange({ ...stage, rule: { ...stage.rule, ...p } })
+  // Сообщения стадии: эффективный список = messages ?? [messagePresetId] (обратная совместимость).
+  // Пишем всегда в messages; messagePresetId (устаревшее) не трогаем при записи.
+  const msgList: string[] = stage.messages ?? (stage.messagePresetId ? [stage.messagePresetId] : [""])
+  const setMsgList = (next: string[]) => patch({ messages: next })
+  const addMessage = () => setMsgList([...msgList, ""])
+  const removeMessage = (i: number) => { const next = msgList.filter((_, idx) => idx !== i); setMsgList(next.length > 0 ? next : [""]) }
+  const setMessageAt = (i: number, text: string) => setMsgList(msgList.map((m, idx) => idx === i ? text : m))
+  const insertPlaceholder = (i: number, ph: string) => setMessageAt(i, `${msgList[i] ?? ""}${ph}`)
   // scoreGate: dropdown «Не гейтить» = убрать объект; иначе патчим поля.
   const gate = stage.rule.scoreGate
   const patchGate = (p: Partial<ScoreGate>) => {
@@ -253,16 +274,17 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose, dripT
         <SheetBody className="flex-1 overflow-y-auto px-5 py-4">
         <div className="mx-auto w-full max-w-5xl space-y-5">
 
-          {/* Действие */}
-          <section className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Действие — что делает кандидат</Label>
-            <div className="flex flex-wrap gap-1.5">
+          {/* Тип этой стадии */}
+          <section className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Тип этой стадии</Label>
+            <p className="text-[11px] text-muted-foreground/70 -mt-0.5">Стадия — один шаг пути кандидата. Тип задаёт, что кандидат делает на этом шаге. Последовательность шагов — в списке слева.</p>
+            <div className="flex flex-wrap gap-1">
               {STAGE_ACTIONS.map(a => {
                 const active = a.type === stage.action
                 return (
                   <button key={a.type} type="button"
-                    onClick={() => patch(a.type === "interview" ? { ...makeStage("interview", stage.id.slice(3)), id: stage.id, action: "interview", messagePresetId: stage.messagePresetId, title: stage.title, hhStatus: stage.hhStatus } : { action: a.type })}
-                    className={cn("text-xs px-2.5 py-1.5 rounded-md border transition-colors", active ? "bg-blue-500/10 border-blue-400 text-blue-700 dark:text-blue-300 font-medium" : "border-border text-muted-foreground hover:bg-muted/50")}>{a.label}</button>
+                    onClick={() => patch(a.type === "interview" ? { ...makeStage("interview", stage.id.slice(3)), id: stage.id, action: "interview", messagePresetId: stage.messagePresetId, messages: stage.messages, title: stage.title, hhStatus: stage.hhStatus } : { action: a.type })}
+                    className={cn("text-[11px] px-2 py-1 rounded-md border transition-colors", active ? "bg-blue-500/10 border-blue-400 text-blue-700 dark:text-blue-300 font-medium" : "border-border text-muted-foreground hover:bg-muted/50")}>{a.label}</button>
                 )
               })}
             </div>
@@ -273,14 +295,32 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose, dripT
           <section className="space-y-2 border-t pt-4">
             <Label className="text-sm font-medium flex items-center gap-1.5"><Link2 className="w-4 h-4" /> Сообщение / контент</Label>
             {!isPrequal && (
-              <div className="space-y-1">
-                <Label className="text-[11px] text-muted-foreground">Сообщение кандидату (текст)</Label>
-                <Textarea value={stage.messagePresetId ?? ""} onChange={e => patch({ messagePresetId: e.target.value || null })} placeholder="напр. «Добрый день, {{name}}! …»" className="min-h-[150px] text-base md:text-base" />
-                <div className="flex flex-wrap gap-1 pt-0.5">
-                  {["{{name}}", (stage.action === "test" || stage.action === "task") ? "{{test_link}}" : "{{demo_link}}", "{{vacancy}}", "{{company}}"].map(ph => (
-                    <button key={ph} type="button" onClick={() => patch({ messagePresetId: `${stage.messagePresetId ?? ""}${ph}` })} className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:bg-muted/50 font-mono">{ph}</button>
-                  ))}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-[11px] text-muted-foreground">Сообщения кандидату (текст)</Label>
+                  <button type="button" onClick={addMessage} className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-0.5"><Plus className="w-3 h-3" /> Добавить сообщение</button>
                 </div>
+                {msgList.map((m, i) => (
+                  <div key={i} className="rounded-md border p-2 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-muted-foreground">Сообщение {i + 1}{i === 0 ? " (обязательно)" : ""}</span>
+                      {msgList.length > 1 && (
+                        <button onClick={() => removeMessage(i)} className="text-muted-foreground hover:text-destructive" aria-label="Удалить сообщение"><X className="w-3.5 h-3.5" /></button>
+                      )}
+                    </div>
+                    <Textarea
+                      value={m}
+                      onChange={e => setMessageAt(i, e.target.value)}
+                      placeholder="напр. «Добрый день, {{name}}! …»"
+                      className="min-h-[150px] text-base md:text-base"
+                    />
+                    <div className="flex flex-wrap gap-1 pt-0.5">
+                      {["{{name}}", (stage.action === "test" || stage.action === "task") ? "{{test_link}}" : "{{demo_link}}", "{{vacancy}}", "{{company}}"].map(ph => (
+                        <button key={ph} type="button" onClick={() => insertPlaceholder(i, ph)} className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:bg-muted/50 font-mono">{ph}</button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
                 <p className="text-[11px] text-muted-foreground/70"><b className="font-mono">{(stage.action === "test" || stage.action === "task") ? "{{test_link}}" : "{{demo_link}}"}</b> — индивидуальная ссылка кандидату, формируется автоматически.</p>
               </div>
             )}
@@ -302,12 +342,16 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose, dripT
             )}
           </section>
 
-          {/* Правило прохода по баллу (scoreGate) */}
-          <section className="space-y-2.5 border-t pt-4">
-            <Label className="text-sm font-medium flex items-center gap-1.5"><Gauge className="w-4 h-4" /> Правило прохода по баллу</Label>
+          {/* Переход дальше — единый поток: условие прохода → прошёл → не прошёл → авто.
+              Презентационное слияние бывших блоков «Правило прохода по баллу» и
+              «Правило прохода» — поля и их привязка к scoreGate и rule не менялись. */}
+          <section className="space-y-4 border-t pt-4">
+            <Label className="text-sm font-medium flex items-center gap-1.5"><Route className="w-4 h-4" /> Переход дальше</Label>
+
+            {/* (а) Условие прохода */}
             <div className="rounded-lg border bg-muted/30 p-3 space-y-2.5">
-              <div className="space-y-1">
-                <Label className="text-[11px] text-muted-foreground">Гейт по баллу</Label>
+              <span className="text-xs font-medium flex items-center gap-1.5"><Gauge className="w-3.5 h-3.5" /> Условие прохода</span>
+              <FieldRow label="Гейт по баллу">
                 <Select value={gate?.scoreType ?? "none"} onValueChange={setGateType}>
                   <SelectTrigger className="h-11 text-base"><SelectValue placeholder="Не гейтить" /></SelectTrigger>
                   <SelectContent>
@@ -315,89 +359,103 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose, dripT
                     {SCORE_GATE_TYPES.map(t => <SelectItem key={t} value={t}>{SCORE_GATE_TYPE_LABEL[t]}</SelectItem>)}
                   </SelectContent>
                 </Select>
-              </div>
-              {gate && (<>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-muted-foreground">Порог балла</span>
+              </FieldRow>
+              {gate && (
+                <FieldRow label="Порог балла">
                   <div className="flex items-center gap-1.5">
                     <Input type="number" min={0} max={100} value={gate.threshold}
                       onChange={e => patchGate({ threshold: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
                       className="w-20 h-10 text-base" />
-                    <span className="text-[11px] text-muted-foreground w-10">из 100</span>
+                    <span className="text-[11px] text-muted-foreground w-12">из 100</span>
                   </div>
+                </FieldRow>
+              )}
+              {!gate && <p className="text-[11px] text-muted-foreground/70">Балл на этой стадии не проверяется — кандидаты проходят вручную.</p>}
+              <FieldRow label="Критерий прохода">
+                <Input value={stage.rule.passCriteria ?? ""} onChange={e => patchRule({ passCriteria: e.target.value || undefined })} placeholder={isScoring ? "напр. «ответил верно ≥ порога»" : "напр. «посмотрел демо»"} className="h-11 text-base" />
+              </FieldRow>
+              {isContent && (
+                <div className="rounded-lg bg-muted/40 p-3 space-y-2.5">
+                  <span className="text-xs font-medium">Пороги отбора</span>
+                  <FieldRow label="Порог AI-балла">
+                    <div className="flex items-center gap-1.5">
+                      <Input type="number" min={0} max={100} value={stage.rule.threshold ?? ""} onChange={e => patchRule({ threshold: e.target.value === "" ? undefined : Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="w-20 h-10 text-base" placeholder="—" />
+                      <span className="text-[11px] text-muted-foreground w-12">из 100</span>
+                    </div>
+                  </FieldRow>
+                  <FieldRow label="Порог правильных ответов">
+                    <div className="flex items-center gap-1.5">
+                      <Input type="number" min={0} max={100} value={stage.rule.objThreshold ?? ""} onChange={e => patchRule({ objThreshold: e.target.value === "" ? undefined : Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="w-20 h-10 text-base" placeholder="—" />
+                      <span className="text-[11px] text-muted-foreground w-12">%</span>
+                    </div>
+                  </FieldRow>
+                  <p className="text-[11px] text-muted-foreground/80">Отказ, если не пройден <b>любой</b> заданный порог (при включённом авто-отказе ниже). Пустое поле = по этому баллу не отбираем.</p>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-[11px] text-muted-foreground">Если не прошёл</Label>
+              )}
+            </div>
+
+            {/* (б) Прошёл → */}
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-2.5">
+              <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">Прошёл →</span>
+              <FieldRow label="Авто-приглашение прошедших">
+                <Switch checked={stage.rule.autoAdvance} onCheckedChange={v => patchRule({ autoAdvance: v })} />
+              </FieldRow>
+              <FieldRow label="Зовём на">
+                <Select value={stage.rule.advanceTo ?? "next"} onValueChange={v => patchRule({ advanceTo: v })}>
+                  <SelectTrigger className="h-11 text-base"><SelectValue /></SelectTrigger>
+                  <SelectContent>{advanceOptions.map(o => <SelectItem key={o.v} value={o.v}>{o.label}</SelectItem>)}</SelectContent>
+                </Select>
+              </FieldRow>
+            </div>
+
+            {/* (в) Не прошёл → */}
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-2.5">
+              <span className="text-xs font-medium text-rose-700 dark:text-rose-400">Не прошёл →</span>
+              <FieldRow label="Авто-отказ не прошедших">
+                <Switch checked={stage.rule.autoReject} onCheckedChange={v => patchRule({ autoReject: v })} />
+              </FieldRow>
+              {gate && (gate.failAction === "preliminary_reject" || gate.failAction === "reject") ? (
+                <FieldRow label={gate.failAction === "preliminary_reject" ? "Текст предварительного отказа (обратимый)" : "Текст отказа"} align="top">
+                  <Textarea value={stage.rule.rejectText ?? ""} onChange={e => patchRule({ rejectText: e.target.value || undefined })} placeholder="Благодарим за интерес. К сожалению…" className="min-h-[110px] text-base md:text-base" />
+                </FieldRow>
+              ) : gate ? (
+                <FieldRow label="Сообщение">
+                  <p className="text-[11px] text-muted-foreground/70 pt-2.5">сообщение не отправляется ({SCORE_GATE_FAIL_LABEL[gate.failAction].toLowerCase()})</p>
+                </FieldRow>
+              ) : (
+                <FieldRow label="Текст отказа" align="top">
+                  <Textarea value={stage.rule.rejectText ?? ""} onChange={e => patchRule({ rejectText: e.target.value || undefined })} placeholder="Благодарим за интерес. К сожалению…" className="min-h-[110px] text-base md:text-base" />
+                </FieldRow>
+              )}
+              <FieldRow label="Задержка отказа, мин">
+                <div className="flex items-center gap-2">
+                  <Input type="number" value={stage.rule.rejectDelayMinutes} onChange={e => patchRule({ rejectDelayMinutes: Math.max(0, Number(e.target.value) || 0) })} className="w-24 h-11 text-base" />
+                  {stage.rule.rejectDelayMinutes >= 60 && <span className="text-[11px] text-muted-foreground">= {Math.floor(stage.rule.rejectDelayMinutes / 60)} ч{stage.rule.rejectDelayMinutes % 60 ? ` ${stage.rule.rejectDelayMinutes % 60} мин` : ""}</span>}
+                </div>
+              </FieldRow>
+              {gate && (
+                <FieldRow label="Если не прошёл (гейт по баллу)">
                   <Select value={gate.failAction} onValueChange={v => patchGate({ failAction: v as ScoreGateFailAction })}>
                     <SelectTrigger className="h-11 text-base"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {SCORE_GATE_FAIL_ACTIONS.map(f => <SelectItem key={f} value={f}>{SCORE_GATE_FAIL_LABEL[f]}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="flex items-start justify-between gap-3 pt-0.5">
-                  <div className="min-w-0">
-                    <span className="text-xs">Авто</span>
-                    <p className="text-[11px] text-muted-foreground/80">когда выключено — двигаешь вручную; включи, когда доверишь баллу.</p>
-                  </div>
-                  <Switch checked={gate.autoEnabled} onCheckedChange={v => patchGate({ autoEnabled: v })} className="mt-0.5 shrink-0" />
-                </div>
-              </>)}
-              {!gate && <p className="text-[11px] text-muted-foreground/70">Балл на этой стадии не проверяется — кандидаты проходят вручную.</p>}
+                </FieldRow>
+              )}
             </div>
-          </section>
 
-          {/* Правило прохода */}
-          <section className="space-y-2.5 border-t pt-4">
-            <Label className="text-sm font-medium flex items-center gap-1.5"><Route className="w-4 h-4" /> Правило прохода</Label>
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Критерий прохода</Label>
-              <Input value={stage.rule.passCriteria ?? ""} onChange={e => patchRule({ passCriteria: e.target.value || undefined })} placeholder={isScoring ? "напр. «ответил верно ≥ порога»" : "напр. «посмотрел демо»"} className="h-12 text-base" />
-            </div>
-            {isContent && (
-              <div className="rounded-lg bg-muted/40 p-3 space-y-2.5">
-                <span className="text-xs font-medium">Пороги отбора</span>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-muted-foreground">Порог AI-балла</span>
-                  <div className="flex items-center gap-1.5">
-                    <Input type="number" min={0} max={100} value={stage.rule.threshold ?? ""} onChange={e => patchRule({ threshold: e.target.value === "" ? undefined : Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="w-20 h-10 text-base" placeholder="—" />
-                    <span className="text-[11px] text-muted-foreground w-10">из 100</span>
+            {/* (г) Авто */}
+            {gate && (
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <FieldRow label="Авто" align="top">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="text-[11px] text-muted-foreground/80 flex-1">когда выключено — двигаешь вручную; включи, когда доверишь баллу.</p>
+                    <Switch checked={gate.autoEnabled} onCheckedChange={v => patchGate({ autoEnabled: v })} className="mt-0.5 shrink-0" />
                   </div>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-muted-foreground">Порог правильных ответов</span>
-                  <div className="flex items-center gap-1.5">
-                    <Input type="number" min={0} max={100} value={stage.rule.objThreshold ?? ""} onChange={e => patchRule({ objThreshold: e.target.value === "" ? undefined : Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="w-20 h-10 text-base" placeholder="—" />
-                    <span className="text-[11px] text-muted-foreground w-10">%</span>
-                  </div>
-                </div>
-                <p className="text-[11px] text-muted-foreground/80">Отказ, если не пройден <b>любой</b> заданный порог (при включённом авто-отказе ниже). Пустое поле = по этому баллу не отбираем.</p>
+                </FieldRow>
               </div>
             )}
-            <div className="flex items-center justify-between">
-              <span className="text-xs">Авто-приглашение прошедших</span>
-              <Switch checked={stage.rule.autoAdvance} onCheckedChange={v => patchRule({ autoAdvance: v })} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Прошёл → зовём на</Label>
-              <Select value={stage.rule.advanceTo ?? "next"} onValueChange={v => patchRule({ advanceTo: v })}>
-                <SelectTrigger className="h-12 text-base"><SelectValue /></SelectTrigger>
-                <SelectContent>{advanceOptions.map(o => <SelectItem key={o.v} value={o.v}>{o.label}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center justify-between pt-1">
-              <span className="text-xs">Авто-отказ не прошедших</span>
-              <Switch checked={stage.rule.autoReject} onCheckedChange={v => patchRule({ autoReject: v })} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Не прошёл → текст отказа</Label>
-              <Textarea value={stage.rule.rejectText ?? ""} onChange={e => patchRule({ rejectText: e.target.value || undefined })} placeholder="Благодарим за интерес. К сожалению…" className="min-h-[110px] text-base md:text-base" />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground shrink-0">Задержка отказа, мин</span>
-              <Input type="number" value={stage.rule.rejectDelayMinutes} onChange={e => patchRule({ rejectDelayMinutes: Math.max(0, Number(e.target.value) || 0) })} className="w-24 h-11 text-base" />
-              {stage.rule.rejectDelayMinutes >= 60 && <span className="text-[11px] text-muted-foreground">= {Math.floor(stage.rule.rejectDelayMinutes / 60)} ч{stage.rule.rejectDelayMinutes % 60 ? ` ${stage.rule.rejectDelayMinutes % 60} мин` : ""}</span>}
-            </div>
           </section>
 
           {/* Дожим — цепочка касаний */}
@@ -422,7 +480,7 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose, dripT
                   <span className="text-[11px] text-muted-foreground">дн.</span>
                   <button onClick={() => setChain(chain.filter((_, idx) => idx !== i))} className="ml-auto text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
                 </div>
-                <Textarea value={t.text} onChange={e => setChain(chain.map((x, idx) => idx === i ? { ...x, text: e.target.value } : x))} placeholder="Текст касания…" className="min-h-[110px] text-base md:text-base" />
+                <Textarea value={t.text} onChange={e => setChain(chain.map((x, idx) => idx === i ? { ...x, text: e.target.value } : x))} placeholder="Текст касания…" className="min-h-[64px] text-base md:text-base" rows={2} />
               </div>
             ))}
           </section>
@@ -442,7 +500,7 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose, dripT
                   <span className="text-[11px] text-muted-foreground">дн.</span>
                   <button onClick={() => setChainOpened(chainOpened.filter((_, idx) => idx !== i))} className="ml-auto text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
                 </div>
-                <Textarea value={t.text} onChange={e => setChainOpened(chainOpened.map((x, idx) => idx === i ? { ...x, text: e.target.value } : x))} placeholder="Текст касания (для тех, кто открыл, но не досмотрел)…" className="min-h-[110px] text-base md:text-base" />
+                <Textarea value={t.text} onChange={e => setChainOpened(chainOpened.map((x, idx) => idx === i ? { ...x, text: e.target.value } : x))} placeholder="Текст касания (для тех, кто открыл, но не досмотрел)…" className="min-h-[64px] text-base md:text-base" rows={2} />
               </div>
             ))}
           </section>
@@ -488,14 +546,29 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose, dripT
           {/* Статус + название */}
           <section className="space-y-2.5 border-t pt-4">
             <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Статус hh / Avito при входе в стадию</Label>
-              <Select value={stage.hhStatus ?? "none"} onValueChange={v => patch({ hhStatus: v === "none" ? undefined : v })}>
-                <SelectTrigger className="h-12 text-base"><SelectValue placeholder="не менять" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">— не менять —</SelectItem>
-                  {STAGE_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Label className="text-[11px] text-muted-foreground">Статус при входе в стадию</Label>
+              <div className="flex gap-2">
+                <div className="flex-1 flex items-center gap-1.5 min-w-0">
+                  <span className="text-[11px] text-muted-foreground shrink-0">hh:</span>
+                  <Select value={stage.hhStatus ?? "none"} onValueChange={v => patch({ hhStatus: v === "none" ? undefined : v })}>
+                    <SelectTrigger className="h-11 text-base"><SelectValue placeholder="не менять" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— не менять —</SelectItem>
+                      {STAGE_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex-1 flex items-center gap-1.5 min-w-0">
+                  <span className="text-[11px] text-muted-foreground shrink-0">Avito:</span>
+                  <Select value={stage.avitoStatus ?? "none"} onValueChange={v => patch({ avitoStatus: v === "none" ? undefined : v })}>
+                    <SelectTrigger className="h-11 text-base"><SelectValue placeholder="не менять" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— не менять —</SelectItem>
+                      {STAGE_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
             <div className="space-y-1">
               <Label className="text-[11px] text-muted-foreground">Название стадии (необязательно)</Label>
