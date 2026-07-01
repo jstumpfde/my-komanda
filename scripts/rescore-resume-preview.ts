@@ -26,7 +26,7 @@
 import { eq, and, isNotNull, desc } from "drizzle-orm"
 import { db, pgClient } from "@/lib/db"
 import { candidates, vacancies, hhResponses } from "@/lib/db/schema"
-import { screenResume, type ResumeScreenInput } from "@/lib/ai-screen-resume"
+import { screenResume, hasSubstantiveRoleHistory, type ResumeScreenInput } from "@/lib/ai-screen-resume"
 import { extractHhResumeFields } from "@/lib/hh/extract-resume-fields"
 import { getSpec } from "@/lib/core/spec/store"
 import {
@@ -107,6 +107,11 @@ interface Row {
   delta: number | null
   verdict: string | null
   summary: string | null
+  // Восстановилась ли из raw_data содержательная история должностей. Если нет —
+  // вход обеднён (в БД только сырое hh-превью без experience[]), «было» считалось
+  // вживую на полном резюме, а «стало» — на обеднённом. Сравнение недостоверно.
+  inputComplete: boolean
+  workHistoryLen: number
   error?: string
 }
 
@@ -253,6 +258,12 @@ async function main() {
         workHistory:      extracted.workHistory ?? null,
       }
 
+      // Достоверность входа: удалось ли восстановить содержательную историю
+      // должностей из raw_data. Нет → «стало» посчитано на обеднённом входе,
+      // а «было» бралось из live-скоринга на полном резюме → сравнение неверно.
+      const workHistoryLen = resumeObj.workHistory?.length ?? 0
+      const inputComplete = hasSubstantiveRoleHistory(resumeObj)
+
       let newScore: number | null = null
       let verdict: string | null = null
       let summary: string | null = null
@@ -268,7 +279,7 @@ async function main() {
 
       const oldScore = r.resumeScore ?? null
       const delta = newScore !== null && oldScore !== null ? newScore - oldScore : null
-      return { candidateId: r.candidateId, name: r.candidateName, oldScore, newScore, delta, verdict, summary, error }
+      return { candidateId: r.candidateId, name: r.candidateName, oldScore, newScore, delta, verdict, summary, inputComplete, workHistoryLen, error }
     }))
     results.push(...batchResults)
     console.log(`  …${Math.min(i + CONCURRENCY, uniqueRows.length)}/${uniqueRows.length}`)
@@ -278,38 +289,54 @@ async function main() {
   // ── Таблица (сортировка по новому баллу, убыв.) ─────────────────────────────
   const sorted = [...results].sort((a, b) => (b.newScore ?? -1) - (a.newScore ?? -1))
 
-  console.log("\n" + "═".repeat(78))
+  console.log("\n" + "═".repeat(84))
   console.log(` РЕЗУЛЬТАТ — вакансия "${vac.title}" (${mode})`)
-  console.log("═".repeat(78))
-  console.log(` ${"Имя".padEnd(26)} | было | стало |   Δ   | вердикт`)
-  console.log("─".repeat(78))
+  console.log("═".repeat(84))
+  console.log(` ${"Имя".padEnd(26)} | было | стало |   Δ   | вход | вердикт`)
+  console.log("─".repeat(84))
   for (const r of sorted) {
     const oldS = r.oldScore != null ? String(r.oldScore).padStart(4) : "  — "
+    // Флаг достоверности входа: ⚠ = обеднён (нет истории должностей в raw_data).
+    const inp = r.inputComplete ? " ok " : " ⚠  "
     if (r.newScore === null) {
-      console.log(` ${trunc(r.name, 26)} | ${oldS} |  N/A  |   —   | ${r.error ?? "ошибка"}`)
+      console.log(` ${trunc(r.name, 26)} | ${oldS} |  N/A  |   —   |${inp}| ${r.error ?? "ошибка"}`)
       continue
     }
     const newS = String(r.newScore).padStart(5)
     const dStr = r.delta === null ? "  —  " : (r.delta >= 0 ? `+${r.delta}` : `${r.delta}`).padStart(5)
     const weak = r.newScore < 45 ? " 🔴" : ""
-    console.log(` ${trunc(r.name, 26)} | ${oldS} | ${newS} | ${dStr} | ${r.verdict ?? ""}${weak}`)
+    console.log(` ${trunc(r.name, 26)} | ${oldS} | ${newS} | ${dStr} |${inp}| ${r.verdict ?? ""}${weak}`)
   }
-  console.log("─".repeat(78))
+  console.log("─".repeat(84))
 
   // ── Сводка ──────────────────────────────────────────────────────────────────
-  const scored = results.filter(r => r.newScore !== null)
-  const withDelta = scored.filter(r => r.delta !== null)
+  // Достоверную статистику Δ считаем ТОЛЬКО по кандидатам с полным входом:
+  // у обеднённых «было» бралось из live-скоринга на полном hh-резюме (с
+  // ролями), а «стало» посчитано на обеднённом входе из raw_data → сравнение
+  // невалидно и завышало бы разброс.
+  const scored     = results.filter(r => r.newScore !== null)
+  const impoverished = results.filter(r => !r.inputComplete)
+  const valid      = scored.filter(r => r.inputComplete)
+  const withDelta  = valid.filter(r => r.delta !== null)
   const avgDelta = withDelta.length ? Math.round(withDelta.reduce((s, r) => s + r.delta!, 0) / withDelta.length) : 0
-  const avgAbs = withDelta.length ? Math.round(withDelta.reduce((s, r) => s + Math.abs(r.delta!), 0) / withDelta.length) : 0
-  const raised = withDelta.filter(r => r.delta! > 0).length
-  const lowered = withDelta.filter(r => r.delta! < 0).length
-  const weakNew = scored.filter(r => r.newScore! < 45).length
-  const weakOld = results.filter(r => r.oldScore != null && r.oldScore < 45).length
+  const avgAbs   = withDelta.length ? Math.round(withDelta.reduce((s, r) => s + Math.abs(r.delta!), 0) / withDelta.length) : 0
+  const raised   = withDelta.filter(r => r.delta! > 0).length
+  const lowered  = withDelta.filter(r => r.delta! < 0).length
+  const weakNew  = valid.filter(r => r.newScore! < 45).length
+  const weakOld  = valid.filter(r => r.oldScore != null && r.oldScore < 45).length
 
-  console.log(`  Оценено:        ${scored.length} из ${results.length} (ошибок: ${results.length - scored.length})`)
-  console.log(`  Средний Δ:      ${avgDelta >= 0 ? "+" : ""}${avgDelta} (|Δ| среднее ${avgAbs})`)
-  console.log(`  Балл вырос:     ${raised}   Балл упал: ${lowered}`)
-  console.log(`  Слабых (<45):   было ${weakOld} → стало ${weakNew}`)
+  console.log(`  Оценено:            ${scored.length} из ${results.length} (ошибок: ${results.length - scored.length})`)
+  console.log(`  Достоверный вход:   ${valid.length}   ⚠ обеднённый вход: ${impoverished.length} (исключены из статистики Δ)`)
+  console.log(`  ── статистика ТОЛЬКО по достоверным (${withDelta.length}) ──`)
+  console.log(`  Средний Δ:          ${avgDelta >= 0 ? "+" : ""}${avgDelta} (|Δ| среднее ${avgAbs})`)
+  console.log(`  Балл вырос:         ${raised}   Балл упал: ${lowered}`)
+  console.log(`  Слабых (<45):       было ${weakOld} → стало ${weakNew}`)
+  if (impoverished.length > 0) {
+    console.log(`\n  ⚠️  У ${impoverished.length} кандидатов в raw_data нет истории должностей (experience[]).`)
+    console.log(`      Для них «было» считалось вживую на полном hh-резюме, «стало» — на`)
+    console.log(`      обеднённом входе. Сравнение недостоверно; масс-апдейт по ним делать`)
+    console.log(`      НЕЛЬЗЯ, пока не будет исходного резюме (репарсинг с hh).`)
+  }
   console.log(`\n  ⚠️  Это ПРЕВЬЮ. Ни одно поле в БД не изменено.`)
   console.log(`      Применить: scripts/rescore-resume-apply.ts (тот же вход, но с UPDATE).\n`)
 
