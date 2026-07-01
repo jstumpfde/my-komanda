@@ -235,6 +235,9 @@ function VideoPlayer({ url }: { url: string }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [ready, setReady] = useState(false)
+  // Кадр-обложка: подменяем чёрный первый кадр на живой с ~15-й секунды.
+  const posterAppliedRef = useRef(false)
+  const startedRef = useRef(false)
   // PiP API недоступен в Firefox-mobile и старых WebKit — считаем флаг
   // на mount, чтобы избежать гидрационного несовпадения.
   const [pipAvailable, setPipAvailable] = useState(false)
@@ -313,12 +316,22 @@ function VideoPlayer({ url }: { url: string }) {
           onCanPlay={(e) => {
             // Fallback для коротких видео (< 10s) — для них onProgress не
             // успеет дойти до порога. Заодно подменяем чёрный первый кадр
-            // на живой через seek=0.5s (но только если юзер ещё не скрабил).
+            // на живой КАДР-ОБЛОЖКУ с ~15-й секунды (или с середины для коротких).
+            // Играть будем с начала — сброс в onPlay.
             const v = e.currentTarget
-            if (!ready && v.duration > 1 && Number.isFinite(v.duration)) {
-              v.currentTime = 0.5
+            if (!posterAppliedRef.current && !startedRef.current && v.duration > 1 && Number.isFinite(v.duration)) {
+              posterAppliedRef.current = true
+              v.currentTime = Math.min(15, v.duration / 2)
             }
             setReady(true)
+          }}
+          onPlay={(e) => {
+            // Первый запуск — играем с начала, а не с кадра-обложки (15с).
+            const v = e.currentTarget
+            if (!startedRef.current) {
+              startedRef.current = true
+              if (posterAppliedRef.current) v.currentTime = 0
+            }
           }}
           className="block w-full h-full bg-black"
           style={{ objectFit: "cover" }}
