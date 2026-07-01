@@ -1792,6 +1792,7 @@ export default function DemoPage() {
 // ─── Media recording block ───────────────────────────────────────────────────
 
 const MAX_MEDIA_SIZE = 50 * 1024 * 1024
+const MAX_MEDIA_MB = Math.round(MAX_MEDIA_SIZE / (1024 * 1024))
 
 // iOS-friendly: mp4 первым — Safari не поддерживает webm.
 const VIDEO_MIME_CANDIDATES = [
@@ -2205,7 +2206,7 @@ function MediaBlock({
 
   const pickPhoto = (file: File) => {
     if (file.size > MAX_MEDIA_SIZE) {
-      reportErr("Файл больше 50MB. Выберите файл поменьше.")
+      reportErr(`Файл больше ${MAX_MEDIA_MB} МБ. Выберите файл поменьше.`)
       return
     }
     blobRef.current = file
@@ -2222,7 +2223,7 @@ function MediaBlock({
 
   const pickVideoFile = (file: File) => {
     if (file.size > MAX_MEDIA_SIZE) {
-      reportErr("Файл больше 50MB. Запишите короче или выберите другой файл.")
+      reportErr(`Файл больше ${MAX_MEDIA_MB} МБ. Запишите короче или выберите другой файл.`)
       return
     }
     blobRef.current = file
@@ -2239,7 +2240,7 @@ function MediaBlock({
 
   const pickAudioFile = (file: File) => {
     if (file.size > MAX_MEDIA_SIZE) {
-      reportErr("Файл больше 50MB. Выберите файл поменьше.")
+      reportErr(`Файл больше ${MAX_MEDIA_MB} МБ. Выберите файл поменьше.`)
       return
     }
     blobRef.current = file
@@ -2258,7 +2259,7 @@ function MediaBlock({
     const blob = blobRef.current
     if (!blob) return
     if (blob.size > MAX_MEDIA_SIZE) {
-      reportErr("Размер файла больше 50MB. Попробуйте записать короче.")
+      reportErr(`Размер файла больше ${MAX_MEDIA_MB} МБ. Попробуйте записать короче.`)
       setMode("preview")
       return
     }
@@ -2305,24 +2306,40 @@ function MediaBlock({
       const data = await new Promise<any>((resolve, reject) => {
         const xhr = new XMLHttpRequest()
         xhr.open("POST", `/api/public/demo/${token}/upload-media`)
+        // Тайм-аут: чтобы «зависший» upload не крутился бесконечно без сообщения.
+        // Медиа до 50 МБ на медленном мобильном — даём 3 минуты.
+        xhr.timeout = 180_000
         xhr.upload.onprogress = (e) => {
           if (e.lengthComputable) {
             setUploadProgress(Math.round((e.loaded / e.total) * 100))
           }
         }
         xhr.onload = () => {
-          try {
-            const parsed = JSON.parse(xhr.responseText || "{}")
-            if (xhr.status >= 200 && xhr.status < 300 && parsed?.url) {
-              resolve(parsed)
-            } else {
-              reject(new Error(parsed?.error || "Ошибка загрузки"))
-            }
-          } catch {
-            reject(new Error("Ошибка ответа сервера"))
+          // Пытаемся достать серверное сообщение; при не-JSON (напр. 413 от
+          // nginx — HTML-страница) даём понятный текст по HTTP-статусу.
+          let parsed: any = null
+          try { parsed = JSON.parse(xhr.responseText || "{}") } catch { /* не JSON */ }
+          if (xhr.status >= 200 && xhr.status < 300 && parsed?.url) {
+            resolve(parsed)
+            return
+          }
+          if (parsed?.error) { reject(new Error(parsed.error)); return }
+          if (xhr.status === 413) {
+            reject(new Error(`Файл слишком большой для сервера. Снимите короче или до ${MAX_MEDIA_MB} МБ и попробуйте снова.`))
+          } else if (xhr.status === 415) {
+            reject(new Error("Сервер не принял формат файла. Попробуйте записать заново или загрузить в MP4."))
+          } else if (xhr.status === 429) {
+            reject(new Error("Слишком много загрузок подряд. Подождите пару минут и попробуйте снова."))
+          } else if (xhr.status === 0) {
+            reject(new Error("Загрузка прервалась. Проверьте связь и попробуйте снова."))
+          } else if (xhr.status >= 500) {
+            reject(new Error("Сервер временно недоступен. Попробуйте ещё раз через минуту."))
+          } else {
+            reject(new Error("Не удалось загрузить. Попробуйте ещё раз."))
           }
         }
-        xhr.onerror = () => reject(new Error("Сеть недоступна"))
+        xhr.onerror = () => reject(new Error("Нет связи с сервером. Проверьте интернет (лучше Wi-Fi) и попробуйте снова."))
+        xhr.ontimeout = () => reject(new Error("Загрузка идёт слишком долго. Проверьте связь, снимите короче и попробуйте снова."))
         xhr.send(fd)
       })
       const answer: MediaAnswer = {
@@ -2412,11 +2429,13 @@ function MediaBlock({
                   <Upload className={iconClass} />
                   Загрузить файл
                 </button>
+                {/* БЕЗ capture — кнопка «Загрузить файл» должна давать выбрать
+                    готовую запись из галереи (иначе часть мобильных браузеров
+                    открывают только камеру и кандидат не может отправить видео). */}
                 <input
                   ref={videoFileInputRef}
                   type="file"
                   accept="video/*"
-                  capture="user"
                   className="hidden"
                   onChange={(e) => {
                     const f = e.target.files?.[0]
@@ -2484,11 +2503,24 @@ function MediaBlock({
             )}
           </div>
 
-          {(allowVideo || allowAudio) && (
-            <p className="text-xs text-gray-500">
-              Если запись не работает — загрузите готовый файл.
-            </p>
-          )}
+          {/* Подсказка кандидату: форматы/размер + что делать, если не грузится.
+              Помогает тем, у кого «видео не отправляется» (частая жалоба). */}
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600 leading-relaxed space-y-1">
+            {allowVideo && (
+              <p>🎬 Видео: MP4, MOV, WebM и другие — до {MAX_MEDIA_MB} МБ{maxDuration ? `, до ${formatTime(maxDuration)}` : ""}.</p>
+            )}
+            {allowAudio && (
+              <p>🎙 Аудио: MP3, M4A, WAV и другие — до {MAX_MEDIA_MB} МБ.</p>
+            )}
+            {allowPhoto && (
+              <p>📷 Фото: JPG, PNG, HEIC и другие — до {MAX_MEDIA_MB} МБ.</p>
+            )}
+            <p><b>Дождитесь окончания загрузки</b> — появится «Отправлено ✓». Не закрывайте вкладку до этого.</p>
+            {(allowVideo || allowAudio) && (
+              <p>Если запись не работает — нажмите «Загрузить файл» и выберите готовую запись из галереи.</p>
+            )}
+            <p>Не грузится? Проверьте связь (лучше Wi-Fi), снимите короче или меньшего размера, либо попробуйте другой браузер (Chrome/Safari).</p>
+          </div>
 
           {/* Кнопка «Пропустить и завершить» — только для опциональных media */}
           {isOptional && onSkip && (
