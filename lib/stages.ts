@@ -30,6 +30,7 @@ export type StageSlug =
   | "offer_sent"
   | "hired"
   | "started_work"
+  | "preliminary_reject"
   | "rejected"
 
 export type HhAction = "invitation" | "discard" | "assessment" | null
@@ -254,6 +255,16 @@ export const PLATFORM_STAGES: Record<StageSlug, StageDefinition> = {
     isTerminal: true,
     sortOrder: 14,
     description: "Кандидат вышел на работу",
+  },
+  preliminary_reject: {
+    slug: "preliminary_reject",
+    defaultLabel: "Предварительный отказ",
+    defaultColor: "rose",     // мягче жёсткого «Отказ» (red); негативный, но обратимый
+    defaultHhAction: null,    // hh-папку не трогаем — решение ещё не финальное
+    isSystem: false,
+    isTerminal: false,        // НЕ терминальный — можно вернуть в воронку или в жёсткий rejected
+    sortOrder: 98,            // перед жёстким «Отказ» (99)
+    description: "Кандидат не прошёл порог балла — предварительный отказ (обратимый: вернуть в воронку или в «Отказ»)",
   },
   rejected: {
     slug: "rejected",
@@ -649,7 +660,8 @@ export function resolveVacancyStageOptions(
   }
 
   // Источник 2/3 — legacy pipeline (enabled-стадии) или дефолт-пресет "standard".
+  // «Отказ» и «Предварительный отказ» — негативные, в UI это отдельные пункты.
   return getEnabledStages(pipeline)
-    .filter(slug => slug !== "rejected")
+    .filter(slug => slug !== "rejected" && slug !== "preliminary_reject")
     .map(slug => ({ slug, label: getStageLabel(slug, pipeline) }))
 }

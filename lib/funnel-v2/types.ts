@@ -7,6 +7,7 @@
 import { buildDozhimChain } from "./dozhim-templates"
 import type { DripTemplates } from "@/lib/db/schema"
 import { hhStatusStringToHhAction } from "@/lib/hh/stage-mapping"
+import type { StageColor } from "@/lib/stages"
 
 export type StageActionType =
   | "message"          // просто сообщение/касание
@@ -85,7 +86,31 @@ export interface StageRule {
   passCriteria?: string       // критерий прохода (описательно / для AI)
   advanceTo?: string          // куда зовём прошедших: "next" (по умолч.) | id стадии (ветвление)
   rejectText?: string         // текст отказа (пресет/текст)
+  scoreGate?: ScoreGate       // правило прохода по баллу (Фаза 1а — модель; рантайм подключит позже)
 }
+
+/** С какого скоринга берём балл для гейта стадии.
+ *  resume — балл AI-резюме (Портрет), anketa — анкета/предквал, block2 — 2-я
+ *  часть (путь менеджера), test — тест-задание, portrait — итог Портрета. */
+export type ScoreGateType = "resume" | "anketa" | "block2" | "test" | "portrait"
+
+/** Что делать с не прошедшими порог: предварительный отказ (обратимый),
+ *  ручное решение HR, или жёсткий отказ. */
+export type ScoreGateFailAction = "preliminary_reject" | "manual" | "reject"
+
+/** Правило прохода стадии по баллу. autoEnabled=false по умолчанию —
+ *  без явного включения ничего НЕ гейтится автоматически (обратная
+ *  совместимость: действующие вакансии не меняют поведение). */
+export interface ScoreGate {
+  scoreType:  ScoreGateType
+  threshold:  number           // 0–100, дефолт 50
+  failAction: ScoreGateFailAction
+  autoEnabled: boolean         // дефолт false — авто-гейт выключен
+}
+
+export const DEFAULT_SCORE_GATE_THRESHOLD = 50
+export const SCORE_GATE_TYPES: ScoreGateType[] = ["resume", "anketa", "block2", "test", "portrait"]
+export const SCORE_GATE_FAIL_ACTIONS: ScoreGateFailAction[] = ["preliminary_reject", "manual", "reject"]
 
 export interface StageReminders {
   dayBefore: boolean   // за сутки
@@ -97,6 +122,9 @@ export interface FunnelV2Stage {
   id: string
   action: StageActionType
   title?: string
+  color?: StageColor    // цвет бейджа стадии (реестр стадий воронки v2)
+  negative?: boolean    // негативная/отказная стадия (напр. предв. отказ)
+  terminal?: boolean    // терминальная стадия (из неё нет автоперехода дальше)
   // параметры действия «Интервью»
   interviewMode?: InterviewMode
   scheduling?: SchedulingMode[]   // оба варианта по умолчанию
@@ -169,6 +197,29 @@ export function makeStage(action: StageActionType, idSeed: string): FunnelV2Stag
   return base
 }
 
+/** Нормализовать scoreGate стадии (терпимо к старым/битым данным).
+ *  undefined на входе → undefined (гейта нет). Дефолты только для заданного
+ *  объекта: threshold=50, failAction='preliminary_reject', autoEnabled=false. */
+export function normalizeScoreGate(raw: unknown): ScoreGate | undefined {
+  if (!raw || typeof raw !== "object") return undefined
+  const g = raw as Partial<ScoreGate>
+  const scoreType: ScoreGateType = SCORE_GATE_TYPES.includes(g.scoreType as ScoreGateType)
+    ? (g.scoreType as ScoreGateType)
+    : "resume"
+  const threshold = typeof g.threshold === "number" && Number.isFinite(g.threshold)
+    ? Math.max(0, Math.min(100, g.threshold))
+    : DEFAULT_SCORE_GATE_THRESHOLD
+  const failAction: ScoreGateFailAction = SCORE_GATE_FAIL_ACTIONS.includes(g.failAction as ScoreGateFailAction)
+    ? (g.failAction as ScoreGateFailAction)
+    : "preliminary_reject"
+  return { scoreType, threshold, failAction, autoEnabled: g.autoEnabled === true }
+}
+
+const STAGE_COLORS: StageColor[] = [
+  "slate", "blue", "indigo", "violet", "purple", "amber",
+  "orange", "yellow", "lime", "green", "emerald", "rose", "red",
+]
+
 /** Безопасная нормализация прочитанного из БД (терпимо к старым/битым данным). */
 export function normalizeFunnelV2(raw: unknown): FunnelV2Config {
   if (!raw || typeof raw !== "object") return emptyFunnelV2()
@@ -180,6 +231,9 @@ export function normalizeFunnelV2(raw: unknown): FunnelV2Config {
       const st = s as FunnelV2Stage
       return {
         ...st,
+        color: STAGE_COLORS.includes(st.color as StageColor) ? st.color : undefined,
+        negative: st.negative === true ? true : undefined,
+        terminal: st.terminal === true ? true : undefined,
         rule: {
           autoAdvance: st.rule?.autoAdvance === true,
           autoReject: st.rule?.autoReject === true,
@@ -189,9 +243,68 @@ export function normalizeFunnelV2(raw: unknown): FunnelV2Config {
           passCriteria: typeof st.rule?.passCriteria === "string" ? st.rule.passCriteria : undefined,
           advanceTo: typeof st.rule?.advanceTo === "string" ? st.rule.advanceTo : undefined,
           rejectText: typeof st.rule?.rejectText === "string" ? st.rule.rejectText : undefined,
+          scoreGate: normalizeScoreGate(st.rule?.scoreGate),
         },
         dozhim: (["off", "soft", "standard", "strong"] as DozhimPreset[]).includes(st.dozhim) ? st.dozhim : "standard",
       }
     }),
   }
+}
+
+// ── Дефолт-шаблон воронки v2 (инициализация пустой воронки) ───────────────────
+// Разумный набор стадий пути продаж. ВСЕ scoreGate.autoEnabled=false — при
+// инициализации ничего не гейтится автоматически (обратная совместимость,
+// поведение действующих вакансий не меняется). Подключит UI-фаза при создании
+// пустой воронки; рантайм включит гейты только когда HR включит autoEnabled.
+
+/** Проставить scoreGate на стадию (autoEnabled всегда false в дефолт-шаблоне). */
+function withScoreGate(stage: FunnelV2Stage, scoreType: ScoreGateType, threshold = DEFAULT_SCORE_GATE_THRESHOLD): FunnelV2Stage {
+  stage.rule.scoreGate = { scoreType, threshold, failAction: "preliminary_reject", autoEnabled: false }
+  return stage
+}
+
+/**
+ * Дефолтный набор стадий воронки v2 для пустой воронки (путь продаж):
+ *   Отклик → скан резюме [gate resume] · Демо (1-я часть) · Путь менеджера
+ *   (2-я часть) [gate anketa] · Тест-задание [gate test] · Интервью · Оффер ·
+ *   Нанят.
+ * Стадия 1 «Портрет» (скан резюме) хранится не здесь — она рендерится из spec.
+ * Все gate — autoEnabled=false (ничего не отсеивается без явного включения HR).
+ *
+ * @param seed префикс для генерации id стадий (по умолчанию 'default').
+ */
+export function defaultFunnelV2Stages(seed = "default"): FunnelV2Stage[] {
+  const s = (suffix: string) => `${seed}-${suffix}`
+
+  // 1) Отклик — скан резюме (первое касание, gate по баллу AI-резюме)
+  const respond = withScoreGate(makeStage("message", s("respond")), "resume")
+  respond.title = "Отклик — скан резюме"
+
+  // 2) Демо (1-я часть пути)
+  const demo = makeStage("demo", s("demo"))
+  demo.title = "Демо (1-я часть)"
+
+  // 3) Путь менеджера (2-я часть) — анкета/предквалификация, gate по анкете
+  const managerPath = withScoreGate(makeStage("prequalification", s("manager-path")), "anketa")
+  managerPath.title = "Путь менеджера (2-я часть)"
+
+  // 4) Тест-задание — gate по баллу теста
+  const task = withScoreGate(makeStage("task", s("task")), "test")
+  task.title = "Тест-задание"
+
+  // 5) Интервью
+  const interview = makeStage("interview", s("interview"))
+  interview.title = "Интервью"
+
+  // 6) Оффер
+  const offer = makeStage("offer", s("offer"))
+  offer.title = "Оффер"
+
+  // 7) Нанят (терминальная позитивная)
+  const hired = makeStage("hired", s("hired"))
+  hired.title = "Нанят"
+  hired.terminal = true
+  hired.color = "green"
+
+  return [respond, demo, managerPath, task, interview, offer, hired]
 }
