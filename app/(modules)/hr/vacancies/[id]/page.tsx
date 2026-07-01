@@ -2873,6 +2873,9 @@ export default function VacancyPage() {
                       // #18: серверные фасеты по ВСЕЙ вакансии (города/источники) —
                       // дропдауны показывают все значения, а не только из страницы.
                       facets={candidateFacets}
+                      // #18: pipeline вакансии → секция «Статус в воронке» показывает
+                      // только реально включённые стадии этой вакансии.
+                      vacancyPipeline={vacancyPipeline}
                       candidates={useListPaginated ? (paginatedColumns?.[0]?.candidates ?? []) : columns.flatMap((c) => c.candidates)}
                     />
                     {false && <SortMenu sortMode={sortMode} onSortChange={setSortMode} />}
