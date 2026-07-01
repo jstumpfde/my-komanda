@@ -74,6 +74,8 @@ import {
   type ContactOutcome,
 } from "@/lib/hr/contacts"
 import { cn } from "@/lib/utils"
+import { EditableMessagePreview } from "@/components/candidates/editable-message-preview"
+import { useAuth } from "@/lib/auth"
 import {
   getStageLabel,
   getStageColorClasses,
@@ -105,6 +107,7 @@ interface CandidateContact {
   reasonCategory: string | null
   comment: string | null
   createdAt: string
+  createdById: string | null
   createdByName: string | null
 }
 
@@ -389,17 +392,43 @@ function AiScoreBadge({ score, onClick }: { score: number | null; onClick?: () =
   )
 }
 
-function ScoreBadge({ score }: { score: number | null }) {
-  if (score === null) return null
-  const color =
-    score >= 80 ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" :
-    score >= 60 ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" :
-    "bg-destructive/10 text-destructive border-destructive/20"
+// ─── Score line (шапка карточки) ──────────────────────────────────────────────
+// Все доступные баллы в одну линию, каждый с подписью. Цвет как в списке
+// (>70 success / ≥40 warning / <40 destructive — см. list-view.tsx).
+
+function scoreLineColor(score: number) {
+  if (score > 70) return "bg-success/10 text-success border-success/20"
+  if (score >= 40) return "bg-warning/10 text-warning border-warning/20"
+  return "bg-destructive/10 text-destructive border-destructive/20"
+}
+
+function HeaderScores({
+  resume, anketa, portrait, test,
+}: {
+  resume: number | null
+  anketa: number | null
+  portrait: number | null
+  test: number | null
+}) {
+  const items: { label: string; value: number }[] = []
+  if (resume   != null) items.push({ label: "Резюме",  value: resume })
+  if (anketa   != null) items.push({ label: "Анкета",  value: anketa })
+  if (portrait != null) items.push({ label: "Портрет", value: portrait })
+  if (test     != null) items.push({ label: "Тест",    value: test })
+  if (items.length === 0) return null
   return (
-    <Badge variant="outline" className={cn("font-bold text-sm border", color)}>
-      <Star className="w-3 h-3 mr-1" />
-      {score}
-    </Badge>
+    <div className="flex flex-wrap items-center gap-1.5">
+      {items.map((it) => (
+        <Badge
+          key={it.label}
+          variant="outline"
+          className={cn("text-xs border font-medium gap-1", scoreLineColor(it.value))}
+        >
+          <span className="opacity-70">{it.label}</span>
+          <span className="font-bold tabular-nums">{it.value}</span>
+        </Badge>
+      ))}
+    </div>
   )
 }
 
@@ -627,6 +656,7 @@ export function CandidateDrawer({
   initialCandidate,
   initialTab,
 }: CandidateDrawerProps) {
+  const { user } = useAuth()
   const [sheetExpanded, setSheetExpanded] = useState(false)
   const [candidate, setCandidate] = useState<ApiCandidate | null>(null)
   // Notes хранятся в demo_progress_json у самого кандидата — отдельный
@@ -639,6 +669,20 @@ export function CandidateDrawer({
   const [confirmRestoreOpen, setConfirmRestoreOpen] = useState(false)
   const [restoreTargetStage, setRestoreTargetStage] = useState<string | null>(null)
   const [confirmInterviewOpen, setConfirmInterviewOpen] = useState(false)
+  // #30/#31: диалог приглашения на интервью с двумя режимами и редактируемым
+  // превью. mode 'link' — ссылка на самозапись (/schedule); mode 'slots' —
+  // HR выбирает 2-3 конкретных времени из окон вакансии.
+  const [inviteMode, setInviteMode] = useState<"link" | "slots">("link")
+  const [inviteText, setInviteText] = useState("")            // разовый текст для этого кандидата
+  const [inviteTemplate, setInviteTemplate] = useState("")    // текущий шаблон вакансии (для сравнения/сейва)
+  const [inviteDefaultText, setInviteDefaultText] = useState("")
+  const [inviteScheduleLink, setInviteScheduleLink] = useState("")
+  const [inviteVacancyTitle, setInviteVacancyTitle] = useState("")
+  const [inviteFirstName, setInviteFirstName] = useState("")
+  const [inviteTzLabel, setInviteTzLabel] = useState("")
+  const [inviteDays, setInviteDays] = useState<{ date: string; label: string; slots: string[] }[]>([])
+  const [inviteSelectedSlots, setInviteSelectedSlots] = useState<string[]>([]) // "YYYY-MM-DD|HH:MM"
+  const [inviteLoading, setInviteLoading] = useState(false)
   // #1: «Запланировать интервью» из карточки — создаёт событие календаря,
   // привязанное к кандидату+вакансии (появляется в табе «Интервью»).
   const [scheduleOpen, setScheduleOpen] = useState(false)
@@ -686,6 +730,13 @@ export function CandidateDrawer({
   const [contactReason, setContactReason] = useState("")
   const [contactComment, setContactComment] = useState("")
   const [savingContact, setSavingContact] = useState(false)
+  // #33: редактирование существующей записи контакта (автором).
+  const [editingContactId, setEditingContactId] = useState<string | null>(null)
+  const [editChannel, setEditChannel] = useState<ContactChannel>("call")
+  const [editOutcome, setEditOutcome] = useState<ContactOutcome>("pending")
+  const [editReason, setEditReason] = useState("")
+  const [editComment, setEditComment] = useState("")
+  const [savingEdit, setSavingEdit] = useState(false)
   const [activeTab, setActiveTab] = useState("contacts")
   // Открыть карточку на заданной вкладке (напр. клик по колонке «Тест» → результат теста).
   useEffect(() => {
@@ -732,7 +783,18 @@ export function CandidateDrawer({
   const [tgSending,      setTgSending]      = useState(false)
   const [tgMessages,     setTgMessages]     = useState<import("@/lib/db/schema").TgMessage[]>([])
 
-  // ── Стадии каналов (hh и др.) — загружаются лениво при открытии таба «Каналы» ──
+  // ── Стадии каналов (hh, авито и др.) — загружаются лениво при открытии таба «Каналы» ──
+  // Читаемые лейблы каналов; неизвестный ключ показываем как есть (capitalize).
+  const CHANNEL_LABELS: Record<string, string> = {
+    hh:       "hh.ru",
+    avito:    "Авито",
+    telegram: "Telegram",
+    site:     "Сайт",
+    referral: "Реферал",
+    manual:   "Вручную",
+  }
+  const channelLabel = (channel: string): string =>
+    CHANNEL_LABELS[channel.toLowerCase()] ?? (channel.charAt(0).toUpperCase() + channel.slice(1))
   type ChannelStage = { channel: string; stageId: string; stageLabel: string }
   const [channelStages,        setChannelStages]        = useState<ChannelStage[]>([])
   const [channelStagesLoading, setChannelStagesLoading] = useState(false)
@@ -799,11 +861,53 @@ export function CandidateDrawer({
     }
   }
 
+  // #33: открыть/закрыть режим правки записи контакта.
+  const startEditContact = (c: CandidateContact) => {
+    setEditingContactId(c.id)
+    setEditChannel(c.channel)
+    setEditOutcome(c.outcome)
+    setEditReason(c.reasonCategory ?? "")
+    setEditComment(c.comment ?? "")
+  }
+  const cancelEditContact = () => {
+    setEditingContactId(null)
+  }
+  const saveEditContact = async () => {
+    if (!candidateId || !editingContactId) return
+    setSavingEdit(true)
+    try {
+      const body: Record<string, unknown> = {
+        contactId: editingContactId,
+        channel: editChannel,
+        outcome: editOutcome,
+        reasonCategory: editOutcome === "no_fit" ? (editReason || null) : null,
+        comment: editComment.trim() || null,
+      }
+      const res = await fetch(`/api/modules/hr/candidates/${candidateId}/contacts`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => null) as { error?: string } | null
+        throw new Error(j?.error || "")
+      }
+      toast.success("Запись обновлена")
+      setEditingContactId(null)
+      await loadContacts(candidateId)
+    } catch (e) {
+      toast.error(e instanceof Error && e.message ? e.message : "Не удалось обновить запись")
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
   useEffect(() => {
     if (open && candidateId) {
       setCandidate(null)
       setNotes([])
       setContacts([])
+      setEditingContactId(null)
       setHhMessages([])
       setHhError(null)
       setHhDraft("")
@@ -1043,14 +1147,18 @@ export function CandidateDrawer({
     } catch { toast.error("Не удалось запланировать интервью") } finally { setScheduling(false) }
   }
 
-  const handleStageChange = async (newStage: string) => {
+  const handleStageChange = async (newStage: string, messageOverride?: string) => {
     if (!candidate || changingStage) return
     setChangingStage(newStage)
     try {
       const res = await fetch(`/api/modules/hr/candidates/${candidate.id}/stage`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage: newStage }),
+        body: JSON.stringify(
+          messageOverride && messageOverride.trim().length > 0
+            ? { stage: newStage, messageOverride: messageOverride.trim() }
+            : { stage: newStage },
+        ),
       })
       if (!res.ok) throw new Error()
       setCandidate((prev) => prev ? { ...prev, stage: newStage } : prev)
@@ -1067,6 +1175,108 @@ export function CandidateDrawer({
       setChangingStage(null)
     }
   }
+
+  // #30/#31: открыть диалог приглашения на интервью. Грузим шаблон вакансии,
+  // дефолт, персональную ссылку самозаписи и доступные слоты интервью.
+  const openInviteDialog = useCallback(async () => {
+    if (!candidate) return
+    setInviteMode("link")
+    setInviteSelectedSlots([])
+    setInviteText("")
+    setInviteDays([])
+    setInviteLoading(true)
+    setConfirmInterviewOpen(true)
+    try {
+      const res = await fetch(`/api/modules/hr/candidates/${candidate.id}/interview-invite`)
+      const json = await res.json().catch(() => null)
+      const d = (json?.data ?? json) as {
+        scheduleInviteText?: string
+        defaultText?: string
+        scheduleLink?: string
+        vacancyTitle?: string
+        candidateFirstName?: string
+        timezoneLabel?: string
+        days?: { date: string; label: string; slots: string[] }[]
+      } | null
+      if (!res.ok || !d) throw new Error()
+      const tmpl = (d.scheduleInviteText && d.scheduleInviteText.trim().length > 0)
+        ? d.scheduleInviteText
+        : (d.defaultText ?? "")
+      setInviteTemplate(tmpl)
+      setInviteDefaultText(d.defaultText ?? "")
+      setInviteText(tmpl)
+      setInviteScheduleLink(d.scheduleLink ?? "")
+      setInviteVacancyTitle(d.vacancyTitle ?? "")
+      setInviteFirstName(d.candidateFirstName ?? "")
+      setInviteTzLabel(d.timezoneLabel ?? "")
+      setInviteDays(Array.isArray(d.days) ? d.days : [])
+    } catch {
+      toast.error("Не удалось загрузить данные приглашения")
+    } finally {
+      setInviteLoading(false)
+    }
+  }, [candidate])
+
+  // Переключить выбор конкретного слота (Режим Б). Максимум 3.
+  const toggleInviteSlot = useCallback((key: string) => {
+    setInviteSelectedSlots((prev) => {
+      if (prev.includes(key)) return prev.filter((k) => k !== key)
+      if (prev.length >= 3) { toast.info("Можно выбрать до 3 вариантов"); return prev }
+      return [...prev, key]
+    })
+  }, [])
+
+  // Человекочитаемая подпись слота: «Пн, 9 июн, 10:00».
+  const formatSlotKey = useCallback((key: string): string => {
+    const [date, time] = key.split("|")
+    const day = inviteDays.find((d) => d.date === date)
+    return day ? `${day.label}, ${time}` : `${date}, ${time}`
+  }, [inviteDays])
+
+  // Финальный текст, который уйдёт кандидату (override для стадии interview).
+  // Режим А: текст как есть (содержит {{schedule_link}}).
+  // Режим Б: к тексту дописываем строки с выбранными временами и просьбу ответить.
+  const buildInviteMessage = useCallback((): string => {
+    if (inviteMode === "link") return inviteText
+    const lines = inviteSelectedSlots.map((k) => `• ${formatSlotKey(k)}`)
+    const tz = inviteTzLabel ? ` (${inviteTzLabel})` : ""
+    return [
+      inviteText.trim(),
+      "",
+      `Предлагаю такие варианты времени${tz}:`,
+      ...lines,
+      "",
+      "Напишите, какой вам удобен?",
+    ].join("\n")
+  }, [inviteMode, inviteText, inviteSelectedSlots, formatSlotKey, inviteTzLabel])
+
+  // Отправить приглашение: перевод в стадию «Интервью» с messageOverride
+  // (стадия-роут ставит schedule_invite в очередь follow-up с этим текстом).
+  const submitInvite = useCallback(async () => {
+    if (!candidate) return
+    if (inviteMode === "slots" && inviteSelectedSlots.length === 0) {
+      toast.error("Выберите хотя бы одно время")
+      return
+    }
+    // Режим А: если {{schedule_link}} убрали из текста — кандидат не получит
+    // ссылку. Мягко предупреждаем, но не блокируем (HR мог намеренно).
+    setConfirmInterviewOpen(false)
+    await handleStageChange("interview", buildInviteMessage())
+  }, [candidate, inviteMode, inviteSelectedSlots, buildInviteMessage, handleStageChange])
+
+  // #31: сохранить текущий текст в шаблон вакансии (vacancies.schedule_invite_text).
+  const saveInviteTemplate = useCallback(async (text: string) => {
+    const vacancyId = (candidate as { vacancyId?: string | null } | null)?.vacancyId
+    if (!vacancyId) { toast.error("Вакансия не определена"); return }
+    const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ schedule_invite_text: text }),
+    })
+    if (!res.ok) { toast.error("Не удалось сохранить шаблон"); throw new Error() }
+    setInviteTemplate(text)
+    toast.success("Шаблон приглашения обновлён")
+  }, [candidate])
 
   // Восстановление кандидата из стадии "rejected". prevStage определяет
   // сервер (по stage_history), но для confirm-диалога рассчитываем тут же
@@ -1433,8 +1643,12 @@ export function CandidateDrawer({
                       {stageCfg.label}
                     </Badge>
                   )}
-                  <ScoreBadge score={candidate.score} />
-                  <AiScoreBadge score={candidate.aiScoreV2 ?? candidate.resumeScore ?? null} />
+                  <HeaderScores
+                    resume={candidate.resumeScore ?? null}
+                    anketa={candidate.demoAnswersScore ?? null}
+                    portrait={candidate.aiScoreV2 ?? null}
+                    test={candidate.testScore ?? null}
+                  />
                 </div>
               </div>
             </div>
@@ -1732,8 +1946,8 @@ export function CandidateDrawer({
                       className="resize-none text-xs min-h-8 flex-1"
                     />
                     <Button size="sm" className="h-8 text-xs shrink-0 gap-1.5" onClick={() => void submitContact()} disabled={savingContact}>
-                      {savingContact ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PhoneCall className="w-3.5 h-3.5" />}
-                      Записать
+                      {savingContact ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                      Сохранить результат
                     </Button>
                   </div>
                 </div>
@@ -1745,8 +1959,73 @@ export function CandidateDrawer({
                   <p className="text-sm text-muted-foreground py-4 text-center">Контактов пока нет</p>
                 ) : (
                   <div className="divide-y divide-border">
-                    {contacts.map((c) => (
-                      <div key={c.id} className="py-2.5 space-y-1">
+                    {contacts.map((c) => {
+                      const canEdit = !c.createdById || (!!user.id && c.createdById === user.id)
+                      if (editingContactId === c.id) {
+                        return (
+                          <div key={c.id} className="py-2.5 space-y-2.5">
+                            <div className="flex gap-2 flex-wrap items-center">
+                              <Select value={editChannel} onValueChange={(v) => setEditChannel(v as ContactChannel)}>
+                                <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  {CONTACT_CHANNELS.map((item) => (
+                                    <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <div className="flex gap-1.5 flex-wrap">
+                                {CONTACT_OUTCOMES.map((item) => (
+                                  <button
+                                    key={item.id}
+                                    type="button"
+                                    onClick={() => { setEditOutcome(item.id as ContactOutcome); if (item.id !== "no_fit") setEditReason("") }}
+                                    className={cn(
+                                      "px-2.5 py-1 rounded-md text-xs border transition-colors",
+                                      editOutcome === item.id
+                                        ? item.id === "fit"
+                                          ? "bg-emerald-100 border-emerald-400 text-emerald-800 dark:bg-emerald-900/30 dark:border-emerald-600 dark:text-emerald-300"
+                                          : item.id === "no_fit"
+                                          ? "bg-red-100 border-red-400 text-red-800 dark:bg-red-900/30 dark:border-red-600 dark:text-red-300"
+                                          : "bg-muted border-border text-foreground"
+                                        : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30",
+                                    )}
+                                  >
+                                    {item.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            {editOutcome === "no_fit" && (
+                              <Select value={editReason} onValueChange={setEditReason}>
+                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Причина" /></SelectTrigger>
+                                <SelectContent>
+                                  {REJECTION_REASONS.map((item) => (
+                                    <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                            <Textarea
+                              value={editComment}
+                              onChange={(e) => setEditComment(e.target.value)}
+                              placeholder="Итоги разговора (необязательно)…"
+                              rows={2}
+                              className="resize-none text-xs"
+                            />
+                            <div className="flex gap-2">
+                              <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => void saveEditContact()} disabled={savingEdit}>
+                                {savingEdit ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                                Сохранить
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={cancelEditContact} disabled={savingEdit}>
+                                Отмена
+                              </Button>
+                            </div>
+                          </div>
+                        )
+                      }
+                      return (
+                      <div key={c.id} className="py-2.5 space-y-1 group/contact">
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                           <span className="text-xs text-muted-foreground shrink-0">
                             {new Date(c.createdAt).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
@@ -1764,17 +2043,30 @@ export function CandidateDrawer({
                             {contactOutcomeLabel(c.outcome)}
                           </Badge>
                           {c.reasonCategory && (
-                            <span className="text-xs text-muted-foreground">{c.reasonCategory}</span>
+                            <span className="text-xs text-muted-foreground">{rejectionReasonLabel(c.reasonCategory)}</span>
                           )}
-                          {c.createdByName && (
-                            <span className="text-[10px] text-muted-foreground/60 ml-auto">{c.createdByName}</span>
-                          )}
+                          <div className="flex items-center gap-1.5 ml-auto">
+                            {c.createdByName && (
+                              <span className="text-[10px] text-muted-foreground/60">{c.createdByName}</span>
+                            )}
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => startEditContact(c)}
+                                title="Изменить"
+                                className="shrink-0 text-muted-foreground/40 hover:text-foreground transition-colors p-0.5"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                         {c.comment && (
                           <p className="text-xs text-foreground italic pl-0.5">{c.comment}</p>
                         )}
                       </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
 
@@ -1958,7 +2250,7 @@ export function CandidateDrawer({
 
               {/* ── Тест ─────────────────────────────────────────── */}
               <TabsContent value="test" className="px-6 py-4 pb-40 mt-0 space-y-4">
-                <TestTab candidateId={candidate.id} anketaScore={candidate.demoAnswersScore} anketaScoreDetails={candidate.demoAnswersDetails} />
+                <TestTab candidateId={candidate.id} />
               </TabsContent>
 
               {/* ── Чат (только hh) ──────────────────────────────── */}
@@ -2203,9 +2495,9 @@ export function CandidateDrawer({
                     <div className="space-y-1">
                       {channelStages.map((cs) => (
                         <div key={cs.channel} className="flex items-center gap-2 text-xs">
-                          <span className="font-medium text-foreground capitalize">{cs.channel}</span>
+                          <span className="font-medium text-foreground">{channelLabel(cs.channel)}</span>
                           <span className="text-muted-foreground">—</span>
-                          <span className="text-foreground">{cs.stageLabel}</span>
+                          <span className="text-foreground">{cs.stageLabel || "—"}</span>
                         </div>
                       ))}
                     </div>
@@ -2252,7 +2544,7 @@ export function CandidateDrawer({
               onValueChange={(slug) => {
                 if (slug === (candidate.stage ?? "")) return
                 if (slug === "rejected") { openRejectDialog(); return }
-                if (slug === "interview") { setConfirmInterviewOpen(true); return }
+                if (slug === "interview") { void openInviteDialog(); return }
                 void handleStageChange(slug)
               }}
             >
@@ -2346,29 +2638,119 @@ export function CandidateDrawer({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Подтверждение приглашения на интервью */}
-      <AlertDialog open={confirmInterviewOpen} onOpenChange={setConfirmInterviewOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Пригласить на интервью?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {candidate?.name ? <><b>{candidate.name}</b> будет переведён</> : "Кандидат будет переведён"} на стадию «Интервью».
-              {" "}Если в воронке для стадии «Интервью» настроено действие hh.ru «Пригласить» — кандидату автоматически уйдёт приглашение в hh-чат с текстом из настроек вакансии.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={!!changingStage}>Отмена</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={!!changingStage}
+      {/* #30/#31: Приглашение на интервью — два режима + редактируемый превью */}
+      <Dialog open={confirmInterviewOpen} onOpenChange={setConfirmInterviewOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Пригласить на интервью{candidate?.name ? ` — ${candidate.name}` : ""}</DialogTitle>
+          </DialogHeader>
+
+          {inviteLoading ? (
+            <div className="flex items-center justify-center py-10 text-muted-foreground">
+              <Loader2 className="w-5 h-5 animate-spin mr-2" /> Загрузка…
+            </div>
+          ) : (
+            <Tabs value={inviteMode} onValueChange={(v) => setInviteMode(v as "link" | "slots")} className="w-full">
+              <TabsList className="grid grid-cols-2 w-full">
+                <TabsTrigger value="link">Ссылка на самозапись</TabsTrigger>
+                <TabsTrigger value="slots">Предложить 2-3 времени</TabsTrigger>
+              </TabsList>
+
+              {/* Режим А — кандидат сам выбирает слот по ссылке /schedule */}
+              <TabsContent value="link" className="space-y-3 pt-3">
+                <p className="text-xs text-muted-foreground">
+                  Кандидату уйдёт ссылка на страницу самозаписи — он сам выберет удобное время.
+                  Плейсхолдер <code className="bg-muted px-1 rounded">{"{{schedule_link}}"}</code> заменится на персональную ссылку.
+                </p>
+                <EditableMessagePreview
+                  text={inviteText}
+                  onChange={setInviteText}
+                  vars={{ name: inviteFirstName, vacancy: inviteVacancyTitle, schedule_link: inviteScheduleLink }}
+                  placeholders={["name", "vacancy", "schedule_link"]}
+                  onSaveTemplate={saveInviteTemplate}
+                />
+              </TabsContent>
+
+              {/* Режим Б — HR выбирает 2-3 конкретных времени из окон вакансии */}
+              <TabsContent value="slots" className="space-y-3 pt-3">
+                <p className="text-xs text-muted-foreground">
+                  Выберите 2-3 времени из окон вакансии{inviteTzLabel ? ` (${inviteTzLabel})` : ""} — кандидат ответит, какое ему подходит.
+                </p>
+                {inviteDays.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Нет доступных слотов. Проверьте окна интервью в настройках вакансии, либо используйте режим «Ссылка на самозапись».
+                  </p>
+                ) : (
+                  <div className="max-h-56 overflow-y-auto space-y-2 pr-1">
+                    {inviteDays.map((day) => (
+                      <div key={day.date}>
+                        <div className="text-xs font-medium text-muted-foreground mb-1">{day.label}</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {day.slots.map((t) => {
+                            const key = `${day.date}|${t}`
+                            const active = inviteSelectedSlots.includes(key)
+                            return (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={() => toggleInviteSlot(key)}
+                                className={cn(
+                                  "px-2.5 py-1 rounded-md text-xs border transition-colors",
+                                  active
+                                    ? "bg-purple-600 border-purple-600 text-white"
+                                    : "bg-background hover:bg-muted border-border",
+                                )}
+                              >
+                                {t}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {inviteSelectedSlots.length > 0 && (
+                  <div className="text-[11px] text-muted-foreground">
+                    Выбрано: {inviteSelectedSlots.map(formatSlotKey).join("; ")}
+                  </div>
+                )}
+                {/* Базовый текст + превью итогового сообщения со слотами */}
+                <EditableMessagePreview
+                  label="Вступительный текст (перед списком времени)"
+                  text={inviteText}
+                  onChange={setInviteText}
+                  vars={{ name: inviteFirstName, vacancy: inviteVacancyTitle }}
+                  placeholders={["name", "vacancy"]}
+                  onSaveTemplate={saveInviteTemplate}
+                />
+                <div className="rounded-md border bg-muted/40 p-3">
+                  <div className="text-[11px] text-muted-foreground mb-1">Итоговое сообщение кандидату:</div>
+                  <div className="text-sm whitespace-pre-wrap break-words">
+                    {inviteSelectedSlots.length === 0
+                      ? "Выберите время выше — оно добавится в сообщение."
+                      : buildInviteMessage()
+                          .replace(/\{\{\s*name\s*\}\}/g, inviteFirstName)
+                          .replace(/\{\{\s*vacancy\s*\}\}/g, inviteVacancyTitle)}
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmInterviewOpen(false)} disabled={!!changingStage}>Отмена</Button>
+            <Button
+              disabled={!!changingStage || inviteLoading || (inviteMode === "slots" && inviteSelectedSlots.length === 0)}
               className="bg-purple-600 hover:bg-purple-700"
-              onClick={(e) => { e.preventDefault(); setConfirmInterviewOpen(false); void handleStageChange("interview") }}
+              onClick={() => void submitInvite()}
             >
               {changingStage === "interview" ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : null}
-              Пригласить
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+              Отправить приглашение
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Диалог записи контакта */}
       <Dialog open={contactDialogOpen} onOpenChange={setContactDialogOpen}>

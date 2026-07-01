@@ -68,6 +68,10 @@ export async function PUT(
       hiring_plan?: number
       employee_type?: string
       branding_override_enabled?: boolean
+      // Текст приглашения на интервью (шаблон, редактируется из карточки
+      // кандидата — «Сохранить изменения в шаблоне»). Плейсхолдеры
+      // {{name}}/{{vacancy}}/{{schedule_link}}.
+      schedule_invite_text?: string
       // M3: какие каналы откликов слушает вакансия (['hh'] / ['hh','avito']).
       channel_sources?: Array<"hh" | "avito">
       // Уровень 3 интеграций: per-vacancy override webhooks/bitrix.
@@ -116,6 +120,10 @@ export async function PUT(
     // Группа 38: переключатель override брендинга.
     if (body.branding_override_enabled !== undefined) {
       updates.brandingOverrideEnabled = body.branding_override_enabled === true
+    }
+    // Текст приглашения на интервью (шаблон вакансии).
+    if (typeof body.schedule_invite_text === "string") {
+      updates.scheduleInviteText = body.schedule_invite_text
     }
     // Уровень 3 интеграций: per-vacancy override webhooks/bitrix.
     if (body.integrations_override !== undefined) {
