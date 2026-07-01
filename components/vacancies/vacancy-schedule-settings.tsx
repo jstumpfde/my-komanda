@@ -631,55 +631,52 @@ function InterviewWindowsSection({ vacancyId }: { vacancyId: string }) {
         {DAY_IDS.map((day) => {
           const ranges = schedule[day] ?? []
           return (
-            <div key={day} className="flex items-start gap-3">
-              <div className="w-10 shrink-0 pt-2 text-sm font-medium text-muted-foreground">
+            <div key={day} className="flex items-center gap-x-3 gap-y-2 flex-wrap min-h-9">
+              <div className="w-10 shrink-0 text-sm font-medium text-muted-foreground">
                 {DAY_LABELS_RU[day]}
               </div>
-              <div className="flex-1 space-y-1.5">
-                {ranges.length === 0 ? (
-                  <div className="flex items-center gap-2 h-9">
-                    <span className="text-xs text-muted-foreground italic">Выходной / не задано</span>
+              {ranges.length === 0 && (
+                <span className="text-xs text-muted-foreground italic">Выходной / не задано</span>
+              )}
+              {ranges.map((r, idx) => {
+                const invalid = timeToMinutes(r.from) >= timeToMinutes(r.to)
+                return (
+                  <div key={idx} className="flex items-center gap-1.5">
+                    <Input
+                      type="time"
+                      value={r.from}
+                      onChange={(e) => updateRange(day, idx, { from: e.target.value })}
+                      className={cn("w-[104px] h-9", invalid && "border-destructive")}
+                    />
+                    <span className="text-sm text-muted-foreground">–</span>
+                    <Input
+                      type="time"
+                      value={r.to}
+                      onChange={(e) => updateRange(day, idx, { to: e.target.value })}
+                      className={cn("w-[104px] h-9", invalid && "border-destructive")}
+                    />
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 text-destructive shrink-0"
+                      onClick={() => removeRange(day, idx)}
+                      title="Удалить окно"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
                   </div>
-                ) : (
-                  ranges.map((r, idx) => {
-                    const invalid = timeToMinutes(r.from) >= timeToMinutes(r.to)
-                    return (
-                      <div key={idx} className="flex items-center gap-2">
-                        <Input
-                          type="time"
-                          value={r.from}
-                          onChange={(e) => updateRange(day, idx, { from: e.target.value })}
-                          className={cn("w-[110px] h-9", invalid && "border-destructive")}
-                        />
-                        <span className="text-sm text-muted-foreground">–</span>
-                        <Input
-                          type="time"
-                          value={r.to}
-                          onChange={(e) => updateRange(day, idx, { to: e.target.value })}
-                          className={cn("w-[110px] h-9", invalid && "border-destructive")}
-                        />
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 text-destructive shrink-0"
-                          onClick={() => removeRange(day, idx)}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    )
-                  })
-                )}
-              </div>
+                )
+              })}
               <Button
                 type="button"
-                size="sm"
+                size="icon"
                 variant="outline"
-                className="h-8 gap-1 shrink-0 mt-0.5"
+                className="h-8 w-8 shrink-0"
                 onClick={() => addRange(day)}
+                title="Добавить окно"
               >
-                <Plus className="w-3.5 h-3.5" /> Окно
+                <Plus className="w-4 h-4" />
               </Button>
             </div>
           )
