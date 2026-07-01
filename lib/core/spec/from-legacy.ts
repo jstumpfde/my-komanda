@@ -249,7 +249,7 @@ export function buildSpecFromLegacy(vacancy: LegacyVacancyInput): CandidateSpec 
     // (c) пороги (Этап 2: две пары)
     resumeThresholds,
     anketaThresholds,
-    anketaPassInvite: { enabled: false, passThreshold: 35, aiEvalThreshold: 55, contentBlockId: null, messageText: "", delaySeconds: 900, advanceToStage: null, hhAction: null },
+    anketaPassInvite: { enabled: false, passThreshold: 35, aiEvalThreshold: 45, contentBlockId: null, messageText: "", delaySeconds: 900, advanceToStage: null, hhAction: null },
     // (d) профиль
     idealProfile,
     portraitRequiredSkills,

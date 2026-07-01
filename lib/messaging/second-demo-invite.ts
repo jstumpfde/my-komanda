@@ -36,7 +36,7 @@ const DEFAULT_TEXT =
 // Дефолт порога AI-оценки ответов = дефолт схемы (types.ts AnketaPassInviteSchema).
 // НЕ хардкод логики: getSpec не всегда применяет дефолты схемы (инцидент 30.06),
 // поэтому для старых спеков без aiEvalThreshold подставляем это значение.
-const DEFAULT_AI_EVAL_THRESHOLD = 55
+const DEFAULT_AI_EVAL_THRESHOLD = 45
 
 async function ensureCampaign(vacancyId: string): Promise<string | null> {
   const [existing] = await db
