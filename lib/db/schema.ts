@@ -195,6 +195,9 @@ export interface CompanyHiringDefaults {
     lunchTo?:          string  // "14:00"
     remind24h?:        boolean
     remind2h?:         boolean
+    // #27: доп. пороги напоминаний (по умолчанию ВКЛ, как остальные).
+    remindMorning?:    boolean
+    remind1h?:         boolean
     timezone?:         string
     interviewMethods?: string[]
     officeAddress?:    string
@@ -2323,6 +2326,9 @@ export const calendarEvents = pgTable("calendar_events", {
   // C6: метки отправленных напоминаний (24ч/2ч до start_at). NULL = не слали.
   remind24hSentAt: timestamp("remind_24h_sent_at", { withTimezone: true }),
   remind2hSentAt:  timestamp("remind_2h_sent_at", { withTimezone: true }),
+  // #27: доп. напоминания — «утром в день встречи» и «за час до». NULL = не слали.
+  remindMorningSentAt: timestamp("remind_morning_sent_at", { withTimezone: true }),
+  remind1hSentAt:      timestamp("remind_1h_sent_at", { withTimezone: true }),
   // Интервью-модуль: структура для событий type='interview' (всё nullable).
   candidateId:      uuid("candidate_id").references(() => candidates.id, { onDelete: "set null" }),
   vacancyId:        uuid("vacancy_id").references(() => vacancies.id, { onDelete: "set null" }),

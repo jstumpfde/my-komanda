@@ -89,8 +89,9 @@ export interface StageRule {
 }
 
 export interface StageReminders {
-  dayBefore: boolean  // за сутки
-  morning: boolean    // утром в день встречи
+  dayBefore: boolean   // за сутки
+  morning: boolean     // утром в день встречи
+  hourBefore?: boolean // за ~час до встречи (#27)
 }
 
 export interface FunnelV2Stage {
@@ -164,7 +165,7 @@ export function makeStage(action: StageActionType, idSeed: string): FunnelV2Stag
   if (action === "interview") {
     base.interviewMode = "phone"
     base.scheduling = ["bot", "self_link"]
-    base.reminders = { dayBefore: true, morning: true }
+    base.reminders = { dayBefore: true, morning: true, hourBefore: true }
   }
   return base
 }

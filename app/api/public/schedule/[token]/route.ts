@@ -11,18 +11,16 @@ import { isShortId } from "@/lib/short-id"
 import type { CompanyHiringDefaults } from "@/lib/db/schema"
 import type { SchedulePageData, MethodConfig, SlotDay } from "@/lib/schedule-interview-types"
 import { sendToCompanyChannel } from "@/lib/telegram/send-to-company"
+import { resolveDaySchedule, resolveVacancyDaySchedule, generateSlotsForWindows, JS_TO_DAY_ID } from "@/lib/schedule/day-windows"
+import { normalizeFunnelV2, type InterviewMode } from "@/lib/funnel-v2/types"
 
 export type { SchedulePageData, MethodConfig, SlotDay }
 
 // ─── Константы / дефолты ──────────────────────────────────────────────────────
 
 const DEFAULT_TZ     = "Europe/Moscow"
-const DEFAULT_DAYS   = ["mon","tue","wed","thu","fri"]
-const DEFAULT_FROM   = "09:00"
-const DEFAULT_TO     = "18:00"
 const DEFAULT_STEP   = 30
 const DEFAULT_MAX    = 8
-const DAY_ID_TO_JS   = { sun:0, mon:1, tue:2, wed:3, thu:4, fri:5, sat:6 } as const
 const DAY_LABELS_RU  = ["Вс","Пн","Вт","Ср","Чт","Пт","Сб"]
 const MONTH_SHORT_RU = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"]
 
@@ -36,6 +34,42 @@ const DEFAULT_METHODS: MethodConfig[] = [
 
 const METHOD_LABELS: Record<string, string> = {
   phone:"Телефон", zoom:"Zoom", telemost:"Яндекс Телемост", meet:"Google Meet", office:"Офис"
+}
+
+// Подпись часового пояса для кандидата (пояс он не меняет — только читает).
+const TZ_LABELS: Record<string, string> = {
+  "Europe/Kaliningrad": "Калининград (UTC+2)",
+  "Europe/Moscow":      "Москва (UTC+3)",
+  "Europe/Samara":      "Самара (UTC+4)",
+  "Asia/Yekaterinburg": "Екатеринбург (UTC+5)",
+  "Asia/Omsk":          "Омск (UTC+6)",
+  "Asia/Novosibirsk":   "Новосибирск (UTC+7)",
+  "Asia/Irkutsk":       "Иркутск (UTC+8)",
+  "Asia/Yakutsk":       "Якутск (UTC+9)",
+  "Asia/Vladivostok":   "Владивосток (UTC+10)",
+  "Asia/Magadan":       "Магадан (UTC+11)",
+  "Asia/Kamchatka":     "Камчатка (UTC+12)",
+}
+
+// interviewMode из первой interview-стадии воронки v2 (или null).
+function interviewModeFromFunnelV2(descriptionJson: unknown): InterviewMode | null {
+  const raw = (descriptionJson as { funnelV2?: unknown } | null)?.funnelV2
+  if (!raw) return null
+  const cfg = normalizeFunnelV2(raw)
+  if (!cfg.enabled) return null
+  const st = cfg.stages.find(s => s.action === "interview" && s.interviewMode)
+  return st?.interviewMode ?? null
+}
+
+// Сводит interviewMode (phone|zoom|office) к конкретному включённому методу.
+function pickMethodForMode(mode: InterviewMode, enabled: MethodConfig[]): MethodConfig | null {
+  if (mode === "phone")  return enabled.find(m => m.method === "phone")  ?? null
+  if (mode === "office") return enabled.find(m => m.method === "office") ?? null
+  for (const v of ["telemost", "zoom", "meet"]) {
+    const found = enabled.find(m => m.method === v)
+    if (found) return found
+  }
+  return null
 }
 
 // ─── TZ-хелперы (Intl, без сторонних пакетов) ────────────────────────────────
@@ -124,45 +158,6 @@ function utcToLocalDateTime(utcDate: Date, tz: string): { ymd: string; hhmm: str
   return { ymd, hhmm }
 }
 
-// ─── Остальные helpers ────────────────────────────────────────────────────────
-
-function timeToMinutes(hhmm: string): number {
-  const [h, m] = hhmm.split(":").map(Number)
-  return h * 60 + m
-}
-
-function minutesToTime(mins: number): string {
-  const h = Math.floor(mins / 60)
-  const m = mins % 60
-  return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`
-}
-
-// Генерирует слоты для одного дня по настройкам
-function generateDaySlots(cfg: {
-  from: number
-  to: number
-  step: number
-  lunchEnabled: boolean
-  lunchFrom: number
-  lunchTo: number
-  duration: number  // продолжительность выбранного метода
-}): string[] {
-  const slots: string[] = []
-  let cur = cfg.from
-  while (cur + cfg.duration <= cfg.to) {
-    const slotEnd = cur + cfg.duration
-    // Пропускаем слоты, которые пересекаются с обедом
-    if (cfg.lunchEnabled) {
-      const overlapsLunch = cur < cfg.lunchTo && slotEnd > cfg.lunchFrom
-      if (!overlapsLunch) slots.push(minutesToTime(cur))
-    } else {
-      slots.push(minutesToTime(cur))
-    }
-    cur += cfg.step
-  }
-  return slots
-}
-
 // ─── GET /api/public/schedule/[token] ────────────────────────────────────────
 
 export async function GET(
@@ -198,6 +193,8 @@ export async function GET(
         hiringDefaults:       companies.hiringDefaultsJson,
         // #3.4 Fallback адреса: companies.office_address
         companyOfficeAddress: companies.officeAddress,
+        // #21: per-вакансия окна записи (descriptionJson.interviewDaySchedule)
+        vacancyDescriptionJson: vacancies.descriptionJson,
       })
       .from(vacancies)
       .innerJoin(companies, eq(vacancies.companyId, companies.id))
@@ -209,17 +206,14 @@ export async function GET(
     const sched = (row.hiringDefaults as CompanyHiringDefaults)?.schedule ?? {}
 
     // 3. Разбираем настройки
-    const enabledDays   = sched.interviewDays?.length ? sched.interviewDays : DEFAULT_DAYS
-    const enabledJsDays = new Set(enabledDays.map(d => DAY_ID_TO_JS[d as keyof typeof DAY_ID_TO_JS] ?? -1))
-    const fromMins  = timeToMinutes(sched.interviewFrom ?? DEFAULT_FROM)
-    const toMins    = timeToMinutes(sched.interviewTo   ?? DEFAULT_TO)
+    // Окна доступности по дням недели: сначала per-вакансия, иначе company-level.
+    const daySchedule = resolveVacancyDaySchedule(
+      (row.vacancyDescriptionJson as { interviewDaySchedule?: unknown } | null)?.interviewDaySchedule,
+      sched,
+    )
     const step      = sched.slotStep ?? DEFAULT_STEP
     const maxPerDay = Number(sched.maxPerDay ?? DEFAULT_MAX) || DEFAULT_MAX
     const timezone  = sched.timezone ?? "Europe/Moscow"
-
-    const lunchEnabled = sched.lunchEnabled ?? false
-    const lunchFrom = lunchEnabled ? timeToMinutes(sched.lunchFrom ?? "13:00") : 0
-    const lunchTo   = lunchEnabled ? timeToMinutes(sched.lunchTo   ?? "14:00") : 0
 
     // 4. Методы интервью
     let methods: MethodConfig[]
@@ -241,16 +235,25 @@ export async function GET(
       methods = DEFAULT_METHODS
     }
 
-    const enabledMethods = methods.filter(m => m.enabled)
-    const defaultMethod  = sched.defaultInterviewMethod
-      ?? (enabledMethods.find(m => m.method === "telemost")?.method
-        ?? enabledMethods[0]?.method
-        ?? "phone")
+    let enabledMethods = methods.filter(m => m.enabled)
 
-    // Для слотов используем длительность дефолтного метода
-    const defaultDuration = enabledMethods.find(m => m.method === defaultMethod)?.duration
-      ?? enabledMethods[0]?.duration
-      ?? 60
+    // #26.3: кандидат способ НЕ выбирает — оставляем ровно один актуальный.
+    // Приоритет: interviewMode воронки v2 → sched.defaultInterviewMethod → telemost/первый.
+    const funnelMode = interviewModeFromFunnelV2(row.vacancyDescriptionJson)
+    let pinned: MethodConfig | null = null
+    if (funnelMode) pinned = pickMethodForMode(funnelMode, enabledMethods)
+    if (!pinned && sched.defaultInterviewMethod) {
+      pinned = enabledMethods.find(m => m.method === sched.defaultInterviewMethod) ?? null
+    }
+    if (!pinned) {
+      pinned = enabledMethods.find(m => m.method === "telemost") ?? enabledMethods[0] ?? null
+    }
+    if (pinned) enabledMethods = [pinned]
+
+    const defaultMethod  = pinned?.method ?? "phone"
+
+    // Для слотов используем длительность выбранного метода
+    const defaultDuration = pinned?.duration ?? 60
 
     // 5. Уже занятые слоты этой компании (type='interview', ближайшие 16 дней)
     // Берём UTC-границы с запасом (+16 д), чтобы не срезать последний день в
@@ -293,15 +296,13 @@ export async function GET(
 
     for (let i = 0; i < 21 && days.length < 14; i++) {
       const jsDay = localDayOfWeek(checkDate, timezone)
-      if (enabledJsDays.has(jsDay)) {
+      const windows = daySchedule[JS_TO_DAY_ID[jsDay]] ?? []
+      if (windows.length > 0) {
         const ymd = localDateToYMD(checkDate, timezone)
         const dayBooked = bookedCountByDay[ymd] ?? 0
 
         if (dayBooked < maxPerDay) {
-          const rawSlots = generateDaySlots({
-            from: fromMins, to: toMins, step, lunchEnabled, lunchFrom, lunchTo,
-            duration: defaultDuration,
-          })
+          const rawSlots = generateSlotsForWindows(windows, step, defaultDuration)
 
           // Исключаем уже занятые конкретные слоты (ключи в локальной TZ)
           const freeSlots = rawSlots.filter(t => !bookedSlotSet.has(`${ymd}T${t}`))
@@ -337,6 +338,7 @@ export async function GET(
       brandPrimaryColor: row.brandPrimary ?? "#3b82f6",
       brandBgColor:      row.brandBg      ?? "#f0f4ff",
       timezone,
+      timezoneLabel:     TZ_LABELS[timezone] ?? timezone,
       officeAddress,
       methods:           enabledMethods,
       defaultMethod,

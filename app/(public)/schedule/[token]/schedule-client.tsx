@@ -3,7 +3,6 @@
 import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { Calendar, Clock, Video, Building2, Phone, CheckCircle2, Globe, Loader2 } from "lucide-react"
@@ -17,16 +16,6 @@ function MethodIcon({ method, className }: { method: string; className?: string 
   return <Video className={className} />
 }
 
-// ─── Часовые пояса ────────────────────────────────────────────────────────────
-
-const TIMEZONES = [
-  { id: "Europe/Moscow",       label: "Москва (UTC+3)" },
-  { id: "Europe/Kaliningrad",  label: "Калининград (UTC+2)" },
-  { id: "Asia/Yekaterinburg",  label: "Екатеринбург (UTC+5)" },
-  { id: "Asia/Novosibirsk",    label: "Новосибирск (UTC+7)" },
-  { id: "Asia/Vladivostok",    label: "Владивосток (UTC+10)" },
-]
-
 // ─── Компонент ────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -37,8 +26,8 @@ interface Props {
 
 export function ScheduleClientPage({ token, initialData, initialError }: Props) {
   const [data]                      = useState<SchedulePageData | null>(initialData)
-  const [method, setMethod]         = useState<string>(initialData?.defaultMethod ?? "phone")
-  const [timezone, setTimezone]     = useState<string>(initialData?.timezone ?? "Europe/Moscow")
+  // Способ встречи задан вакансией/настройками — кандидат его НЕ выбирает.
+  const method = initialData?.defaultMethod ?? "phone"
   const [selectedSlot, setSelectedSlot] = useState<{ date: string; time: string } | null>(null)
   const [confirmed, setConfirmed]   = useState(false)
   const [confirmedSlot, setConfirmedSlot] = useState<{ date: string; time: string; label: string } | null>(null)
@@ -122,7 +111,7 @@ export function ScheduleClientPage({ token, initialData, initialError }: Props) 
               </div>
               <div className="flex items-center gap-2.5 text-sm">
                 <Globe className="w-4 h-4 text-muted-foreground shrink-0" />
-                <span className="text-foreground">{TIMEZONES.find(t => t.id === timezone)?.label}</span>
+                <span className="text-foreground">Время указано в часовом поясе {data.timezoneLabel}</span>
               </div>
 
               {method === "phone" && (
@@ -172,7 +161,7 @@ export function ScheduleClientPage({ token, initialData, initialError }: Props) 
           <div className="flex items-center gap-2.5 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
             <Clock className="w-4 h-4 text-amber-600 shrink-0" />
             <p className="text-xs text-amber-700 dark:text-amber-400 text-left">
-              Мы пришлём напоминание за 24 часа до встречи
+              Мы пришлём напоминания: за сутки, утром в день встречи и за час до неё
             </p>
           </div>
 
@@ -185,11 +174,14 @@ export function ScheduleClientPage({ token, initialData, initialError }: Props) 
             </div>
           </div>
 
-          <button className="text-sm text-muted-foreground underline underline-offset-4" onClick={handleReschedule}>
-            Перенести встречу
+          <button
+            className="text-sm text-foreground/80 underline underline-offset-4 hover:text-foreground"
+            onClick={handleReschedule}
+          >
+            Перенести на другое время
           </button>
 
-          <p className="text-xs text-muted-foreground/50">Powered by Company24</p>
+          <p className="text-xs text-muted-foreground">Powered by Company24</p>
         </div>
       </div>
     )
@@ -223,55 +215,57 @@ export function ScheduleClientPage({ token, initialData, initialError }: Props) 
           <h1 className="text-2xl font-bold text-foreground">
             {data.candidateFirstName || data.candidateName}, выберите удобное время
           </h1>
-          <p className="text-muted-foreground mt-1">для интервью на позицию «{data.vacancyTitle}»</p>
+          <p className="text-foreground/70 mt-1">для интервью на позицию «{data.vacancyTitle}»</p>
         </div>
 
-        {/* Способ интервью */}
-        {data.methods.length > 1 && (
-          <div className={cn("grid gap-2", data.methods.length <= 3 ? "grid-cols-3" : "grid-cols-2 sm:grid-cols-3")}>
-            {data.methods.map(m => (
-              <button
-                key={m.method}
-                className={cn(
-                  "flex flex-col items-center gap-1.5 p-3 rounded-xl border text-center transition-all",
-                  method === m.method
-                    ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-                    : "border-border hover:border-primary/30"
-                )}
-                onClick={() => setMethod(m.method)}
-              >
-                <MethodIcon
-                  method={m.method}
-                  className={cn("w-5 h-5", method === m.method ? "text-primary" : "text-muted-foreground")}
-                />
-                <span className="text-sm font-medium">{m.label}</span>
-                <span className="text-[10px] text-muted-foreground">{m.duration} мин</span>
-              </button>
-            ))}
+        {/* Способ встречи — показываем ТОЛЬКО актуальный (кандидат не выбирает) */}
+        {selectedMethod && (
+          <div className={cn(
+            "flex items-center gap-3 p-3.5 rounded-xl border text-sm",
+            method === "office"
+              ? "bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800"
+              : method === "phone"
+                ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800"
+                : "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800"
+          )}>
+            <MethodIcon
+              method={method}
+              className={cn(
+                "w-5 h-5 shrink-0",
+                method === "office" ? "text-purple-600" : method === "phone" ? "text-emerald-600" : "text-blue-600"
+              )}
+            />
+            <div className="min-w-0">
+              <p className={cn(
+                "font-medium",
+                method === "office" ? "text-purple-900 dark:text-purple-200"
+                  : method === "phone" ? "text-emerald-900 dark:text-emerald-200"
+                    : "text-blue-900 dark:text-blue-200"
+              )}>
+                {method === "office" ? "Встреча в офисе"
+                  : method === "phone" ? "Телефонное интервью"
+                    : `Онлайн-интервью — ${selectedMethod.label}`}
+              </p>
+              {/* Для офиса сразу показываем адрес + метро */}
+              {method === "office" && data.officeAddress && (
+                <p className="text-purple-700 dark:text-purple-300 mt-0.5">{data.officeAddress}</p>
+              )}
+              {method !== "office" && (
+                <p className={cn(
+                  "mt-0.5",
+                  method === "phone" ? "text-emerald-700 dark:text-emerald-300" : "text-blue-700 dark:text-blue-300"
+                )}>
+                  Длительность — {selectedMethod.duration} мин
+                </p>
+              )}
+            </div>
           </div>
         )}
 
-        {/* Адрес офиса (если выбран office) */}
-        {method === "office" && data.officeAddress && (
-          <div className="flex items-start gap-2 p-3 rounded-lg bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 text-sm">
-            <Building2 className="w-4 h-4 text-purple-600 mt-0.5 shrink-0" />
-            <span className="text-purple-800 dark:text-purple-300">{data.officeAddress}</span>
-          </div>
-        )}
-
-        {/* Часовой пояс */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <Globe className="w-4 h-4" /> Часовой пояс
-          </div>
-          <Select value={timezone} onValueChange={setTimezone}>
-            <SelectTrigger className="w-[220px] h-9"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {TIMEZONES.map(tz => (
-                <SelectItem key={tz.id} value={tz.id}>{tz.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {/* Часовой пояс — только информация, кандидат его не меняет */}
+        <div className="flex items-center gap-1.5 text-sm text-foreground/70 justify-center">
+          <Globe className="w-4 h-4 shrink-0" />
+          <span>Время указано в часовом поясе {data.timezoneLabel}</span>
         </div>
 
         {/* Слоты */}
@@ -280,7 +274,7 @@ export function ScheduleClientPage({ token, initialData, initialError }: Props) 
             <CardContent className="pt-5 pb-5 space-y-4">
               {data.days.map(day => (
                 <div key={day.date}>
-                  <p className="text-sm font-medium text-muted-foreground mb-2">{day.label}</p>
+                  <p className="text-sm font-semibold text-foreground/80 mb-2">{day.label}</p>
                   <div className="grid grid-cols-4 gap-2">
                     {day.slots.map(time => {
                       const isSelected = selectedSlot?.date === day.date && selectedSlot?.time === time
@@ -330,7 +324,7 @@ export function ScheduleClientPage({ token, initialData, initialError }: Props) 
           )}
         </Button>
 
-        <p className="text-center text-xs text-muted-foreground/50">Powered by Company24</p>
+        <p className="text-center text-xs text-muted-foreground">Powered by Company24</p>
       </div>
     </div>
   )
