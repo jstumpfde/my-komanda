@@ -958,8 +958,12 @@ interface PublishTimeData {
   total: number
   periodDays?: number
   firstAt?: string | null
-  topDays?: { name: string; pct: number }[]
-  topHours?: { range: string; pct: number }[]
+  best?: { dow: number; dayName: string; hour: number; range: string; cnt: number; pct: number } | null
+  combos?: { dow: number; dayName: string; hour: number; range: string; cnt: number; pct: number }[]
+  grid?: { dow: number; hour: number; cnt: number }[]
+  maxCell?: number
+  days?: { dow: number; name: string; cnt: number; pct: number }[]
+  hours?: { hour: number; range: string; cnt: number; pct: number }[]
 }
 
 function BestPublishTimeCard({ vacancyId, city }: { vacancyId?: string; city?: string }) {
@@ -1001,22 +1005,104 @@ function BestPublishTimeCard({ vacancyId, city }: { vacancyId?: string; city?: s
         </p>
       ) : (
         <>
-          <div className="space-y-1">
-            {data.topDays && data.topDays.length > 0 && (
-              <div className="flex items-baseline gap-1.5 text-sm">
-                <span className="text-muted-foreground text-xs">Дни:</span>
-                <span className="font-medium">{data.topDays.map(d => `${d.name} (${d.pct}%)`).join(", ")}</span>
+          {data.best && (
+            <div className="rounded-md bg-primary/10 text-primary px-2.5 py-1.5 text-sm font-medium">
+              🎯 Лучше всего: {data.best.dayName}, {data.best.range}
+            </div>
+          )}
+
+          {data.grid && data.grid.length > 0 && (() => {
+            // Дни с понедельника: EXTRACT(DOW) 0=Вс..6=Сб → порядок Пн(1)..Вс(0).
+            const dowOrder = [1, 2, 3, 4, 5, 6, 0]
+            const dayShort = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"]
+            const hoursAxis = Array.from({ length: 24 }, (_, h) => h)
+            const maxCell = data.maxCell && data.maxCell > 0 ? data.maxCell : 1
+            const grid = data.grid
+            const cellAt = (dow: number, hour: number) =>
+              grid.find(g => g.dow === dow && g.hour === hour)?.cnt ?? 0
+            // Пик каждого дня — подсветим рамкой.
+            const peakByDow = new Map<number, number>()
+            for (const g of grid) {
+              const cur = peakByDow.get(g.dow)
+              if (cur === undefined || g.cnt > (cellAt(g.dow, cur))) peakByDow.set(g.dow, g.hour)
+            }
+            // Одноцветный синий ramp через opacity primary (без кастомных hex).
+            const cellClass = (cnt: number) => {
+              if (cnt <= 0) return "bg-muted/40"
+              const r = cnt / maxCell
+              if (r > 0.8) return "bg-primary"
+              if (r > 0.6) return "bg-primary/80"
+              if (r > 0.4) return "bg-primary/60"
+              if (r > 0.2) return "bg-primary/40"
+              return "bg-primary/20"
+            }
+            return (
+              <div className="overflow-x-auto">
+                <div className="inline-block min-w-full">
+                  {/* Шкала часов сверху — метки каждые 3 часа */}
+                  <div className="flex pl-6">
+                    {hoursAxis.map(h => (
+                      <div key={h} className="w-[9px] text-center text-[7px] leading-none text-muted-foreground">
+                        {h % 3 === 0 ? h : ""}
+                      </div>
+                    ))}
+                  </div>
+                  {dowOrder.map(dow => (
+                    <div key={dow} className="flex items-center">
+                      <div className="w-6 pr-1 text-right text-[9px] leading-none text-muted-foreground">
+                        {dayShort[dow]}
+                      </div>
+                      {hoursAxis.map(h => {
+                        const cnt = cellAt(dow, h)
+                        const isPeak = cnt > 0 && peakByDow.get(dow) === h
+                        return (
+                          <div
+                            key={h}
+                            title={`${dayShort[dow]} ${String(h).padStart(2, "0")}:00 — ${cnt} откл.`}
+                            className={`w-[9px] h-[9px] m-[0.5px] rounded-[1px] ${cellClass(cnt)} ${isPeak ? "ring-1 ring-primary ring-offset-0" : ""}`}
+                          />
+                        )
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
+
+          <div className="grid grid-cols-2 gap-3">
+            {data.days && data.days.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-[10px] font-medium text-muted-foreground">Дни (=100%)</p>
+                {data.days.slice(0, 7).map(d => (
+                  <div key={d.dow} className="flex items-center gap-1.5">
+                    <span className="w-14 shrink-0 text-[10px] text-muted-foreground truncate">{d.name}</span>
+                    <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                      <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, d.pct)}%` }} />
+                    </div>
+                    <span className="w-7 shrink-0 text-right text-[10px] tabular-nums">{d.pct}%</span>
+                  </div>
+                ))}
               </div>
             )}
-            {data.topHours && data.topHours.length > 0 && (
-              <div className="flex items-baseline gap-1.5 text-sm">
-                <span className="text-muted-foreground text-xs">Часы:</span>
-                <span className="font-medium">{data.topHours.map(h => `${h.range} (${h.pct}%)`).join(", ")}</span>
+            {data.hours && data.hours.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-[10px] font-medium text-muted-foreground">Часы (=100%)</p>
+                {data.hours.slice(0, 7).map(h => (
+                  <div key={h.hour} className="flex items-center gap-1.5">
+                    <span className="w-14 shrink-0 text-[10px] text-muted-foreground truncate">{h.range}</span>
+                    <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                      <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, h.pct)}%` }} />
+                    </div>
+                    <span className="w-7 shrink-0 text-right text-[10px] tabular-nums">{h.pct}%</span>
+                  </div>
+                ))}
               </div>
             )}
           </div>
+
           <p className="text-[10px] text-muted-foreground">
-            {data.total} откликов{data.periodDays ? ` за ${data.periodDays}д.` : ""}{firstAtLabel ? ` · с ${firstAtLabel}` : ""} · МСК{cityLabel}
+            По {data.total} откликам вашей компании{data.periodDays ? ` за ${data.periodDays}д.` : ""}{firstAtLabel ? ` · с ${firstAtLabel}` : ""} · МСК{cityLabel}
           </p>
         </>
       )}
