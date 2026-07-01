@@ -351,6 +351,15 @@ export interface CompanyHiringDefaults {
   // отправки). Дефолт OFF. При срабатывании — запись в held_messages + уведомление
   // HR. Option 2, Юрий 27.06.
   messageGuardHold?: { enabled?: boolean }
+  // #36 Окно отправки по типу касания: для каждой категории — "always"
+  // (круглосуточно) или "window" (по расписанию вакансии). Отсутствующие
+  // ключи наследуют DEFAULT_TOUCH_WINDOWS (транзакционные — always, дожим —
+  // window). Резолвер — lib/messaging/touch-window.ts. Читает cron follow-up.
+  messageWindows?: Record<string, "always" | "window">
+  // #37а Очерёдность исходящих: порядок групп приоритета (сверху = уходит
+  // первым). Отсутствие/пустой массив → DEFAULT_SEND_PRIORITY_ORDER.
+  // Значения — SendPriorityGroup из lib/messaging/send-priority.ts.
+  sendPriorityOrder?: string[]
 }
 
 // ── CompanyLegalContact (drizzle/0177) ──

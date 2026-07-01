@@ -22,6 +22,7 @@ import { MessageQueueJournal } from "@/components/vacancies/message-queue-journa
 import { FollowupPresetsManager } from "@/components/vacancies/followup-presets-manager"
 import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
 import { VacancyTestFollowupSettings } from "@/components/vacancies/vacancy-test-followup-settings"
+import { QueueSettingsSection } from "@/components/vacancies/queue-settings-section"
 
 interface QueueData {
   paused: boolean
@@ -160,6 +161,7 @@ export function MessageQueueSection({ vacancyId }: Props) {
         <TabsList>
           <TabsTrigger value="journal">Журнал</TabsTrigger>
           <TabsTrigger value="templates">Шаблоны рассылки</TabsTrigger>
+          <TabsTrigger value="settings">Настройки очереди</TabsTrigger>
         </TabsList>
 
         <TabsContent value="journal" className="mt-3 space-y-3">
@@ -191,6 +193,12 @@ export function MessageQueueSection({ vacancyId }: Props) {
           <FollowupPresetsManager vacancyId={vacancyId} />
           <VacancyFollowupSettings vacancyId={vacancyId} />
           <VacancyTestFollowupSettings vacancyId={vacancyId} />
+        </TabsContent>
+
+        <TabsContent value="settings" className="mt-3">
+          {/* #36/#37 Настройки очереди — company-level (окно по типу касания,
+              порядок приоритета, темп отправки). Применяются ко всем вакансиям. */}
+          <QueueSettingsSection />
         </TabsContent>
       </Tabs>
 

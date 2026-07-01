@@ -37,6 +37,10 @@ const NESTED_KEYS: (keyof CompanyHiringDefaults)[] = [
   "rolePermissions",
   "feedbackSurveys",
   "dashboardCards",
+  // #36: messageWindows — per-category режим окна; deep-merge, чтобы патч одной
+  // категории не затирал остальные. (sendPriorityOrder — массив, НЕ здесь: он
+  // заменяется целиком.)
+  "messageWindows",
 ];
 
 function mergeDefaults(
@@ -135,6 +139,13 @@ export async function PATCH(req: NextRequest) {
   if ("candidateColumns" in patch &&
       !["director", "client", "platform_admin", "admin"].includes(ctx.role)) {
     return NextResponse.json({ error: "Только директор компании может настраивать колонки" }, { status: 403 });
+  }
+
+  // #36/#37: настройки очереди (окно по типу касания + порядок приоритета)
+  // применяются ко ВСЕМ вакансиям компании — меняет только директор.
+  if (("messageWindows" in patch || "sendPriorityOrder" in patch) &&
+      !["director", "client", "platform_admin", "admin"].includes(ctx.role)) {
+    return NextResponse.json({ error: "Только директор компании может менять настройки очереди" }, { status: 403 });
   }
 
   const [company] = await db

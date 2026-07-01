@@ -9,6 +9,13 @@ import { canSendNow } from "@/lib/schedule/can-send-now"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { renderTemplate } from "@/lib/template-renderer"
 import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
+import { resolveTouchWindowMode, type MessageWindowsConfig } from "@/lib/messaging/touch-window"
+import {
+  classifySendPriority,
+  normalizeSendPriorityOrder,
+  priorityRank,
+  type SendPriorityGroup,
+} from "@/lib/messaging/send-priority"
 
 // POST /api/cron/follow-up
 // Отправляет очередную порцию касаний из follow_up_messages кандидатам
@@ -99,6 +106,102 @@ async function resolveCompanyDelayMs(
   return ms
 }
 
+// #36 Резолвер per-company конфига окон отправки (messageWindows) с коротким
+// кэшем на процесс (одна компания встречается в очереди многократно). TTL 60с —
+// достаточно свежо, но не бьёт БД в горячем цикле отправки.
+const messageWindowsCache = new Map<string, { cfg: MessageWindowsConfig; ts: number }>()
+const MESSAGE_WINDOWS_TTL_MS = 60_000
+async function resolveCompanyMessageWindows(companyId: string): Promise<MessageWindowsConfig> {
+  const now = Date.now()
+  const hit = messageWindowsCache.get(companyId)
+  if (hit && now - hit.ts < MESSAGE_WINDOWS_TTL_MS) return hit.cfg
+  let cfg: MessageWindowsConfig = {}
+  try {
+    const [row] = await db
+      .select({ hd: companies.hiringDefaultsJson })
+      .from(companies)
+      .where(eq(companies.id, companyId))
+      .limit(1)
+    const hd = row?.hd as { messageWindows?: MessageWindowsConfig } | null | undefined
+    cfg = hd?.messageWindows ?? {}
+  } catch {
+    // осечка БД → пустой конфиг → дефолты категорий (fail-safe)
+  }
+  messageWindowsCache.set(companyId, { cfg, ts: now })
+  return cfg
+}
+
+// #37а Пересортировка окна pending по приоритету групп кандидатов.
+// Батч-подгружаем стадию + demoOpened кандидатов и company-level порядок
+// приоритета (через campaign → vacancy → company). Стабильная сортировка:
+// primary = ранг группы в порядке КОМПАНИИ этого сообщения, secondary =
+// scheduledAt. Компании с разным порядком не конфликтуют (токен hh per-company).
+async function orderPendingByPriority(
+  rows: (typeof followUpMessages.$inferSelect)[],
+): Promise<(typeof followUpMessages.$inferSelect)[]> {
+  if (rows.length <= 1) return rows
+
+  // Стадия + demoOpened по кандидатам.
+  const candIds = [...new Set(rows.map((r) => r.candidateId))]
+  const candRows = candIds.length
+    ? await db
+        .select({ id: candidates.id, stage: candidates.stage, demoOpenedAt: candidates.demoOpenedAt })
+        .from(candidates)
+        .where(inArray(candidates.id, candIds))
+    : []
+  const candMap = new Map(candRows.map((c) => [c.id, c]))
+
+  // campaign → vacancy → company (для company-level порядка приоритета).
+  const campIds = [...new Set(rows.map((r) => r.campaignId))]
+  const campRows = campIds.length
+    ? await db
+        .select({ id: followUpCampaigns.id, companyId: vacancies.companyId })
+        .from(followUpCampaigns)
+        .innerJoin(vacancies, eq(vacancies.id, followUpCampaigns.vacancyId))
+        .where(inArray(followUpCampaigns.id, campIds))
+    : []
+  const campToCompany = new Map(campRows.map((c) => [c.id, c.companyId]))
+
+  // Порядок приоритета per-company (кэш на этот run).
+  const orderCache = new Map<string, SendPriorityGroup[]>()
+  async function companyOrder(companyId: string | undefined): Promise<SendPriorityGroup[]> {
+    if (!companyId) return normalizeSendPriorityOrder(undefined)
+    const hit = orderCache.get(companyId)
+    if (hit) return hit
+    const [row] = await db
+      .select({ hd: companies.hiringDefaultsJson })
+      .from(companies)
+      .where(eq(companies.id, companyId))
+      .limit(1)
+    const hd = row?.hd as { sendPriorityOrder?: unknown } | null | undefined
+    const order = normalizeSendPriorityOrder(hd?.sendPriorityOrder)
+    orderCache.set(companyId, order)
+    return order
+  }
+
+  // Считаем ранг каждой строки.
+  const ranked = await Promise.all(rows.map(async (r, idx) => {
+    const cand = candMap.get(r.candidateId)
+    const group = classifySendPriority({
+      stage: cand?.stage,
+      branch: r.branch,
+      demoOpened: cand?.demoOpenedAt != null,
+    })
+    const companyId = campToCompany.get(r.campaignId)
+    const order = await companyOrder(companyId)
+    return { r, idx, rank: priorityRank(group, order), scheduledAt: r.scheduledAt }
+  }))
+
+  ranked.sort((a, b) => {
+    if (a.rank !== b.rank) return a.rank - b.rank
+    const at = a.scheduledAt?.getTime() ?? 0
+    const bt = b.scheduledAt?.getTime() ?? 0
+    if (at !== bt) return at - bt
+    return a.idx - b.idx   // стабильность
+  })
+  return ranked.map((x) => x.r)
+}
+
 async function processCampaignTouches(now: Date) {
   // Восстановление зависших броней: строка, застрявшая в 'sending' дольше 5 минут,
   // означает упавший прошлый проход (одна реальная отправка занимает секунды).
@@ -112,12 +215,19 @@ async function processCampaignTouches(now: Date) {
       lte(followUpMessages.sentAt, new Date(now.getTime() - 5 * 60 * 1000)),
     ))
 
-  const pending = await db
+  const pendingRaw = await db
     .select()
     .from(followUpMessages)
     .where(and(eq(followUpMessages.status, "pending"), lte(followUpMessages.scheduledAt, now)))
     .orderBy(followUpMessages.scheduledAt)
     .limit(LIMIT)
+
+  // #37а Очерёдность исходящих: пересортировываем окно pending по приоритету
+  // групп кандидатов (нанят/оффер/интервью → прошли этап → новые → дожим-открыл
+  // → дожим-не-открыл). Порядок групп — company-level (hiring_defaults_json.
+  // sendPriorityOrder), дефолт DEFAULT_SEND_PRIORITY_ORDER. Внутри группы —
+  // по scheduledAt (кто дольше ждёт). Так дожим-хвост не блокирует критичное.
+  const pending = await orderPendingByPriority(pendingRaw)
 
   let touchSent = 0
   let touchCancelled = 0
@@ -452,13 +562,24 @@ async function processOneTouch(
     return { outcome: "cancelled", reason: "ai_chatbot_active" }
   }
 
+  // #36 Окно отправки по типу касания: у каждой категории (приглашение/
+  // подтверждение/благодарность/приветствие/дожим) свой режим —
+  // "always" (круглосуточно) или "window" (по расписанию вакансии).
+  // Настройка company-level (hiring_defaults_json.messageWindows), дефолты —
+  // транзакционные круглосуточно, дожим по окну. Если "always" — окно НЕ
+  // применяем (иначе приглашение ждало бы утра).
+  const windowsConfig = await resolveCompanyMessageWindows(vacancy.companyId)
+  const windowMode = resolveTouchWindowMode(msg.branch, windowsConfig)
+
   // Проверка расписания: если сейчас вне окна — оставляем pending,
   // следующий cron в рабочее время подберёт. НЕ помечаем как failed.
-  // Исключение: off-hours-сообщение (isOffHoursFirst) специально шлётся вне
-  // рабочего окна — для него проверку расписания пропускаем.
-  const check = canSendNow(vacancy, now)
-  if (!check.allowed && !isOffHoursFirst) {
-    return { outcome: "skipped", reason: check.reason ?? "off_hours" }
+  // Исключения: off-hours-сообщение (isOffHoursFirst) специально шлётся вне
+  // рабочего окна; касание с режимом "always" — круглосуточно.
+  if (windowMode === "window" && !isOffHoursFirst) {
+    const check = canSendNow(vacancy, now)
+    if (!check.allowed) {
+      return { outcome: "skipped", reason: check.reason ?? "off_hours" }
+    }
   }
 
   const [hhResp] = await db
