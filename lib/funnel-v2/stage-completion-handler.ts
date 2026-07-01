@@ -24,6 +24,7 @@ import type { FunnelV2Stage } from "@/lib/funnel-v2/types"
 import { calcStageScore, calcStageScoreWithAI } from "@/lib/funnel-v2/calc-stage-score"
 import { scheduleV2Rejection } from "@/lib/funnel-v2/advance-stage"
 import { advanceToNextStage } from "@/lib/funnel-v2/advance-stage"
+import { evaluateScoreGate, type CandidateScores } from "@/lib/funnel-v2/score-gate"
 import type { CandidateForExecutor, VacancyForExecutor } from "@/lib/funnel-v2/runtime-executor"
 import type { StructuredAnswer } from "@/lib/score-test-objective"
 import { renderTemplate } from "@/lib/template-renderer"
@@ -37,6 +38,7 @@ import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
 async function loadForCompletion(candidateId: string): Promise<{
   candidate: CandidateForExecutor
   vacancy: VacancyForExecutor
+  scores: CandidateScores
 } | null> {
   const [row] = await db
     .select({
@@ -48,6 +50,11 @@ async function loadForCompletion(candidateId: string): Promise<{
       cPhone:            candidates.phone,
       cVacancyId:        candidates.vacancyId,
       cFunnelV2State:    candidates.funnelV2StateJson,
+      // Баллы для авто-гейта по баллу (score-gate, Фаза 1в)
+      cResumeScore:      candidates.resumeScore,
+      cDemoAnswersScore: candidates.demoAnswersScore,
+      cAiScoreV2:        candidates.aiScoreV2,
+      cDemoBlockScores:  candidates.demoBlockScores,
       // Поля вакансии
       vId:               vacancies.id,
       vTitle:            vacancies.title,
@@ -97,7 +104,17 @@ async function loadForCompletion(candidateId: string): Promise<{
     scheduleExcludedHolidayIds: row.vSchedHolidays as string[] | null,
   }
 
-  return { candidate, vacancy }
+  const scores: CandidateScores = {
+    resumeScore:      row.cResumeScore ?? null,
+    demoAnswersScore: row.cDemoAnswersScore ?? null,
+    aiScoreV2:        row.cAiScoreV2 ?? null,
+    demoBlockScores:  (row.cDemoBlockScores as CandidateScores["demoBlockScores"]) ?? null,
+    // testScore — производный (нет колонки); гейт по test работает при пересчёте
+    // из route теста. Здесь null → гейт по test не срабатывает (ждём балл).
+    testScore:        null,
+  }
+
+  return { candidate, vacancy, scores }
 }
 
 /** Загрузить lessonsJson контентного блока текущей стадии (из таблицы demos). */
@@ -127,6 +144,7 @@ async function applyStageRule(args: {
   totalScore:       number
   objectivePercent?: number | null  // % правильных ответов (объективные вопросы)
   aiPercent?:        number | null  // % AI-балла (AI-вопросы)
+  scores?:          CandidateScores // баллы кандидата для авто-гейта по баллу (Фаза 1в)
 }): Promise<void> {
   const { candidate, vacancy, stage, scorePercent, totalScore } = args
   const objectivePercent = args.objectivePercent ?? null
@@ -155,6 +173,26 @@ async function applyStageRule(args: {
   const updatedCandidate: CandidateForExecutor = {
     ...candidate,
     funnelV2StateJson: updatedState,
+  }
+
+  // ── Шаг 1.5: АВТО-ГЕЙТ ПО БАЛЛУ (Фаза 1в) ────────────────────────────────
+  // Срабатывает ТОЛЬКО если stage.rule.scoreGate.autoEnabled===true. Иначе
+  // evaluateScoreGate вернёт null и мы идём по легаси-пути ниже (autoReject/
+  // autoAdvance/ручной разбор) — поведение действующих вакансий не трогается.
+  if (stage.rule.scoreGate?.autoEnabled === true) {
+    const gateCandidate = { ...updatedCandidate, ...(args.scores ?? {}) }
+    const gate = await evaluateScoreGate(stage, gateCandidate)
+    if (gate !== null) {
+      if (gate.pass) {
+        // Прошёл порог по баллу → двигаем дальше (авто-приглашение).
+        await advanceToNextStage(updatedCandidate, vacancy, { advanceTo: stage.rule.advanceTo, scoreForStage: totalScore })
+      }
+      // gate.pass===false → эффект (preliminary_reject/reject/reserve/manual)
+      // уже применён внутри evaluateScoreGate. В любом исходе гейт — терминальный:
+      // легаси-логику ниже НЕ выполняем (иначе двойное решение).
+      return
+    }
+    // gate===null (балл ещё не посчитан) → падаем в легаси-путь ниже.
   }
 
   const rule = stage.rule
@@ -254,7 +292,7 @@ export async function onAnketaCompleted(
     console.warn("[funnel-v2/completion] onAnketaCompleted — кандидат/вакансия не найдены", { candidateId })
     return
   }
-  const { candidate, vacancy } = loaded
+  const { candidate, vacancy, scores } = loaded
 
   // Гейт: только v2-кандидаты с активным флагом
   if (!vacancy.funnelV2RuntimeEnabled || !candidate.funnelV2StateJson) return
@@ -280,7 +318,7 @@ export async function onAnketaCompleted(
     aiPercent        = score.aiPercent ?? null
   }
 
-  await applyStageRule({ candidate, vacancy, stage, scorePercent, totalScore, objectivePercent, aiPercent })
+  await applyStageRule({ candidate, vacancy, stage, scorePercent, totalScore, objectivePercent, aiPercent, scores })
 }
 
 /**
@@ -311,7 +349,7 @@ export async function onTestSubmitted(
     console.warn("[funnel-v2/completion] onTestSubmitted — кандидат/вакансия не найдены", { candidateId })
     return
   }
-  const { candidate, vacancy } = loaded
+  const { candidate, vacancy, scores } = loaded
 
   // Гейт: только v2-кандидаты с активным флагом
   if (!vacancy.funnelV2RuntimeEnabled || !candidate.funnelV2StateJson) return
@@ -371,5 +409,9 @@ export async function onTestSubmitted(
     objectivePercent = objectiveScore
   }
 
-  await applyStageRule({ candidate, vacancy, stage, scorePercent, totalScore, objectivePercent, aiPercent })
+  // Для гейта scoreType='test' балл берём из только что посчитанного итогового
+  // scorePercent теста (колонки test_score нет — она производная).
+  const scoresWithTest: CandidateScores = { ...scores, testScore: scorePercent }
+
+  await applyStageRule({ candidate, vacancy, stage, scorePercent, totalScore, objectivePercent, aiPercent, scores: scoresWithTest })
 }
