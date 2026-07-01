@@ -79,13 +79,20 @@ interface CandidateFiltersProps {
    *  Если заданы — дропдауны строятся из них, а не из загруженной страницы. */
   facets?: { cities: { city: string; count: number }[]; sources: { source: string; count: number }[] } | null
   /**
-   * #18: pipeline текущей вакансии. Секция «Статус в воронке» показывает
-   * ТОЛЬКО стадии, реально включённые в воронке этой вакансии
-   * (getEnabledStages), а не весь платформенный справочник. Лейблы берутся
-   * с учётом custom-переименований (getStageLabel). Если pipeline не задан —
-   * fallback на все системные стадии (ALL_STAGE_SLUGS).
+   * #18: pipeline текущей вакансии. Лейблы стадий берутся с учётом
+   * custom-переименований (getStageLabel). Fallback-источник списка стадий,
+   * если stageOptions не задан.
    */
   vacancyPipeline?: VacancyPipelineV2 | null
+  /**
+   * #42: единый список стадий вакансии (источник = воронка v2 / pipeline),
+   * тот же, что рендерит дропдаун «Стадия» в карточке кандидата. Если задан —
+   * секция «Статус в воронке» строится из него (карта и фильтр читают ОДНО).
+   * Если нет — fallback на getEnabledStages(pipeline) / ALL_STAGE_SLUGS
+   * (мульти-вакансийные экраны, где единой воронки нет).
+   * Считается родителем через resolveVacancyStageOptions() (lib/stages.ts).
+   */
+  stageOptions?: { slug: string; label: string }[] | null
 }
 
 const WORK_FORMATS = [
@@ -188,7 +195,7 @@ const INDUSTRY_OPTIONS = [
   "Бухгалтерия/Аудит", "Страхование", "Консалтинг", "Управление персоналом", "Другое",
 ]
 
-export function CandidateFilters({ filters, onFiltersChange, candidates = [], vacancyPipeline, facets }: CandidateFiltersProps) {
+export function CandidateFilters({ filters, onFiltersChange, candidates = [], vacancyPipeline, stageOptions, facets }: CandidateFiltersProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [showAllCities, setShowAllCities] = useState(false)
   const [showAllSources, setShowAllSources] = useState(false)
@@ -196,16 +203,22 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
   const [industryOpen, setIndustryOpen] = useState(false)
   const [skillsOpen, setSkillsOpen] = useState(false)
 
-  // #18: стадии для секции «Статус в воронке» — ТОЛЬКО реально включённые в
-  // воронке ЭТОЙ вакансии (getEnabledStages из pipeline вакансии), а не весь
-  // платформенный справочник из 17 стадий. rejected исключён — им управляет
-  // тумблер «Показать отказы» ниже (он охватывает и «Отказ», и «Кандидат
-  // отказался» — это одна стадия rejected, различающаяся инициатором).
-  // Без pipeline — fallback на все системные стадии, чтобы фильтр не опустел.
-  const funnelStageSlugs = useMemo<StageSlug[]>(() => {
+  // #42: секция «Статус в воронке» и дропдаун «Стадия» в карточке читают ОДИН
+  // список. Приоритет источника — stageOptions (воронка v2 вакансии, считается
+  // родителем через resolveVacancyStageOptions); при отсутствии — fallback на
+  // getEnabledStages(pipeline) / ALL_STAGE_SLUGS (мульти-вакансийные экраны).
+  // rejected исключён — им управляет тумблер «Показать отказы» ниже (он
+  // охватывает и «Отказ», и «Отказался» — это одна стадия rejected,
+  // различающаяся инициатором).
+  const funnelStageItems = useMemo<{ slug: string; label: string }[]>(() => {
+    if (stageOptions && stageOptions.length > 0) {
+      return stageOptions.filter((o) => o.slug !== "rejected")
+    }
     const base = vacancyPipeline ? getEnabledStages(vacancyPipeline) : ALL_STAGE_SLUGS
-    return base.filter((slug) => slug !== "rejected")
-  }, [vacancyPipeline])
+    return base
+      .filter((slug) => slug !== "rejected")
+      .map((slug) => ({ slug, label: getStageLabel(slug, vacancyPipeline) }))
+  }, [stageOptions, vacancyPipeline])
 
   // #18: если есть серверные фасеты по всей вакансии — берём их (полный список),
   // иначе fallback на подсчёт по загруженной странице.
@@ -554,14 +567,14 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
               <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform" />
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-3 pt-3">
-              {/* Статус в воронке. Показываем ТОЛЬКО стадии, включённые в
-                  воронке этой вакансии (funnelStageSlugs). rejected исключён —
-                  им управляет тумблер ниже. */}
+              {/* #42: Статус в воронке — единый список стадий вакансии
+                  (funnelStageItems), тот же, что в дропдауне «Стадия» карточки.
+                  rejected исключён — им управляет тумблер ниже. */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground">Статус в воронке</label>
                 <div className="space-y-1">
-                  {funnelStageSlugs.map((slug) => {
-                    const stage = PLATFORM_STAGES[slug]
+                  {funnelStageItems.map(({ slug, label }) => {
+                    const stage = PLATFORM_STAGES[slug as StageSlug]
                     return (
                       <div key={slug} className="flex items-center gap-2">
                         <Checkbox
@@ -570,18 +583,20 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
                           onCheckedChange={() => onFiltersChange({ ...filters, funnelStatuses: toggleArray(filters.funnelStatuses, slug) })}
                         />
                         <label htmlFor={`funnel-${slug}`} className="text-sm cursor-pointer flex items-center gap-2">
-                          <span>{getStageLabel(slug, vacancyPipeline)}</span>
-                          {stage.isTerminal && <span className="text-[10px] text-muted-foreground">терминальная</span>}
+                          <span>{label}</span>
+                          {stage?.isTerminal && <span className="text-[10px] text-muted-foreground">терминальная</span>}
                         </label>
                       </div>
                     )
                   })}
                 </div>
-                {/* Скрыть/Показать отказы — отдельный hideRejected (сервер: stage != 'rejected'),
-                    т.к. в данных есть legacy-стадии вне ALL_STAGE_SLUGS. */}
+                {/* Скрыть/Показать отказы — групповой тумблер hideRejected
+                    (сервер: stage != 'rejected'). Охватывает оба негативных
+                    исхода — «Отказ» (company) и «Отказался» (candidate): это
+                    одна стадия rejected, различающаяся инициатором. */}
                 <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-border/40">
                   <Label htmlFor="show-rejections" className="text-sm cursor-pointer">
-                    {filters.hideRejected ? "Показать отказы" : "Скрыть отказы"}
+                    {filters.hideRejected ? "Показать отказы (Отказ / Отказался)" : "Скрыть отказы"}
                   </Label>
                   <Switch
                     id="show-rejections"

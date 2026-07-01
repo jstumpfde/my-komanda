@@ -609,6 +609,13 @@ export interface CandidateDrawerProps {
    * См. parsePipeline(vacancy.descriptionJson?.pipeline) на стороне родителя.
    */
   vacancyPipeline?: VacancyPipelineV2 | null
+  /**
+   * #42: единый список стадий вакансии (источник = воронка v2 / pipeline).
+   * Если задан — дропдаун «Стадия» рендерит именно его (плюс негативные
+   * «Отказ»/«Отказался»); если нет — fallback на ALL_STAGE_SLUGS.
+   * Считается родителем через resolveVacancyStageOptions() (lib/stages.ts).
+   */
+  stageOptions?: { slug: string; label: string }[] | null
   /** VA4: AI-критерии вакансии — показываются в табе «AI-оценка» как контекст. */
   vacancyAnketa?: {
     aiIdealProfile?: string | null
@@ -653,6 +660,7 @@ export function CandidateDrawer({
   onStageChange,
   onToggleFavorite,
   vacancyPipeline,
+  stageOptions,
   vacancyAnketa,
   initialCandidate,
   initialTab,
@@ -1316,8 +1324,10 @@ export function CandidateDrawer({
     setConfirmRestoreOpen(true)
   }
 
-  const openRejectDialog = () => {
-    setRejectInitiator("company")
+  // #42: initiator предзадаётся из выбранного пункта («Отказ» → company,
+  // «Отказался» → candidate). HR может изменить его в самом диалоге.
+  const openRejectDialog = (initiator: "company" | "candidate" = "company") => {
+    setRejectInitiator(initiator)
     setRejectReason("")
     setRejectComment("")
     setConfirmRejectOpen(true)
@@ -2589,6 +2599,10 @@ export function CandidateDrawer({
               value={candidate.stage ?? "new"}
               disabled={!!changingStage}
               onValueChange={(slug) => {
+                // #42: два негативных пункта в конце списка — оба ведут в
+                // rejected, но с разным инициатором (company / candidate).
+                if (slug === "__reject_company") { openRejectDialog("company"); return }
+                if (slug === "__reject_candidate") { openRejectDialog("candidate"); return }
                 if (slug === (candidate.stage ?? "")) return
                 if (slug === "rejected") { openRejectDialog(); return }
                 if (slug === "interview") { void openInviteDialog(); return }
@@ -2603,9 +2617,17 @@ export function CandidateDrawer({
                 </span>
               </SelectTrigger>
               <SelectContent>
-                {ALL_STAGE_SLUGS.map((slug) => (
-                  <SelectItem key={slug} value={slug}>{getStageLabel(slug, vacancyPipeline)}</SelectItem>
+                {/* #42: единый источник — воронка v2 вакансии (stageOptions);
+                    fallback на ALL_STAGE_SLUGS, когда список не прокинут. */}
+                {(stageOptions && stageOptions.length > 0
+                  ? stageOptions.filter((o) => o.slug !== "rejected")
+                  : ALL_STAGE_SLUGS.filter((slug) => slug !== "rejected").map((slug) => ({ slug, label: getStageLabel(slug, vacancyPipeline) }))
+                ).map((opt) => (
+                  <SelectItem key={opt.slug} value={opt.slug}>{opt.label}</SelectItem>
                 ))}
+                {/* Негативные исходы — всегда в конце. */}
+                <SelectItem value="__reject_company">Отказ</SelectItem>
+                <SelectItem value="__reject_candidate">Отказался</SelectItem>
               </SelectContent>
             </Select>
 

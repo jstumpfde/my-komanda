@@ -88,7 +88,7 @@ import { SpecEditor } from "@/components/vacancies/spec-editor"
 import { FunnelTab } from "@/components/vacancies/funnel-tab"
 import { MessageQueueSection } from "@/components/vacancies/message-queue-section"
 import { OutboundPauseMenuItem } from "@/components/vacancies/outbound-pause-control"
-import { parsePipeline, type CompanyStageHhActions, type CompanyStagePalette } from "@/lib/stages"
+import { parsePipeline, resolveVacancyStageOptions, type CompanyStageHhActions, type CompanyStagePalette, type FunnelV2StageLite } from "@/lib/stages"
 import { BrandingOverrideSwitch } from "@/components/vacancies/branding-override-switch"
 import { VacancySettingsProvider, VacancyTabPendingDot, VacancyTabFooter, useVacancySectionRegister, useSafeSubTabSwitch, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
 import {
@@ -662,6 +662,30 @@ export default function VacancyPage() {
       .filter((s) => typeof s.id === "string")
       .map((s) => ({ id: s.id as string, title: s.title ?? null }))
   }, [apiVacancy?.descriptionJson])
+
+  /**
+   * #42: ЕДИНЫЙ источник списка стадий вакансии — и для дропдауна «Стадия» в
+   * карточке кандидата, и для секции «Статус в воронке» фильтра. Приоритет:
+   * воронка v2 (funnelV2.stages) → legacy pipeline → дефолт-пресет.
+   * resolveVacancyStageOptions (lib/stages.ts) сам разбирает fallback-цепочку.
+   */
+  const stageOptions = useMemo(() => {
+    const raw = (apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.funnelV2
+    let v2: FunnelV2StageLite[] | null = null
+    if (raw && typeof raw === "object") {
+      const stages = (raw as { stages?: unknown }).stages
+      if (Array.isArray(stages)) {
+        v2 = (stages as Array<{ id?: unknown; action?: unknown; title?: unknown }>)
+          .filter((s) => typeof s.id === "string" && typeof s.action === "string")
+          .map((s) => ({
+            id: s.id as string,
+            action: s.action as string,
+            title: typeof s.title === "string" ? s.title : null,
+          }))
+      }
+    }
+    return resolveVacancyStageOptions(v2, vacancyPipeline)
+  }, [apiVacancy?.descriptionJson, vacancyPipeline])
 
   /**
    * #34: актуальные для ЭТОЙ вакансии тумблеры колонок «Вид → Настройки
@@ -2981,9 +3005,11 @@ export default function VacancyPage() {
                       // #18: серверные фасеты по ВСЕЙ вакансии (города/источники) —
                       // дропдауны показывают все значения, а не только из страницы.
                       facets={candidateFacets}
-                      // #18: pipeline вакансии → секция «Статус в воронке» показывает
-                      // только реально включённые стадии этой вакансии.
+                      // #18: pipeline вакансии → лейблы/fallback-список стадий.
                       vacancyPipeline={vacancyPipeline}
+                      // #42: единый источник списка стадий (воронка v2 → pipeline)
+                      // — тот же, что и в дропдауне «Стадия» карточки кандидата.
+                      stageOptions={stageOptions}
                       candidates={useListPaginated ? (paginatedColumns?.[0]?.candidates ?? []) : columns.flatMap((c) => c.candidates)}
                     />
                     {false && <SortMenu sortMode={sortMode} onSortChange={setSortMode} />}
@@ -4944,6 +4970,10 @@ export default function VacancyPage() {
         initialTab={drawerInitialTab}
         onToggleFavorite={handleToggleFavorite}
         vacancyAnketa={drawerAnketa}
+        vacancyPipeline={vacancyPipeline}
+        // #42: единый источник списка стадий (воронка v2 → pipeline) — тот же,
+        // что и в секции «Статус в воронке» фильтра.
+        stageOptions={stageOptions}
         onStageChange={(candidateId, newStage) => {
           // Sync kanban columns when stage changes in drawer
           setColumns((prev) => {
