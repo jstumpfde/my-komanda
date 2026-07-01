@@ -8,6 +8,7 @@ import { isShortId } from "@/lib/short-id"
 import type { CompanyHiringDefaults } from "@/lib/db/schema"
 import type { SchedulePageData, MethodConfig, SlotDay } from "@/lib/schedule-interview-types"
 import { resolveDaySchedule, resolveVacancyDaySchedule, generateSlotsForWindows, JS_TO_DAY_ID } from "@/lib/schedule/day-windows"
+import { normalizeFunnelV2, type InterviewMode } from "@/lib/funnel-v2/types"
 
 export type { SchedulePageData, MethodConfig, SlotDay }
 
@@ -29,6 +30,52 @@ const DEFAULT_METHODS: MethodConfig[] = [
 
 export const METHOD_LABELS: Record<string, string> = {
   phone:"Телефон", zoom:"Zoom", telemost:"Яндекс Телемост", meet:"Google Meet", office:"Офис"
+}
+
+// Подпись часового пояса для кандидата (он пояс НЕ меняет — только читает).
+const TZ_LABELS: Record<string, string> = {
+  "Europe/Kaliningrad": "Калининград (UTC+2)",
+  "Europe/Moscow":      "Москва (UTC+3)",
+  "Europe/Samara":      "Самара (UTC+4)",
+  "Asia/Yekaterinburg": "Екатеринбург (UTC+5)",
+  "Asia/Omsk":          "Омск (UTC+6)",
+  "Asia/Novosibirsk":   "Новосибирск (UTC+7)",
+  "Asia/Irkutsk":       "Иркутск (UTC+8)",
+  "Asia/Yakutsk":       "Якутск (UTC+9)",
+  "Asia/Vladivostok":   "Владивосток (UTC+10)",
+  "Asia/Magadan":       "Магадан (UTC+11)",
+  "Asia/Kamchatka":     "Камчатка (UTC+12)",
+}
+
+function timezoneLabelFor(tz: string): string {
+  return TZ_LABELS[tz] ?? tz
+}
+
+// Читает interviewMode из первой interview-стадии воронки v2 вакансии.
+// Возвращает null, если воронка v2 выключена или интервью-стадии нет —
+// тогда способ встречи определяется настройками расписания компании.
+function interviewModeFromFunnelV2(descriptionJson: unknown): InterviewMode | null {
+  const raw = (descriptionJson as { funnelV2?: unknown } | null)?.funnelV2
+  if (!raw) return null
+  const cfg = normalizeFunnelV2(raw)
+  if (!cfg.enabled) return null
+  const interviewStage = cfg.stages.find(s => s.action === "interview" && s.interviewMode)
+  return interviewStage?.interviewMode ?? null
+}
+
+// Сводит абстрактный interviewMode воронки (phone|zoom|office) к конкретному
+// способу встречи из включённых методов расписания. Для "zoom" (видео) выбираем
+// первый включённый видео-метод (telemost→zoom→meet), чтобы адрес/ссылку показать верно.
+function pickMethodForMode(mode: InterviewMode, enabled: MethodConfig[]): MethodConfig | null {
+  if (mode === "phone")  return enabled.find(m => m.method === "phone")  ?? null
+  if (mode === "office") return enabled.find(m => m.method === "office") ?? null
+  // mode === "zoom" → любой видео-метод
+  const videoOrder = ["telemost", "zoom", "meet"]
+  for (const v of videoOrder) {
+    const found = enabled.find(m => m.method === v)
+    if (found) return found
+  }
+  return null
 }
 
 // ─── TZ-хелперы (Intl, без сторонних пакетов) ────────────────────────────────
@@ -150,17 +197,33 @@ export async function fetchScheduleData(
       methods = DEFAULT_METHODS
     }
 
-    const enabledMethods = methods.filter(m => m.enabled)
-    const defaultMethod  =
-      sched.defaultInterviewMethod
-      ?? enabledMethods.find(m => m.method === "telemost")?.method
-      ?? enabledMethods[0]?.method
-      ?? "phone"
+    let enabledMethods = methods.filter(m => m.enabled)
 
-    const defaultDuration =
-      enabledMethods.find(m => m.method === defaultMethod)?.duration
-      ?? enabledMethods[0]?.duration
-      ?? 60
+    // #26.3: способ встречи кандидат НЕ выбирает — показываем ТОЛЬКО актуальный.
+    // Источник правды в порядке приоритета:
+    //   1) interviewMode интервью-стадии воронки v2 вакансии;
+    //   2) sched.defaultInterviewMethod (настройки расписания компании);
+    //   3) первый включённый метод (предпочтительно telemost).
+    const funnelMode = interviewModeFromFunnelV2(row.vacancyDescriptionJson)
+    let pinned: MethodConfig | null = null
+    if (funnelMode) {
+      pinned = pickMethodForMode(funnelMode, enabledMethods)
+    }
+    if (!pinned && sched.defaultInterviewMethod) {
+      pinned = enabledMethods.find(m => m.method === sched.defaultInterviewMethod) ?? null
+    }
+    if (!pinned) {
+      pinned =
+        enabledMethods.find(m => m.method === "telemost")
+        ?? enabledMethods[0]
+        ?? null
+    }
+
+    // Оставляем ровно один способ — карточек выбора не показываем.
+    if (pinned) enabledMethods = [pinned]
+
+    const defaultMethod  = pinned?.method ?? "phone"
+    const defaultDuration = pinned?.duration ?? 60
 
     // 5. Занятые слоты компании на 16 дней (с запасом на TZ-оффсет)
     const now   = new Date()
@@ -231,6 +294,7 @@ export async function fetchScheduleData(
       brandPrimaryColor:  row.brandPrimary ?? "#3b82f6",
       brandBgColor:       row.brandBg      ?? "#f0f4ff",
       timezone,
+      timezoneLabel:      timezoneLabelFor(timezone),
       officeAddress,
       methods:            enabledMethods,
       defaultMethod,

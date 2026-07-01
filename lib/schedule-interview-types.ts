@@ -24,6 +24,9 @@ export interface SchedulePageData {
   brandPrimaryColor:  string
   brandBgColor:       string
   timezone:           string
+  // Человекочитаемая подпись пояса, например «Москва (UTC+3)».
+  // Кандидат пояс НЕ выбирает — показываем как есть.
+  timezoneLabel:      string
   officeAddress:      string | null
   methods:            MethodConfig[]
   defaultMethod:      string

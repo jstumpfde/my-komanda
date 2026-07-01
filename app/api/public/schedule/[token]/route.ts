@@ -12,6 +12,7 @@ import type { CompanyHiringDefaults } from "@/lib/db/schema"
 import type { SchedulePageData, MethodConfig, SlotDay } from "@/lib/schedule-interview-types"
 import { sendToCompanyChannel } from "@/lib/telegram/send-to-company"
 import { resolveDaySchedule, resolveVacancyDaySchedule, generateSlotsForWindows, JS_TO_DAY_ID } from "@/lib/schedule/day-windows"
+import { normalizeFunnelV2, type InterviewMode } from "@/lib/funnel-v2/types"
 
 export type { SchedulePageData, MethodConfig, SlotDay }
 
@@ -33,6 +34,42 @@ const DEFAULT_METHODS: MethodConfig[] = [
 
 const METHOD_LABELS: Record<string, string> = {
   phone:"Телефон", zoom:"Zoom", telemost:"Яндекс Телемост", meet:"Google Meet", office:"Офис"
+}
+
+// Подпись часового пояса для кандидата (пояс он не меняет — только читает).
+const TZ_LABELS: Record<string, string> = {
+  "Europe/Kaliningrad": "Калининград (UTC+2)",
+  "Europe/Moscow":      "Москва (UTC+3)",
+  "Europe/Samara":      "Самара (UTC+4)",
+  "Asia/Yekaterinburg": "Екатеринбург (UTC+5)",
+  "Asia/Omsk":          "Омск (UTC+6)",
+  "Asia/Novosibirsk":   "Новосибирск (UTC+7)",
+  "Asia/Irkutsk":       "Иркутск (UTC+8)",
+  "Asia/Yakutsk":       "Якутск (UTC+9)",
+  "Asia/Vladivostok":   "Владивосток (UTC+10)",
+  "Asia/Magadan":       "Магадан (UTC+11)",
+  "Asia/Kamchatka":     "Камчатка (UTC+12)",
+}
+
+// interviewMode из первой interview-стадии воронки v2 (или null).
+function interviewModeFromFunnelV2(descriptionJson: unknown): InterviewMode | null {
+  const raw = (descriptionJson as { funnelV2?: unknown } | null)?.funnelV2
+  if (!raw) return null
+  const cfg = normalizeFunnelV2(raw)
+  if (!cfg.enabled) return null
+  const st = cfg.stages.find(s => s.action === "interview" && s.interviewMode)
+  return st?.interviewMode ?? null
+}
+
+// Сводит interviewMode (phone|zoom|office) к конкретному включённому методу.
+function pickMethodForMode(mode: InterviewMode, enabled: MethodConfig[]): MethodConfig | null {
+  if (mode === "phone")  return enabled.find(m => m.method === "phone")  ?? null
+  if (mode === "office") return enabled.find(m => m.method === "office") ?? null
+  for (const v of ["telemost", "zoom", "meet"]) {
+    const found = enabled.find(m => m.method === v)
+    if (found) return found
+  }
+  return null
 }
 
 // ─── TZ-хелперы (Intl, без сторонних пакетов) ────────────────────────────────
@@ -198,16 +235,25 @@ export async function GET(
       methods = DEFAULT_METHODS
     }
 
-    const enabledMethods = methods.filter(m => m.enabled)
-    const defaultMethod  = sched.defaultInterviewMethod
-      ?? (enabledMethods.find(m => m.method === "telemost")?.method
-        ?? enabledMethods[0]?.method
-        ?? "phone")
+    let enabledMethods = methods.filter(m => m.enabled)
 
-    // Для слотов используем длительность дефолтного метода
-    const defaultDuration = enabledMethods.find(m => m.method === defaultMethod)?.duration
-      ?? enabledMethods[0]?.duration
-      ?? 60
+    // #26.3: кандидат способ НЕ выбирает — оставляем ровно один актуальный.
+    // Приоритет: interviewMode воронки v2 → sched.defaultInterviewMethod → telemost/первый.
+    const funnelMode = interviewModeFromFunnelV2(row.vacancyDescriptionJson)
+    let pinned: MethodConfig | null = null
+    if (funnelMode) pinned = pickMethodForMode(funnelMode, enabledMethods)
+    if (!pinned && sched.defaultInterviewMethod) {
+      pinned = enabledMethods.find(m => m.method === sched.defaultInterviewMethod) ?? null
+    }
+    if (!pinned) {
+      pinned = enabledMethods.find(m => m.method === "telemost") ?? enabledMethods[0] ?? null
+    }
+    if (pinned) enabledMethods = [pinned]
+
+    const defaultMethod  = pinned?.method ?? "phone"
+
+    // Для слотов используем длительность выбранного метода
+    const defaultDuration = pinned?.duration ?? 60
 
     // 5. Уже занятые слоты этой компании (type='interview', ближайшие 16 дней)
     // Берём UTC-границы с запасом (+16 д), чтобы не срезать последний день в
@@ -292,6 +338,7 @@ export async function GET(
       brandPrimaryColor: row.brandPrimary ?? "#3b82f6",
       brandBgColor:      row.brandBg      ?? "#f0f4ff",
       timezone,
+      timezoneLabel:     TZ_LABELS[timezone] ?? timezone,
       officeAddress,
       methods:           enabledMethods,
       defaultMethod,

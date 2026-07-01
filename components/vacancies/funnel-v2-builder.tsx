@@ -355,8 +355,9 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose, dripT
               </div>
               <div className="space-y-1.5">
                 <Label className="text-[11px] text-muted-foreground">Напоминания</Label>
-                <label className="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" checked={stage.reminders?.dayBefore ?? false} onChange={e => patch({ reminders: { dayBefore: e.target.checked, morning: stage.reminders?.morning ?? false } })} /> За сутки</label>
-                <label className="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" checked={stage.reminders?.morning ?? false} onChange={e => patch({ reminders: { dayBefore: stage.reminders?.dayBefore ?? false, morning: e.target.checked } })} /> Утром в день встречи</label>
+                <label className="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" checked={stage.reminders?.dayBefore ?? false} onChange={e => patch({ reminders: { dayBefore: e.target.checked, morning: stage.reminders?.morning ?? false, hourBefore: stage.reminders?.hourBefore ?? false } })} /> За сутки</label>
+                <label className="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" checked={stage.reminders?.morning ?? false} onChange={e => patch({ reminders: { dayBefore: stage.reminders?.dayBefore ?? false, morning: e.target.checked, hourBefore: stage.reminders?.hourBefore ?? false } })} /> Утром в день встречи</label>
+                <label className="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" checked={stage.reminders?.hourBefore ?? false} onChange={e => patch({ reminders: { dayBefore: stage.reminders?.dayBefore ?? false, morning: stage.reminders?.morning ?? false, hourBefore: e.target.checked } })} /> За час до встречи</label>
               </div>
               <div className="rounded-md border border-border/60 bg-muted/20 p-2.5 space-y-1.5">
                 <p className="text-[11px] text-muted-foreground">
