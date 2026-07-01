@@ -49,6 +49,12 @@ const ALIASES: Record<string, string> = {
   "ссылка_на_запись":          "schedule_link",
   "записаться_на_интервью":    "schedule_link",
   "schedule_link":             "schedule_link",
+  // ─── менеджер (подпись) ───
+  "менеджер":                  "manager",
+  "Менеджер":                  "manager",
+  "имя_менеджера":             "manager",
+  "manager":                   "manager",
+  "Manager":                   "manager",
   // ─── ЗП и интервью ────────
   "зп_от":                     "salary_from",
   "зп_до":                     "salary_to",

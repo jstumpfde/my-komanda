@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { eq, and, lte, gte, ne, isNotNull, inArray, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { vacancies, candidates, followUpMessages, followUpCampaigns, hhResponses, companies, testSubmissions, vacancySpecs } from "@/lib/db/schema"
+import { vacancies, candidates, followUpMessages, followUpCampaigns, hhResponses, companies, users, testSubmissions, vacancySpecs } from "@/lib/db/schema"
 import { changeNegotiationState } from "@/lib/hh-api"
 import { getValidToken } from "@/lib/hh-helpers"
 import { shouldStopFollowUp } from "@/lib/followup/should-stop"
@@ -414,6 +414,7 @@ async function processOneTouch(
     .select({
       companyId:                  vacancies.companyId,
       title:                      vacancies.title,
+      createdBy:                  vacancies.createdBy,
       aiChatbotEnabled:           vacancies.aiChatbotEnabled,
       outboundPaused:             vacancies.outboundPaused,
       scheduleEnabled:            vacancies.scheduleEnabled,
@@ -515,10 +516,33 @@ async function processOneTouch(
   const demoUrl      = `https://company24.pro/demo/${demoTokenForUrl}`
   const testUrl      = `https://company24.pro/test/${tokenForUrl}`
   const scheduleUrl  = `https://company24.pro/schedule/${tokenForUrl}`
+
+  // {{company}} — реальное название компании вакансии (раньше было
+  // захардкожено «Company24»). {{manager}} — имя ответственного за вакансию
+  // (vacancies.created_by → users.first_name || users.name); если не задан —
+  // пустая строка (подпись не ломается литералом «{{manager}}»).
+  const [companyRow] = await db
+    .select({ name: companies.name })
+    .from(companies)
+    .where(eq(companies.id, vacancy.companyId))
+    .limit(1)
+  const companyName = companyRow?.name?.trim() || "Company24"
+
+  let managerName = ""
+  if (vacancy.createdBy) {
+    const [mgr] = await db
+      .select({ firstName: users.firstName, name: users.name })
+      .from(users)
+      .where(eq(users.id, vacancy.createdBy))
+      .limit(1)
+    managerName = (mgr?.firstName?.trim() || mgr?.name?.trim() || "")
+  }
+
   const finalText = renderTemplate(msg.messageText, {
     name:          firstName,
     vacancy:       vacancy.title || "",
-    company:       "Company24",
+    company:       companyName,
+    manager:       managerName,
     demo_link:     demoUrl,
     test_link:     testUrl,
     schedule_link: scheduleUrl,

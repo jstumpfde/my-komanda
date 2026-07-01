@@ -79,6 +79,7 @@ import { VacancyPrequalificationSettings } from "@/components/vacancies/vacancy-
 import { VacancyStopWordsSettings } from "@/components/vacancies/vacancy-stop-words-settings"
 import { FinalScreensSettings, type FinalScreensConfig } from "@/components/vacancies/final-screens-settings"
 import { RecoveryMessageSettings } from "@/components/vacancies/recovery-message-settings"
+import { ScheduleInviteSettings } from "@/components/vacancies/schedule-invite-settings"
 import { FirstMessagesChainEditor } from "@/components/vacancies/first-messages-chain-editor"
 import { FunnelBuilder } from "@/components/vacancies/funnel-builder"
 import { FunnelV2Builder } from "@/components/vacancies/funnel-v2-builder"
@@ -4093,6 +4094,12 @@ export default function VacancyPage() {
                     vacancyId={id}
                     initialEnabled={(apiVacancy as { recoveryMessageEnabled?: boolean } | undefined)?.recoveryMessageEnabled ?? false}
                     initialText={(apiVacancy as { recoveryMessageText?: string } | undefined)?.recoveryMessageText ?? ""}
+                    onSaved={() => refetchVacancy()}
+                  />
+                  {/* Настраиваемый текст приглашения на интервью (ссылка /schedule/[token]). */}
+                  <ScheduleInviteSettings
+                    vacancyId={id}
+                    initialText={(apiVacancy as { scheduleInviteText?: string } | undefined)?.scheduleInviteText ?? ""}
                     onSaved={() => refetchVacancy()}
                   />
                 </div>
