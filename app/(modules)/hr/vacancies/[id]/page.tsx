@@ -4550,6 +4550,10 @@ export default function VacancyPage() {
               // «Далее» у них скрываем, оставляя только крошки навигации слева.
               const ownsOwnNext = activeTab === "anketa" || activeTab === "content"
               const showNext = !ownsOwnNext && !!nextStep
+              // #44: конфиг-табы выравниваем по ширине контента (max-w-3xl, как эталон
+              // «Вакансия»). Широкие рабочие табы с таблицами (Кандидаты/Аналитика)
+              // — панель на всю ширину, иначе крошки повисли бы слева под таблицей.
+              const wideTab = activeTab === "candidates" || activeTab === "analytics"
               return (
                 <VacancyTabFooter
                   onAllVacancies={() => router.push("/hr/vacancies")}
@@ -4558,6 +4562,7 @@ export default function VacancyPage() {
                   nextLabel={showNext ? nextStep!.label : null}
                   onNext={showNext ? () => goToVacancyStep(nextStep!) : undefined}
                   showSave={false}
+                  className={wideTab ? "max-w-none" : undefined}
                 />
               )
             })()}

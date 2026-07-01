@@ -375,6 +375,10 @@ export function VacancyTabFooter(props: {
   saving?: boolean
   /** Показывать кнопку «Сохранить» (по умолчанию — только если есть onSave или контекст). */
   showSave?: boolean
+  /** #44: доп. классы обёртки. По умолчанию max-w-3xl (ширина контента конфиг-табов,
+   *  как у эталона «Вакансия»). Для широких табов (Кандидаты/Аналитика) можно
+   *  передать "max-w-none", чтобы панель растянулась под таблицу. */
+  className?: string
 }) {
   const ctx = useVacancySettings()
   const { onAllVacancies, prevLabel, onPrev, nextLabel, onNext } = props
@@ -385,7 +389,12 @@ export function VacancyTabFooter(props: {
     ? `Сохранить настройки (${ctx.pendingCount} изменения)`
     : ctx ? "Сохранить настройки" : "Сохранить"
   return (
-    <div className="flex items-center justify-between mt-6 pt-4 border-t gap-3">
+    // #44: ширина/выравнивание нижней панели = ширина контента табов (max-w-3xl),
+    // как у эталона «Вакансия» (AnketaTab). Раньше футер рендерился на всю ширину
+    // TabsContent → кнопки прижимались к правому краю viewport, а не к краю
+    // контентной колонки. max-w-3xl совпадает с обёрткой секций настроек
+    // (space-y-6 max-w-3xl) и линией-разделителем над кнопками.
+    <div className={cn("flex items-center justify-between mt-6 pt-4 border-t gap-3 max-w-3xl", props.className)}>
       {/* Снизу-слева: хлебные крошки навигации */}
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={onAllVacancies}>
