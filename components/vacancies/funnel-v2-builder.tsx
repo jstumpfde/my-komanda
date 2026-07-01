@@ -358,6 +358,20 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose, dripT
                 <label className="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" checked={stage.reminders?.dayBefore ?? false} onChange={e => patch({ reminders: { dayBefore: e.target.checked, morning: stage.reminders?.morning ?? false } })} /> За сутки</label>
                 <label className="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" checked={stage.reminders?.morning ?? false} onChange={e => patch({ reminders: { dayBefore: stage.reminders?.dayBefore ?? false, morning: e.target.checked } })} /> Утром в день встречи</label>
               </div>
+              <div className="rounded-md border border-border/60 bg-muted/20 p-2.5 space-y-1.5">
+                <p className="text-[11px] text-muted-foreground">
+                  Часы записи (окна доступности по дням, шаг, макс. в день) — общие для
+                  всех вакансий компании.
+                </p>
+                <a
+                  href="/hr/hiring-settings?tab=interview"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> Настроить часы записи
+                </a>
+              </div>
             </section>
           )}
 

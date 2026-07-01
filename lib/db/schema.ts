@@ -167,6 +167,12 @@ export interface DripTemplates {
   offer:     string[]  // оффер
 }
 
+// Один диапазон времени доступности для записи (напр. { from:"10:00", to:"12:00" }).
+export interface InterviewTimeRange {
+  from: string  // "HH:MM"
+  to:   string  // "HH:MM"
+}
+
 // ── CompanyHiringDefaults (drizzle/0156) ──
 // Дефолты компании для всех вакансий (HR → Настройки найма).
 // Хранится в companies.hiring_defaults_json. VacancyStopFactors определён ниже
@@ -190,9 +196,26 @@ export interface CompanyHiringDefaults {
     // Шаг сетки слотов записи (мин): 15/20/30/40/45/50/60. Дефолт 30.
     slotStep?:         number
     // Обеденный перерыв — в это окно слоты не предлагаются.
+    // LEGACY: заменён на interviewDaySchedule (разрыв между двумя окнами дня).
+    // Поля оставлены для backward-compat деривации, но новый источник правды —
+    // interviewDaySchedule. Резолвер — lib/schedule/day-windows.ts.
     lunchEnabled?:     boolean
     lunchFrom?:        string  // "13:00"
     lunchTo?:          string  // "14:00"
+    // Окна доступности для записи по каждому дню недели. У дня может быть
+    // несколько диапазонов (напр. 10:00–12:00 и 14:00–17:00). Пустой массив
+    // = день недоступен. НОВЫЙ источник правды для генерации слотов —
+    // перекрывает interviewFrom/interviewTo/interviewDays/lunch*.
+    // Если отсутствует — деривится из legacy-полей (lib/schedule/day-windows.ts).
+    interviewDaySchedule?: {
+      mon: InterviewTimeRange[]
+      tue: InterviewTimeRange[]
+      wed: InterviewTimeRange[]
+      thu: InterviewTimeRange[]
+      fri: InterviewTimeRange[]
+      sat: InterviewTimeRange[]
+      sun: InterviewTimeRange[]
+    }
     remind24h?:        boolean
     remind2h?:         boolean
     timezone?:         string
