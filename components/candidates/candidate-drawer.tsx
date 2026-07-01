@@ -1953,7 +1953,7 @@ export function CandidateDrawer({
                 {derived.surveyContacts ? (
                   <SurveyContactsBlock contacts={derived.surveyContacts} />
                 ) : null}
-                <AnswersTab answers={candidate.anketaAnswers} demoLessons={candidate.demoLessons} candidateId={candidate.id} aiScore={candidate.demoAnswersScore} answersDetails={candidate.demoAnswersDetails} testScore={candidate.testScore} demoBlockScores={candidate.demoBlockScores} />
+                <AnswersTab answers={candidate.anketaAnswers} demoLessons={candidate.demoLessons} candidateId={candidate.id} aiScore={candidate.demoAnswersScore} answersDetails={candidate.demoAnswersDetails} testScore={candidate.testScore} demoBlockScores={candidate.demoBlockScores} secondDemoInvite={candidate.secondDemoInvite} />
               </TabsContent>
 
               {/* ── Тест ─────────────────────────────────────────── */}

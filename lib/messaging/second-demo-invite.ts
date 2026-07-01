@@ -53,6 +53,60 @@ async function ensureCampaign(vacancyId: string): Promise<string | null> {
   return created?.id ?? null
 }
 
+/**
+ * Read-only описание решения по приглашению на 2-ю часть (для карточки кандидата).
+ * НЕ пишет в БД. Повторяет гейт maybeScheduleSecondDemoInvite, чтобы HR видел
+ * ПОЧЕМУ кандидат приглашён/не приглашён (балл vs порог), а не гадал.
+ *
+ * @returns null — фича выключена в Портрете (баннер не показываем).
+ */
+export async function describeSecondDemoInvite(
+  candidateId: string,
+  vacancyId:   string,
+): Promise<{
+  invited:    boolean       // приглашение уже отправлено/запланировано (override стоит)
+  score:      number | null // объективный балл по выбору (гейт), null — нет оцениваемых вопросов
+  threshold:  number        // порог из Портрета
+  passed:     boolean | null // score >= threshold; null если score неизвестен
+  blockTitle: string | null // название целевого блока «Путь менеджера»
+} | null> {
+  try {
+    const spec = await getSpec(vacancyId)
+    const ap = spec?.anketaPassInvite
+    if (!ap || ap.enabled !== true) return null
+
+    const [cand] = await db
+      .select({
+        overrideContentBlockId: candidates.overrideContentBlockId,
+        secondDemoInvitedAt:    candidates.secondDemoInvitedAt,
+      })
+      .from(candidates)
+      .where(and(eq(candidates.id, candidateId), eq(candidates.vacancyId, vacancyId)))
+      .limit(1)
+    if (!cand) return null
+    const invited = !!(cand.overrideContentBlockId || cand.secondDemoInvitedAt)
+
+    let blockTitle: string | null = null
+    if (ap.contentBlockId) {
+      const [b] = await db
+        .select({ title: demos.title })
+        .from(demos)
+        .where(and(eq(demos.vacancyId, vacancyId), eq(demos.id, ap.contentBlockId)))
+        .limit(1)
+      blockTitle = b?.title ?? null
+    }
+
+    const result = await computeObjectiveGateScore(candidateId, vacancyId)
+    const score = result ? result.score : null
+    const threshold = ap.passThreshold
+    const passed = score == null ? null : score >= threshold
+
+    return { invited, score, threshold, passed, blockTitle }
+  } catch {
+    return null
+  }
+}
+
 export async function maybeScheduleSecondDemoInvite(args: {
   candidateId: string
   vacancyId:   string
@@ -148,19 +202,24 @@ export async function maybeScheduleSecondDemoInvite(args: {
 
     // 8. Выставляем override (ссылка {{demo_link}} теперь ведёт на 2-ю часть) и
     //    ставим приглашение в очередь. Override + invitedAt = дедуп-флаг.
-    await db.update(candidates)
-      .set({ overrideContentBlockId: blockId, secondDemoInvitedAt: new Date() })
-      .where(eq(candidates.id, args.candidateId))
+    //    Атомарно (транзакция): иначе сбой между update и insert оставлял бы
+    //    override без сообщения — «помечен приглашённым, но ссылка не ушла»
+    //    (часть корня инцидента 30.06). Оба шага либо есть, либо нет.
+    await db.transaction(async (tx) => {
+      await tx.update(candidates)
+        .set({ overrideContentBlockId: blockId, secondDemoInvitedAt: new Date() })
+        .where(eq(candidates.id, args.candidateId))
 
-    await db.insert(followUpMessages).values({
-      campaignId,
-      candidateId: args.candidateId,
-      scheduledAt,
-      touchNumber: 0,
-      channel:     "hh",
-      messageText,
-      status:      "pending",
-      branch:      "second_demo_invite",
+      await tx.insert(followUpMessages).values({
+        campaignId,
+        candidateId: args.candidateId,
+        scheduledAt,
+        touchNumber: 0,
+        channel:     "hh",
+        messageText,
+        status:      "pending",
+        branch:      "second_demo_invite",
+      })
     })
 
     console.log("[second-demo-invite]", JSON.stringify({

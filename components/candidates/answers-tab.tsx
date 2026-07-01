@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
-import { Video as VideoIcon, Mic, Image as ImageIcon, FileText, FileQuestion, Loader2, PictureInPicture2 } from "lucide-react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
+import { Video as VideoIcon, Mic, Image as ImageIcon, FileText, FileQuestion, Loader2, PictureInPicture2, CheckCircle2 } from "lucide-react"
 import { AiScoreBadge } from "@/components/dashboard/ai-score-badge"
 import { cn } from "@/lib/utils"
 import type { Lesson, Block, Question } from "@/lib/course-types"
@@ -37,6 +37,14 @@ interface AnswersTabProps {
   testScore?: number | null
   /** Пер-блочные баллы анкеты (candidates.demo_block_scores): { demoId: { title, score } }. */
   demoBlockScores?: Record<string, { title?: string; score: number }> | null
+  /** Прозрачность приглашения на 2-ю часть демо (из Портрета). null = фича выключена. */
+  secondDemoInvite?: {
+    invited: boolean
+    score: number | null
+    threshold: number
+    passed: boolean | null
+    blockTitle: string | null
+  } | null
 }
 
 /** Цвет бейджа оценки — как в списке кандидатов (>70 зелёный, ≥40 янтарь, <40 красный). */
@@ -756,7 +764,7 @@ function entryHasMedia(entry: AnketaEntry): boolean {
   return Array.isArray(media) ? media.length > 0 : true
 }
 
-export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answersDetails, testScore, demoBlockScores }: AnswersTabProps) {
+export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answersDetails, testScore, demoBlockScores, secondDemoInvite }: AnswersTabProps) {
   const entries = normalizeEntries(answers).filter(Boolean)
   const blockMap = buildBlockMap(demoLessons)
 
@@ -841,10 +849,45 @@ export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answers
     </div>
   ) : null
 
+  // Прозрачность приглашения на 2-ю часть (Юрий 01.07): показываем ПОЧЕМУ
+  // кандидат приглашён/нет — объективный балл по выбору vs порог из Портрета.
+  // Гейт приглашения считает ИМЕННО этот балл (не AI-оценку выше).
+  const si = secondDemoInvite
+  const inviteBanner = si ? (() => {
+    const target = si.blockTitle ? `«${si.blockTitle}»` : "2-ю часть"
+    let tone: string, icon: ReactNode, text: string
+    if (si.invited) {
+      tone = "border-success/30 bg-success/10 text-success"
+      icon = <CheckCircle2 className="w-4 h-4 shrink-0" />
+      text = si.score != null
+        ? `Приглашён на ${target} · балл ${si.score} ≥ порог ${si.threshold}`
+        : `Приглашён на ${target}`
+    } else if (si.score == null) {
+      tone = "border-border bg-muted/40 text-muted-foreground"
+      icon = <FileQuestion className="w-4 h-4 shrink-0" />
+      text = `Не приглашён на ${target} · нет балла по вопросам-выбора (кандидат на них не ответил)`
+    } else if (si.passed) {
+      tone = "border-warning/30 bg-warning/10 text-warning"
+      icon = <FileQuestion className="w-4 h-4 shrink-0" />
+      text = `Проходит порог (${si.score} ≥ ${si.threshold}) — приглашение готовится`
+    } else {
+      tone = "border-destructive/30 bg-destructive/10 text-destructive"
+      icon = <FileQuestion className="w-4 h-4 shrink-0" />
+      text = `Не приглашён на ${target} · балл ${si.score} < порог ${si.threshold}`
+    }
+    return (
+      <div className={cn("flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium", tone)}>
+        {icon}
+        <span className="min-w-0">{text}</span>
+      </div>
+    )
+  })() : null
+
   if (visible.length === 0) {
     return (
       <div className="space-y-3 min-w-0">
         {scoreBadge}
+        {inviteBanner}
         {prequalSection}
         <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
           <FileQuestion className="w-10 h-10 mb-3 opacity-50" />
@@ -859,6 +902,7 @@ export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answers
   return (
     <div className="space-y-4 min-w-0">
       {scoreBadge}
+      {inviteBanner}
       {prequalSection}
 
       {/* Ответы сгруппированы по КОНТЕНТ-БЛОКАМ (демо). Заголовок группы = имя блока
