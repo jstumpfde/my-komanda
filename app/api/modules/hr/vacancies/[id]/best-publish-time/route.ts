@@ -114,8 +114,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       cnt: c.cnt,
       pct: Math.round((c.cnt / total) * 100),
     })
-    const best = cells.length > 0 ? toCombo(cells[0]) : null
     const combos = cells.slice(0, 3).map(toCombo)
+
+    // ── Будние слоты (Пн–Пт, dow 1..5) для карточки advisor ───────────────
+    // Карточка показывает лучшие рабочие дни/часы — Сб/Вс исключаем.
+    // best = лучшая будняя ячейка (карточка про будни). weekdayTops — топ-5.
+    const weekdayCells = cells.filter(c => c.dow >= 1 && c.dow <= 5)
+    const best = weekdayCells.length > 0 ? toCombo(weekdayCells[0]) : null
+    const weekdayTops = weekdayCells.slice(0, 5).map(toCombo)
 
     return NextResponse.json({
       enough: true,
@@ -124,6 +130,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       firstAt,
       best,
       combos,
+      weekdayTops,
       grid,
       maxCell,
       days,
