@@ -187,6 +187,14 @@ export const AnketaPassInviteSchema = z.object({
    * открытые/AI-вопросы исключены — порог стабильный. Дефолт 35.
    */
   passThreshold:  z.number().int().min(0).max(100).default(35),
+  /**
+   * Порог AI-ОЦЕНКИ ответов анкеты (candidates.demo_answers_score, 0–100).
+   * ИЛИ-гейт: во 2-ю часть пропускаем, если объективный балл ≥ passThreshold
+   * ИЛИ AI-оценка ответов ≥ aiEvalThreshold (достаточно ЛЮБОГО из двух). Так
+   * сильные по сути ответы проходят даже при низком объективном балле. Дефолт 55.
+   * Если demo_answers_score ещё не посчитан (null) — ИЛИ-ветка не срабатывает.
+   */
+  aiEvalThreshold: z.number().int().min(0).max(100).default(55),
   /** Какой контент-блок отправить (id «Путь менеджера»). null = боевой по умолчанию. */
   contentBlockId: z.string().nullable().default(null),
   /** Текст сообщения; {{name}}, {{vacancy}}, {{demo_link}} подставляются. */

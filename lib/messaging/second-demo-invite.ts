@@ -33,6 +33,11 @@ import { adjustToWorkingWindow } from "@/lib/schedule/can-send-now"
 const DEFAULT_TEXT =
   "{{name}}, отлично — вы прошли анкету! Приглашаем вас на следующий этап: {{demo_link}}"
 
+// Дефолт порога AI-оценки ответов = дефолт схемы (types.ts AnketaPassInviteSchema).
+// НЕ хардкод логики: getSpec не всегда применяет дефолты схемы (инцидент 30.06),
+// поэтому для старых спеков без aiEvalThreshold подставляем это значение.
+const DEFAULT_AI_EVAL_THRESHOLD = 55
+
 async function ensureCampaign(vacancyId: string): Promise<string | null> {
   const [existing] = await db
     .select({ id: followUpCampaigns.id })
@@ -64,11 +69,13 @@ export async function describeSecondDemoInvite(
   candidateId: string,
   vacancyId:   string,
 ): Promise<{
-  invited:    boolean       // приглашение уже отправлено/запланировано (override стоит)
-  score:      number | null // объективный балл по выбору (гейт), null — нет оцениваемых вопросов
-  threshold:  number        // порог из Портрета
-  passed:     boolean | null // score >= threshold; null если score неизвестен
-  blockTitle: string | null // название целевого блока «Путь менеджера»
+  invited:         boolean       // приглашение уже отправлено/запланировано (override стоит)
+  score:           number | null // объективный балл по выбору (гейт), null — нет оцениваемых вопросов
+  threshold:       number        // порог объективного балла из Портрета
+  aiEvalScore:     number | null // AI-оценка ответов анкеты (demo_answers_score), null — ещё не посчитана
+  aiEvalThreshold: number        // порог AI-оценки из Портрета
+  passed:          boolean | null // ИЛИ-гейт взят (объективный ИЛИ AI-оценка); null если оба балла неизвестны
+  blockTitle:      string | null // название целевого блока «Путь менеджера»
 } | null> {
   try {
     const spec = await getSpec(vacancyId)
@@ -79,6 +86,7 @@ export async function describeSecondDemoInvite(
       .select({
         overrideContentBlockId: candidates.overrideContentBlockId,
         secondDemoInvitedAt:    candidates.secondDemoInvitedAt,
+        demoAnswersScore:       candidates.demoAnswersScore,
       })
       .from(candidates)
       .where(and(eq(candidates.id, candidateId), eq(candidates.vacancyId, vacancyId)))
@@ -99,9 +107,15 @@ export async function describeSecondDemoInvite(
     const result = await computeObjectiveGateScore(candidateId, vacancyId)
     const score = result ? result.score : null
     const threshold = ap.passThreshold
-    const passed = score == null ? null : score >= threshold
+    const aiEvalScore = typeof cand.demoAnswersScore === "number" ? cand.demoAnswersScore : null
+    const aiEvalThreshold = typeof ap.aiEvalThreshold === "number" ? ap.aiEvalThreshold : DEFAULT_AI_EVAL_THRESHOLD
 
-    return { invited, score, threshold, passed, blockTitle }
+    // ИЛИ-гейт: тот же критерий, что в maybeScheduleSecondDemoInvite.
+    const passObjective = score != null && score >= threshold
+    const passAiEval = aiEvalScore != null && aiEvalScore >= aiEvalThreshold
+    const passed = score == null && aiEvalScore == null ? null : (passObjective || passAiEval)
+
+    return { invited, score, threshold, aiEvalScore, aiEvalThreshold, passed, blockTitle }
   } catch {
     return null
   }
@@ -119,10 +133,12 @@ export async function maybeScheduleSecondDemoInvite(args: {
     if (!ap || ap.enabled !== true) return { scheduled: false, reason: "disabled" }
 
     // 2. Дедуп: override уже стоит → кандидат уже приглашён.
+    //    Заодно берём demo_answers_score — вход ИЛИ-ветки гейта (см. шаг 4).
     const [cand] = await db
       .select({
         overrideContentBlockId: candidates.overrideContentBlockId,
         secondDemoInvitedAt:    candidates.secondDemoInvitedAt,
+        demoAnswersScore:       candidates.demoAnswersScore,
       })
       .from(candidates)
       .where(and(eq(candidates.id, args.candidateId), eq(candidates.vacancyId, args.vacancyId)))
@@ -143,13 +159,37 @@ export async function maybeScheduleSecondDemoInvite(args: {
       .limit(1)
     if (!blockRow) return { scheduled: false, reason: "content_block_not_found" }
 
-    // 4. Детерминированный балл по выбору. Гейт срабатывает только при наличии
-    //    оцениваемых вопросов-выбора (иначе null → не шлём).
+    // 4. ИЛИ-гейт: пропускаем во 2-ю часть, если ЛЮБОЕ из двух:
+    //    (а) объективный балл по выбору >= passThreshold, ИЛИ
+    //    (б) AI-оценка ответов анкеты (demo_answers_score) >= aiEvalThreshold.
+    //    Так сильные по сути ответы проходят даже при низком объективном балле.
+    //    - Объективный балл: null, если у вакансии нет оцениваемых вопросов-выбора
+    //      или у кандидата нет ответов (тогда ветка (а) не срабатывает).
+    //    - AI-оценка: null, если ещё не посчитана (score-answers — fire-and-forget,
+    //      считается параллельно этому гейту в answer-route). Тогда ветка (б) не
+    //      срабатывает, поведение как раньше — без краша.
     const result = await computeObjectiveGateScore(args.candidateId, args.vacancyId)
-    if (!result) return { scheduled: false, reason: "no_objective_questions" }
-    if (result.score < ap.passThreshold) {
-      return { scheduled: false, reason: "below_threshold", score: result.score }
+    const objectiveScore = result ? result.score : null
+    const aiEvalScore = typeof cand.demoAnswersScore === "number" ? cand.demoAnswersScore : null
+    const aiEvalThreshold = typeof ap.aiEvalThreshold === "number" ? ap.aiEvalThreshold : DEFAULT_AI_EVAL_THRESHOLD
+
+    const passObjective = objectiveScore != null && objectiveScore >= ap.passThreshold
+    const passAiEval = aiEvalScore != null && aiEvalScore >= aiEvalThreshold
+
+    if (!passObjective && !passAiEval) {
+      // Ни один порог не взят. Если объективных вопросов вовсе нет И AI-оценки нет —
+      // гейт неприменим (как раньше), иначе — балл ниже порогов.
+      if (objectiveScore == null && aiEvalScore == null) {
+        return { scheduled: false, reason: "no_objective_questions" }
+      }
+      return {
+        scheduled: false,
+        reason:    "below_threshold",
+        score:     objectiveScore ?? aiEvalScore ?? undefined,
+      }
     }
+    // Для логов/возврата — «сработавший» балл (приоритет объективного).
+    const gateScore = passObjective ? (objectiveScore as number) : (aiEvalScore as number)
 
     // 5. Гарантируем кампанию (follow_up_messages.campaign_id NOT NULL).
     const campaignId = await ensureCampaign(args.vacancyId)
@@ -165,7 +205,7 @@ export async function maybeScheduleSecondDemoInvite(args: {
         inArray(followUpMessages.status, ["pending", "sending", "sent"]),
       ))
       .limit(1)
-    if (existing) return { scheduled: false, reason: "already_scheduled", score: result.score }
+    if (existing) return { scheduled: false, reason: "already_scheduled", score: gateScore }
 
     // 7. Расписание вакансии (сдвигаем отправку в рабочее окно).
     const [vac] = await db
@@ -223,16 +263,20 @@ export async function maybeScheduleSecondDemoInvite(args: {
     })
 
     console.log("[second-demo-invite]", JSON.stringify({
-      tag:         "second-demo-invite/schedule",
-      candidateId: args.candidateId,
-      vacancyId:   args.vacancyId,
-      score:       result.score,
-      threshold:   ap.passThreshold,
+      tag:             "second-demo-invite/schedule",
+      candidateId:     args.candidateId,
+      vacancyId:       args.vacancyId,
+      score:           gateScore,
+      gate:            passObjective ? "objective" : "ai_eval",
+      objectiveScore,
+      aiEvalScore,
+      passThreshold:   ap.passThreshold,
+      aiEvalThreshold,
       blockId,
-      scheduledAt: scheduledAt.toISOString(),
+      scheduledAt:     scheduledAt.toISOString(),
     }))
 
-    return { scheduled: true, score: result.score, scheduledAt: scheduledAt.toISOString() }
+    return { scheduled: true, score: gateScore, scheduledAt: scheduledAt.toISOString() }
   } catch (err) {
     console.error("[second-demo-invite] schedule failed:", err instanceof Error ? err.message : err)
     return { scheduled: false, reason: "exception" }

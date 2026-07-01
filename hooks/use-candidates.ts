@@ -67,6 +67,8 @@ export interface ApiCandidate {
     invited: boolean
     score: number | null
     threshold: number
+    aiEvalScore: number | null
+    aiEvalThreshold: number
     passed: boolean | null
     blockTitle: string | null
   } | null
