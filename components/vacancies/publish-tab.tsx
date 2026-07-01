@@ -4,16 +4,16 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Separator } from "@/components/ui/separator"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { getBrand, type BrandConfig } from "@/lib/branding"
 import {
-  Copy, Check, ExternalLink, Eye, Code2, FileText,
-  Globe, Smartphone, Monitor, ChevronRight, Plus, X, Save, Sparkles,
+  Copy, Check, Eye, Code2, FileText,
+  Plus, X, Save, Sparkles,
 } from "lucide-react"
 
 export interface MiniFormFieldForHtml {
@@ -38,11 +38,14 @@ interface PublishTabProps {
     slogan?: string
   }
   formFields?: MiniFormFieldForHtml[]
-  // Редактируемые текстовые блоки над формой (descriptionJson.landingBlocks).
+  // Редактируемые rich-текстовые блоки над формой (descriptionJson.landingBlocks).
+  // Принимаем и новый формат ({ html }), и legacy ({ icon, text }).
   // benefits — legacy string[] (descriptionJson.landingBenefits) для обратной совместимости.
   vacancyId?: string
-  blocks?: LandingBlock[]
+  blocks?: LandingBlockInput[]
   benefits?: string[]
+  // Настройки кнопки формы (descriptionJson.landingButton).
+  button?: LandingButton
   descriptionJson?: unknown
   onSaved?: () => void
 }
@@ -64,31 +67,98 @@ function escHtml(str: string): string {
     .replace(/'/g, "&#x27;")
 }
 
-// Текстовый блок над формой лендинга: иконка (эмодзи) + текст (может быть
-// многострочным). Хранится в descriptionJson.landingBlocks.
-export interface LandingBlock { icon: string; text: string }
+// #47: rich-текстовый блок над формой лендинга. Иконки/эмодзи ставятся ВНУТРИ
+// текста (inline). Хранится в descriptionJson.landingBlocks как { html }.
+export interface LandingBlock { html: string }
+// Legacy-совместимый вход: старые блоки { icon, text }.
+export type LandingBlockInput = LandingBlock | { icon?: string; text?: string }
 
-// Палитра иконок для блоков.
-export const BLOCK_ICONS = ["✓", "⭐", "🚀", "💰", "📈", "🎯", "🏆", "✅", "💼", "🔥", "⚡", "🎓", "📍", "🤝", "💎", "❤️", "🌟", "📌"]
+// #49: настройки кнопки формы (текст, цвет, иконка + её позиция).
+// Хранится в descriptionJson.landingButton. Пустые поля → дефолты.
+export interface LandingButton {
+  text?: string
+  color?: string
+  icon?: string
+  iconPosition?: "left" | "right"
+}
+// Набор эмодзи-иконок для кнопки (standalone HTML не может импортировать
+// lucide, поэтому иконки — эмодзи, как и BLOCK_ICONS).
+export const BUTTON_ICONS = ["→", "✓", "🚀", "📩", "💬", "👉", "✨", "🔥", "📞", "📝", "⭐", "❤️"]
+export const DEFAULT_BUTTON_TEXT = "Узнать подробнее"
+// Пресеты цвета кнопки (совпадают с палитрой navButton в notion-editor).
+const BUTTON_COLORS = ["#3b82f6", "#ef4444", "#22c55e", "#f97316", "#8b5cf6", "#000000"]
 
-// Дефолтные блоки (если HR ничего не задал) — часть динамическая (доход×1.5 от
-// нижней вилки, город). После редактирования сохраняются как есть в landingBlocks.
-function defaultBlocks(v: { city?: string; salaryFrom?: number }): LandingBlock[] {
-  return [
-    { icon: "💰", text: v.salaryFrom
-      ? `Доход от ${Math.round(v.salaryFrom * 1.5).toLocaleString("ru-RU")} ₽ через 3 месяца`
-      : "Доход выше среднего по рынку через 3 месяца" },
-    { icon: "🎓", text: "Обучение и наставник с первого дня" },
-    { icon: "📈", text: "Карьерный рост до руководителя за 6-12 мес." },
-    { icon: "📍", text: `Современный офис${v.city ? " в " + v.city : ""}` },
-  ]
+function resolveButton(btn: LandingButton | undefined, fallbackColor: string): Required<LandingButton> {
+  return {
+    text: (btn?.text || "").trim() || DEFAULT_BUTTON_TEXT,
+    color: btn?.color || fallbackColor,
+    icon: btn?.icon ?? "→",
+    iconPosition: btn?.iconPosition === "left" ? "left" : "right",
+  }
 }
 
-// Нормализация входа: новые landingBlocks, либо legacy landingBenefits (string[]),
-// либо дефолт.
-function resolveBlocks(blocks: LandingBlock[] | undefined, benefits: string[] | undefined, v: { city?: string; salaryFrom?: number }): LandingBlock[] {
-  if (blocks && blocks.length > 0) return blocks.map(b => ({ icon: b.icon || "✓", text: b.text ?? "" }))
-  if (benefits && benefits.length > 0) return benefits.map(text => ({ icon: "✓", text }))
+// #48: очень лёгкая санитизация rich-HTML блоков для standalone-лендинга.
+// Разрешаем только безопасные inline/blocks теги, вырезаем script/style/on*.
+// (Контент вводит HR в своём же кабинете — это защита от случайной вставки.)
+const ALLOWED_BLOCK_TAGS = new Set([
+  "b", "strong", "i", "em", "u", "s", "br", "p", "div", "span", "ul", "ol", "li", "a", "h3", "h4",
+])
+function sanitizeBlockHtml(html: string): string {
+  if (!html) return ""
+  let out = html
+    .replace(/<\s*(script|style|iframe|object|embed)[\s\S]*?<\s*\/\s*\1\s*>/gi, "")
+    .replace(/ on[a-z]+\s*=\s*"[^"]*"/gi, "")
+    .replace(/ on[a-z]+\s*=\s*'[^']*'/gi, "")
+    .replace(/javascript:/gi, "")
+  // Убираем неразрешённые теги (оставляя их содержимое).
+  out = out.replace(/<\/?([a-z0-9]+)([^>]*)>/gi, (m, tag: string, attrs: string) => {
+    const t = tag.toLowerCase()
+    if (!ALLOWED_BLOCK_TAGS.has(t)) return ""
+    if (t === "a") {
+      const href = /href\s*=\s*"([^"]*)"/i.exec(attrs)?.[1] || /href\s*=\s*'([^']*)'/i.exec(attrs)?.[1] || ""
+      const safeHref = /^(https?:|mailto:|tel:)/i.test(href) ? href : ""
+      return m.startsWith("</") ? "</a>" : `<a href="${escHtml(safeHref)}" target="_blank" rel="noopener noreferrer">`
+    }
+    return m.startsWith("</") ? `</${t}>` : `<${t}>`
+  })
+  return out
+}
+
+// Текст «нет форматирования» → есть ли в html хоть какой-то видимый контент.
+function htmlHasContent(html: string): boolean {
+  return html.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim().length > 0
+}
+
+// Дефолтные блоки (если HR ничего не задал) — часть динамическая (доход×1.5 от
+// нижней вилки, город). Возвращаем как rich-html (эмодзи inline).
+function defaultBlocks(v: { city?: string; salaryFrom?: number }): LandingBlock[] {
+  const lines = [
+    v.salaryFrom
+      ? `💰 Доход от ${Math.round(v.salaryFrom * 1.5).toLocaleString("ru-RU")} ₽ через 3 месяца`
+      : "💰 Доход выше среднего по рынку через 3 месяца",
+    "🎓 Обучение и наставник с первого дня",
+    "📈 Карьерный рост до руководителя за 6-12 мес.",
+    `📍 Современный офис${v.city ? " в " + v.city : ""}`,
+  ]
+  return [{ html: lines.map(l => `<div>${escHtml(l)}</div>`).join("") }]
+}
+
+// Нормализация одного блока входа в новый формат { html }.
+function blockToHtml(b: LandingBlockInput): LandingBlock {
+  if (b && typeof (b as LandingBlock).html === "string") return { html: (b as LandingBlock).html }
+  const legacy = b as { icon?: string; text?: string }
+  const icon = (legacy.icon || "").trim()
+  const text = (legacy.text || "").trim()
+  if (!text) return { html: "" }
+  const inner = escHtml((icon ? icon + " " : "") + text).replace(/\n/g, "<br>")
+  return { html: `<div>${inner}</div>` }
+}
+
+// Нормализация входа: новые landingBlocks ({html}|{icon,text}), либо legacy
+// landingBenefits (string[]), либо дефолт.
+function resolveBlocks(blocks: LandingBlockInput[] | undefined, benefits: string[] | undefined, v: { city?: string; salaryFrom?: number }): LandingBlock[] {
+  if (blocks && blocks.length > 0) return blocks.map(blockToHtml)
+  if (benefits && benefits.length > 0) return [{ html: benefits.map(t => `<div>${escHtml(t)}</div>`).join("") }]
   return defaultBlocks(v)
 }
 
@@ -98,6 +168,7 @@ function generateFullPageHtml(
   override?: BrandOverride,
   formFields?: MiniFormFieldForHtml[],
   blocks?: LandingBlock[],
+  button?: LandingButton,
 ): string {
   const primary = override?.color || brand.primaryColor || "#3b82f6"
   const bg = override?.color ? override.color + "10" : brand.bgColor
@@ -105,63 +176,81 @@ function generateFullPageHtml(
   const rawCompany = override?.companyName || brand.companyName || ""
   const company = rawCompany.trim() || "Ваша компания"
   const origin = typeof window !== "undefined" ? window.location.origin : "https://company24.pro"
-  // B6: на внешнем сайте (Tilda/Wix) относительный путь /uploads/... ломается
+  // #48 / B6: на внешнем сайте (Tilda/Wix) относительный путь /uploads/... ломается
   // (резолвится к чужому домену) → пустой квадрат. Делаем логотип абсолютным.
-  const logoSrc = override?.logo || brand.logoUrl
+  const logoSrc = (override?.logo || brand.logoUrl || "").trim()
   const logoUrl = logoSrc && logoSrc.startsWith("/") ? origin + logoSrc : logoSrc
   const initial = company.charAt(0) || "•"
+  // #48: fallback-аватар (буква на фоне primary) при пустом logoUrl. При битой
+  // картинке onerror прячет <img> и показывает соседний fallback (не «сломанное
+  // фото»). Оба элемента всегда в DOM — fallback скрыт, пока картинка грузится.
+  const fallbackLogo = `<div style="width:44px;height:44px;border-radius:12px;background:${primary};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px">${escHtml(initial)}</div>`
   const logoHtml = logoUrl
-    ? `<img src="${logoUrl}" alt="${company}" style="width:44px;height:44px;border-radius:12px;object-fit:contain" />`
-    : `<div style="width:44px;height:44px;border-radius:12px;background:${primary};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px">${initial}</div>`
+    ? `<img src="${escHtml(logoUrl)}" alt="${escHtml(company)}" style="width:44px;height:44px;border-radius:12px;object-fit:contain;background:#fff" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div style="display:none;width:44px;height:44px;border-radius:12px;background:${primary};align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px">${escHtml(initial)}</div>`
+    : fallbackLogo
   const salary = vacancy.salaryFrom && vacancy.salaryTo
     ? `${vacancy.salaryFrom.toLocaleString("ru-RU")} – ${vacancy.salaryTo.toLocaleString("ru-RU")} ₽`
     : ""
   const slogan = override?.slogan?.trim() || ""
+  const btn = resolveButton(button, primary)
+  const btnLabel = escHtml(btn.text)
+  const btnIcon = btn.icon ? escHtml(btn.icon) : ""
+  const btnInner = btn.iconPosition === "left"
+    ? `${btnIcon ? btnIcon + " " : ""}${btnLabel}`
+    : `${btnLabel}${btnIcon ? " " + btnIcon : ""}`
+
+  const richBlocks = (blocks && blocks.length > 0 ? blocks : defaultBlocks(vacancy))
+    .map(b => sanitizeBlockHtml(b.html || ""))
+    .filter(h => htmlHasContent(h))
 
   return `<!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${vacancy.title} — ${company}</title>
+<title>${escHtml(vacancy.title)} — ${escHtml(company)}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:${bg};color:${text};min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
-.container{max-width:480px;width:100%;text-align:center}
-.logo{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:32px}
-.logo-text{font-size:20px;font-weight:700;color:${text}}
-h1{font-size:28px;font-weight:800;color:${text};margin-bottom:8px;line-height:1.2}
-.slogan{color:${text}cc;font-size:15px;font-weight:500;margin-bottom:12px}
-.meta{color:${text}99;font-size:14px;margin-bottom:24px}
-.highlights{background:#fff;border-radius:16px;padding:24px;margin-bottom:24px;text-align:left}
-.highlight{display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;font-size:14px;color:${text}}
-.highlight:last-child{margin-bottom:0}
-.check{color:${primary};font-size:18px;flex-shrink:0;margin-top:1px}
-.form-card{background:#fff;border-radius:16px;padding:24px;margin-bottom:24px}
-.form-card input,.form-card select{width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:12px;outline:none;transition:border .2s;background:#fff;color:${text};appearance:none;-webkit-appearance:none}
+.container{max-width:480px;width:100%}
+/* #48: единая белая подложка — шапка, преимущества и форма в одной карточке */
+.sheet{background:#fff;border-radius:20px;box-shadow:0 8px 30px rgba(0,0,0,.08);overflow:hidden;color:#0f172a}
+.sheet-inner{padding:28px 24px}
+.logo{display:flex;align-items:center;gap:10px;margin-bottom:20px}
+.logo-text{font-size:18px;font-weight:700;color:#0f172a}
+h1{font-size:26px;font-weight:800;color:#0f172a;margin-bottom:8px;line-height:1.2;text-align:center}
+.slogan{color:#475569;font-size:15px;font-weight:500;margin-bottom:8px;text-align:center}
+.meta{color:#64748b;font-size:14px;margin-bottom:20px;text-align:center}
+.highlights{border-radius:16px;padding:20px;margin-bottom:20px;text-align:left;background:#f8fafc;border:1px solid #eef2f7}
+.highlight-block{font-size:14px;line-height:1.55;color:#0f172a;margin-bottom:14px}
+.highlight-block:last-child{margin-bottom:0}
+.highlight-block a{color:${primary};text-decoration:underline}
+.highlight-block ul,.highlight-block ol{padding-left:20px;margin:4px 0}
+.form-card input,.form-card select{width:100%;padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:12px;outline:none;transition:border .2s;background:#fff;color:#0f172a;appearance:none;-webkit-appearance:none}
 .form-card input:focus,.form-card select:focus{border-color:${primary}}
-.btn{display:block;width:100%;padding:16px;background:${primary};color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;transition:opacity .2s}
+.btn{display:block;width:100%;padding:16px;background:${btn.color};color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;transition:opacity .2s}
 .btn:hover{opacity:.9}
-.footer{font-size:11px;color:${text}40;margin-top:24px}
+.footer{font-size:11px;color:${text}66;margin-top:20px;text-align:center}
 </style>
 </head>
 <body>
 <div class="container">
-<div class="logo">${logoHtml}<span class="logo-text">${company}</span></div>
-<h1>${vacancy.title}</h1>
-${slogan ? `<p class="slogan">${slogan}</p>\n` : ""}<p class="meta">${vacancy.city || ""}${salary ? " · " + salary : ""}</p>
-<div class="highlights">
-${(blocks && blocks.length > 0 ? blocks : defaultBlocks(vacancy))
-  .filter(b => (b.text ?? "").trim())
-  .map(b => `<div class="highlight"><span class="check">${escHtml(b.icon || "✓")}</span><span>${escHtml(b.text.trim()).replace(/\n/g, "<br>")}</span></div>`)
-  .join("\n")}
-</div>
+<div class="sheet">
+<div class="sheet-inner">
+<div class="logo">${logoHtml}<span class="logo-text">${escHtml(company)}</span></div>
+<h1>${escHtml(vacancy.title)}</h1>
+${slogan ? `<p class="slogan">${escHtml(slogan)}</p>\n` : ""}<p class="meta">${escHtml(vacancy.city || "")}${salary ? " · " + salary : ""}</p>
+${richBlocks.length > 0 ? `<div class="highlights">
+${richBlocks.map(h => `<div class="highlight-block">${h}</div>`).join("\n")}
+</div>` : ""}
 <div class="form-card">
 <input type="text" id="hf-name" placeholder="Ваше имя" required />
 <input type="tel" id="hf-phone" placeholder="Телефон" required />
 ${(formFields ?? []).map(f => {
   const lbl = escHtml(f.label)
-  const ph = escHtml(f.placeholder || f.label)
+  // #46: плейсхолдер = label поля, а не example-value (f.placeholder — пример
+  // «Москва» для «Город», кандидату он не нужен).
+  const ph = lbl
   const fid = escHtml(f.id)
   const req = f.required ? " required" : ""
   if (f.type === "select" && f.options && f.options.length > 0) {
@@ -171,9 +260,11 @@ ${(formFields ?? []).map(f => {
   const inputType = f.type === "number" ? "number" : "text"
   return `<input type="${inputType}" id="hf-${fid}" data-field="${fid}" placeholder="${ph}${f.required ? " *" : ""}"${req} />`
 }).join("\n")}
-<button class="btn" onclick="handleSubmit()">Узнать подробнее →</button>
+<button class="btn" onclick="handleSubmit()">${btnInner}</button>
 </div>
 <p class="footer">Powered by Company24</p>
+</div>
+</div>
 </div>
 <script>
 function handleSubmit(){
@@ -224,16 +315,71 @@ const CMS_INSTRUCTIONS: { id: string; name: string; steps: string[] }[] = [
   ]},
 ]
 
-export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom, salaryTo, brandOverride, formFields, vacancyId, blocks, benefits, descriptionJson, onSaved }: PublishTabProps) {
+// #47: лёгкий rich-редактор одного блока (contentEditable + мини-тулбар).
+// Эмодзи вводятся прямо в тексте. Хранит и отдаёт HTML (санитизуется при сохранении).
+function RichBlockEditor({ value, onChange, placeholder }: {
+  value: string
+  onChange: (html: string) => void
+  placeholder?: string
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const isInternal = useRef(false)
+
+  // Синхроним value → DOM только при внешних изменениях (не при своём вводе).
+  useEffect(() => {
+    if (ref.current && !isInternal.current && ref.current.innerHTML !== value) {
+      ref.current.innerHTML = value || ""
+    }
+    isInternal.current = false
+  }, [value])
+
+  const sync = () => {
+    if (!ref.current) return
+    isInternal.current = true
+    onChange(ref.current.innerHTML)
+  }
+  const exec = (cmd: string) => {
+    document.execCommand(cmd, false)
+    ref.current?.focus()
+    sync()
+  }
+
+  return (
+    <div className="border rounded-lg overflow-hidden bg-background">
+      <div className="flex items-center gap-0.5 px-1.5 py-1 border-b bg-muted/30">
+        <button type="button" title="Жирный" onMouseDown={(e) => { e.preventDefault(); exec("bold") }} className="px-2 py-1 rounded hover:bg-muted text-sm font-bold">B</button>
+        <button type="button" title="Курсив" onMouseDown={(e) => { e.preventDefault(); exec("italic") }} className="px-2 py-1 rounded hover:bg-muted text-sm italic">I</button>
+        <button type="button" title="Список" onMouseDown={(e) => { e.preventDefault(); exec("insertUnorderedList") }} className="px-2 py-1 rounded hover:bg-muted text-xs">• Список</button>
+      </div>
+      <div
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        onInput={sync}
+        onBlur={sync}
+        data-placeholder={placeholder || "Текст блока…"}
+        className={cn(
+          "px-3 py-2.5 min-h-[52px] outline-none text-sm leading-relaxed",
+          "[&:empty]:before:content-[attr(data-placeholder)] [&:empty]:before:text-muted-foreground/50 [&:empty]:before:pointer-events-none",
+          "[&_ul]:list-disc [&_ul]:pl-5 [&_a]:text-primary [&_a]:underline",
+        )}
+      />
+    </div>
+  )
+}
+
+export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom, salaryTo, brandOverride, formFields, vacancyId, blocks, benefits, button, descriptionJson, onSaved }: PublishTabProps) {
   const [brand, setBrand] = useState<BrandConfig | null>(null)
   const [copied, setCopied] = useState(false)
   const [activeInstruction, setActiveInstruction] = useState<string | null>(null)
 
-  // Текстовые блоки над формой. Если HR ещё ничего не сохранял — дефолтные
-  // (динамические по зарплате/городу). Поддерживаем legacy landingBenefits.
+  // #47: rich-текстовые блоки над формой. Если HR ещё ничего не сохранял —
+  // дефолтные (динамические по зарплате/городу). Поддерживаем legacy landingBenefits.
   const [blockList, setBlockList] = useState<LandingBlock[]>(
     resolveBlocks(blocks, benefits, { city: vacancyCity, salaryFrom }),
   )
+  // #49: настройки кнопки формы.
+  const [btnCfg, setBtnCfg] = useState<LandingButton>(button ?? {})
   const [savingBlocks, setSavingBlocks] = useState(false)
   // S3: авто-сохранение блоков. isUserEditRef отличает правки пользователя от
   // синка из props (иначе синк триггерил бы лишний автосейв). autoSaved — бейдж.
@@ -241,18 +387,24 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
   const isUserEditRef = useRef(false)
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Подхватываем блоки при загрузке/смене вакансии (родитель догружает async).
+  // Подхватываем блоки/кнопку при загрузке/смене вакансии (родитель догружает async).
   // Это НЕ правка пользователя → сбрасываем флаг, чтобы автосейв не сработал.
   useEffect(() => {
     isUserEditRef.current = false
     setBlockList(resolveBlocks(blocks, benefits, { city: vacancyCity, salaryFrom }))
-  }, [blocks, benefits, vacancyCity, salaryFrom])
+    setBtnCfg(button ?? {})
+  }, [blocks, benefits, button, vacancyCity, salaryFrom])
 
   // Правка пользователя: помечаем флаг, дальше сработает автосейв (debounce).
   const editBlocks = (updater: (prev: LandingBlock[]) => LandingBlock[]) => {
     isUserEditRef.current = true
     setAutoSaved(false)
     setBlockList(updater)
+  }
+  const editButton = (patch: Partial<LandingButton>) => {
+    isUserEditRef.current = true
+    setAutoSaved(false)
+    setBtnCfg(prev => ({ ...prev, ...patch }))
   }
 
   useEffect(() => {
@@ -265,23 +417,27 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
     setBrand(base)
   }, [brandOverride])
 
-  // Блоки для генерации HTML — только с непустым текстом.
-  const cleanBlocks = blockList
-    .map(b => ({ icon: b.icon || "✓", text: b.text.trim() }))
-    .filter(b => b.text)
+  // Блоки для генерации HTML — только с непустым (после санитизации) контентом.
+  const cleanBlocks: LandingBlock[] = blockList
+    .map(b => ({ html: sanitizeBlockHtml(b.html || "") }))
+    .filter(b => htmlHasContent(b.html))
+
+  // Тело запроса на сохранение: блоки + кнопка (в общий description_json).
+  const buildSaveBody = (clean: LandingBlock[], btn: LandingButton) => {
+    const currentJson = descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null
+      ? (descriptionJson as Record<string, unknown>)
+      : {}
+    return { description_json: { ...currentJson, landingBlocks: clean, landingBenefits: [], landingButton: btn } }
+  }
 
   const handleSaveBlocks = async () => {
     if (!vacancyId) return
     setSavingBlocks(true)
     try {
-      const currentJson = descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null
-        ? (descriptionJson as Record<string, unknown>)
-        : {}
-      // Сохраняем landingBlocks; legacy landingBenefits чистим (источник — blocks).
       const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description_json: { ...currentJson, landingBlocks: cleanBlocks, landingBenefits: [] } }),
+        body: JSON.stringify(buildSaveBody(cleanBlocks, btnCfg)),
       })
       if (!res.ok) throw new Error()
       toast.success("Блоки сохранены")
@@ -297,30 +453,30 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
   // родителя перезатёр бы текст во время набора). Дёргается debounce-эффектом.
   const autoSaveBlocks = useCallback(async () => {
     if (!vacancyId) return
-    const clean = blockList.map(b => ({ icon: b.icon || "✓", text: b.text.trim() })).filter(b => b.text)
+    const clean = blockList.map(b => ({ html: sanitizeBlockHtml(b.html || "") })).filter(b => htmlHasContent(b.html))
     try {
       const currentJson = descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null
         ? (descriptionJson as Record<string, unknown>) : {}
       const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description_json: { ...currentJson, landingBlocks: clean, landingBenefits: [] } }),
+        body: JSON.stringify({ description_json: { ...currentJson, landingBlocks: clean, landingBenefits: [], landingButton: btnCfg } }),
       })
       if (!res.ok) throw new Error()
       setAutoSaved(true)
     } catch { /* молча — остаётся ручная кнопка «Сохранить» */ }
-  }, [vacancyId, blockList, descriptionJson])
+  }, [vacancyId, blockList, btnCfg, descriptionJson])
 
   useEffect(() => {
     if (!isUserEditRef.current || !vacancyId) return
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
     autoSaveTimer.current = setTimeout(() => { autoSaveBlocks() }, 1000)
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current) }
-  }, [blockList, vacancyId, autoSaveBlocks])
+  }, [blockList, btnCfg, vacancyId, autoSaveBlocks])
 
   const handleCopyCode = async () => {
     if (!brand) return
-    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields, cleanBlocks)
+    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields, cleanBlocks, btnCfg)
     await navigator.clipboard.writeText(html)
     setCopied(true)
     toast.success("HTML-код скопирован в буфер обмена")
@@ -329,7 +485,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
 
   const handlePreview = () => {
     if (!brand) return
-    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields, cleanBlocks)
+    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields, cleanBlocks, btnCfg)
     const blob = new Blob([html], { type: "text/html" })
     const url = URL.createObjectURL(blob)
     window.open(url, "_blank")
@@ -338,7 +494,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
 
   const handleDownload = () => {
     if (!brand) return
-    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields, cleanBlocks)
+    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields, cleanBlocks, btnCfg)
     const blob = new Blob([html], { type: "text/html" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
@@ -350,6 +506,8 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
   }
 
   if (!brand) return null
+
+  const resolvedBtn = resolveButton(btnCfg, brand.primaryColor)
 
   return (
     <div className="space-y-6">
@@ -365,34 +523,114 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
               Текстовые блоки, которые кандидат видит над формой отклика на лендинге.
-              У каждого блока можно выбрать иконку. Отредактируйте под свою вакансию.
+              Форматируйте текст, добавляйте эмодзи прямо внутри блока. Можно
+              несколько блоков — для разделения на смысловые части.
             </p>
-            <div className="space-y-2.5">
+            <div className="space-y-3">
               {blockList.map((b, i) => (
-                <div key={i} className="flex items-start gap-2">
-                  {/* Выбор иконки */}
+                <div key={i} className="relative">
+                  <RichBlockEditor
+                    value={b.html}
+                    onChange={(html) => editBlocks(prev => prev.map((x, j) => j === i ? { html } : x))}
+                    placeholder="Текст блока — например: 💰 Доход от 150 000 ₽…"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute -top-2 -right-2 h-7 w-7 rounded-full bg-background border shadow-sm text-muted-foreground hover:text-destructive"
+                    onClick={() => editBlocks(prev => prev.filter((_, j) => j !== i))}
+                    title="Удалить блок"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1.5"
+              onClick={() => editBlocks(prev => [...prev, { html: "" }])}
+            >
+              <Plus className="w-3.5 h-3.5" /> Добавить блок
+            </Button>
+
+            <Separator />
+
+            {/* #49: настройки кнопки формы */}
+            <div className="space-y-3">
+              <p className="text-sm font-medium">Кнопка формы</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Надпись</Label>
+                  <Input
+                    value={btnCfg.text ?? ""}
+                    onChange={(e) => editButton({ text: e.target.value })}
+                    placeholder={DEFAULT_BUTTON_TEXT}
+                    className="h-9 text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Цвет</Label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={resolvedBtn.color}
+                      onChange={(e) => editButton({ color: e.target.value })}
+                      className="h-9 w-12 rounded-md border cursor-pointer bg-transparent p-0.5"
+                      title="Цвет кнопки"
+                    />
+                    <div className="flex gap-1">
+                      {BUTTON_COLORS.map(c => (
+                        <button
+                          key={c}
+                          type="button"
+                          className={cn(
+                            "h-7 w-7 rounded-md border transition-transform hover:scale-110",
+                            resolvedBtn.color.toLowerCase() === c.toLowerCase() && "ring-2 ring-offset-1 ring-primary",
+                          )}
+                          style={{ backgroundColor: c }}
+                          onClick={() => editButton({ color: c })}
+                          title={c}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-end gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Иконка</Label>
                   <Popover>
                     <PopoverTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-9 w-9 shrink-0 p-0 text-lg leading-none"
-                        title="Выбрать иконку"
-                      >
-                        {b.icon || "✓"}
+                      <Button type="button" variant="outline" className="h-9 w-12 p-0 text-lg leading-none">
+                        {resolvedBtn.icon || "—"}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-56 p-2" align="start">
                       <div className="grid grid-cols-6 gap-1">
-                        {BLOCK_ICONS.map(ic => (
+                        <button
+                          type="button"
+                          className={cn(
+                            "h-8 w-8 rounded-md text-xs leading-none hover:bg-muted transition-colors flex items-center justify-center",
+                            !btnCfg.icon && "bg-primary/10 ring-1 ring-primary",
+                          )}
+                          onClick={() => editButton({ icon: "" })}
+                          title="Без иконки"
+                        >
+                          —
+                        </button>
+                        {BUTTON_ICONS.map(ic => (
                           <button
                             key={ic}
                             type="button"
                             className={cn(
                               "h-8 w-8 rounded-md text-lg leading-none hover:bg-muted transition-colors",
-                              b.icon === ic && "bg-primary/10 ring-1 ring-primary",
+                              resolvedBtn.icon === ic && "bg-primary/10 ring-1 ring-primary",
                             )}
-                            onClick={() => editBlocks(prev => prev.map((x, j) => j === i ? { ...x, icon: ic } : x))}
+                            onClick={() => editButton({ icon: ic })}
                           >
                             {ic}
                           </button>
@@ -400,52 +638,53 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
                       </div>
                     </PopoverContent>
                   </Popover>
-                  {/* Текст блока (многострочный) */}
-                  <Textarea
-                    value={b.text}
-                    onChange={(e) => editBlocks(prev => prev.map((x, j) => j === i ? { ...x, text: e.target.value } : x))}
-                    placeholder="Текст блока"
-                    rows={1}
-                    className="min-h-9 text-sm resize-y"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
-                    onClick={() => editBlocks(prev => prev.filter((_, j) => j !== i))}
-                    title="Удалить блок"
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
                 </div>
-              ))}
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Позиция иконки</Label>
+                  <div className="flex gap-1 p-0.5 bg-muted rounded-lg w-fit">
+                    {(["left", "right"] as const).map(pos => (
+                      <button
+                        key={pos}
+                        type="button"
+                        onClick={() => editButton({ iconPosition: pos })}
+                        className={cn(
+                          "px-3 h-8 text-xs rounded-md transition-colors",
+                          resolvedBtn.iconPosition === pos ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {pos === "left" ? "Слева" : "Справа"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {/* Живой предпросмотр кнопки */}
+                <div className="ml-auto">
+                  <div
+                    className="h-9 px-5 rounded-lg text-white text-sm font-semibold flex items-center gap-1.5"
+                    style={{ backgroundColor: resolvedBtn.color }}
+                  >
+                    {resolvedBtn.iconPosition === "left" && resolvedBtn.icon && <span>{resolvedBtn.icon}</span>}
+                    <span>{resolvedBtn.text}</span>
+                    {resolvedBtn.iconPosition === "right" && resolvedBtn.icon && <span>{resolvedBtn.icon}</span>}
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="flex items-center justify-between gap-2">
+
+            <div className="flex items-center justify-end gap-2">
+              {autoSaved && (
+                <span className="flex items-center gap-1 text-[11px] text-emerald-600"><Check className="w-3 h-3" /> Сохранено автоматически</span>
+              )}
               <Button
                 type="button"
-                variant="outline"
                 size="sm"
                 className="h-8 text-xs gap-1.5"
-                onClick={() => editBlocks(prev => [...prev, { icon: "✓", text: "" }])}
+                onClick={handleSaveBlocks}
+                disabled={savingBlocks}
               >
-                <Plus className="w-3.5 h-3.5" /> Добавить текстовый блок
+                <Save className="w-3.5 h-3.5" />
+                {savingBlocks ? "Сохранение…" : "Сохранить"}
               </Button>
-              <div className="flex items-center gap-2">
-                {autoSaved && (
-                  <span className="flex items-center gap-1 text-[11px] text-emerald-600"><Check className="w-3 h-3" /> Сохранено автоматически</span>
-                )}
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-8 text-xs gap-1.5"
-                  onClick={handleSaveBlocks}
-                  disabled={savingBlocks || cleanBlocks.length === 0}
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  {savingBlocks ? "Сохранение…" : "Сохранить"}
-                </Button>
-              </div>
             </div>
           </CardContent>
         </Card>
@@ -499,35 +738,37 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
               className="p-6 flex items-center justify-center"
               style={{ backgroundColor: brand.bgColor, minHeight: 220 }}
             >
-              <div className="text-center max-w-[280px] w-full space-y-3">
-                {/* Logo */}
-                <div className="flex items-center justify-center gap-2">
+              {/* #48: единая белая подложка — шапка + блоки + форма в одной карточке */}
+              <div className="max-w-[300px] w-full bg-white rounded-2xl shadow-md p-4 space-y-3 text-slate-900">
+                {/* Logo (шапка теперь внутри белой карточки) */}
+                <div className="flex items-center gap-2">
                   {brand.logoUrl ? (
-                    <img src={brand.logoUrl} alt="" className="w-8 h-8 rounded-lg object-contain" />
+                    <img src={brand.logoUrl} alt="" className="w-8 h-8 rounded-lg object-contain bg-white" />
                   ) : (
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs" style={{ backgroundColor: brand.primaryColor }}>
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs shrink-0" style={{ backgroundColor: brand.primaryColor }}>
                       {(brand.companyName.trim() || "Ваша компания").charAt(0)}
                     </div>
                   )}
-                  <span className="text-sm font-bold" style={{ color: brand.textColor }}>{brand.companyName.trim() || "Ваша компания"}</span>
+                  <span className="text-sm font-bold truncate">{brand.companyName.trim() || "Ваша компания"}</span>
                 </div>
-                <h3 className="text-base font-bold" style={{ color: brand.textColor }}>{vacancyTitle}</h3>
-                <p className="text-xs" style={{ color: brand.textColor + "80" }}>
+                <h3 className="text-base font-bold text-center">{vacancyTitle}</h3>
+                <p className="text-xs text-center text-slate-500">
                   {vacancyCity}{salaryFrom ? ` · ${salaryFrom.toLocaleString("ru-RU")} – ${salaryTo?.toLocaleString("ru-RU")} ₽` : ""}
                 </p>
-                {/* Blocks preview */}
+                {/* Blocks preview (rich html) */}
                 {cleanBlocks.length > 0 && (
-                  <div className="bg-white rounded-lg p-3 text-left space-y-1">
+                  <div className="bg-slate-50 border border-slate-100 rounded-lg p-3 text-left space-y-1.5">
                     {cleanBlocks.map((b, i) => (
-                      <div key={i} className="flex items-start gap-1.5 text-[10px]" style={{ color: brand.textColor }}>
-                        <span className="shrink-0">{b.icon}</span>
-                        <span className="truncate">{b.text}</span>
-                      </div>
+                      <div
+                        key={i}
+                        className="text-[11px] leading-snug text-slate-700 [&_ul]:list-disc [&_ul]:pl-4 [&_a]:text-blue-600 [&_a]:underline"
+                        dangerouslySetInnerHTML={{ __html: sanitizeBlockHtml(b.html) }}
+                      />
                     ))}
                   </div>
                 )}
                 {/* Mini form preview */}
-                <div className="space-y-1.5 bg-white rounded-lg p-3">
+                <div className="space-y-1.5">
                   <div className="h-7 rounded-md border bg-white" />
                   <div className="h-7 rounded-md border bg-white" />
                   {(formFields ?? []).map(f => (
@@ -535,8 +776,10 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
                       <span className="absolute inset-0 flex items-center px-2 text-[9px] text-gray-400 truncate">{f.label}{f.required ? " *" : ""}</span>
                     </div>
                   ))}
-                  <div className="h-8 rounded-md text-white text-xs font-semibold flex items-center justify-center" style={{ backgroundColor: brand.primaryColor }}>
-                    Узнать подробнее →
+                  <div className="h-8 rounded-md text-white text-xs font-semibold flex items-center justify-center gap-1.5" style={{ backgroundColor: resolvedBtn.color }}>
+                    {resolvedBtn.iconPosition === "left" && resolvedBtn.icon && <span>{resolvedBtn.icon}</span>}
+                    <span>{resolvedBtn.text}</span>
+                    {resolvedBtn.iconPosition === "right" && resolvedBtn.icon && <span>{resolvedBtn.icon}</span>}
                   </div>
                 </div>
               </div>

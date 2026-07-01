@@ -29,6 +29,7 @@ import {
   ChevronLeft, ChevronRight, Mic, Highlighter, Loader2, Clapperboard,
   Undo2, Redo2, ArchiveRestore,
 } from "lucide-react"
+import { renderButtonIcon } from "@/lib/button-icons"
 import { toast } from "sonner"
 import type { Demo, Block, BlockType, Lesson, StoriesCard } from "@/lib/course-types"
 import {BLOCK_TYPE_META, createBlock, STORIES_CTA_DEFAULT_TEXT, STORIES_CARD_DEFAULT_DURATION_SEC} from "@/lib/course-types"
@@ -4010,7 +4011,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
                       : "border-border hover:border-primary/50 hover:bg-muted"
                   )}
                 >
-                  {symbol || "∅"}
+                  {symbol ? renderButtonIcon(symbol, "w-4 h-4") : <span className="text-muted-foreground">∅</span>}
                 </button>
               ))}
             </div>
@@ -4032,7 +4033,7 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
                       : "border-border hover:border-primary/50 hover:bg-muted"
                   )}
                 >
-                  {symbol || "∅"}
+                  {symbol ? renderButtonIcon(symbol, "w-4 h-4") : <span className="text-muted-foreground">∅</span>}
                 </button>
               ))}
             </div>
@@ -4075,9 +4076,9 @@ function NotionMediaBlock({ block, onUpdate, onRemove }: { block: Block; onUpdat
               )}
               style={previewStyle}
             >
-              {block.buttonIconBefore && <span>{block.buttonIconBefore}</span>}
+              {renderButtonIcon(block.buttonIconBefore, "w-4 h-4")}
               {block.buttonText || "Кнопка"}
-              {block.buttonIconAfter && <span>{block.buttonIconAfter}</span>}
+              {renderButtonIcon(block.buttonIconAfter, "w-4 h-4")}
             </button>
           </div>
         </div>
@@ -4434,6 +4435,7 @@ const BUTTON_ICONS_AFTER = [
   { symbol: "+", label: "Плюс" },
   { symbol: "▶", label: "Воспроизвести" },
 ]
+
 
 
 function hexToHsl(hex: string): { h: number; s: number; l: number } {
@@ -5234,9 +5236,9 @@ function SimplePreviewBlock({ block, onNext }: { block: Block; onNext?: () => vo
       )
       const inner = (
         <>
-          {block.buttonIconBefore && <span>{block.buttonIconBefore}</span>}
+          {renderButtonIcon(block.buttonIconBefore, "w-4 h-4")}
           {block.buttonText || "Кнопка"}
-          {block.buttonIconAfter && <span>{block.buttonIconAfter}</span>}
+          {renderButtonIcon(block.buttonIconAfter, "w-4 h-4")}
         </>
       )
       // «Куда ведёт: Следующая страница» — в предпросмотре листает уроки (onNext),

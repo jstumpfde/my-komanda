@@ -14,6 +14,7 @@ import { resolveBrand } from "@/lib/brand-colors"
 import { VideoEmbed } from "@/components/blocks/VideoEmbed"
 import { StoriesPlayer } from "@/components/vacancies/stories-player"
 import { PdfSlidesViewer } from "@/components/vacancies/pdf-slides-viewer"
+import { renderButtonIcon } from "@/lib/button-icons"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -700,9 +701,9 @@ function ButtonBlock({ block, onNext, nextDisabled, token, isPreviewMode }: { bl
   // рендерим как в превью редактора; раньше публичная кнопка их теряла.
   const label = (
     <>
-      {block.buttonIconBefore ? <span>{block.buttonIconBefore}</span> : null}
+      {renderButtonIcon(block.buttonIconBefore, "w-4 h-4")}
       <span>{block.buttonText || (isUrl ? "Подробнее" : "Далее")}</span>
-      {block.buttonIconAfter ? <span>{block.buttonIconAfter}</span> : null}
+      {renderButtonIcon(block.buttonIconAfter, "w-4 h-4")}
     </>
   )
 

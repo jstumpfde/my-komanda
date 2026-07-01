@@ -455,7 +455,7 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
                         <Input
                           value={extraFields[field.id] || ""}
                           onChange={(e) => setExtraFields((prev) => ({ ...prev, [field.id]: e.target.value }))}
-                          placeholder={field.placeholder}
+                          placeholder={field.label}
                         />
                       )}
 
@@ -464,7 +464,7 @@ function VacancyPageInner({ params }: { params: Promise<{ slug: string }> }) {
                           type="number"
                           value={extraFields[field.id] || ""}
                           onChange={(e) => setExtraFields((prev) => ({ ...prev, [field.id]: e.target.value }))}
-                          placeholder={field.placeholder}
+                          placeholder={field.label}
                         />
                       )}
 
