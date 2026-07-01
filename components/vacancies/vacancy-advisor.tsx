@@ -1003,19 +1003,21 @@ function BestPublishTimeCard({ vacancyId, city }: { vacancyId?: string; city?: s
         <>
           {data.weekdayTops && data.weekdayTops.length > 0 && (() => {
             // Каждый будний день (Пн–Пт) со своим лучшим временем (топ-2 слота
-            // внутри дня, по времени). Порядок дней строго Пн→Пт. День без
-            // откликов — «—».
+            // внутри дня, по времени). Порядок дней строго Пн→Пт. Дни без
+            // откликов НЕ показываем (строку пропускаем целиком).
             const short: Record<number, string> = { 1: "Пн", 2: "Вт", 3: "Ср", 4: "Чт", 5: "Пт" }
+            const rows = data.weekdayTops!.filter(d => d.slots.length > 0)
+            if (rows.length === 0) return null
             return (
               <div className="space-y-0.5">
                 <p className="text-[10px] text-muted-foreground">% — доля откликов внутри дня</p>
-                {data.weekdayTops!.map(d => {
+                {rows.map(d => {
                   const slots = [...d.slots].sort((a, b) => a.hour - b.hour)
                   return (
                     <div key={d.dow} className="flex items-baseline gap-1.5 text-sm">
                       <span className="w-6 shrink-0 font-medium text-muted-foreground">{short[d.dow]}</span>
                       <span className="text-foreground">
-                        {slots.length > 0 ? slots.map(s => `${s.range} — ${s.pct}%`).join(" · ") : "—"}
+                        {slots.map(s => `${s.range} — ${s.pct}%`).join(" · ")}
                       </span>
                     </div>
                   )

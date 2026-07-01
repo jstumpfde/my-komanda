@@ -1637,12 +1637,16 @@ export function CandidateDrawer({
                     <Star className={cn("w-4 h-4", candidate.isFavorite && "fill-current")} />
                   </button>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                   {stageCfg && (
-                    <Badge variant="outline" className={cn("text-xs border", stageCfg.color)}>
-                      {stageCfg.label}
-                    </Badge>
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-[11px] text-muted-foreground">Стадия:</span>
+                      <Badge variant="outline" className={cn("text-xs border", stageCfg.color)}>
+                        {stageCfg.label}
+                      </Badge>
+                    </span>
                   )}
+                  {stageCfg && <span className="hidden sm:inline-block h-5 w-px bg-border/60" aria-hidden />}
                   <HeaderScores
                     resume={candidate.resumeScore ?? null}
                     anketa={candidate.demoAnswersScore ?? null}
