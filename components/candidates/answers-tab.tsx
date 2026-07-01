@@ -713,6 +713,15 @@ function PrequalificationSection({ candidateId }: { candidateId?: string }) {
   )
 }
 
+/** Есть ли в ответе видео-медиа. Видео-визитка бывает не только группой _vi_N,
+ *  но и обычным блоком-ответом с видео-файлом — такие тоже уводим В КОНЕЦ. */
+function entryHasVideoMedia(entry: AnketaEntry): boolean {
+  const media = coerceMedia((entry as { answer?: unknown }).answer)
+  if (!media) return false
+  const arr = Array.isArray(media) ? media : [media]
+  return arr.some((m) => m.mediaType === "video")
+}
+
 export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answersDetails }: AnswersTabProps) {
   const entries = normalizeEntries(answers).filter(Boolean)
   const blockMap = buildBlockMap(demoLessons)
@@ -746,6 +755,7 @@ export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answers
   // чтобы показать их под общим заголовком «Видео-интервью».
   const viGroups = new Map<string, AnketaEntry[]>()
   const regularEntries: AnketaEntry[] = []
+  const videoEntries: AnketaEntry[] = []   // обычные блоки-ответы с видео — тоже в конец
   for (const e of visible) {
     const blockId = "blockId" in (e as object) ? (e as { blockId?: string }).blockId ?? "" : ""
     const viKey = parseVideoInterviewKey(blockId)
@@ -753,6 +763,8 @@ export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answers
       const group = viGroups.get(viKey.baseId) ?? []
       group.push(e)
       viGroups.set(viKey.baseId, group)
+    } else if (entryHasVideoMedia(e)) {
+      videoEntries.push(e)
     } else {
       regularEntries.push(e)
     }
@@ -815,6 +827,21 @@ export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answers
           <div className="space-y-3">
             {regularEntries.map((entry, i) => (
               <EntryCard key={i} entry={entry} blockMap={blockMap} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Видео-визитка обычным блоком-ответом (не _vi_N) — тоже В КОНЦЕ, после
+          финальной анкеты (решение Юрия 01.07: видео всегда последним). */}
+      {videoEntries.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Видео-визитка
+          </p>
+          <div className="space-y-3">
+            {videoEntries.map((entry, i) => (
+              <EntryCard key={`ve-${i}`} entry={entry} blockMap={blockMap} />
             ))}
           </div>
         </div>

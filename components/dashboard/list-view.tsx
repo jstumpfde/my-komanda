@@ -196,9 +196,12 @@ function SortHeader({
         // перед заголовком, opacity-40 неактивна). ListFilter по умолчанию
         // сужается вниз (широкое сверху = «большое сверху» = убывание), поэтому
         // флип scale-y вешаем на ASC (возрастание), desc — дефолтная ориентация.
-        "inline-flex items-center gap-1.5 select-none whitespace-nowrap transition-colors",
-        align === "center" && "justify-center",
-        align === "right" && "flex-row-reverse",
+        "items-center gap-1.5 select-none whitespace-nowrap transition-colors",
+        // Центрирование заголовка В ЯЧЕЙКЕ: inline-flex ужимает кнопку до контента
+        // (лепится влево), поэтому для center делаем flex w-full + justify-center.
+        align === "center" ? "flex w-full justify-center"
+          : align === "right" ? "inline-flex flex-row-reverse"
+          : "inline-flex",
         dir ? "text-foreground" : "text-muted-foreground hover:text-foreground",
       )}
     >
