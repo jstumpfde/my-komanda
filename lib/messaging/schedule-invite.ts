@@ -64,9 +64,10 @@ export async function scheduleInterviewInvite(args: {
   messageText?: string
 }): Promise<ScheduleInviteResult> {
   try {
-    // 1. Проверяем, что вакансия существует.
+    // 1. Проверяем, что вакансия существует, и заодно читаем настроенный HR-ом
+    //    текст приглашения на интервью (vacancies.schedule_invite_text).
     const [vac] = await db
-      .select({ id: vacancies.id })
+      .select({ id: vacancies.id, scheduleInviteText: vacancies.scheduleInviteText })
       .from(vacancies)
       .where(eq(vacancies.id, args.vacancyId))
       .limit(1)
@@ -89,9 +90,16 @@ export async function scheduleInterviewInvite(args: {
     if (!campaignId) return { scheduled: false, reason: "campaign_upsert_failed" }
 
     // 4. Создаём запись касания. scheduled_at = now + delay.
+    //    Приоритет текста: явный override (messageText, разовое переопределение
+    //    из карточки кандидата) > настроенный per-вакансия текст
+    //    (vacancies.schedule_invite_text) > дефолт DEFAULT_SCHEDULE_INVITE_TEXT.
+    const configuredText =
+      typeof vac.scheduleInviteText === "string" && vac.scheduleInviteText.trim().length > 0
+        ? vac.scheduleInviteText.trim()
+        : DEFAULT_SCHEDULE_INVITE_TEXT
     const text = args.messageText && args.messageText.trim().length > 0
       ? args.messageText.trim()
-      : DEFAULT_SCHEDULE_INVITE_TEXT
+      : configuredText
     const scheduledAt = new Date(Date.now() + DEFAULT_DELAY_MINUTES * 60_000)
 
     await db.insert(followUpMessages).values({
