@@ -95,8 +95,9 @@ export interface StageRule {
 export type ScoreGateType = "resume" | "anketa" | "block2" | "test" | "portrait"
 
 /** Что делать с не прошедшими порог: предварительный отказ (обратимый),
- *  ручное решение HR, или жёсткий отказ. */
-export type ScoreGateFailAction = "preliminary_reject" | "manual" | "reject"
+ *  ручное решение HR, жёсткий отказ, или «в резерв» (talent pool — кандидат не
+ *  набрал балл, но не отказываем, а откладываем в резерв). */
+export type ScoreGateFailAction = "preliminary_reject" | "manual" | "reject" | "reserve"
 
 /** Правило прохода стадии по баллу. autoEnabled=false по умолчанию —
  *  без явного включения ничего НЕ гейтится автоматически (обратная
@@ -110,7 +111,7 @@ export interface ScoreGate {
 
 export const DEFAULT_SCORE_GATE_THRESHOLD = 50
 export const SCORE_GATE_TYPES: ScoreGateType[] = ["resume", "anketa", "block2", "test", "portrait"]
-export const SCORE_GATE_FAIL_ACTIONS: ScoreGateFailAction[] = ["preliminary_reject", "manual", "reject"]
+export const SCORE_GATE_FAIL_ACTIONS: ScoreGateFailAction[] = ["preliminary_reject", "manual", "reject", "reserve"]
 
 export interface StageReminders {
   dayBefore: boolean   // за сутки

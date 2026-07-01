@@ -20,7 +20,7 @@ import {
   GripVertical, Trash2, Plus, Loader2, Target, ExternalLink, SlidersHorizontal,
   ClipboardList, PlayCircle, ListChecks, ClipboardCheck, Calendar, FileText,
   ShieldCheck, Phone, MessageSquare, CircleCheck, Check, Link2, Route, Repeat, X,
-  Maximize2, Minimize2, Eye, AlertTriangle,
+  Maximize2, Minimize2, Eye, AlertTriangle, Palette, Ban, Gauge, Wand2,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -38,9 +38,13 @@ import { toast } from "sonner"
 import {
   STAGE_ACTIONS, DOZHIM_LABEL, STAGE_STATUSES, makeStage, emptyFunnelV2,
   normalizeFunnelV2, dozhimChainFor, dozhimChainForOpened,
+  defaultFunnelV2Stages,
+  SCORE_GATE_TYPES, SCORE_GATE_FAIL_ACTIONS, DEFAULT_SCORE_GATE_THRESHOLD,
   type FunnelV2Config, type FunnelV2Stage, type StageActionType,
   type DozhimPreset, type InterviewMode, type DozhimTouch,
+  type ScoreGate, type ScoreGateType, type ScoreGateFailAction,
 } from "@/lib/funnel-v2/types"
+import { STAGE_COLOR_CLASSES, type StageColor } from "@/lib/stages"
 import type { DripTemplates } from "@/lib/db/schema"
 import { renderTemplate } from "@/lib/template-renderer"
 import { guardOutgoingMessage } from "@/lib/messaging/outgoing-guard"
@@ -108,31 +112,79 @@ const INTERVIEW_MODES: Array<{ v: InterviewMode; label: string }> = [
 ]
 const DOZHIM_OPTS: DozhimPreset[] = ["off", "soft", "standard", "strong"]
 
+// ── Реестр стадий: палитра цветов (StageColor) и подписи ──────────────────────
+// Палитра — те же 13 цветов, что и в общей карте стадий (lib/stages.ts).
+const STAGE_COLOR_PALETTE: StageColor[] = [
+  "slate", "blue", "indigo", "violet", "purple", "amber",
+  "orange", "yellow", "lime", "green", "emerald", "rose", "red",
+]
+// Читаемая точка-образец цвета для пикера (bg насыщенный, без текста).
+const STAGE_COLOR_DOT: Record<StageColor, string> = {
+  slate: "bg-slate-500", blue: "bg-blue-500", indigo: "bg-indigo-500",
+  violet: "bg-violet-500", purple: "bg-purple-500", amber: "bg-amber-500",
+  orange: "bg-orange-500", yellow: "bg-yellow-500", lime: "bg-lime-500",
+  green: "bg-green-500", emerald: "bg-emerald-500", rose: "bg-rose-500",
+  red: "bg-red-500",
+}
+
+// ── Правило прохода по баллу (scoreGate) — подписи ────────────────────────────
+const SCORE_GATE_TYPE_LABEL: Record<ScoreGateType, string> = {
+  resume: "Резюме", anketa: "Анкета", block2: "Блок 2", test: "Тест", portrait: "Портрет",
+}
+// «Если не прошёл» — включая «В резерв» (talent pool).
+const SCORE_GATE_FAIL_LABEL: Record<ScoreGateFailAction, string> = {
+  preliminary_reject: "Предварительный отказ", manual: "Ручное", reject: "Отказ", reserve: "В резерв",
+}
+
 interface ContentBlock { id: string; title: string; contentType: string }
 
+// Стадия «включена»? Признак хранится ad-hoc (survive-нормализацию через spread);
+// по умолчанию — включена (обратная совместимость: enabled не задан → true).
+function isStageEnabled(stage: FunnelV2Stage): boolean {
+  return (stage as { enabled?: boolean }).enabled !== false
+}
+// Краткая сводка гейта по баллу для бейджа карточки: «гейт: Анкета ≥50 · авто выкл».
+function scoreGateBadgeText(gate?: ScoreGate): string | null {
+  if (!gate) return null
+  return `гейт: ${SCORE_GATE_TYPE_LABEL[gate.scoreType]} ≥${gate.threshold} · авто ${gate.autoEnabled ? "вкл" : "выкл"}`
+}
+
 // ── Компактная карточка стадии (клик → Sheet) ────────────────────────────────
-function StageCard({ stage, index, onOpen, onRemove }: {
+function StageCard({ stage, index, onOpen, onRemove, onToggleEnabled }: {
   stage: FunnelV2Stage; index: number; onOpen: () => void; onRemove: () => void
+  onToggleEnabled: (v: boolean) => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: stage.id })
   const meta = actionMeta(stage.action)
   const Icon = ICONS[meta.icon] ?? MessageSquare
+  const enabled = isStageEnabled(stage)
+  const gateText = scoreGateBadgeText(stage.rule.scoreGate)
+  const colorClass = stage.color ? STAGE_COLOR_CLASSES[stage.color] : null
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn("rounded-xl border border-border bg-card", isDragging && "opacity-60 shadow-lg")}>
+      className={cn("rounded-xl border bg-card transition-opacity",
+        stage.negative ? "border-rose-300/60 dark:border-rose-800/60" : "border-border",
+        isDragging && "opacity-60 shadow-lg", !enabled && "opacity-55")}>
       <div className="flex items-center gap-2.5 p-3">
         <button {...attributes} {...listeners} className="cursor-grab text-muted-foreground/50 hover:text-muted-foreground touch-none" aria-label="Перетащить"><GripVertical className="w-4 h-4" /></button>
         <span className="grid place-items-center w-6 h-6 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-medium shrink-0">{index + 2}</span>
         <Icon className="w-4 h-4 text-muted-foreground shrink-0" />
         <button onClick={onOpen} className="flex-1 min-w-0 text-left">
-          <div className="text-sm font-medium truncate">{stage.title?.trim() || meta.label}</div>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className={cn("text-sm font-medium truncate px-1.5 py-0.5 rounded-md border", colorClass ?? "border-transparent")}>{stage.title?.trim() || meta.label}</span>
+            {stage.negative && <span className="shrink-0 inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400" title="Негативная (отказная) стадия"><Ban className="w-3 h-3" /> негативная</span>}
+            {stage.terminal && <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground" title="Терминальная стадия — из неё нет автоперехода дальше">финал</span>}
+          </div>
           <div className="flex flex-wrap gap-1.5 mt-1">
             <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">{meta.label}</span>
             {stage.action === "interview" && stage.interviewMode && <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">{INTERVIEW_MODES.find(m => m.v === stage.interviewMode)?.label}</span>}
+            {gateText && <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">{gateText}</span>}
             <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">дожим: {DOZHIM_LABEL[stage.dozhim].toLowerCase()}</span>
             {stage.hhStatus && <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">hh: {stage.hhStatus}</span>}
           </div>
         </button>
+        {/* Вкл/выкл стадии — тумблер прямо в реестре */}
+        <Switch checked={enabled} onCheckedChange={onToggleEnabled} className="shrink-0 scale-90" aria-label={enabled ? "Выключить стадию" : "Включить стадию"} />
         <button onClick={onOpen} className="shrink-0 grid place-items-center w-8 h-8 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" aria-label="Настроить стадию"><SlidersHorizontal className="w-4 h-4" /></button>
         {/* Удаление отделено от «Настроить» (отступ+разделитель) и приглушено, чтобы не промахнуться; подтверждение — в removeStage */}
         <button onClick={onRemove} className="shrink-0 ml-1 pl-2 border-l border-border/60 text-muted-foreground/40 hover:text-destructive p-1 transition-colors" aria-label="Удалить стадию" title="Удалить стадию"><Trash2 className="w-3.5 h-3.5" /></button>
@@ -165,6 +217,16 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose, dripT
 
   const patch = (p: Partial<FunnelV2Stage>) => onChange({ ...stage, ...p })
   const patchRule = (p: Partial<FunnelV2Stage["rule"]>) => onChange({ ...stage, rule: { ...stage.rule, ...p } })
+  // scoreGate: dropdown «Не гейтить» = убрать объект; иначе патчим поля.
+  const gate = stage.rule.scoreGate
+  const patchGate = (p: Partial<ScoreGate>) => {
+    const base: ScoreGate = gate ?? { scoreType: "resume", threshold: DEFAULT_SCORE_GATE_THRESHOLD, failAction: "preliminary_reject", autoEnabled: false }
+    patchRule({ scoreGate: { ...base, ...p } })
+  }
+  const setGateType = (v: string) => {
+    if (v === "none") { patchRule({ scoreGate: undefined }); return }
+    patchGate({ scoreType: v as ScoreGateType })
+  }
   const setChain = (next: DozhimTouch[]) => onChange({ ...stage, dozhimChain: next })
   // Ветка Б — «открыл, но не досмотрел» (переключается при открытии демо/теста).
   const chainOpened: DozhimTouch[] = stage.dozhimChainOpened ?? dozhimChainForOpened(stage.dozhim, stage.action, dripTemplates)
@@ -236,6 +298,51 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose, dripT
                 {content.length === 0 && <p className="text-[11px] text-muted-foreground/70">Блоков пока нет — создайте во вкладке «Контент».</p>}
               </div>
             )}
+          </section>
+
+          {/* Правило прохода по баллу (scoreGate) */}
+          <section className="space-y-2.5 border-t pt-4">
+            <Label className="text-sm font-medium flex items-center gap-1.5"><Gauge className="w-4 h-4" /> Правило прохода по баллу</Label>
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-2.5">
+              <div className="space-y-1">
+                <Label className="text-[11px] text-muted-foreground">Гейт по баллу</Label>
+                <Select value={gate?.scoreType ?? "none"} onValueChange={setGateType}>
+                  <SelectTrigger className="h-11 text-base"><SelectValue placeholder="Не гейтить" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">— не гейтить —</SelectItem>
+                    {SCORE_GATE_TYPES.map(t => <SelectItem key={t} value={t}>{SCORE_GATE_TYPE_LABEL[t]}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              {gate && (<>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground">Порог балла</span>
+                  <div className="flex items-center gap-1.5">
+                    <Input type="number" min={0} max={100} value={gate.threshold}
+                      onChange={e => patchGate({ threshold: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
+                      className="w-20 h-10 text-base" />
+                    <span className="text-[11px] text-muted-foreground w-10">из 100</span>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Если не прошёл</Label>
+                  <Select value={gate.failAction} onValueChange={v => patchGate({ failAction: v as ScoreGateFailAction })}>
+                    <SelectTrigger className="h-11 text-base"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {SCORE_GATE_FAIL_ACTIONS.map(f => <SelectItem key={f} value={f}>{SCORE_GATE_FAIL_LABEL[f]}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-start justify-between gap-3 pt-0.5">
+                  <div className="min-w-0">
+                    <span className="text-xs">Авто</span>
+                    <p className="text-[11px] text-muted-foreground/80">когда выключено — двигаешь вручную; включи, когда доверишь баллу.</p>
+                  </div>
+                  <Switch checked={gate.autoEnabled} onCheckedChange={v => patchGate({ autoEnabled: v })} className="mt-0.5 shrink-0" />
+                </div>
+              </>)}
+              {!gate && <p className="text-[11px] text-muted-foreground/70">Балл на этой стадии не проверяется — кандидаты проходят вручную.</p>}
+            </div>
           </section>
 
           {/* Правило прохода */}
@@ -391,6 +498,32 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose, dripT
             <div className="space-y-1">
               <Label className="text-[11px] text-muted-foreground">Название стадии (необязательно)</Label>
               <Input value={stage.title ?? ""} onChange={e => patch({ title: e.target.value || undefined })} placeholder={meta.label} className="h-12 text-base" />
+            </div>
+            {/* Цвет стадии (палитра как в карте стадий) */}
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-muted-foreground flex items-center gap-1.5"><Palette className="w-3.5 h-3.5" /> Цвет стадии</Label>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button type="button" onClick={() => patch({ color: undefined })}
+                  className={cn("w-7 h-7 rounded-md border grid place-items-center text-muted-foreground", !stage.color ? "border-primary ring-1 ring-primary/40" : "border-border hover:bg-muted/50")}
+                  title="Без цвета" aria-label="Без цвета">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+                {STAGE_COLOR_PALETTE.map(c => (
+                  <button key={c} type="button" onClick={() => patch({ color: c })}
+                    className={cn("w-7 h-7 rounded-md grid place-items-center border", stage.color === c ? "border-primary ring-1 ring-primary/40" : "border-transparent hover:opacity-80")}
+                    title={c} aria-label={`Цвет ${c}`}>
+                    <span className={cn("w-4 h-4 rounded-full", STAGE_COLOR_DOT[c])} />
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Негативная стадия (отказная) */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <span className="text-xs flex items-center gap-1.5"><Ban className="w-3.5 h-3.5 text-rose-500" /> Негативная стадия</span>
+                <p className="text-[11px] text-muted-foreground/80">Отказная стадия (напр. предварительный отказ) — помечается отдельно в реестре.</p>
+              </div>
+              <Switch checked={stage.negative === true} onCheckedChange={v => patch({ negative: v ? true : undefined })} className="mt-0.5 shrink-0" />
             </div>
           </section>
         </div>
@@ -556,6 +689,15 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait }: { vacancyId: stri
 
   const addStage = (action: StageActionType) => { if (!config) return; const st = makeStage(action, `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`); update({ ...config, stages: [...config.stages, st] }); setEditingId(st.id) }
   const changeStage = (s: FunnelV2Stage) => { if (!config) return; update({ ...config, stages: config.stages.map(x => x.id === s.id ? s : x) }) }
+  const toggleStageEnabled = (id: string, val: boolean) => { if (!config) return; update({ ...config, stages: config.stages.map(x => x.id === id ? { ...x, enabled: val } as FunnelV2Stage : x) }) }
+  // «Загрузить типовую воронку» — заполнить пустую воронку дефолт-шаблоном пути продаж.
+  const loadDefault = () => {
+    if (!config) return
+    if (config.stages.length > 0) return
+    const stages = defaultFunnelV2Stages(`${Date.now()}-${Math.random().toString(36).slice(2, 6)}`)
+    update({ ...config, stages })
+    toast.success("Загружена типовая воронка — отредактируйте под вакансию")
+  }
   const removeStage = (id: string) => {
     if (!config) return
     const st = config.stages.find(s => s.id === id)
@@ -623,7 +765,7 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait }: { vacancyId: stri
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={stageIds} strategy={verticalListSortingStrategy}>
           <div className="space-y-2.5">
-            {stages.map((s, i) => <StageCard key={s.id} stage={s} index={i} onOpen={() => setEditingId(s.id)} onRemove={() => removeStage(s.id)} />)}
+            {stages.map((s, i) => <StageCard key={s.id} stage={s} index={i} onOpen={() => setEditingId(s.id)} onRemove={() => removeStage(s.id)} onToggleEnabled={v => toggleStageEnabled(s.id, v)} />)}
           </div>
         </SortableContext>
       </DndContext>
@@ -642,7 +784,16 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait }: { vacancyId: stri
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {stages.length === 0 && <p className="text-xs text-muted-foreground text-center pt-1">Стадия 1 (Портрет) уже есть. Добавьте следующие — приветствие, демо, тест, интервью, оффер…</p>}
+      {stages.length === 0 && (
+        <div className="rounded-xl border border-dashed border-primary/40 bg-primary/[0.03] p-4 flex flex-col items-center gap-2 text-center">
+          <p className="text-xs text-muted-foreground">Воронка пустая. Стадия 1 (Портрет) уже есть — загрузите типовой путь продаж или соберите стадии вручную.</p>
+          <button type="button" onClick={loadDefault}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary text-primary-foreground px-3.5 py-2 text-sm font-medium hover:bg-primary/90 transition-colors">
+            <Wand2 className="w-4 h-4" /> Загрузить типовую воронку
+          </button>
+          <p className="text-[11px] text-muted-foreground/70">7 стадий: демо, путь менеджера, тест-задание, интервью, оффер, нанят. Все авто-гейты выключены — включите, когда доверите баллу.</p>
+        </div>
+      )}
 
       <StageSheet stage={editing} index={editingIndex} allStages={stages} content={content} onChange={changeStage} onClose={() => setEditingId(null)} dripTemplates={dripTemplates} />
 
