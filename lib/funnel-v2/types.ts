@@ -80,7 +80,8 @@ export function hhActionForStatus(
 export interface StageRule {
   autoAdvance: boolean        // авто-приглашение прошедших на след. стадию
   autoReject: boolean         // авто-отказ не прошедших
-  threshold?: number          // порог балла (для скоринговых действий: test/task/prequalification)
+  threshold?: number          // порог AI-балла (0–100; если AI-вопросов нет — по итоговому баллу, backward-compat)
+  objThreshold?: number       // порог правильных ответов (0–100; объективные вопросы: single/multiple/yesno/sort)
   rejectDelayMinutes: number  // задержка отказа, дефолт 60 (наследуется, можно переопределить)
   passCriteria?: string       // критерий прохода (описательно / для AI)
   advanceTo?: string          // куда зовём прошедших: "next" (по умолч.) | id стадии (ветвление)
@@ -183,6 +184,7 @@ export function normalizeFunnelV2(raw: unknown): FunnelV2Config {
           autoAdvance: st.rule?.autoAdvance === true,
           autoReject: st.rule?.autoReject === true,
           threshold: typeof st.rule?.threshold === "number" ? st.rule.threshold : undefined,
+          objThreshold: typeof st.rule?.objThreshold === "number" ? st.rule.objThreshold : undefined,
           rejectDelayMinutes: typeof st.rule?.rejectDelayMinutes === "number" ? st.rule.rejectDelayMinutes : DEFAULT_REJECT_DELAY_MIN,
           passCriteria: typeof st.rule?.passCriteria === "string" ? st.rule.passCriteria : undefined,
           advanceTo: typeof st.rule?.advanceTo === "string" ? st.rule.advanceTo : undefined,
