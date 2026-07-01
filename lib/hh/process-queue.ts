@@ -17,7 +17,7 @@ import { generateTouchSchedule, mergeMessagesWithDefaults } from "@/lib/followup
 import { DEFAULT_FOLLOWUP_NOT_OPENED } from "@/lib/followup/default-messages"
 import { isFollowUpPreset } from "@/lib/followup/presets"
 import { canSendNow } from "@/lib/schedule/can-send-now"
-import { screenResume } from "@/lib/ai-screen-resume"
+import { screenResume, type ResumeScreenInput } from "@/lib/ai-screen-resume"
 import { getSpec } from "@/lib/core/spec/store"
 import { buildSpecResumeInput, isSpecScoringEnabled, specHasScoringContent, isPortraitConfigured } from "@/lib/core/spec/resume-input"
 import { scoreCandidateV2 } from "@/lib/ai-score-candidate-v2"
@@ -640,6 +640,9 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                 relocationReady:  extracted.relocationReady ?? null,
                 professionalRoles:(extracted.professionalRoles as string[] | undefined) ?? null,
                 citizenshipNames: (extracted.citizenshipNames as string[] | undefined) ?? null,
+                // История занятости (должности/компании/срок) — главный сигнал
+                // релевантности опыта для скорера резюме (иначе занижаем сильных).
+                workHistory:      (extracted.workHistory as ResumeScreenInput["resume"]["workHistory"]) ?? null,
             }
 
             // R4 этап 2.5: Spec-скоринг («Кого ищем») по умолчанию для всех,

@@ -30,8 +30,23 @@ export interface ExtractedHhFields {
   citizenshipNames?:  string[]         // ["Россия","Беларусь",...]
   workTicketNames?:   string[]         // разрешение на работу
   professionalRoles?: string[]         // желаемые профроли/профобласти
+  // История занятости (experience[]): реально занятые должности/компании/срок.
+  // Нужна скореру резюме — по одному числу experienceYears нельзя оценить
+  // релевантность опыта (роль/отрасль). См. lib/ai-screen-resume.ts.
+  workHistory?:       WorkHistoryEntry[]
   // legacy
   experience?:         string | null   // напр. "5 лет"
+}
+
+/** Одна запись истории занятости из hh experience[]. */
+export interface WorkHistoryEntry {
+  position?:    string | null   // должность, напр. «Руководитель развития партнёрской сети»
+  company?:     string | null   // работодатель
+  industry?:    string | null   // отрасль (company_industries[0])
+  start?:       string | null   // YYYY-MM
+  end?:         string | null   // YYYY-MM или null (по настоящее время)
+  months?:      number | null   // total_months на этом месте
+  description?: string | null   // обязанности/достижения (обрезаны)
 }
 
 // Сырое резюме hh — как приходит из API (см. lib/hh-api.ts:HHFullResume)
@@ -46,7 +61,15 @@ type RawResume = {
   area?: { name?: unknown } | null
   salary?: { amount?: unknown; currency?: unknown } | null
   total_experience?: { months?: unknown } | null
-  experience?: Array<{ total_months?: unknown }> | unknown
+  experience?: Array<{
+    total_months?: unknown
+    position?: unknown
+    company?: unknown
+    company_industries?: Array<{ name?: unknown }> | unknown
+    start?: unknown
+    end?: unknown
+    description?: unknown
+  }> | unknown
   skill_set?: unknown
   skills?: unknown
   education?: {
@@ -164,6 +187,47 @@ function parseExperienceYears(raw: RawResume): number | null {
   return null
 }
 
+// История занятости: реально занятые должности из experience[]. hh отдаёт их
+// в свежем порядке (последнее место — первым). Обрезаем до 6 записей и описание
+// до 400 символов — чтобы промпт скорера не раздувался, но роли/отрасль/срок
+// сохранились для оценки релевантности опыта.
+function parseWorkHistory(raw: RawResume): WorkHistoryEntry[] {
+  if (!Array.isArray(raw.experience)) return []
+  const out: WorkHistoryEntry[] = []
+  for (const e of raw.experience as Array<{
+    total_months?: unknown; position?: unknown; company?: unknown
+    company_industries?: Array<{ name?: unknown }> | unknown
+    start?: unknown; end?: unknown; description?: unknown
+  }>) {
+    if (!e || typeof e !== "object") continue
+    const position = isString(e.position) ? e.position.trim() : null
+    const company  = isString(e.company)  ? e.company.trim()  : null
+    // Пропускаем совсем пустые записи (ни должности, ни компании).
+    if (!position && !company) continue
+    let industry: string | null = null
+    if (Array.isArray(e.company_industries)) {
+      const first = (e.company_industries as Array<{ name?: unknown }>).find(i => isString(i?.name))
+      if (first && isString(first.name)) industry = first.name
+    }
+    const descRaw = isString(e.description) ? e.description.trim() : ""
+    // Снимаем html-теги (hh иногда отдаёт разметку в описании) и режем длину.
+    const description = descRaw
+      ? descRaw.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 400) || null
+      : null
+    out.push({
+      position,
+      company,
+      industry,
+      start:  isString(e.start) ? e.start : null,
+      end:    isString(e.end)   ? e.end   : null,
+      months: isNumber(e.total_months) ? e.total_months : null,
+      description,
+    })
+    if (out.length >= 6) break
+  }
+  return out
+}
+
 // resume.age (число лет) → birth_date = YYYY-01-01, где YYYY = текущий_год − age
 function deriveBirthDateFromAge(age: unknown): string | null {
   if (!isNumber(age) || age < 14 || age > 100) return null
@@ -249,6 +313,10 @@ export function extractHhResumeFields(raw: unknown): ExtractedHhFields {
   if (out.experienceYears !== null) {
     out.experience = `${out.experienceYears} лет`
   }
+
+  // История занятости (должности/компании/срок) — для скорера резюме.
+  const wh = parseWorkHistory(r)
+  if (wh.length > 0) out.workHistory = wh
 
   // education
   out.educationLevel = mapEducationLevel(r.education?.level?.id)
