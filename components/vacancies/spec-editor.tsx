@@ -2194,7 +2194,9 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
       {(() => {
         // getSpec отдаёт сырой спек без дефолтов → у старых вакансий поля нет.
         // Fallback, иначе ap.enabled крашит Портрет (инцидент 30.06).
-        const ap = spec.anketaPassInvite ?? { enabled: false, passThreshold: 35, contentBlockId: null, messageText: "", delaySeconds: 900 }
+        const ap = spec.anketaPassInvite ?? { enabled: false, passThreshold: 35, aiEvalThreshold: 55, contentBlockId: null, messageText: "", delaySeconds: 900 }
+        // Порог AI-оценки может отсутствовать у старых спеков — дефолт 55 (как в схеме).
+        const aiEvalThreshold = typeof ap.aiEvalThreshold === "number" ? ap.aiEvalThreshold : 55
         return (
           <Card>
             <CardContent className="pt-5 space-y-3">
@@ -2202,9 +2204,10 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                 <div>
                   <h3 className="text-base font-semibold">После анкеты → 2-я часть «Путь менеджера»</h3>
                   <p className="text-xs text-muted-foreground">
-                    Кто ответил на вопросы-выбора правильно (детерминированный балл ≥ порога) — авто-сообщение
-                    со ссылкой на второй демо-блок, через задержку. Открытые/AI-вопросы в балл не входят —
-                    порог стабильный. ✓-варианты в «Контенте» = эталон.
+                    Приглашаем во 2-ю часть, если объективный балл по выбору ≥ порога <b>ИЛИ</b> AI-оценка
+                    ответов анкеты ≥ своего порога (достаточно любого из двух — сильные по сути ответы
+                    проходят даже при низком объективном балле). Открытые/AI-вопросы в объективный балл
+                    не входят — он стабильный. ✓-варианты в «Контенте» = эталон.
                   </p>
                 </div>
                 <Switch checked={ap.enabled} onCheckedChange={v => patch({ anketaPassInvite: { ...ap, enabled: v } })} />
@@ -2212,8 +2215,12 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
               {ap.enabled && (
                 <div className="space-y-3 pt-1">
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Порог балла по выбору: <b>{ap.passThreshold}</b> из 100 (≥ — приглашаем; ~70 = оба контрольных вопроса верно)</Label>
+                    <Label className="text-xs">Порог теста (объективный балл по выбору): <b>{ap.passThreshold}</b> из 100 (≥ — приглашаем; ~70 = оба контрольных вопроса верно)</Label>
                     <Slider min={0} max={100} step={1} value={[ap.passThreshold]} onValueChange={([v]) => patch({ anketaPassInvite: { ...ap, passThreshold: v } })} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Порог AI-оценки ответов: <b>{aiEvalThreshold}</b> из 100 (<b>ИЛИ</b> — достаточно любого из двух порогов)</Label>
+                    <Slider min={0} max={100} step={1} value={[aiEvalThreshold]} onValueChange={([v]) => patch({ anketaPassInvite: { ...ap, aiEvalThreshold: v } })} />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">Контент-блок 2-й части</Label>

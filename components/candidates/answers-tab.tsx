@@ -42,6 +42,8 @@ interface AnswersTabProps {
     invited: boolean
     score: number | null
     threshold: number
+    aiEvalScore: number | null
+    aiEvalThreshold: number
     passed: boolean | null
     blockTitle: string | null
   } | null
@@ -850,30 +852,38 @@ export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answers
   ) : null
 
   // Прозрачность приглашения на 2-ю часть (Юрий 01.07): показываем ПОЧЕМУ
-  // кандидат приглашён/нет — объективный балл по выбору vs порог из Портрета.
-  // Гейт приглашения считает ИМЕННО этот балл (не AI-оценку выше).
+  // кандидат приглашён/нет. ИЛИ-гейт: пропускаем, если объективный балл по
+  // выбору ≥ порога ИЛИ AI-оценка ответов ≥ своего порога (достаточно любого).
   const si = secondDemoInvite
   const inviteBanner = si ? (() => {
     const target = si.blockTitle ? `«${si.blockTitle}»` : "2-ю часть"
+    // Человекочитаемое объяснение баллов vs порогов (ИЛИ).
+    const objPart = si.score != null
+      ? `объективный ${si.score}${si.score >= si.threshold ? " ≥" : " <"} ${si.threshold}`
+      : null
+    const aiPart = si.aiEvalScore != null
+      ? `AI-оценка ${si.aiEvalScore}${si.aiEvalScore >= si.aiEvalThreshold ? " ≥" : " <"} ${si.aiEvalThreshold}`
+      : null
+    const detail = [objPart, aiPart].filter(Boolean).join(" · ")
     let tone: string, icon: ReactNode, text: string
     if (si.invited) {
       tone = "border-success/30 bg-success/10 text-success"
       icon = <CheckCircle2 className="w-4 h-4 shrink-0" />
-      text = si.score != null
-        ? `Приглашён на ${target} · балл ${si.score} ≥ порог ${si.threshold}`
+      text = detail
+        ? `Приглашён на ${target} · ${detail}`
         : `Приглашён на ${target}`
-    } else if (si.score == null) {
+    } else if (si.passed == null) {
       tone = "border-border bg-muted/40 text-muted-foreground"
       icon = <FileQuestion className="w-4 h-4 shrink-0" />
-      text = `Не приглашён на ${target} · нет балла по вопросам-выбора (кандидат на них не ответил)`
+      text = `Не приглашён на ${target} · пока нет баллов (кандидат не ответил / AI-оценка не посчитана)`
     } else if (si.passed) {
       tone = "border-warning/30 bg-warning/10 text-warning"
       icon = <FileQuestion className="w-4 h-4 shrink-0" />
-      text = `Проходит порог (${si.score} ≥ ${si.threshold}) — приглашение готовится`
+      text = `Проходит порог (${detail}) — приглашение готовится`
     } else {
       tone = "border-destructive/30 bg-destructive/10 text-destructive"
       icon = <FileQuestion className="w-4 h-4 shrink-0" />
-      text = `Не приглашён на ${target} · балл ${si.score} < порог ${si.threshold}`
+      text = `Не приглашён на ${target} · ${detail} (ни один порог не взят)`
     }
     return (
       <div className={cn("flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium", tone)}>
