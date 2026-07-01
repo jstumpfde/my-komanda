@@ -1014,6 +1014,7 @@ function BestPublishTimeCard({ vacancyId, city }: { vacancyId?: string; city?: s
             const short: Record<number, string> = { 1: "Пн", 2: "Вт", 3: "Ср", 4: "Чт", 5: "Пт" }
             return (
               <div className="space-y-0.5">
+                <p className="text-[10px] text-muted-foreground">% — доля откликов внутри дня</p>
                 {data.weekdayTops!.map(d => {
                   const slots = [...d.slots].sort((a, b) => a.hour - b.hour)
                   return (

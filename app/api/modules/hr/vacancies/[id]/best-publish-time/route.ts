@@ -123,10 +123,16 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     const weekdayCells = cells.filter(c => c.dow >= 1 && c.dow <= 5)
     const best = weekdayCells.length > 0 ? toCombo(weekdayCells[0]) : null
     const weekdayTops = [1, 2, 3, 4, 5].map(dow => {
-      const slots = weekdayCells
-        .filter(c => c.dow === dow) // cells уже отсортированы по cnt DESC
-        .slice(0, 2)
-        .map(c => ({ hour: c.hour, range: hourRange(c.hour), cnt: c.cnt, pct: Math.round((c.cnt / total) * 100) }))
+      const dayCells = weekdayCells.filter(c => c.dow === dow) // cells уже отсортированы по cnt DESC
+      // Процент слота — доля ВНУТРИ этого дня недели (cnt / dayTotal), а не от
+      // общего total: числа крупнее и читаются как «когда в этот день пик».
+      const dayTotal = dayCells.reduce((s, c) => s + c.cnt, 0)
+      const slots = dayCells.slice(0, 2).map(c => ({
+        hour: c.hour,
+        range: hourRange(c.hour),
+        cnt: c.cnt,
+        pct: dayTotal > 0 ? Math.round((c.cnt / dayTotal) * 100) : 0,
+      }))
       return { dow, dayName: DAY_NAMES[dow], slots }
     })
 
