@@ -7,6 +7,7 @@ import { isShortId } from "@/lib/short-id"
 import { scoreCandidateById } from "@/lib/ai-score-candidate"
 import { scoreCandidateV2 } from "@/lib/ai-score-candidate-v2"
 import { scoreDemoAnswers } from "@/lib/demo/score-answers"
+import { maybeGateBlocks } from "@/lib/demo/block-gate"
 import { maybeScheduleSecondDemoInvite } from "@/lib/messaging/second-demo-invite"
 import { isPortraitConfigured } from "@/lib/core/spec/resume-input"
 import { getSpec } from "@/lib/core/spec/store"
@@ -347,7 +348,14 @@ export async function POST(
     // Работает независимо от A/B скоринга: оценивает task-вопросы с aiCriteria.
     // Пишет в СВОЮ колонку candidates.demo_answers_score (не ai_score — иначе была
     // бы гонка с runAbScoring). Только если у вакансии есть такие вопросы.
-    if (txResult.isComplete || txResult.hasRealAnswer) {
+    // При ЗАВЕРШЕНИИ блока — maybeGateBlocks: сам скорит (AI + объективный) И гейтит
+    // по порогам блока (Вариант Б, дефолт ВЫКЛ — без настройки HR никто не отсеивается).
+    // При частичном ответе — просто пересчёт балла (гейт не применяем до завершения).
+    if (txResult.isComplete) {
+      void maybeGateBlocks(txResult.candidateId, txResult.vacancyId).catch((err: unknown) => {
+        console.error("[demo answer] block-gate failed:", err instanceof Error ? err.message : err)
+      })
+    } else if (txResult.hasRealAnswer) {
       void scoreDemoAnswers({
         candidateId: txResult.candidateId,
         vacancyId:   txResult.vacancyId,
@@ -355,11 +363,12 @@ export async function POST(
       }).catch((err: unknown) => {
         console.error("[demo answer] score-answers failed:", err instanceof Error ? err.message : err)
       })
+    }
 
-      // «2-я часть демо» (Путь менеджера): если в Портрете включён
-      // anketaPassInvite и кандидат прошёл детерминированный гейт по выбору —
-      // выставляем override-блок и ставим приглашение в очередь. OFF by default,
-      // дедуп внутри. Fire-and-forget: ошибка не блокирует ответ кандидату.
+    if (txResult.isComplete || txResult.hasRealAnswer) {
+      // «2-я часть демо» (Путь менеджера): если в Портрете включён anketaPassInvite и
+      // кандидат прошёл детерминированный гейт по выбору — выставляем override-блок и
+      // ставим приглашение. OFF by default, дедуп внутри. Fire-and-forget.
       void maybeScheduleSecondDemoInvite({
         candidateId: txResult.candidateId,
         vacancyId:   txResult.vacancyId,
