@@ -1001,12 +1001,6 @@ function BestPublishTimeCard({ vacancyId, city }: { vacancyId?: string; city?: s
         </p>
       ) : (
         <>
-          {data.best && (
-            <div className="rounded-md bg-primary/10 text-primary px-2.5 py-1.5 text-sm font-medium">
-              🎯 Лучше всего: {data.best.dayName}, {data.best.range}
-            </div>
-          )}
-
           {data.weekdayTops && data.weekdayTops.length > 0 && (() => {
             // Каждый будний день (Пн–Пт) со своим лучшим временем (топ-2 слота
             // внутри дня, по времени). Порядок дней строго Пн→Пт. День без
@@ -1033,6 +1027,9 @@ function BestPublishTimeCard({ vacancyId, city }: { vacancyId?: string; city?: s
           <p className="text-[10px] text-muted-foreground">
             По {data.total} откликам вашей компании{data.periodDays ? ` за ${data.periodDays}д.` : ""}{firstAtLabel ? ` · с ${firstAtLabel}` : ""} · МСК{cityLabel}
           </p>
+          <a href="?tab=analytics" className="inline-block text-[11px] text-primary hover:underline">
+            Открыть в аналитике →
+          </a>
         </>
       )}
     </div>
