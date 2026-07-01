@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback, useMemo, Suspense } from "react"
+import { useState, useRef, useEffect, useCallback, useMemo, Suspense, type ReactNode } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth, isPlatformRole } from "@/lib/auth"
@@ -85,7 +85,7 @@ import { FunnelV2Builder } from "@/components/vacancies/funnel-v2-builder"
 import { SpecEditor } from "@/components/vacancies/spec-editor"
 import { FunnelTab } from "@/components/vacancies/funnel-tab"
 import { MessageQueueSection } from "@/components/vacancies/message-queue-section"
-import { OutboundPauseControl } from "@/components/vacancies/outbound-pause-control"
+import { OutboundPauseMenuItem } from "@/components/vacancies/outbound-pause-control"
 import { parsePipeline, type CompanyStageHhActions, type CompanyStagePalette } from "@/lib/stages"
 import { BrandingOverrideSwitch } from "@/components/vacancies/branding-override-switch"
 import { VacancySettingsProvider, VacancyTabPendingDot, VacancyStickySaveBar, useVacancySectionRegister, useSafeSubTabSwitch, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
@@ -1181,6 +1181,9 @@ export default function VacancyPage() {
     demoOpened: number; rejected: number;
     hhTotal: number; hhNew: number; inProgress: number;
     anketaFilled: number; demoAnswered: number; hired: number;
+    // #15: интервью (scheduled + interview + legacy interviewed) и оферы
+    // (offer_sent + legacy offer) — считаются из byStage стадий кандидатов.
+    interview: number; offer: number;
     ctaClicked: number;
     aiTokensIn: number; aiTokensOut: number;
   } | null>(null)
@@ -1197,11 +1200,18 @@ export default function VacancyPage() {
         inProgress: number; rejected: number; hired: number;
         demoOpened: number; anketaFilled: number; demoAnswered: number;
         ctaClicked: number;
+        byStage?: Record<string, number>;
         aiTokensIn: number; aiTokensOut: number;
       }
       const cand = candRes.ok
         ? await candRes.json() as { pending: number; freshCount: number }
         : { pending: 0, freshCount: 0 }
+      // #15: интервью и оферы из byStage. scheduled = «Интервью назначено»,
+      // interview = «Интервью прошло»; legacy-slug interviewed/offer — вторая
+      // система статусов (B9), учитываем чтобы не терять исторические числа.
+      const bs = stats.byStage ?? {}
+      const interviewCount = (bs["scheduled"] ?? 0) + (bs["interview"] ?? 0) + (bs["interviewed"] ?? 0)
+      const offerCount = (bs["offer_sent"] ?? 0) + (bs["offer"] ?? 0)
       setHeaderStats({
         total:        stats.total,
         pending:      cand.pending,
@@ -1213,6 +1223,8 @@ export default function VacancyPage() {
         inProgress:   stats.inProgress,
         anketaFilled: stats.anketaFilled,
         demoAnswered: stats.demoAnswered,
+        interview:    interviewCount,
+        offer:        offerCount,
         ctaClicked:   stats.ctaClicked ?? 0,
         hired:        stats.hired,
         aiTokensIn:   stats.aiTokensIn  ?? 0,
@@ -2523,73 +2535,116 @@ export default function VacancyPage() {
                     </DropdownMenu>
                   )}
                   <VacancyStatusBadge status={status} />
-                  {status === "active" && apiVacancy?.createdAt && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="size-3.5" />{Math.floor((Date.now() - new Date(apiVacancy.createdAt).getTime()) / 86400000)} дн.</span>}
+                  {/* «X дн.» — сколько вакансия висит на hh: считаем от даты ПЕРВОЙ
+                      публикации (vacancies.hh_published_at, заполняет крон
+                      hh-vacancy-sync). Fallback на created_at, если hh-даты ещё
+                      нет (вакансия без hh-привязки или синк не прошёл). */}
+                  {(() => {
+                    if (status !== "active") return null
+                    const hhPublishedAt = (apiVacancy as { hhPublishedAt?: string | null } | undefined)?.hhPublishedAt
+                    const since = hhPublishedAt ?? apiVacancy?.createdAt
+                    if (!since) return null
+                    const days = Math.floor((Date.now() - new Date(since).getTime()) / 86400000)
+                    return <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="size-3.5" />{days} дн.</span>
+                  })()}
                 </div>
                 <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
                   {activeTab === "candidates" && <>
-                    {/* #13: две логические группы метрик. Слева — hh.ru
-                        (синхрон с hh-кабинетом), вертикальная черта,
-                        справа — наши данные после разбора. Если вакансия
-                        не привязана к hh — hh-блок скрыт. */}
-                    {headerStats?.hhTotal !== undefined && headerStats.hhTotal + headerStats.hhNew > 0 && (
-                      <>
+                    {/* #15: счётчики шапки. Порядок: откликов → новых → демо →
+                        анкет → интервью → оферы → нанято → отказ.
+                        HIDE-AT-ZERO: всегда показываем «откликов всего»,
+                        «новых», «открыли демо» (даже 0); анкет/интервью/оферы/
+                        нанято/отказ — только если >0.
+                        Разделитель «·» рендерит каждый видимый элемент ПЕРЕД
+                        собой, кроме первого (isFirst), чтобы не было висячих
+                        точек при скрытых метриках. */}
+                    {(() => {
+                      const s = headerStats
+                      // hh-блок (откликов/новых) — только для hh-привязанных вакансий.
+                      const showHh = s?.hhTotal !== undefined
+                      const nodes: ReactNode[] = []
+                      const push = (key: string, node: ReactNode) => {
+                        if (nodes.length > 0) nodes.push(<span key={`sep-${key}`} aria-hidden="true">·</span>)
+                        nodes.push(<span key={key} className="inline-flex items-center">{node}</span>)
+                      }
+                      // Всегда (для hh-вакансий): откликов всего, новых.
+                      if (showHh) {
+                        push("hhTotal",
+                          <UITooltip>
+                            <TooltipTrigger asChild>
+                              <span className="cursor-help"><span className="font-medium text-foreground">{s!.hhTotal}</span> откликов всего</span>
+                            </TooltipTrigger>
+                            <TooltipContent>Всего откликов с hh.ru, синхронизировано с hh-кабинетом</TooltipContent>
+                          </UITooltip>)
+                        push("hhNew",
+                          <UITooltip>
+                            <TooltipTrigger asChild>
+                              <span className="cursor-help"><span className="font-medium text-foreground">{s!.hhNew}</span> новых</span>
+                            </TooltipTrigger>
+                            <TooltipContent>Новые отклики, ещё не разобраны (status = response)</TooltipContent>
+                          </UITooltip>)
+                      }
+                      // Всегда: открыли демо.
+                      push("demoOpened",
                         <UITooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-help">
-                              <span className="font-medium text-foreground">{headerStats.hhTotal}</span> откликов всего
-                            </span>
+                            <span className="cursor-help"><span className="font-medium text-foreground">{s?.demoOpened ?? 0}</span> демо</span>
                           </TooltipTrigger>
-                          <TooltipContent>Всего откликов с hh.ru, синхронизировано с hh-кабинетом</TooltipContent>
-                        </UITooltip>
-                        <span>·</span>
+                          <TooltipContent>Кандидаты, открывшие демо («demo_opened» и далее)</TooltipContent>
+                        </UITooltip>)
+                      // Только >0: анкет (demoAnswered).
+                      if ((s?.demoAnswered ?? 0) > 0) push("anketa",
                         <UITooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-help">
-                              <span className="font-medium text-foreground">{headerStats.hhNew}</span> новых
-                            </span>
+                            <span className="cursor-help"><span className="font-medium text-foreground">{s!.demoAnswered}</span> анкет</span>
                           </TooltipTrigger>
-                          <TooltipContent>Новые отклики, ещё не разобраны (status = response)</TooltipContent>
-                        </UITooltip>
-                        <span className="mx-1 inline-block h-3 w-px bg-border" aria-hidden="true" />
-                      </>
-                    )}
-                    {/* Блок наших данных после разбора */}
-                    <UITooltip>
-                      <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.demoOpened ?? "—"}</span> открыли демо</span>
-                      </TooltipTrigger>
-                      <TooltipContent>Кандидаты, добравшиеся до стадии «demo_opened» и далее</TooltipContent>
-                    </UITooltip>
-                    <span>·</span>
-                    <UITooltip>
-                      <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.demoAnswered ?? "—"}</span> заполнили анкету</span>
-                      </TooltipTrigger>
-                      <TooltipContent>Кандидаты, ответившие на вопросы анкеты (посчитан балл «AI-ан» по ответам)</TooltipContent>
-                    </UITooltip>
-                    {(headerStats?.ctaClicked ?? 0) > 0 && (
-                      <>
-                        <span>·</span>
+                          <TooltipContent>Кандидаты, ответившие на вопросы анкеты (посчитан балл «AI-ан» по ответам)</TooltipContent>
+                        </UITooltip>)
+                      // Только >0: перешли по ссылке (оставлено из прежней логики).
+                      if ((s?.ctaClicked ?? 0) > 0) push("cta",
                         <UITooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.ctaClicked}</span> перешли по ссылке</span>
+                            <span className="cursor-help"><span className="font-medium text-foreground">{s!.ctaClicked}</span> перешли по ссылке</span>
                           </TooltipTrigger>
                           <TooltipContent>Кандидаты, кликнувшие по кнопке-ссылке в демо (Telegram-канал / сайт)</TooltipContent>
-                        </UITooltip>
-                      </>
-                    )}
-                    <span>·</span>
-                    <UITooltip>
-                      <TooltipTrigger asChild>
-                        <span className="cursor-help"><span className="font-medium text-foreground">{headerStats?.rejected ?? "—"}</span> отказ</span>
-                      </TooltipTrigger>
-                      <TooltipContent>Кандидаты со статусом «Отказ» в воронке</TooltipContent>
-                    </UITooltip>
-                    {/* P0-9: бейдж дельты «свежих» — оставлен (отдельная семантика
-                        «с прошлого захода»), но переехал в конец, чтобы не мешать
-                        основным метрикам. */}
+                        </UITooltip>)
+                      // Только >0: интервью, оферы, нанято.
+                      if ((s?.interview ?? 0) > 0) push("interview",
+                        <UITooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help"><span className="font-medium text-foreground">{s!.interview}</span> интервью</span>
+                          </TooltipTrigger>
+                          <TooltipContent>Кандидаты на стадии интервью (назначено + прошло)</TooltipContent>
+                        </UITooltip>)
+                      if ((s?.offer ?? 0) > 0) push("offer",
+                        <UITooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help"><span className="font-medium text-foreground">{s!.offer}</span> оферов</span>
+                          </TooltipTrigger>
+                          <TooltipContent>Кандидаты, которым отправлен оффер</TooltipContent>
+                        </UITooltip>)
+                      if ((s?.hired ?? 0) > 0) push("hired",
+                        <UITooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help"><span className="font-medium text-foreground">{s!.hired}</span> нанято</span>
+                          </TooltipTrigger>
+                          <TooltipContent>Кандидаты, нанятые по этой вакансии</TooltipContent>
+                        </UITooltip>)
+                      // Только >0: отказ.
+                      if ((s?.rejected ?? 0) > 0) push("rejected",
+                        <UITooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help"><span className="font-medium text-foreground">{s!.rejected}</span> отказ</span>
+                          </TooltipTrigger>
+                          <TooltipContent>Кандидаты со статусом «Отказ» в воронке</TooltipContent>
+                        </UITooltip>)
+                      return nodes
+                    })()}
+                    {/* P0-9: бейдж дельты «свежих» — отдельная семантика
+                        «с прошлого захода», в конце. Индикатор пагинации
+                        «Стр. N из M» из этой строки убран (#15). */}
                     {(headerStats?.freshCount ?? 0) > 0 && <>
-                      <span>·</span>
+                      <span aria-hidden="true">·</span>
                       <UITooltip>
                         <TooltipTrigger asChild>
                           <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 cursor-help">
@@ -2599,20 +2654,6 @@ export default function VacancyPage() {
                         <TooltipContent>Новые заполненные анкеты с прошлого захода в вакансию</TooltipContent>
                       </UITooltip>
                     </>}
-                    {useListPaginated && paginated.total > 0 && (
-                      <>
-                        <span>·</span>
-                        <span className="text-foreground">
-                          Стр. <span className="font-medium tabular-nums">{paginated.page}</span> из{" "}
-                          <span className="font-medium tabular-nums">{paginated.totalPages}</span>{" "}
-                          (<span className="tabular-nums">
-                            {(paginated.page - 1) * paginated.pageSize + 1}
-                            –
-                            {Math.min(paginated.total, paginated.page * paginated.pageSize)}
-                          </span>)
-                        </span>
-                      </>
-                    )}
                   </>}
                 </div>
                 <input
@@ -2637,13 +2678,9 @@ export default function VacancyPage() {
                     </TooltipContent>
                   </UITooltip>
                 )}
-                {/* Заметная кнопка паузы дожимов (исходящая очередь).
-                    Останавливает только дожимы/приглашения; разбор новых
-                    откликов process-queue паузу не читает. Показываем для
-                    активных вакансий, где очередь реально работает. */}
-                {(status === "active" || status === "published" || status === "paused") && (
-                  <OutboundPauseControl vacancyId={id} />
-                )}
+                {/* #17: пауза дожимов переехала в дропдаун «Ещё» тулбара над
+                    списком (пунктом OutboundPauseMenuItem). Отдельной кнопки в
+                    шапке больше нет. */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
@@ -2914,6 +2951,12 @@ export default function VacancyPage() {
                           Поискать в базе
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
+                        {/* #17: пауза дожимов (исходящая очередь) переехала сюда
+                            из шапки. Показываем для активных/на паузе вакансий,
+                            где очередь реально работает. */}
+                        {(status === "active" || status === "published" || status === "paused") && (
+                          <OutboundPauseMenuItem vacancyId={id} />
+                        )}
                         {/* Режим рассылки hh: показывает иконку чата в каждой строке
                             списка для одиночной полу-ручной рассылки (архивные hh-вакансии).
                             onSelect+preventDefault — чтобы клик не закрывал меню. */}
