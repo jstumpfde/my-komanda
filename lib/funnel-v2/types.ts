@@ -6,6 +6,7 @@
 
 import { buildDozhimChain } from "./dozhim-templates"
 import type { DripTemplates } from "@/lib/db/schema"
+import { hhStatusStringToHhAction } from "@/lib/hh/stage-mapping"
 
 export type StageActionType =
   | "message"          // просто сообщение/касание
@@ -66,13 +67,11 @@ export const STAGE_STATUSES = ["новый", "первичный контакт"
 export function hhActionForStatus(
   status?: string | null,
 ): "invitation" | "assessment" | "interview" | "discard" | null {
-  const t = (status ?? "").toLowerCase()
-  if (!t) return null
-  if (t.includes("отказ")) return "discard"
-  if (t.includes("тест")) return "assessment"
-  if (t.includes("интервью")) return "interview"
-  if (t.includes("первичн") || t.includes("контакт")) return "invitation"
-  return null
+  // Делегируем центральному модулю маппинга (lib/hh/stage-mapping.ts), чтобы
+  // исходящий пуш v2 шёл через единую утверждённую карту стадий (#16/#23).
+  // "consider" в v2-статусах не используется → сузим тип до legacy-набора.
+  const a = hhStatusStringToHhAction(status)
+  return a === "consider" ? null : a
 }
 
 /** Правило прохода стадии. Решение (включён ли авто-отказ/приглашение, порог) —

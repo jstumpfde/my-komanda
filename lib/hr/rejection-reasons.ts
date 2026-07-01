@@ -45,6 +45,9 @@ export const AUTO_REASON_LABELS: Record<string, string> = {
   stop_word_regex:               "Стоп-слово (фильтр)",
   unstable_pattern_in_chat:      "Подозрительное поведение в чате",
   trashed:                       "Перемещён в корзину",
+  // Входящий синк стадий hh (#23): отказ, замеченный на стороне hh.
+  hh_discard_by_employer:        "Отказ (замечен на hh)",
+  hh_discard_by_applicant:       "Кандидат отказался (на hh)",
 }
 
 // Нормализуем причину к ключу — часть до первого ":" (детали после двоеточия,
