@@ -23,7 +23,7 @@
 import { eq, and, isNotNull, desc } from "drizzle-orm"
 import { db, pgClient } from "@/lib/db"
 import { candidates, vacancies, hhResponses } from "@/lib/db/schema"
-import { screenResume, type ResumeScreenInput } from "@/lib/ai-screen-resume"
+import { screenResume, hasSubstantiveRoleHistory, type ResumeScreenInput } from "@/lib/ai-screen-resume"
 import { extractHhResumeFields } from "@/lib/hh/extract-resume-fields"
 import { getSpec } from "@/lib/core/spec/store"
 import {
@@ -34,20 +34,22 @@ import {
 
 const DEFAULT_VACANCY_ID = "6916db01-a765-4c4e-a652-81475566f95b"
 
-function parseArgs(argv: string[]): { vacancyId: string; limit: number; apply: boolean; help: boolean } {
+function parseArgs(argv: string[]): { vacancyId: string; limit: number; apply: boolean; forceThin: boolean; help: boolean } {
   const args = argv.slice(2)
   let vacancyId = DEFAULT_VACANCY_ID
   let limit = 500
   let apply = false
+  let forceThin = false
   let help = false
   for (let i = 0; i < args.length; i++) {
     const a = args[i]
     if (a === "--help" || a === "-h") { help = true; continue }
     if (a === "--apply") { apply = true; continue }
+    if (a === "--force-thin") { forceThin = true; continue }
     if (a === "--vacancy-id" && args[i + 1]) { vacancyId = args[++i]; continue }
     if (a === "--limit" && args[i + 1]) { limit = Math.min(1000, Math.max(1, parseInt(args[++i], 10) || 500)); continue }
   }
-  return { vacancyId, limit, apply, help }
+  return { vacancyId, limit, apply, forceThin, help }
 }
 
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
@@ -66,7 +68,10 @@ async function screenWithRetry(input: ResumeScreenInput, retries = 1): Promise<A
 async function main() {
   const opts = parseArgs(process.argv)
   if (opts.help) {
-    console.log("rescore-resume-apply — пересчёт и ЗАПИСЬ resume_score. --apply для реальной записи (иначе dry-run).")
+    console.log("rescore-resume-apply — пересчёт и ЗАПИСЬ resume_score.\n" +
+      "  --apply        реальная запись (иначе dry-run)\n" +
+      "  --force-thin   не пропускать кандидатов без истории должностей в raw_data\n" +
+      "                 (по умолчанию такие пропускаются — вход обеднён, live-балл не трогаем)")
     process.exit(0)
   }
   if (!process.env.DATABASE_URL) { console.error("DATABASE_URL не задан"); process.exit(1) }
@@ -126,7 +131,7 @@ async function main() {
   const uniqueRows = rows.filter(r => (seen.has(r.candidateId) ? false : (seen.add(r.candidateId), true)))
   console.log(`  Кандидатов: ${uniqueRows.length}\n`)
 
-  let updated = 0, failed = 0
+  let updated = 0, failed = 0, skippedThin = 0
   for (const r of uniqueRows) {
     const raw = r.hhRawData as { resume?: Record<string, unknown> } | null
     const extracted = extractHhResumeFields(raw?.resume)
@@ -144,6 +149,15 @@ async function main() {
       citizenshipNames: (r.citizenshipNames as string[] | null) ?? extracted.citizenshipNames ?? null,
       workHistory: extracted.workHistory ?? null,
     }
+
+    // Защита: без содержательной истории должностей в raw_data «стало» посчитано
+    // на обеднённом входе — перезаписывать live-балл нельзя (только с --force-thin).
+    if (!hasSubstantiveRoleHistory(resumeObj) && !opts.forceThin) {
+      console.log(`  ⚠ ${r.candidateName.padEnd(28).slice(0, 28)} пропущен: нет истории должностей в raw_data (--force-thin чтобы всё равно)`)
+      skippedThin++
+      continue
+    }
+
     let res: Awaited<ReturnType<typeof screenResume>> = null
     try { res = await screenWithRetry({ resume: resumeObj, vacancy: vacancyInput }) }
     catch (err) { console.warn(`  ✗ ${r.candidateName}: ${err instanceof Error ? err.message : err}`); failed++; continue }
@@ -159,7 +173,7 @@ async function main() {
     await sleep(300)
   }
 
-  console.log(`\n  ${opts.apply ? `Обновлено: ${updated}` : "DRY-RUN — ничего не записано (добавьте --apply)"}, ошибок: ${failed}\n`)
+  console.log(`\n  ${opts.apply ? `Обновлено: ${updated}` : "DRY-RUN — ничего не записано (добавьте --apply)"}, пропущено (обеднённый вход): ${skippedThin}, ошибок: ${failed}\n`)
   await pgClient.end({ timeout: 5 })
   process.exit(0)
 }
