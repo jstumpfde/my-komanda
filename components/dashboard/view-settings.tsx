@@ -24,6 +24,13 @@ interface ViewSettingsProps {
   testTableHref?: string
   /** Сброс к стандартным настройкам колонок */
   onReset?: () => void
+  /**
+   * Актуальные для ЭТОЙ вакансии ключи колонок (по конфигу воронки). Если задан —
+   * показываем тумблер только для колонки из набора (плюс всегда универсальные,
+   * которые уже включены в набор). Если не задан (null/undefined) — показываем ВСЕ
+   * тумблеры (прежнее поведение, безопасный дефолт).
+   */
+  availableKeys?: Set<keyof CardDisplaySettings> | null
 }
 
 const VIEW_MODES: Array<{ value: ViewMode; label: string }> = [
@@ -38,7 +45,7 @@ const VIEW_MODES: Array<{ value: ViewMode; label: string }> = [
 // Добавилась/убралась колонка → тумблер меняется автоматически.
 const DISPLAY_TOGGLES = CANDIDATE_COLUMN_TOGGLES
 
-export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeChange, testTableHref, onReset }: ViewSettingsProps) {
+export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeChange, testTableHref, onReset, availableKeys }: ViewSettingsProps) {
   const { role, user } = useAuth()
   // Виды Воронка/Канбан/Плитки пока обкатываются — показываем только владельцу-
   // полигону (по email). Остальным — только «Список».
@@ -55,6 +62,12 @@ export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeC
     if (key === "showSalary" && next.showSalary) next.showSalaryFull = false
     onSettingsChange(next)
   }
+
+  // Тумблеры колонок: если задан availableKeys — показываем только актуальные
+  // для этой вакансии колонки; иначе (null/undefined) — все (прежнее поведение).
+  const visibleToggles = availableKeys
+    ? DISPLAY_TOGGLES.filter(({ key }) => availableKeys.has(key))
+    : DISPLAY_TOGGLES
 
   const activeLabel = VIEW_MODES.find((m) => m.value === viewMode)?.label
 
@@ -128,7 +141,7 @@ export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeC
               </p>
             )}
             <div className="space-y-2.5">
-              {DISPLAY_TOGGLES.map(({ key, label }) => (
+              {visibleToggles.map(({ key, label }) => (
                 <div key={key} className="flex items-center justify-between">
                   <Label
                     htmlFor={`vs-${key}`}
