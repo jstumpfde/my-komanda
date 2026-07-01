@@ -94,14 +94,14 @@ export function PublishTimeHeatmap({ data, city }: { data: PublishTimeHeatmapDat
         )}
       </p>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {grid.length > 0 && (
-          <div className="lg:col-span-2 overflow-x-auto">
+          <div className="overflow-x-auto">
             <div className="inline-block min-w-full">
               {/* Шкала часов сверху — метки каждые 3 часа */}
               <div className="flex pl-6">
                 {hoursAxis.map(h => (
-                  <div key={h} className="w-[14px] text-center text-[8px] leading-none text-muted-foreground">
+                  <div key={h} className="w-[22px] text-center text-[8px] leading-none text-muted-foreground">
                     {h % 3 === 0 ? h : ""}
                   </div>
                 ))}
@@ -118,7 +118,7 @@ export function PublishTimeHeatmap({ data, city }: { data: PublishTimeHeatmapDat
                       <div
                         key={h}
                         title={`${dayShort[dow]} ${String(h).padStart(2, "0")}:00 — ${cnt} откл.`}
-                        className={`w-3 h-3 m-[1px] rounded-[2px] ${cellClass(cnt)} ${isPeak ? "ring-1 ring-primary ring-offset-0" : ""}`}
+                        className={`w-5 h-6 m-[1px] rounded-[3px] ${cellClass(cnt)} ${isPeak ? "ring-2 ring-primary ring-offset-0" : ""}`}
                       />
                     )
                   })}
