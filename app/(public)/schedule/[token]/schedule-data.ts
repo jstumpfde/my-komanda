@@ -7,18 +7,15 @@ import { candidates, vacancies, companies, calendarEvents } from "@/lib/db/schem
 import { isShortId } from "@/lib/short-id"
 import type { CompanyHiringDefaults } from "@/lib/db/schema"
 import type { SchedulePageData, MethodConfig, SlotDay } from "@/lib/schedule-interview-types"
+import { resolveDaySchedule, rangesForJsDay } from "@/lib/schedule/day-windows"
 
 export type { SchedulePageData, MethodConfig, SlotDay }
 
 // ─── Константы / дефолты ──────────────────────────────────────────────────────
 
 const DEFAULT_TZ     = "Europe/Moscow"
-const DEFAULT_DAYS   = ["mon","tue","wed","thu","fri"]
-const DEFAULT_FROM   = "09:00"
-const DEFAULT_TO     = "18:00"
 const DEFAULT_STEP   = 30
 const DEFAULT_MAX    = 8
-const DAY_ID_TO_JS   = { sun:0, mon:1, tue:2, wed:3, thu:4, fri:5, sat:6 } as const
 const DAY_LABELS_RU  = ["Вс","Пн","Вт","Ср","Чт","Пт","Сб"]
 const MONTH_SHORT_RU = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"]
 
@@ -93,28 +90,25 @@ function minutesToTime(mins: number): string {
   return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`
 }
 
+// Генерация слотов по набору окон (мульти-диапазон на день).
+// Каждое окно [from,to] нарезается шагом step; слот входит, если целиком
+// умещается в окно. Окна уже учитывают обед (обеденный интервал выражен как
+// разрыв между двумя окнами).
 function generateDaySlots(cfg: {
-  from: number
-  to: number
+  ranges: Array<{ from: number; to: number }>
   step: number
-  lunchEnabled: boolean
-  lunchFrom: number
-  lunchTo: number
   duration: number
 }): string[] {
   const slots: string[] = []
-  let cur = cfg.from
-  while (cur + cfg.duration <= cfg.to) {
-    const slotEnd = cur + cfg.duration
-    if (cfg.lunchEnabled) {
-      const overlapsLunch = cur < cfg.lunchTo && slotEnd > cfg.lunchFrom
-      if (!overlapsLunch) slots.push(minutesToTime(cur))
-    } else {
+  for (const range of cfg.ranges) {
+    let cur = range.from
+    while (cur + cfg.duration <= range.to) {
       slots.push(minutesToTime(cur))
+      cur += cfg.step
     }
-    cur += cfg.step
   }
-  return slots
+  // Сортируем и дедупим (окна могут пересекаться при некорректном вводе).
+  return Array.from(new Set(slots)).sort()
 }
 
 // ─── Основная функция ─────────────────────────────────────────────────────────
@@ -149,6 +143,8 @@ export async function fetchScheduleData(
         hiringDefaults:       companies.hiringDefaultsJson,
         // #3.4 Fallback адреса: companies.office_address
         companyOfficeAddress: companies.officeAddress,
+        // #21 per-вакансия окна записи (descriptionJson.interviewDaySchedule)
+        vacancyDescriptionJson: vacancies.descriptionJson,
       })
       .from(vacancies)
       .innerJoin(companies, eq(vacancies.companyId, companies.id))
@@ -160,19 +156,23 @@ export async function fetchScheduleData(
     const sched = (row.hiringDefaults as CompanyHiringDefaults)?.schedule ?? {}
 
     // 3. Разбираем настройки
-    const enabledDays   = sched.interviewDays?.length ? sched.interviewDays : DEFAULT_DAYS
-    const enabledJsDays = new Set(
-      enabledDays.map(d => DAY_ID_TO_JS[d as keyof typeof DAY_ID_TO_JS] ?? -1)
-    )
-    const fromMins  = timeToMinutes(sched.interviewFrom ?? DEFAULT_FROM)
-    const toMins    = timeToMinutes(sched.interviewTo   ?? DEFAULT_TO)
     const step      = sched.slotStep ?? DEFAULT_STEP
     const maxPerDay = Number(sched.maxPerDay ?? DEFAULT_MAX) || DEFAULT_MAX
     const timezone  = sched.timezone ?? DEFAULT_TZ
 
-    const lunchEnabled = sched.lunchEnabled ?? false
-    const lunchFrom = lunchEnabled ? timeToMinutes(sched.lunchFrom ?? "13:00") : 0
-    const lunchTo   = lunchEnabled ? timeToMinutes(sched.lunchTo   ?? "14:00") : 0
+    // #21 Окна записи по дням недели: per-вакансия (descriptionJson.interviewDaySchedule)
+    // либо company-level fallback (из плоских interviewDays/From/To/lunch).
+    const vacancyDj = (row.vacancyDescriptionJson && typeof row.vacancyDescriptionJson === "object")
+      ? row.vacancyDescriptionJson as Record<string, unknown>
+      : {}
+    const daySchedule = resolveDaySchedule(vacancyDj.interviewDaySchedule, {
+      interviewDays: sched.interviewDays,
+      interviewFrom: sched.interviewFrom,
+      interviewTo:   sched.interviewTo,
+      lunchEnabled:  sched.lunchEnabled,
+      lunchFrom:     sched.lunchFrom,
+      lunchTo:       sched.lunchTo,
+    })
 
     // 4. Методы
     let methods: MethodConfig[]
@@ -237,14 +237,16 @@ export async function fetchScheduleData(
     const checkDate = new Date(now.getTime() + 24 * 60 * 60 * 1000)
 
     for (let i = 0; i < 21 && days.length < 14; i++) {
-      const jsDay = localDayOfWeek(checkDate, timezone)
-      if (enabledJsDays.has(jsDay)) {
+      const jsDay  = localDayOfWeek(checkDate, timezone)
+      const ranges = rangesForJsDay(daySchedule, jsDay)
+      if (ranges.length > 0) {
         const ymd = localDateToYMD(checkDate, timezone)
         const dayBooked = bookedCountByDay[ymd] ?? 0
 
         if (dayBooked < maxPerDay) {
           const rawSlots = generateDaySlots({
-            from: fromMins, to: toMins, step, lunchEnabled, lunchFrom, lunchTo,
+            ranges: ranges.map(r => ({ from: timeToMinutes(r.from), to: timeToMinutes(r.to) })),
+            step,
             duration: defaultDuration,
           })
           const freeSlots = rawSlots.filter(t => !bookedSlotSet.has(`${ymd}T${t}`))
