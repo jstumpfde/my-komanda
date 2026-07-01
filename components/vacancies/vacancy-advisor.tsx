@@ -959,7 +959,7 @@ interface PublishTimeData {
   periodDays?: number
   firstAt?: string | null
   best?: { dow: number; dayName: string; hour: number; range: string; cnt: number; pct: number } | null
-  weekdayTops?: { dow: number; dayName: string; hour: number; range: string; cnt: number; pct: number }[]
+  weekdayTops?: { dow: number; dayName: string; slots: { hour: number; range: string; cnt: number; pct: number }[] }[]
 }
 
 function BestPublishTimeCard({ vacancyId, city }: { vacancyId?: string; city?: string }) {
@@ -1008,25 +1008,19 @@ function BestPublishTimeCard({ vacancyId, city }: { vacancyId?: string; city?: s
           )}
 
           {data.weekdayTops && data.weekdayTops.length > 0 && (() => {
-            // Топ-5 будних слотов (Пн–Пт), сгруппированы по дню недели.
-            // Порядок дней — Пн..Пт; внутри дня слоты по времени.
+            // Каждый будний день (Пн–Пт) со своим лучшим временем (топ-2 слота
+            // внутри дня, по времени). Порядок дней строго Пн→Пт. День без
+            // откликов — «—».
             const short: Record<number, string> = { 1: "Пн", 2: "Вт", 3: "Ср", 4: "Чт", 5: "Пт" }
-            const byDow = new Map<number, { range: string; pct: number; hour: number }[]>()
-            for (const s of data.weekdayTops!) {
-              const arr = byDow.get(s.dow) ?? []
-              arr.push({ range: s.range, pct: s.pct, hour: s.hour })
-              byDow.set(s.dow, arr)
-            }
-            const orderedDows = Array.from(byDow.keys()).sort((a, b) => a - b)
             return (
               <div className="space-y-0.5">
-                {orderedDows.map(dow => {
-                  const slots = (byDow.get(dow) ?? []).sort((a, b) => a.hour - b.hour)
+                {data.weekdayTops!.map(d => {
+                  const slots = [...d.slots].sort((a, b) => a.hour - b.hour)
                   return (
-                    <div key={dow} className="flex items-baseline gap-1.5 text-sm">
-                      <span className="w-6 shrink-0 font-medium text-muted-foreground">{short[dow]}</span>
+                    <div key={d.dow} className="flex items-baseline gap-1.5 text-sm">
+                      <span className="w-6 shrink-0 font-medium text-muted-foreground">{short[d.dow]}</span>
                       <span className="text-foreground">
-                        {slots.map(s => `${s.range} — ${s.pct}%`).join(" · ")}
+                        {slots.length > 0 ? slots.map(s => `${s.range} — ${s.pct}%`).join(" · ") : "—"}
                       </span>
                     </div>
                   )

@@ -116,12 +116,19 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     })
     const combos = cells.slice(0, 3).map(toCombo)
 
-    // ── Будние слоты (Пн–Пт, dow 1..5) для карточки advisor ───────────────
-    // Карточка показывает лучшие рабочие дни/часы — Сб/Вс исключаем.
-    // best = лучшая будняя ячейка (карточка про будни). weekdayTops — топ-5.
+    // ── Будние дни (Пн–Пт, dow 1..5) для карточки advisor ─────────────────
+    // Показываем КАЖДЫЙ будний день со своим лучшим временем (топ-2 ячейки
+    // внутри дня), а не глобальный топ, который у концентрированных данных
+    // схлопывается в один день. best = лучшая будняя ячейка среди всех будней.
     const weekdayCells = cells.filter(c => c.dow >= 1 && c.dow <= 5)
     const best = weekdayCells.length > 0 ? toCombo(weekdayCells[0]) : null
-    const weekdayTops = weekdayCells.slice(0, 5).map(toCombo)
+    const weekdayTops = [1, 2, 3, 4, 5].map(dow => {
+      const slots = weekdayCells
+        .filter(c => c.dow === dow) // cells уже отсортированы по cnt DESC
+        .slice(0, 2)
+        .map(c => ({ hour: c.hour, range: hourRange(c.hour), cnt: c.cnt, pct: Math.round((c.cnt / total) * 100) }))
+      return { dow, dayName: DAY_NAMES[dow], slots }
+    })
 
     return NextResponse.json({
       enough: true,
