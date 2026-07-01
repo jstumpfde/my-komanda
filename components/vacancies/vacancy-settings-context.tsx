@@ -11,7 +11,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
-import { Save, Loader2 } from "lucide-react"
+import { Save, Loader2, ChevronLeft, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export type VacancyTabKey =
@@ -346,6 +346,74 @@ export function VacancyStickySaveBar() {
           {ctx.nextAction.label}
         </Button>
       )}
+    </div>
+  )
+}
+
+/**
+ * #20 — ЕДИНАЯ нижняя панель действий для всех табов вакансии.
+ *
+ * Эталон = таб «Вакансия» (AnketaTab): СПРАВА в ряд [Сохранить] · [Далее → {next}];
+ * СНИЗУ-СЛЕВА хлебные крошки [‹ Все вакансии] · [‹ {prev}]. Порядок табов —
+ * канонический v2-ряд (Вакансия → Портрет → Контент → Воронка → Сообщения →
+ * Дожим → Воронка v2 → Источники → Расписание → Интеграции → Брендинг →
+ * Исходящий подбор → Очередь).
+ *
+ * onSave — необязателен. Когда компонент рендерится внутри VacancySettingsProvider
+ * (вкладка «Настройки»), «Сохранить» по умолчанию вызывает ctx.saveAll(); для
+ * табов, владеющих собственным сохранением (Вакансия/Контент/…), кнопку
+ * «Сохранить» показывает сам таб, а здесь передаётся только навигация.
+ */
+export function VacancyTabFooter(props: {
+  onAllVacancies: () => void
+  prevLabel?: string | null
+  onPrev?: () => void
+  nextLabel?: string | null
+  onNext?: () => void
+  /** Явный обработчик «Сохранить». Если не задан и есть контекст — ctx.saveAll(). */
+  onSave?: () => void | Promise<void>
+  saving?: boolean
+  /** Показывать кнопку «Сохранить» (по умолчанию — только если есть onSave или контекст). */
+  showSave?: boolean
+}) {
+  const ctx = useVacancySettings()
+  const { onAllVacancies, prevLabel, onPrev, nextLabel, onNext } = props
+  const saveHandler = props.onSave ?? (ctx ? () => ctx.saveAll() : undefined)
+  const saving = props.saving ?? ctx?.saving ?? false
+  const showSave = props.showSave ?? !!saveHandler
+  const saveLabel = ctx && ctx.pendingCount > 1
+    ? `Сохранить настройки (${ctx.pendingCount} изменения)`
+    : ctx ? "Сохранить настройки" : "Сохранить"
+  return (
+    <div className="flex items-center justify-between mt-6 pt-4 border-t gap-3">
+      {/* Снизу-слева: хлебные крошки навигации */}
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={onAllVacancies}>
+          <ChevronLeft className="w-3.5 h-3.5" />
+          Все вакансии
+        </Button>
+        {prevLabel && onPrev && (
+          <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={onPrev}>
+            <ChevronLeft className="w-3.5 h-3.5" />
+            {prevLabel}
+          </Button>
+        )}
+      </div>
+      {/* Справа: [Сохранить] · [Далее → {next}] */}
+      <div className="flex items-center gap-3">
+        {showSave && saveHandler && (
+          <Button size="sm" className="gap-1.5 h-9 text-xs" onClick={() => { void saveHandler() }} disabled={saving}>
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            {saveLabel}
+          </Button>
+        )}
+        {nextLabel && onNext && (
+          <Button size="sm" variant="default" className="gap-1.5 h-9 text-xs" onClick={onNext} disabled={saving}>
+            {nextLabel}
+            <ChevronRight className="w-3.5 h-3.5" />
+          </Button>
+        )}
+      </div>
     </div>
   )
 }

@@ -90,7 +90,7 @@ import { MessageQueueSection } from "@/components/vacancies/message-queue-sectio
 import { OutboundPauseMenuItem } from "@/components/vacancies/outbound-pause-control"
 import { parsePipeline, type CompanyStageHhActions, type CompanyStagePalette } from "@/lib/stages"
 import { BrandingOverrideSwitch } from "@/components/vacancies/branding-override-switch"
-import { VacancySettingsProvider, VacancyTabPendingDot, VacancyStickySaveBar, useVacancySectionRegister, useSafeSubTabSwitch, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
+import { VacancySettingsProvider, VacancyTabPendingDot, VacancyTabFooter, useVacancySectionRegister, useSafeSubTabSwitch, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
 import {
   ResponsiveContainer,
   BarChart,
@@ -1087,6 +1087,53 @@ export default function VacancyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>(initialSettingsSection)
+
+  // #20 — единый канонический порядок табов вакансии для нижней панели действий.
+  // Совпадает с плоским рядом под-табов v2 (settingsSubTabs ниже). Каждый шаг —
+  // это либо верхний таб (kind:"tab"), либо секция настроек (kind:"section").
+  // Из этого ряда нижняя панель (VacancyTabFooter) вычисляет «Далее»/«Назад».
+  type VacancyStep = { kind: "tab" | "section"; value: string; section: SettingsSectionId | null; label: string }
+  const vacancySteps = useMemo<VacancyStep[]>(() => {
+    const all: VacancyStep[] = [
+      { kind: "tab",     value: "anketa",   section: null,             label: "Вакансия" },
+      { kind: "section", value: "settings", section: "spec",           label: "Портрет" },
+      { kind: "tab",     value: "content",  section: null,             label: "Контент" },
+      { kind: "section", value: "settings", section: "funnel-builder", label: "Воронка" },
+      { kind: "section", value: "settings", section: "messages",       label: "Сообщения" },
+      { kind: "section", value: "settings", section: "followup",       label: "Дожим" },
+      { kind: "section", value: "settings", section: "funnel-v2",      label: "Воронка v2" },
+      { kind: "section", value: "settings", section: "sources",        label: "Источники" },
+      { kind: "section", value: "settings", section: "ai",             label: "Расписание" },
+      { kind: "section", value: "settings", section: "integrations",   label: "Интеграции" },
+      { kind: "section", value: "settings", section: "page",           label: "Брендинг" },
+      { kind: "tab",     value: "outbound", section: null,             label: "Исходящий подбор" },
+      { kind: "tab",     value: "queue",    section: null,             label: "Очередь" },
+    ]
+    // «Воронка» (старый funnel-builder) видна только платформенному администратору.
+    return all.filter(s => isPlatformAdmin || s.section !== "funnel-builder")
+  }, [isPlatformAdmin])
+
+  // Переход к шагу канонического ряда (используется «Далее»/«Назад» нижней панели).
+  const goToVacancyStep = useCallback((step: VacancyStep) => {
+    if (step.kind === "section") {
+      setActiveTab("settings")
+      setSettingsSection(step.section as SettingsSectionId)
+      const sp = new URLSearchParams(window.location.search)
+      sp.set("tab", "settings")
+      sp.set("section", step.section as string)
+      router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+    } else {
+      setV2SettingsSub(step.value as typeof v2SettingsSub)
+      setActiveTab(step.value)
+      const sp = new URLSearchParams(window.location.search)
+      sp.set("tab", step.value)
+      sp.delete("section")
+      router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router])
+
   const [anPeriod, setAnPeriod] = useState("all")
   // Аналитика: серверная агрегация по ВСЕЙ вакансии (источник истины — БД,
   // а не выгруженный на клиент массив columns). Период anPeriod дёргает
@@ -4431,61 +4478,61 @@ export default function VacancyPage() {
                     tabKey="integrations"
                   />
 
-                  {/* Далее → следующий под-раздел настроек (Брендинг) */}
-                  <div className="flex justify-end pt-1">
-                    <Button size="sm" variant="default" className="gap-1.5 h-9 text-xs" onClick={() => {
-                      setSettingsSection("page")
-                      const sp = new URLSearchParams(window.location.search)
-                      sp.set("tab", "settings"); sp.set("section", "page")
-                      router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
-                      window.scrollTo({ top: 0, behavior: "smooth" })
-                    }}>
-                      Далее → Брендинг
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
                 </div>
                 )}
 
-                {/* Единая sticky-кнопка сохранения + beforeunload-защита */}
-                <VacancyStickySaveBar />
+                {/* #20 — ЕДИНАЯ нижняя панель настроек (эталон = таб «Вакансия»):
+                    СПРАВА [Сохранить настройки] · [Далее → {next}]; СЛЕВА крошки
+                    [‹ Все вакансии] · [‹ {prev}]. «Далее»/«Назад» — из канонического
+                    v2-ряда по текущему settingsSection. Заменяет прежний floating
+                    VacancyStickySaveBar + per-section «Далее». beforeunload-защита
+                    остаётся в самом провайдере. */}
+                {(() => {
+                  const idx = vacancySteps.findIndex(s => s.kind === "section" && s.section === settingsSection)
+                  const prevStep = idx > 0 ? vacancySteps[idx - 1] : null
+                  const nextStep = idx >= 0 && idx < vacancySteps.length - 1 ? vacancySteps[idx + 1] : null
+                  return (
+                    <VacancyTabFooter
+                      onAllVacancies={() => router.push("/hr/vacancies")}
+                      prevLabel={prevStep?.label ?? null}
+                      onPrev={prevStep ? () => goToVacancyStep(prevStep) : undefined}
+                      nextLabel={nextStep?.label ?? null}
+                      onNext={nextStep ? () => goToVacancyStep(nextStep) : undefined}
+                    />
+                  )
+                })()}
                 </VacancySettingsProvider>
               </TabsContent>
             </Tabs>
 
-            {/* ═══ Bottom tab navigation ══════════════════ */}
-            {(() => {
-              const tabOrder = status === "active"
-                ? ["candidates", "analytics", "content", "anketa", "settings"]
-                : ["anketa", "analytics", "candidates", "content", "settings"]
-              const tabLabels: Record<string, string> = { anketa: "Вакансия", content: "Контент", candidates: "Кандидаты", analytics: "Аналитика", settings: "Настройки" }
-              const idx = tabOrder.indexOf(activeTab)
-              const prevTab = idx > 0 ? tabOrder[idx - 1] : null
-              const nextTab = idx < tabOrder.length - 1 ? tabOrder[idx + 1] : null
-              const goTab = (tab: string) => { setActiveTab(tab); window.scrollTo({ top: 0, behavior: "smooth" }) }
+            {/* ═══ Единая нижняя панель — для табов ВНЕ настроек ═════════
+                #20: Настройки рендерят VacancyTabFooter ВНУТРИ провайдера
+                (там доступен saveAll). Здесь — глобальная панель для
+                верхних табов v2-ряда (Вакансия/Контент/Исходящий/Очередь) и
+                рабочих табов (Кандидаты/Аналитика/Интервью). «Сохранить» тут
+                НЕ показываем — этими табами владеет собственный редактор
+                (у него своя кнопка «Сохранить»), панель даёт крошки + «Далее».
+                Для activeTab==="settings" панель не рендерим — её показывает
+                внутренний футер настроек. */}
+            {activeTab !== "settings" && (() => {
+              // Позиция текущего верхнего таба в каноническом v2-ряду.
+              const idx = vacancySteps.findIndex(s => s.kind === "tab" && s.value === activeTab)
+              const prevStep = idx > 0 ? vacancySteps[idx - 1] : null
+              const nextStep = idx >= 0 && idx < vacancySteps.length - 1 ? vacancySteps[idx + 1] : null
+              // «Вакансия» и «Контент» рендерят собственную кнопку «Далее» внутри
+              // редактора (AnketaTab/ContentBlocksTab) — чтобы не задваивать, здесь
+              // «Далее» у них скрываем, оставляя только крошки навигации слева.
+              const ownsOwnNext = activeTab === "anketa" || activeTab === "content"
+              const showNext = !ownsOwnNext && !!nextStep
               return (
-                <div className="flex items-center justify-between mt-6 pt-4 border-t">
-                  <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={() => router.push("/hr/vacancies")}>
-                      <ChevronLeft className="w-3.5 h-3.5" />
-                      Все вакансии
-                    </Button>
-                    {prevTab && (
-                      <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={() => goTab(prevTab)}>
-                        <ChevronLeft className="w-3.5 h-3.5" />
-                        {tabLabels[prevTab]}
-                      </Button>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {nextTab && (
-                      <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => goTab(nextTab)}>
-                        {tabLabels[nextTab]}
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
+                <VacancyTabFooter
+                  onAllVacancies={() => router.push("/hr/vacancies")}
+                  prevLabel={prevStep?.label ?? null}
+                  onPrev={prevStep ? () => goToVacancyStep(prevStep) : undefined}
+                  nextLabel={showNext ? nextStep!.label : null}
+                  onNext={showNext ? () => goToVacancyStep(nextStep!) : undefined}
+                  showSave={false}
+                />
               )
             })()}
           </div>
