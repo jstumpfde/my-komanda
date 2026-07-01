@@ -59,7 +59,7 @@ import {
   type MidRangeAction,
 } from "@/lib/core/spec/types"
 import { computeRealism, REALISM_TONE_CLASS } from "./spec-editor-helpers"
-import { useVacancySectionRegister, useVacancySettings } from "./vacancy-settings-context"
+import { useVacancySectionRegister } from "./vacancy-settings-context"
 import { PortraitAdvisor } from "./portrait-advisor"
 import { useContentBlocks } from "@/hooks/use-content-blocks"
 import { DEFAULT_INVITE_MESSAGE, DEFAULT_OFF_HOURS_MESSAGE } from "@/lib/hh/default-messages"
@@ -1238,20 +1238,10 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
     save,
   })
 
-  // «Далее → Контент» отдаём в общий sticky-бар, чтобы стоять в один ряд с
-  // «Сохранить настройки» (а не друг под другом). setNextAction стабилен (useState).
-  const settingsCtx = useVacancySettings()
-  const setNext = settingsCtx?.setNextAction
-  const saveRef = useRef(save); saveRef.current = save
-  const navRef = useRef(onNavigateNext); navRef.current = onNavigateNext
-  useEffect(() => {
-    if (!setNext || !onNavigateNext) return
-    setNext({
-      label: "Далее → Контент",
-      onClick: async () => { try { await saveRef.current(); navRef.current?.() } catch { /* save показал ошибку */ } },
-    })
-    return () => setNext(null)
-  }, [setNext, !!onNavigateNext])
+  // #44: «Далее → Контент» рендерит единая нижняя панель вакансии (VacancyTabFooter)
+  // по каноническому v2-ряду, чтобы не задваивать кнопку перехода. Прежний
+  // setNextAction слал кнопку в неиспользуемый VacancyStickySaveBar (мёртвый код) —
+  // удалён. Навигация «Далее» с этого экрана идёт через футер.
 
   // ── Перенос v1-портрета → v2-критерии (Этап 2, п.3) ───────────────────────
   const canTransferFromPortrait = !!spec
@@ -2287,8 +2277,9 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
         Изменения сохраняются общей кнопкой «Сохранить настройки» внизу.
       </p>
 
-      {/* «Далее → Контент» перенесена в общий sticky-бар (рядом с «Сохранить
-          настройки») — см. useEffect с setNextAction выше. */}
+      {/* #44: «Далее → Контент» рендерит единая нижняя панель вакансии
+          (VacancyTabFooter) — здесь собственной кнопки перехода нет, чтобы не
+          задваивать. */}
 
       {/* Диалог подтверждения AI-предложения */}
       <SuggestionDialog
