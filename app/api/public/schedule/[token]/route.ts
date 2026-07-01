@@ -3,7 +3,7 @@
 // Публичный роут (без сессии), токен = candidates.token.
 
 import { NextRequest } from "next/server"
-import { eq, and, gte, lte, gt, sql, isNull } from "drizzle-orm"
+import { eq, and, gte, lte, gt, lt, ne, sql, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, companies, calendarEvents, users } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
@@ -452,6 +452,26 @@ export async function POST(
 
     if (existingSlot) {
       return apiSuccess({ alreadyBooked: true, eventId: existingSlot.id })
+    }
+
+    // 5.5 Анти-двойная-запись (company-wide, все вакансии): слот не должен
+    // пересекаться с ЧУЖИМ подтверждённым интервью этой компании. Закрывает
+    // гонку двух кандидатов на один слот. Свои события исключаем (их перенос —
+    // ниже). Пересечение: existing.startAt < endAt И existing.endAt > startAt.
+    const [slotTaken] = await db
+      .select({ id: calendarEvents.id })
+      .from(calendarEvents)
+      .where(and(
+        eq(calendarEvents.companyId,   row.companyId),
+        eq(calendarEvents.type,        "interview"),
+        eq(calendarEvents.status,      "confirmed"),
+        ne(calendarEvents.candidateId, candidate.id),
+        lt(calendarEvents.startAt,     endAt),
+        gt(calendarEvents.endAt,       startAt),
+      ))
+      .limit(1)
+    if (slotTaken) {
+      return apiError("Это время уже занято — выберите, пожалуйста, другой слот.", 409)
     }
 
     // #3.3 Перенос: если у кандидата уже есть будущий interview-event — отменяем его.
