@@ -166,29 +166,37 @@ function coerceMedia(v: unknown): MediaAnswer | MediaAnswer[] | null {
 interface BlockMapEntry {
   block: Block
   lesson: Lesson
+  demoTitle: string   // имя контент-блока (title демо) — заголовок группы в анкете
+  demoOrder: number   // порядок демо (sortOrder) для сортировки групп
 }
 
-function buildBlockMap(lessons: unknown): Map<string, BlockMapEntry> {
+function buildBlockMap(demoLessons: unknown): Map<string, BlockMapEntry> {
   const map = new Map<string, BlockMapEntry>()
-  if (!Array.isArray(lessons)) return map
+  if (!Array.isArray(demoLessons)) return map
 
-  // demoLessons может быть:
-  //   - плоским массивом уроков: [{ id, blocks }, ...]          (старый формат)
-  //   - массивом массивов уроков: [[{ id, blocks }, ...], ...]  (новый: json_agg всех демо)
-  // Определяем формат по первому элементу и нормализуем в плоский массив.
-  let flat: unknown[]
-  if (lessons.length > 0 && Array.isArray(lessons[0])) {
-    flat = (lessons as unknown[][]).flat()
-  } else {
-    flat = lessons
-  }
-
-  for (const l of flat as Lesson[]) {
-    if (!l || !Array.isArray(l.blocks)) continue
-    for (const b of l.blocks) {
-      if (b && typeof b.id === "string") map.set(b.id, { block: b, lesson: l })
+  // Форматы demoLessons:
+  //   - [{ title, lessons: [...] }, ...]  — НОВЫЙ (json_build_object per демо, с именем блока)
+  //   - [[lesson, ...], ...]              — старый json_agg массивов
+  //   - [lesson, ...]                     — совсем старый плоский
+  demoLessons.forEach((demoEntry, demoOrder) => {
+    let demoTitle = ""
+    let lessons: unknown[] = []
+    if (demoEntry && typeof demoEntry === "object" && !Array.isArray(demoEntry) && "lessons" in demoEntry) {
+      const de = demoEntry as { title?: unknown; lessons?: unknown }
+      demoTitle = typeof de.title === "string" ? de.title : ""
+      lessons = Array.isArray(de.lessons) ? de.lessons : []
+    } else if (Array.isArray(demoEntry)) {
+      lessons = demoEntry
+    } else {
+      lessons = [demoEntry]
     }
-  }
+    for (const l of lessons as Lesson[]) {
+      if (!l || !Array.isArray(l.blocks)) continue
+      for (const b of l.blocks) {
+        if (b && typeof b.id === "string") map.set(b.id, { block: b, lesson: l, demoTitle, demoOrder })
+      }
+    }
+  })
   return map
 }
 
@@ -713,13 +721,12 @@ function PrequalificationSection({ candidateId }: { candidateId?: string }) {
   )
 }
 
-/** Есть ли в ответе видео-медиа. Видео-визитка бывает не только группой _vi_N,
- *  но и обычным блоком-ответом с видео-файлом — такие тоже уводим В КОНЕЦ. */
-function entryHasVideoMedia(entry: AnketaEntry): boolean {
+/** Есть ли в ответе медиа (видео-визитка / аудио / фото). Такие ответы идут
+ *  ВНИЗУ своего блока (после текстовых), решение Юрия 01.07. */
+function entryHasMedia(entry: AnketaEntry): boolean {
   const media = coerceMedia((entry as { answer?: unknown }).answer)
   if (!media) return false
-  const arr = Array.isArray(media) ? media : [media]
-  return arr.some((m) => m.mediaType === "video")
+  return Array.isArray(media) ? media.length > 0 : true
 }
 
 export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answersDetails }: AnswersTabProps) {
@@ -751,24 +758,34 @@ export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answers
   // Раздел «Предквалификация» (Сессия 9). Реальные ответы и AI-вердикт.
   const prequalSection = <PrequalificationSection candidateId={candidateId} />
 
-  // F4: выделяем группы видео-интервью (записи _vi_N с одним базовым blockId),
-  // чтобы показать их под общим заголовком «Видео-интервью».
-  const viGroups = new Map<string, AnketaEntry[]>()
-  const regularEntries: AnketaEntry[] = []
-  const videoEntries: AnketaEntry[] = []   // обычные блоки-ответы с видео — тоже в конец
+  // Группировка по КОНТЕНТ-БЛОКАМ (демо): заголовок группы = имя блока из «Контента»
+  // (title демо), группы в порядке sortOrder. Внутри блока — сначала текстовые
+  // ответы (как отвечал), затем медиа (видео-визитка/аудио/фото) — ВНИЗУ своего
+  // блока (Юрий 01.07). Видео-интервью _vi_N считаем медиа и резолвим по baseId.
+  interface DemoGroup { title: string; order: number; text: AnketaEntry[]; media: AnketaEntry[] }
+  const groupsByKey = new Map<string, DemoGroup>()
   for (const e of visible) {
-    const blockId = "blockId" in (e as object) ? (e as { blockId?: string }).blockId ?? "" : ""
-    const viKey = parseVideoInterviewKey(blockId)
-    if (viKey) {
-      const group = viGroups.get(viKey.baseId) ?? []
-      group.push(e)
-      viGroups.set(viKey.baseId, group)
-    } else if (entryHasVideoMedia(e)) {
-      videoEntries.push(e)
-    } else {
-      regularEntries.push(e)
-    }
+    const rawBlockId = "blockId" in (e as object) ? (e as { blockId?: string }).blockId ?? "" : ""
+    const viKey = parseVideoInterviewKey(rawBlockId)
+    const effectiveBlockId = viKey ? viKey.baseId : rawBlockId
+    const mapped = blockMap.get(effectiveBlockId)
+    const order = mapped?.demoOrder ?? 999
+    const title = mapped?.demoTitle || "Ответы"
+    const key = `${order}:::${title}`
+    let g = groupsByKey.get(key)
+    if (!g) { g = { title, order, text: [], media: [] }; groupsByKey.set(key, g) }
+    if (viKey || entryHasMedia(e)) g.media.push(e)
+    else g.text.push(e)
   }
+  // Медиа внутри блока: _vi_N по порядку idx, остальные — как есть.
+  for (const g of groupsByKey.values()) {
+    g.media.sort((a, b) => {
+      const ai = parseVideoInterviewKey((a as { blockId?: string }).blockId ?? "")?.idx ?? 0
+      const bi = parseVideoInterviewKey((b as { blockId?: string }).blockId ?? "")?.idx ?? 0
+      return ai - bi
+    })
+  }
+  const orderedGroups = [...groupsByKey.values()].sort((a, b) => a.order - b.order)
 
   // Бэдж общей AI-оценки за ответы демо (зелёный ≥70, жёлтый ≥40, красный <40)
   // + поразбивка по вопросам из demo_answers_details (если есть).
@@ -816,60 +833,23 @@ export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answers
       {scoreBadge}
       {prequalSection}
 
-      {/* Порядок секций (решение Юрия 30.06): сначала текстовые ответы демо/анкеты
-          (вопросы первого этапа + финальная анкета — идут в том порядке, в котором
-          кандидат отвечал), затем видео-визитка/видео-интервью — всегда В КОНЦЕ. */}
-      {regularEntries.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Финальная анкета
-          </p>
+      {/* Ответы сгруппированы по КОНТЕНТ-БЛОКАМ (демо). Заголовок группы = имя блока
+          из «Контента» (title демо). Внутри блока: текстовые ответы сверху, затем
+          медиа (видео-визитка/аудио/фото) — ВНИЗУ своего блока (Юрий 01.07). */}
+      {orderedGroups.map((g, gi) => (
+        <div key={`grp-${gi}`} className="space-y-2 border-t border-border/60 pt-4 first:border-t-0 first:pt-0">
+          <p className="text-sm font-semibold text-foreground">{g.title}</p>
           <div className="space-y-3">
-            {regularEntries.map((entry, i) => (
-              <EntryCard key={i} entry={entry} blockMap={blockMap} />
+            {g.text.map((entry, i) => (
+              <EntryCard key={`t-${i}`} entry={entry} blockMap={blockMap} />
             ))}
-          </div>
-        </div>
-      )}
-
-      {/* Видео-визитка обычным блоком-ответом (не _vi_N) — тоже В КОНЦЕ, после
-          финальной анкеты (решение Юрия 01.07: видео всегда последним). */}
-      {videoEntries.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Видео-визитка
-          </p>
-          <div className="space-y-3">
-            {videoEntries.map((entry, i) => (
-              <EntryCard key={`ve-${i}`} entry={entry} blockMap={blockMap} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* F4: секция «Видео-визитка / видео-интервью» — сгруппированные ответы _vi_N.
-          Рендерится ПОСЛЕДНЕЙ, после финальной анкеты. */}
-      {viGroups.size > 0 && Array.from(viGroups.entries()).map(([baseId, viEntries]) => (
-        <div key={`vi-${baseId}`} className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Видео-визитка
-          </p>
-          <div className="space-y-3">
-            {viEntries
-              .slice()
-              .sort((a, b) => {
-                const ai = parseVideoInterviewKey((a as { blockId?: string }).blockId ?? "")?.idx ?? 0
-                const bi = parseVideoInterviewKey((b as { blockId?: string }).blockId ?? "")?.idx ?? 0
-                return ai - bi
-              })
-              .map((entry, i) => {
-                const blockId = (entry as { blockId?: string }).blockId ?? ""
-                const viKey = parseVideoInterviewKey(blockId)
-                const label = viKey !== null ? `Вопрос ${viKey.idx + 1}` : `Ответ ${i + 1}`
-                return (
-                  <VideoInterviewEntryCard key={blockId} entry={entry} label={label} />
-                )
-              })}
+            {g.media.map((entry, i) => {
+              const bid = (entry as { blockId?: string }).blockId ?? ""
+              const viKey = parseVideoInterviewKey(bid)
+              return viKey
+                ? <VideoInterviewEntryCard key={`m-${i}`} entry={entry} label={`Вопрос ${viKey.idx + 1}`} />
+                : <EntryCard key={`m-${i}`} entry={entry} blockMap={blockMap} />
+            })}
           </div>
         </div>
       ))}

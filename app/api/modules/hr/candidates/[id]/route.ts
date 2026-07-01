@@ -21,7 +21,10 @@ async function getOwnedCandidate(candidateId: string, companyId: string) {
       // kind LIKE 'block:%'), чтобы answers-tab мог резолвить любой blk-... id.
       // Коррелированный subquery, один round-trip.
       demoLessons: sql<unknown>`(
-        SELECT json_agg(${demos.lessonsJson})
+        SELECT json_agg(
+          json_build_object('title', ${demos.title}, 'lessons', ${demos.lessonsJson})
+          ORDER BY ${demos.sortOrder}, ${demos.createdAt}
+        )
         FROM ${demos}
         WHERE ${demos.vacancyId} = ${candidates.vacancyId}
           AND (${demos.kind} = 'demo' OR ${demos.kind} LIKE 'block:%')
