@@ -34,6 +34,26 @@ import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ListFilter,
 import { DemoProgressBar, calcDemoPercent, calcDemoFraction } from "@/components/hr/demo-progress-bar"
 import { getStageLabel, getStageColorClasses } from "@/lib/stages"
 
+// «2-я часть демо» (Путь менеджера): кандидатам с override_content_block_id
+// отправлена вторая часть контента (анкета/демо), а НЕ тест-задание. Стадия у
+// них — test_task_sent, но платформенный ярлык «Тест отправлен» вводит в
+// заблуждение. Показываем контекстный ярлык. Ровно эта строка (не хардкод в
+// глубине рендера).
+const SECOND_PART_LABEL = "2-я часть"
+
+/** Контекстный ярлык статуса. Если кандидату отправлена 2-я часть
+ *  (overrideContentBlockId != null) И стадия = test_task_sent — «2-я часть»
+ *  вместо «Тест отправлен». Иначе — стандартный getStageLabel. */
+function resolveStatusLabel(
+  candidate: Candidate,
+  pipeline?: import("@/lib/stages").VacancyPipelineV2 | null,
+): string {
+  if (candidate.stage === "test_task_sent" && candidate.overrideContentBlockId) {
+    return SECOND_PART_LABEL
+  }
+  return getStageLabel(candidate.stage, pipeline ?? undefined)
+}
+
 export type ListSortKey = "favorite" | "name" | "aiScore" | "answersScore" | "resumeScore" | "portraitScore" | "testScore" | "progress" | "salary" | "responseDate" | "status" | "city" | "source" | "nextInterview"
 export type ListSortDir = "asc" | "desc"
 export interface ListSortState {
@@ -700,7 +720,7 @@ export function ListView({
                     const fv2Stage = funnelV2Stages.find((s) => s.id === fv2Id)
                     if (fv2Stage?.title) return fv2Stage.title
                   }
-                  return getStageLabel(candidate.stage, vacancyPipeline ?? undefined)
+                  return resolveStatusLabel(candidate, vacancyPipeline)
                 })()
               : (candidate.columnTitle === "Демонстрация" ? "Демо" : candidate.columnTitle)}
           </span>

@@ -446,6 +446,9 @@ export async function GET(req: NextRequest) {
           photoUrl: candidates.photoUrl,
           testInviteSentAt: candidates.testInviteSentAt,
           firstNameOverride: candidates.firstNameOverride,
+          // «2-я часть демо»: отправлен override-блок (миграция 0236). Нужен
+          // клиенту для контекстного ярлыка статуса «2-я часть» вместо «Тест».
+          overrideContentBlockId: candidates.overrideContentBlockId,
         })
         .from(candidates)
         .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))

@@ -232,6 +232,8 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     businessTripsReady: c.businessTripsReady ?? null,
     photoUrl: c.photoUrl ?? null,
     funnelV2StateJson: (c.funnelV2StateJson as { stageId?: string | null } | null) ?? null,
+    // «2-я часть демо»: override-блок → контекстный ярлык «2-я часть» в статусе.
+    overrideContentBlockId: (c as { overrideContentBlockId?: string | null }).overrideContentBlockId ?? null,
   }
 }
 
