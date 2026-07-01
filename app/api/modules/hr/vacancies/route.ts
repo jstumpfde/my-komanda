@@ -17,6 +17,7 @@ import { buildDefaultAnketaQuestions } from "@/lib/funnel-builder/anketa-default
 import { getEffectiveMessageDefaults } from "@/lib/messaging/effective-message-defaults"
 import { buildSpecFromLegacy } from "@/lib/core/spec/from-legacy"
 import { saveSpec } from "@/lib/core/spec/store"
+import { resolveDaySchedule, type DayId } from "@/lib/schedule/day-windows"
 
 // Transliterate Russian text to Latin for slug generation
 function transliterate(text: string): string {
@@ -226,25 +227,37 @@ export async function POST(req: NextRequest) {
         const sched = hd.schedule
         if (sched) {
           if (sched.timezone) insertValues.scheduleTimezone = sched.timezone
-          if (sched.interviewFrom) insertValues.scheduleStart = sched.interviewFrom
-          if (sched.interviewTo) insertValues.scheduleEnd = sched.interviewTo
-          // Дни недели: hd хранит строки "mon".."sun", вакансия — number[] 1=Пн..7=Вс.
-          if (Array.isArray(sched.interviewDays) && sched.interviewDays.length > 0) {
-            const dayMap: Record<string, number> = {
-              mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6, sun: 7,
-            }
-            const mapped = sched.interviewDays
-              .map((d) => dayMap[String(d).toLowerCase().slice(0, 3)])
-              .filter((n): n is number => typeof n === "number")
-            // Переносим только если ВСЕ дни распознаны (иначе маппинг неоднозначен — пропускаем).
-            if (mapped.length === sched.interviewDays.length) {
-              insertValues.scheduleWorkingDays = Array.from(new Set(mapped)).sort((a, b) => a - b)
-            }
+
+          // Новый источник правды часов записи — interviewDaySchedule (окна по дням).
+          // Из него деривим envelope (общее «с/до» и рабочие дни) для расписания
+          // ИСХОДЯЩИХ сообщений вакансии. Если поля нет — старые legacy-поля.
+          const dayMap: Record<string, number> = {
+            mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6, sun: 7,
           }
-          // Обеденный перерыв из дефолтов компании.
-          if (typeof sched.lunchEnabled === "boolean") insertValues.scheduleLunchEnabled = sched.lunchEnabled
-          if (sched.lunchFrom) insertValues.scheduleLunchFrom = sched.lunchFrom
-          if (sched.lunchTo)   insertValues.scheduleLunchTo   = sched.lunchTo
+          const dayMs = resolveDaySchedule(sched)
+          const daysWithWindows = (Object.keys(dayMap) as (keyof typeof dayMap)[])
+            .filter((d) => (dayMs[d as DayId]?.length ?? 0) > 0)
+
+          if (daysWithWindows.length > 0) {
+            // Envelope: самое раннее «с» и самое позднее «до» среди всех окон всех дней.
+            let minFrom = 24 * 60
+            let maxTo = 0
+            for (const d of daysWithWindows) {
+              for (const w of dayMs[d as DayId]) {
+                const [fh, fm] = w.from.split(":").map(Number)
+                const [th, tm] = w.to.split(":").map(Number)
+                minFrom = Math.min(minFrom, fh * 60 + fm)
+                maxTo = Math.max(maxTo, th * 60 + tm)
+              }
+            }
+            const pad = (x: number) =>
+              `${String(Math.floor(x / 60)).padStart(2, "0")}:${String(x % 60).padStart(2, "0")}`
+            insertValues.scheduleStart = pad(minFrom)
+            insertValues.scheduleEnd = pad(maxTo)
+            insertValues.scheduleWorkingDays = daysWithWindows
+              .map((d) => dayMap[d])
+              .sort((a, b) => a - b)
+          }
         }
 
         // 3) hd.automation (autoDemo/autoInvite/minScore/autoReject) — ОТЛОЖЕНО.

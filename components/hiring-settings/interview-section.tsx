@@ -12,25 +12,36 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import type { CompanyHiringDefaults } from "@/lib/db/schema"
+import { Plus, X } from "lucide-react"
+import type { CompanyHiringDefaults, InterviewTimeRange } from "@/lib/db/schema"
 import {
   INTERVIEW_METHOD_ORDER,
   INTERVIEW_METHOD_LABELS,
   getInterviewMethodConfigs,
   type MethodConfig,
 } from "@/lib/hiring/interview-methods"
+import { resolveDaySchedule, type DayId, type DaySchedule } from "@/lib/schedule/day-windows"
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-const INTERVIEW_DAYS = [
-  { id: "mon", label: "Пн" },
-  { id: "tue", label: "Вт" },
-  { id: "wed", label: "Ср" },
-  { id: "thu", label: "Чт" },
-  { id: "fri", label: "Пт" },
-  { id: "sat", label: "Сб" },
-  { id: "sun", label: "Вс" },
+const INTERVIEW_DAYS: { id: DayId; label: string; full: string }[] = [
+  { id: "mon", label: "Пн", full: "Понедельник" },
+  { id: "tue", label: "Вт", full: "Вторник" },
+  { id: "wed", label: "Ср", full: "Среда" },
+  { id: "thu", label: "Чт", full: "Четверг" },
+  { id: "fri", label: "Пт", full: "Пятница" },
+  { id: "sat", label: "Сб", full: "Суббота" },
+  { id: "sun", label: "Вс", full: "Воскресенье" },
 ]
+
+// Готовый список времени (шаг 30 мин) для селектов окон.
+const TIME_OPTIONS: string[] = (() => {
+  const out: string[] = []
+  for (let m = 0; m < 24 * 60; m += 30) {
+    out.push(`${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`)
+  }
+  return out
+})()
 
 const DURATION_OPTIONS = [
   { value: 15,  label: "15 мин" },
@@ -91,30 +102,17 @@ export function InterviewSection({
   )
 
   // ── Часы для записи кандидатов ──
-  const [interviewFrom, setInterviewFrom] = useState<string>(
-    schedule.interviewFrom ?? "09:00"
-  )
-  const [interviewTo, setInterviewTo] = useState<string>(
-    schedule.interviewTo ?? "18:00"
-  )
   const [maxPerDay, setMaxPerDay] = useState<string>(
     schedule.maxPerDay != null ? String(schedule.maxPerDay) : "8"
-  )
-  const [interviewDays, setInterviewDays] = useState<Set<string>>(
-    new Set(
-      Array.isArray(schedule.interviewDays) && schedule.interviewDays.length > 0
-        ? schedule.interviewDays
-        : ["mon", "tue", "wed", "thu", "fri"]
-    )
   )
 
   // ── Шаг сетки слотов ──
   const [slotStep, setSlotStep] = useState<number>(schedule.slotStep ?? 30)
 
-  // ── Обеденный перерыв ──
-  const [lunchEnabled, setLunchEnabled] = useState<boolean>(schedule.lunchEnabled ?? false)
-  const [lunchFrom, setLunchFrom] = useState<string>(schedule.lunchFrom ?? "13:00")
-  const [lunchTo, setLunchTo] = useState<string>(schedule.lunchTo ?? "14:00")
+  // ── Окна доступности по дням недели (с backward-compat деривацией) ──
+  const [daySchedule, setDaySchedule] = useState<DaySchedule>(() =>
+    resolveDaySchedule(schedule)
+  )
 
   // ── Напоминания ──
   const [remind24h, setRemind24h] = useState<boolean>(schedule.remind24h ?? true)
@@ -153,16 +151,34 @@ export function InterviewSection({
     )
   }
 
-  function toggleDay(dayId: string) {
-    setInterviewDays(prev => {
-      const next = new Set(prev)
-      if (next.has(dayId)) {
-        next.delete(dayId)
-      } else {
-        next.add(dayId)
-      }
-      return next
-    })
+  // ── Хелперы окон доступности ──
+
+  function updateDayWindows(day: DayId, windows: InterviewTimeRange[]) {
+    setDaySchedule(prev => ({ ...prev, [day]: windows }))
+  }
+
+  function addWindow(day: DayId) {
+    // Дефолт: если у дня нет окон — целый рабочий день; иначе — вечернее окно.
+    const existing = daySchedule[day]
+    const next = existing.length === 0
+      ? { from: "09:00", to: "18:00" }
+      : { from: "14:00", to: "16:00" }
+    updateDayWindows(day, [...existing, next])
+  }
+
+  function removeWindow(day: DayId, idx: number) {
+    updateDayWindows(day, daySchedule[day].filter((_, i) => i !== idx))
+  }
+
+  function setWindowField(day: DayId, idx: number, field: "from" | "to", value: string) {
+    updateDayWindows(
+      day,
+      daySchedule[day].map((w, i) => (i === idx ? { ...w, [field]: value } : w)),
+    )
+  }
+
+  function clearDay(day: DayId) {
+    updateDayWindows(day, [])
   }
 
   // ── Сохранение ──
@@ -185,15 +201,20 @@ export function InterviewSection({
           officeAddress,
           // время/дни
           timezone,
-          interviewFrom,
-          interviewTo,
-          interviewDays: Array.from(interviewDays),
           maxPerDay: maxPerDay || "8",
-          // шаг сетки + обеденный перерыв
+          // шаг сетки
           slotStep,
-          lunchEnabled,
-          lunchFrom,
-          lunchTo,
+          // окна доступности по дням недели (новый источник правды).
+          // Отсеиваем вырожденные окна (from>=to).
+          interviewDaySchedule: {
+            mon: daySchedule.mon.filter(w => w.from < w.to),
+            tue: daySchedule.tue.filter(w => w.from < w.to),
+            wed: daySchedule.wed.filter(w => w.from < w.to),
+            thu: daySchedule.thu.filter(w => w.from < w.to),
+            fri: daySchedule.fri.filter(w => w.from < w.to),
+            sat: daySchedule.sat.filter(w => w.from < w.to),
+            sun: daySchedule.sun.filter(w => w.from < w.to),
+          },
           // напоминания
           remind24h,
           remind2h,
@@ -401,24 +422,6 @@ export function InterviewSection({
         <CardContent className="space-y-4">
           <div className="flex items-center gap-3 flex-wrap">
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">С</Label>
-              <Input
-                type="time"
-                value={interviewFrom}
-                onChange={e => setInterviewFrom(e.target.value)}
-                className="w-28 h-9 text-sm bg-[var(--input-bg)]"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">До</Label>
-              <Input
-                type="time"
-                value={interviewTo}
-                onChange={e => setInterviewTo(e.target.value)}
-                className="w-28 h-9 text-sm bg-[var(--input-bg)]"
-              />
-            </div>
-            <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Макс. в день</Label>
               <Input
                 value={maxPerDay}
@@ -441,47 +444,112 @@ export function InterviewSection({
             </div>
           </div>
 
-          {/* Обеденный перерыв */}
-          <div className="rounded-lg border p-3 space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium">Обед</p>
-                <p className="text-xs text-muted-foreground">В это время слоты не предлагаются</p>
-              </div>
-              <Switch checked={lunchEnabled} onCheckedChange={setLunchEnabled} />
-            </div>
-            {lunchEnabled && (
-              <div className="flex items-center gap-3 flex-wrap">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">С</Label>
-                  <Input type="time" value={lunchFrom} onChange={e => setLunchFrom(e.target.value)} className="w-28 h-9 text-sm bg-[var(--input-bg)]" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">До</Label>
-                  <Input type="time" value={lunchTo} onChange={e => setLunchTo(e.target.value)} className="w-28 h-9 text-sm bg-[var(--input-bg)]" />
-                </div>
-              </div>
-            )}
-          </div>
+          {/* Окна доступности по дням недели */}
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">
+              Окна доступности по дням недели
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              У дня может быть несколько окон. Перерыв (обед) — просто разрыв между
+              окнами. День без окон — записи не принимаем.
+            </p>
+            <div className="space-y-2">
+              {INTERVIEW_DAYS.map(day => {
+                const windows = daySchedule[day.id]
+                const active = windows.length > 0
+                return (
+                  <div
+                    key={day.id}
+                    className={cn(
+                      "rounded-lg border p-3 transition-colors",
+                      active ? "border-border bg-background" : "border-border/60 bg-muted/20"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Switch
+                        checked={active}
+                        onCheckedChange={checked =>
+                          checked ? addWindow(day.id) : clearDay(day.id)
+                        }
+                        className="shrink-0"
+                      />
+                      <span className={cn("text-sm font-medium flex-1", !active && "text-muted-foreground")}>
+                        {day.full}
+                      </span>
+                      {!active && (
+                        <span className="text-xs text-muted-foreground">не принимаем</span>
+                      )}
+                      {active && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground"
+                          onClick={() => addWindow(day.id)}
+                        >
+                          <Plus className="size-3.5" /> Окно
+                        </Button>
+                      )}
+                    </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Дни для интервью</Label>
-            <div className="flex gap-2 flex-wrap">
-              {INTERVIEW_DAYS.map(day => (
-                <button
-                  key={day.id}
-                  type="button"
-                  onClick={() => toggleDay(day.id)}
-                  className={cn(
-                    "w-10 h-10 rounded-lg text-sm font-medium transition-all",
-                    interviewDays.has(day.id)
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "border border-border text-muted-foreground hover:border-primary/50"
-                  )}
-                >
-                  {day.label}
-                </button>
-              ))}
+                    {active && (
+                      <div className="mt-2.5 space-y-2 pl-[3.25rem]">
+                        {windows.map((w, idx) => {
+                          const invalid = w.from >= w.to
+                          return (
+                            <div key={idx} className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs text-muted-foreground">с</span>
+                              <Select
+                                value={w.from}
+                                onValueChange={v => setWindowField(day.id, idx, "from", v)}
+                              >
+                                <SelectTrigger className="h-8 w-[92px] text-xs bg-[var(--input-bg)]">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {TIME_OPTIONS.map(t => (
+                                    <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <span className="text-xs text-muted-foreground">до</span>
+                              <Select
+                                value={w.to}
+                                onValueChange={v => setWindowField(day.id, idx, "to", v)}
+                              >
+                                <SelectTrigger className={cn(
+                                  "h-8 w-[92px] text-xs bg-[var(--input-bg)]",
+                                  invalid && "border-destructive text-destructive"
+                                )}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {TIME_OPTIONS.map(t => (
+                                    <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {invalid && (
+                                <span className="text-[11px] text-destructive">
+                                  «до» позже «с»
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => removeWindow(day.id, idx)}
+                                className="text-muted-foreground hover:text-destructive shrink-0"
+                                aria-label="Удалить окно"
+                              >
+                                <X className="size-4" />
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
         </CardContent>
