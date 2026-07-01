@@ -3,8 +3,10 @@
 // Воронка v2 — конструктор «стадий» (FUNNEL-V2.md, Фаза 1).
 // Карточка стадии = компактная сводка; клик → Sheet со всеми настройками
 // (действие, сообщение/контент, правило прохода+куда зовёт, цепочка дожима,
-// hh-статус, интервью). Стадия 1 = Портрет (read-only из spec). Конструктор
-// без рантайма. Видно только владельцу (гейт на странице + 404 на API).
+// hh-статус, интервью). Над списком — тонкая read-only врезка «входной скан
+// резюме из Портрета» (НЕ пронумерована, это не стадия воронки); нумерация
+// реальных стадий начинается с 1. Конструктор без рантайма. Видно только
+// владельцу (гейт на странице + 404 на API).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
@@ -61,7 +63,7 @@ function buildFunnelPreview(stages: FunnelV2Stage[]): PreviewRow[] {
   }
   for (let i = 0; i < stages.length; i++) {
     const s = stages[i]
-    const label = `Стадия ${i + 2} · ${s.title?.trim() || (STAGE_ACTIONS.find(a => a.type === s.action)?.label ?? s.action)}`
+    const label = `Стадия ${i + 1} · ${s.title?.trim() || (STAGE_ACTIONS.find(a => a.type === s.action)?.label ?? s.action)}`
     if (s.messagePresetId) add(label, "Сообщение", s.messagePresetId)
     ;(s.dozhimChain ?? []).forEach((t, j) => add(label, `Дожим «не открыл» №${j + 1}`, t.text))
     ;(s.dozhimChainOpened ?? []).forEach((t, j) => add(label, `Дожим «не завершил» №${j + 1}`, t.text))
@@ -122,7 +124,7 @@ function StageCard({ stage, index, onOpen, onRemove }: {
       className={cn("rounded-xl border border-border bg-card", isDragging && "opacity-60 shadow-lg")}>
       <div className="flex items-center gap-2.5 p-3">
         <button {...attributes} {...listeners} className="cursor-grab text-muted-foreground/50 hover:text-muted-foreground touch-none" aria-label="Перетащить"><GripVertical className="w-4 h-4" /></button>
-        <span className="grid place-items-center w-6 h-6 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-medium shrink-0">{index + 2}</span>
+        <span className="grid place-items-center w-6 h-6 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-medium shrink-0">{index + 1}</span>
         <Icon className="w-4 h-4 text-muted-foreground shrink-0" />
         <button onClick={onOpen} className="flex-1 min-w-0 text-left">
           <div className="text-sm font-medium truncate">{stage.title?.trim() || meta.label}</div>
@@ -173,14 +175,14 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose, dripT
   // «куда зовёт»: следующая стадия + остальные стадии (ветвление). Номер = реальный индекс.
   const advanceOptions = [
     { v: "next", label: "Следующая стадия" },
-    ...allStages.map((s, i) => ({ s, i })).filter(({ s }) => s.id !== stage.id).map(({ s, i }) => ({ v: s.id, label: `Стадия ${i + 2} · ${s.title?.trim() || actionMeta(s.action).label}` })),
+    ...allStages.map((s, i) => ({ s, i })).filter(({ s }) => s.id !== stage.id).map(({ s, i }) => ({ v: s.id, label: `Стадия ${i + 1} · ${s.title?.trim() || actionMeta(s.action).label}` })),
   ]
 
   return (
     <Sheet open={!!stage} onOpenChange={(o) => { if (!o) onClose() }}>
       <SheetContent className={cn("p-0 flex flex-col gap-0", expanded ? "w-screen max-w-none sm:max-w-none" : "w-full sm:max-w-6xl")}>
         <SheetHeader className="px-5 py-4 border-b flex-row items-center justify-between gap-2 space-y-0">
-          <SheetTitle className="flex items-center gap-2 text-base min-w-0"><Icon className="w-4 h-4 text-muted-foreground shrink-0" /> <span className="truncate">Стадия {index + 2} · {stage.title?.trim() || meta.label}</span></SheetTitle>
+          <SheetTitle className="flex items-center gap-2 text-base min-w-0"><Icon className="w-4 h-4 text-muted-foreground shrink-0" /> <span className="truncate">Стадия {index + 1} · {stage.title?.trim() || meta.label}</span></SheetTitle>
           <button onClick={() => setExpanded(e => !e)} className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs shrink-0 mr-7" aria-label={expanded ? "Свернуть" : "На весь экран"}>
             {expanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
             <span className="hidden sm:inline">{expanded ? "Свернуть" : "На весь экран"}</span>
@@ -388,28 +390,27 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose, dripT
   )
 }
 
-// ── Стадия 1: Портрет (read-only) ────────────────────────────────────────────
+// ── Врезка «до стадий»: входной скан резюме из Портрета (read-only, НЕ стадия
+// воронки — без номера, тонкая строка-справка, чтобы не сливаться с реальной
+// стадией 1 «Отклик — скан резюме» ниже) ────────────────────────────────────
 interface SpecSummary { upper?: number; lower?: number; autoReject?: boolean; autoInvite?: boolean; stops: string[]; criteriaCount: number }
 function PortraitStageCard({ summary, loading, onOpen }: { summary: SpecSummary | null; loading: boolean; onOpen?: () => void }) {
   const empty = !loading && summary && summary.criteriaCount === 0 && summary.stops.length === 0
   return (
-    <div className="rounded-xl border border-border bg-card p-3">
-      <div className="flex items-center gap-2.5">
-        <span className="grid place-items-center w-6 h-6 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-medium shrink-0">1</span>
-        <Target className="w-4 h-4 text-muted-foreground shrink-0" />
-        <div className="flex-1 min-w-0"><div className="text-sm font-medium">Отклик → скан резюме <span className="text-[11px] text-muted-foreground font-normal">· из Портрета</span></div></div>
-        {onOpen && <button onClick={onOpen} className="text-xs text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1">Открыть Портрет <ExternalLink className="w-3 h-3" /></button>}
-      </div>
-      <div className="flex flex-wrap gap-1.5 mt-2.5 pl-9">
-        {loading ? <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> загрузка…</span>
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 py-1 text-muted-foreground/80">
+      <Target className="w-3.5 h-3.5 shrink-0" />
+      <span className="text-xs">Входной скан резюме настраивается в Портрете</span>
+      {onOpen && <button onClick={onOpen} className="text-xs text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1">Открыть Портрет <ExternalLink className="w-3 h-3" /></button>}
+      <span className="flex flex-wrap gap-1 ml-auto">
+        {loading ? <span className="text-[11px] inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> загрузка…</span>
           : summary ? (<>
-            <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">пороги &lt;{summary.lower ?? 40} / {summary.lower ?? 40}–{(summary.upper ?? 75) - 1} / ≥{summary.upper ?? 75}</span>
-            <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">авто-отказ {summary.autoReject ? "вкл" : "выкл"}</span>
-            <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">авто-приглашение {summary.autoInvite ? "вкл" : "выкл"}</span>
-            {summary.stops.length > 0 && <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">стоп: {summary.stops.join(", ")}</span>}
-            {empty && <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground/70">пусто → 100% проходят дальше</span>}
-          </>) : <span className="text-[11px] text-muted-foreground/70">Портрет не настроен → проходят все</span>}
-      </div>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/80">пороги &lt;{summary.lower ?? 40} / {summary.lower ?? 40}–{(summary.upper ?? 75) - 1} / ≥{summary.upper ?? 75}</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/80">авто-отказ {summary.autoReject ? "вкл" : "выкл"}</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/80">авто-приглашение {summary.autoInvite ? "вкл" : "выкл"}</span>
+            {summary.stops.length > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/80">стоп: {summary.stops.join(", ")}</span>}
+            {empty && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/60">пусто → 100% проходят дальше</span>}
+          </>) : <span className="text-[10px] text-muted-foreground/60">Портрет не настроен → проходят все</span>}
+      </span>
     </div>
   )
 }
@@ -627,7 +628,7 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait }: { vacancyId: stri
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {stages.length === 0 && <p className="text-xs text-muted-foreground text-center pt-1">Стадия 1 (Портрет) уже есть. Добавьте следующие — приветствие, демо, тест, интервью, оффер…</p>}
+      {stages.length === 0 && <p className="text-xs text-muted-foreground text-center pt-1">Входной скан резюме уже настроен в Портрете. Добавьте стадии воронки — приветствие, демо, тест, интервью, оффер…</p>}
 
       <StageSheet stage={editing} index={editingIndex} allStages={stages} content={content} onChange={changeStage} onClose={() => setEditingId(null)} dripTemplates={dripTemplates} />
 
