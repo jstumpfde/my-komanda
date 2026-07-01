@@ -110,3 +110,64 @@ export async function computeObjectiveGateScore(
   if (result.gradedCount === 0 || result.maxPoints === 0) return null
   return result
 }
+
+/**
+ * Пер-блочный объективный балл (Вариант Б, легаси-мост): считает балл по
+ * ВЫБОРНЫМ вопросам (correctOptions) для КАЖДОГО контент-блока отдельно.
+ * Ключ = demos.id. { [demoId]: { title, score, gradedCount, correctCount } }.
+ * Блоки без объективных вопросов пропускаются. Зеркало scoreDemoAnswers (AI).
+ */
+export async function computeBlockObjectiveScores(
+  candidateId: string,
+  vacancyId: string,
+): Promise<Record<string, { title: string; score: number; gradedCount: number; correctCount: number }>> {
+  const out: Record<string, { title: string; score: number; gradedCount: number; correctCount: number }> = {}
+
+  const [candidate] = await db
+    .select({ anketaAnswers: candidates.anketaAnswers })
+    .from(candidates)
+    .where(and(eq(candidates.id, candidateId), eq(candidates.vacancyId, vacancyId)))
+    .limit(1)
+  if (!candidate) return out
+
+  const demoRows = await db
+    .select({ id: demos.id, title: demos.title, lessonsJson: demos.lessonsJson })
+    .from(demos)
+    .where(and(
+      eq(demos.vacancyId, vacancyId),
+      or(eq(demos.kind, "demo"), like(demos.kind, "block:%")),
+    ))
+    .orderBy(demos.sortOrder, demos.createdAt)
+  if (demoRows.length === 0) return out
+
+  // Ответы кандидата: questionId → value (первый непустой).
+  const rawAnswers: Array<{ blockId?: string; answer?: unknown }> = Array.isArray(candidate.anketaAnswers)
+    ? (candidate.anketaAnswers as Array<{ blockId?: string; answer?: unknown }>)
+    : []
+  const answersByQuestion: Record<string, string> = {}
+  for (const entry of rawAnswers) {
+    const ans = entry?.answer
+    if (ans && typeof ans === "object" && !Array.isArray(ans)) {
+      for (const [qid, val] of Object.entries(ans as Record<string, unknown>)) {
+        if (qid === "viewed" || qid === "viewedAt" || qid === "timeSpent") continue
+        const v = answerToValue(val)
+        if (v && !answersByQuestion[qid]) answersByQuestion[qid] = v
+      }
+    }
+  }
+
+  for (const demo of demoRows) {
+    const lessons = Array.isArray(demo.lessonsJson) ? (demo.lessonsJson as { blocks?: { type?: string; questions?: Question[] }[] }[]) : []
+    const questions = collectTaskQuestions(lessons)
+    if (questions.length === 0) continue
+    const r = scoreObjective(questions, answersByQuestion)
+    if (r.gradedCount === 0 || r.maxPoints === 0) continue // нет объективных вопросов в блоке
+    out[demo.id] = {
+      title: demo.title,
+      score: r.score,
+      gradedCount: r.gradedCount,
+      correctCount: r.perQuestion.filter((q) => q.correct).length,
+    }
+  }
+  return out
+}
