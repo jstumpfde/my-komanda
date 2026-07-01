@@ -62,6 +62,14 @@ export interface ApiCandidate {
   demoAnswersDetails?: { questionText: string; awarded: number; max: number; comment: string }[] | null
   // Пер-блочные баллы анкеты (candidates.demo_block_scores): { demoId: { title, score } }.
   demoBlockScores?: Record<string, { title?: string; score: number }> | null
+  // Прозрачность приглашения на 2-ю часть демо (describeSecondDemoInvite). null = фича выключена.
+  secondDemoInvite?: {
+    invited: boolean
+    score: number | null
+    threshold: number
+    passed: boolean | null
+    blockTitle: string | null
+  } | null
   // AI-скор резюме (выставляется в lib/hh/process-queue.ts при приёме отклика).
   // Отдельно от aiScore — тот считается после демо и учитывает ответы.
   resumeScore?: number | null

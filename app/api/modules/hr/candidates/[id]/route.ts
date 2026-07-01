@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { candidates, vacancies, hhResponses, hhCandidates, demos } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { deriveCandidateName } from "@/lib/candidate-name"
+import { describeSecondDemoInvite } from "@/lib/messaging/second-demo-invite"
 
 // Helper: verify candidate belongs to user's company.
 // За один SQL-запрос подтягиваем кандидата + вакансию + связку hh_responses
@@ -84,6 +85,10 @@ export async function GET(
       return apiError("Candidate not found", 404)
     }
 
+    // Прозрачность приглашения на 2-ю часть демо: показываем HR балл + порог +
+    // приглашён/нет (read-only, не пишет в БД). null = фича в Портрете выключена.
+    const secondDemoInvite = await describeSecondDemoInvite(id, row.candidate.vacancyId)
+
     return apiSuccess({
       ...row.candidate,
       // Имя: fallback на anketa_answers, затем на hh_responses.candidate_name
@@ -92,6 +97,7 @@ export async function GET(
       hhResponseId: row.hhResponseId ?? null,
       hhRawData: row.hhRawData ?? null,
       demoLessons: row.demoLessons ?? null,
+      secondDemoInvite,
     })
   } catch (err) {
     if (err instanceof Response) return err
