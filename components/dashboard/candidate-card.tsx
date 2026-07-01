@@ -91,6 +91,10 @@ export interface Candidate {
    *  Возвращается только пер-вакансионным API. Используется в ListView для
    *  отображения кастомного лейбла стадии вместо платформенного дефолта. */
   funnelV2StateJson?: { stageId?: string | null } | null
+  /** «2-я часть демо» (Путь менеджера): per-candidate override блока (миграция
+   *  0236). Если не NULL И stage='test_task_sent' — статус-бейдж показывает
+   *  «2-я часть» вместо «Тест отправлен» (там анкета/демо, а не тест-задание). */
+  overrideContentBlockId?: string | null
 }
 
 interface CandidateCardProps {

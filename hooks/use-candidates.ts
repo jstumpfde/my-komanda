@@ -118,6 +118,9 @@ export interface ApiCandidate {
   telegramOptOut?: boolean | null
   telegramInviteToken?: string | null
   tgMessages?: import("@/lib/db/schema").TgMessage[] | null
+  // «2-я часть демо» (Путь менеджера): per-candidate override блока (миграция
+  // 0236). Не NULL И stage='test_task_sent' → статус-ярлык «2-я часть».
+  overrideContentBlockId?: string | null
 }
 
 // ─── useCandidates ────────────────────────────────────────────────────────────
