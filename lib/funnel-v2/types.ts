@@ -275,7 +275,7 @@ function withScoreGate(stage: FunnelV2Stage, scoreType: ScoreGateType, threshold
 
 /**
  * Дефолтный набор стадий воронки v2 для пустой воронки (путь продаж):
- *   Отклик → скан резюме [gate resume] · Демо (1-я часть) · Путь менеджера
+ *   Отклик → приглашение на демо [gate resume] · Демо (1-я часть) · Путь менеджера
  *   (2-я часть) [gate anketa] · Тест-задание [gate test] · Интервью · Оффер ·
  *   Нанят.
  * Стадия 1 «Портрет» (скан резюме) хранится не здесь — она рендерится из spec.
@@ -286,9 +286,11 @@ function withScoreGate(stage: FunnelV2Stage, scoreType: ScoreGateType, threshold
 export function defaultFunnelV2Stages(seed = "default"): FunnelV2Stage[] {
   const s = (suffix: string) => `${seed}-${suffix}`
 
-  // 1) Отклик — скан резюме (первое касание, gate по баллу AI-резюме)
+  // 1) Отклик → приглашение на демо (первое касание — сообщение + ссылка на
+  //    демо; условие прохода = gate по баллу AI-резюме). Входной скан резюме
+  //    как таковой настраивается в Портрете (врезка над списком стадий).
   const respond = withScoreGate(makeStage("message", s("respond")), "resume")
-  respond.title = "Отклик — скан резюме"
+  respond.title = "Отклик → приглашение на демо"
 
   // 2) Демо (1-я часть пути)
   const demo = makeStage("demo", s("demo"))
