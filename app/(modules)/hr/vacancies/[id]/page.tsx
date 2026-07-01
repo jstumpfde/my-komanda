@@ -2222,9 +2222,9 @@ export default function VacancyPage() {
   // Переоценить выделенных кандидатов по параметру (или всем сразу). Реальные
   // AI-вызовы → только по выделенным (selectedCandidateIds).
   const RESCORE_LABELS: Record<string, string> = {
-    resume: "AI-резюме", ai: "AI-оценка", rubric: "AI-рубрика", test: "AI-тест", portrait: "AI-Портрет", all: "все параметры",
+    resume: "AI-резюме", test: "AI-тест", portrait: "AI-Портрет", all: "все параметры",
   }
-  const rescoreSelected = async (dimension: "resume" | "ai" | "rubric" | "test" | "portrait" | "all") => {
+  const rescoreSelected = async (dimension: "resume" | "test" | "portrait" | "all") => {
     if (rescoring) return
     const ids = Array.from(selectedCandidateIds)
     if (ids.length === 0) { toast.info("Выделите кандидатов галочками — переоценка идёт по выделенным"); return }
@@ -2237,11 +2237,10 @@ export default function VacancyPage() {
       })
       const j = await res.json().catch(() => null)
       if (!res.ok) { toast.error(j?.error || "Не удалось переоценить"); return }
-      const r = (j?.data ?? j) as { resume: number; ai: number; rubric: number; test: number; skipped: number; errors: number }
+      const r = (j?.data ?? j) as { resume: number; portrait: number; test: number; skipped: number; errors: number }
       const parts: string[] = []
       if (r.resume) parts.push(`резюме ${r.resume}`)
-      if (r.ai) parts.push(`оценка ${r.ai}`)
-      if (r.rubric) parts.push(`рубрика ${r.rubric}`)
+      if (r.portrait) parts.push(`портрет ${r.portrait}`)
       if (r.test) parts.push(`тест ${r.test}`)
       toast.success(
         `Переоценка (${RESCORE_LABELS[dimension]}): ${parts.join(", ") || "0"}` +

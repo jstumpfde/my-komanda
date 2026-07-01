@@ -1,9 +1,9 @@
 // POST /api/modules/hr/vacancies/[id]/rescore
 // Переоценка выделенных кандидатов вакансии по выбранному параметру:
-//   resume — AI-резюме (resume_score), ai — AI-оценка (ai_score),
-//   rubric — AI-рубрика (rubric_score), test — AI-тест (test_submissions.ai_score),
-//   all — все четыре.
-// Body: { candidateIds: string[], dimension: 'resume'|'ai'|'rubric'|'test'|'all' }
+//   resume — AI-резюме (resume_score), portrait — AI-Портрет (ai_score_v2),
+//   test — AI-тест (test_submissions.ai_score), answers — оценка ответов демо,
+//   all — все параметры (кроме answers).
+// Body: { candidateIds: string[], dimension: 'resume'|'portrait'|'test'|'answers'|'all' }
 // Реальные AI-вызовы (стоят денег) → работаем ТОЛЬКО по выделенным, максимум 50 за раз.
 import { NextRequest } from "next/server"
 import { and, eq, inArray, desc } from "drizzle-orm"
@@ -11,10 +11,7 @@ import { db } from "@/lib/db"
 import { candidates, vacancies, testSubmissions } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { screenResume } from "@/lib/ai-screen-resume"
-import { scoreCandidateById } from "@/lib/ai-score-candidate"
 import { scoreCandidateV2 } from "@/lib/ai-score-candidate-v2"
-import { scoreResumeRubric } from "@/lib/scoring/rubric"
-import { buildSpecFromAnketa, buildResumeText } from "@/lib/scoring/vacancy-spec"
 import { scoreTestSubmission } from "@/lib/ai-score-test"
 import { isSpecScoringEnabled, buildSpecResumeInput, specHasScoringContent } from "@/lib/core/spec/resume-input"
 import { getSpec } from "@/lib/core/spec/store"
@@ -23,8 +20,8 @@ import { scoreDemoAnswers } from "@/lib/demo/score-answers"
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
-type Dim = "resume" | "ai" | "rubric" | "test" | "portrait" | "answers" | "all"
-const ALL_DIMS: Exclude<Dim, "all">[] = ["resume", "ai", "rubric", "test", "portrait"]
+type Dim = "resume" | "test" | "portrait" | "answers" | "all"
+const ALL_DIMS: Exclude<Dim, "all">[] = ["resume", "test", "portrait"]
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -75,7 +72,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       .where(and(eq(candidates.vacancyId, vacancyId), inArray(candidates.id, ids)))
 
     const dims = dimension === "all" ? ALL_DIMS : [dimension]
-    const result = { resume: 0, ai: 0, rubric: 0, test: 0, portrait: 0, answers: 0, skipped: 0, errors: 0 }
+    const result = { resume: 0, test: 0, portrait: 0, answers: 0, skipped: 0, errors: 0 }
 
     // Портрет (spec) для переоценки резюме — тот же путь, что у живого пайплайна:
     // если заполнен и включён, оцениваем ПО НЕМУ (а не по legacy-анкете).
@@ -122,9 +119,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             } else {
               result.skipped++
             }
-          } else if (d === "ai") {
-            await scoreCandidateById({ candidateId: c.id, vacancyId, skipIfScored: false })
-            result.ai++
           } else if (d === "portrait") {
             // AI-Портрет: двухпроходная оценка по критериям Портрета (ai_score_v2).
             // Требует непустой requirementsJson.must_have (Портрет настроен) — иначе
@@ -140,14 +134,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             } else {
               result.skipped++
             }
-          } else if (d === "rubric") {
-            const spec = buildSpecFromAnketa(anketa)
-            const resumeText = buildResumeText(c)
-            const rr = await scoreResumeRubric(spec, resumeText)
-            await db.update(candidates)
-              .set({ rubricScore: rr.total, rubricDetails: rr, rubricScoredAt: new Date() })
-              .where(eq(candidates.id, c.id))
-            result.rubric++
           } else if (d === "answers") {
             const r = await scoreDemoAnswers({ candidateId: c.id, vacancyId, skipIfScored: false })
             if (r != null) result.answers++

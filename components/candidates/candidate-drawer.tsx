@@ -15,7 +15,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { RubricShadowSection } from "@/components/candidates/rubric-shadow-section"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -734,24 +733,6 @@ function buildTimeline(args: {
         icon: CheckCircle, iconClass: "text-emerald-500",
         title: "Завершил демонстрацию",
       })
-    }
-  }
-
-  // AI-оценка
-  const aiScore = candidate.aiScore
-  if (aiScore != null) {
-    // Используем updatedAt как приближённое время оценки
-    const updIso = candidate.updatedAt
-    if (updIso) {
-      const t = Date.parse(updIso)
-      if (!isNaN(t)) {
-        events.push({
-          at: t + 2, iso: updIso,
-          icon: Sparkles, iconClass: "text-purple-500",
-          title: `AI-оценка: ${aiScore}/100`,
-          hint: candidate.aiSummary ? candidate.aiSummary.slice(0, 120) : undefined,
-        })
-      }
     }
   }
 
@@ -2693,9 +2674,6 @@ export function CandidateDrawer({
                     }
                   </div>
                 )}
-
-                {/* Рубрика-тень (устаревший непersisted-скоринг) — скрыта по умолчанию */}
-                <RubricShadowSection candidateId={candidate.id} />
               </TabsContent>
 
               {/* ── История ──────────────────────────────────────── */}

@@ -1,25 +1,23 @@
 import { NextRequest } from "next/server"
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, vacancies, type VacancyRequirements } from "@/lib/db/schema"
+import { candidates, vacancies } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { isShortId } from "@/lib/short-id"
-import { scoreCandidateById } from "@/lib/ai-score-candidate"
 import { scoreCandidateV2 } from "@/lib/ai-score-candidate-v2"
 import { scoreDemoAnswers } from "@/lib/demo/score-answers"
 import { maybeScheduleSecondDemoInvite } from "@/lib/messaging/second-demo-invite"
 import { isPortraitConfigured } from "@/lib/core/spec/resume-input"
 import { getSpec } from "@/lib/core/spec/store"
 
-// Группа 25: fire-and-forget A/B скоринг при завершении демо.
-// Для Portrait-вакансий (критерии в Spec, а не в must_have) тоже запускаем
-// v2 — ранее гейт hasRequirements=(must_have.length>0) их блокировал.
-// Не переоцениваем кандидатов с aiScoredAt != null.
-async function runAbScoring(candidateId: string, vacancyId: string): Promise<void> {
+// Fire-and-forget AI-Портрет (v2) при завершении демо.
+// Для Portrait-вакансий (критерии в Spec, а не в must_have) тоже запускаем v2.
+// Не переоцениваем кандидатов с aiScoredAt != null (skipIfScored на уровне v2).
+// Legacy AI-оценка v1 (scoreCandidateById) удалена.
+async function runDemoScoring(candidateId: string, vacancyId: string): Promise<void> {
   try {
     const [vac] = await db
       .select({
-        requirementsJson:  vacancies.requirementsJson,
         aiProcessSettings: vacancies.aiProcessSettings,
         portraitScoring:   vacancies.portraitScoring,
       })
@@ -43,44 +41,23 @@ async function runAbScoring(candidateId: string, vacancyId: string): Promise<voi
 
     const portraitConfigured = vac ? isPortraitConfigured(vac, specForGate) : false
 
-    const reqJson = (vac?.requirementsJson ?? {}) as VacancyRequirements
-    const hasLegacyRequirements = (reqJson.must_have?.length ?? 0) > 0
+    // Без критериев Портрета оценивать нечем (legacy v1 удалён).
+    if (!portraitConfigured) return
 
-    if (!portraitConfigured) {
-      // Нет ни legacy must_have, ни Portrait-критериев — только v1 (legacy).
-      const v1 = await scoreCandidateById({ candidateId, vacancyId, skipIfScored: true })
-      if (v1) {
-        await db.update(candidates).set({
-          aiScoreV1:  v1.score,
-          aiScoredAt: new Date(),
-        }).where(eq(candidates.id, candidateId))
-      }
-      return
-    }
-
-    // Portrait настроен: запускаем v1 + v2 параллельно.
     // Post-demo: skipIfScored=false для v2 — переоцениваем с ответами демо.
-    // Для v1: skipIfScored=true (legacy score не меняем, нет смысла).
-    const v1SkipIfScored = hasLegacyRequirements  // v1 нужен только в legacy-пути
-    const [v1Result, v2Result] = await Promise.all([
-      scoreCandidateById({ candidateId, vacancyId, skipIfScored: v1SkipIfScored })
-        .catch((err: unknown) => { console.error("[demo answer] v1 failed:", err); return null }),
-      scoreCandidateV2({ candidateId, vacancyId, skipIfScored: false })
-        .catch((err: unknown) => { console.error("[demo answer] v2 failed:", err); return null }),
-    ])
+    const v2Result = await scoreCandidateV2({ candidateId, vacancyId, skipIfScored: false })
+      .catch((err: unknown) => { console.error("[demo answer] v2 failed:", err); return null })
 
-    if (!v1Result && !v2Result) return
+    if (!v2Result) return
 
-    const mainScore = v2Result?.score ?? v1Result?.score ?? null
     await db.update(candidates).set({
-      aiScore:          mainScore,
-      aiScoreV1:        v1Result?.score ?? null,
-      aiScoreV2:        v2Result?.score ?? null,
-      aiScoreV2Details: v2Result ?? null,
+      aiScore:          v2Result.score,
+      aiScoreV2:        v2Result.score,
+      aiScoreV2Details: v2Result,
       aiScoredAt:       new Date(),
     }).where(eq(candidates.id, candidateId))
   } catch (err) {
-    console.error("[demo answer] A/B scoring failed:", err instanceof Error ? err.message : err)
+    console.error("[demo answer] Portrait scoring failed:", err instanceof Error ? err.message : err)
   }
 }
 
@@ -333,10 +310,9 @@ export async function POST(
       }
     })
 
-    // Авто AI-скоринг при завершении демо (вне транзакции, fire-and-forget).
-    // Группа 25: запускает v1+v2 параллельно, если у вакансии есть структурированные требования.
+    // Авто AI-Портрет (v2) при завершении демо (вне транзакции, fire-and-forget).
     if (txResult.isComplete && txResult.aiScoreNull) {
-      void runAbScoring(txResult.candidateId, txResult.vacancyId)
+      void runDemoScoring(txResult.candidateId, txResult.vacancyId)
     }
 
     // Балл по ответам демо — fire-and-forget. Пересчитываем при завершении демо
@@ -346,7 +322,7 @@ export async function POST(
     // версии демо (неотвеченные = 0), поэтому пересчёт по мере ответов корректен.
     // Работает независимо от A/B скоринга: оценивает task-вопросы с aiCriteria.
     // Пишет в СВОЮ колонку candidates.demo_answers_score (не ai_score — иначе была
-    // бы гонка с runAbScoring). Только если у вакансии есть такие вопросы.
+    // бы гонка с runDemoScoring). Только если у вакансии есть такие вопросы.
     if (txResult.isComplete || txResult.hasRealAnswer) {
       void scoreDemoAnswers({
         candidateId: txResult.candidateId,

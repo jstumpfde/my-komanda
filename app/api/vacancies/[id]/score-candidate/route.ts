@@ -3,7 +3,6 @@ import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, type VacancyRequirements } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
-import { scoreCandidateById } from "@/lib/ai-score-candidate"
 import { scoreCandidateV2 } from "@/lib/ai-score-candidate-v2"
 
 export async function POST(
@@ -20,7 +19,7 @@ export async function POST(
     }
 
     // Гарантия владения вакансией перед скорингом + проверка наличия
-    // структурированных требований (требуются для v2).
+    // структурированных требований (требуются для Портрета v2).
     const [vacancy] = await db
       .select({
         id:               vacancies.id,
@@ -37,88 +36,40 @@ export async function POST(
     const reqJson = (vacancy.requirementsJson ?? {}) as VacancyRequirements
     const hasRequirements = (reqJson.must_have?.length ?? 0) > 0
 
-    if (hasRequirements) {
-      // Группа 25: A/B — запускаем v1 и v2 параллельно. Каждый — со своей
-      // обработкой ошибок. Если оба упали — ошибка. Если хотя бы один — ОК.
-      const [v1Result, v2Result] = await Promise.all([
-        scoreCandidateById({
-          candidateId: body.candidateId,
-          vacancyId,
-          skipIfScored: false,
-        }).catch((err: unknown) => {
-          console.error("[score-v1] error", err)
-          return null
-        }),
-        scoreCandidateV2({
-          candidateId: body.candidateId,
-          vacancyId,
-          skipIfScored: false,
-        }).catch((err: unknown) => {
-          console.error("[score-v2] error", err)
-          return null
-        }),
-      ])
-
-      if (!v1Result && !v2Result) {
-        return apiError("Не удалось получить результат AI-скоринга", 500)
-      }
-
-      // aiScore = v2 если есть, иначе v1 (он уже записан в БД самим v1).
-      const mainScore = v2Result?.score ?? v1Result?.score ?? null
-      await db
-        .update(candidates)
-        .set({
-          aiScore:          mainScore,
-          aiScoreV1:        v1Result?.score ?? null,
-          aiScoreV2:        v2Result?.score ?? null,
-          aiScoreV2Details: v2Result ?? null,
-          aiScoredAt:       new Date(),
-          updatedAt:        new Date(),
-        })
-        .where(eq(candidates.id, body.candidateId))
-
-      return apiSuccess({
-        candidateId: body.candidateId,
-        v1:          v1Result?.score ?? null,
-        v2:          v2Result?.score ?? null,
-        // v2Details — полный CandidateScoreV2 (extracted_facts, criteria_scores,
-        // reasoning, must_have stats). Передаём отдельным полем чтобы не
-        // конфликтовать с legacy details (массив v1).
-        v2Details:   v2Result ?? null,
-        // Legacy-поля для совместимости с UI, не использующим v2 ещё.
-        score:       mainScore,
-        summary:     v1Result?.summary ?? null,
-        details:     v1Result?.details ?? null,
-      })
+    if (!hasRequirements) {
+      // Без критериев Портрета оценивать нечем (legacy AI-оценка v1 удалена).
+      return apiError("Для AI-скоринга заполните критерии Портрета вакансии", 400)
     }
 
-    // Legacy: только v1.
-    const v1Result = await scoreCandidateById({
+    const v2Result = await scoreCandidateV2({
       candidateId: body.candidateId,
       vacancyId,
       skipIfScored: false,
     })
-    if (!v1Result) {
-      return apiError("Не удалось получить результат", 500)
+
+    if (!v2Result) {
+      return apiError("Не удалось получить результат AI-скоринга", 500)
     }
 
-    // scoreCandidateById обновляет aiScore сам — синхронизируем aiScoreV1 + aiScoredAt.
     await db
       .update(candidates)
       .set({
-        aiScoreV1:  v1Result.score,
-        aiScoredAt: new Date(),
-        updatedAt:  new Date(),
+        aiScore:          v2Result.score,
+        aiScoreV2:        v2Result.score,
+        aiScoreV2Details: v2Result,
+        aiScoredAt:       new Date(),
+        updatedAt:        new Date(),
       })
       .where(eq(candidates.id, body.candidateId))
 
     return apiSuccess({
       candidateId: body.candidateId,
-      score:       v1Result.score,
-      summary:     v1Result.summary,
-      details:     v1Result.details,
-      v1:          v1Result.score,
-      v2:          null,
+      v2:          v2Result.score,
+      // v2Details — полный CandidateScoreV2 (extracted_facts, criteria_scores,
+      // reasoning, must_have stats).
+      v2Details:   v2Result,
+      // score — главный балл (= v2) для UI, не использующего v2 напрямую.
+      score:       v2Result.score,
     })
   } catch (err) {
     if (err instanceof Response) return err
