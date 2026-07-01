@@ -732,7 +732,18 @@ export function CandidateDrawer({
   const [tgSending,      setTgSending]      = useState(false)
   const [tgMessages,     setTgMessages]     = useState<import("@/lib/db/schema").TgMessage[]>([])
 
-  // ── Стадии каналов (hh и др.) — загружаются лениво при открытии таба «Каналы» ──
+  // ── Стадии каналов (hh, авито и др.) — загружаются лениво при открытии таба «Каналы» ──
+  // Читаемые лейблы каналов; неизвестный ключ показываем как есть (capitalize).
+  const CHANNEL_LABELS: Record<string, string> = {
+    hh:       "hh.ru",
+    avito:    "Авито",
+    telegram: "Telegram",
+    site:     "Сайт",
+    referral: "Реферал",
+    manual:   "Вручную",
+  }
+  const channelLabel = (channel: string): string =>
+    CHANNEL_LABELS[channel.toLowerCase()] ?? (channel.charAt(0).toUpperCase() + channel.slice(1))
   type ChannelStage = { channel: string; stageId: string; stageLabel: string }
   const [channelStages,        setChannelStages]        = useState<ChannelStage[]>([])
   const [channelStagesLoading, setChannelStagesLoading] = useState(false)
@@ -2203,9 +2214,9 @@ export function CandidateDrawer({
                     <div className="space-y-1">
                       {channelStages.map((cs) => (
                         <div key={cs.channel} className="flex items-center gap-2 text-xs">
-                          <span className="font-medium text-foreground capitalize">{cs.channel}</span>
+                          <span className="font-medium text-foreground">{channelLabel(cs.channel)}</span>
                           <span className="text-muted-foreground">—</span>
-                          <span className="text-foreground">{cs.stageLabel}</span>
+                          <span className="text-foreground">{cs.stageLabel || "—"}</span>
                         </div>
                       ))}
                     </div>
