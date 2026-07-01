@@ -74,6 +74,7 @@ import {
   type ContactOutcome,
 } from "@/lib/hr/contacts"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/lib/auth"
 import {
   getStageLabel,
   getStageColorClasses,
@@ -105,6 +106,7 @@ interface CandidateContact {
   reasonCategory: string | null
   comment: string | null
   createdAt: string
+  createdById: string | null
   createdByName: string | null
 }
 
@@ -389,17 +391,43 @@ function AiScoreBadge({ score, onClick }: { score: number | null; onClick?: () =
   )
 }
 
-function ScoreBadge({ score }: { score: number | null }) {
-  if (score === null) return null
-  const color =
-    score >= 80 ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" :
-    score >= 60 ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" :
-    "bg-destructive/10 text-destructive border-destructive/20"
+// ─── Score line (шапка карточки) ──────────────────────────────────────────────
+// Все доступные баллы в одну линию, каждый с подписью. Цвет как в списке
+// (>70 success / ≥40 warning / <40 destructive — см. list-view.tsx).
+
+function scoreLineColor(score: number) {
+  if (score > 70) return "bg-success/10 text-success border-success/20"
+  if (score >= 40) return "bg-warning/10 text-warning border-warning/20"
+  return "bg-destructive/10 text-destructive border-destructive/20"
+}
+
+function HeaderScores({
+  resume, anketa, portrait, test,
+}: {
+  resume: number | null
+  anketa: number | null
+  portrait: number | null
+  test: number | null
+}) {
+  const items: { label: string; value: number }[] = []
+  if (resume   != null) items.push({ label: "Резюме",  value: resume })
+  if (anketa   != null) items.push({ label: "Анкета",  value: anketa })
+  if (portrait != null) items.push({ label: "Портрет", value: portrait })
+  if (test     != null) items.push({ label: "Тест",    value: test })
+  if (items.length === 0) return null
   return (
-    <Badge variant="outline" className={cn("font-bold text-sm border", color)}>
-      <Star className="w-3 h-3 mr-1" />
-      {score}
-    </Badge>
+    <div className="flex flex-wrap items-center gap-1.5">
+      {items.map((it) => (
+        <Badge
+          key={it.label}
+          variant="outline"
+          className={cn("text-xs border font-medium gap-1", scoreLineColor(it.value))}
+        >
+          <span className="opacity-70">{it.label}</span>
+          <span className="font-bold tabular-nums">{it.value}</span>
+        </Badge>
+      ))}
+    </div>
   )
 }
 
@@ -627,6 +655,7 @@ export function CandidateDrawer({
   initialCandidate,
   initialTab,
 }: CandidateDrawerProps) {
+  const { user } = useAuth()
   const [sheetExpanded, setSheetExpanded] = useState(false)
   const [candidate, setCandidate] = useState<ApiCandidate | null>(null)
   // Notes хранятся в demo_progress_json у самого кандидата — отдельный
@@ -686,6 +715,13 @@ export function CandidateDrawer({
   const [contactReason, setContactReason] = useState("")
   const [contactComment, setContactComment] = useState("")
   const [savingContact, setSavingContact] = useState(false)
+  // #33: редактирование существующей записи контакта (автором).
+  const [editingContactId, setEditingContactId] = useState<string | null>(null)
+  const [editChannel, setEditChannel] = useState<ContactChannel>("call")
+  const [editOutcome, setEditOutcome] = useState<ContactOutcome>("pending")
+  const [editReason, setEditReason] = useState("")
+  const [editComment, setEditComment] = useState("")
+  const [savingEdit, setSavingEdit] = useState(false)
   const [activeTab, setActiveTab] = useState("contacts")
   // Открыть карточку на заданной вкладке (напр. клик по колонке «Тест» → результат теста).
   useEffect(() => {
@@ -810,11 +846,53 @@ export function CandidateDrawer({
     }
   }
 
+  // #33: открыть/закрыть режим правки записи контакта.
+  const startEditContact = (c: CandidateContact) => {
+    setEditingContactId(c.id)
+    setEditChannel(c.channel)
+    setEditOutcome(c.outcome)
+    setEditReason(c.reasonCategory ?? "")
+    setEditComment(c.comment ?? "")
+  }
+  const cancelEditContact = () => {
+    setEditingContactId(null)
+  }
+  const saveEditContact = async () => {
+    if (!candidateId || !editingContactId) return
+    setSavingEdit(true)
+    try {
+      const body: Record<string, unknown> = {
+        contactId: editingContactId,
+        channel: editChannel,
+        outcome: editOutcome,
+        reasonCategory: editOutcome === "no_fit" ? (editReason || null) : null,
+        comment: editComment.trim() || null,
+      }
+      const res = await fetch(`/api/modules/hr/candidates/${candidateId}/contacts`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => null) as { error?: string } | null
+        throw new Error(j?.error || "")
+      }
+      toast.success("Запись обновлена")
+      setEditingContactId(null)
+      await loadContacts(candidateId)
+    } catch (e) {
+      toast.error(e instanceof Error && e.message ? e.message : "Не удалось обновить запись")
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
   useEffect(() => {
     if (open && candidateId) {
       setCandidate(null)
       setNotes([])
       setContacts([])
+      setEditingContactId(null)
       setHhMessages([])
       setHhError(null)
       setHhDraft("")
@@ -1444,8 +1522,12 @@ export function CandidateDrawer({
                       {stageCfg.label}
                     </Badge>
                   )}
-                  <ScoreBadge score={candidate.score} />
-                  <AiScoreBadge score={candidate.aiScoreV2 ?? candidate.resumeScore ?? null} />
+                  <HeaderScores
+                    resume={candidate.resumeScore ?? null}
+                    anketa={candidate.demoAnswersScore ?? null}
+                    portrait={candidate.aiScoreV2 ?? null}
+                    test={candidate.testScore ?? null}
+                  />
                 </div>
               </div>
             </div>
@@ -1743,8 +1825,8 @@ export function CandidateDrawer({
                       className="resize-none text-xs min-h-8 flex-1"
                     />
                     <Button size="sm" className="h-8 text-xs shrink-0 gap-1.5" onClick={() => void submitContact()} disabled={savingContact}>
-                      {savingContact ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PhoneCall className="w-3.5 h-3.5" />}
-                      Записать
+                      {savingContact ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                      Сохранить результат
                     </Button>
                   </div>
                 </div>
@@ -1756,8 +1838,73 @@ export function CandidateDrawer({
                   <p className="text-sm text-muted-foreground py-4 text-center">Контактов пока нет</p>
                 ) : (
                   <div className="divide-y divide-border">
-                    {contacts.map((c) => (
-                      <div key={c.id} className="py-2.5 space-y-1">
+                    {contacts.map((c) => {
+                      const canEdit = !c.createdById || (!!user.id && c.createdById === user.id)
+                      if (editingContactId === c.id) {
+                        return (
+                          <div key={c.id} className="py-2.5 space-y-2.5">
+                            <div className="flex gap-2 flex-wrap items-center">
+                              <Select value={editChannel} onValueChange={(v) => setEditChannel(v as ContactChannel)}>
+                                <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  {CONTACT_CHANNELS.map((item) => (
+                                    <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <div className="flex gap-1.5 flex-wrap">
+                                {CONTACT_OUTCOMES.map((item) => (
+                                  <button
+                                    key={item.id}
+                                    type="button"
+                                    onClick={() => { setEditOutcome(item.id as ContactOutcome); if (item.id !== "no_fit") setEditReason("") }}
+                                    className={cn(
+                                      "px-2.5 py-1 rounded-md text-xs border transition-colors",
+                                      editOutcome === item.id
+                                        ? item.id === "fit"
+                                          ? "bg-emerald-100 border-emerald-400 text-emerald-800 dark:bg-emerald-900/30 dark:border-emerald-600 dark:text-emerald-300"
+                                          : item.id === "no_fit"
+                                          ? "bg-red-100 border-red-400 text-red-800 dark:bg-red-900/30 dark:border-red-600 dark:text-red-300"
+                                          : "bg-muted border-border text-foreground"
+                                        : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30",
+                                    )}
+                                  >
+                                    {item.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            {editOutcome === "no_fit" && (
+                              <Select value={editReason} onValueChange={setEditReason}>
+                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Причина" /></SelectTrigger>
+                                <SelectContent>
+                                  {REJECTION_REASONS.map((item) => (
+                                    <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                            <Textarea
+                              value={editComment}
+                              onChange={(e) => setEditComment(e.target.value)}
+                              placeholder="Итоги разговора (необязательно)…"
+                              rows={2}
+                              className="resize-none text-xs"
+                            />
+                            <div className="flex gap-2">
+                              <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => void saveEditContact()} disabled={savingEdit}>
+                                {savingEdit ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                                Сохранить
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={cancelEditContact} disabled={savingEdit}>
+                                Отмена
+                              </Button>
+                            </div>
+                          </div>
+                        )
+                      }
+                      return (
+                      <div key={c.id} className="py-2.5 space-y-1 group/contact">
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                           <span className="text-xs text-muted-foreground shrink-0">
                             {new Date(c.createdAt).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
@@ -1775,17 +1922,30 @@ export function CandidateDrawer({
                             {contactOutcomeLabel(c.outcome)}
                           </Badge>
                           {c.reasonCategory && (
-                            <span className="text-xs text-muted-foreground">{c.reasonCategory}</span>
+                            <span className="text-xs text-muted-foreground">{rejectionReasonLabel(c.reasonCategory)}</span>
                           )}
-                          {c.createdByName && (
-                            <span className="text-[10px] text-muted-foreground/60 ml-auto">{c.createdByName}</span>
-                          )}
+                          <div className="flex items-center gap-1.5 ml-auto">
+                            {c.createdByName && (
+                              <span className="text-[10px] text-muted-foreground/60">{c.createdByName}</span>
+                            )}
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => startEditContact(c)}
+                                title="Изменить"
+                                className="shrink-0 text-muted-foreground/40 hover:text-foreground transition-colors p-0.5"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                         {c.comment && (
                           <p className="text-xs text-foreground italic pl-0.5">{c.comment}</p>
                         )}
                       </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
 
@@ -1969,7 +2129,7 @@ export function CandidateDrawer({
 
               {/* ── Тест ─────────────────────────────────────────── */}
               <TabsContent value="test" className="px-6 py-4 pb-40 mt-0 space-y-4">
-                <TestTab candidateId={candidate.id} anketaScore={candidate.demoAnswersScore} anketaScoreDetails={candidate.demoAnswersDetails} />
+                <TestTab candidateId={candidate.id} />
               </TabsContent>
 
               {/* ── Чат (только hh) ──────────────────────────────── */}

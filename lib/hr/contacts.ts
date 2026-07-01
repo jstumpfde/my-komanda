@@ -3,10 +3,12 @@
 // Причина «не подошёл» берётся из общей таксономии lib/hr/rejection-reasons.ts.
 
 export const CONTACT_CHANNELS = [
-  { id: "call",    label: "Звонок" },
-  { id: "video",   label: "Видео / Zoom" },
-  { id: "meeting", label: "Встреча" },
-  { id: "message", label: "Переписка" },
+  { id: "call",             label: "Звонок" },
+  { id: "video",            label: "Видео-встреча" },
+  { id: "office_interview", label: "Интервью в офисе" },
+  { id: "meeting",          label: "Встреча" },
+  { id: "messenger",        label: "Мессенджер" },
+  { id: "message",          label: "Переписка" },
 ] as const
 
 export type ContactChannel = (typeof CONTACT_CHANNELS)[number]["id"]
