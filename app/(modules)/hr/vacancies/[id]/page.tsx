@@ -14,7 +14,7 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { KanbanBoard, type ViewMode } from "@/components/dashboard/kanban-board"
 import type { ListSortKey, ListSortState } from "@/components/dashboard/list-view"
-import { type CardDisplaySettings } from "@/components/dashboard/card-settings"
+import { type CardDisplaySettings, relevantColumnKeys } from "@/components/dashboard/card-settings"
 import { ViewSettings } from "@/components/dashboard/view-settings"
 import { CandidateFilters, DEFAULT_FUNNEL_STATUSES, type FilterState } from "@/components/dashboard/candidate-filters"
 import { applyCandidateFilters } from "@/lib/candidate-filter"
@@ -662,6 +662,26 @@ export default function VacancyPage() {
       .filter((s) => typeof s.id === "string")
       .map((s) => ({ id: s.id as string, title: s.title ?? null }))
   }, [apiVacancy?.descriptionJson])
+
+  /**
+   * #34: актуальные для ЭТОЙ вакансии тумблеры колонок «Вид → Настройки
+   * отображения». Считаем по конфигу воронки (funnel_config_json блоки +
+   * funnelV2-стадии) и legacy-флагам скоринга. null → показать все тумблеры
+   * (вакансия без сигнала о воронке — безопасный дефолт, прежнее поведение).
+   */
+  const availableColumnKeys = useMemo(
+    () =>
+      relevantColumnKeys(
+        apiVacancy as {
+          funnelConfigJson?: { blocks?: Array<{ type?: string; enabled?: boolean }> } | null
+          descriptionJson?: unknown
+          portraitScoring?: boolean
+          aiScoringEnabled?: boolean
+          aiChatbotEnabled?: boolean
+        } | null,
+      ),
+    [apiVacancy],
+  )
 
   // viewMode поднят сюда (выше хуков), чтобы useCandidates умел пропускать
   // запрос в режиме list-paginated и не дублировал usePaginatedCandidates.
@@ -2984,6 +3004,7 @@ export default function VacancyPage() {
                       onViewModeChange={setViewMode}
                       testTableHref={`/hr/vacancies/${id}/test-table`}
                       onReset={() => setCardSettings(defaultSettings)}
+                      availableKeys={availableColumnKeys}
                     />
                   </div>
                 )}
