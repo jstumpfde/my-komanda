@@ -28,19 +28,48 @@ interface QueueItem {
   nameSource: string
   needsCheck: boolean
   scheduledAt: string
+  sentAt: string | null
+  status: string                 // pending | sending | sent | cancelled | failed
+  waitingReason: string | null   // только для pending/sending
   branch: string
   touchNumber: number
   preview: string
 }
 
 const BRANCH_LABELS: Record<string, string> = {
-  not_opened: "Не открыл демо", opened_not_finished: "Открыл, не дошёл",
+  not_opened: "Дожим (не открыл демо)", opened_not_finished: "Дожим (открыл, не дошёл)",
   anketa_confirmation: "Подтверждение анкеты", anketa_auto_reply: "Автоответ анкеты",
   first_msg_2: "Сообщение 2", first_msg_3: "Сообщение 3", first_msg_offhours: "Внерабочий отклик",
   test_after_message: "После теста", test_invite: "Приглашение на тест",
-  test_reminder: "Напоминание о тесте", test_not_opened: "Тест не открыт",
-  test_opened_not_submitted: "Тест не отправлен", schedule_invite: "Приглашение на интервью",
+  test_reminder: "Напоминание о тесте", test_not_opened: "Дожим по тесту (не открыл)",
+  test_opened_not_submitted: "Дожим по тесту (не отправил)", schedule_invite: "Приглашение на интервью",
 }
+
+// branch может быть вида funnelv2:<stageId> — показываем как «Дожим стадии».
+function branchLabel(branch: string): string {
+  if (branch.startsWith("funnelv2:")) return "Дожим стадии"
+  return BRANCH_LABELS[branch] ?? branch
+}
+
+// Русские ярлыки + цвет статуса. Цвета — как в проекте (Tailwind-токены,
+// без кастомных hex): ждёт=amber, отправлено=emerald, отменено=muted,
+// ошибка=destructive, отправляется=amber. Badge variant="outline" + классы.
+const STATUS_META: Record<string, { label: string; cls: string }> = {
+  pending:   { label: "ждёт",          cls: "text-amber-700 dark:text-amber-400 border-amber-300/60 bg-amber-500/10" },
+  sending:   { label: "отправляется",  cls: "text-amber-700 dark:text-amber-400 border-amber-300/60 bg-amber-500/10" },
+  sent:      { label: "отправлено",    cls: "text-emerald-700 dark:text-emerald-400 border-emerald-300/60 bg-emerald-500/10" },
+  cancelled: { label: "отменено",      cls: "text-muted-foreground border-muted-foreground/30 bg-muted/40" },
+  failed:    { label: "ошибка",        cls: "text-destructive border-destructive/40 bg-destructive/10" },
+}
+
+// Опции фильтра по статусу (порядок в дропдауне).
+const STATUS_FILTERS: { value: string; label: string }[] = [
+  { value: "all",       label: "Все статусы" },
+  { value: "pending",   label: "Ждёт" },
+  { value: "sent",      label: "Отправлено" },
+  { value: "cancelled", label: "Отменено" },
+  { value: "failed",    label: "Ошибка" },
+]
 
 const SOURCE_NOTE: Record<string, string> = {
   hh_last_swap: "имя взято из поля «Фамилия» на hh — кандидат перепутал поля",
@@ -57,15 +86,28 @@ function fmtTime(iso: string): string {
   } catch { return iso }
 }
 
+// Короткое HH:MM (МСК) — для колонки «Уйдёт в».
+function fmtHHMM(iso: string): string {
+  try {
+    return new Intl.DateTimeFormat("ru-RU", {
+      timeZone: "Europe/Moscow", hour: "2-digit", minute: "2-digit",
+    }).format(new Date(iso))
+  } catch { return iso }
+}
+
 interface Props {
   vacancyId: string
   onChanged?: () => void   // дёрнуть при отмене сообщения (обновить счётчики секции)
 }
 
 /** Инлайн-журнал очереди рассылки в виде таблицы-списка (как список кандидатов):
- *  одна строка — одно отложенное сообщение. Фильтры (поиск по имени, тип касания,
- *  «только проверить»), правка обращения, раскрытие полного текста по клику,
- *  одиночное и массовое удаление сообщений. Не в Sheet — прямо на вкладке. */
+ *  одна строка — одно касание. Показывает и запланированные (pending/sending),
+ *  и недавно завершённые (sent/cancelled/failed за последнюю неделю). На строку:
+ *  «Уйдёт в» (плановое время / факт отправки, МСК), русский бейдж статуса с цветом,
+ *  причина ожидания (для pending), тип касания русским ярлыком. Фильтры (поиск по
+ *  имени, тип касания, статус, «только проверить»), правка обращения, раскрытие
+ *  полного текста по клику, одиночное и массовое удаление ещё-не-ушедших сообщений.
+ *  Не в Sheet — прямо на вкладке. */
 export function MessageQueueJournal({ vacancyId, onChanged }: Props) {
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState<QueueItem[]>([])
@@ -84,6 +126,7 @@ export function MessageQueueJournal({ vacancyId, onChanged }: Props) {
   // Фильтры
   const [search, setSearch] = useState("")
   const [branchFilter, setBranchFilter] = useState<string>("all")
+  const [statusFilter, setStatusFilter] = useState<string>("all")
   const [onlyCheck, setOnlyCheck] = useState(false)
 
   const fetchItems = useCallback(async () => {
@@ -104,10 +147,16 @@ export function MessageQueueJournal({ vacancyId, onChanged }: Props) {
 
   useEffect(() => { fetchItems() }, [fetchItems])
 
-  // Сколько сообщений у каждого кандидата (для бейджа «группа из N»).
-  const countByCandidate = useMemo(() => {
+  // Сколько ЕЩЁ НЕ УШЕДШИХ сообщений у каждого кандидата (для бейджа «группа из N»
+  // и группового удаления). Завершённые (sent/cancelled/failed) не считаем —
+  // групповая отмена трогает только pending.
+  const pendingCountByCandidate = useMemo(() => {
     const m = new Map<string, number>()
-    for (const it of items) m.set(it.candidateId, (m.get(it.candidateId) ?? 0) + 1)
+    for (const it of items) {
+      if (it.status === "pending" || it.status === "sending") {
+        m.set(it.candidateId, (m.get(it.candidateId) ?? 0) + 1)
+      }
+    }
     return m
   }, [items])
 
@@ -118,20 +167,31 @@ export function MessageQueueJournal({ vacancyId, onChanged }: Props) {
     return [...set]
   }, [items])
 
-  // Применяем фильтры: поиск по имени, тип касания, «проверить».
+  // Применяем фильтры: поиск по имени, тип касания, статус, «проверить».
+  // Статус 'pending' в фильтре включает и 'sending' (в полёте) — оба «ещё не ушли».
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return items
       .filter((m) => !onlyCheck || m.needsCheck)
       .filter((m) => branchFilter === "all" || m.branch === branchFilter)
       .filter((m) =>
+        statusFilter === "all" ||
+        m.status === statusFilter ||
+        (statusFilter === "pending" && m.status === "sending"),
+      )
+      .filter((m) =>
         !q ||
         m.candidateName.toLowerCase().includes(q) ||
         (m.resolvedName ?? "").toLowerCase().includes(q),
       )
-  }, [items, search, branchFilter, onlyCheck])
+  }, [items, search, branchFilter, statusFilter, onlyCheck])
 
-  const visibleIds = useMemo(() => filtered.map((m) => m.messageId), [filtered])
+  // Для выделения/массового удаления берём только ещё-не-ушедшие строки —
+  // отменить sent/cancelled/failed нельзя, чекбокс у них выключен.
+  const visibleIds = useMemo(
+    () => filtered.filter((m) => m.status === "pending" || m.status === "sending").map((m) => m.messageId),
+    [filtered],
+  )
 
   // ─── Selection helpers (паттерн из list-view.tsx) ────────────────────────
   const selectedVisibleCount = useMemo(() => {
@@ -308,7 +368,15 @@ export function MessageQueueJournal({ vacancyId, onChanged }: Props) {
           <SelectContent>
             <SelectItem value="all" className="text-xs">Все типы касаний</SelectItem>
             {branches.map((b) => (
-              <SelectItem key={b} value={b} className="text-xs">{BRANCH_LABELS[b] ?? b}</SelectItem>
+              <SelectItem key={b} value={b} className="text-xs">{branchLabel(b)}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="h-8 w-auto min-w-[130px] text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {STATUS_FILTERS.map((s) => (
+              <SelectItem key={s.value} value={s.value} className="text-xs">{s.label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -333,7 +401,7 @@ export function MessageQueueJournal({ vacancyId, onChanged }: Props) {
         </div>
       ) : items.length === 0 ? (
         <div className="text-center text-sm text-muted-foreground py-16">
-          Очередь пуста — отложенных сообщений нет.
+          Журнал пуст — ни отложенных, ни недавно отправленных сообщений нет.
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-center text-sm text-muted-foreground py-16">
@@ -351,8 +419,9 @@ export function MessageQueueJournal({ vacancyId, onChanged }: Props) {
               <DataHeadCell>Кандидат</DataHeadCell>
               <DataHeadCell>Обращение</DataHeadCell>
               <DataHeadCell>Превью</DataHeadCell>
-              <DataHeadCell width="120px">Дата</DataHeadCell>
-              <DataHeadCell width="160px">Статус</DataHeadCell>
+              <DataHeadCell width="150px">Уйдёт в</DataHeadCell>
+              <DataHeadCell width="130px">Статус</DataHeadCell>
+              <DataHeadCell width="180px">Тип касания</DataHeadCell>
               <DataHeadCell align="center" width="72px">Касание</DataHeadCell>
               <DataHeadCell align="right" width="84px">Действия</DataHeadCell>
             </DataHead>
@@ -361,7 +430,8 @@ export function MessageQueueJournal({ vacancyId, onChanged }: Props) {
                 const isExpanded = expanded.has(m.messageId)
                 const isEditing = editId === m.messageId
                 const isSelected = selected.has(m.messageId)
-                const groupCount = countByCandidate.get(m.candidateId) ?? 1
+                const isPending = m.status === "pending" || m.status === "sending"
+                const groupCount = pendingCountByCandidate.get(m.candidateId) ?? 0
                 const note = SOURCE_NOTE[m.nameSource]
                 return (
                   <DataRow
@@ -370,13 +440,15 @@ export function MessageQueueJournal({ vacancyId, onChanged }: Props) {
                     onClick={() => toggleExpand(m.messageId)}
                   >
                     {/* Чекбокс: клик по ячейке несёт shiftKey для диапазона
-                        (как в list-view). stopPropagation, чтобы не раскрыть строку. */}
+                        (как в list-view). stopPropagation, чтобы не раскрыть строку.
+                        Для завершённых (не pending) выделение выключено. */}
                     <td
                       className="pl-5 pr-2 py-3 w-10 align-top"
-                      onClick={(e) => { e.stopPropagation(); toggleOne(m.messageId, e) }}
+                      onClick={(e) => { e.stopPropagation(); if (isPending) toggleOne(m.messageId, e) }}
                     >
                       <Checkbox
                         checked={isSelected}
+                        disabled={!isPending}
                         onCheckedChange={() => { /* handled by cell onClick */ }}
                         aria-label={isSelected ? "Снять выделение" : "Выделить сообщение"}
                       />
@@ -467,44 +539,80 @@ export function MessageQueueJournal({ vacancyId, onChanged }: Props) {
                         <span className="text-[11px] text-muted-foreground/70">нажмите, чтобы развернуть</span>
                       )}
                     </DataCell>
-                    {/* Дата */}
-                    <DataCell className="align-top text-muted-foreground whitespace-nowrap tabular-nums text-xs">
-                      {fmtTime(m.scheduledAt)}
-                    </DataCell>
-                    {/* Статус (тип касания) */}
+                    {/* Уйдёт в: для отправленных — время отправки, иначе плановое.
+                        Крупно HH:MM (МСК), под ним дата и причина ожидания. */}
                     <DataCell className="align-top text-xs">
-                      {BRANCH_LABELS[m.branch] ?? m.branch}
+                      {(() => {
+                        const isSent = m.status === "sent"
+                        const when = isSent && m.sentAt ? m.sentAt : m.scheduledAt
+                        return (
+                          <div className="space-y-0.5">
+                            <div className="font-medium tabular-nums whitespace-nowrap">
+                              {isSent && <span className="text-muted-foreground font-normal">ушло в </span>}
+                              {fmtHHMM(when)}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground tabular-nums whitespace-nowrap">
+                              {fmtTime(when)}
+                            </div>
+                            {m.waitingReason && (
+                              <div className="text-[11px] text-amber-600 dark:text-amber-400 max-w-[150px]">
+                                {m.waitingReason}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })()}
+                    </DataCell>
+                    {/* Статус — русский бейдж с цветом */}
+                    <DataCell className="align-top">
+                      {(() => {
+                        const sm = STATUS_META[m.status] ?? { label: m.status, cls: "text-muted-foreground border-muted-foreground/30" }
+                        return (
+                          <Badge variant="outline" className={cn("text-[11px] h-5", sm.cls)}>
+                            {sm.label}
+                          </Badge>
+                        )
+                      })()}
+                    </DataCell>
+                    {/* Тип касания */}
+                    <DataCell className="align-top text-xs">
+                      {branchLabel(m.branch)}
                     </DataCell>
                     {/* Касание */}
                     <DataCell align="center" className="align-top text-muted-foreground tabular-nums">
                       {m.touchNumber}
                     </DataCell>
-                    {/* Действия */}
+                    {/* Действия — только для ещё не ушедших (pending/sending).
+                        Отменить sent/cancelled/failed нельзя, кнопки скрыты. */}
                     <DataCell align="right" className="align-top" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-0.5">
-                        <Button
-                          size="icon" variant="ghost"
-                          className="h-7 w-7 shrink-0 text-destructive hover:bg-destructive/10"
-                          title="Удалить это сообщение"
-                          onClick={() => cancelMessage(m.messageId)}
-                          disabled={cancelingId === m.messageId || bulkBusy}
-                        >
-                          {cancelingId === m.messageId
-                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            : <Trash2 className="w-3.5 h-3.5" />}
-                        </Button>
-                        {groupCount > 1 && (
+                      {isPending ? (
+                        <div className="flex items-center justify-end gap-0.5">
                           <Button
                             size="icon" variant="ghost"
-                            className="h-7 w-7 shrink-0 text-destructive/80 hover:bg-destructive/10"
-                            title={`Удалить все ${groupCount} сообщений этого кандидата`}
-                            onClick={() => cancelForCandidate(m.candidateId)}
-                            disabled={bulkBusy}
+                            className="h-7 w-7 shrink-0 text-destructive hover:bg-destructive/10"
+                            title="Удалить это сообщение"
+                            onClick={() => cancelMessage(m.messageId)}
+                            disabled={cancelingId === m.messageId || bulkBusy}
                           >
-                            <Users className="w-3.5 h-3.5" />
+                            {cancelingId === m.messageId
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <Trash2 className="w-3.5 h-3.5" />}
                           </Button>
-                        )}
-                      </div>
+                          {groupCount > 1 && (
+                            <Button
+                              size="icon" variant="ghost"
+                              className="h-7 w-7 shrink-0 text-destructive/80 hover:bg-destructive/10"
+                              title={`Удалить все ${groupCount} сообщений этого кандидата`}
+                              onClick={() => cancelForCandidate(m.candidateId)}
+                              disabled={bulkBusy}
+                            >
+                              <Users className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground/50">—</span>
+                      )}
                     </DataCell>
                   </DataRow>
                 )

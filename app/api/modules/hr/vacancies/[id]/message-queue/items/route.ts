@@ -1,29 +1,76 @@
 import { NextRequest } from "next/server"
-import { eq, and, inArray } from "drizzle-orm"
+import { eq, and, inArray, or, gte } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancies, followUpMessages, followUpCampaigns, candidates, hhResponses } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { renderTemplate } from "@/lib/template-renderer"
 import { resolveGivenNameMeta } from "@/lib/messaging/candidate-name"
+import { canSendNow, adjustToWorkingWindow, type VacancySchedule } from "@/lib/schedule/can-send-now"
 
-// Ревизия очереди исходящих: список отложенных дожимов с превью текста (имя уже
-// подставлено), что hh отдал как имя/фамилию, флаг «проверить» и действия.
+// Ревизия очереди исходящих: журнал касаний с превью текста (имя уже подставлено),
+// что hh отдал как имя/фамилию, флаг «проверить», статус, «уйдёт в» и причину ожидания.
 //
-// GET  — список pending-сообщений вакансии (кандидат, имя, источник, превью, время)
+// GET  — журнал сообщений вакансии: все pending + недавние завершённые
+//        (sent/cancelled/failed за последние DONE_WINDOW_DAYS дней).
+//        На каждую строку: статус, scheduledAt, sentAt, причина ожидания (для pending).
 // POST — { action: 'cancel', messageId }
 //      | { action: 'cancel_batch', messageIds: string[] }
 //      | { action: 'cancel_for_candidate', candidateId }
 //      | { action: 'rename', candidateId, firstName }
 
 const MAX_ITEMS = 500
+// Завершённые (sent/cancelled/failed) показываем только за последнюю неделю —
+// журнал не разрастается бесконечно, но недавнюю историю отправок видно.
+const DONE_WINDOW_DAYS = 7
 
 async function getVacancy(id: string, companyId: string) {
   const [v] = await db
-    .select({ id: vacancies.id, title: vacancies.title })
+    .select({
+      id:                         vacancies.id,
+      title:                      vacancies.title,
+      scheduleEnabled:            vacancies.scheduleEnabled,
+      scheduleStart:              vacancies.scheduleStart,
+      scheduleEnd:                vacancies.scheduleEnd,
+      scheduleTimezone:           vacancies.scheduleTimezone,
+      scheduleWorkingDays:        vacancies.scheduleWorkingDays,
+      scheduleExcludedHolidayIds: vacancies.scheduleExcludedHolidayIds,
+      scheduleCustomHolidays:     vacancies.scheduleCustomHolidays,
+      scheduleLunchEnabled:       vacancies.scheduleLunchEnabled,
+      scheduleLunchFrom:          vacancies.scheduleLunchFrom,
+      scheduleLunchTo:            vacancies.scheduleLunchTo,
+      scheduleCountry:            vacancies.scheduleCountry,
+    })
     .from(vacancies)
     .where(and(eq(vacancies.id, id), eq(vacancies.companyId, companyId)))
     .limit(1)
   return v ?? null
+}
+
+// «Уйдёт в» строкой HH:MM (МСК) — короткий формат для причины ожидания.
+function fmtHHMM(iso: Date | string): string {
+  return new Intl.DateTimeFormat("ru-RU", {
+    timeZone: "Europe/Moscow", hour: "2-digit", minute: "2-digit",
+  }).format(new Date(iso))
+}
+
+// Причина ожидания для pending-сообщения. Cron скип-ризоны в БД не хранятся —
+// деривим из scheduled_at + окна работы вакансии (canSendNow/adjustToWorkingWindow):
+//   • scheduled_at в будущем → «отложено до HH:MM» (ждём наступления времени)
+//   • время пришло, но сейчас вне окна отправки → «вне окна отправки (до HH:MM)»
+//   • иначе → «в очереди» (ближайший cron заберёт)
+function deriveWaitingReason(
+  scheduledAt: Date, now: Date, schedule: VacancySchedule,
+): string {
+  if (scheduledAt.getTime() > now.getTime()) {
+    return `отложено до ${fmtHHMM(scheduledAt)}`
+  }
+  const check = canSendNow(schedule, now)
+  if (!check.allowed) {
+    // Ближайший разрешённый слот окна — до какого времени ждать.
+    const { adjusted } = adjustToWorkingWindow(now, schedule)
+    return `вне окна отправки (до ${fmtHHMM(adjusted)})`
+  }
+  return "в очереди"
 }
 
 export async function GET(
@@ -43,19 +90,36 @@ export async function GET(
     const campaignIds = campaignRows.map((c) => c.id)
     if (campaignIds.length === 0) return apiSuccess({ items: [], total: 0, needsCheck: 0 })
 
+    const now = new Date()
+    const doneSince = new Date(now.getTime() - DONE_WINDOW_DAYS * 24 * 60 * 60 * 1000)
+
+    // Журнал = все pending + завершённые за последнюю неделю. 'sending' (в полёте
+    // у cron) показываем как «отправляется» — трактуем как pending-подобное.
     const msgs = await db
       .select({
-        id:          followUpMessages.id,
-        candidateId: followUpMessages.candidateId,
-        messageText: followUpMessages.messageText,
-        scheduledAt: followUpMessages.scheduledAt,
-        branch:      followUpMessages.branch,
-        touchNumber: followUpMessages.touchNumber,
+        id:           followUpMessages.id,
+        candidateId:  followUpMessages.candidateId,
+        messageText:  followUpMessages.messageText,
+        scheduledAt:  followUpMessages.scheduledAt,
+        sentAt:       followUpMessages.sentAt,
+        status:       followUpMessages.status,
+        branch:       followUpMessages.branch,
+        touchNumber:  followUpMessages.touchNumber,
       })
       .from(followUpMessages)
       .where(and(
-        eq(followUpMessages.status, "pending"),
         inArray(followUpMessages.campaignId, campaignIds),
+        or(
+          inArray(followUpMessages.status, ["pending", "sending"]),
+          // Завершённые — только недавние (по sentAt для sent/failed, иначе scheduledAt).
+          and(
+            inArray(followUpMessages.status, ["sent", "cancelled", "failed"]),
+            or(
+              gte(followUpMessages.sentAt, doneSince),
+              gte(followUpMessages.scheduledAt, doneSince),
+            ),
+          ),
+        ),
       ))
       .orderBy(followUpMessages.scheduledAt)
       .limit(MAX_ITEMS)
@@ -101,7 +165,10 @@ export async function GET(
         hhLast:   hh?.last,
         fullName: cand?.name,
       })
-      if (!meta.confident) needsCheck++
+      const isPending = m.status === "pending" || m.status === "sending"
+      // «Проверить» имеет смысл только для ещё не ушедших — правка override
+      // повлияет лишь на будущую отправку. По завершённым не считаем.
+      if (isPending && !meta.confident) needsCheck++
 
       const slug = cand?.shortId ?? cand?.token ?? m.candidateId
       const preview = renderTemplate(m.messageText, {
@@ -122,12 +189,30 @@ export async function GET(
         override:     cand?.firstNameOverride ?? null,
         resolvedName: meta.firstName,
         nameSource:   meta.source,
-        needsCheck:   !meta.confident,
+        needsCheck:   isPending && !meta.confident,
         scheduledAt:  m.scheduledAt,
+        sentAt:       m.sentAt,
+        status:       m.status,
+        // Причина ожидания — только для ещё-не-ушедших; по завершённым null.
+        waitingReason: isPending ? deriveWaitingReason(m.scheduledAt, now, vac) : null,
         branch:       m.branch,
         touchNumber:  m.touchNumber,
         preview,
       }
+    })
+
+    // Порядок: сначала ещё-не-ушедшие (pending/sending) — ближайшие сверху
+    // (asc по плановому времени), затем завершённые — самые свежие сверху
+    // (desc по факту отправки / плановому времени). Так «что скоро уйдёт»
+    // не тонет под историей.
+    const isPend = (s: string) => s === "pending" || s === "sending"
+    const whenMs = (it: { sentAt: unknown; scheduledAt: unknown }) =>
+      new Date((it.sentAt ?? it.scheduledAt) as string | Date).getTime()
+    items.sort((a, b) => {
+      const ap = isPend(a.status), bp = isPend(b.status)
+      if (ap !== bp) return ap ? -1 : 1
+      if (ap) return whenMs(a) - whenMs(b)   // pending: ближайшие первыми
+      return whenMs(b) - whenMs(a)           // завершённые: свежие первыми
     })
 
     return apiSuccess({ items, total: items.length, needsCheck })
