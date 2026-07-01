@@ -377,27 +377,6 @@ export function HhAutoProcess({
                 </Button>
               </PopoverTrigger>
               <PopoverContent align="end" className="w-80 p-4">
-                {onSync && (
-                  <>
-                    <div className="flex items-center gap-2 mb-3 min-w-0">
-                      <Button
-                        onClick={syncAndRun}
-                        disabled={syncing || running}
-                        size="sm"
-                        variant="outline"
-                        className="h-8 text-xs gap-1.5 shrink-0"
-                        title="Подтянуть отклики с hh.ru, затем разобрать по этим настройкам"
-                      >
-                        {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                        Синхронизировать и разобрать
-                      </Button>
-                      {lastSyncLabel && (
-                        <span className="text-[11px] text-muted-foreground truncate">{lastSyncLabel}</span>
-                      )}
-                    </div>
-                    <div className="border-t -mx-4 mb-3" />
-                  </>
-                )}
                 <div className="text-sm font-medium mb-3">Настройки разбора hh-откликов</div>
                 {settingsContent}
               </PopoverContent>
