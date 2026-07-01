@@ -29,10 +29,19 @@ interface AnswersTabProps {
   answers: unknown
   demoLessons: unknown
   candidateId?: string
-  /** Балл по ответам демо (candidates.demo_answers_score). green ≥70 / amber ≥40 / red <40 */
+  /** Балл по ответам демо (candidates.demo_answers_score) — оценка первого блока. */
   aiScore?: number | null
   /** Поразбивка по вопросам (candidates.demo_answers_details). */
   answersDetails?: { questionText: string; awarded: number; max: number; comment: string }[] | null
+  /** Балл теста (candidates.test_score) — оценка блока-теста (напр. «Путь менеджера»). */
+  testScore?: number | null
+}
+
+/** Цвет бейджа оценки — как в списке кандидатов (>70 зелёный, ≥40 янтарь, <40 красный). */
+function scoreBadgeClass(score: number): string {
+  if (score > 70) return "bg-success/10 text-success border-success/20"
+  if (score >= 40) return "bg-warning/10 text-warning border-warning/20"
+  return "bg-destructive/10 text-destructive border-destructive/20"
 }
 
 interface QualificationAnswer {
@@ -729,7 +738,7 @@ function entryHasMedia(entry: AnketaEntry): boolean {
   return Array.isArray(media) ? media.length > 0 : true
 }
 
-export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answersDetails }: AnswersTabProps) {
+export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answersDetails, testScore }: AnswersTabProps) {
   const entries = normalizeEntries(answers).filter(Boolean)
   const blockMap = buildBlockMap(demoLessons)
 
@@ -793,7 +802,7 @@ export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answers
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs text-muted-foreground">AI-оценка ответов</span>
-        <AiScoreBadge score={aiScore} size="md" />
+        <span className={cn("inline-flex items-center justify-center rounded-md border font-bold px-2.5 h-8 min-w-[2.5rem] text-base", scoreBadgeClass(aiScore!))}>{aiScore}</span>
       </div>
       {Array.isArray(answersDetails) && answersDetails.length > 0 && (
         <div className="space-y-1.5 rounded-lg border border-border bg-muted/30 p-3">
@@ -836,9 +845,19 @@ export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answers
       {/* Ответы сгруппированы по КОНТЕНТ-БЛОКАМ (демо). Заголовок группы = имя блока
           из «Контента» (title демо). Внутри блока: текстовые ответы сверху, затем
           медиа (видео-визитка/аудио/фото) — ВНИЗУ своего блока (Юрий 01.07). */}
-      {orderedGroups.map((g, gi) => (
-        <div key={`grp-${gi}`} className="space-y-2 border-t border-border/60 pt-4 first:border-t-0 first:pt-0">
-          <p className="text-sm font-semibold text-foreground">{g.title}</p>
+      {orderedGroups.map((g, gi) => {
+        // Оценка блока в шапке: блок 1 — сверху (общий scoreBadge); последний блок
+        // (блок-тест, напр. «Путь менеджера») — его test_score. Цвет как в списке.
+        // 2-балльная модель (анкета + тест); per-block scoring для N блоков — отдельно.
+        const headerScore = orderedGroups.length > 1 && gi === orderedGroups.length - 1 ? testScore : null
+        return (
+        <div key={`grp-${gi}`} className="space-y-2 mt-8 pt-6 border-t border-border/60 first:mt-0 first:pt-0 first:border-t-0">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-foreground">{g.title}</p>
+            {headerScore != null && (
+              <span className={cn("inline-flex items-center justify-center rounded-md border font-bold px-2 h-6 min-w-[2rem] text-sm", scoreBadgeClass(headerScore))}>{headerScore}</span>
+            )}
+          </div>
           <div className="space-y-3">
             {g.text.map((entry, i) => (
               <EntryCard key={`t-${i}`} entry={entry} blockMap={blockMap} />
@@ -852,7 +871,8 @@ export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answers
             })}
           </div>
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
