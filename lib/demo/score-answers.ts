@@ -176,7 +176,7 @@ export async function scoreDemoAnswers(
 
   // Загружаем все demos вакансии: kind='demo' и kind LIKE 'block:%'
   const demoRows = await db
-    .select({ lessonsJson: demos.lessonsJson })
+    .select({ id: demos.id, title: demos.title, kind: demos.kind, lessonsJson: demos.lessonsJson })
     .from(demos)
     .where(
       and(
@@ -184,18 +184,9 @@ export async function scoreDemoAnswers(
         or(eq(demos.kind, "demo"), like(demos.kind, "block:%")),
       ),
     )
+    .orderBy(demos.sortOrder, demos.createdAt)
 
   if (demoRows.length === 0) return null
-
-  // Строим версии демо (каждая строка в БД — отдельная версия)
-  const versions: DemoVersion[] = demoRows
-    .map((r) => ({
-      lessonsJson:   r.lessonsJson,
-      taskQuestions: extractTaskQuestions(r.lessonsJson),
-    }))
-    .filter((v) => v.taskQuestions.length > 0)
-
-  if (versions.length === 0) return null
 
   // Индексируем ответы кандидата по blockId (берём все записи для блока)
   const rawAnswers: Array<{ blockId?: string; answer?: unknown }> = Array.isArray(candidate.anketaAnswers)
@@ -212,10 +203,13 @@ export async function scoreDemoAnswers(
     answersByBlock.set(bid, list)
   }
 
-  // Определяем версию демо кандидата по перекрытию blockId-ов
-  const answeredBlockIds = new Set(answersByBlock.keys())
-  const candidateVersion = pickCandidateDemoVersion(versions, answeredBlockIds)
-  const allScorable = candidateVersion.taskQuestions // весь знаменатель
+  // Скорим КАЖДЫЙ демо-блок отдельно (Вариант Б, пер-блочный балл анкеты).
+  const blockScores: Record<string, { title: string; score: number; breakdown: AnswerQuestionBreakdown[] }> = {}
+  let mainResult: ScoreDemoAnswersResult | null = null
+
+  for (const demo of demoRows) {
+    const allScorable = extractTaskQuestions(demo.lessonsJson) // весь знаменатель этого блока
+    if (allScorable.length === 0) continue
 
   // Для каждого scorable-вопроса находим реальный ответ (не view-маркер)
   interface AnsweredQuestion {
@@ -266,8 +260,8 @@ export async function scoreDemoAnswers(
     }
   }
 
-  // Нет реальных ответов — не вызываем AI
-  if (answeredQuestions.length === 0) return null
+  // Нет реальных ответов на этот блок — пропускаем блок
+  if (answeredQuestions.length === 0) continue
 
   // Отправляем в AI ТОЛЬКО отвеченные вопросы (экономия токенов)
   const questionsBlock = answeredQuestions.map((aq, i) => {
@@ -361,11 +355,21 @@ ${questionsBlock}
   const sumMax     = breakdown.reduce((s, b) => s + b.max, 0)
   const score = sumMax > 0 ? Math.max(0, Math.min(100, Math.round((sumAwarded / sumMax) * 100))) : 0
 
-  // Запись в БД — в свои колонки (не ai_score, чтобы не было гонки с v1/v2).
+    // Балл этого блока собран
+    blockScores[demo.id] = { title: demo.title, score, breakdown }
+    // Основной балл (demo_answers_score/details) = блок kind='demo' (или первый скоренный).
+    if (demo.kind === "demo" || mainResult === null) mainResult = { score, breakdown }
+  }
+
+  // Ни одного блока с реальными ответами — ничего не пишем.
+  if (!mainResult) return null
+
+  // Запись: demo_answers_score/details = основной блок; demo_block_scores = все блоки.
   await db.update(candidates).set({
-    demoAnswersScore:   score,
-    demoAnswersDetails: breakdown,
+    demoAnswersScore:   mainResult.score,
+    demoAnswersDetails: mainResult.breakdown,
+    demoBlockScores:    blockScores,
   }).where(eq(candidates.id, candidateId))
 
-  return { score, breakdown }
+  return mainResult
 }

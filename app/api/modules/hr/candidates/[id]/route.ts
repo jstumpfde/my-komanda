@@ -22,7 +22,7 @@ async function getOwnedCandidate(candidateId: string, companyId: string) {
       // Коррелированный subquery, один round-trip.
       demoLessons: sql<unknown>`(
         SELECT json_agg(
-          json_build_object('title', ${demos.title}, 'lessons', ${demos.lessonsJson})
+          json_build_object('id', ${demos.id}, 'title', ${demos.title}, 'lessons', ${demos.lessonsJson})
           ORDER BY ${demos.sortOrder}, ${demos.createdAt}
         )
         FROM ${demos}

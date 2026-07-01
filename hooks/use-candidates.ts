@@ -60,6 +60,8 @@ export interface ApiCandidate {
   // от aiScore — туда пишет v1/v2-скоринг резюме, тут оценка task-вопросов демо.
   demoAnswersScore?: number | null
   demoAnswersDetails?: { questionText: string; awarded: number; max: number; comment: string }[] | null
+  // Пер-блочные баллы анкеты (candidates.demo_block_scores): { demoId: { title, score } }.
+  demoBlockScores?: Record<string, { title?: string; score: number }> | null
   // AI-скор резюме (выставляется в lib/hh/process-queue.ts при приёме отклика).
   // Отдельно от aiScore — тот считается после демо и учитывает ответы.
   resumeScore?: number | null

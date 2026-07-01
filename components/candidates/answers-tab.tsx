@@ -35,6 +35,8 @@ interface AnswersTabProps {
   answersDetails?: { questionText: string; awarded: number; max: number; comment: string }[] | null
   /** Балл теста (candidates.test_score) — оценка блока-теста (напр. «Путь менеджера»). */
   testScore?: number | null
+  /** Пер-блочные баллы анкеты (candidates.demo_block_scores): { demoId: { title, score } }. */
+  demoBlockScores?: Record<string, { title?: string; score: number }> | null
 }
 
 /** Цвет бейджа оценки — как в списке кандидатов (>70 зелёный, ≥40 янтарь, <40 красный). */
@@ -175,6 +177,7 @@ function coerceMedia(v: unknown): MediaAnswer | MediaAnswer[] | null {
 interface BlockMapEntry {
   block: Block
   lesson: Lesson
+  demoId: string      // id демо (demos.id) — ключ для demo_block_scores
   demoTitle: string   // имя контент-блока (title демо) — заголовок группы в анкете
   demoOrder: number   // порядок демо (sortOrder) для сортировки групп
 }
@@ -184,14 +187,16 @@ function buildBlockMap(demoLessons: unknown): Map<string, BlockMapEntry> {
   if (!Array.isArray(demoLessons)) return map
 
   // Форматы demoLessons:
-  //   - [{ title, lessons: [...] }, ...]  — НОВЫЙ (json_build_object per демо, с именем блока)
-  //   - [[lesson, ...], ...]              — старый json_agg массивов
-  //   - [lesson, ...]                     — совсем старый плоский
+  //   - [{ id, title, lessons: [...] }, ...] — НОВЫЙ (json_build_object per демо)
+  //   - [[lesson, ...], ...]                 — старый json_agg массивов
+  //   - [lesson, ...]                        — совсем старый плоский
   demoLessons.forEach((demoEntry, demoOrder) => {
+    let demoId = ""
     let demoTitle = ""
     let lessons: unknown[] = []
     if (demoEntry && typeof demoEntry === "object" && !Array.isArray(demoEntry) && "lessons" in demoEntry) {
-      const de = demoEntry as { title?: unknown; lessons?: unknown }
+      const de = demoEntry as { id?: unknown; title?: unknown; lessons?: unknown }
+      demoId = typeof de.id === "string" ? de.id : ""
       demoTitle = typeof de.title === "string" ? de.title : ""
       lessons = Array.isArray(de.lessons) ? de.lessons : []
     } else if (Array.isArray(demoEntry)) {
@@ -202,7 +207,7 @@ function buildBlockMap(demoLessons: unknown): Map<string, BlockMapEntry> {
     for (const l of lessons as Lesson[]) {
       if (!l || !Array.isArray(l.blocks)) continue
       for (const b of l.blocks) {
-        if (b && typeof b.id === "string") map.set(b.id, { block: b, lesson: l, demoTitle, demoOrder })
+        if (b && typeof b.id === "string") map.set(b.id, { block: b, lesson: l, demoId, demoTitle, demoOrder })
       }
     }
   })
@@ -751,7 +756,7 @@ function entryHasMedia(entry: AnketaEntry): boolean {
   return Array.isArray(media) ? media.length > 0 : true
 }
 
-export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answersDetails, testScore }: AnswersTabProps) {
+export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answersDetails, testScore, demoBlockScores }: AnswersTabProps) {
   const entries = normalizeEntries(answers).filter(Boolean)
   const blockMap = buildBlockMap(demoLessons)
 
@@ -784,7 +789,7 @@ export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answers
   // (title демо), группы в порядке sortOrder. Внутри блока — сначала текстовые
   // ответы (как отвечал), затем медиа (видео-визитка/аудио/фото) — ВНИЗУ своего
   // блока (Юрий 01.07). Видео-интервью _vi_N считаем медиа и резолвим по baseId.
-  interface DemoGroup { title: string; order: number; text: AnketaEntry[]; media: AnketaEntry[] }
+  interface DemoGroup { demoId: string; title: string; order: number; text: AnketaEntry[]; media: AnketaEntry[] }
   const groupsByKey = new Map<string, DemoGroup>()
   for (const e of visible) {
     const rawBlockId = "blockId" in (e as object) ? (e as { blockId?: string }).blockId ?? "" : ""
@@ -793,9 +798,10 @@ export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answers
     const mapped = blockMap.get(effectiveBlockId)
     const order = mapped?.demoOrder ?? 999
     const title = mapped?.demoTitle || "Ответы"
+    const demoId = mapped?.demoId ?? ""
     const key = `${order}:::${title}`
     let g = groupsByKey.get(key)
-    if (!g) { g = { title, order, text: [], media: [] }; groupsByKey.set(key, g) }
+    if (!g) { g = { demoId, title, order, text: [], media: [] }; groupsByKey.set(key, g) }
     if (viKey || entryHasMedia(e)) g.media.push(e)
     else g.text.push(e)
   }
@@ -859,10 +865,9 @@ export function AnswersTab({ answers, demoLessons, candidateId, aiScore, answers
           из «Контента» (title демо). Внутри блока: текстовые ответы сверху, затем
           медиа (видео-визитка/аудио/фото) — ВНИЗУ своего блока (Юрий 01.07). */}
       {orderedGroups.map((g, gi) => {
-        // Оценка блока в шапке: блок 1 — сверху (общий scoreBadge); последний блок
-        // (блок-тест, напр. «Путь менеджера») — его test_score. Цвет как в списке.
-        // 2-балльная модель (анкета + тест); per-block scoring для N блоков — отдельно.
-        const headerScore = orderedGroups.length > 1 && gi === orderedGroups.length - 1 ? testScore : null
+        // Оценка блока в шапке: блок 1 (первый) — сверху (общий scoreBadge, aiScore);
+        // блоки 2+ — свой пер-блочный балл из demo_block_scores по demoId. Цвет как в списке.
+        const headerScore = gi > 0 ? (demoBlockScores?.[g.demoId]?.score ?? null) : null
         return (
         <div key={`grp-${gi}`} className="space-y-2 mt-8 pt-6 border-t border-border/60 first:mt-0 first:pt-0 first:border-t-0">
           <div className="flex items-center justify-between gap-2">
