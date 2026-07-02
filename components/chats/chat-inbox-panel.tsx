@@ -163,13 +163,14 @@ export function ChatInboxPanel({ fixedVacancyId, className, onThreadsLoaded }: C
 
   // ── Быстрые действия: тот же API, что кнопки ✓/✗ в списке кандидатов ──
   // PUT /api/modules/hr/candidates/[id]/stage — серверная логика (hh-синк,
-  // отложенный отказ, вебхуки) общая со списком.
-  const putStage = useCallback(async (candidateId: string, stage: string): Promise<boolean> => {
+  // отложенный отказ, вебхуки) общая со списком. extra — доп. поля body
+  // (rejectionComment и т.п. — API их принимает и пишет в отчёт найма).
+  const putStage = useCallback(async (candidateId: string, stage: string, extra?: Record<string, unknown>): Promise<boolean> => {
     try {
       const res = await fetch(`/api/modules/hr/candidates/${candidateId}/stage`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage }),
+        body: JSON.stringify({ stage, ...(extra ?? {}) }),
       })
       return res.ok
     } catch {
@@ -199,7 +200,10 @@ export function ChatInboxPanel({ fixedVacancyId, className, onThreadsLoaded }: C
     if (!rejectFor || actionBusy) return
     setActionBusy(true)
     try {
-      const ok = await putStage(rejectFor.candidateId, "rejected")
+      const ok = await putStage(rejectFor.candidateId, "rejected", {
+        rejectionComment: rejectReason.trim() || null,
+        rejectionInitiator: "company",
+      })
       if (ok) {
         toast.success(`${rejectFor.name} отклонён`)
         void load(true)
@@ -211,7 +215,7 @@ export function ChatInboxPanel({ fixedVacancyId, className, onThreadsLoaded }: C
       setRejectFor(null)
       setRejectReason("")
     }
-  }, [rejectFor, actionBusy, putStage, load])
+  }, [rejectFor, rejectReason, actionBusy, putStage, load])
 
   const cardHref = (t: InboxThread) => `/hr/vacancies/${t.vacancyId}?candidate=${t.candidateId}`
 

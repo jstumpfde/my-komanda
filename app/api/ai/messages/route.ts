@@ -22,11 +22,13 @@ const MAX_TOTAL_CHARS = 400_000
 
 // Разрешённые модели — только актуальные id (снятые claude-3-* / claude-haiku-4-2025*
 // возвращали 404 от API). Реестр и политика — lib/ai/models.ts.
+// Opus сюда НЕ добавлять: ручка клиентская (model приходит из body от любого
+// залогиненного пользователя), Opus слишком дорог для клиентских фич —
+// осознанное решение, а не забытая модель.
 const ALLOWED_MODELS = new Set([
   AI_MODEL_MAIN,       // claude-sonnet-5
   "claude-sonnet-4-6",
   AI_MODEL_FAST,       // claude-haiku-4-5-20251001
-  "claude-opus-4-8",
 ])
 
 interface InMessage {

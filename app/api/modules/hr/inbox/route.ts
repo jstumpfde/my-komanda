@@ -19,6 +19,7 @@ import { and, eq, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, hhResponses } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { isOwnerEmail } from "@/lib/owner"
 import { getStageLabel } from "@/lib/stages"
 
 export const dynamic = "force-dynamic"
@@ -64,6 +65,15 @@ export async function GET(req: NextRequest) {
   try {
     const user = await requireCompany()
     const vacancyId = req.nextUrl.searchParams.get("vacancyId")
+
+    // КРОСС-вакансионный режим (без vacancyId) тянет messagesCache всех
+    // hh-кандидатов компании — тяжело на больших тенантах. Пока виджет «Чаты»
+    // owner-only, зеркалим гейт и на сервере (страховка от прямых поллов).
+    // БЛОКЕР раскрытия всем HR: сначала перенести превью/unread в SQL
+    // (jsonb-выражения по хвосту messagesCache) или добавить пагинацию.
+    if (!vacancyId && !isOwnerEmail(user.email)) {
+      return apiError("forbidden", 403)
+    }
 
     const conditions = [
       eq(vacancies.companyId, user.companyId),
