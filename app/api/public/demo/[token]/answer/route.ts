@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
-import { eq } from "drizzle-orm"
+import { eq, and, inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, vacancies } from "@/lib/db/schema"
+import { candidates, vacancies, followUpMessages } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { isShortId } from "@/lib/short-id"
 import { checkPublicTokenRateLimit } from "@/lib/public/rate-limit-public"
@@ -386,6 +386,25 @@ export async function POST(
         }
       } catch (err) {
         console.error("[demo answer] second-demo-invite failed:", err instanceof Error ? err.message : err)
+      }
+    }
+
+    // Предохранитель (решение Юрия): если кандидат прошёл гейт и уходит бесшовно
+    // на блок 2 (advanceToBlockId != null) — ЯВНО гасим его дожимы демо1, не
+    // полагаясь только на completedAt. Иначе прошедший-но-не-долиставший демо
+    // кандидат мог бы получить «допройдите презентацию», уже находясь на блоке 2.
+    // Правило: ушёл на блок 2 ⇒ дожим демо1 больше не трогает.
+    if (advanceToBlockId) {
+      try {
+        await db.update(followUpMessages)
+          .set({ status: "cancelled", errorMessage: "advanced_to_block2" })
+          .where(and(
+            eq(followUpMessages.candidateId, txResult.candidateId),
+            inArray(followUpMessages.branch, ["not_opened", "opened_not_finished"]),
+            eq(followUpMessages.status, "pending"),
+          ))
+      } catch (err) {
+        console.error("[demo answer] cancel demo1 dozhim failed:", err instanceof Error ? err.message : err)
       }
     }
 
