@@ -2316,7 +2316,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
       {(() => {
         // getSpec отдаёт сырой спек без дефолтов → у старых вакансий поля нет.
         // Fallback, иначе ap.enabled крашит Портрет (инцидент 30.06).
-        const ap = spec.anketaPassInvite ?? { enabled: false, passThreshold: 35, aiEvalThreshold: 55, contentBlockId: null, messageText: "", delaySeconds: 900 }
+        const ap = spec.anketaPassInvite ?? { enabled: false, passThreshold: 35, aiEvalThreshold: 55, contentBlockId: null, messageText: "", delaySeconds: 900, inlineContinue: true, passScreenTitle: "", passScreenText: "", passScreenButtonLabel: "", failScreenTitle: "", failScreenText: "" }
         // Порог AI-оценки может отсутствовать у старых спеков — дефолт 55 (как в схеме).
         const aiEvalThreshold = typeof ap.aiEvalThreshold === "number" ? ap.aiEvalThreshold : 55
         return (
@@ -2375,6 +2375,71 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                         <SelectItem value="3600">1 час</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  {/* ── «Склейка»: блок 2 сразу на странице + два экрана результата ── */}
+                  <div className="border-t pt-3 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <Label className="text-xs font-semibold">Показывать блок 2 сразу на странице (без письма)</Label>
+                        <p className="text-[11px] text-muted-foreground">
+                          Прошедший гейт кандидат видит экран-поздравление и с него сразу переходит
+                          в блок 2 — не дожидаясь письма. Письмо остаётся страховкой для тех, кто
+                          ушёл со страницы. Выкл = как раньше (только письмо).
+                        </p>
+                      </div>
+                      <Switch
+                        checked={ap.inlineContinue !== false}
+                        onCheckedChange={v => patch({ anketaPassInvite: { ...ap, inlineContinue: v } })}
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">✅ Экран для прошедших — заголовок</Label>
+                      <Input
+                        value={ap.passScreenTitle ?? ""}
+                        onChange={e => patch({ anketaPassInvite: { ...ap, passScreenTitle: e.target.value } })}
+                        placeholder="Вы молодец!"
+                        maxLength={200}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">✅ Экран для прошедших — текст</Label>
+                      <Textarea
+                        value={ap.passScreenText ?? ""}
+                        onChange={e => patch({ anketaPassInvite: { ...ap, passScreenText: e.target.value } })}
+                        placeholder="Вы отлично справились с первой частью. Продолжим — впереди «Путь менеджера»."
+                        rows={3} maxLength={2000}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">✅ Экран для прошедших — надпись на кнопке</Label>
+                      <Input
+                        value={ap.passScreenButtonLabel ?? ""}
+                        onChange={e => patch({ anketaPassInvite: { ...ap, passScreenButtonLabel: e.target.value } })}
+                        placeholder="Продолжить →"
+                        maxLength={100}
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">❌ Экран «Спасибо» для не прошедших — заголовок</Label>
+                      <Input
+                        value={ap.failScreenTitle ?? ""}
+                        onChange={e => patch({ anketaPassInvite: { ...ap, failScreenTitle: e.target.value } })}
+                        placeholder="Спасибо за прохождение демонстрации!"
+                        maxLength={200}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">❌ Экран «Спасибо» для не прошедших — текст</Label>
+                      <Textarea
+                        value={ap.failScreenText ?? ""}
+                        onChange={e => patch({ anketaPassInvite: { ...ap, failScreenText: e.target.value } })}
+                        placeholder="Мы рассмотрим ваши ответы и свяжемся с вами в ближайшее время."
+                        rows={3} maxLength={2000}
+                      />
+                    </div>
                   </div>
                 </div>
               )}

@@ -160,6 +160,28 @@ interface DemoData {
     thankYouText:       string
     questions:          { text: string; maxDurationSeconds: number }[]
   } | null
+  // «Склейка демо1 + блок 2»: редактируемые тексты двух экранов результата
+  // после демо1 (из Портрета spec.anketaPassInvite). null — фича выкл.
+  passInviteScreens?: {
+    inlineContinue:        boolean
+    passScreenTitle:       string
+    passScreenText:        string
+    passScreenButtonLabel: string
+    failScreenTitle:       string
+    failScreenText:        string
+  } | null
+}
+
+// Дефолты экранов результата демо1 — совпадают с AnketaPassInviteSchema
+// (lib/core/spec/types.ts). Если HR оставил поле пустым → используется дефолт.
+const DEMO_DEFAULT_PASS_SCREEN = {
+  title:  "Вы молодец!",
+  text:   "Вы отлично справились с первой частью. Продолжим — впереди «Путь менеджера».",
+  button: "Продолжить →",
+}
+const DEMO_DEFAULT_FAIL_SCREEN = {
+  title: "Спасибо!",
+  text:  "Мы рассмотрим ваши ответы и свяжемся с вами в ближайшее время.",
 }
 
 // Дефолты должны совпадать с DEFAULT_AFTER_VIDEO/DEFAULT_AFTER_ANKETA из
@@ -749,6 +771,12 @@ export default function DemoPage() {
   const [error, setError] = useState("")
   const [currentIndex, setCurrentIndex] = useState(0)
   const [finished, setFinished] = useState(false)
+  // «Склейка демо1 + блок 2»: кандидат прошёл гейт и получил сигнал
+  // advanceToBlockId → показываем экран-поздравление «Вы молодец!» с кнопкой на
+  // блок 2 (вместо мягкого «Спасибо»). null — не прошёл / фича выкл.
+  const [passGate, setPassGate] = useState(false)
+  // Идёт перезагрузка демо для показа блока 2 (после клика «Продолжить»).
+  const [advancing, setAdvancing] = useState(false)
   const [taskAnswers, setTaskAnswers] = useState<Record<string, Record<string, string>>>({})
   const [mediaUploaded, setMediaUploaded] = useState<Record<string, MediaAnswer>>({})
   const [mediaSkipped, setMediaSkipped] = useState<Record<string, boolean>>({})
@@ -1062,6 +1090,9 @@ export default function DemoPage() {
 
       // Отправка батчем — один POST, одна транзакция на сервере.
       let success = true
+      // «Склейка демо1 + блок 2»: сервер вернёт advanceToBlockId, если кандидат
+      // ТОЛЬКО ЧТО прошёл гейт и его надо инлайн перевести на блок 2.
+      let advanceToBlockId: string | null = null
       if (batch.length > 0 && !isPreviewMode) {
         setSaving(true)
         try {
@@ -1079,7 +1110,15 @@ export default function DemoPage() {
           if (!success) console.error("[Demo] batch saveAnswer non-200:", res.status)
           // Помечаем viewed локально только при успехе — иначе при retry
           // локальное и серверное состояния разойдутся.
-          if (success) setViewedBlockIds(nowViewed)
+          if (success) {
+            setViewedBlockIds(nowViewed)
+            try {
+              const body = await res.json()
+              if (body && typeof body.advanceToBlockId === "string") {
+                advanceToBlockId = body.advanceToBlockId
+              }
+            } catch { /* тело не JSON — не критично, идём обычным путём */ }
+          }
         } catch (err) {
           console.error("[Demo] batch saveAnswer failed:", err)
           success = false
@@ -1097,6 +1136,17 @@ export default function DemoPage() {
 
       if (currentIndex < totalLessons - 1) {
         setCurrentIndex((i) => i + 1)
+        if (typeof window !== "undefined") {
+          window.scrollTo({ top: 0, behavior: "smooth" })
+        }
+      } else if (advanceToBlockId) {
+        // ✅ Прошёл гейт + inlineContinue: НЕ показываем «Спасибо». Показываем
+        // экран-поздравление «Вы молодец!» с кнопкой на блок 2 («Путь менеджера»).
+        // Отмечаем прохождение уроков (без __thanks__ — «Спасибо» кандидат не видит).
+        void postCompleteMarker()
+        void postVirtualMarkers(["__anketa__"])
+        setPassGate(true)
+        setFinished(true)
         if (typeof window !== "undefined") {
           window.scrollTo({ top: 0, behavior: "smooth" })
         }
@@ -1215,6 +1265,50 @@ export default function DemoPage() {
   }
 
   if (finished) {
+    // ✅ «Склейка демо1 + блок 2»: кандидат прошёл гейт → экран-поздравление
+    // «Вы молодец!» (редактируемый) с кнопкой «Продолжить →» на блок 2
+    // («Путь менеджера»). Кнопка перезагружает /demo/[token] — GET уже отдаст
+    // override-блок (см. route.ts). Приоритет над всеми «Спасибо». Не показываем
+    // мягкое «Спасибо»-вспышку — только поздравление и переход.
+    if (passGate) {
+      const ps = data.passInviteScreens
+      const passTitle  = ps?.passScreenTitle?.trim()  || DEMO_DEFAULT_PASS_SCREEN.title
+      const passText   = ps?.passScreenText?.trim()   || DEMO_DEFAULT_PASS_SCREEN.text
+      const passButton = ps?.passScreenButtonLabel?.trim() || DEMO_DEFAULT_PASS_SCREEN.button
+      const goToBlock2 = () => {
+        setAdvancing(true)
+        // Полная перезагрузка на тот же URL: GET вернёт override-блок «Путь
+        // менеджера», состояние демо стартует с чистого листа для блока 2.
+        if (typeof window !== "undefined") {
+          window.location.href = `/demo/${token}`
+        }
+      }
+      return (
+        <div className="flex min-h-screen items-center justify-center px-4 py-8" style={{ backgroundColor: bgColor }}>
+          <div className="w-full max-w-md space-y-6 text-center">
+            {data.companyLogo && (
+              <img
+                src={data.companyLogo}
+                alt={data.companyName}
+                className="mx-auto h-12 w-auto object-contain mb-2"
+              />
+            )}
+            <h1 className="text-3xl font-bold text-gray-900">{passTitle}</h1>
+            <p className="text-gray-600 whitespace-pre-line">{passText}</p>
+            <button
+              type="button"
+              onClick={goToBlock2}
+              disabled={advancing}
+              className="inline-flex items-center justify-center rounded-lg px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors disabled:opacity-60"
+              style={{ backgroundColor: data.brandPrimaryColor || "#3b82f6" }}
+            >
+              {advancing ? <Loader2 className="h-4 w-4 animate-spin" /> : passButton}
+            </button>
+          </div>
+        </div>
+      )
+    }
+
     // #25: порядок экранов после прохождения уроков:
     //   1. (если postDemoSettings.enabled === false) → статичный «спасибо»,
     //      минуя анкету и финальный экран. Выход.
@@ -1238,6 +1332,11 @@ export default function DemoPage() {
       data.postDemoSettings?.anketaEnabled === false ||
       data.candidateHasContacts === true
     if (skipAnketa) {
+      // ❌ fail-ветка «Спасибо»: если в Портрете заданы редактируемые тексты
+      // failScreenTitle/failScreenText — используем их; иначе прежние дефолты
+      // (обратная совместимость, не хардкод новых значений).
+      const failTitle = data.passInviteScreens?.failScreenTitle?.trim() || "Спасибо за прохождение демонстрации!"
+      const failText  = data.passInviteScreens?.failScreenText?.trim()  || "Мы рассмотрим ваши ответы и свяжемся с вами в ближайшее время."
       return (
         <div className="flex min-h-screen items-center justify-center px-4" style={{ backgroundColor: bgColor }}>
           <div className="text-center max-w-md space-y-4">
@@ -1251,8 +1350,8 @@ export default function DemoPage() {
             {data.companyName && (
               <div className="text-sm font-medium text-gray-700">{data.companyName}</div>
             )}
-            <h1 className="text-3xl font-bold text-gray-900">Спасибо за прохождение демонстрации!</h1>
-            <p className="text-gray-600">Мы рассмотрим ваши ответы и свяжемся с вами в ближайшее время.</p>
+            <h1 className="text-3xl font-bold text-gray-900">{failTitle}</h1>
+            <p className="text-gray-600 whitespace-pre-line">{failText}</p>
           </div>
         </div>
       )

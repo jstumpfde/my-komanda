@@ -9,6 +9,7 @@ import { buildCandidateDeepLink, generateInviteToken } from "@/lib/telegram/cand
 import { normalizeFunnelV2 } from "@/lib/funnel-v2/types"
 import { resolveCurrentStageContent } from "@/lib/funnel-v2/resolve-content"
 import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
+import { getSpec } from "@/lib/core/spec/store"
 
 // Достаём first/last/city из hh resume. У части записей raw_data — это сам
 // resume, у других обёрнут в { resume: ... }. Альтернативные ключи
@@ -196,6 +197,7 @@ export async function GET(
           prefill:            { first_name: null, last_name: null, city: null },
           videoIntro:         null,
           candidateTelegramDeepLink: null,
+          passInviteScreens:  null,
           // Метка v2 для фронта (опционально, можно игнорировать)
           _funnelV2:          { stageId: resolved.stageId, demoKind: resolved.demoKind },
         })
@@ -258,6 +260,34 @@ export async function GET(
     }
 
     const demo = demoRows[0]
+
+    // «Склейка демо1 + блок 2»: редактируемые тексты двух экранов результата
+    // после демо1 (✅ прошёл гейт → «Вы молодец!» с кнопкой на блок 2;
+    // ❌ не прошёл → мягкое «Спасибо»). Берём из Портрета (spec.anketaPassInvite).
+    // Наружу отдаём ТОЛЬКО тексты экранов + inlineContinue — пороги/логику гейта
+    // кандидату не светим (security). Пусто = фронт применит свои дефолты.
+    let passInviteScreens: {
+      inlineContinue:        boolean
+      passScreenTitle:       string
+      passScreenText:        string
+      passScreenButtonLabel: string
+      failScreenTitle:       string
+      failScreenText:        string
+    } | null = null
+    try {
+      const spec = await getSpec(vacancy.id)
+      const ap = spec?.anketaPassInvite
+      if (ap?.enabled === true) {
+        passInviteScreens = {
+          inlineContinue:        ap.inlineContinue !== false,
+          passScreenTitle:       ap.passScreenTitle ?? "",
+          passScreenText:        ap.passScreenText ?? "",
+          passScreenButtonLabel: ap.passScreenButtonLabel ?? "",
+          failScreenTitle:       ap.failScreenTitle ?? "",
+          failScreenText:        ap.failScreenText ?? "",
+        }
+      }
+    } catch { /* нет спеки — экраны по дефолту фронта */ }
 
     // hh prefill — если кандидат пришёл с hh.ru, достаём имя/город из resume.
     // Реферальные/прямые кандидаты hh-записи не имеют — prefill будет null.
@@ -364,6 +394,7 @@ export async function GET(
       prefill,
       videoIntro,
       candidateTelegramDeepLink,
+      passInviteScreens,
     })
   } catch (err) {
     if (err instanceof Response) return err

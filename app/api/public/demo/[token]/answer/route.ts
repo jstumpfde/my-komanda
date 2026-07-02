@@ -330,6 +330,11 @@ export async function POST(
     // Работает независимо от A/B скоринга: оценивает task-вопросы с aiCriteria.
     // Пишет в СВОЮ колонку candidates.demo_answers_score (не ai_score — иначе была
     // бы гонка с runDemoScoring). Только если у вакансии есть такие вопросы.
+    // Сигнал фронту: кандидат ТОЛЬКО ЧТО прошёл гейт и его надо инлайн перевести
+    // на блок 2 («Путь менеджера») прямо на странице (без «Спасибо» + письма).
+    // null — не прошёл / фича выкл / inlineContinue=false → прежний экран.
+    let advanceToBlockId: string | null = null
+
     if (txResult.isComplete || txResult.hasRealAnswer) {
       void scoreDemoAnswers({
         candidateId: txResult.candidateId,
@@ -342,16 +347,43 @@ export async function POST(
       // «2-я часть демо» (Путь менеджера): если в Портрете включён
       // anketaPassInvite и кандидат прошёл детерминированный гейт по выбору —
       // выставляем override-блок и ставим приглашение в очередь. OFF by default,
-      // дедуп внутри. Fire-and-forget: ошибка не блокирует ответ кандидату.
-      void maybeScheduleSecondDemoInvite({
-        candidateId: txResult.candidateId,
-        vacancyId:   txResult.vacancyId,
-      }).catch((err: unknown) => {
+      // дедуп внутри. Письмо остаётся страховкой (кандидат ушёл со страницы).
+      //
+      // Awaited (не fire-and-forget), потому что от результата зависит, вернём
+      // ли мы фронту advanceToBlockId для ИНЛАЙН-склейки. maybeSchedule сам
+      // атомарно выставляет candidates.overrideContentBlockId при прохождении;
+      // дедуп внутри (already_invited) → повторный сабмит не задвоит письмо, но
+      // блок 2 всё равно резолвим ниже для инлайн-показа.
+      try {
+        const inviteResult = await maybeScheduleSecondDemoInvite({
+          candidateId: txResult.candidateId,
+          vacancyId:   txResult.vacancyId,
+        })
+        // Прошёл гейт, если инвайт запланирован СЕЙЧАС (scheduled=true) ИЛИ
+        // override уже стоял (already_invited/already_scheduled — прошёл ранее,
+        // повторный сабмит). Читаем актуальный override кандидата как источник
+        // истины и уважаем под-флаг inlineContinue из Портрета.
+        const passedNow = inviteResult.scheduled ||
+          inviteResult.reason === "already_invited" ||
+          inviteResult.reason === "already_scheduled"
+        if (passedNow) {
+          const spec = await getSpec(txResult.vacancyId)
+          const ap = spec?.anketaPassInvite
+          if (ap?.enabled === true && ap.inlineContinue !== false) {
+            const [cand] = await db
+              .select({ overrideContentBlockId: candidates.overrideContentBlockId })
+              .from(candidates)
+              .where(eq(candidates.id, txResult.candidateId))
+              .limit(1)
+            advanceToBlockId = cand?.overrideContentBlockId ?? null
+          }
+        }
+      } catch (err) {
         console.error("[demo answer] second-demo-invite failed:", err instanceof Error ? err.message : err)
-      })
+      }
     }
 
-    return apiSuccess({ ok: true, stage: txResult.stage })
+    return apiSuccess({ ok: true, stage: txResult.stage, advanceToBlockId })
   } catch (err) {
     if (err instanceof Response) return err
     console.error("POST /api/public/demo/[token]/answer", err)

@@ -211,6 +211,26 @@ export const AnketaPassInviteSchema = z.object({
    * "consider" / "invitation". null = только текст, hh-этап не трогаем.
    */
   hhAction:       z.enum(["assessment", "interview", "consider", "invitation"]).nullable().default(null),
+  /**
+   * «Склейка» демо1 и блока 2 ИНЛАЙН: при прохождении гейта показать блок 2
+   * («Путь менеджера») сразу на той же странице (без ожидания письма). Письмо
+   * остаётся страховкой для тех, кто ушёл со страницы. Дефолт true.
+   * При false — прежнее поведение (экран результата + письмо, без инлайн-перехода).
+   */
+  inlineContinue: z.boolean().default(true),
+  /**
+   * ✅ Экран-поздравление для ПРОШЕДШИХ гейт (перед переходом на блок 2).
+   * Тексты редактируемые (не хардкод). Кнопка ведёт на блок 2 инлайн.
+   */
+  passScreenTitle:       z.string().max(200).default("Вы молодец!"),
+  passScreenText:        z.string().max(2000).default("Вы отлично справились с первой частью. Продолжим — впереди «Путь менеджера»."),
+  passScreenButtonLabel: z.string().max(100).default("Продолжить →"),
+  /**
+   * ❌ Экран «Спасибо» для НЕ прошедших гейт (мягкий). Пустой title/text =
+   * фронт применит свои дефолты финального экрана демо (обратная совместимость).
+   */
+  failScreenTitle: z.string().max(200).default(""),
+  failScreenText:  z.string().max(2000).default(""),
 })
 export type AnketaPassInvite = z.infer<typeof AnketaPassInviteSchema>
 
