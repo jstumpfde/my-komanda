@@ -85,7 +85,6 @@ import { FirstMessagesChainEditor } from "@/components/vacancies/first-messages-
 import { FunnelBuilder } from "@/components/vacancies/funnel-builder"
 import { FunnelV2Builder } from "@/components/vacancies/funnel-v2-builder"
 import { SpecEditor } from "@/components/vacancies/spec-editor"
-import { PortraitChatbotToggle } from "@/components/vacancies/portrait-chatbot-toggle"
 import { FunnelTab } from "@/components/vacancies/funnel-tab"
 import { MessageQueueSection } from "@/components/vacancies/message-queue-section"
 import { OutboundPauseMenuItem } from "@/components/vacancies/outbound-pause-control"
@@ -4352,15 +4351,7 @@ export default function VacancyPage() {
                   // #20: Портрет — той же ширины, что и прочие секции настроек
                   // (max-w-3xl), чтобы нижняя панель выглядела одинаково со всеми
                   // табами (решение Юрия 02.07).
-                  <div className="max-w-3xl space-y-5">
-                    {/* Чат-бот для легаси-вакансий (не на Воронке v2). Взаимоисключение
-                        с движком v2 — enforced на сервере (решение Юрия 02.07). */}
-                    <PortraitChatbotToggle
-                      vacancyId={id}
-                      enabled={(apiVacancy as { aiChatbotEnabled?: boolean } | undefined)?.aiChatbotEnabled === true}
-                      v2Enabled={(apiVacancy as { funnelV2RuntimeEnabled?: boolean } | undefined)?.funnelV2RuntimeEnabled === true}
-                      onChanged={refetchVacancy}
-                    />
+                  <div className="max-w-3xl">
                     <SpecEditor
                       vacancyId={id}
                       portraitScoring={(apiVacancy as { portraitScoring?: boolean } | undefined)?.portraitScoring}

@@ -715,7 +715,6 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait, onOpenChatbot }: { 
     setRuntimeBusy(true)
     const prev = runtimeEnabled
     setRuntimeEnabled(val) // оптимистично
-    if (val) setChatbotEnabled(false) // взаимоисключение: v2 вкл → чат-бот выкл (сервер enforce)
     try {
       const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/funnel-v2`, {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ runtimeEnabled: val }),
@@ -743,7 +742,6 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait, onOpenChatbot }: { 
     setChatbotBusy(true)
     const prev = chatbotEnabled
     setChatbotEnabled(val) // оптимистично
-    if (val) setRuntimeEnabled(false) // взаимоисключение: чат-бот вкл → v2 выкл (сервер enforce)
     try {
       const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/ai-chatbot`, {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: val }),
@@ -897,7 +895,7 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait, onOpenChatbot }: { 
             {onOpenChatbot && <button onClick={onOpenChatbot} className="ml-auto text-xs text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1">Настроить <ExternalLink className="w-3 h-3" /></button>}
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Отвечает кандидатам сам, вместо стадийной автоматики. Чат-бот и Воронка v2 — либо/либо: включение чат-бота выключит движок Воронки v2. Промпт, фильтры и песочница — в «Настроить».
+            Отвечает кандидатам на всех стадиях воронки — это слой поверх стадий, а не отдельный шаг. Когда включён, ведёт переписку сам; дожимы на это время приостанавливаются. Промпт, фильтры и песочница — в «Настроить».
           </p>
         </div>
       </div>

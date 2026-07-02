@@ -40,12 +40,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       enabled?: unknown; settings?: unknown; prompt?: unknown
     }
     const updates: Record<string, unknown> = { updatedAt: new Date() }
-    if (typeof body.enabled === "boolean") {
-      updates.aiChatbotEnabled = body.enabled
-      // Взаимоисключение с движком Воронки v2 (решение Юрия 02.07): чат-бот и v2 —
-      // либо/либо. Включаем чат-бот → выключаем движок Воронки v2.
-      if (body.enabled === true) updates.funnelV2RuntimeEnabled = false
-    }
+    if (typeof body.enabled === "boolean")  updates.aiChatbotEnabled = body.enabled
     if (body.settings && typeof body.settings === "object") updates.aiChatbotSettings = body.settings
     if (typeof body.prompt === "string")    updates.aiChatbotPrompt = body.prompt.slice(0, 50_000)
 
