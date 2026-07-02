@@ -16,6 +16,7 @@ import {
   priorityRank,
   type SendPriorityGroup,
 } from "@/lib/messaging/send-priority"
+import { decideDozhimMutex } from "@/lib/messaging/dozhim-mutex"
 
 // POST /api/cron/follow-up
 // Отправляет очередную порцию касаний из follow_up_messages кандидатам
@@ -527,6 +528,7 @@ async function processOneTouch(
       createdBy:                  vacancies.createdBy,
       aiChatbotEnabled:           vacancies.aiChatbotEnabled,
       outboundPaused:             vacancies.outboundPaused,
+      funnelV2RuntimeEnabled:     vacancies.funnelV2RuntimeEnabled,
       scheduleEnabled:            vacancies.scheduleEnabled,
       scheduleStart:              vacancies.scheduleStart,
       scheduleEnd:                vacancies.scheduleEnd,
@@ -541,6 +543,23 @@ async function processOneTouch(
   if (!vacancy) {
     await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "vacancy_missing" }).where(eq(followUpMessages.id, msg.id))
     return { outcome: "cancelled", reason: "vacancy_missing" }
+  }
+
+  // #61 Взаимоисключение дожимов: v2 vs legacy-кампания (см.
+  // lib/messaging/dozhim-mutex.ts). Читаем funnelV2RuntimeEnabled ИЗ ЭТОЙ
+  // строки vacancy — она только что загружена из БД выше, поэтому проверка
+  // происходит на момент отправки, а не на момент планирования касания.
+  const mutex = decideDozhimMutex(msg.branch, vacancy.funnelV2RuntimeEnabled)
+  if (!mutex.allowed) {
+    if (mutex.action === "cancel") {
+      await db.update(followUpMessages).set({
+        status: "cancelled",
+        errorMessage: mutex.reason,
+      }).where(eq(followUpMessages.id, msg.id))
+      return { outcome: "cancelled", reason: mutex.reason }
+    }
+    // action === "skip" — оставляем pending, следующий cron перепроверит.
+    return { outcome: "skipped", reason: mutex.reason }
   }
 
   // Пауза исходящей очереди: если HR приостановил отправки на вакансии —
