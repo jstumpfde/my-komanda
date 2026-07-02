@@ -1281,6 +1281,8 @@ export default function VacancyPage() {
     // (offer_sent + legacy offer) — считаются из byStage стадий кандидатов.
     interview: number; offer: number;
     ctaClicked: number;
+    // «2-я часть демо» (Путь менеджера): приглашены / прошли (балл 2-го блока).
+    secondDemoInvited: number; secondDemoPassed: number;
     aiTokensIn: number; aiTokensOut: number;
   } | null>(null)
   const loadHeaderStats = useCallback(async () => {
@@ -1296,6 +1298,7 @@ export default function VacancyPage() {
         inProgress: number; rejected: number; hired: number;
         demoOpened: number; anketaFilled: number; demoAnswered: number;
         ctaClicked: number;
+        secondDemoInvited?: number; secondDemoPassed?: number;
         byStage?: Record<string, number>;
         aiTokensIn: number; aiTokensOut: number;
       }
@@ -1322,6 +1325,8 @@ export default function VacancyPage() {
         interview:    interviewCount,
         offer:        offerCount,
         ctaClicked:   stats.ctaClicked ?? 0,
+        secondDemoInvited: stats.secondDemoInvited ?? 0,
+        secondDemoPassed:  stats.secondDemoPassed ?? 0,
         hired:        stats.hired,
         aiTokensIn:   stats.aiTokensIn  ?? 0,
         aiTokensOut:  stats.aiTokensOut ?? 0,
@@ -2694,6 +2699,17 @@ export default function VacancyPage() {
                             <span className="cursor-help"><span className="font-medium text-foreground">{s!.demoAnswered}</span> анкет</span>
                           </TooltipTrigger>
                           <TooltipContent>Кандидаты, ответившие на вопросы анкеты (посчитан балл «AI-ан» по ответам)</TooltipContent>
+                        </UITooltip>)
+                      // Только >0: «2-я часть» демо (Путь менеджера) — сколько
+                      // прошли второй этап (есть балл 2-го блока); в тултипе —
+                      // сколько приглашено. Показываем и при 0 прошедших, если
+                      // приглашения уже идут (воронка работает, этап не пустой).
+                      if ((s?.secondDemoPassed ?? 0) > 0 || (s?.secondDemoInvited ?? 0) > 0) push("demo2",
+                        <UITooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help"><span className="font-medium text-foreground">{s!.secondDemoPassed}</span> демо-2</span>
+                          </TooltipTrigger>
+                          <TooltipContent>Прошли 2-ю часть демо («Путь менеджера») — есть балл по второму блоку. Приглашено во 2-ю часть: {s!.secondDemoInvited}</TooltipContent>
                         </UITooltip>)
                       // Только >0: перешли по ссылке (оставлено из прежней логики).
                       if ((s?.ctaClicked ?? 0) > 0) push("cta",

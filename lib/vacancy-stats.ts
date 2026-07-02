@@ -32,6 +32,10 @@ export interface VacancyStats {
   // Кандидаты, кликнувшие по кнопке-ссылке в демо (demo_progress_json.ctaClicks
   // непустой). 0 — если в демо нет кнопки-ссылки или никто не переходил.
   ctaClicked:     number
+  // «2-я часть демо» (Путь менеджера): приглашены (second_demo_invited_at)
+  // и прошли — есть балл ВТОРОГО блока в demo_block_scores (≥2 ключей).
+  secondDemoInvited: number
+  secondDemoPassed:  number
   // Детализация по стадиям (slug → count) — для аналитики/воронки.
   byStage:        Record<string, number>
   // Конверсии. Все в процентах [0..100], округлены до 1 знака.
@@ -117,6 +121,17 @@ export async function getVacancyStats(vacancyId: string): Promise<VacancyStats> 
     ))
   const ctaClicked = ctaClickedRow?.c ?? 0
 
+  // «2-я часть демо» (Путь менеджера): приглашённые и прошедшие (балл 2-го блока).
+  const [secondDemoRow] = await db
+    .select({
+      invited: sql<number>`count(*) FILTER (WHERE ${candidates.secondDemoInvitedAt} IS NOT NULL)::int`,
+      passed:  sql<number>`count(*) FILTER (WHERE (SELECT count(*) FROM jsonb_object_keys(COALESCE(${candidates.demoBlockScores}, '{}'::jsonb))) >= 2)::int`,
+    })
+    .from(candidates)
+    .where(eq(candidates.vacancyId, vacancyId))
+  const secondDemoInvited = secondDemoRow?.invited ?? 0
+  const secondDemoPassed  = secondDemoRow?.passed ?? 0
+
   // hh.ru данные — из hh_responses (кеш, обновляется через /api/cron/hh-import).
   let hhTotal = 0
   let hhNew   = 0
@@ -157,6 +172,7 @@ export async function getVacancyStats(vacancyId: string): Promise<VacancyStats> 
     hhTotal, hhNew, hhLastSyncAt,
     total, inProgress, rejected, hired, demoOpened, anketaFilled, demoAnswered,
     ctaClicked,
+    secondDemoInvited, secondDemoPassed,
     byStage,
     conversions: {
       demoOpenRate:   pct(demoOpened, total),
@@ -218,6 +234,19 @@ export async function getVacancyStatsBulk(
   const ctaClickedByVacancy = new Map<string, number>()
   for (const r of ctaClickedRows) ctaClickedByVacancy.set(r.vacancyId, r.cnt)
 
+  // «2-я часть демо» — приглашены/прошли, по вакансиям.
+  const secondDemoRows = await db
+    .select({
+      vacancyId: candidates.vacancyId,
+      invited:   sql<number>`count(*) FILTER (WHERE ${candidates.secondDemoInvitedAt} IS NOT NULL)::int`,
+      passed:    sql<number>`count(*) FILTER (WHERE (SELECT count(*) FROM jsonb_object_keys(COALESCE(${candidates.demoBlockScores}, '{}'::jsonb))) >= 2)::int`,
+    })
+    .from(candidates)
+    .where(inArray(candidates.vacancyId, vacancyIds))
+    .groupBy(candidates.vacancyId)
+  const secondDemoByVacancy = new Map<string, { invited: number; passed: number }>()
+  for (const r of secondDemoRows) secondDemoByVacancy.set(r.vacancyId, { invited: r.invited, passed: r.passed })
+
   // hh-stats fetched per-vacancy on demand. Bulk-версия hh не делает,
   // чтобы не таскать все hh_responses в одном запросе. Возвращаем
   // hh-блок нулями (если caller хочет — отдельно дёрнет getVacancyStats
@@ -244,6 +273,8 @@ export async function getVacancyStatsBulk(
     stats.anketaFilled = sumByGroup(ANKETA_FILLED_STAGE_SLUGS)
     stats.demoAnswered = demoAnsweredByVacancy.get(id) ?? 0
     stats.ctaClicked   = ctaClickedByVacancy.get(id) ?? 0
+    stats.secondDemoInvited = secondDemoByVacancy.get(id)?.invited ?? 0
+    stats.secondDemoPassed  = secondDemoByVacancy.get(id)?.passed ?? 0
     stats.conversions = {
       demoOpenRate:   pct(stats.demoOpened, stats.total),
       anketaFillRate: pct(stats.anketaFilled, stats.demoOpened),
@@ -261,6 +292,7 @@ function emptyStats(): VacancyStats {
     hhTotal: 0, hhNew: 0, hhLastSyncAt: null,
     total: 0, inProgress: 0, rejected: 0, hired: 0,
     demoOpened: 0, anketaFilled: 0, demoAnswered: 0, ctaClicked: 0,
+    secondDemoInvited: 0, secondDemoPassed: 0,
     byStage,
     conversions: { demoOpenRate: 0, anketaFillRate: 0, hiredRate: 0 },
     aiTokensIn: 0, aiTokensOut: 0,
