@@ -4543,6 +4543,11 @@ export default function VacancyPage() {
                       onPrev={prevStep ? () => goToVacancyStep(prevStep) : undefined}
                       nextLabel={nextStep?.label ?? null}
                       onNext={nextStep ? () => goToVacancyStep(nextStep) : undefined}
+                      // Портрет (SpecEditor) рендерится на всю ширину (без max-w-3xl
+                      // обёртки, в отличие от прочих секций) → и футер тянем на
+                      // всю ширину, чтобы кнопки прижались к правому краю контента,
+                      // а не «висели» по центру (замечание Юрия).
+                      className={settingsSection === "spec" ? "max-w-none" : undefined}
                     />
                   )
                 })()}
