@@ -4348,18 +4348,17 @@ export default function VacancyPage() {
 
                 {/* ───────── ТАБ «Кого ищем» (R4 Candidate Spec, новый контур) ───────── */}
                 {settingsSection === "spec" && (
-                  // #20: Портрет — той же ширины, что и прочие секции настроек
-                  // (max-w-3xl), чтобы нижняя панель выглядела одинаково со всеми
-                  // табами (решение Юрия 02.07).
-                  <div className="max-w-3xl">
-                    <SpecEditor
-                      vacancyId={id}
-                      portraitScoring={(apiVacancy as { portraitScoring?: boolean } | undefined)?.portraitScoring}
-                      onAdopted={refetchVacancy}
-                      onNavigateNext={() => { setV2SettingsSub("content"); setActiveTab("content"); window.scrollTo({ top: 0, behavior: "smooth" }) }}
-                      vacancyAnketaData={(apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.anketa as Record<string, unknown> | undefined}
-                    />
-                  </div>
+                  // Портрет — полноширинный (двухколоночный: Портрет + AI-ассистент),
+                  // как таб «Вакансия»/«Контент». НЕ оборачиваем в max-w-3xl — иначе
+                  // панель ассистента зажимается (решение Юрия 02.07). Нижняя панель
+                  // для spec — тоже на всю ширину (VacancyTabFooter className ниже).
+                  <SpecEditor
+                    vacancyId={id}
+                    portraitScoring={(apiVacancy as { portraitScoring?: boolean } | undefined)?.portraitScoring}
+                    onAdopted={refetchVacancy}
+                    onNavigateNext={() => { setV2SettingsSub("content"); setActiveTab("content"); window.scrollTo({ top: 0, behavior: "smooth" }) }}
+                    vacancyAnketaData={(apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.anketa as Record<string, unknown> | undefined}
+                  />
                 )}
 
                 {/* ───────── ТАБ «Дожим» ───────── */}
@@ -4571,6 +4570,9 @@ export default function VacancyPage() {
                       onPrev={prevStep ? () => goToVacancyStep(prevStep) : undefined}
                       nextLabel={nextStep?.label ?? null}
                       onNext={nextStep ? () => goToVacancyStep(nextStep) : undefined}
+                      // Портрет (SpecEditor) — полноширинный, поэтому его нижняя
+                      // панель тоже на всю ширину, кнопки у правого края (как «Вакансия»).
+                      className={settingsSection === "spec" ? "max-w-none" : undefined}
                     />
                   )
                 })()}
