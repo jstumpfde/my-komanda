@@ -44,7 +44,7 @@ import { toast } from "sonner"
 import {
   STAGE_ACTIONS, DOZHIM_LABEL, makeStage, emptyFunnelV2, normalizeFunnelV2,
   dozhimChainFor, dozhimChainForOpened, isStageEnabled,
-  SCORE_GATE_TYPES, DEFAULT_SCORE_GATE_THRESHOLD,
+  SCORE_GATE_TYPES, SCORE_GATE_FAIL_ACTIONS, DEFAULT_SCORE_GATE_THRESHOLD,
   type FunnelV2Config, type FunnelV2Stage, type StageActionType,
   type DozhimPreset, type DozhimTouch, type ScoreGate, type ScoreGateType,
   type ScoreGateFailAction, type ScoreGateMiddleAction,
@@ -65,6 +65,10 @@ const SCORE_GATE_TYPE_LABEL: Record<ScoreGateType, string> = {
 }
 const MIDDLE_ACTION_LABEL: Record<ScoreGateMiddleAction, string> = {
   manual_review: "Ручной разбор", prequalification: "Предквалификация",
+}
+// «Что делать с непрошедшими» — те же подписи, что в v2-билдере.
+const SCORE_GATE_FAIL_LABEL: Record<ScoreGateFailAction, string> = {
+  preliminary_reject: "Предварительный отказ", manual: "Ручное", reject: "Отказ", reserve: "В резерв",
 }
 const DOZHIM_OPTS: DozhimPreset[] = ["off", "soft", "standard", "strong"]
 
@@ -123,7 +127,8 @@ function ZoneBar({ lower, upper }: { lower: number; upper: number }) {
       <div className="flex justify-between text-[10px] text-muted-foreground">
         <span>0</span>
         <span className="text-red-600 dark:text-red-400">&lt;{lo} отказ/разбор</span>
-        <span className="text-amber-600 dark:text-amber-400">{lo}–{Math.max(lo, hi - 1)} жёлтая</span>
+        {/* Пороги равны → жёлтой зоны нет, подпись скрываем (fix: пустая зона) */}
+        {hi > lo && <span className="text-amber-600 dark:text-amber-400">{lo}–{hi - 1} жёлтая</span>}
         <span className="text-emerald-600 dark:text-emerald-400">≥{hi} дальше</span>
         <span>100</span>
       </div>
@@ -282,6 +287,14 @@ export function FunnelV3Editor({ vacancyId }: { vacancyId: string }) {
         </span>
       </div>
 
+      {/* Все стадии выключены: движок не обрабатывает новых кандидатов
+          автоматически (process-queue оставляет их на ручном разборе). */}
+      {stages.length > 0 && stages.every(s => !isStageEnabled(s)) && (
+        <div className="rounded-lg border border-amber-400/60 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+          Все стадии выключены — новые кандидаты не обрабатываются автоматически и остаются на ручном разборе. Включите хотя бы одну стадию.
+        </div>
+      )}
+
       <div className="flex flex-col lg:flex-row gap-4 items-start">
         {/* ── Слева: список стадий ── */}
         <div className="w-full lg:w-80 shrink-0 space-y-2">
@@ -327,6 +340,7 @@ export function FunnelV3Editor({ vacancyId }: { vacancyId: string }) {
               key={selected.id}
               stage={selected}
               index={selectedIndex}
+              allStages={stages}
               content={content}
               dripTemplates={dripTemplates}
               onPatch={p => patchStage(selected.id, p)}
@@ -340,9 +354,10 @@ export function FunnelV3Editor({ vacancyId }: { vacancyId: string }) {
 }
 
 // ── Правая карточка: все секции стадии ───────────────────────────────────────
-function StageDetail({ stage, index, content, dripTemplates, onPatch, onRemove }: {
+function StageDetail({ stage, index, allStages, content, dripTemplates, onPatch, onRemove }: {
   stage: FunnelV2Stage
   index: number
+  allStages: FunnelV2Stage[]
   content: ContentBlock[]
   dripTemplates?: DripTemplates
   onPatch: (p: Partial<FunnelV2Stage>) => void
@@ -353,6 +368,19 @@ function StageDetail({ stage, index, content, dripTemplates, onPatch, onRemove }
   const enabled = isStageEnabled(stage)
   const isContent = CONTENT_ACTIONS.includes(stage.action)
   const isPrequal = stage.action === "prequalification"
+
+  // «Выключенный хвост»: после этой стадии в конфиге есть стадии, но все
+  // выключены — прошедшие предыдущую включённую стадию зависнут на ручном
+  // разборе (движок НЕ ставит hired). Предупреждаем при выключении и показываем
+  // постоянную плашку.
+  const stagesAfter = index >= 0 ? allStages.slice(index + 1) : []
+  const disabledTail = stagesAfter.length > 0 && stagesAfter.every(s => !isStageEnabled(s))
+  const toggleEnabled = (v: boolean) => {
+    if (!v && disabledTail) {
+      toast.warning("После этой стадии не остаётся включённых — кандидаты, прошедшие предыдущую стадию, зависнут на ручном разборе.")
+    }
+    onPatch({ enabled: v ? undefined : false })
+  }
 
   const patchRule = (p: Partial<FunnelV2Stage["rule"]>) => onPatch({ rule: { ...stage.rule, ...p } })
   const gate = stage.rule.scoreGate
@@ -385,12 +413,17 @@ function StageDetail({ stage, index, content, dripTemplates, onPatch, onRemove }
       {/* (1) Шапка: тумблер + название + тип */}
       <section className="p-4 space-y-3">
         <div className="flex items-center gap-3">
-          <Switch checked={enabled} onCheckedChange={v => onPatch({ enabled: v ? undefined : false })} aria-label={enabled ? "Выключить стадию" : "Включить стадию"} />
+          <Switch checked={enabled} onCheckedChange={toggleEnabled} aria-label={enabled ? "Выключить стадию" : "Включить стадию"} />
           <Icon className="w-4 h-4 text-muted-foreground shrink-0" />
           <span className="text-sm font-medium">Стадия {index + 1}</span>
           {!enabled && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400">выключена — кандидаты проскакивают дальше</span>}
           <button type="button" onClick={onRemove} className="ml-auto text-muted-foreground/50 hover:text-destructive transition-colors" aria-label="Удалить стадию" title="Удалить стадию"><Trash2 className="w-4 h-4" /></button>
         </div>
+        {!enabled && disabledTail && (
+          <p className="rounded-md border border-amber-400/60 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-700 dark:text-amber-400">
+            После этой стадии не остаётся включённых: кандидаты, прошедшие предыдущую включённую стадию, останутся на ручном разборе (движок НЕ помечает их «Нанят»).
+          </p>
+        )}
         <div className="grid sm:grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label className="text-[11px] text-muted-foreground">Название стадии</Label>
@@ -460,6 +493,20 @@ function StageDetail({ stage, index, content, dripTemplates, onPatch, onRemove }
             </div>
           )}
         </div>
+        {gate && !threeZones && (
+          <div className="space-y-1">
+            <Label className="text-[11px] text-muted-foreground">Что делать с непрошедшими</Label>
+            <Select value={gate.failAction} onValueChange={v => patchGate({ failAction: v as ScoreGateFailAction })}>
+              <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {SCORE_GATE_FAIL_ACTIONS.map(f => <SelectItem key={f} value={f}>{SCORE_GATE_FAIL_LABEL[f]}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        {gate && threeZones && (
+          <p className="text-[11px] text-muted-foreground/70">Действия с непрошедшими задаются зонами ниже (жёлтая / красная).</p>
+        )}
         {gate ? (
           <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 p-3">
             <div className="min-w-0">
@@ -491,7 +538,7 @@ function StageDetail({ stage, index, content, dripTemplates, onPatch, onRemove }
                 <div className="space-y-1">
                   <Label className="text-[11px] text-muted-foreground">Нижний порог (красная / жёлтая)</Label>
                   <div className="flex items-center gap-1.5">
-                    <Input type="number" min={0} max={100} value={gate.thresholdLower!}
+                    <Input type="number" min={0} max={gate.threshold} value={gate.thresholdLower!}
                       onChange={e => patchGate({ thresholdLower: Math.max(0, Math.min(gate.threshold, Number(e.target.value) || 0)) })}
                       className="w-24 h-10" />
                     <span className="text-[11px] text-muted-foreground">≤ {gate.threshold}</span>
@@ -564,6 +611,19 @@ function StageDetail({ stage, index, content, dripTemplates, onPatch, onRemove }
           <Label className="text-[11px] text-muted-foreground">Отказ (не прошёл стадию)</Label>
           <Textarea value={stage.rejectText ?? ""} onChange={e => onPatch({ rejectText: e.target.value || undefined })}
             placeholder="Пусто — используется текст из правила прохода или стандартный текст отказа вакансии" className="min-h-[80px]" />
+          {/* Честная подпись: при какой конфигурации текст РЕАЛЬНО отправляется */}
+          {(() => {
+            if (!gate) return <p className="text-[11px] text-muted-foreground/70">Сейчас не отправляется: гейт по баллу не настроен.</p>
+            if (!gate.autoEnabled) return <p className="text-[11px] text-muted-foreground/70">Сейчас не отправляется: «Автоматический проход» выключен.</p>
+            if (threeZones) {
+              return gate.autoRejectRed === true
+                ? <p className="text-[11px] text-emerald-700 dark:text-emerald-400">Отправляется кандидатам красной зоны (авто-отказ красной зоны включён).</p>
+                : <p className="text-[11px] text-muted-foreground/70">Сейчас не отправляется: красная зона уходит на ручной разбор без сообщения.</p>
+            }
+            return gate.failAction === "reject"
+              ? <p className="text-[11px] text-emerald-700 dark:text-emerald-400">Отправляется не прошедшим порог (действие «Отказ»).</p>
+              : <p className="text-[11px] text-muted-foreground/70">Сейчас не отправляется: действие «{SCORE_GATE_FAIL_LABEL[gate.failAction].toLowerCase()}» без сообщения.</p>
+          })()}
         </div>
         {stage.action === "hired" && (
           <div className="space-y-1">
