@@ -4362,9 +4362,26 @@ export default function VacancyPage() {
                       </div>
                     </div>
                   )}
+                  {/* Пояснение разделения ответственности при включённом движке
+                      Воронки v2: пер-стадийные дожимы живут в конструкторе, эта
+                      вкладка — легаси-путь. Предупреждаем о двойных касаниях, т.к.
+                      на уровне отправки (cron/follow-up) обе цепочки не исключают
+                      друг друга (разбор 02.07). */}
+                  {(apiVacancy as { funnelV2RuntimeEnabled?: boolean } | undefined)?.funnelV2RuntimeEnabled && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <div className="text-xs text-amber-900 dark:text-amber-200">
+                        <strong>Движок Воронки v2 включён.</strong> Дожимы кандидатов теперь
+                        настраиваются по стадиям — в конструкторе «Воронка v2» (у каждой стадии
+                        свои ветки «не открыл» / «открыл, не досмотрел»). Настройки на этой
+                        вкладке — легаси-путь. Чтобы кандидаты не получали двойные касания, не
+                        держите обе цепочки включёнными одновременно.
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <h3 className="text-lg font-semibold text-foreground mb-1">Настройки дожима</h3>
-                    <p className="text-sm text-muted-foreground">AI-фильтр откликов и цепочка касаний кандидатов, которые не открыли или не дошли до конца демо.</p>
+                    <p className="text-sm text-muted-foreground">AI-фильтр откликов и цепочка касаний кандидатов, которые не открыли или не дошли до конца демо. Пер-стадийные дожимы Воронки v2 настраиваются в конструкторе «Воронка v2», не здесь.</p>
                   </div>
                   {/* #62: предупреждение когда AI-агент включён. */}
                   {(apiVacancy as { aiChatbotEnabled?: boolean } | undefined)?.aiChatbotEnabled && (
