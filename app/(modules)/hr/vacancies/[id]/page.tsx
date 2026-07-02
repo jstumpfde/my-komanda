@@ -4336,6 +4336,12 @@ export default function VacancyPage() {
                     sp.set("tab", "settings"); sp.set("section", "spec")
                     router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
                     window.scrollTo({ top: 0, behavior: "smooth" })
+                  }} onOpenChatbot={() => {
+                    setSettingsSection("aichatbot")
+                    const sp = new URLSearchParams(window.location.search)
+                    sp.set("tab", "settings"); sp.set("section", "aichatbot")
+                    router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+                    window.scrollTo({ top: 0, behavior: "smooth" })
                   }} />
                 </div>
                 )}

@@ -654,7 +654,7 @@ function PortraitStageCard({ summary, loading, onOpen }: { summary: SpecSummary 
 }
 
 // ── Главный конструктор ──────────────────────────────────────────────────────
-export function FunnelV2Builder({ vacancyId, onOpenPortrait }: { vacancyId: string; onOpenPortrait?: () => void }) {
+export function FunnelV2Builder({ vacancyId, onOpenPortrait, onOpenChatbot }: { vacancyId: string; onOpenPortrait?: () => void; onOpenChatbot?: () => void }) {
   const [config, setConfig] = useState<FunnelV2Config | null>(null)
   const [summary, setSummary] = useState<SpecSummary | null>(null)
   const [content, setContent] = useState<ContentBlock[]>([])
@@ -726,6 +726,33 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait }: { vacancyId: stri
       toast.error("Не удалось переключить движок")
     } finally { setRuntimeBusy(false) }
   }, [vacancyId, runtimeEnabled])
+
+  // Сквозной слой «AI чат-бот»: отвечает кандидатам на ВСЕХ стадиях (не стадия).
+  // Когда включён — ведёт переписку сам, дожимы на это время приостанавливаются.
+  const [chatbotEnabled, setChatbotEnabled] = useState(false)
+  const [chatbotBusy, setChatbotBusy] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/modules/hr/vacancies/${vacancyId}/ai-chatbot`).then(r => r.ok ? r.json() : null)
+      .then((d: { enabled?: boolean } | null) => { if (!cancelled) setChatbotEnabled(d?.enabled === true) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [vacancyId])
+  const toggleChatbot = useCallback(async (val: boolean) => {
+    setChatbotBusy(true)
+    const prev = chatbotEnabled
+    setChatbotEnabled(val) // оптимистично
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/ai-chatbot`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: val }),
+      })
+      if (!res.ok) throw new Error()
+      toast.success(val ? "AI чат-бот включён" : "AI чат-бот выключен")
+    } catch {
+      setChatbotEnabled(prev)
+      toast.error("Не удалось переключить чат-бот")
+    } finally { setChatbotBusy(false) }
+  }, [vacancyId, chatbotEnabled])
 
   // Список контент-блоков (для «подключить демо/тест»)
   useEffect(() => {
@@ -852,6 +879,26 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait }: { vacancyId: stri
       </div>
 
       <PortraitStageCard summary={summary} loading={specLoading} onOpen={onOpenPortrait} />
+
+      {/* Сквозной слой: AI чат-бот. Не стадия — работает поверх ВСЕХ стадий
+          (отвечает кандидатам на любом шаге). Тумблер тут же; промпт/фильтры/
+          песочница — в полных настройках («Настроить»). */}
+      <div className={cn("rounded-xl border p-3 flex items-start gap-3", chatbotEnabled ? "border-violet-300/60 bg-violet-500/5" : "border-border bg-muted/30")}>
+        <Switch checked={chatbotEnabled} onCheckedChange={toggleChatbot} disabled={chatbotBusy} className="mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-medium">🤖 AI чат-бот · сквозной слой</span>
+            {chatbotBusy && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+            {chatbotEnabled
+              ? <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-700 dark:text-violet-400">включён</span>
+              : <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-muted text-muted-foreground">выключен</span>}
+            {onOpenChatbot && <button onClick={onOpenChatbot} className="ml-auto text-xs text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1">Настроить <ExternalLink className="w-3 h-3" /></button>}
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Отвечает кандидатам на всех стадиях воронки — это слой поверх стадий, а не отдельный шаг. Когда включён, ведёт переписку сам; дожимы на это время приостанавливаются. Промпт, фильтры и песочница — в «Настроить».
+          </p>
+        </div>
+      </div>
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={stageIds} strategy={verticalListSortingStrategy}>
