@@ -87,6 +87,7 @@ import { FunnelV2Builder } from "@/components/vacancies/funnel-v2-builder"
 import { SpecEditor } from "@/components/vacancies/spec-editor"
 import { FunnelTab } from "@/components/vacancies/funnel-tab"
 import { MessageQueueSection } from "@/components/vacancies/message-queue-section"
+import { InboxTab } from "@/components/vacancies/inbox-tab"
 import { OutboundPauseMenuItem } from "@/components/vacancies/outbound-pause-control"
 import { parsePipeline, resolveVacancyStageOptions, type CompanyStageHhActions, type CompanyStagePalette, type FunnelV2StageLite } from "@/lib/stages"
 import { BrandingOverrideSwitch } from "@/components/vacancies/branding-override-switch"
@@ -2980,6 +2981,7 @@ export default function VacancyPage() {
                   <>
                   {((status === "active" || status === "published") ? [
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
+                    { value: "inbox", icon: MessageSquare, label: "Инбокс" },
                     { value: "interview", icon: CalendarDays, label: "Интервью" },
                     { value: "analytics", icon: BarChart3, label: "Аналитика" },
                     { value: "outbound", icon: UserSearch, label: "Исходящий подбор" },
@@ -2990,6 +2992,7 @@ export default function VacancyPage() {
                     { value: "anketa", icon: ClipboardList, label: "Вакансия" },
                     { value: "content", icon: BookOpen, label: "Контент" },
                     { value: "candidates", icon: Kanban, label: "Кандидаты" },
+                    { value: "inbox", icon: MessageSquare, label: "Инбокс" },
                     { value: "interview", icon: CalendarDays, label: "Интервью" },
                     { value: "analytics", icon: BarChart3, label: "Аналитика" },
                     { value: "outbound", icon: UserSearch, label: "Исходящий подбор" },
@@ -3421,6 +3424,12 @@ export default function VacancyPage() {
                     window.scrollTo({ top: 0, behavior: "smooth" })
                   }}
                 />
+              </TabsContent>
+
+              {/* #62: «Инбокс» — единый чат-инбокс по вакансии (список переписок
+                  слева + нить выбранного кандидата справа). */}
+              <TabsContent value="inbox">
+                <InboxTab vacancyId={id} />
               </TabsContent>
 
               {/* Интервью — календарь компании прямо внутри вакансии (часть единого
