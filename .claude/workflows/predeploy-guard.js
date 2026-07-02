@@ -65,12 +65,15 @@ const LENSES = [
 Верни реальные расхождения с договорённостью.` },
 ]
 
+// Ярусность моделей (решение Юрия 02.07, экономия токенов): поиск находок —
+// Sonnet 5 (дёшево, тщательно), адверс-проверка — Opus (нужна сила рассуждения).
+// Fable — только главный цикл координатора, в агентах не используем.
 const results = await pipeline(
   LENSES,
-  l => agent(l.prompt, { label: `guard:${l.key}`, phase: 'Review', schema: FIND_SCHEMA }),
+  l => agent(l.prompt, { label: `guard:${l.key}`, phase: 'Review', schema: FIND_SCHEMA, model: 'sonnet' }),
   (review, lens) => parallel((review?.findings ?? []).map(f => () =>
     agent(`${COMMON}\n\nАдверсариально ПРОВЕРЬ заявленный дефект по реальному коду. Не воспроизводится → isReal=false. Будь скептиком, но точным.\n[${lens.key}] ${f.title}\n${f.file}:${f.lines} (${f.severity})\n${f.detail}\nФикс: ${f.fix}`,
-      { label: `verify:${f.file}:${f.lines}`, phase: 'Verify', schema: VERDICT_SCHEMA })
+      { label: `verify:${f.file}:${f.lines}`, phase: 'Verify', schema: VERDICT_SCHEMA, model: 'opus' })
       .then(v => ({ ...f, lens: lens.key, verdict: v }))))
 )
 
