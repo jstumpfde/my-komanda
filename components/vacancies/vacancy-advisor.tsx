@@ -1010,14 +1010,21 @@ function BestPublishTimeCard({ vacancyId, city }: { vacancyId?: string; city?: s
             if (rows.length === 0) return null
             return (
               <div className="space-y-0.5">
-                <p className="text-[10px] text-muted-foreground">% — доля откликов этого часа от всех откликов за этот день недели</p>
+                <p className="text-[10px] text-muted-foreground">% — доля откликов часа от всех откликов этого дня; строка в сумме даёт 100%</p>
                 {rows.map(d => {
                   const slots = [...d.slots].sort((a, b) => a.hour - b.hour)
+                  // Остаток дня, чтобы строка явно сходилась к 100% (иначе
+                  // «42% · 23%» читается как баг). Считаем от показанных
+                  // округлённых pct — сумма строки всегда ровно 100.
+                  const rest = Math.max(0, 100 - slots.reduce((s, x) => s + x.pct, 0))
                   return (
                     <div key={d.dow} className="flex items-baseline gap-1.5 text-sm">
                       <span className="w-6 shrink-0 font-medium text-muted-foreground">{short[d.dow]}</span>
                       <span className="text-foreground">
                         {slots.map(s => `${s.range} — ${s.pct}%`).join(" · ")}
+                        {rest > 0 && (
+                          <span className="text-muted-foreground"> · прочие часы — {rest}%</span>
+                        )}
                       </span>
                     </div>
                   )

@@ -36,7 +36,15 @@ ssh tz 'cd /var/www/mk-shadow && git fetch origin && git reset --hard origin/mai
 # 5) Публика на зелёном → обновить основной: в /var/www/my-komanda:
 #    rm -rf .next-prev && mv .next .next-prev && cp -a /var/www/mk-shadow/.next .next &&
 #    git pull origin main && pm2 restart my-komanda --update-env → build-id на :3000 = новый.
-# 6) nginx upstream: 3002 → 3000, reload; pm2 delete mk-next-green.
+# 6) nginx upstream: 3002 → 3000, reload. ВАЖНО (инцидент 03.07 00:18-00:25):
+#    reload оставляет СТАРЫЕ воркеры ("worker process is shutting down") жить,
+#    пока открыты их keepalive/HTTP-2 соединения, и они маршрутизируют по
+#    СТАРОМУ конфигу (→ :3002). Если удалить зелёный сразу — у клиентов с
+#    открытым сайтом (браузер Юрия!) начинаются 502 на МИНУТЫ. Поэтому:
+#    удалять mk-next-green ТОЛЬКО когда старых воркеров не осталось:
+#      while [ $(ps aux | grep 'nginx: worker process is shutting down' | grep -cv grep) -gt 0 ]; do sleep 10; done
+#    либо через 60с добить их вручную (kill <pid> старого воркера — клиенты
+#    переоткроют соединение на новые воркеры), и лишь потом pm2 delete mk-next-green.
 # 7) Проверка: внешний build-id/200 через ssh riga (Mac-curl врёт), 0 новых 5xx в
 #    access.log за окно, 0 InvariantError в pm2-логе. Откат: .next-prev на месте.
 ```
