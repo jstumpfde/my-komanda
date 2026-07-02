@@ -2026,26 +2026,46 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
             </div>
           </FactorRow>
 
+          {/* Семантика инвертируемая на глаз (инцидент 03.07: «Офис» отметили,
+              думая что отсеивают офисных, а галочки — кого ПРОПУСКАЕМ) —
+              явная подпись + живая сводка, как в vacancy-stop-factors-settings. */}
           <FactorRow
             title="Формат работы"
-            help="Если кандидат предпочитает не разрешённый формат — стоп"
+            help="Галочки — форматы, которые ПОДХОДЯТ вакансии. Кандидат, который хочет другой формат, получит авто-отказ"
             enabled={sf.format?.enabled ?? false}
             onToggle={v => toggleFactor("format", v)}
           >
-            <div className="flex gap-3">
-              {FORMAT_OPTIONS.map(f => (
-                <label key={f.id} className="flex items-center gap-1.5 text-xs">
-                  <Checkbox
-                    checked={(sf.format?.allowedFormats ?? []).includes(f.id)}
-                    onCheckedChange={v => {
-                      const current = sf.format?.allowedFormats ?? []
-                      const next = v ? [...new Set([...current, f.id])] : current.filter(x => x !== f.id)
-                      setSf({ ...sf, format: { ...(sf.format ?? { enabled: true }), allowedFormats: next } })
-                    }}
-                  />
-                  {f.label}
-                </label>
-              ))}
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">Пропускаем кандидатов с форматом:</p>
+              <div className="flex gap-3">
+                {FORMAT_OPTIONS.map(f => (
+                  <label key={f.id} className="flex items-center gap-1.5 text-xs">
+                    <Checkbox
+                      checked={(sf.format?.allowedFormats ?? []).includes(f.id)}
+                      onCheckedChange={v => {
+                        const current = sf.format?.allowedFormats ?? []
+                        const next = v ? [...new Set([...current, f.id])] : current.filter(x => x !== f.id)
+                        setSf({ ...sf, format: { ...(sf.format ?? { enabled: true }), allowedFormats: next } })
+                      }}
+                    />
+                    {f.label}
+                  </label>
+                ))}
+              </div>
+              {(() => {
+                const allowed = sf.format?.allowedFormats ?? []
+                if (allowed.length === 0) {
+                  return <p className="text-[11px] text-muted-foreground">Ничего не отмечено — фактор не действует.</p>
+                }
+                const pass = FORMAT_OPTIONS.filter(f => allowed.includes(f.id)).map(f => f.label).join(", ")
+                const cut = FORMAT_OPTIONS.filter(f => !allowed.includes(f.id)).map(f => f.label).join(", ")
+                return (
+                  <p className="text-[11px] leading-snug">
+                    <span className="text-success">Пропускаем: {pass}.</span>{" "}
+                    {cut && <span className="text-destructive">Авто-отказ тем, кто хочет: {cut}.</span>}
+                  </p>
+                )
+              })()}
             </div>
           </FactorRow>
 
