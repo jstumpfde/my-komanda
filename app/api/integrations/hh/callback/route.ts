@@ -4,6 +4,9 @@ import { hhIntegrations } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 import { exchangeCode, getMe } from "@/lib/hh-api"
 import { verifyHhState } from "@/lib/hh/oauth-state"
+// База редиректа — из env (НЕ req.url): Next 16 подставляет внутренний origin
+// (http://localhost:3000) — инцидент 02.07.
+import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -11,7 +14,7 @@ export async function GET(req: NextRequest) {
   const state = searchParams.get("state")
 
   if (!code || !state) {
-    return NextResponse.redirect(new URL("/hr/hiring-settings?tab=integrations&error=missing_params", req.url))
+    return NextResponse.redirect(new URL("/hr/hiring-settings?tab=integrations&error=missing_params", getAppBaseUrl()))
   }
 
   // State подписан HMAC при инициации (/connect). Проверяем подпись — без неё
@@ -19,7 +22,7 @@ export async function GET(req: NextRequest) {
   // чужой компании, подставив чужой companyId).
   const parsed = verifyHhState(state)
   if (!parsed) {
-    return NextResponse.redirect(new URL("/hr/hiring-settings?tab=integrations&error=invalid_state", req.url))
+    return NextResponse.redirect(new URL("/hr/hiring-settings?tab=integrations&error=invalid_state", getAppBaseUrl()))
   }
   const companyId: string = parsed.companyId
   const userId: string = parsed.userId
@@ -71,11 +74,11 @@ export async function GET(req: NextRequest) {
     // Подключались со страницы вакансии — возвращаемся туда и сразу
     // открываем «Привязать» (флаг hhConnected=1), чтобы шаг был один.
     if (vacancyId) {
-      return NextResponse.redirect(new URL(`/hr/vacancies/${vacancyId}?hhConnected=1`, req.url))
+      return NextResponse.redirect(new URL(`/hr/vacancies/${vacancyId}?hhConnected=1`, getAppBaseUrl()))
     }
-    return NextResponse.redirect(new URL("/hr/hiring-settings?tab=integrations&connected=hh", req.url))
+    return NextResponse.redirect(new URL("/hr/hiring-settings?tab=integrations&connected=hh", getAppBaseUrl()))
   } catch (err) {
     console.error("[hh/callback]", err)
-    return NextResponse.redirect(new URL("/hr/hiring-settings?tab=integrations&error=auth_failed", req.url))
+    return NextResponse.redirect(new URL("/hr/hiring-settings?tab=integrations&error=auth_failed", getAppBaseUrl()))
   }
 }

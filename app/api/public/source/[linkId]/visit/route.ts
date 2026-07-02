@@ -5,6 +5,9 @@ import { candidates, vacancyUtmLinks } from "@/lib/db/schema"
 import { generateCandidateShortId } from "@/lib/short-id"
 import { generateCandidateToken } from "@/lib/candidate-tokens"
 import { markDemoOpened } from "@/lib/candidates/mark-demo-opened"
+// База редиректа — из env (НЕ req.url): Next 16 подставляет внутренний origin
+// (http://localhost:3000) — инцидент 02.07.
+import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
 
 // Источник-демо bounce. Зеркало app/api/public/demo/[token]/visit/route.ts —
 // но «owner» берётся не из candidates.short_id, а из vacancy_utm_links.id.
@@ -29,7 +32,7 @@ export async function GET(
 
   // Невалидный uuid → отправляем домой (как /v/[code] делает для unknown slug).
   if (!UUID_RE.test(linkId)) {
-    return NextResponse.redirect(new URL("/", req.url))
+    return NextResponse.redirect(new URL("/", getAppBaseUrl()))
   }
 
   const [link] = await db
@@ -43,7 +46,7 @@ export async function GET(
     .limit(1)
 
   if (!link) {
-    return NextResponse.redirect(new URL("/", req.url))
+    return NextResponse.redirect(new URL("/", getAppBaseUrl()))
   }
 
   // Существующий посетитель — отправляем на его собственный демо-shortId,
@@ -68,7 +71,7 @@ export async function GET(
     if (existing && existing.shortId && existing.vacancyId === link.vacancyId) {
       if (!toTest) await markDemoOpened(existing.id)
       return NextResponse.redirect(
-        new URL(landingPath(existing.shortId, existing.id), req.url),
+        new URL(landingPath(existing.shortId, existing.id), getAppBaseUrl()),
       )
     }
     // Cookie указывает на (а) несуществующего кандидата, (б) кандидата
@@ -103,7 +106,7 @@ export async function GET(
   if (!created || !created.shortId) {
     // Не смогли (нет short_code у вакансии и т.п.) — отправляем на описание
     // вакансии как безопасный фолбэк.
-    return NextResponse.redirect(new URL("/", req.url))
+    return NextResponse.redirect(new URL("/", getAppBaseUrl()))
   }
 
   // Инкремент счётчика кандидатов на ссылке — единообразно с apply-веткой
@@ -113,7 +116,7 @@ export async function GET(
     .set({ candidatesCount: sql`${vacancyUtmLinks.candidatesCount} + 1` })
     .where(eq(vacancyUtmLinks.id, link.id))
 
-  const target = new URL(landingPath(created.shortId, created.id), req.url)
+  const target = new URL(landingPath(created.shortId, created.id), getAppBaseUrl())
   const res = NextResponse.redirect(target)
   res.cookies.set({
     name:     COOKIE_NAME,

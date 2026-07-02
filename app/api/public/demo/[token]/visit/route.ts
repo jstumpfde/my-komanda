@@ -6,6 +6,9 @@ import { isShortId, generateCandidateShortId } from "@/lib/short-id"
 import { checkPublicTokenRateLimit } from "@/lib/public/rate-limit-public"
 import { generateCandidateToken } from "@/lib/candidate-tokens"
 import { markDemoOpened } from "@/lib/candidates/mark-demo-opened"
+// База редиректа — из env (НЕ req.url): Next 16 подставляет внутренний origin
+// (http://localhost:3000), кандидаты за nginx получали битый Location (02.07).
+import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
 
 const COOKIE_NAME = "myk_candidate_uuid"
 const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 90 // 90 дней
@@ -32,7 +35,7 @@ export async function GET(
   const { token } = await params
 
   if (!isShortId(token)) {
-    return NextResponse.redirect(new URL(`/demo/${token}`, req.url))
+    return NextResponse.redirect(new URL(`/demo/${token}`, getAppBaseUrl()))
   }
 
   // Анти-перебор предсказуемых short_id: этот роут СОЗДАЁТ карточки кандидатов,
@@ -49,7 +52,7 @@ export async function GET(
     .where(eq(candidates.shortId, token))
     .limit(1)
   if (!owner) {
-    return NextResponse.redirect(new URL(`/demo/${token}`, req.url))
+    return NextResponse.redirect(new URL(`/demo/${token}`, getAppBaseUrl()))
   }
 
   // Если у посетителя уже есть cookie с валидным кандидатом — отправим к нему,
@@ -60,7 +63,7 @@ export async function GET(
     if (cookieUuid === owner.id) {
       // Owner кликнул на свою ссылку — фиксируем первый просмотр демо.
       await markDemoOpened(owner.id)
-      return NextResponse.redirect(new URL(`/demo/${token}?c=${owner.id}`, req.url))
+      return NextResponse.redirect(new URL(`/demo/${token}?c=${owner.id}`, getAppBaseUrl()))
     }
     const [existing] = await db
       .select({
@@ -82,7 +85,7 @@ export async function GET(
       // Существующий кандидат заходит на чужую ссылку владельца (но тех же
       // тенантов) — фиксируем его собственное открытие демо (не owner'а).
       await markDemoOpened(existing.id)
-      return NextResponse.redirect(new URL(`/demo/${existing.shortId}?c=${existing.id}`, req.url))
+      return NextResponse.redirect(new URL(`/demo/${existing.shortId}?c=${existing.id}`, getAppBaseUrl()))
     }
     // Cookie указывает на (а) несуществующего кандидата, (б) кандидата
     // другой вакансии — fallthrough, создаём нового под owner.vacancyId.
@@ -96,7 +99,7 @@ export async function GET(
     await markDemoOpened(owner.id)
     const ownerRedirect = new URL(
       `/demo/${owner.shortId ?? token}?c=${owner.id}`,
-      req.url
+      getAppBaseUrl()
     )
     const res = NextResponse.redirect(ownerRedirect)
     res.cookies.set({
@@ -136,10 +139,10 @@ export async function GET(
 
   if (!created || !created.shortId) {
     // Не смогли (нет short_code у вакансии и т.п.) — отправляем как есть.
-    return NextResponse.redirect(new URL(`/demo/${token}`, req.url))
+    return NextResponse.redirect(new URL(`/demo/${token}`, getAppBaseUrl()))
   }
 
-  const targetUrl = new URL(`/demo/${created.shortId}?c=${created.id}`, req.url)
+  const targetUrl = new URL(`/demo/${created.shortId}?c=${created.id}`, getAppBaseUrl())
   const res = NextResponse.redirect(targetUrl)
   res.cookies.set({
     name: COOKIE_NAME,

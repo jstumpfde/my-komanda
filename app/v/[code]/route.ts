@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { eq, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancyUtmLinks, vacancies } from "@/lib/db/schema"
+// База редиректа — из env (НЕ req.url): Next 16 подставляет внутренний origin
+// (http://localhost:3000) — инцидент 02.07.
+import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
 
 export async function GET(
   _req: NextRequest,
@@ -24,7 +27,7 @@ export async function GET(
       .limit(1)
 
     if (!link) {
-      return NextResponse.redirect(new URL("/", _req.url))
+      return NextResponse.redirect(new URL("/", getAppBaseUrl()))
     }
 
     // Increment clicks
@@ -43,7 +46,7 @@ export async function GET(
       // Источник ведёт сразу на демо ИЛИ на тест. Bounce создаёт кандидата под
       // link.vacancyId, ставит cookie и редиректит на /demo/{shortId} или
       // /test/{shortId} (флаг ?to=test). ?ref — аналитика (utm_ref cookie ниже).
-      redirectUrl = new URL(`/api/public/source/${link.id}/visit`, _req.url)
+      redirectUrl = new URL(`/api/public/source/${link.id}/visit`, getAppBaseUrl())
       if (link.destinationType === "test") redirectUrl.searchParams.set("to", "test")
     } else {
       // Default: страница описания вакансии (destinationType='vacancy').
@@ -54,7 +57,7 @@ export async function GET(
         .limit(1)
 
       const vacancySlug = vacancy?.slug || link.vacancyId
-      redirectUrl = new URL(`/vacancy/${vacancySlug}`, _req.url)
+      redirectUrl = new URL(`/vacancy/${vacancySlug}`, getAppBaseUrl())
       redirectUrl.searchParams.set("ref", link.id)
     }
 
@@ -69,6 +72,6 @@ export async function GET(
 
     return response
   } catch {
-    return NextResponse.redirect(new URL("/", _req.url))
+    return NextResponse.redirect(new URL("/", getAppBaseUrl()))
   }
 }
