@@ -127,6 +127,12 @@ export async function POST(
     if (file.size > MAX_SIZE) return apiError("Файл больше 200MB", 413)
 
     const mime = (file.type || "").toLowerCase()
+    // SVG отсекаем всегда: инлайн-SVG с публичного /uploads исполняет скрипты
+    // (stored XSS), а по prefix "image/" он иначе прошёл бы как photo.
+    if (mime === "image/svg+xml" || mime.startsWith("image/svg") ||
+        (file.name.split(".").pop()?.toLowerCase() ?? "") === "svg") {
+      return apiError("Формат SVG не поддерживается", 415)
+    }
     const allowed = ALLOWED_MIME[mediaType]
     const prefix = MEDIA_TYPE_PREFIX[mediaType]
     // Принимаем если: (1) точное совпадение/с codecs-суффиксом из белого списка,

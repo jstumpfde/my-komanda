@@ -28,7 +28,9 @@ export async function POST(req: NextRequest) {
 
     const filename0 = (file as File).name ?? "logo"
     const ext = filename0.split(".").pop()?.toLowerCase() ?? "png"
-    const allowedExts = ["png", "jpg", "jpeg", "svg", "webp"]
+    // SVG исключён намеренно — stored XSS: инлайн-рендер SVG с публичного
+    // /uploads исполняет вложенные скрипты. Растровые форматы безопасны.
+    const allowedExts = ["png", "jpg", "jpeg", "webp"]
     if (!allowedExts.includes(ext)) {
       return NextResponse.json(
         { error: `Формат .${ext} не поддерживается. Разрешены: ${allowedExts.join(", ")}` },

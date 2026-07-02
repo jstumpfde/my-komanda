@@ -3,6 +3,7 @@ import { db } from "@/lib/db"
 import { hhIntegrations } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 import { exchangeCode, getMe } from "@/lib/hh-api"
+import { verifyHhState } from "@/lib/hh/oauth-state"
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -13,17 +14,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL("/hr/hiring-settings?tab=integrations&error=missing_params", req.url))
   }
 
-  let companyId: string
-  let userId: string
-  let vacancyId: string | undefined
-  try {
-    const parsed = JSON.parse(Buffer.from(state, "base64url").toString())
-    companyId = parsed.companyId
-    userId = parsed.userId
-    vacancyId = parsed.vacancyId || undefined
-  } catch {
+  // State подписан HMAC при инициации (/connect). Проверяем подпись — без неё
+  // companyId из state доверять НЕЛЬЗЯ (иначе можно привязать hh-интеграцию к
+  // чужой компании, подставив чужой companyId).
+  const parsed = verifyHhState(state)
+  if (!parsed) {
     return NextResponse.redirect(new URL("/hr/hiring-settings?tab=integrations&error=invalid_state", req.url))
   }
+  const companyId: string = parsed.companyId
+  const userId: string = parsed.userId
+  const vacancyId: string | undefined = parsed.vacancyId
 
   try {
     const tokens = await exchangeCode(code)

@@ -40,7 +40,10 @@ export async function POST(req: NextRequest) {
     }
 
     const ext = filename0.split(".").pop()?.toLowerCase() ?? "png"
-    const allowedExts = ["png", "jpg", "jpeg", "svg", "webp"]
+    // SVG исключён намеренно: файл отдаётся с публичного /uploads и, будучи
+    // отрендерен инлайн, исполняет вложенные <script> (stored XSS у всех, кто
+    // увидит логотип на публичной странице). Растровые логотипы безопасны.
+    const allowedExts = ["png", "jpg", "jpeg", "webp"]
     if (!allowedExts.includes(ext)) {
       return NextResponse.json({ error: `Формат .${ext} не поддерживается. Разрешены: ${allowedExts.join(", ")}` }, { status: 400 })
     }

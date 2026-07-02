@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { candidates, demos, testSubmissions } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { isShortId } from "@/lib/short-id"
+import { checkPublicTokenRateLimit } from "@/lib/public/rate-limit-public"
 import {
   scoreObjective,
   collectTaskQuestions,
@@ -27,6 +28,12 @@ export async function POST(
   { params }: { params: Promise<{ token: string }> },
 ) {
   try {
+    // Анти-перебор предсказуемых short_id. Автосохранение зовётся чаще обычных
+    // роутов, поэтому лимит выше (см. lib/public/rate-limit-public).
+    if (!checkPublicTokenRateLimit(req, "test-answer", 240)) {
+      return apiError("Слишком много запросов, попробуйте позже", 429)
+    }
+
     const { token } = await params
     const body = await req.json().catch(() => ({})) as {
       answerText?: unknown

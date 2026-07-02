@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { candidates } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { isShortId } from "@/lib/short-id"
+import { checkPublicTokenRateLimit } from "@/lib/public/rate-limit-public"
 
 // POST /api/public/demo/[token]/cta-click
 // Публичный (без логина) трекинг клика по кнопке-ссылке (button-блок с
@@ -23,6 +24,11 @@ export async function POST(
   { params }: { params: Promise<{ token: string }> },
 ) {
   try {
+    // Анти-перебор предсказуемых short_id (см. lib/public/rate-limit-public).
+    if (!checkPublicTokenRateLimit(req, "demo-cta-click")) {
+      return apiError("Слишком много запросов, попробуйте позже", 429)
+    }
+
     const { token } = await params
 
     let blockId = ""

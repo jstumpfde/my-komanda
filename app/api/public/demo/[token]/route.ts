@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { candidates, vacancies, demos, companies, hhResponses, vacancySpecs } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { isShortId } from "@/lib/short-id"
+import { checkPublicTokenRateLimit } from "@/lib/public/rate-limit-public"
 import { buildCandidateDeepLink, generateInviteToken } from "@/lib/telegram/candidate-bot"
 import { normalizeFunnelV2 } from "@/lib/funnel-v2/types"
 import { resolveCurrentStageContent } from "@/lib/funnel-v2/resolve-content"
@@ -36,10 +37,15 @@ function extractHhPrefill(rawData: unknown): { first_name: string | null; last_n
 }
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ token: string }> },
 ) {
   try {
+    // Анти-перебор предсказуемых short_id (см. lib/public/rate-limit-public).
+    if (!checkPublicTokenRateLimit(req, "demo-get")) {
+      return apiError("Слишком много запросов, попробуйте позже", 429)
+    }
+
     const { token } = await params
 
     // Резолв: сначала по short_id, иначе по token (preview/nanoid/uuid).
