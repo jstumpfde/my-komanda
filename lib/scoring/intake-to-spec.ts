@@ -97,6 +97,7 @@ export async function intakeToScoringSpec(data: IntakeData): Promise<ScoringSpec
   const client = getScoringClient()
   const response = await client.messages.create({
     model: MODEL,
+    thinking: { type: "disabled" },
     max_tokens: 1500,
     tools: [TOOL],
     tool_choice: { type: "tool", name: "submit_spec" },

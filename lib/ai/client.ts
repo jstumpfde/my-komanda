@@ -36,6 +36,7 @@ async function call(model: string, prompt: string, system?: string, maxTokens = 
     const resp = await client().messages.create({
       model,
       max_tokens: maxTokens,
+      thinking: { type: "disabled" }, // Sonnet 5: без поля включился бы adaptive (см. lib/ai/models.ts)
       system,
       messages: [{ role: "user", content: prompt }],
     })
@@ -58,6 +59,7 @@ async function callMessages(
     const resp = await client().messages.create({
       model,
       max_tokens: maxTokens,
+      thinking: { type: "disabled" }, // Sonnet 5: без поля включился бы adaptive (см. lib/ai/models.ts)
       system,
       messages: messages.map(m => ({ role: m.role, content: m.content })),
     })
@@ -82,6 +84,7 @@ async function callWithUsage(model: string, prompt: string, system?: string, max
     const resp = await client().messages.create({
       model,
       max_tokens: maxTokens,
+      thinking: { type: "disabled" }, // Sonnet 5: без поля включился бы adaptive (см. lib/ai/models.ts)
       system,
       messages: [{ role: "user", content: prompt }],
     })
@@ -100,6 +103,7 @@ async function callMessagesWithUsage(
     const resp = await client().messages.create({
       model,
       max_tokens: maxTokens,
+      thinking: { type: "disabled" }, // Sonnet 5: без поля включился бы adaptive (см. lib/ai/models.ts)
       system,
       messages: messages.map(m => ({ role: m.role, content: m.content })),
     })

@@ -360,6 +360,7 @@ export async function POST(req: NextRequest) {
 
     const response = await client.messages.create({
       model: AI_MODEL_MAIN,
+      thinking: { type: "disabled" },
       max_tokens: 3000,
       system: `Ты — AI-помощник для HR. Ты анализируешь анкету вакансии и даёшь рекомендации по улучшению.
 Отвечай ТОЛЬКО валидным JSON. Никакого markdown, комментариев или текста вне JSON.

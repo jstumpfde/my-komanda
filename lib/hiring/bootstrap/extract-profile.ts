@@ -91,6 +91,7 @@ function toProfile(raw: RawProduct, i: number): ProductProfile {
 export async function extractProfileFromSiteText(siteText: string): Promise<ExtractResult> {
   const response = await client.messages.create({
     model: AI_MODEL_MAIN,
+    thinking: { type: "disabled" },
     max_tokens: 2500,
     system: SYSTEM,
     messages: [{

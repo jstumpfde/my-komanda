@@ -129,7 +129,8 @@ ${salesSections.length > 0 ? "\nСПЕЦИФИКА ПРОДАЖ:\n" + salesSecti
 
   const response = await client.messages.create({
     model: AI_MODEL_MAIN,
-    max_tokens: 1000,
+    thinking: { type: "disabled" },
+    max_tokens: 1500, // запас под токенизатор Sonnet 5 (~+30%)
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content: userMessage }],
   })

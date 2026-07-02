@@ -72,7 +72,8 @@ ${sideHint}
 
     const message = await anthropic.messages.create({
       model:      AI_MODEL_MAIN,
-      max_tokens: 300,
+      thinking: { type: "disabled" },
+      max_tokens: 500, // запас под токенизатор Sonnet 5 (~+30%)
       messages:   [{ role: "user", content: prompt }],
     })
 

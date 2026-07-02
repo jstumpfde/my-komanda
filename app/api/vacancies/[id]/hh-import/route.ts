@@ -44,6 +44,7 @@ async function splitDescriptionWithAi(description: string): Promise<{ about: str
         // текст в «Обязанности»). Модель — из реестра lib/ai/models.ts. max_tokens 2000 был мал для длинных вакансий — JSON ответа
         // обрезался, парс падал → тот же fallback. 12000 покрывает длинное (потолок 64K).
         model: AI_MODEL_MAIN,
+        thinking: { type: "disabled" },
         max_tokens: 12000,
         system: SPLIT_PROMPT,
         messages: [{ role: "user", content: description }],

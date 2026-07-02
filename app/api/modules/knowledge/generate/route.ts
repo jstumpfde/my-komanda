@@ -267,6 +267,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         model: CLAUDE_MODEL,
+        thinking: { type: "disabled" },
         max_tokens: 4096,
         system: BASE_SYSTEM,
         messages: [{ role: "user", content: userMessage }],

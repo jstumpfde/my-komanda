@@ -61,6 +61,7 @@ async function callClaude(
     },
     body: JSON.stringify({
       model: CLAUDE_MODEL,
+      thinking: { type: "disabled" },
       max_tokens: 4096,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: userText }],

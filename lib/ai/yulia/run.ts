@@ -44,6 +44,7 @@ export interface YuliaResponse {
 export async function runYulia(history: YuliaTurn[]): Promise<YuliaResponse> {
   const resp = await client().messages.create({
     model:       MODEL,
+    thinking: { type: "disabled" },
     max_tokens:  MAX_TOKENS,
     system:      YULIA_SYSTEM_PROMPT,
     tools:       YULIA_VACANCY_CREATION_TOOLS as unknown as Anthropic.Tool[],

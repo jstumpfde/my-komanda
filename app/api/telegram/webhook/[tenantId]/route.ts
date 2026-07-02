@@ -129,7 +129,8 @@ async function askClaude(question: string, context: string, materialsList: Mater
       },
       body: JSON.stringify({
         model: AI_MODEL_MAIN,
-        max_tokens: 1024,
+        thinking: { type: "disabled" },
+        max_tokens: 1536, // запас под токенизатор Sonnet 5 (~+30%)
         system: SYSTEM_PROMPT,
         messages: [
           { role: "user", content: `Материалы компании:\n${context}\n\nВопрос: ${question}` },

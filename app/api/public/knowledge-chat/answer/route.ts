@@ -55,7 +55,8 @@ export async function POST(req: NextRequest) {
     const client = new Anthropic({ baseURL: getClaudeApiUrl() })
     const resp = await client.messages.create({
       model: CLAUDE_MODEL,
-      max_tokens: 1024,
+      thinking: { type: "disabled" },
+      max_tokens: 1536, // запас под токенизатор Sonnet 5 (~+30%)
       system: SYSTEM_PROMPT,
       messages: [
         { role: "user", content: `Материалы компании:\n${context}\n\nВопрос: ${question}` },

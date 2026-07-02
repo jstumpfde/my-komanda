@@ -8,7 +8,15 @@
 //  - AI_MODEL_FAST — дешёвые/массовые задачи (пре/пост-фильтры чат-бота,
 //    классификация ответов, скрининг резюме): claude-haiku-4-5 — $1/$5.
 //
-// ВАЖНО про claude-sonnet-5: non-default temperature/top_p/top_k → 400
-// (у Sonnet 4.6 работали). НЕ передавать temperature в вызовы с AI_MODEL_MAIN.
+// ВАЖНО про claude-sonnet-5 (отличия от Sonnet 4.6):
+//  1. non-default temperature/top_p/top_k → 400. НЕ передавать temperature
+//     в вызовы с AI_MODEL_MAIN.
+//  2. Без поля thinking по умолчанию включается ADAPTIVE thinking (на 4.6
+//     отсутствие поля = выключен). Thinking-токены тратятся и входят в
+//     max_tokens → JSON-ответы могут обрезаться. Политика пайплайна:
+//     каждый вызов с AI_MODEL_MAIN передаёт thinking: { type: "disabled" };
+//     adaptive включаем только осознанно и точечно.
+//  3. Новый токенизатор: ~+30% токенов на тот же текст → у «впритык»
+//     max_tokens добавлен запас (комментарий «запас под токенизатор Sonnet 5»).
 export const AI_MODEL_MAIN = "claude-sonnet-5"
 export const AI_MODEL_FAST = "claude-haiku-4-5-20251001"

@@ -87,13 +87,16 @@ export async function POST(req: NextRequest) {
   const model = ALLOWED_MODELS.has(requestedModel)
     ? requestedModel
     : AI_MODEL_MAIN
-  const maxTokens = Math.min(Math.max(Number(body?.max_tokens) || 1024, 1), MAX_TOKENS_CAP)
+  const maxTokens = Math.min(Math.max(Number(body?.max_tokens) || 1536, 1), MAX_TOKENS_CAP) // дефолт 1536: запас под токенизатор Sonnet 5
 
   try {
     const client = new Anthropic({ baseURL: getClaudeApiUrl() })
     const resp = await client.messages.create({
       model,
       max_tokens: maxTokens,
+      // Sonnet 5: без поля thinking включился бы adaptive (thinking-токены едят
+      // max_tokens). Выключаем явно; {type:"disabled"} валиден на всех ALLOWED_MODELS.
+      thinking: { type: "disabled" },
       ...(system ? { system } : {}),
       messages,
     })

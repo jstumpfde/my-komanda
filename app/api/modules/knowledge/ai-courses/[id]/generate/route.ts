@@ -172,6 +172,7 @@ ${combinedText.slice(0, 12000)}
       headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
         model: AI_MODEL_MAIN,
+        thinking: { type: "disabled" },
         max_tokens: 8192,
         system: "Ты эксперт по созданию корпоративных обучающих курсов. На основе предоставленных материалов создай структурированный курс. Отвечай ТОЛЬКО валидным JSON без markdown.",
         messages: [{ role: "user", content: prompt }],

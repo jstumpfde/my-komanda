@@ -112,6 +112,7 @@ async function callClaudeVision(
     },
     body: JSON.stringify({
       model: CLAUDE_MODEL,
+      thinking: { type: "disabled" },
       max_tokens: 4096,
       system: OCR_SYSTEM_PROMPT,
       messages: [

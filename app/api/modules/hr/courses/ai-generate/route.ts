@@ -278,6 +278,7 @@ ${combinedText.slice(0, 12000)}
       },
       body: JSON.stringify({
         model: AI_MODEL_MAIN,
+        thinking: { type: "disabled" },
         max_tokens: 8192,
         system: "Ты — эксперт по созданию обучающих курсов для корпоративного обучения. Создай структурированный курс на основе предоставленных материалов. Ответь строго в JSON формате.",
         messages: [{ role: "user", content: prompt }],

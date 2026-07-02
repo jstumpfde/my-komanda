@@ -462,7 +462,8 @@ export async function POST(req: Request) {
         const client = new Anthropic({ baseURL })
         resp = await client.messages.create({
           model:      AI_MODEL_MAIN,
-          max_tokens: 768,
+          thinking: { type: "disabled" },
+          max_tokens: 1024, // запас под токенизатор Sonnet 5 (~+30%)
           system:     systemFull,
           messages,
         })

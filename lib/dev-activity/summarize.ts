@@ -75,6 +75,7 @@ export async function summarizeDay(day: string, commits: CommitForSummary[], who
 
   const msg = await anthropic.messages.create({
     model:       AI_MODEL_MAIN,
+    thinking: { type: "disabled" },
     max_tokens:  2000,
     messages:    [{ role: "user", content: buildPrompt(day, commits, who) }],
   })

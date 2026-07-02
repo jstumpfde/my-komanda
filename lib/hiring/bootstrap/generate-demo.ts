@@ -98,6 +98,7 @@ export async function generateDemoFromProfile(opts: {
 
   const response = await client.messages.create({
     model: AI_MODEL_MAIN,
+    thinking: { type: "disabled" },
     max_tokens: length === "short" ? 1500 : 4500,
     system: length === "short" ? SYSTEM_SHORT : SYSTEM_FULL,
     messages: [{

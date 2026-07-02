@@ -263,6 +263,7 @@ export async function scoreCandidateV2(
 
   const extractMsg = await anthropic.messages.create({
     model:       AI_MODEL_MAIN,
+    thinking: { type: "disabled" },
     max_tokens:  1500,
     messages:    [{ role: "user", content: extractPrompt }],
   })
@@ -285,6 +286,7 @@ export async function scoreCandidateV2(
 
   const compareMsg = await anthropic.messages.create({
     model:       AI_MODEL_MAIN,
+    thinking: { type: "disabled" },
     max_tokens:  1500,
     messages:    [{ role: "user", content: comparePrompt }],
   })

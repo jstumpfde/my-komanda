@@ -104,6 +104,7 @@ export async function POST(req: NextRequest) {
 
     const response = await client.messages.create({
       model: AI_MODEL_MAIN,
+      thinking: { type: "disabled" },
       max_tokens: 2000,
       system: SYSTEM_PROMPT + AI_SAFETY_PROMPT,
       messages: [{ role: "user", content: userMessage }],

@@ -68,6 +68,7 @@ async function askClaudeRecommendations(
       },
       body: JSON.stringify({
         model: AI_MODEL_MAIN,
+        thinking: { type: "disabled" },
         max_tokens: 1500,
         messages: [{ role: "user", content: prompt }],
       }),

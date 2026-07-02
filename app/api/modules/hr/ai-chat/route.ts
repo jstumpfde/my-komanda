@@ -91,7 +91,8 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 1024,
+        thinking: { type: "disabled" },
+        max_tokens: 1536, // запас под токенизатор Sonnet 5 (~+30%)
         system: SYSTEM_PROMPT,
         messages,
       }),
