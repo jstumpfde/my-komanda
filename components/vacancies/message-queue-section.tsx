@@ -15,7 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Loader2, PauseCircle, Trash2 } from "lucide-react"
+import { Loader2, PauseCircle, Play, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { Label } from "@/components/ui/label"
 import { MessageQueueJournal } from "@/components/vacancies/message-queue-journal"
@@ -165,8 +165,27 @@ export function MessageQueueSection({ vacancyId }: Props) {
         </TabsList>
 
         <TabsContent value="journal" className="mt-3 space-y-3">
-          {totalPending > 0 && (
-            <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            {/* Остановить/возобновить рассылку — рядом с «Очистить очередь» (просьба Юрия) */}
+            <Button
+              variant="outline"
+              size="sm"
+              className={
+                data?.paused
+                  ? "h-8 text-xs text-emerald-600 border-emerald-500/40 hover:bg-emerald-500/5 hover:text-emerald-600"
+                  : "h-8 text-xs text-amber-600 border-amber-500/40 hover:bg-amber-500/5 hover:text-amber-600"
+              }
+              onClick={() => handlePauseToggle(!(data?.paused ?? false))}
+              disabled={loading || pauseLoading}
+            >
+              {pauseLoading
+                ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                : data?.paused
+                  ? <Play className="w-3.5 h-3.5 mr-1.5" />
+                  : <PauseCircle className="w-3.5 h-3.5 mr-1.5" />}
+              {data?.paused ? "Возобновить рассылку" : "Остановить рассылку"}
+            </Button>
+            {totalPending > 0 && (
               <Button
                 variant="outline"
                 size="sm"
@@ -177,8 +196,8 @@ export function MessageQueueSection({ vacancyId }: Props) {
                 <Trash2 className="w-3.5 h-3.5 mr-1.5" />
                 Очистить очередь
               </Button>
-            </div>
-          )}
+            )}
+          </div>
           <MessageQueueJournal key={journalKey} vacancyId={vacancyId} onChanged={fetchData} />
         </TabsContent>
 
