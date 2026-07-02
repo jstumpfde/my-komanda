@@ -1,7 +1,9 @@
 // Email-гейт «owner-only» экспериментальных фич HR (виды Канбан/Плитки/Воронка
 // в карточке вакансии, пункт меню «Календарь»). Пока обкатываются — видны только
 // владельцу-полигону, остальным (включая директоров других компаний) скрыты.
-export const OWNER_EMAILS = ["j.stumpf@yandex.ru"]
+// Оба аккаунта Юрия: yandex.ru (ИП Штумпф) и yandex.by (Орлинк) — owner-фичи
+// должны быть видны ему с любого его логина (02.07: с yandex.by не видел Воронку 3).
+export const OWNER_EMAILS = ["j.stumpf@yandex.ru", "j.stumpf@yandex.by"]
 
 export function isOwnerEmail(email?: string | null): boolean {
   return !!email && OWNER_EMAILS.includes(email.trim().toLowerCase())
