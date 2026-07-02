@@ -84,6 +84,7 @@ import { ScheduleInviteSettings } from "@/components/vacancies/schedule-invite-s
 import { FirstMessagesChainEditor } from "@/components/vacancies/first-messages-chain-editor"
 import { FunnelBuilder } from "@/components/vacancies/funnel-builder"
 import { FunnelV2Builder } from "@/components/vacancies/funnel-v2-builder"
+import { FunnelV3Editor } from "@/components/vacancies/funnel-v3-editor"
 import { SpecEditor } from "@/components/vacancies/spec-editor"
 import { FunnelTab } from "@/components/vacancies/funnel-tab"
 import { MessageQueueSection } from "@/components/vacancies/message-queue-section"
@@ -253,6 +254,9 @@ export default function VacancyPage() {
   const id = params.id as string
   // B5: роль поднята наверх — нужна в setCardSettings и useEffect для user-prefs
   const { role, user } = useAuth()
+  // «Воронка 3» — owner-only (тот же email-гейт-полигон, что виды Канбан/Плитки;
+  // API funnel-v2 и так отдаёт 404 не-владельцу).
+  const funnelV3Visible = isOwnerEmail(user?.email)
 
   // «Рабочий стол» (/hr/workspace) открывает последнюю посещённую вакансию.
   useEffect(() => {
@@ -1079,7 +1083,7 @@ export default function VacancyPage() {
   const rawUrlSection = rawUrlTab === "automation" ? "ai" : (searchParams?.get("section") ?? null)
   // Миграция старых section-значений на новые 6 табов.
   // general → page (стартовая вкладка с брендингом), automation → ai.
-  const SETTINGS_SECTION_IDS = ["page", "sources", "messages", "funnel", "funnel-builder", "funnel-v2", "spec", "followup", "aichatbot", "ai", "integrations"] as const
+  const SETTINGS_SECTION_IDS = ["page", "sources", "messages", "funnel", "funnel-builder", "funnel-v2", "funnel-v3", "spec", "followup", "aichatbot", "ai", "integrations"] as const
   type SettingsSectionId = typeof SETTINGS_SECTION_IDS[number]
   // Скрытые legacy-секции: при прямой ссылке (?section=funnel|followup|aichatbot)
   // перенаправляем на funnel-builder. «messages» ВЕРНУЛИ отдельным табом (Юрий не мог
@@ -1128,6 +1132,7 @@ export default function VacancyPage() {
       { kind: "section", value: "settings", section: "messages",       label: "Сообщения" },
       { kind: "section", value: "settings", section: "followup",       label: "Дожим" },
       { kind: "section", value: "settings", section: "funnel-v2",      label: "Воронка v2" },
+      { kind: "section", value: "settings", section: "funnel-v3",      label: "Воронка 3" },
       { kind: "section", value: "settings", section: "sources",        label: "Источники" },
       { kind: "section", value: "settings", section: "ai",             label: "Расписание" },
       { kind: "section", value: "settings", section: "integrations",   label: "Интеграции" },
@@ -1136,8 +1141,11 @@ export default function VacancyPage() {
       { kind: "tab",     value: "queue",    section: null,             label: "Очередь" },
     ]
     // «Воронка» (старый funnel-builder) видна только платформенному администратору.
-    return all.filter(s => isPlatformAdmin || s.section !== "funnel-builder")
-  }, [isPlatformAdmin])
+    // «Воронка 3» — только владельцу-полигону (owner-only, как API funnel-v2).
+    return all
+      .filter(s => isPlatformAdmin || s.section !== "funnel-builder")
+      .filter(s => funnelV3Visible || s.section !== "funnel-v3")
+  }, [isPlatformAdmin, funnelV3Visible])
 
   // Переход к шагу канонического ряда (используется «Далее»/«Назад» нижней панели).
   const goToVacancyStep = useCallback((step: VacancyStep) => {
@@ -3191,6 +3199,7 @@ export default function VacancyPage() {
                   { kind: "section", value: "settings", label: "Сообщения",        icon: MessageSquare, section: "messages"       },
                   { kind: "section", value: "settings", label: "Дожим",            icon: RefreshCw,     section: "followup"       },
                   { kind: "section", value: "settings", label: "Воронка v2",       icon: Workflow,      section: "funnel-v2"      },
+                  { kind: "section", value: "settings", label: "Воронка 3",        icon: Workflow,      section: "funnel-v3"      },
                   { kind: "section", value: "settings", label: "Источники",        icon: Link2,         section: "sources"        },
                   { kind: "section", value: "settings", label: "Расписание",       icon: Clock,         section: "ai"             },
                   { kind: "section", value: "settings", label: "Интеграции",       icon: Settings,      section: "integrations"   },
@@ -3217,7 +3226,10 @@ export default function VacancyPage() {
                 // Если активный пункт попал в «скрытые» — добавляем его перед «Ещё» (на мобильных)
                 // «Воронка v2» (beta) видна всем пользователям (Юрий 26.06).
                 // «Воронка» (старый funnel-builder) — только платформенному администратору.
-                const subTabs = settingsSubTabs.filter(s => isPlatformAdmin || s.section !== "funnel-builder")
+                // «Воронка 3» — только владельцу-полигону (owner-only).
+                const subTabs = settingsSubTabs
+                  .filter(s => isPlatformAdmin || s.section !== "funnel-builder")
+                  .filter(s => funnelV3Visible || s.section !== "funnel-v3")
                 const VISIBLE_COUNT_SM = 5
                 const visibleTabs = subTabs.slice(0, VISIBLE_COUNT_SM)
                 const overflowTabs = subTabs.slice(VISIBLE_COUNT_SM)
@@ -4368,6 +4380,13 @@ export default function VacancyPage() {
                     router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
                     window.scrollTo({ top: 0, behavior: "smooth" })
                   }} />
+                </div>
+                )}
+
+                {/* ───────── Воронка 3 (owner-only: единый конструктор поверх движка v2) ───────── */}
+                {settingsSection === "funnel-v3" && funnelV3Visible && (
+                <div className="space-y-6">
+                  <FunnelV3Editor vacancyId={id} />
                 </div>
                 )}
 
