@@ -483,8 +483,10 @@ export function dealBreakerPenalty(item: DealBreakerItem): number {
 export type DealBreakerEntry = string | DealBreakerItem
 
 /**
- * Нормализует dealBreakers любого формата в массив { text, hard }.
- * Строка → { text, hard: true } (отказ, как раньше). Битые отброшены.
+ * Нормализует dealBreakers любого формата в массив { text, hard, penalty? }.
+ * Строка → { text, hard: true } (отказ, как раньше). Явный penalty (осевой
+ * режим) проносится насквозь — иначе он не переживает ре-рендер редактора
+ * и сохранение спека. Битые отброшены.
  */
 export function normalizeDealBreakers(items: ReadonlyArray<DealBreakerEntry> | null | undefined): DealBreakerItem[] {
   if (!Array.isArray(items)) return []
@@ -495,7 +497,13 @@ export function normalizeDealBreakers(items: ReadonlyArray<DealBreakerEntry> | n
       if (t) out.push({ text: t, hard: true })
     } else if (it && typeof it === "object" && typeof it.text === "string") {
       const t = it.text.trim()
-      if (t) out.push({ text: t, hard: typeof it.hard === "boolean" ? it.hard : true })
+      if (t) out.push({
+        text: t,
+        hard: typeof it.hard === "boolean" ? it.hard : true,
+        ...(typeof it.penalty === "number" && Number.isFinite(it.penalty)
+          ? { penalty: Math.max(0, Math.min(100, Math.round(it.penalty))) }
+          : {}),
+      })
     }
   }
   return out

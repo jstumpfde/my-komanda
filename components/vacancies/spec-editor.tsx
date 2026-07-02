@@ -975,20 +975,29 @@ function GoodEditor({
 
 // ─── 🔴 «Не подходит по смыслу»: стоп-фактор vs минус к баллу ─────────────────
 
+const BAD_KINDS = [
+  { hard: true,  label: "Стоп-фактор",   solid: "bg-red-500"   },
+  { hard: false, label: "Минус к баллу", solid: "bg-amber-500" },
+] as const
+
 function BadEditor({
-  items, onChange, vacancyId,
+  items, onChange, vacancyId, axesMode = false,
 }: {
   items:      DealBreakerEntry[]
   onChange:   (next: DealBreakerItem[]) => void
   vacancyId:  string
+  /** scoringMode==="axes": слайдер величины штрафа; holistic читает только hard → кружки. */
+  axesMode?:  boolean
 }) {
   const rows = normalizeDealBreakers(items)
-  // Величина штрафа: −N баллов (0..100, шаг 5). 100 = полный стоп (обнуление).
-  // Синхронизируем item.hard = (penalty>=100) для legacy-потребителей.
+  // Осевой режим — величина штрафа: −N баллов (0..100, шаг 5), 100 = полный
+  // стоп (обнуление). Синхронизируем item.hard = (penalty>=100) для legacy.
   const setPenalty = (i: number, penalty: number) => {
     const p = Math.max(0, Math.min(100, penalty))
     onChange(rows.map((r, idx) => idx === i ? { ...r, penalty: p, hard: p >= 100 } : r))
   }
+  // Holistic — движок читает только hard (стоп/минус), величина не действует.
+  const setHard = (i: number, hard: boolean) => onChange(rows.map((r, idx) => idx === i ? { ...r, hard } : r))
   const remove  = (i: number) => onChange(rows.filter((_, idx) => idx !== i))
 
   const [draft, setDraft] = useState("")
@@ -1037,17 +1046,27 @@ function BadEditor({
         </Label>
         <ListCounter count={rows.length} max={10} />
       </div>
-      <p className="text-xs text-muted-foreground">
-        Насколько пункт снижает балл, если AI прямо видит это в резюме. Задайте величину штрафа справа:{" "}
-        <b>100 = полный стоп</b> (кандидат обнуляется). Итог не опускается ниже 0 — минуса не бывает.
-      </p>
+      {axesMode ? (
+        <p className="text-xs text-muted-foreground">
+          Насколько пункт снижает балл, если AI прямо видит это в резюме. Задайте величину штрафа справа:{" "}
+          <b>100 = полный стоп</b> (кандидат обнуляется). Итог не опускается ниже 0 — минуса не бывает.
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Стоп-фактор — отказ, только если AI прямо видит это в резюме. Минус к баллу — просто ниже балл, не отказ. Можно фразой. Кружок справа:{" "}
+          <span className="text-red-600 dark:text-red-400">красный — стоп-фактор</span>,{" "}
+          <span className="text-amber-600 dark:text-amber-400">янтарный — минус к баллу</span>.
+        </p>
+      )}
       <div className="space-y-1.5">
         {rows.map((r, i) => (
           <div key={i} className="rounded-md border p-2">
             <div className="flex items-center gap-3">
               <span className="flex-1 text-sm min-w-0 break-words">{r.text}</span>
-              {/* Величина штрафа: −N баллов (Slider 0..100 шаг 5). 100 = полный стоп. */}
-              {(() => {
+              {/* Осевой режим: величина штрафа (Slider 0..100 шаг 5, 100 = полный стоп).
+                  Holistic: прежние кружки стоп/минус — движок читает только hard,
+                  слайдер там был бы мёртвым и молча снимал бы стоп-фактор. */}
+              {axesMode ? (() => {
                 const pen = dealBreakerPenalty(r)
                 const full = pen >= 100
                 return (
@@ -1067,7 +1086,20 @@ function BadEditor({
                     </span>
                   </div>
                 )
-              })()}
+              })() : BAD_KINDS.map(k => {
+                const active = r.hard === k.hard
+                return (
+                  <button key={String(k.hard)} type="button" onClick={() => setHard(i, k.hard)} title={k.label} aria-label={k.label}
+                    className={cn(
+                      "w-7 h-[22px] rounded-md border border-transparent flex items-center justify-center text-white shrink-0 transition-all",
+                      k.solid,
+                      active ? "opacity-100 shadow-sm" : "opacity-30 hover:opacity-60",
+                    )}
+                  >
+                    {active && <Check className="w-3.5 h-3.5" />}
+                  </button>
+                )
+              })}
               <button type="button" onClick={() => remove(i)}
                 className="rounded-full hover:bg-muted-foreground/20 p-0.5 shrink-0" aria-label={`Убрать «${r.text}»`}>
                 <X className="w-3.5 h-3.5" />
@@ -1810,6 +1842,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
             items={spec.dealBreakers}
             onChange={v => patch({ dealBreakers: v })}
             vacancyId={vacancyId}
+            axesMode={spec.scoringMode === "axes"}
           />
 
           <div className="pt-4 border-t space-y-3">

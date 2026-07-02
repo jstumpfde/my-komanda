@@ -16,7 +16,7 @@ import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import { addVacancyTokens } from "@/lib/ai/token-usage"
 import type { ResumeScreenInput } from "@/lib/ai-screen-resume"
 import type { CandidateSpec } from "@/lib/core/spec/types"
-import { normalizeNiceToHave, normalizeDealBreakers, dealBreakerPenalty } from "@/lib/core/spec/types"
+import { normalizeMustHave, normalizeNiceToHave, normalizeDealBreakers, dealBreakerPenalty } from "@/lib/core/spec/types"
 
 const client = new Anthropic({ baseURL: getClaudeApiUrl() })
 
@@ -62,9 +62,17 @@ function splitTermSynonyms(text: string): { label: string; synonyms: string[] } 
   return { label: parts[0] ?? text.trim(), synonyms: parts.slice(1) }
 }
 
-/** Оси «Подходит» из Spec с равными весами (100/N, остаток — первым осям). */
+/**
+ * Оси «Подходит» из Spec с равными весами (100/N, остаток — первым осям).
+ * Источник — ТО ЖЕ объединение mustHave+niceToHave, что GoodEditor показывает
+ * HR-у как оси с бейджами весов: у спеков, сохранённых до 🟢-редизайна,
+ * mustHave непустой, и без него показанные критерии молча выпадали бы из балла.
+ */
 export function buildAxes(spec: CandidateSpec): Axis[] {
-  const rows = normalizeNiceToHave(spec.niceToHave)
+  const rows = [
+    ...normalizeMustHave(spec.mustHave),
+    ...normalizeNiceToHave(spec.niceToHave),
+  ]
   const n = rows.length
   if (n === 0) return []
   const base = Math.floor(100 / n)

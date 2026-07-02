@@ -8,9 +8,10 @@
 import { NextRequest } from "next/server"
 import { and, eq, inArray, desc } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, vacancies, testSubmissions } from "@/lib/db/schema"
+import { candidates, vacancies, testSubmissions, hhResponses } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { screenResume } from "@/lib/ai-screen-resume"
+import { extractHhResumeFields } from "@/lib/hh/extract-resume-fields"
 import { scoreCandidateV2 } from "@/lib/ai-score-candidate-v2"
 import { scoreTestSubmission } from "@/lib/ai-score-test"
 import { isSpecScoringEnabled, buildSpecResumeInput, specHasScoringContent } from "@/lib/core/spec/resume-input"
@@ -77,9 +78,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     // Портрет (spec) для переоценки резюме — тот же путь, что у живого пайплайна:
     // если заполнен и включён, оцениваем ПО НЕМУ (а не по legacy-анкете).
-    const specForResume = (dims.includes("resume") && isSpecScoringEnabled(vacancyId))
+    // Гейт симметричен process-queue: isSpecScoringEnabled ИЛИ portraitScoring.
+    const specForResume = (dims.includes("resume") && (isSpecScoringEnabled(vacancyId) || vac.portraitScoring === true))
       ? await getSpec(vacancyId)
       : null
+
+    // workHistory для осевого скоринга — из hh_responses.rawData, как в живом
+    // пайплайне: оси оценивают «только по явному тексту», без истории должностей
+    // баллы систематически занижены. Нет raw-резюме → осями не считаем (holistic).
+    const workHistoryByCand = new Map<string, NonNullable<ReturnType<typeof extractHhResumeFields>["workHistory"]>>()
+    if (specForResume?.scoringMode === "axes") {
+      const hhRows = await db
+        .select({ cid: hhResponses.localCandidateId, rawData: hhResponses.rawData })
+        .from(hhResponses)
+        .where(inArray(hhResponses.localCandidateId, ids))
+      for (const row of hhRows) {
+        if (!row.cid || workHistoryByCand.has(row.cid)) continue
+        const raw = row.rawData as { resume?: Record<string, unknown> } | null
+        const wh = extractHhResumeFields(raw?.resume).workHistory
+        if (wh && wh.length) workHistoryByCand.set(row.cid, wh)
+      }
+    }
     // Гейт «по Spec»: для Портрета — любое наполнение Spec (🟢/🔴/точные
     // требования), иначе переоценка ушла бы в legacy-анкету. Не-Портрет — прежнее.
     const useSpecForResume = !!specForResume
@@ -100,10 +119,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             }
             // Развилка «оси»: если Spec в режиме scoringMode="axes" — считаем
             // поосево и пишем resume_score + ai_score_breakdown (для «почему»).
-            // null → тихий fallback на screenResume (holistic не меняем).
-            if (useSpecForResume && specForResume && specForResume.scoringMode === "axes") {
+            // Гейт симметричен process-queue (только scoringMode, без mustHave-условия).
+            // Без workHistory или null от AI → тихий fallback на screenResume.
+            const axWorkHistory = workHistoryByCand.get(c.id)
+            if (specForResume?.scoringMode === "axes" && axWorkHistory) {
               const ax = await scoreResumeByAxes(
-                resumeForScreen,
+                { ...resumeForScreen, workHistory: axWorkHistory },
                 { title: vac.title, city: vac.city },
                 specForResume,
                 vacancyId,
@@ -134,7 +155,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
                   },
             )
             if (r) {
-              await db.update(candidates).set({ resumeScore: r.score }).where(eq(candidates.id, c.id))
+              // Holistic-запись затирает старый осевой разбор — иначе блок
+              // «почему» на карточке объясняет не тот балл, который записан.
+              await db.update(candidates).set({ resumeScore: r.score, aiScoreBreakdown: null }).where(eq(candidates.id, c.id))
               result.resume++
             } else {
               result.skipped++

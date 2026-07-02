@@ -733,8 +733,10 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
               await db.update(candidates)
                 .set({
                   resumeScore: result.score,
-                  // Осевой разбор — только когда считали по осям (для «почему»).
-                  ...(axisResult ? { aiScoreBreakdown: axisResult } : {}),
+                  // Осевой разбор — только когда считали по осям (для «почему»);
+                  // при holistic/fallback затираем возможный старый разбор, иначе
+                  // блок «почему» объясняет не тот балл, который записан.
+                  aiScoreBreakdown: axisResult ?? null,
                 })
                 .where(eq(candidates.id, candidateId))
               {
@@ -1332,8 +1334,8 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             const messages = mergeMessagesWithDefaults(campaign.customMessages, DEFAULT_FOLLOWUP_NOT_OPENED)
             // Д0 = дата отклика на hh (negotiation.created_at).
             // Если её нет в raw_data — fallback на момент разбора.
-            const rawCreatedAt = (raw as { created_at?: string } | null)?.created_at
-              ?? (raw?.["negotiation"] as { created_at?: string } | undefined)?.created_at
+            const rawNeg = raw as { created_at?: string; negotiation?: { created_at?: string } } | null
+            const rawCreatedAt = rawNeg?.created_at ?? rawNeg?.negotiation?.created_at
             const parsedD0 = rawCreatedAt ? new Date(rawCreatedAt) : null
             const d0Date   = parsedD0 && !Number.isNaN(parsedD0.getTime()) ? parsedD0 : new Date()
             const d0Source: "hh_response" | "manual_review" =
