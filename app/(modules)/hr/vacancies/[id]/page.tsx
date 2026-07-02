@@ -915,6 +915,14 @@ export default function VacancyPage() {
   const [drawerCandidateId, setDrawerCandidateId] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerInitialTab, setDrawerInitialTab] = useState<string | null>(null)
+  // Deep-link из глобального виджета «Чаты»: ?candidate=<id> открывает карточку
+  // кандидата (drawer сам грузит данные по id — дёшево, без ожидания списка).
+  const candidateFromUrl = searchParams?.get("candidate") ?? null
+  useEffect(() => {
+    if (!candidateFromUrl) return
+    setDrawerCandidateId(candidateFromUrl)
+    setDrawerOpen(true)
+  }, [candidateFromUrl])
   const drawerAnketa = useMemo(() => {
     const a = (apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.anketa as Record<string, unknown> | undefined
     if (!a) return null
