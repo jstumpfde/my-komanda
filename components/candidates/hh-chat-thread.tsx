@@ -140,7 +140,9 @@ export function HhChatThread({ hhResponseId, candidateName, className }: HhChatT
               <div key={m.id} className={cn("flex", mine ? "justify-end" : "justify-start")}>
                 <div
                   className={cn(
-                    "max-w-[80%] rounded-lg px-3 py-2 text-xs space-y-1",
+                    // Потолок ширины пузыря: на широких экранах (инбокс/чаты)
+                    // 80% давало строки во весь экран — нечитаемо (Юрий 02.07).
+                    "max-w-[min(80%,620px)] rounded-lg px-3 py-2 text-xs space-y-1",
                     mine
                       ? "bg-indigo-500/10 text-foreground border border-indigo-500/20"
                       : "bg-muted/60 text-foreground border border-border/40",
