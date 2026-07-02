@@ -2936,6 +2936,7 @@ export default function VacancyPage() {
                     const isVacancyLive = status === "active" || status === "published" || status === "paused" || status === "archived"
                     const workTabs = [
                       { value: "candidates", icon: Kanban, label: "Кандидаты" },
+                      { value: "inbox",      icon: MessageSquare, label: "Инбокс" },
                       { value: "interview",  icon: CalendarDays, label: "Интервью" },
                       { value: "analytics",  icon: BarChart3, label: "Аналитика" },
                     ] as const
