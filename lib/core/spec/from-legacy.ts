@@ -269,6 +269,9 @@ export function buildSpecFromLegacy(vacancy: LegacyVacancyInput): CandidateSpec 
     // weightMode: legacy всегда использует строковые уровни весов (WeightLevel),
     // поэтому "level" — нейтральный дефолт этапа 2.
     weightMode: "level",
+    // scoringMode: legacy-мост всегда даёт холистический скоринг (осевой —
+    // только явным переключателем в редакторе Портрета).
+    scoringMode: "holistic",
     version: 1,
   }
 }

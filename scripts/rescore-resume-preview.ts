@@ -306,6 +306,8 @@ async function main() {
     const dStr = r.delta === null ? "  —  " : (r.delta >= 0 ? `+${r.delta}` : `${r.delta}`).padStart(5)
     const weak = r.newScore < 45 ? " 🔴" : ""
     console.log(` ${trunc(r.name, 26)} | ${oldS} | ${newS} | ${dStr} |${inp}| ${r.verdict ?? ""}${weak}`)
+    // Обоснование «за счёт чего» — вторая строка под кандидатом (почему такой балл).
+    if (r.summary) console.log(`      └─ ${r.summary}`)
   }
   console.log("─".repeat(84))
 

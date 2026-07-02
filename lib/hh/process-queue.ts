@@ -20,6 +20,7 @@ import { canSendNow } from "@/lib/schedule/can-send-now"
 import { screenResume, type ResumeScreenInput } from "@/lib/ai-screen-resume"
 import { getSpec } from "@/lib/core/spec/store"
 import { buildSpecResumeInput, isSpecScoringEnabled, specHasScoringContent, isPortraitConfigured } from "@/lib/core/spec/resume-input"
+import { scoreResumeByAxes, type AxisScoreResult } from "@/lib/core/spec/axis-scorer"
 import { scoreCandidateV2 } from "@/lib/ai-score-candidate-v2"
 import { trySyncRejectToHh } from "@/lib/hh/sync-stage"
 import { scheduleRejection, rejectionDelayMinutes } from "@/lib/rejection/execute"
@@ -651,9 +652,26 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             // При пустом/недоступном Spec — тихий fallback на legacy.
             const portraitOn = localVac.portraitScoring === true
             let screenInput: Parameters<typeof screenResume>[0] | null = null
+            // Осевой скоринг (spec.scoringMode="axes"): считаем поосево, минуя
+            // screenResume. При успехе пишем resume_score + ai_score_breakdown.
+            let axisResult: AxisScoreResult | null = null
             if (isSpecScoringEnabled(localVac.id) || portraitOn) {
               try {
                 const spec = await getSpec(localVac.id)
+                // Развилка «оси»: если Портрет и spec в режиме осей — оцениваем
+                // поосево. null (нет ключа/пустые оси/ошибка AI) → тихий fallback
+                // на screenResume ниже (поведение holistic не меняем).
+                if (spec && spec.scoringMode === "axes") {
+                  axisResult = await scoreResumeByAxes(
+                    resumeForScreen,
+                    { title: localVac.title, city: localVac.city },
+                    spec,
+                    localVac.id,
+                  )
+                  if (axisResult) {
+                    console.log(`[axis-scoring] vacancy=${localVac.id} candidate=${candidateId} — осевой скоринг ${axisResult.score} (${axisResult.verdict})`)
+                  }
+                }
                 // Гейт «строить из Spec»: для Портрета — ЛЮБОЕ наполнение Spec
                 // (🟢 пишет только niceToHave, отсев — через 🔴/точные требования,
                 // поэтому проверки одного mustHave недостаточно — иначе скоринг ушёл бы
@@ -695,22 +713,29 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
               }
             }
 
-            const result = await screenResume(screenInput ?? {
-              resume: resumeForScreen,
-              vacancy: {
-                title:                localVac.title,
-                city:                 localVac.city,
-                aiIdealProfile:       (anketa.aiIdealProfile as string | undefined) ?? null,
-                aiRequiredHardSkills: (anketa.aiRequiredHardSkills as string[] | undefined) ?? null,
-                aiStopFactors:        (anketa.aiStopFactors as string[] | undefined) ?? null,
-                screeningQuestions:   (anketa.screeningQuestions as string[] | undefined) ?? null,
-                aiWeights:            (anketa.aiWeights as Record<string, string> | undefined) ?? null,
-                customCriteria:       (anketa.aiCustomCriteria as { label: string; weight: string }[] | undefined) ?? null,
-              },
-            }, localVac.id)
+            // Осевой результат (если сработал) заменяет screenResume: его форма
+            // (score/verdict/summary) совместима с ResumeScreenResult для гейтинга.
+            const result: { score: number; verdict: string; summary: string; decision?: string } | null =
+              axisResult ?? await screenResume(screenInput ?? {
+                resume: resumeForScreen,
+                vacancy: {
+                  title:                localVac.title,
+                  city:                 localVac.city,
+                  aiIdealProfile:       (anketa.aiIdealProfile as string | undefined) ?? null,
+                  aiRequiredHardSkills: (anketa.aiRequiredHardSkills as string[] | undefined) ?? null,
+                  aiStopFactors:        (anketa.aiStopFactors as string[] | undefined) ?? null,
+                  screeningQuestions:   (anketa.screeningQuestions as string[] | undefined) ?? null,
+                  aiWeights:            (anketa.aiWeights as Record<string, string> | undefined) ?? null,
+                  customCriteria:       (anketa.aiCustomCriteria as { label: string; weight: string }[] | undefined) ?? null,
+                },
+              }, localVac.id)
             if (result) {
               await db.update(candidates)
-                .set({ resumeScore: result.score })
+                .set({
+                  resumeScore: result.score,
+                  // Осевой разбор — только когда считали по осям (для «почему»).
+                  ...(axisResult ? { aiScoreBreakdown: axisResult } : {}),
+                })
                 .where(eq(candidates.id, candidateId))
               {
                 // Уровень 3: per-vacancy webhook override (наследование от компании если не задано).

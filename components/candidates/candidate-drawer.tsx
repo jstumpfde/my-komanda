@@ -552,13 +552,18 @@ function ScoresPanel({ candidate }: { candidate: ApiCandidate }) {
   const dealBreakers = Array.isArray(v2?.triggered_deal_breakers) ? v2!.triggered_deal_breakers : []
   const answerDetails = Array.isArray(candidate.demoAnswersDetails) ? candidate.demoAnswersDetails : []
   const resumeSummary = typeof candidate.aiSummary === "string" ? candidate.aiSummary.trim() : ""
+  // Осевой разбор резюме (spec.scoringMode="axes"): оси score→баллы + штрафы + summary.
+  const breakdown = candidate.aiScoreBreakdown ?? null
+  const breakdownAxes = Array.isArray(breakdown?.axes) ? breakdown!.axes : []
+  const breakdownPenalties = Array.isArray(breakdown?.penalties) ? breakdown!.penalties.filter(p => p.triggered) : []
+  const breakdownSummary = typeof breakdown?.summary === "string" ? breakdown.summary.trim() : ""
 
   // Ни одной оценки — панель не показываем.
   if (resumeScore == null && portraitScore == null && answersScore == null && testScore == null) {
     return null
   }
 
-  const resumeHasDetails = resumeSummary.length > 0
+  const resumeHasDetails = resumeSummary.length > 0 || breakdownAxes.length > 0 || breakdownPenalties.length > 0 || breakdownSummary.length > 0
   const portraitHasDetails = matchedMust.length > 0 || missedMust.length > 0 || dealBreakers.length > 0
   // Балл есть, но сравнивать не с чем (нет matched/missed/deal-breakers) → критерии Портрета не заданы, балл не различает.
   const portraitNoCriteria = portraitScore != null && !portraitHasDetails
@@ -581,7 +586,46 @@ function ScoresPanel({ candidate }: { candidate: ApiCandidate }) {
         score={resumeScore}
         hasDetails={resumeHasDetails}
       >
-        {resumeSummary && <p className="text-foreground/90 whitespace-pre-wrap">{resumeSummary}</p>}
+        {/* Осевой разбор (Портрет, scoringMode="axes"): почему такой балл. */}
+        {breakdownAxes.length > 0 && (
+          <div className="space-y-1">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">По осям</div>
+            <ul className="space-y-1">
+              {breakdownAxes.map((a) => (
+                <li key={a.key} className="space-y-0.5">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="min-w-0 flex-1 text-foreground/90">{a.label}</span>
+                    <span className={cn("shrink-0 text-sm font-bold tabular-nums", scoreTone(a.score))}>
+                      {a.score}<span className="text-[11px] font-normal text-muted-foreground">→{a.points} б.</span>
+                    </span>
+                  </div>
+                  {a.evidence && <p className="text-[11px] leading-snug text-muted-foreground">{a.evidence}</p>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {breakdownPenalties.length > 0 && (
+          <div className="space-y-1">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-destructive flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5" /> Штрафы «Не подходит»
+            </div>
+            <ul className="space-y-0.5">
+              {breakdownPenalties.map((p, i) => (
+                <li key={i} className="space-y-0.5">
+                  <div className="flex gap-1.5">
+                    <span className="shrink-0 font-semibold text-destructive tabular-nums">−{p.applied}</span>
+                    <span className="min-w-0 text-foreground/90">{p.text}</span>
+                  </div>
+                  {p.evidence && <p className="pl-6 text-[11px] leading-snug text-muted-foreground">{p.evidence}</p>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {(breakdownSummary || resumeSummary) && (
+          <p className="text-foreground/90 whitespace-pre-wrap">{breakdownSummary || resumeSummary}</p>
+        )}
       </ScoreRow>
 
       <ScoreRow

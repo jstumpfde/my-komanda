@@ -75,6 +75,9 @@ export interface ApiCandidate {
   // AI-скор резюме (выставляется в lib/hh/process-queue.ts при приёме отклика).
   // Отдельно от aiScore — тот считается после демо и учитывает ответы.
   resumeScore?: number | null
+  // Разбор осевого скоринга резюме (spec.scoringMode="axes"): оси, штрафы,
+  // verdict, summary. Заполняется только при осевой оценке — для блока «почему».
+  aiScoreBreakdown?: import("@/lib/core/spec/axis-scorer").AxisScoreResult | null
   // Рубричный движок (shadow). Считается параллельно, для ранжирования/сравнения.
   rubricScore?: number | null
   // Имя «под вопросом» — резолвер уйдёт в нейтральное «Здравствуйте». HR проверяет.

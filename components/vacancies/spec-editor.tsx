@@ -47,6 +47,7 @@ import {
   normalizeMustHave,
   normalizeNiceToHave,
   normalizeDealBreakers,
+  dealBreakerPenalty,
   DEFAULT_REJECT_LETTER,
   type CandidateSpec,
   type MustHaveItem,
@@ -82,6 +83,18 @@ const GOOD_LEVELS = [
 ] as const
 type GoodLevel = (typeof GOOD_LEVELS)[number]["value"]
 
+/**
+ * Веса осей в осевом скоринге — ТА ЖЕ формула, что buildAxes (axis-scorer.ts):
+ * base = floor(100/N), остаток rem = 100 − base·N распределяется +1 первым rem
+ * осям, чтобы Σ=100. Возвращает массив весов по индексу.
+ */
+function axisWeights(n: number): number[] {
+  if (n <= 0) return []
+  const base = Math.floor(100 / n)
+  const rem = 100 - base * n
+  return Array.from({ length: n }, (_, i) => base + (i < rem ? 1 : 0))
+}
+
 // Куда зовём при авто-приглашении (короткий ярлык для зоны и опции селекта).
 const NEXT_STEP_LABEL: Record<string, string> = {
   demo:      "на демо",
@@ -89,12 +102,6 @@ const NEXT_STEP_LABEL: Record<string, string> = {
   video:     "на видео",
   call:      "на звонок",
 }
-
-// 🔴 «Не подходит по смыслу» — стоп-фактор (отказ) vs минус к баллу.
-const BAD_KINDS = [
-  { hard: true,  label: "Стоп-фактор",   solid: "bg-red-500"   },
-  { hard: false, label: "Минус к баллу", solid: "bg-amber-500" },
-] as const
 
 /** Локальная сборка «идеального профиля» из структурных списков (без AI) —
  *  всегда в синхроне с «Подходит/Не подходит». Это эталон-рамка для AI-скоринга. */
@@ -774,12 +781,14 @@ function SynonymBlock({
  * {importance}. Так движок читает поля как раньше (hard must-have = нокаут).
  */
 function GoodEditor({
-  mustHave, niceToHave, onChange, vacancyId,
+  mustHave, niceToHave, onChange, vacancyId, axesMode = false,
 }: {
   mustHave:   MustHaveEntry[]
   niceToHave: NiceToHaveEntry[]
   onChange:   (next: { mustHave: MustHaveItem[]; niceToHave: NiceToHaveItem[] }) => void
   vacancyId:  string
+  /** scoringMode==="axes": скрыть переключатель важности, показать бейдж баллов. */
+  axesMode?:  boolean
 }) {
   // 🟢 = только балл, не отсев → всё в niceToHave (3 уровня). Старые жёсткие
   // must-have (если были) показываем как «Очень важно» и при правке переводим в
@@ -818,6 +827,9 @@ function GoodEditor({
   }
   const ph = LIST_PLACEHOLDERS.must[rows.length % LIST_PLACEHOLDERS.must.length] || ""
 
+  // Осевой режим: веса осей (100/N + остаток первым) — та же формула, что buildAxes.
+  const weights = axesMode ? axisWeights(rows.length) : []
+
   /** Добавить синоним к критерию по индексу: дописываем через запятую, дедуп */
   const addSynonymToRow = (i: number, syn: string) => {
     const row = rows[i]
@@ -851,7 +863,11 @@ function GoodEditor({
   return (
     <div className="space-y-2.5">
       <div className="flex items-baseline justify-between gap-2">
-        <Label className="text-sm font-medium">Что хотим видеть</Label>
+        <Label className="text-sm font-medium">
+          {axesMode && rows.length > 0
+            ? `Всего 100 баллов, поровну между ${rows.length} разделами`
+            : "Что хотим видеть"}
+        </Label>
         <div className="flex items-center gap-2 shrink-0">
           {rows.length > 0 && (
             <button type="button"
@@ -863,12 +879,19 @@ function GoodEditor({
           <ListCounter count={rows.length} max={10} />
         </div>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Есть в резюме → плюс к баллу. Нет → балл ниже, но <b>не отказ</b>. Цвет справа = важность:{" "}
-        <span className="text-orange-600 dark:text-orange-400">оранжевый — желательно</span>,{" "}
-        <span className="text-lime-600 dark:text-lime-400">салатовый — средне важный</span>,{" "}
-        <span className="text-green-700 dark:text-green-400">зелёный — важный</span> (сильнее влияет на балл; отсев — только в «Не подходит»). Наведите — увидите подпись.
-      </p>
+      {axesMode ? (
+        <p className="text-xs text-muted-foreground">
+          Каждый пункт — отдельная ось с равным весом (100 / число осей). Справа — балл оси:
+          AI оценивает её изолированно и только по явному тексту резюме. Пустая ось не маскируется сильной.
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Есть в резюме → плюс к баллу. Нет → балл ниже, но <b>не отказ</b>. Цвет справа = важность:{" "}
+          <span className="text-orange-600 dark:text-orange-400">оранжевый — желательно</span>,{" "}
+          <span className="text-lime-600 dark:text-lime-400">салатовый — средне важный</span>,{" "}
+          <span className="text-green-700 dark:text-green-400">зелёный — важный</span> (сильнее влияет на балл; отсев — только в «Не подходит»). Наведите — увидите подпись.
+        </p>
+      )}
       <OverRecommendedHint count={rows.length} />
       <div className="space-y-1.5">
         {rows.map((r, i) => (
@@ -894,24 +917,33 @@ function GoodEditor({
                   )
                 })()}
               </div>
-              <div className="flex items-center gap-1 shrink-0" role="group" aria-label="Важность пункта">
-                {GOOD_LEVELS.map(l => {
-                  const active = r.level === l.value
-                  return (
-                    <button key={l.value} type="button" title={l.label} aria-label={l.label} aria-pressed={active}
-                      onClick={() => setLevel(i, l.value)}
-                      className={cn(
-                        "w-7 h-[22px] rounded-md border flex items-center justify-center transition-all",
-                        active
-                          ? cn(l.soft, "shadow-sm")
-                          : "border-border/50 text-muted-foreground/30 hover:text-muted-foreground/70 hover:border-border",
-                      )}
-                    >
-                      {active && <Check className="w-3.5 h-3.5" />}
-                    </button>
-                  )
-                })}
-              </div>
+              {axesMode ? (
+                <span
+                  className="shrink-0 inline-flex items-center rounded-md border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary tabular-nums"
+                  title="Баллов на эту ось (100 / число осей)"
+                >
+                  {weights[i] ?? 0} б.
+                </span>
+              ) : (
+                <div className="flex items-center gap-1 shrink-0" role="group" aria-label="Важность пункта">
+                  {GOOD_LEVELS.map(l => {
+                    const active = r.level === l.value
+                    return (
+                      <button key={l.value} type="button" title={l.label} aria-label={l.label} aria-pressed={active}
+                        onClick={() => setLevel(i, l.value)}
+                        className={cn(
+                          "w-7 h-[22px] rounded-md border flex items-center justify-center transition-all",
+                          active
+                            ? cn(l.soft, "shadow-sm")
+                            : "border-border/50 text-muted-foreground/30 hover:text-muted-foreground/70 hover:border-border",
+                        )}
+                      >
+                        {active && <Check className="w-3.5 h-3.5" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
               <button type="button" onClick={() => remove(i)}
                 className="rounded-full hover:bg-muted-foreground/20 p-0.5 shrink-0" aria-label={`Убрать «${r.text}»`}>
                 <X className="w-3.5 h-3.5" />
@@ -951,7 +983,12 @@ function BadEditor({
   vacancyId:  string
 }) {
   const rows = normalizeDealBreakers(items)
-  const setHard = (i: number, hard: boolean) => onChange(rows.map((r, idx) => idx === i ? { ...r, hard } : r))
+  // Величина штрафа: −N баллов (0..100, шаг 5). 100 = полный стоп (обнуление).
+  // Синхронизируем item.hard = (penalty>=100) для legacy-потребителей.
+  const setPenalty = (i: number, penalty: number) => {
+    const p = Math.max(0, Math.min(100, penalty))
+    onChange(rows.map((r, idx) => idx === i ? { ...r, penalty: p, hard: p >= 100 } : r))
+  }
   const remove  = (i: number) => onChange(rows.filter((_, idx) => idx !== i))
 
   const [draft, setDraft] = useState("")
@@ -1001,30 +1038,36 @@ function BadEditor({
         <ListCounter count={rows.length} max={10} />
       </div>
       <p className="text-xs text-muted-foreground">
-        Стоп-фактор — отказ, только если AI прямо видит это в резюме. Минус к баллу — просто ниже балл, не отказ. Можно фразой. Кружок справа:{" "}
-        <span className="text-red-600 dark:text-red-400">красный — стоп-фактор</span>,{" "}
-        <span className="text-amber-600 dark:text-amber-400">янтарный — минус к баллу</span>.
+        Насколько пункт снижает балл, если AI прямо видит это в резюме. Задайте величину штрафа справа:{" "}
+        <b>100 = полный стоп</b> (кандидат обнуляется). Итог не опускается ниже 0 — минуса не бывает.
       </p>
       <div className="space-y-1.5">
         {rows.map((r, i) => (
           <div key={i} className="rounded-md border p-2">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <span className="flex-1 text-sm min-w-0 break-words">{r.text}</span>
-              {/* Кружки справа: красный — стоп-фактор (отказ), янтарный — минус к баллу */}
-              {BAD_KINDS.map(k => {
-                const active = r.hard === k.hard
+              {/* Величина штрафа: −N баллов (Slider 0..100 шаг 5). 100 = полный стоп. */}
+              {(() => {
+                const pen = dealBreakerPenalty(r)
+                const full = pen >= 100
                 return (
-                  <button key={String(k.hard)} type="button" onClick={() => setHard(i, k.hard)} title={k.label} aria-label={k.label}
-                    className={cn(
-                      "w-7 h-[22px] rounded-md border border-transparent flex items-center justify-center text-white shrink-0 transition-all",
-                      k.solid,
-                      active ? "opacity-100 shadow-sm" : "opacity-30 hover:opacity-60",
-                    )}
-                  >
-                    {active && <Check className="w-3.5 h-3.5" />}
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0 w-[190px]" title="−N баллов (100 = полный стоп)">
+                    <Slider
+                      value={[pen]}
+                      onValueChange={([v]) => setPenalty(i, v ?? 0)}
+                      min={0} max={100} step={5}
+                      className="flex-1"
+                      aria-label={`Штраф для «${r.text}»`}
+                    />
+                    <span className={cn(
+                      "text-xs tabular-nums whitespace-nowrap w-[74px] text-right font-medium",
+                      full ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400",
+                    )}>
+                      {full ? "полный стоп" : `−${pen} б.`}
+                    </span>
+                  </div>
                 )
-              })}
+              })()}
               <button type="button" onClick={() => remove(i)}
                 className="rounded-full hover:bg-muted-foreground/20 p-0.5 shrink-0" aria-label={`Убрать «${r.text}»`}>
                 <X className="w-3.5 h-3.5" />
@@ -1712,6 +1755,21 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
         Если бот включён — спорное он уточнит у кандидата и в «Подходит», и в «Не подходит», а не отрежет сразу.
       </p>
 
+      {/* ── Тумблер «Осевой скоринг» (над «Что хотим видеть») ── */}
+      <div className="rounded-lg border p-3 flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium">Осевой скоринг</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Каждый пункт — отдельная ось, оценивается изолированно и только по явному тексту
+            резюме; баллы делятся поровну (100 / число осей). Пустая ось не маскируется сильной.
+          </p>
+        </div>
+        <Switch
+          checked={spec.scoringMode === "axes"}
+          onCheckedChange={v => patch({ scoringMode: v ? "axes" : "holistic" })}
+        />
+      </div>
+
       {/* ── 🟢 Подходит ── */}
       <Card>
         <CardHeader className="pb-3">
@@ -1730,6 +1788,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
             niceToHave={spec.niceToHave}
             onChange={({ mustHave, niceToHave }) => patch({ mustHave, niceToHave })}
             vacancyId={vacancyId}
+            axesMode={spec.scoringMode === "axes"}
           />
         </CardContent>
       </Card>

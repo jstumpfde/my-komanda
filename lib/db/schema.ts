@@ -89,6 +89,7 @@ export interface CompanyBrandingExtra {
 
 import type { ProductProfile } from "@/lib/hiring/product-profile"
 import type { CandidateSpec } from "@/lib/core/spec/types"
+import type { AxisScoreResult } from "@/lib/core/spec/axis-scorer"
 import type { FunnelV2Stage } from "@/lib/funnel-v2/types"
 import type { RoleScoringFormula } from "@/lib/hiring/role-templates/types"
 
@@ -1605,6 +1606,10 @@ export const candidates = pgTable("candidates", {
   // отклика, до демо. Шкала 0..100, NULL = не оценивали. Отдельно от aiScore
   // (он считается после прохождения демо и включает ответы на вопросы).
   resumeScore: integer("resume_score"),
+  // Разбор осевого скоринга резюме (spec.scoringMode="axes") — целиком
+  // AxisScoreResult: оси (score→points+evidence), штрафы, verdict, summary.
+  // Нужен для блока «почему» на карточке. NULL = не считали по осям.
+  aiScoreBreakdown: jsonb("ai_score_breakdown").$type<AxisScoreResult>(),
   stageHistory: jsonb("stage_history").default("[]"), // [{stage, date, note}]
   isFavorite: boolean("is_favorite").notNull().default(false),
   // Момент первого открытия страницы /demo/<shortId> владельцем-кандидатом.

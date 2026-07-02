@@ -460,8 +460,24 @@ export function niceToHaveTexts(items: ReadonlyArray<NiceToHaveEntry> | null | u
 export const DealBreakerItemSchema = z.object({
   text: z.string().min(1).max(2000),
   hard: z.boolean().default(true),
+  /**
+   * Осевой скоринг (scoringMode="axes"): НАСКОЛЬКО пункт снижает итоговый балл
+   * (0–100). 100 = полное обнуление (полный стоп). Минуса не бывает — итог
+   * не опускается ниже 0 (решение Юрия 02.07). Опц.: если не задан, выводится
+   * из hard (hard=true → 100 стоп, hard=false → 20 минус) — см. dealBreakerPenalty().
+   */
+  penalty: z.number().int().min(0).max(100).optional(),
 })
 export type DealBreakerItem = z.infer<typeof DealBreakerItemSchema>
+
+/**
+ * Величина снижения балла для одного пункта «Не подходит» в осевом скоринге.
+ * Явный penalty приоритетнее; иначе выводим из hard (стоп=100 / минус=20).
+ */
+export function dealBreakerPenalty(item: DealBreakerItem): number {
+  if (typeof item.penalty === "number") return Math.max(0, Math.min(100, item.penalty))
+  return item.hard ? 100 : 20
+}
 
 /** Элемент dealBreakers: строка (legacy) ИЛИ объект (стоп/минус). */
 export type DealBreakerEntry = string | DealBreakerItem
@@ -626,6 +642,16 @@ export const CandidateSpecSchema = z.object({
    * Опц. с дефолтом level — поведение прежнее, пока этап-2 UI не активирован.
    */
   weightMode:    z.enum(["level", "percent"]).default("level"),
+  /**
+   * Режим скоринга резюме (Портрет, редизайн 02.07):
+   *   holistic — единый AI-балл по всей куче критериев (прежнее поведение).
+   *   axes     — каждый пункт «Подходит» = отдельная ось, оценивается изолированно
+   *              и только по явному тексту резюме; веса РАВНЫЕ (100/N), итог =
+   *              среднее осей минус штрафы «Не подходит», пол = 0. Так пустая ось
+   *              (нет ниши/продукта) НЕ маскируется сильной осью. См. lib/core/spec/axis-scorer.ts.
+   * Дефолт holistic — существующие вакансии не меняют поведение.
+   */
+  scoringMode:   z.enum(["holistic", "axes"]).default("holistic"),
   /** Версия Spec — для будущих миграций формата */
   version:       z.literal(1).default(1),
   /** Отметка времени последнего изменения Spec через новый контур */

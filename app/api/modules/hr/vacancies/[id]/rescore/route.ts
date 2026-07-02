@@ -15,6 +15,7 @@ import { scoreCandidateV2 } from "@/lib/ai-score-candidate-v2"
 import { scoreTestSubmission } from "@/lib/ai-score-test"
 import { isSpecScoringEnabled, buildSpecResumeInput, specHasScoringContent } from "@/lib/core/spec/resume-input"
 import { getSpec } from "@/lib/core/spec/store"
+import { scoreResumeByAxes } from "@/lib/core/spec/axis-scorer"
 import { scoreDemoAnswers } from "@/lib/demo/score-answers"
 
 export const dynamic = "force-dynamic"
@@ -96,6 +97,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
               educationLevel: c.educationLevel, workFormat: c.workFormat, languages: c.languages,
               relocationReady: c.relocationReady, professionalRoles: c.professionalRoles,
               citizenshipNames: c.citizenshipNames,
+            }
+            // Развилка «оси»: если Spec в режиме scoringMode="axes" — считаем
+            // поосево и пишем resume_score + ai_score_breakdown (для «почему»).
+            // null → тихий fallback на screenResume (holistic не меняем).
+            if (useSpecForResume && specForResume && specForResume.scoringMode === "axes") {
+              const ax = await scoreResumeByAxes(
+                resumeForScreen,
+                { title: vac.title, city: vac.city },
+                specForResume,
+                vacancyId,
+              )
+              if (ax) {
+                await db.update(candidates)
+                  .set({ resumeScore: ax.score, aiScoreBreakdown: ax })
+                  .where(eq(candidates.id, c.id))
+                result.resume++
+                continue
+              }
+              // ax === null → падаем на screenResume ниже (не ломаем переоценку).
             }
             const r = await screenResume(
               useSpecForResume && specForResume
