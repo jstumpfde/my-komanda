@@ -439,50 +439,12 @@ function AiScoreBadge({ score, onClick }: { score: number | null; onClick?: () =
   )
 }
 
-// ─── Score line (шапка карточки) ──────────────────────────────────────────────
-// Все доступные баллы в одну линию, каждый с подписью. Цвет как в списке
-// (>70 success / ≥40 warning / <40 destructive — см. list-view.tsx).
-
-function scoreLineColor(score: number) {
-  if (score > 70) return "bg-success/10 text-success border-success/20"
-  if (score >= 40) return "bg-warning/10 text-warning border-warning/20"
-  return "bg-destructive/10 text-destructive border-destructive/20"
-}
-
-function HeaderScores({
-  resume, anketa, portrait, test,
-}: {
-  resume: number | null
-  anketa: number | null
-  portrait: number | null
-  test: number | null
-}) {
-  const items: { label: string; value: number }[] = []
-  if (resume   != null) items.push({ label: "Резюме",  value: resume })
-  if (anketa   != null) items.push({ label: "Анкета",  value: anketa })
-  if (portrait != null) items.push({ label: "Портрет", value: portrait })
-  if (test     != null) items.push({ label: "Тест",    value: test })
-  if (items.length === 0) return null
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {items.map((it) => (
-        <Badge
-          key={it.label}
-          variant="outline"
-          className={cn("text-xs border font-medium gap-1", scoreLineColor(it.value))}
-        >
-          <span className="opacity-70">{it.label}</span>
-          <span className="font-bold tabular-nums">{it.value}</span>
-        </Badge>
-      ))}
-    </div>
-  )
-}
-
 // ─── Панель «Оценки» (вверху карточки) ────────────────────────────────────────
-// Все оценки кандидата в одном месте: НАЗВАНИЕ · БАЛЛ (цветной) · «что измеряет»
-// (одной фразой) · «почему» (детали из *_details, разворачиваются по клику).
-// Отсутствующие оценки не показываются. Цвета — success/warning/destructive.
+// ЕДИНСТВЕННОЕ место с баллами кандидата (бейджи из шапки убраны — дублировали
+// и сдвигали контент). Карточки в ОДИН РЯД: крупный балл · название · «что
+// измеряет» одной фразой. Клик по карточке разворачивает «почему» (детали из
+// *_details) под всем рядом. Отсутствующие оценки не показываются; когда
+// появится балл «Интервью» — добавить элемент в items, ряд растянется сам.
 
 function scoreTone(score: number) {
   if (score > 70) return "text-success"
@@ -490,57 +452,8 @@ function scoreTone(score: number) {
   return "text-destructive"
 }
 
-function ScoreRow({
-  title,
-  measures,
-  score,
-  hasDetails,
-  children,
-}: {
-  title: string
-  measures: string
-  score: number | null
-  hasDetails: boolean
-  children?: React.ReactNode
-}) {
-  const [open, setOpen] = useState(false)
-  if (score == null) return null
-  return (
-    <div className="rounded-md border border-border/60 bg-background/50">
-      <button
-        type="button"
-        disabled={!hasDetails}
-        onClick={() => hasDetails && setOpen((v) => !v)}
-        className={cn(
-          "w-full flex items-start gap-2.5 px-3 py-2 text-left",
-          hasDetails && "hover:bg-accent/40 transition-colors cursor-pointer",
-        )}
-      >
-        <span className={cn("shrink-0 text-lg font-bold tabular-nums leading-tight w-9 text-center", scoreTone(score))}>
-          {score}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-1.5">
-            <span className="text-sm font-medium text-foreground">{title}</span>
-            {hasDetails && (
-              open
-                ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-            )}
-          </span>
-          <span className="block text-[11px] leading-snug text-muted-foreground">{measures}</span>
-        </span>
-      </button>
-      {hasDetails && open && (
-        <div className="px-3 pb-3 pt-0.5 space-y-2 text-sm border-t border-border/40">
-          {children}
-        </div>
-      )}
-    </div>
-  )
-}
-
 function ScoresPanel({ candidate }: { candidate: ApiCandidate }) {
+  const [openKey, setOpenKey] = useState<string | null>(null)
   const resumeScore = candidate.resumeScore ?? null
   const portraitScore = candidate.aiScoreV2 ?? null
   const answersScore = candidate.demoAnswersScore ?? null
@@ -573,132 +486,156 @@ function ScoresPanel({ candidate }: { candidate: ApiCandidate }) {
   }
   const testHint = candidate.testStatus ? testStatusLabel[candidate.testStatus] : null
 
+  // Детали «почему» — разворачиваются под рядом карточек.
+  const resumeDetailsNode = (
+    <>
+      {/* Осевой разбор (Портрет, scoringMode="axes"): почему такой балл. */}
+      {breakdownAxes.length > 0 && (
+        <div className="space-y-1">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">По осям</div>
+          <ul className="space-y-1">
+            {breakdownAxes.map((a) => (
+              <li key={a.key} className="space-y-0.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="min-w-0 flex-1 text-foreground/90">{a.label}</span>
+                  <span className={cn("shrink-0 text-sm font-bold tabular-nums", scoreTone(a.score))}>
+                    {a.score}<span className="text-[11px] font-normal text-muted-foreground">→{a.points} б.</span>
+                  </span>
+                </div>
+                {a.evidence && <p className="text-[11px] leading-snug text-muted-foreground">{a.evidence}</p>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {breakdownPenalties.length > 0 && (
+        <div className="space-y-1">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-destructive flex items-center gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5" /> Штрафы «Не подходит»
+          </div>
+          <ul className="space-y-0.5">
+            {breakdownPenalties.map((p, i) => (
+              <li key={i} className="space-y-0.5">
+                <div className="flex gap-1.5">
+                  <span className="shrink-0 font-semibold text-destructive tabular-nums">−{p.applied}</span>
+                  <span className="min-w-0 text-foreground/90">{p.text}</span>
+                </div>
+                {p.evidence && <p className="pl-6 text-[11px] leading-snug text-muted-foreground">{p.evidence}</p>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {(breakdownSummary || resumeSummary) && (
+        <p className="text-foreground/90 whitespace-pre-wrap">{breakdownSummary || resumeSummary}</p>
+      )}
+    </>
+  )
+
+  const portraitDetailsNode = (
+    <>
+      {matchedMust.length > 0 && (
+        <div className="space-y-1">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-success flex items-center gap-1.5">
+            <CheckCircle2 className="w-3.5 h-3.5" /> Совпало (must-have)
+          </div>
+          <ul className="space-y-0.5">
+            {matchedMust.map((m, i) => (
+              <li key={i} className="flex gap-1.5"><span className="text-success">•</span><span>{m}</span></li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {missedMust.length > 0 && (
+        <div className="space-y-1">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-warning flex items-center gap-1.5">
+            <XCircle className="w-3.5 h-3.5" /> Не хватает (must-have)
+          </div>
+          <ul className="space-y-0.5">
+            {missedMust.map((m, i) => (
+              <li key={i} className="flex gap-1.5"><span className="text-warning">•</span><span>{m}</span></li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {dealBreakers.length > 0 && (
+        <div className="space-y-1">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-destructive flex items-center gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5" /> Сработали deal-breakers
+          </div>
+          <ul className="space-y-0.5">
+            {dealBreakers.map((m, i) => (
+              <li key={i} className="flex gap-1.5"><span className="text-destructive">•</span><span>{m}</span></li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </>
+  )
+
+  const answersDetailsNode = (
+    <ul className="space-y-2">
+      {answerDetails.map((d, i) => (
+        <li key={i} className="space-y-0.5">
+          <div className="flex items-start justify-between gap-2">
+            <span className="text-foreground/90 min-w-0 flex-1">{d.questionText}</span>
+            <span className={cn("shrink-0 text-sm font-bold tabular-nums", scoreTone(Math.round((d.awarded / (d.max || 1)) * 100)))}>{d.awarded}/{d.max}</span>
+          </div>
+          {d.comment && <p className="text-[12px] text-muted-foreground">{d.comment}</p>}
+        </li>
+      ))}
+    </ul>
+  )
+
+  type ScoreCard = {
+    key: string; title: string; caption: string
+    score: number; hasDetails: boolean; details: React.ReactNode
+  }
+  const cards = ([
+    { key: "resume", title: "AI-резюме", caption: "Резюме против требований (на входе)", score: resumeScore, hasDetails: resumeHasDetails, details: resumeDetailsNode },
+    { key: "portrait", title: "AI-Портрет",
+      caption: portraitNoCriteria ? "Критерии Портрета не заданы — балл справочный" : "Совпадение с критериями Портрета",
+      score: portraitScore, hasDetails: portraitHasDetails, details: portraitDetailsNode },
+    { key: "answers", title: "Анкета", caption: "Качество ответов в анкете демо", score: answersScore, hasDetails: answersHasDetails, details: answersDetailsNode },
+    { key: "test", title: "Тест", caption: testHint ? `Тестовое задание (${testHint})` : "Результат тестового задания", score: testScore, hasDetails: false, details: null },
+    // Сюда же встанет карточка «Интервью», когда появится балл интервью.
+  ] as Array<Omit<ScoreCard, "score"> & { score: number | null }>)
+    .filter((c): c is ScoreCard => c.score != null)
+
+  const open = cards.find((c) => c.key === openKey && c.hasDetails) ?? null
+
   return (
-    <div className="mx-3 mt-3 shrink-0 rounded-lg border border-border/70 bg-muted/30 p-2.5 space-y-1.5">
-      <div className="flex items-center gap-1.5 px-1 pb-0.5">
-        <Sparkles className="w-3.5 h-3.5 text-muted-foreground" />
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Оценки</span>
+    <div className="mx-3 mt-3 shrink-0 rounded-lg border border-border/70 bg-muted/30 p-2">
+      <div className="grid gap-1.5 grid-cols-[repeat(auto-fit,minmax(120px,1fr))]">
+        {cards.map((c) => (
+          <button
+            key={c.key}
+            type="button"
+            disabled={!c.hasDetails}
+            onClick={() => setOpenKey((k) => (k === c.key ? null : c.key))}
+            title={c.caption}
+            className={cn(
+              "rounded-md border border-border/60 bg-background/50 px-2.5 py-2 text-left",
+              c.hasDetails && "hover:bg-accent/40 transition-colors cursor-pointer",
+              open?.key === c.key && "border-primary/50 bg-accent/30",
+            )}
+          >
+            <span className="flex items-center justify-between gap-1.5">
+              <span className={cn("text-2xl font-bold tabular-nums leading-none", scoreTone(c.score))}>{c.score}</span>
+              {c.hasDetails && (open?.key === c.key
+                ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />)}
+            </span>
+            <span className="mt-1 block text-xs font-medium text-foreground">{c.title}</span>
+            <span className="block text-[10px] leading-snug text-muted-foreground line-clamp-2">{c.caption}</span>
+          </button>
+        ))}
       </div>
-
-      <ScoreRow
-        title="AI-резюме"
-        measures="Насколько резюме подходит под требования (на входе)"
-        score={resumeScore}
-        hasDetails={resumeHasDetails}
-      >
-        {/* Осевой разбор (Портрет, scoringMode="axes"): почему такой балл. */}
-        {breakdownAxes.length > 0 && (
-          <div className="space-y-1">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">По осям</div>
-            <ul className="space-y-1">
-              {breakdownAxes.map((a) => (
-                <li key={a.key} className="space-y-0.5">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="min-w-0 flex-1 text-foreground/90">{a.label}</span>
-                    <span className={cn("shrink-0 text-sm font-bold tabular-nums", scoreTone(a.score))}>
-                      {a.score}<span className="text-[11px] font-normal text-muted-foreground">→{a.points} б.</span>
-                    </span>
-                  </div>
-                  {a.evidence && <p className="text-[11px] leading-snug text-muted-foreground">{a.evidence}</p>}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {breakdownPenalties.length > 0 && (
-          <div className="space-y-1">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-destructive flex items-center gap-1.5">
-              <AlertTriangle className="w-3.5 h-3.5" /> Штрафы «Не подходит»
-            </div>
-            <ul className="space-y-0.5">
-              {breakdownPenalties.map((p, i) => (
-                <li key={i} className="space-y-0.5">
-                  <div className="flex gap-1.5">
-                    <span className="shrink-0 font-semibold text-destructive tabular-nums">−{p.applied}</span>
-                    <span className="min-w-0 text-foreground/90">{p.text}</span>
-                  </div>
-                  {p.evidence && <p className="pl-6 text-[11px] leading-snug text-muted-foreground">{p.evidence}</p>}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {(breakdownSummary || resumeSummary) && (
-          <p className="text-foreground/90 whitespace-pre-wrap">{breakdownSummary || resumeSummary}</p>
-        )}
-      </ScoreRow>
-
-      <ScoreRow
-        title="AI-Портрет"
-        measures={portraitNoCriteria
-          ? "Критерии Портрета не заданы — балл справочный, не различает. Задайте must-have в табе «Портрет»."
-          : "Совпадение кандидата с критериями Портрета (must-have / nice / deal-breakers)"}
-        score={portraitScore}
-        hasDetails={portraitHasDetails}
-      >
-        {matchedMust.length > 0 && (
-          <div className="space-y-1">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-success flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Совпало (must-have)
-            </div>
-            <ul className="space-y-0.5">
-              {matchedMust.map((m, i) => (
-                <li key={i} className="flex gap-1.5"><span className="text-success">•</span><span>{m}</span></li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {missedMust.length > 0 && (
-          <div className="space-y-1">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-warning flex items-center gap-1.5">
-              <XCircle className="w-3.5 h-3.5" /> Не хватает (must-have)
-            </div>
-            <ul className="space-y-0.5">
-              {missedMust.map((m, i) => (
-                <li key={i} className="flex gap-1.5"><span className="text-warning">•</span><span>{m}</span></li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {dealBreakers.length > 0 && (
-          <div className="space-y-1">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-destructive flex items-center gap-1.5">
-              <AlertTriangle className="w-3.5 h-3.5" /> Сработали deal-breakers
-            </div>
-            <ul className="space-y-0.5">
-              {dealBreakers.map((m, i) => (
-                <li key={i} className="flex gap-1.5"><span className="text-destructive">•</span><span>{m}</span></li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </ScoreRow>
-
-      <ScoreRow
-        title="Анкета"
-        measures="Качество ответов кандидата в анкете демо"
-        score={answersScore}
-        hasDetails={answersHasDetails}
-      >
-        <ul className="space-y-2">
-          {answerDetails.map((d, i) => (
-            <li key={i} className="space-y-0.5">
-              <div className="flex items-start justify-between gap-2">
-                <span className="text-foreground/90 min-w-0 flex-1">{d.questionText}</span>
-                <span className={cn("shrink-0 text-sm font-bold tabular-nums", scoreTone(Math.round((d.awarded / (d.max || 1)) * 100)))}>{d.awarded}/{d.max}</span>
-              </div>
-              {d.comment && <p className="text-[12px] text-muted-foreground">{d.comment}</p>}
-            </li>
-          ))}
-        </ul>
-      </ScoreRow>
-
-      <ScoreRow
-        title="Тест"
-        measures={testHint ? `Результат тестового задания (${testHint})` : "Результат тестового задания"}
-        score={testScore}
-        hasDetails={false}
-      />
+      {open && (
+        <div className="mt-1.5 rounded-md border border-border/60 bg-background/50 px-3 py-2.5 space-y-2 text-sm">
+          {open.details}
+        </div>
+      )}
     </div>
   )
 }
@@ -2006,6 +1943,7 @@ export function CandidateDrawer({
                   </button>
                 </div>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  {/* Баллы из шапки убраны — дублировали панель «Оценки» и сдвигали контент. */}
                   {stageCfg && (
                     <span className="flex items-center gap-1.5">
                       <span className="text-[11px] text-muted-foreground">Стадия:</span>
@@ -2014,13 +1952,6 @@ export function CandidateDrawer({
                       </Badge>
                     </span>
                   )}
-                  {stageCfg && <span className="hidden sm:inline-block h-5 w-px bg-border/60" aria-hidden />}
-                  <HeaderScores
-                    resume={candidate.resumeScore ?? null}
-                    anketa={candidate.demoAnswersScore ?? null}
-                    portrait={candidate.aiScoreV2 ?? null}
-                    test={candidate.testScore ?? null}
-                  />
                 </div>
               </div>
             </div>
