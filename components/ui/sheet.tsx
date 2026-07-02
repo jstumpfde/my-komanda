@@ -48,13 +48,18 @@ function SheetContent({
   className,
   children,
   side = 'right',
+  overlayClassName,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: 'top' | 'right' | 'bottom' | 'left'
+  /** Доп. классы для оверлея — напр. приглушить его (bg-transparent
+   * pointer-events-none), когда Sheet открыт с modal={false} поверх
+   * другого интерактивного окна и не должен блокировать клики под собой. */
+  overlayClassName?: string
 }) {
   return (
     <SheetPortal>
-      <SheetOverlay />
+      <SheetOverlay className={overlayClassName} />
       <SheetPrimitive.Content
         data-slot="sheet-content"
         className={cn(

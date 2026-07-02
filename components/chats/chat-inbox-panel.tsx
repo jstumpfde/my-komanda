@@ -20,7 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import {
   Loader2, RefreshCw, MessageSquare, Search, SlidersHorizontal,
-  ExternalLink, MoreHorizontal, CheckCircle2, XCircle, UserRound,
+  MoreHorizontal, CheckCircle2, XCircle, UserRound,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -64,6 +64,13 @@ interface ChatInboxPanelProps {
   className?: string
   /** Колбэк после загрузки списка — глобальный виджет обновляет бейдж. */
   onThreadsLoaded?: (totalUnread: number) => void
+  /**
+   * Открыть карточку кандидата (платформенный CandidateDrawer) БЕЗ навигации —
+   * клик по имени/«Открыть резюме» в шапке треда. Если не передан (напр. таб
+   * «Инбокс» на странице вакансии, где карточка уже открывается по клику из
+   * списка кандидатов), используется обычная ссылка-навигация как fallback.
+   */
+  onOpenCandidate?: (candidateId: string) => void
 }
 
 const POLL_MS = 45_000
@@ -82,7 +89,7 @@ function formatAt(at: string | null): string {
   return d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })
 }
 
-export function ChatInboxPanel({ fixedVacancyId, className, onThreadsLoaded }: ChatInboxPanelProps) {
+export function ChatInboxPanel({ fixedVacancyId, className, onThreadsLoaded, onOpenCandidate }: ChatInboxPanelProps) {
   const [threads, setThreads] = useState<InboxThread[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -409,13 +416,24 @@ export function ChatInboxPanel({ fixedVacancyId, className, onThreadsLoaded }: C
                   zoomable={false}
                 />
                 <div className="min-w-0">
-                  <a
-                    href={cardHref(selected)}
-                    className="text-sm font-semibold truncate block hover:underline"
-                    title="Открыть карточку кандидата"
-                  >
-                    {selected.name}
-                  </a>
+                  {onOpenCandidate ? (
+                    <button
+                      type="button"
+                      onClick={() => onOpenCandidate(selected.candidateId)}
+                      className="text-sm font-semibold truncate block hover:underline text-left"
+                      title="Открыть карточку кандидата"
+                    >
+                      {selected.name}
+                    </button>
+                  ) : (
+                    <a
+                      href={cardHref(selected)}
+                      className="text-sm font-semibold truncate block hover:underline"
+                      title="Открыть карточку кандидата"
+                    >
+                      {selected.name}
+                    </a>
+                  )}
                   <div className="text-[11px] text-muted-foreground truncate">
                     {selected.vacancyTitle}
                     {selected.vacancyCity ? ` · ${selected.vacancyCity}` : ""}
@@ -424,10 +442,21 @@ export function ChatInboxPanel({ fixedVacancyId, className, onThreadsLoaded }: C
                 </div>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
-                {selected.resumeUrl && (
+                {onOpenCandidate ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1.5 text-xs"
+                    onClick={() => onOpenCandidate(selected.candidateId)}
+                    title="Открыть резюме на платформе"
+                  >
+                    <UserRound className="w-3.5 h-3.5" />
+                    Открыть резюме
+                  </Button>
+                ) : (
                   <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" asChild>
-                    <a href={selected.resumeUrl} target="_blank" rel="noopener noreferrer">
-                      <ExternalLink className="w-3.5 h-3.5" />
+                    <a href={cardHref(selected)}>
+                      <UserRound className="w-3.5 h-3.5" />
                       Открыть резюме
                     </a>
                   </Button>
@@ -465,25 +494,11 @@ export function ChatInboxPanel({ fixedVacancyId, className, onThreadsLoaded }: C
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem asChild>
-                      <a href={cardHref(selected)}>
-                        <UserRound className="w-4 h-4" />
-                        Карточка кандидата
-                      </a>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
                       <a href={`/hr/vacancies/${selected.vacancyId}`}>
                         <MessageSquare className="w-4 h-4" />
                         Открыть вакансию
                       </a>
                     </DropdownMenuItem>
-                    {selected.resumeUrl && (
-                      <DropdownMenuItem asChild>
-                        <a href={selected.resumeUrl} target="_blank" rel="noopener noreferrer">
-                          <ExternalLink className="w-4 h-4" />
-                          Резюме на hh
-                        </a>
-                      </DropdownMenuItem>
-                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>

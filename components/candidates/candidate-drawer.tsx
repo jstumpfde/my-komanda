@@ -881,6 +881,14 @@ export interface CandidateDrawerProps {
   initialCandidate?: InitialCandidateSnapshot | null
   /** Вкладка, на которой открыть карточку (напр. "test" — сразу к результату теста). */
   initialTab?: string | null
+  /**
+   * modal=false — открывать карточку НЕ модально (Radix Dialog): без блокирующего
+   * фокус-трапа и с непрозрачным для кликов фоном. Нужно, когда карточка открыта
+   * ПОВЕРХ другого интерактивного окна (глобальный виджет «Чаты»), которое должно
+   * оставаться кликабельным одновременно с открытой карточкой. По умолчанию true
+   * (обычное модальное поведение — как было).
+   */
+  modal?: boolean
 }
 
 // Ищем URL видео-визитки в anketaAnswers. Структура такая же, как
@@ -916,6 +924,7 @@ export function CandidateDrawer({
   vacancyAnketa,
   initialCandidate,
   initialTab,
+  modal = true,
 }: CandidateDrawerProps) {
   const { user } = useAuth()
   const [sheetExpanded, setSheetExpanded] = useState(false)
@@ -1870,19 +1879,32 @@ export function CandidateDrawer({
   }, [open, videoVizitkaUrl])
 
   return (
-    <Sheet open={open} onOpenChange={(next) => {
-      // Если карточку закрывают, а у нас активен PiP видео-визитки — выходим из PiP,
-      // иначе плавающее окно остаётся жить после уже закрытой карточки.
-      if (!next && typeof document !== "undefined" && document.pictureInPictureElement) {
-        document.exitPictureInPicture().catch(() => {})
-      }
-      if (!next) setSheetExpanded(false)
-      onOpenChange(next)
-    }}>
-      <SheetContent side="right" className={cn(
-        "w-full p-0 flex flex-col",
-        sheetExpanded ? "max-w-none sm:max-w-none w-screen" : "sm:max-w-2xl",
-      )}>
+    <Sheet
+      open={open}
+      modal={modal}
+      onOpenChange={(next) => {
+        // Если карточку закрывают, а у нас активен PiP видео-визитки — выходим из PiP,
+        // иначе плавающее окно остаётся жить после уже закрытой карточки.
+        if (!next && typeof document !== "undefined" && document.pictureInPictureElement) {
+          document.exitPictureInPicture().catch(() => {})
+        }
+        if (!next) setSheetExpanded(false)
+        onOpenChange(next)
+      }}
+    >
+      <SheetContent
+        side="right"
+        // modal=false (карточка поверх глобального виджета «Чаты»): гасим
+        // оверлей — Radix всё равно рендерит SheetOverlay, но без затемнения
+        // и БЕЗ перехвата кликов (pointer-events-none) чат под ним остаётся
+        // интерактивным. Сама карточка — z-[60], выше окна чата (z-50).
+        overlayClassName={!modal ? "bg-transparent pointer-events-none" : undefined}
+        className={cn(
+          "w-full p-0 flex flex-col",
+          sheetExpanded ? "max-w-none sm:max-w-none w-screen" : "sm:max-w-2xl",
+          !modal && "z-[60]",
+        )}
+      >
         {/* sr-only title/description: гарантируют наличие aria-labelledby
             и aria-describedby у Radix Dialog даже когда candidate ещё грузится
             или не найден — иначе библиотека пишет варнинги в консоль. */}

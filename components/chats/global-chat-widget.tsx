@@ -16,11 +16,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { usePathname } from "next/navigation"
-import { MessageSquare, Maximize2, Minimize2, X } from "lucide-react"
+import { MessageSquare, Maximize2, Minimize2, X, PanelLeft, PanelRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth"
 import { isOwnerEmail } from "@/lib/owner"
 import { ChatInboxPanel } from "@/components/chats/chat-inbox-panel"
+import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
 
 // ── Гейт первого этапа ──────────────────────────────────────────────────────
 // Пока обкатывается — виджет виден ТОЛЬКО владельцу-полигону (isOwnerEmail).
@@ -29,12 +30,70 @@ const CHAT_WIDGET_OWNER_ONLY = true
 
 const BADGE_POLL_MS = 60_000
 
+// Докинг окна чата — левый/правый край. Сохраняем выбор в localStorage,
+// чтобы не сбрасывался между визитами. Когда открывается карточка
+// кандидата (CandidateDrawer, выезжает справа), чат автоматом прижимается
+// влево, чтобы обе панели не перекрывали друг друга (см. эффект ниже).
+type DockSide = "left" | "right"
+const DOCK_STORAGE_KEY = "chatWidgetDock"
+
+function readStoredDock(): DockSide {
+  if (typeof window === "undefined") return "right"
+  try {
+    const v = window.localStorage.getItem(DOCK_STORAGE_KEY)
+    return v === "left" ? "left" : "right"
+  } catch {
+    return "right"
+  }
+}
+
 export function GlobalChatWidget() {
   const { user } = useAuth()
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [unread, setUnread] = useState(0)
+  const [dock, setDock] = useState<DockSide>("right")
+  // Запоминаем сторону, выбранную пользователем ДО авто-прижатия влево —
+  // чтобы после закрытия карточки кандидата вернуться на неё, а не прыгать.
+  const userDockRef = useRef<DockSide>("right")
+
+  // Карточка кандидата поверх чата — открывается по клику на «Открыть резюме»
+  // или на имя кандидата в шапке треда (см. ChatInboxPanel onOpenCandidate).
+  const [drawerCandidateId, setDrawerCandidateId] = useState<string | null>(null)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+
+  useEffect(() => {
+    const stored = readStoredDock()
+    setDock(stored)
+    userDockRef.current = stored
+  }, [])
+
+  const setDockPersisted = useCallback((side: DockSide) => {
+    userDockRef.current = side
+    setDock(side)
+    try {
+      window.localStorage.setItem(DOCK_STORAGE_KEY, side)
+    } catch {
+      /* localStorage недоступен — просто не сохраняем */
+    }
+  }, [])
+
+  // Авто-режим «рядом»: карточка кандидата открылась — чат прижимается влево
+  // (если был справа), чтобы не перекрываться с выезжающей справа карточкой.
+  // При закрытии карточки возвращаем сторону, которую выбирал пользователь.
+  useEffect(() => {
+    if (drawerOpen) {
+      if (userDockRef.current === "right") setDock("left")
+    } else {
+      setDock(userDockRef.current)
+    }
+  }, [drawerOpen])
+
+  const openCandidate = useCallback((candidateId: string) => {
+    setDrawerCandidateId(candidateId)
+    setDrawerOpen(true)
+  }, [])
 
   // Виджет — про HR-чаты с кандидатами: показываем только в HR-модуле.
   const inHrModule = !!pathname?.startsWith("/hr")
@@ -110,7 +169,10 @@ export function GlobalChatWidget() {
             "animate-in slide-in-from-bottom-4 duration-200",
             expanded
               ? "inset-4"
-              : "right-4 bottom-4 h-[85vh] max-h-[calc(100vh-2rem)] w-[min(960px,calc(100vw-2rem))]",
+              : cn(
+                  "bottom-4 h-[85vh] max-h-[calc(100vh-2rem)] w-[min(960px,calc(100vw-2rem))]",
+                  dock === "left" ? "left-4" : "right-4",
+                ),
           )}
           role="dialog"
           aria-label="Чаты с кандидатами"
@@ -126,6 +188,17 @@ export function GlobalChatWidget() {
                 </span>
               )}
             </div>
+            {!expanded && (
+              <button
+                type="button"
+                onClick={() => setDockPersisted(dock === "left" ? "right" : "left")}
+                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                title={dock === "left" ? "Переместить вправо" : "Переместить влево"}
+                aria-label={dock === "left" ? "Переместить окно вправо" : "Переместить окно влево"}
+              >
+                {dock === "left" ? <PanelRight className="w-4 h-4" /> : <PanelLeft className="w-4 h-4" />}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setExpanded((v) => !v)}
@@ -148,10 +221,28 @@ export function GlobalChatWidget() {
 
           {/* Тело — общий двухпанельный инбокс */}
           <div className="flex-1 min-h-0">
-            <ChatInboxPanel onThreadsLoaded={setUnread} className="h-full" />
+            <ChatInboxPanel
+              onThreadsLoaded={setUnread}
+              className="h-full"
+              onOpenCandidate={openCandidate}
+            />
           </div>
         </div>
       )}
+
+      {/* Карточка кандидата поверх чата — не модальная (modal={false}),
+          чтобы её оверлей не блокировал клики по окну чата, оставшемуся
+          открытым слева. См. компонент CandidateDrawer — Sheet/Radix Dialog
+          пробрасывает modal через ...props. */}
+      <CandidateDrawer
+        candidateId={drawerCandidateId}
+        open={drawerOpen}
+        modal={false}
+        onOpenChange={(next) => {
+          setDrawerOpen(next)
+          if (!next) setDrawerCandidateId(null)
+        }}
+      />
     </>
   )
 }
