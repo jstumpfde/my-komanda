@@ -490,6 +490,7 @@ export async function scanIncomingMessages(opts: {
               aiChatbotEnabled:  candVac.aiChatbotEnabled,
               aiChatbotSettings: candVac.aiChatbotSettings,
               aiChatbotPrompt:   candVac.aiChatbotPrompt,
+              stopWordsJson:     candVac.stopWordsJson,
               botClarifyAmbiguous,
             },
           })

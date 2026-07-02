@@ -171,6 +171,11 @@ export interface ProcessVacancy {
   /** spec.botClarifyAmbiguous (контур «Портрет»): бот деликатно уточняет спорные
    *  моменты по критериям, прежде чем кандидата отсеют. Источник — vacancy_specs. */
   botClarifyAmbiguous?: boolean | null
+  /** Кастомный список стоп-слов вакансии (vacancies.stopWordsJson, настраивается в
+   *  Портрете). Если задан — чат-бот проверяет ИМЕННО его; пусто → платформенный
+   *  baseline. Фикс 02.07: раньше чат-бот всегда читал baseline и игнорировал
+   *  список Портрета (кнопка «не работала» при включённом боте). */
+  stopWordsJson?: unknown
 }
 
 export interface ProcessInput {
@@ -895,7 +900,14 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
   // 0g. mild_negativity / normal — стандартный пайплайн.
 
   // 1. Стоп-слова перебивают AI: rejected без AI-вызова и без отправки сообщения.
-  if (stopwordsOn && matchStopWordWith(incomingText, await getBaselineStopWords())) {
+  //    Источник — список вакансии (stopWordsJson из Портрета), с фолбэком на
+  //    платформенный baseline, если список пуст (фикс 02.07: раньше всегда
+  //    читался baseline и список Портрета игнорировался при включённом боте).
+  const vacStopWords = Array.isArray(vacancy.stopWordsJson)
+    ? vacancy.stopWordsJson.filter((s): s is string => typeof s === "string")
+    : []
+  const effectiveStopWords = vacStopWords.length > 0 ? vacStopWords : await getBaselineStopWords()
+  if (stopwordsOn && matchStopWordWith(incomingText, effectiveStopWords)) {
     if (!dryRun) {
       await db.update(candidates).set({
         stage:                       "rejected",

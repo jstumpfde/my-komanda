@@ -38,6 +38,7 @@ export async function POST(
         aiChatbotEnabled:  vacancies.aiChatbotEnabled,
         aiChatbotSettings: vacancies.aiChatbotSettings,
         aiChatbotPrompt:   vacancies.aiChatbotPrompt,
+        stopWordsJson:     vacancies.stopWordsJson,
         salaryMin:         vacancies.salaryMin,
         salaryMax:         vacancies.salaryMax,
       })
@@ -78,6 +79,7 @@ export async function POST(
         aiChatbotEnabled:  true, // в sandbox считаем что включён
         aiChatbotSettings: vacancy.aiChatbotSettings,
         aiChatbotPrompt:   vacancy.aiChatbotPrompt,
+        stopWordsJson:     vacancy.stopWordsJson,
         salaryMin:         vacancy.salaryMin,
         salaryMax:         vacancy.salaryMax,
         botClarifyAmbiguous: sandboxClarify,

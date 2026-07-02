@@ -386,6 +386,7 @@ export async function processAvitoInbound(
           aiChatbotEnabled:  candVac.aiChatbotEnabled,
           aiChatbotSettings: candVac.aiChatbotSettings,
           aiChatbotPrompt:   candVac.aiChatbotPrompt,
+          stopWordsJson:     candVac.stopWordsJson,
         },
       })
       if (cb.handled) {
