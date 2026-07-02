@@ -362,14 +362,20 @@ export async function POST(
         // Прошёл гейт, если инвайт запланирован СЕЙЧАС (scheduled=true) ИЛИ
         // override уже стоял (already_invited/already_scheduled — прошёл ранее,
         // повторный сабмит). Читаем актуальный override кандидата как источник
-        // истины и уважаем под-флаг inlineContinue из Портрета.
+        // истины и уважаем режим перехода transferMode из Портрета.
         const passedNow = inviteResult.scheduled ||
           inviteResult.reason === "already_invited" ||
           inviteResult.reason === "already_scheduled"
         if (passedNow) {
           const spec = await getSpec(txResult.vacancyId)
           const ap = spec?.anketaPassInvite
-          if (ap?.enabled === true && ap.inlineContinue !== false) {
+          // Инлайн-переход только в seamless/both. Обратная совместимость:
+          // старые спеки без transferMode → inlineContinue (false ⇒ message).
+          const transferMode: "seamless" | "message" | "both" =
+            ap?.transferMode === "seamless" || ap?.transferMode === "message" || ap?.transferMode === "both"
+              ? ap.transferMode
+              : (ap?.inlineContinue === false ? "message" : "both")
+          if (ap?.enabled === true && transferMode !== "message") {
             const [cand] = await db
               .select({ overrideContentBlockId: candidates.overrideContentBlockId })
               .from(candidates)

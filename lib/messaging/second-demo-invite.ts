@@ -191,6 +191,37 @@ export async function maybeScheduleSecondDemoInvite(args: {
     // Для логов/возврата — «сработавший» балл (приоритет объективного).
     const gateScore = passObjective ? (objectiveScore as number) : (aiEvalScore as number)
 
+    // Режим перехода на блок 2. Обратная совместимость: старые спеки без
+    // transferMode, но с inlineContinue=false → трактуем как "message".
+    const transferMode: "seamless" | "message" | "both" =
+      ap.transferMode === "seamless" || ap.transferMode === "message" || ap.transferMode === "both"
+        ? ap.transferMode
+        : (ap.inlineContinue === false ? "message" : "both")
+
+    // 5a. Бесшовный режим (seamless): письмо НЕ шлём — кандидат перейдёт на блок 2
+    //     прямо на странице. Но override ВСЁ РАВНО ставим (GET отдаст блок 2,
+    //     плюс дедуп-флаг). Атомарности с insert тут не нужно — insert-а нет.
+    if (transferMode === "seamless") {
+      await db.update(candidates)
+        .set({ overrideContentBlockId: blockId, secondDemoInvitedAt: new Date() })
+        .where(eq(candidates.id, args.candidateId))
+
+      console.log("[second-demo-invite]", JSON.stringify({
+        tag:             "second-demo-invite/seamless",
+        candidateId:     args.candidateId,
+        vacancyId:       args.vacancyId,
+        score:           gateScore,
+        gate:            passObjective ? "objective" : "ai_eval",
+        objectiveScore,
+        aiEvalScore,
+        passThreshold:   ap.passThreshold,
+        aiEvalThreshold,
+        blockId,
+        transferMode,
+      }))
+      return { scheduled: true, score: gateScore }
+    }
+
     // 5. Гарантируем кампанию (follow_up_messages.campaign_id NOT NULL).
     const campaignId = await ensureCampaign(args.vacancyId)
     if (!campaignId) return { scheduled: false, reason: "campaign_upsert_failed" }

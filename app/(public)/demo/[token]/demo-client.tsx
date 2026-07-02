@@ -160,29 +160,27 @@ interface DemoData {
     thankYouText:       string
     questions:          { text: string; maxDurationSeconds: number }[]
   } | null
-  // «Склейка демо1 + блок 2»: редактируемые тексты двух экранов результата
-  // после демо1 (из Портрета spec.anketaPassInvite). null — фича выкл.
+  // «Склейка демо1 + блок 2»: режим перехода + тексты плашки-поздравления
+  // (сверху блока 2) и экрана «Спасибо» (для НЕ прошедших). null — фича выкл.
   passInviteScreens?: {
-    inlineContinue:        boolean
-    passScreenTitle:       string
-    passScreenText:        string
-    passScreenButtonLabel: string
-    failScreenTitle:       string
-    failScreenText:        string
+    transferMode:    "seamless" | "message" | "both"
+    passScreenTitle: string
+    passScreenText:  string
+    failScreenTitle: string
+    failScreenText:  string
   } | null
 }
 
-// Дефолты экранов результата демо1 — совпадают с AnketaPassInviteSchema
+// Дефолты плашки/экранов результата демо1 — совпадают с AnketaPassInviteSchema
 // (lib/core/spec/types.ts). Если HR оставил поле пустым → используется дефолт.
 const DEMO_DEFAULT_PASS_SCREEN = {
-  title:  "Вы молодец!",
-  text:   "Вы отлично справились с первой частью. Продолжим — впереди «Путь менеджера».",
-  button: "Продолжить →",
+  title: "Вы молодец!",
+  text:  "Вы прошли первую часть. Продолжим — впереди «Путь менеджера».",
 }
-const DEMO_DEFAULT_FAIL_SCREEN = {
-  title: "Спасибо!",
-  text:  "Мы рассмотрим ваши ответы и свяжемся с вами в ближайшее время.",
-}
+
+// sessionStorage-ключ «кандидат только что прошёл гейт» — ставится перед
+// авто-редиректом на блок 2, читается на загрузке блока 2 для показа плашки.
+const PASS_WELCOME_KEY = "myk_demo_pass_welcome"
 
 // Дефолты должны совпадать с DEFAULT_AFTER_VIDEO/DEFAULT_AFTER_ANKETA из
 // components/vacancies/final-screens-settings.tsx (UI настроек). Если HR
@@ -771,12 +769,12 @@ export default function DemoPage() {
   const [error, setError] = useState("")
   const [currentIndex, setCurrentIndex] = useState(0)
   const [finished, setFinished] = useState(false)
-  // «Склейка демо1 + блок 2»: кандидат прошёл гейт и получил сигнал
-  // advanceToBlockId → показываем экран-поздравление «Вы молодец!» с кнопкой на
-  // блок 2 (вместо мягкого «Спасибо»). null — не прошёл / фича выкл.
-  const [passGate, setPassGate] = useState(false)
-  // Идёт перезагрузка демо для показа блока 2 (после клика «Продолжить»).
+  // «Склейка демо1 + блок 2»: идёт авто-редирект на блок 2 после прохождения
+  // гейта (показываем спиннер вместо «Спасибо»-вспышки).
   const [advancing, setAdvancing] = useState(false)
+  // Плашка-поздравление «Вы молодец!» СВЕРХУ блока 2 — ставится по метке из
+  // sessionStorage (кандидат только что прошёл гейт), dismissable.
+  const [showPassWelcome, setShowPassWelcome] = useState(false)
   const [taskAnswers, setTaskAnswers] = useState<Record<string, Record<string, string>>>({})
   const [mediaUploaded, setMediaUploaded] = useState<Record<string, MediaAnswer>>({})
   const [mediaSkipped, setMediaSkipped] = useState<Record<string, boolean>>({})
@@ -820,6 +818,19 @@ export default function DemoPage() {
   const [formOtherLinks, setFormOtherLinks] = useState("")
   const [formEmployment, setFormEmployment] = useState("")
   const [formNiches, setFormNiches] = useState("")
+
+  // «Склейка демо1 + блок 2»: кандидат только что прошёл гейт и был авто-редиректнут
+  // на блок 2 → показываем плашку-поздравление сверху. Метку читаем один раз и
+  // сразу гасим (чтобы при обычной перезагрузке блока 2 плашка не всплывала).
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    try {
+      if (window.sessionStorage.getItem(PASS_WELCOME_KEY) === token) {
+        setShowPassWelcome(true)
+        window.sessionStorage.removeItem(PASS_WELCOME_KEY)
+      }
+    } catch { /* sessionStorage недоступен — плашку не показываем, не критично */ }
+  }, [token])
 
   // Fetch demo data
   useEffect(() => {
@@ -1140,15 +1151,17 @@ export default function DemoPage() {
           window.scrollTo({ top: 0, behavior: "smooth" })
         }
       } else if (advanceToBlockId) {
-        // ✅ Прошёл гейт + inlineContinue: НЕ показываем «Спасибо». Показываем
-        // экран-поздравление «Вы молодец!» с кнопкой на блок 2 («Путь менеджера»).
-        // Отмечаем прохождение уроков (без __thanks__ — «Спасибо» кандидат не видит).
+        // ✅ Прошёл гейт (seamless/both): НЕ показываем «Спасибо» и отдельный
+        // экран. АВТО-переход на блок 2 — override уже отдаёт блок 2 через GET.
+        // Ставим метку в sessionStorage → на загрузке блока 2 покажется плашка
+        // «Вы молодец!». Отмечаем прохождение уроков (без __thanks__).
         void postCompleteMarker()
         void postVirtualMarkers(["__anketa__"])
-        setPassGate(true)
-        setFinished(true)
+        setAdvancing(true)
         if (typeof window !== "undefined") {
-          window.scrollTo({ top: 0, behavior: "smooth" })
+          try { window.sessionStorage.setItem(PASS_WELCOME_KEY, token) } catch { /* нет sessionStorage — плашки не будет, но переход всё равно нужен */ }
+          // Полная перезагрузка на тот же URL: GET вернёт блок 2 «Путь менеджера».
+          window.location.href = `/demo/${token}`
         }
       } else {
         setFinished(true)
@@ -1178,7 +1191,9 @@ export default function DemoPage() {
 
   // ─── Loading state ──────────────────────────────────────────────────────────
 
-  if (loading) {
+  // Идёт авто-переход на блок 2 (seamless/both) — показываем спиннер, чтобы
+  // не мелькнул экран «Спасибо» до навигации.
+  if (loading || advancing) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white">
         <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
@@ -1265,50 +1280,9 @@ export default function DemoPage() {
   }
 
   if (finished) {
-    // ✅ «Склейка демо1 + блок 2»: кандидат прошёл гейт → экран-поздравление
-    // «Вы молодец!» (редактируемый) с кнопкой «Продолжить →» на блок 2
-    // («Путь менеджера»). Кнопка перезагружает /demo/[token] — GET уже отдаст
-    // override-блок (см. route.ts). Приоритет над всеми «Спасибо». Не показываем
-    // мягкое «Спасибо»-вспышку — только поздравление и переход.
-    if (passGate) {
-      const ps = data.passInviteScreens
-      const passTitle  = ps?.passScreenTitle?.trim()  || DEMO_DEFAULT_PASS_SCREEN.title
-      const passText   = ps?.passScreenText?.trim()   || DEMO_DEFAULT_PASS_SCREEN.text
-      const passButton = ps?.passScreenButtonLabel?.trim() || DEMO_DEFAULT_PASS_SCREEN.button
-      const goToBlock2 = () => {
-        setAdvancing(true)
-        // Полная перезагрузка на тот же URL: GET вернёт override-блок «Путь
-        // менеджера», состояние демо стартует с чистого листа для блока 2.
-        if (typeof window !== "undefined") {
-          window.location.href = `/demo/${token}`
-        }
-      }
-      return (
-        <div className="flex min-h-screen items-center justify-center px-4 py-8" style={{ backgroundColor: bgColor }}>
-          <div className="w-full max-w-md space-y-6 text-center">
-            {data.companyLogo && (
-              <img
-                src={data.companyLogo}
-                alt={data.companyName}
-                className="mx-auto h-12 w-auto object-contain mb-2"
-              />
-            )}
-            <h1 className="text-3xl font-bold text-gray-900">{passTitle}</h1>
-            <p className="text-gray-600 whitespace-pre-line">{passText}</p>
-            <button
-              type="button"
-              onClick={goToBlock2}
-              disabled={advancing}
-              className="inline-flex items-center justify-center rounded-lg px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors disabled:opacity-60"
-              style={{ backgroundColor: data.brandPrimaryColor || "#3b82f6" }}
-            >
-              {advancing ? <Loader2 className="h-4 w-4 animate-spin" /> : passButton}
-            </button>
-          </div>
-        </div>
-      )
-    }
-
+    // Примечание: прошедшие гейт (seamless/both) сюда НЕ попадают — их
+    // авто-редиректит на блок 2 в handleNext (advancing=true → спиннер выше).
+    // Здесь остаются только НЕ прошедшие / message-режим / фича выкл.
     // #25: порядок экранов после прохождения уроков:
     //   1. (если postDemoSettings.enabled === false) → статичный «спасибо»,
     //      минуя анкету и финальный экран. Выход.
@@ -1660,6 +1634,33 @@ export default function DemoPage() {
           <Progress value={progressPercent} className="h-2" />
         </div>
       </div>
+
+      {/* ✅ «Склейка демо1 + блок 2»: плашка-поздравление СВЕРХУ блока 2 для
+          только что прошедших гейт (метка из sessionStorage). Ненавязчивая,
+          зелёная, dismissable. Тексты из Портрета (passScreenTitle/Text). */}
+      {showPassWelcome && (
+        <div className="mx-auto max-w-2xl w-full px-4 pt-4">
+          <div className="flex items-start gap-3 rounded-xl border border-green-200 bg-green-50 px-4 py-3">
+            <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-green-600 mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-green-900">
+                {data.passInviteScreens?.passScreenTitle?.trim() || DEMO_DEFAULT_PASS_SCREEN.title}
+              </p>
+              <p className="text-sm text-green-800 whitespace-pre-line">
+                {data.passInviteScreens?.passScreenText?.trim() || DEMO_DEFAULT_PASS_SCREEN.text}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowPassWelcome(false)}
+              aria-label="Закрыть"
+              className="flex-shrink-0 rounded-md p-1 text-green-700 hover:bg-green-100 transition-colors"
+            >
+              <span aria-hidden className="text-lg leading-none">×</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Content — все блоки текущего урока рендерятся на одной странице */}
       <div className="flex-1">

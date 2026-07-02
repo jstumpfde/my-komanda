@@ -2316,9 +2316,17 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
       {(() => {
         // getSpec отдаёт сырой спек без дефолтов → у старых вакансий поля нет.
         // Fallback, иначе ap.enabled крашит Портрет (инцидент 30.06).
-        const ap = spec.anketaPassInvite ?? { enabled: false, passThreshold: 35, aiEvalThreshold: 55, contentBlockId: null, messageText: "", delaySeconds: 900, inlineContinue: true, passScreenTitle: "", passScreenText: "", passScreenButtonLabel: "", failScreenTitle: "", failScreenText: "" }
+        const ap = spec.anketaPassInvite ?? { enabled: false, passThreshold: 35, aiEvalThreshold: 55, contentBlockId: null, messageText: "", delaySeconds: 900, transferMode: "both" as const, inlineContinue: true, passScreenTitle: "", passScreenText: "", passScreenButtonLabel: "", failScreenTitle: "", failScreenText: "" }
         // Порог AI-оценки может отсутствовать у старых спеков — дефолт 55 (как в схеме).
         const aiEvalThreshold = typeof ap.aiEvalThreshold === "number" ? ap.aiEvalThreshold : 55
+        // Режим перехода. Обратная совместимость: старые спеки без transferMode →
+        // маппинг из inlineContinue (false ⇒ message, иначе both).
+        const transferMode: "seamless" | "message" | "both" =
+          ap.transferMode === "seamless" || ap.transferMode === "message" || ap.transferMode === "both"
+            ? ap.transferMode
+            : ((ap as { inlineContinue?: boolean }).inlineContinue === false ? "message" : "both")
+        const showSeamless = transferMode === "seamless" || transferMode === "both"
+        const showMessage  = transferMode === "message"  || transferMode === "both"
         return (
           <Card>
             <CardContent className="pt-5 space-y-3">
@@ -2354,74 +2362,82 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Текст (подставятся {"{{name}}"}, {"{{vacancy}}"}, {"{{demo_link}}"})</Label>
-                    <Textarea
-                      value={ap.messageText}
-                      onChange={e => patch({ anketaPassInvite: { ...ap, messageText: e.target.value } })}
-                      placeholder="{{name}}, добрый день! Благодарим за ответы — вы нам подходите. Предлагаем 2-ю часть «Путь менеджера»: {{demo_link}}"
-                      rows={4} maxLength={2000}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Задержка перед отправкой</Label>
-                    <Select value={String(ap.delaySeconds)} onValueChange={v => patch({ anketaPassInvite: { ...ap, delaySeconds: Number(v) } })}>
-                      <SelectTrigger className="h-9 w-44"><SelectValue /></SelectTrigger>
+                  {/* Режим перехода на блок 2. При смене синхронно пишем
+                      inlineContinue (back-compat: seamless/both⇒true, message⇒false). */}
+                  <div className="space-y-1.5 border-t pt-3">
+                    <Label className="text-xs font-semibold">Как переводить на блок 2</Label>
+                    <Select
+                      value={transferMode}
+                      onValueChange={v => patch({ anketaPassInvite: { ...ap, transferMode: v as "seamless" | "message" | "both", inlineContinue: v !== "message" } })}
+                    >
+                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="60">1 минута</SelectItem>
-                        <SelectItem value="180">3 минуты</SelectItem>
-                        <SelectItem value="900">15 минут</SelectItem>
-                        <SelectItem value="1800">30 минут</SelectItem>
-                        <SelectItem value="3600">1 час</SelectItem>
+                        <SelectItem value="seamless">Бесшовно (сразу на странице, без письма)</SelectItem>
+                        <SelectItem value="message">Письмом с задержкой</SelectItem>
+                        <SelectItem value="both">И так, и так (рекомендуется)</SelectItem>
                       </SelectContent>
                     </Select>
+                    <p className="text-[11px] text-muted-foreground">
+                      {transferMode === "seamless" && "Прошедший гейт кандидат сразу переходит на блок 2 прямо на странице, сверху — плашка-поздравление. Письмо не шлём."}
+                      {transferMode === "message" && "Кандидат видит «Спасибо», а приглашение на блок 2 уходит письмом с задержкой. Инлайн-перехода нет."}
+                      {transferMode === "both" && "Авто-переход на блок 2 + плашка на странице, а кто ушёл не продолжив — догоняем письмом (страховка)."}
+                    </p>
                   </div>
 
-                  {/* ── «Склейка»: блок 2 сразу на странице + два экрана результата ── */}
-                  <div className="border-t pt-3 space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <Label className="text-xs font-semibold">Показывать блок 2 сразу на странице (без письма)</Label>
-                        <p className="text-[11px] text-muted-foreground">
-                          Прошедший гейт кандидат видит экран-поздравление и с него сразу переходит
-                          в блок 2 — не дожидаясь письма. Письмо остаётся страховкой для тех, кто
-                          ушёл со страницы. Выкл = как раньше (только письмо).
-                        </p>
+                  {/* ✅ Плашка-поздравление сверху блока 2 (seamless/both) */}
+                  {showSeamless && (
+                    <div className="space-y-3 rounded-lg border border-green-200 bg-green-50/40 p-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">✅ Плашка на блоке 2 — заголовок</Label>
+                        <Input
+                          value={ap.passScreenTitle ?? ""}
+                          onChange={e => patch({ anketaPassInvite: { ...ap, passScreenTitle: e.target.value } })}
+                          placeholder="Вы молодец!"
+                          maxLength={200}
+                        />
                       </div>
-                      <Switch
-                        checked={ap.inlineContinue !== false}
-                        onCheckedChange={v => patch({ anketaPassInvite: { ...ap, inlineContinue: v } })}
-                      />
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">✅ Плашка на блоке 2 — текст</Label>
+                        <Textarea
+                          value={ap.passScreenText ?? ""}
+                          onChange={e => patch({ anketaPassInvite: { ...ap, passScreenText: e.target.value } })}
+                          placeholder="Вы прошли первую часть. Продолжим — впереди «Путь менеджера»."
+                          rows={3} maxLength={2000}
+                        />
+                      </div>
                     </div>
+                  )}
 
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">✅ Экран для прошедших — заголовок</Label>
-                      <Input
-                        value={ap.passScreenTitle ?? ""}
-                        onChange={e => patch({ anketaPassInvite: { ...ap, passScreenTitle: e.target.value } })}
-                        placeholder="Вы молодец!"
-                        maxLength={200}
-                      />
+                  {/* Письмо-приглашение (message/both) */}
+                  {showMessage && (
+                    <div className="space-y-3 border-t pt-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Текст письма (подставятся {"{{name}}"}, {"{{vacancy}}"}, {"{{demo_link}}"})</Label>
+                        <Textarea
+                          value={ap.messageText}
+                          onChange={e => patch({ anketaPassInvite: { ...ap, messageText: e.target.value } })}
+                          placeholder="{{name}}, добрый день! Благодарим за ответы — вы нам подходите. Предлагаем 2-ю часть «Путь менеджера»: {{demo_link}}"
+                          rows={4} maxLength={2000}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Задержка перед отправкой</Label>
+                        <Select value={String(ap.delaySeconds)} onValueChange={v => patch({ anketaPassInvite: { ...ap, delaySeconds: Number(v) } })}>
+                          <SelectTrigger className="h-9 w-44"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="60">1 минута</SelectItem>
+                            <SelectItem value="180">3 минуты</SelectItem>
+                            <SelectItem value="900">15 минут</SelectItem>
+                            <SelectItem value="1800">30 минут</SelectItem>
+                            <SelectItem value="3600">1 час</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">✅ Экран для прошедших — текст</Label>
-                      <Textarea
-                        value={ap.passScreenText ?? ""}
-                        onChange={e => patch({ anketaPassInvite: { ...ap, passScreenText: e.target.value } })}
-                        placeholder="Вы отлично справились с первой частью. Продолжим — впереди «Путь менеджера»."
-                        rows={3} maxLength={2000}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">✅ Экран для прошедших — надпись на кнопке</Label>
-                      <Input
-                        value={ap.passScreenButtonLabel ?? ""}
-                        onChange={e => patch({ anketaPassInvite: { ...ap, passScreenButtonLabel: e.target.value } })}
-                        placeholder="Продолжить →"
-                        maxLength={100}
-                      />
-                    </div>
+                  )}
 
+                  {/* ❌ Экран «Спасибо» — только для НЕ прошедших гейт */}
+                  <div className="space-y-3 border-t pt-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs">❌ Экран «Спасибо» для не прошедших — заголовок</Label>
                       <Input

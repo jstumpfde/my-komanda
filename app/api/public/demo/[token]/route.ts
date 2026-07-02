@@ -261,30 +261,32 @@ export async function GET(
 
     const demo = demoRows[0]
 
-    // «Склейка демо1 + блок 2»: редактируемые тексты двух экранов результата
-    // после демо1 (✅ прошёл гейт → «Вы молодец!» с кнопкой на блок 2;
-    // ❌ не прошёл → мягкое «Спасибо»). Берём из Портрета (spec.anketaPassInvite).
-    // Наружу отдаём ТОЛЬКО тексты экранов + inlineContinue — пороги/логику гейта
+    // «Склейка демо1 + блок 2»: тексты плашки-поздравления (для прошедших, seamless/both)
+    // и экрана «Спасибо» (для НЕ прошедших). Берём из Портрета (spec.anketaPassInvite).
+    // Наружу отдаём ТОЛЬКО тексты + режим transferMode — пороги/логику гейта
     // кандидату не светим (security). Пусто = фронт применит свои дефолты.
     let passInviteScreens: {
-      inlineContinue:        boolean
-      passScreenTitle:       string
-      passScreenText:        string
-      passScreenButtonLabel: string
-      failScreenTitle:       string
-      failScreenText:        string
+      transferMode:    "seamless" | "message" | "both"
+      passScreenTitle: string
+      passScreenText:  string
+      failScreenTitle: string
+      failScreenText:  string
     } | null = null
     try {
       const spec = await getSpec(vacancy.id)
       const ap = spec?.anketaPassInvite
       if (ap?.enabled === true) {
+        // Обратная совместимость: старые спеки без transferMode → inlineContinue.
+        const transferMode: "seamless" | "message" | "both" =
+          ap.transferMode === "seamless" || ap.transferMode === "message" || ap.transferMode === "both"
+            ? ap.transferMode
+            : (ap.inlineContinue === false ? "message" : "both")
         passInviteScreens = {
-          inlineContinue:        ap.inlineContinue !== false,
-          passScreenTitle:       ap.passScreenTitle ?? "",
-          passScreenText:        ap.passScreenText ?? "",
-          passScreenButtonLabel: ap.passScreenButtonLabel ?? "",
-          failScreenTitle:       ap.failScreenTitle ?? "",
-          failScreenText:        ap.failScreenText ?? "",
+          transferMode,
+          passScreenTitle: ap.passScreenTitle ?? "",
+          passScreenText:  ap.passScreenText ?? "",
+          failScreenTitle: ap.failScreenTitle ?? "",
+          failScreenText:  ap.failScreenText ?? "",
         }
       }
     } catch { /* нет спеки — экраны по дефолту фронта */ }
