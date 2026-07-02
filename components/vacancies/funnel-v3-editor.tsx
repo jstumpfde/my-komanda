@@ -126,8 +126,9 @@ function ZoneBar({ lower, upper }: { lower: number; upper: number }) {
       </div>
       <div className="flex justify-between text-[10px] text-muted-foreground">
         <span>0</span>
-        <span className="text-red-600 dark:text-red-400">&lt;{lo} отказ/разбор</span>
-        {/* Пороги равны → жёлтой зоны нет, подпись скрываем (fix: пустая зона) */}
+        {/* Пустые зоны → подписи скрываем вслед за сегментами: красная при
+            lower=0, жёлтая при lower==threshold */}
+        {lo > 0 && <span className="text-red-600 dark:text-red-400">&lt;{lo} отказ/разбор</span>}
         {hi > lo && <span className="text-amber-600 dark:text-amber-400">{lo}–{hi - 1} жёлтая</span>}
         <span className="text-emerald-600 dark:text-emerald-400">≥{hi} дальше</span>
         <span>100</span>
@@ -368,13 +369,20 @@ function StageDetail({ stage, index, allStages, content, dripTemplates, onPatch,
   const enabled = isStageEnabled(stage)
   const isContent = CONTENT_ACTIONS.includes(stage.action)
   const isPrequal = stage.action === "prequalification"
+  // security_check/reference_check — no-op в executeStageEntry (сообщений при
+  // входе нет) → поле «Приглашение» было бы мёртвым, показываем пояснение.
+  const isNoopAction = stage.action === "security_check" || stage.action === "reference_check"
 
   // «Выключенный хвост»: после этой стадии в конфиге есть стадии, но все
   // выключены — прошедшие предыдущую включённую стадию зависнут на ручном
   // разборе (движок НЕ ставит hired). Предупреждаем при выключении и показываем
   // постоянную плашку.
   const stagesAfter = index >= 0 ? allStages.slice(index + 1) : []
-  const disabledTail = stagesAfter.length > 0 && stagesAfter.every(s => !isStageEnabled(s))
+  // every на пустом массиве = true — НАМЕРЕННО: выключение ПОСЛЕДНЕЙ стадии
+  // тоже создаёт выключенный хвост для предыдущей включённой (кандидаты
+  // зависнут на ручном разборе). Для единственной стадии дублирует верхний
+  // баннер «все стадии выключены» — это ок.
+  const disabledTail = stagesAfter.every(s => !isStageEnabled(s))
   const toggleEnabled = (v: boolean) => {
     if (!v && disabledTail) {
       toast.warning("После этой стадии не остаётся включённых — кандидаты, прошедшие предыдущую стадию, зависнут на ручном разборе.")
@@ -578,7 +586,9 @@ function StageDetail({ stage, index, allStages, content, dripTemplates, onPatch,
       {/* (5) Тексты стадии */}
       <section className="p-4 space-y-3">
         <Label className="text-sm font-medium flex items-center gap-1.5"><MessageSquare className="w-4 h-4" /> Тексты стадии</Label>
-        {!isPrequal ? (
+        {isNoopAction ? (
+          <p className="text-[11px] text-muted-foreground/70">Тип «{meta.label}» пока не отправляет сообщений при входе — поле «Приглашение» не используется.</p>
+        ) : !isPrequal ? (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label className="text-[11px] text-muted-foreground">Приглашение (сообщения кандидату при входе в стадию)</Label>
@@ -611,8 +621,26 @@ function StageDetail({ stage, index, allStages, content, dripTemplates, onPatch,
           <Label className="text-[11px] text-muted-foreground">Отказ (не прошёл стадию)</Label>
           <Textarea value={stage.rejectText ?? ""} onChange={e => onPatch({ rejectText: e.target.value || undefined })}
             placeholder="Пусто — используется текст из правила прохода или стандартный текст отказа вакансии" className="min-h-[80px]" />
+          <div className="flex flex-wrap gap-1">
+            {["{{name}}", "{{vacancy}}", "{{company}}"].map(ph => (
+              <button key={ph} type="button" onClick={() => onPatch({ rejectText: `${stage.rejectText ?? ""}${ph}` })}
+                className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:bg-muted/50 font-mono">{ph}</button>
+            ))}
+          </div>
           {/* Честная подпись: при какой конфигурации текст РЕАЛЬНО отправляется */}
           {(() => {
+            // ПРИОРИТЕТ: легаси-авто-отказ правила стадии (rule.autoReject +
+            // хотя бы один порог; тумблер во вкладке «Воронка v2», конфиг общий).
+            // stage-completion-handler шлёт rejectText по нему НЕЗАВИСИМО от
+            // состояния гейта по баллу.
+            const legacyAutoReject = stage.rule.autoReject === true &&
+              (typeof stage.rule.threshold === "number" || typeof stage.rule.objThreshold === "number")
+            if (legacyAutoReject) {
+              return <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                Отправляется не прошедшим порог авто-отказа (включён в правиле стадии — вкладка «Воронка v2»).
+                Текст: этот «Отказ» → текст правила прохода → стандартный текст отказа вакансии.
+              </p>
+            }
             if (!gate) return <p className="text-[11px] text-muted-foreground/70">Сейчас не отправляется: гейт по баллу не настроен.</p>
             if (!gate.autoEnabled) return <p className="text-[11px] text-muted-foreground/70">Сейчас не отправляется: «Автоматический проход» выключен.</p>
             if (threeZones) {

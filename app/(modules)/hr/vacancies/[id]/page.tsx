@@ -1118,6 +1118,16 @@ export default function VacancyPage() {
   }, [activeTab])
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>(initialSettingsSection)
 
+  // Deep-link ?section=funnel-v3 у не-владельца: секция скрыта из навигации,
+  // но прямая ссылка дала бы пустую панель. Как для скрытых legacy-секций —
+  // редиректим на дефолтную. Ждём загрузки user (email известен), чтобы не
+  // выкинуть владельца при первом рендере без сессии.
+  useEffect(() => {
+    if (settingsSection === "funnel-v3" && user?.email && !funnelV3Visible) {
+      setSettingsSection("page")
+    }
+  }, [settingsSection, user?.email, funnelV3Visible])
+
   // #20 — единый канонический порядок табов вакансии для нижней панели действий.
   // Совпадает с плоским рядом под-табов v2 (settingsSubTabs ниже). Каждый шаг —
   // это либо верхний таб (kind:"tab"), либо секция настроек (kind:"section").
