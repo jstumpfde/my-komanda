@@ -602,6 +602,12 @@ export default function AdminClientPage() {
     fetch(`/api/admin/clients/${clientId}/modules`)
       .then(r => r.json())
       .then((data: ModuleItem[]) => {
+        // 403/ошибка отдают объект {error} — без гарда for..of/map роняли
+        // всю карточку клиента в error boundary (инцидент 03.07).
+        if (!Array.isArray(data)) {
+          setError((data as unknown as { error?: string })?.error || "Не удалось загрузить модули")
+          return
+        }
         setModules(data)
         const init: typeof localMods = {}
         for (const m of data) {

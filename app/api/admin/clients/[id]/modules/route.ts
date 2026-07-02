@@ -6,6 +6,16 @@ import {
   tenantModules, vacancies, candidates, users,
 } from "@/lib/db/schema"
 import { requireAuth, apiError, apiSuccess } from "@/lib/api-helpers"
+import { isPlatformAdminEmail } from "@/lib/platform/auth"
+
+// Платформ-админ Юрия = role 'director' + email в PLATFORM_ADMIN_EMAILS —
+// гейт по одной роли отдавал ему 403, и карточка клиента падала на .map
+// по объекту ошибки (инцидент 03.07). Пускаем по роли ИЛИ по белому списку.
+function isPlatformStaff(user: { role?: unknown; email?: string | null }): boolean {
+  const role = user.role as string
+  return role === "platform_admin" || role === "platform_manager" || role === "admin"
+    || isPlatformAdminEmail(user.email)
+}
 
 // Цвета модулей по slug
 const MODULE_COLORS: Record<string, string> = {
@@ -22,8 +32,7 @@ export async function GET(
 ) {
   try {
     const user = await requireAuth()
-    const role = user.role as string
-    if (role !== "platform_admin" && role !== "platform_manager" && role !== "admin") {
+    if (!isPlatformStaff(user)) {
       return apiError("Доступ запрещён", 403)
     }
 
@@ -140,8 +149,7 @@ export async function PATCH(
 ) {
   try {
     const user = await requireAuth()
-    const role = user.role as string
-    if (role !== "platform_admin" && role !== "platform_manager" && role !== "admin") {
+    if (!isPlatformStaff(user)) {
       return apiError("Доступ запрещён", 403)
     }
 
