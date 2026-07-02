@@ -40,7 +40,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquare, MessageSquareText, Zap, Globe, AlertTriangle, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, Plus, RefreshCw, Bot, Workflow, FilePlus, UserSearch, Trash2, Target, Inbox, CalendarDays, Plug} from "lucide-react"
+import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquare, MessageSquareText, Zap, Globe, AlertTriangle, CheckCircle2, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, Plus, RefreshCw, Bot, Workflow, FilePlus, UserSearch, Trash2, Target, Inbox, CalendarDays, Plug} from "lucide-react"
 import { InterviewsView } from "@/app/(modules)/hr/interviews/page"
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-factors-settings"
@@ -1413,6 +1413,32 @@ export default function VacancyPage() {
     loadHhStats()
   }, [apiVacancy?.hhVacancyId, loadHhStats])
 
+  // hh-статус-бейдж в шапке: связь с hh + архив + недавние падения отправки.
+  // Лёгкий БД-роут (не дёргает hh API). level: none|ok|warn|error.
+  const [hhStatus, setHhStatus] = useState<{
+    linked: boolean; archived: boolean
+    sendFailedRecent: number; invalidVacancyRecent: number
+    level: "ok" | "warn" | "error" | "none"; message: string
+  } | null>(null)
+  const loadHhStatus = useCallback(async () => {
+    if (!apiVacancy?.hhVacancyId) { setHhStatus(null); return }
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${id}/hh-status`)
+      if (!res.ok) { setHhStatus(null); return }
+      const data = await res.json() as {
+        linked: boolean; archived: boolean
+        sendFailedRecent: number; invalidVacancyRecent: number
+        level: "ok" | "warn" | "error" | "none"; message: string
+      }
+      setHhStatus(data)
+    } catch { setHhStatus(null) }
+  }, [apiVacancy?.hhVacancyId, id])
+
+  useEffect(() => {
+    if (!apiVacancy?.hhVacancyId) { setHhStatus(null); return }
+    loadHhStatus()
+  }, [apiVacancy?.hhVacancyId, loadHhStatus])
+
   // Отвязка вакансии от hh.ru
   const [hhUnlinkOpen, setHhUnlinkOpen] = useState(false)
   const [hhUnlinking, setHhUnlinking] = useState(false)
@@ -2644,6 +2670,29 @@ export default function VacancyPage() {
                     </DropdownMenu>
                   )}
                   <VacancyStatusBadge status={status} />
+                  {/* hh-статус-бейдж: 🟢 hh ✓ / 🟠 ⚠ / 🔴 ⚠. Показываем только
+                      если hh привязан (level !== 'none'). Данные — лёгкий БД-роут
+                      hh-status (архив + недавние failed-отправки), не hh API. */}
+                  {hhStatus && hhStatus.level !== "none" && (() => {
+                    const cls =
+                      hhStatus.level === "error"
+                        ? "border-red-300 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+                        : hhStatus.level === "warn"
+                        ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
+                        : "border-green-300 bg-green-50 text-green-700 dark:border-green-900 dark:bg-green-950 dark:text-green-300"
+                    const Icon = hhStatus.level === "ok" ? CheckCircle2 : AlertTriangle
+                    return (
+                      <UITooltip>
+                        <TooltipTrigger asChild>
+                          <span className={cn("inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium cursor-help", cls)}>
+                            <Icon className="size-3.5" />
+                            {hhStatus.level === "ok" ? "hh ✓" : "hh"}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>{hhStatus.message}</TooltipContent>
+                      </UITooltip>
+                    )
+                  })()}
                   {/* «X дн.» — сколько вакансия висит на hh: считаем от даты ПЕРВОЙ
                       публикации (vacancies.hh_published_at, заполняет крон
                       hh-vacancy-sync). Fallback на created_at, если hh-даты ещё

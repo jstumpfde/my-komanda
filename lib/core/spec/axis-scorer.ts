@@ -63,23 +63,47 @@ function splitTermSynonyms(text: string): { label: string; synonyms: string[] } 
 }
 
 /**
- * Оси «Подходит» из Spec с равными весами (100/N, остаток — первым осям).
- * Источник — ТО ЖЕ объединение mustHave+niceToHave, что GoodEditor показывает
- * HR-у как оси с бейджами весов: у спеков, сохранённых до 🟢-редизайна,
- * mustHave непустой, и без него показанные критерии молча выпадали бы из балла.
+ * Оси «Подходит» из Spec. Источник — ТО ЖЕ объединение mustHave+niceToHave, что
+ * GoodEditor показывает HR-у как оси с бейджами весов: у спеков, сохранённых до
+ * 🟢-редизайна, mustHave непустой, и без него показанные критерии молча выпадали
+ * бы из балла.
+ *
+ * Веса (редизайн 02.07, ручной балл оси):
+ *   - у оси с заданным `weight` (только niceToHave) берём его;
+ *   - ОСТАВШИЙСЯ бюджет (100 − сумма заданных, не меньше 0) делим ПОРОВНУ между
+ *     осями БЕЗ weight (остаток +1 первым таким осям), Σ стремится к 100;
+ *   - если weight задан у ВСЕХ осей — используем как есть (движок считает вклад
+ *     = score/100 * weight, так что сумма ≠ 100 не ломает арифметику).
+ * Если weight нигде не задан — прежнее равное деление (обратная совместимость).
  */
 export function buildAxes(spec: CandidateSpec): Axis[] {
-  const rows = [
-    ...normalizeMustHave(spec.mustHave),
-    ...normalizeNiceToHave(spec.niceToHave),
+  // mustHave не имеет поля weight → всегда «без веса» (равная доля остатка).
+  const rows: { text: string; weight?: number }[] = [
+    ...normalizeMustHave(spec.mustHave).map(m => ({ text: m.text })),
+    ...normalizeNiceToHave(spec.niceToHave).map(n => ({ text: n.text, weight: n.weight })),
   ]
   const n = rows.length
   if (n === 0) return []
-  const base = Math.floor(100 / n)
-  const rem = 100 - base * n // распределяем остаток по первым осям, чтобы Σ=100
+
+  const hasWeight = (r: { weight?: number }) => typeof r.weight === "number"
+  const fixedSum = rows.reduce((s, r) => s + (hasWeight(r) ? (r.weight as number) : 0), 0)
+  const freeCount = rows.filter(r => !hasWeight(r)).length
+  // Бюджет на оси без weight = остаток 100 − сумма заданных (не меньше 0).
+  const budget = Math.max(0, 100 - fixedSum)
+  const base = freeCount > 0 ? Math.floor(budget / freeCount) : 0
+  const rem = freeCount > 0 ? budget - base * freeCount : 0 // остаток +1 первым свободным осям
+
+  let freeSeen = 0
   return rows.map((r, i) => {
     const { label, synonyms } = splitTermSynonyms(r.text)
-    return { key: String(i), label, synonyms, weight: base + (i < rem ? 1 : 0) }
+    let weight: number
+    if (hasWeight(r)) {
+      weight = r.weight as number
+    } else {
+      weight = base + (freeSeen < rem ? 1 : 0)
+      freeSeen++
+    }
+    return { key: String(i), label, synonyms, weight }
   })
 }
 

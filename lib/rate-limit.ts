@@ -32,7 +32,19 @@ export function checkRateLimit(key: string, maxRequests: number, windowMs: numbe
 
 /**
  * Password attempt limiter — returns true if allowed, false if blocked.
+ * Дефолт: 8 попыток за 15 мин (обычные опечатки не должны запирать вход).
  */
-export function checkPasswordAttempts(key: string, maxAttempts: number = 5, blockMs: number = 15 * 60 * 1000): boolean {
+export function checkPasswordAttempts(key: string, maxAttempts: number = 8, blockMs: number = 15 * 60 * 1000): boolean {
   return checkRateLimit(`pwd:${key}`, maxAttempts, blockMs)
+}
+
+/**
+ * Сколько попыток осталось до блокировки (не расходуя попытку).
+ * Возвращает оставшийся счётчик; если окна нет — полный лимит.
+ */
+export function passwordAttemptsRemaining(key: string, maxAttempts: number = 8): number {
+  const now = Date.now()
+  const entry = store.get(`pwd:${key}`)
+  if (!entry || entry.resetAt < now) return maxAttempts
+  return Math.max(0, maxAttempts - entry.count)
 }

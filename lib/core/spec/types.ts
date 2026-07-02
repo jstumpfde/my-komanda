@@ -449,6 +449,12 @@ export type NiceImportance = z.infer<typeof NiceImportanceSchema>
 export const NiceToHaveItemSchema = z.object({
   text:       z.string().min(1).max(2000),
   importance: NiceImportanceSchema.default("nice"),
+  /**
+   * Осевой скоринг (scoringMode="axes"): ручной балл оси 0–100. Если задан —
+   * берётся как вес оси; если НЕ задан — вес равный (100/N среди осей без weight).
+   * См. buildAxes() в lib/core/spec/axis-scorer.ts. Опц.: undefined = равная доля.
+   */
+  weight:     z.number().int().min(0).max(100).optional(),
 })
 export type NiceToHaveItem = z.infer<typeof NiceToHaveItemSchema>
 
@@ -469,7 +475,15 @@ export function normalizeNiceToHave(items: ReadonlyArray<NiceToHaveEntry> | null
     } else if (it && typeof it === "object" && typeof it.text === "string") {
       const t = it.text.trim()
       const imp = it.importance === "important" || it.importance === "very" ? it.importance : "nice"
-      if (t) out.push({ text: t, importance: imp })
+      if (t) out.push({
+        text: t,
+        importance: imp,
+        // Ручной вес оси (осевой режим) проносим насквозь — иначе он не переживёт
+        // ре-рендер редактора и сохранение спека.
+        ...(typeof it.weight === "number" && Number.isFinite(it.weight)
+          ? { weight: Math.max(0, Math.min(100, Math.round(it.weight))) }
+          : {}),
+      })
     }
   }
   return out

@@ -38,7 +38,7 @@ import {
 import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
 import { toast } from "sonner"
 import {
-  Target, Plus, X, Loader2, ShieldAlert, FileText, Gauge,
+  Target, Plus, Minus, X, Loader2, ShieldAlert, FileText, Gauge,
   ArrowRightLeft, AlertTriangle, Sparkles, Wand2, CheckCircle2, Check,
   Lightbulb, Save,
 } from "lucide-react"
@@ -84,15 +84,110 @@ const GOOD_LEVELS = [
 type GoodLevel = (typeof GOOD_LEVELS)[number]["value"]
 
 /**
- * Веса осей в осевом скоринге — ТА ЖЕ формула, что buildAxes (axis-scorer.ts):
- * base = floor(100/N), остаток rem = 100 − base·N распределяется +1 первым rem
- * осям, чтобы Σ=100. Возвращает массив весов по индексу.
+ * ЭФФЕКТИВНЫЕ веса осей — ТА ЖЕ формула, что buildAxes (axis-scorer.ts):
+ * у оси с заданным weight берём его; ОСТАВШИЙСЯ бюджет (100 − сумма заданных,
+ * не меньше 0) делим ПОРОВНУ между осями без weight (остаток +1 первым таким).
+ * `manual[i]` === undefined → ось без ручного веса. Возвращает массив весов по индексу.
  */
-function axisWeights(n: number): number[] {
+function axisWeights(manual: (number | undefined)[]): number[] {
+  const n = manual.length
   if (n <= 0) return []
-  const base = Math.floor(100 / n)
-  const rem = 100 - base * n
-  return Array.from({ length: n }, (_, i) => base + (i < rem ? 1 : 0))
+  const fixedSum = manual.reduce<number>((s, w) => s + (typeof w === "number" ? w : 0), 0)
+  const freeCount = manual.filter(w => typeof w !== "number").length
+  const budget = Math.max(0, 100 - fixedSum)
+  const base = freeCount > 0 ? Math.floor(budget / freeCount) : 0
+  const rem = freeCount > 0 ? budget - base * freeCount : 0
+  let freeSeen = 0
+  return manual.map(w => {
+    if (typeof w === "number") return w
+    const v = base + (freeSeen < rem ? 1 : 0)
+    freeSeen++
+    return v
+  })
+}
+
+/**
+ * Компактный степпер «− N ед. +» с hold-to-repeat (десктоп/мышь).
+ * Клик = ±step; удержание кнопки → авто-повтор с ускорением (интервал сжимается).
+ * Интервал очищается на pointerup/leave и на размонтировании.
+ */
+function Stepper({
+  value, onChange, min = 0, max = 100, step = 1, suffix, valueClassName, ariaLabel,
+}: {
+  value:           number
+  onChange:        (next: number) => void
+  min?:            number
+  max?:            number
+  step?:           number
+  suffix?:         string
+  valueClassName?: string
+  ariaLabel?:      string
+}) {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const clamp = (v: number) => Math.max(min, Math.min(max, v))
+  // Держим актуальное значение в ref, чтобы hold-repeat читал свежее (не stale-замыкание).
+  const valueRef = useRef(value)
+  valueRef.current = value
+
+  const clear = () => {
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }
+  }
+  useEffect(() => clear, [])
+
+  const bump = (dir: 1 | -1) => {
+    const next = clamp(valueRef.current + dir * step)
+    if (next !== valueRef.current) onChange(next)
+  }
+
+  // Hold: первый повтор через 400 мс, дальше интервал сжимается 250→60 мс (ускорение).
+  const startHold = (dir: 1 | -1) => {
+    clear()
+    let delay = 250
+    const tick = () => {
+      const before = valueRef.current
+      bump(dir)
+      if (valueRef.current === before) { clear(); return } // упёрлись в предел
+      delay = Math.max(60, delay - 25)
+      timerRef.current = setTimeout(tick, delay)
+    }
+    timerRef.current = setTimeout(tick, 400)
+  }
+
+  const btn = "flex items-center justify-center w-6 h-6 rounded-md border text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:pointer-events-none select-none transition-colors"
+
+  return (
+    <div className="inline-flex items-center gap-1 select-none" role="group" aria-label={ariaLabel}>
+      <button
+        type="button"
+        className={btn}
+        aria-label="Уменьшить"
+        disabled={value <= min}
+        onClick={() => bump(-1)}
+        onPointerDown={e => { e.preventDefault(); startHold(-1) }}
+        onPointerUp={clear}
+        onPointerLeave={clear}
+        onPointerCancel={clear}
+      >
+        <Minus className="w-3.5 h-3.5" />
+      </button>
+      <span className={cn("text-xs tabular-nums text-center min-w-[52px]", valueClassName)}>
+        {value}{suffix ?? ""}
+      </span>
+      <button
+        type="button"
+        className={btn}
+        aria-label="Увеличить"
+        disabled={value >= max}
+        onClick={() => bump(1)}
+        onPointerDown={e => { e.preventDefault(); startHold(1) }}
+        onPointerUp={clear}
+        onPointerLeave={clear}
+        onPointerCancel={clear}
+      >
+        <Plus className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  )
 }
 
 // Куда зовём при авто-приглашении (короткий ярлык для зоны и опции селекта).
@@ -793,12 +888,17 @@ function GoodEditor({
   // 🟢 = только балл, не отсев → всё в niceToHave (3 уровня). Старые жёсткие
   // must-have (если были) показываем как «Очень важно» и при правке переводим в
   // niceToHave; mustHave очищаем (criteria-нокаута больше нет — отсев это 🔴).
-  const rows: { text: string; level: GoodLevel }[] = [
+  const rows: { text: string; level: GoodLevel; weight?: number }[] = [
     ...normalizeMustHave(mustHave).map(m => ({ text: m.text, level: "very" as GoodLevel })),
-    ...normalizeNiceToHave(niceToHave).map(n => ({ text: n.text, level: n.importance as GoodLevel })),
+    ...normalizeNiceToHave(niceToHave).map(n => ({ text: n.text, level: n.importance as GoodLevel, weight: n.weight })),
   ]
-  const commit = (next: { text: string; level: GoodLevel }[]) => {
-    const niceToHave = next.map(r => ({ text: r.text, importance: r.level as NiceImportance }))
+  const commit = (next: { text: string; level: GoodLevel; weight?: number }[]) => {
+    const niceToHave: NiceToHaveItem[] = next.map(r => ({
+      text: r.text,
+      importance: r.level as NiceImportance,
+      // Ручной вес оси (осевой режим) сохраняем, только если задан.
+      ...(typeof r.weight === "number" ? { weight: r.weight } : {}),
+    }))
     // Блокируем только ДОБАВЛЕНИЕ сверх 10. Удаление/правку существующих
     // (в т.ч. когда пунктов уже >10 из старых данных) всегда разрешаем — иначе
     // переполненный список нельзя почистить через ✕ (Юрий 26.06).
@@ -806,6 +906,11 @@ function GoodEditor({
     onChange({ mustHave: [], niceToHave })
   }
   const setLevel = (i: number, level: GoodLevel) => commit(rows.map((r, idx) => idx === i ? { ...r, level } : r))
+  // Осевой режим: задать ручной вес оси (0–100). Пишем weight на пункт.
+  const setWeight = (i: number, weight: number) =>
+    commit(rows.map((r, idx) => idx === i ? { ...r, weight: Math.max(0, Math.min(100, weight)) } : r))
+  // «Поровну» — сбросить все ручные веса (weight → undefined), оси снова делят 100 равно.
+  const resetWeights = () => commit(rows.map(r => ({ text: r.text, level: r.level })))
   const remove   = (i: number) => commit(rows.filter((_, idx) => idx !== i))
   // Убрать ОДИН синоним (часть критерия после запятой), сохранив основной термин.
   const removeSynonym = (i: number, syn: string) => commit(rows.map((r, idx) => {
@@ -827,8 +932,11 @@ function GoodEditor({
   }
   const ph = LIST_PLACEHOLDERS.must[rows.length % LIST_PLACEHOLDERS.must.length] || ""
 
-  // Осевой режим: веса осей (100/N + остаток первым) — та же формула, что buildAxes.
-  const weights = axesMode ? axisWeights(rows.length) : []
+  // Осевой режим: ЭФФЕКТИВНЫЕ веса осей — та же формула, что buildAxes:
+  // заданный weight, иначе равная доля остатка. Сумма — для «Всего X / 100».
+  const weights = axesMode ? axisWeights(rows.map(r => r.weight)) : []
+  const weightsTotal = weights.reduce((s, w) => s + w, 0)
+  const anyManual = axesMode && rows.some(r => typeof r.weight === "number")
 
   /** Добавить синоним к критерию по индексу: дописываем через запятую, дедуп */
   const addSynonymToRow = (i: number, syn: string) => {
@@ -864,11 +972,32 @@ function GoodEditor({
     <div className="space-y-2.5">
       <div className="flex items-baseline justify-between gap-2">
         <Label className="text-sm font-medium">
-          {axesMode && rows.length > 0
-            ? `Всего 100 баллов, поровну между ${rows.length} разделами`
-            : "Что хотим видеть"}
+          {axesMode && rows.length > 0 ? "Разделы оценки (оси)" : "Что хотим видеть"}
         </Label>
         <div className="flex items-center gap-2 shrink-0">
+          {axesMode && rows.length > 0 && (
+            <>
+              <span
+                className={cn(
+                  "text-[11px] tabular-nums font-medium",
+                  weightsTotal === 100 ? "text-muted-foreground" : "text-amber-600 dark:text-amber-400",
+                )}
+                title={weightsTotal === 100
+                  ? "Сумма весов осей"
+                  : "Сумма ≠ 100 — не страшно: движок нормирует вклад на фактическую сумму"}
+              >
+                Всего: {weightsTotal} / 100
+              </span>
+              {anyManual && (
+                <button type="button"
+                  onClick={resetWeights}
+                  title="Сбросить ручные баллы — снова поровну между осями"
+                  className="text-[11px] text-muted-foreground hover:text-primary underline decoration-dotted underline-offset-2">
+                  Поровну
+                </button>
+              )}
+            </>
+          )}
           {rows.length > 0 && (
             <button type="button"
               onClick={() => { if (rows.length <= 1 || confirm(`Удалить все критерии (${rows.length})?`)) commit([]) }}
@@ -881,8 +1010,9 @@ function GoodEditor({
       </div>
       {axesMode ? (
         <p className="text-xs text-muted-foreground">
-          Каждый пункт — отдельная ось с равным весом (100 / число осей). Справа — балл оси:
-          AI оценивает её изолированно и только по явному тексту резюме. Пустая ось не маскируется сильной.
+          Каждый пункт — отдельная ось. По умолчанию 100 баллов делятся поровну; справа можно
+          <b> усилить/ослабить</b> любую ось вручную (степпер «− балл +»). AI оценивает ось изолированно
+          и только по явному тексту резюме — пустая ось не маскируется сильной.
         </p>
       ) : (
         <p className="text-xs text-muted-foreground">
@@ -918,12 +1048,19 @@ function GoodEditor({
                 })()}
               </div>
               {axesMode ? (
-                <span
-                  className="shrink-0 inline-flex items-center rounded-md border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary tabular-nums"
-                  title="Баллов на эту ось (100 / число осей)"
-                >
-                  {weights[i] ?? 0} б.
-                </span>
+                <div className="shrink-0" title="Балл этой оси. По умолчанию поровну; можно задать вручную">
+                  <Stepper
+                    value={weights[i] ?? 0}
+                    onChange={v => setWeight(i, v)}
+                    min={0} max={100} step={1}
+                    suffix=" б."
+                    ariaLabel={`Балл оси «${r.text}»`}
+                    valueClassName={cn(
+                      "font-medium",
+                      typeof r.weight === "number" ? "text-primary" : "text-muted-foreground",
+                    )}
+                  />
+                </div>
               ) : (
                 <div className="flex items-center gap-1 shrink-0" role="group" aria-label="Важность пункта">
                   {GOOD_LEVELS.map(l => {
@@ -1063,26 +1200,27 @@ function BadEditor({
           <div key={i} className="rounded-md border p-2">
             <div className="flex items-center gap-3">
               <span className="flex-1 text-sm min-w-0 break-words">{r.text}</span>
-              {/* Осевой режим: величина штрафа (Slider 0..100 шаг 5, 100 = полный стоп).
+              {/* Осевой режим: величина штрафа степпером «− N б. +» (0..100, шаг 1, 100 = полный стоп).
                   Holistic: прежние кружки стоп/минус — движок читает только hard,
-                  слайдер там был бы мёртвым и молча снимал бы стоп-фактор. */}
+                  степпер там был бы мёртвым и молча снимал бы стоп-фактор. */}
               {axesMode ? (() => {
                 const pen = dealBreakerPenalty(r)
                 const full = pen >= 100
                 return (
-                  <div className="flex items-center gap-2 shrink-0 w-[190px]" title="−N баллов (100 = полный стоп)">
-                    <Slider
-                      value={[pen]}
-                      onValueChange={([v]) => setPenalty(i, v ?? 0)}
-                      min={0} max={100} step={5}
-                      className="flex-1"
-                      aria-label={`Штраф для «${r.text}»`}
+                  <div className="flex items-center gap-2 shrink-0" title="−N баллов (100 = полный стоп)">
+                    <Stepper
+                      value={pen}
+                      onChange={v => setPenalty(i, v)}
+                      min={0} max={100} step={1}
+                      suffix=" б."
+                      ariaLabel={`Штраф для «${r.text}»`}
+                      valueClassName={cn(
+                        "font-medium",
+                        full ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400",
+                      )}
                     />
-                    <span className={cn(
-                      "text-xs tabular-nums whitespace-nowrap w-[74px] text-right font-medium",
-                      full ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400",
-                    )}>
-                      {full ? "полный стоп" : `−${pen} б.`}
+                    <span className="text-[11px] text-muted-foreground whitespace-nowrap w-[64px]">
+                      {full ? "полный стоп" : "100 = стоп"}
                     </span>
                   </div>
                 )
