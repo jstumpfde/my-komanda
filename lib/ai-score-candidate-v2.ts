@@ -38,6 +38,7 @@ import {
   niceToHaveTexts,
   dealBreakerTexts,
 } from "@/lib/core/spec/types"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -261,9 +262,8 @@ export async function scoreCandidateV2(
   })
 
   const extractMsg = await anthropic.messages.create({
-    model:       "claude-sonnet-4-6",
+    model:       AI_MODEL_MAIN,
     max_tokens:  1500,
-    temperature: 0,
     messages:    [{ role: "user", content: extractPrompt }],
   })
   void addVacancyTokens(vacancyId, extractMsg.usage)
@@ -284,9 +284,8 @@ export async function scoreCandidateV2(
   })
 
   const compareMsg = await anthropic.messages.create({
-    model:       "claude-sonnet-4-6",
+    model:       AI_MODEL_MAIN,
     max_tokens:  1500,
-    temperature: 0,
     messages:    [{ role: "user", content: comparePrompt }],
   })
   void addVacancyTokens(vacancyId, compareMsg.usage)

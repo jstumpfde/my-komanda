@@ -10,6 +10,7 @@ import { AI_SAFETY_PROMPT, checkAiRateLimit, handleAiError } from "@/lib/ai-safe
 import { checkRateLimit } from "@/lib/rate-limit"
 import { findBenchmark, adjustBenchmark, assessSalary, formatSalary, suggestTitles, type SalaryBenchmark } from "@/lib/salary-benchmarks"
 import { addVacancyTokens } from "@/lib/ai/token-usage"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 // P0-28: ключевые поля анкеты, по которым считается inputHash. Любое
 // изменение из этого списка инвалидирует кеш AI-анализа. Не включаем
@@ -358,7 +359,7 @@ export async function POST(req: NextRequest) {
     const prompt = buildPrompt(vacancyData, body, focusedField)
 
     const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
+      model: AI_MODEL_MAIN,
       max_tokens: 3000,
       system: `Ты — AI-помощник для HR. Ты анализируешь анкету вакансии и даёшь рекомендации по улучшению.
 Отвечай ТОЛЬКО валидным JSON. Никакого markdown, комментариев или текста вне JSON.

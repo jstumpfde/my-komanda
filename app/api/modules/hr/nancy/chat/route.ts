@@ -27,6 +27,7 @@ import { companies } from "@/lib/db/schema"
 import type { NancyVoiceSettings } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 import { getClaudeApiUrls } from "@/lib/claude-proxy"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 export interface NancyAction {
   type:
@@ -460,7 +461,7 @@ export async function POST(req: Request) {
       try {
         const client = new Anthropic({ baseURL })
         resp = await client.messages.create({
-          model:      "claude-sonnet-4-5",
+          model:      AI_MODEL_MAIN,
           max_tokens: 768,
           system:     systemFull,
           messages,

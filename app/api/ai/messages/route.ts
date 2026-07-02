@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
 import { requireCompany } from "@/lib/api-helpers"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
+import { AI_MODEL_MAIN, AI_MODEL_FAST } from "@/lib/ai/models"
 import { checkRateLimit } from "@/lib/rate-limit"
 
 export const runtime = "nodejs"
@@ -19,15 +20,13 @@ const MAX_TOKENS_CAP = 16384
 const MAX_MESSAGES = 60
 const MAX_TOTAL_CHARS = 400_000
 
-// Разрешённые модели (opus не разрешён — слишком дорого для клиентских фич)
+// Разрешённые модели — только актуальные id (снятые claude-3-* / claude-haiku-4-2025*
+// возвращали 404 от API). Реестр и политика — lib/ai/models.ts.
 const ALLOWED_MODELS = new Set([
-  "claude-haiku-4-20250307",
-  "claude-haiku-3-5-20241022",
-  "claude-3-haiku-20240307",
+  AI_MODEL_MAIN,       // claude-sonnet-5
   "claude-sonnet-4-6",
-  "claude-3-5-sonnet-20241022",
-  "claude-3-5-sonnet-20240620",
-  "claude-3-sonnet-20240229",
+  AI_MODEL_FAST,       // claude-haiku-4-5-20251001
+  "claude-opus-4-8",
 ])
 
 interface InMessage {
@@ -87,7 +86,7 @@ export async function POST(req: NextRequest) {
   const requestedModel = typeof body?.model === "string" ? body.model : ""
   const model = ALLOWED_MODELS.has(requestedModel)
     ? requestedModel
-    : "claude-sonnet-4-6"
+    : AI_MODEL_MAIN
   const maxTokens = Math.min(Math.max(Number(body?.max_tokens) || 1024, 1), MAX_TOKENS_CAP)
 
   try {

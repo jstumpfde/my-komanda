@@ -8,6 +8,7 @@
 import Anthropic from "@anthropic-ai/sdk"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import type { DaySummary, DayTask, Substance } from "./types"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 const anthropic = new Anthropic({
   apiKey:  process.env.ANTHROPIC_API_KEY,
@@ -73,9 +74,8 @@ export async function summarizeDay(day: string, commits: CommitForSummary[], who
   }
 
   const msg = await anthropic.messages.create({
-    model:       "claude-sonnet-4-6",
+    model:       AI_MODEL_MAIN,
     max_tokens:  2000,
-    temperature: 0,
     messages:    [{ role: "user", content: buildPrompt(day, commits, who) }],
   })
   const block = msg.content.find(b => b.type === "text")

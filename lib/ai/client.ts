@@ -4,9 +4,10 @@
 
 import Anthropic from "@anthropic-ai/sdk"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
+import { AI_MODEL_MAIN, AI_MODEL_FAST } from "@/lib/ai/models"
 
-const HAIKU  = "claude-haiku-4-5-20251001"
-const SONNET = "claude-sonnet-4-6"
+const HAIKU  = AI_MODEL_FAST
+const SONNET = AI_MODEL_MAIN
 
 let _client: Anthropic | null = null
 function client(): Anthropic {

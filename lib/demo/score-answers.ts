@@ -26,6 +26,7 @@ import {
   renderAnswerValue,
 } from "@/lib/demo/resolve-questions"
 import { addVacancyTokens } from "@/lib/ai/token-usage"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 // Cloned from ai-score-candidate-v2 — same proxy/model pattern
 const anthropic = new Anthropic({
@@ -297,9 +298,8 @@ ${questionsBlock}
 Итоговый балл будет посчитан как сумма awarded / сумма max × 100. Будь объективен и строг.`
 
   const msg = await anthropic.messages.create({
-    model:      "claude-sonnet-4-6",
+    model:      AI_MODEL_MAIN,
     max_tokens: 1500,
-    temperature: 0,
     messages:   [{ role: "user", content: prompt }],
   })
   void addVacancyTokens(vacancyId, msg.usage)

@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { vacancies, vacancyUtmLinks, companies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { fetchClaudeMessages } from "@/lib/claude-proxy"
+import { AI_MODEL_FAST } from "@/lib/ai/models"
 
 // Формат работы
 const FORMAT_LABELS: Record<string, string> = {
@@ -221,7 +222,7 @@ ${vacancyContext}
 
         const { response } = await fetchClaudeMessages({
           body: JSON.stringify({
-            model: "claude-haiku-4-5",
+            model: AI_MODEL_FAST,
             max_tokens: 600,
             messages: [{ role: "user", content: prompt }],
           }),

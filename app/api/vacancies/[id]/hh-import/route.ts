@@ -7,6 +7,7 @@ import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { logActivity } from "@/lib/activity-log"
 import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
 import { classifyPosition } from "@/lib/position-classifier"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -39,11 +40,10 @@ async function splitDescriptionWithAi(description: string): Promise<{ about: str
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        // Sonnet 4 (claude-sonnet-4-2025…) устарел (ретайр ~15.06.2026) → 404 на
-        // прокси → split падал в fallback (весь текст в «Обязанности»). Sonnet 4.6
-        // актуальна. max_tokens 2000 был мал для длинных вакансий — JSON ответа
+        // Устаревшие model id давали 404 на прокси → split падал в fallback (весь
+        // текст в «Обязанности»). Модель — из реестра lib/ai/models.ts. max_tokens 2000 был мал для длинных вакансий — JSON ответа
         // обрезался, парс падал → тот же fallback. 12000 покрывает длинное (потолок 64K).
-        model: "claude-sonnet-4-6",
+        model: AI_MODEL_MAIN,
         max_tokens: 12000,
         system: SPLIT_PROMPT,
         messages: [{ role: "user", content: description }],

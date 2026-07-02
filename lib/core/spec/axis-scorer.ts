@@ -17,6 +17,7 @@ import { addVacancyTokens } from "@/lib/ai/token-usage"
 import type { ResumeScreenInput } from "@/lib/ai-screen-resume"
 import type { CandidateSpec } from "@/lib/core/spec/types"
 import { normalizeMustHave, normalizeNiceToHave, normalizeDealBreakers, dealBreakerPenalty } from "@/lib/core/spec/types"
+import { AI_MODEL_FAST } from "@/lib/ai/models"
 
 const client = new Anthropic({ baseURL: getClaudeApiUrl() })
 
@@ -190,7 +191,7 @@ ${wh || "  (детальная история не указана)"}
   let raw = ""
   try {
     const response = await client.messages.create({
-      model:       "claude-haiku-4-5-20251001",
+      model:       AI_MODEL_FAST,
       max_tokens:  2000,
       temperature: 0,
       system:      SYSTEM_PROMPT + AI_SAFETY_PROMPT,

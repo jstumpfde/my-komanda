@@ -4,9 +4,10 @@ import { db } from "@/lib/db"
 import { aiChatMessages } from "@/lib/db/schema"
 import {eq, and} from "drizzle-orm"
 import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY
-const MODEL = "claude-sonnet-4-6"
+const MODEL = AI_MODEL_MAIN
 
 const SYSTEM_PROMPT = `Ты — AI-ассистент HR-платформы my-komanda. Ты помогаешь HR-менеджерам и руководителям.
 

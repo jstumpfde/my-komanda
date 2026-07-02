@@ -6,6 +6,7 @@ import { vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { AI_SAFETY_PROMPT } from "@/lib/ai-safety"
 import { buildComparison, type CompareResult } from "@/lib/compare/build-comparison"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 const client = new Anthropic()
 
@@ -102,7 +103,7 @@ export async function POST(req: NextRequest) {
     }
 
     const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
+      model: AI_MODEL_MAIN,
       max_tokens: 2000,
       system: SYSTEM_PROMPT + AI_SAFETY_PROMPT,
       messages: [{ role: "user", content: userMessage }],

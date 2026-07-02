@@ -7,6 +7,7 @@ import type Anthropic from "@anthropic-ai/sdk"
 import { AI_SAFETY_PROMPT } from "@/lib/ai-safety"
 import { getScoringClient } from "./anthropic-client"
 import type { ScoringSpec, WeightLevel } from "./types"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 // Поля, которые собирает публичная интейк-форма (app/(public)/intake/[token]).
 export interface IntakeData {
@@ -26,7 +27,7 @@ export interface IntakeData {
   topPriority?: string
 }
 
-const MODEL = "claude-sonnet-4-6"
+const MODEL = AI_MODEL_MAIN
 
 const TOOL: Anthropic.Tool = {
   name: "submit_spec",

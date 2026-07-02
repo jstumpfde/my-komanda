@@ -9,6 +9,7 @@ import {
 } from "@/lib/db/schema"
 import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
 import { checkCronAuth } from "@/lib/cron/auth"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 // POST /api/cron/knowledge-gaps — Protected by X-Cron-Secret header.
 // Weekly: для каждого тенанта находит топ-10 неотвеченных вопросов за 7 дней,
@@ -66,7 +67,7 @@ async function askClaudeRecommendations(
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: AI_MODEL_MAIN,
         max_tokens: 1500,
         messages: [{ role: "user", content: prompt }],
       }),

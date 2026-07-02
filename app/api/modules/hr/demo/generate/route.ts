@@ -16,6 +16,7 @@ import {
   type FilterStrictnessId,
 } from "@/lib/hr/demo-templates"
 import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
+import { AI_MODEL_FAST } from "@/lib/ai/models"
 
 interface GenerateRequestBody {
   vacancyId: string
@@ -193,7 +194,7 @@ ${blockDescription}
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
+      model: AI_MODEL_FAST,
       max_tokens: 2500,
       messages: [{ role: "user", content: prompt }],
     }),

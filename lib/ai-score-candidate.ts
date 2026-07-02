@@ -6,6 +6,7 @@ import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import type { Lesson, Block } from "@/lib/course-types"
 import { buildScoreCandidatePrompt } from "@/lib/ai/prompts/score-candidate"
 import { addVacancyTokens } from "@/lib/ai/token-usage"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -183,9 +184,8 @@ export async function scoreCandidateById(args: {
   })
 
   const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    model: AI_MODEL_MAIN,
     max_tokens: 1024,
-    temperature: 0,
     messages: [{ role: "user", content: prompt }],
   })
   void addVacancyTokens(vacancyId, message.usage)

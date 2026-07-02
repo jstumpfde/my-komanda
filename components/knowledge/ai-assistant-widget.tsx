@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAuth, ROLE_LABELS, type UserRole } from "@/lib/auth"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 type Role = "user" | "assistant"
 
@@ -414,7 +415,7 @@ function getSystemPrompt(module: ModuleContext, role: UserRole): string {
   return BASE_PROMPT + "\n" + buildUserContext(role) + "\n" + MODULE_PROMPTS[module]
 }
 
-const CLAUDE_MODEL = "claude-sonnet-4-20250514"
+const CLAUDE_MODEL = AI_MODEL_MAIN
 
 function materialHref(m: MaterialRef): string {
   return m.type === "demo"

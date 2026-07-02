@@ -42,6 +42,7 @@ import { getSpec, saveSpec } from "@/lib/core/spec/store"
 import { buildSpecFromLegacy } from "@/lib/core/spec/from-legacy"
 import { CandidateSpecSchema, type CandidateSpec, type NiceImportance } from "@/lib/core/spec/types"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 // ─── Константы задачи ─────────────────────────────────────────────────────────
 
@@ -207,9 +208,8 @@ async function main() {
     vacancyDescription: descText,
   })
   const message = await anthropic.messages.create({
-    model:       "claude-sonnet-4-6",
-    max_tokens:  1200,
-    temperature: 0.3,
+    model:      AI_MODEL_MAIN,
+    max_tokens: 1200,
     messages:    [{ role: "user", content: prompt }],
   })
   const rawText = message.content

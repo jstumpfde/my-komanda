@@ -10,6 +10,7 @@ import { db } from "@/lib/db"
 import { companies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
+import { AI_MODEL_FAST } from "@/lib/ai/models"
 
 // ─── СТРУКТУРА ПРОФИЛЯ ДЛЯ ДЕМОНСТРАЦИЙ ─────────────────────────────────────
 
@@ -164,7 +165,7 @@ ${body.text}
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
+        model: AI_MODEL_FAST,
         max_tokens: 2000,
         messages: [{ role: "user", content: prompt }],
       }),

@@ -20,6 +20,7 @@ import {
 } from "@/lib/db/schema"
 import { generateCandidateToken } from "@/lib/candidate-tokens"
 import { auth } from "@/auth"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 const isDevAllowed =
   process.env.NODE_ENV === "development" ||
@@ -1029,7 +1030,7 @@ export async function POST() {
           action: a.action,
           inputTokens,
           outputTokens,
-          model: "claude-sonnet-4-6",
+          model: AI_MODEL_MAIN,
           costUsd: cost,
           createdAt: daysAgo(Math.floor(Math.random() * 30)),
         })

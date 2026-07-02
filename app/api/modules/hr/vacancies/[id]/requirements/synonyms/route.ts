@@ -10,6 +10,7 @@ import { db } from "@/lib/db"
 import { vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -70,7 +71,7 @@ ${sideHint}
 Ответ (только JSON массив):`
 
     const message = await anthropic.messages.create({
-      model:      "claude-sonnet-4-6",
+      model:      AI_MODEL_MAIN,
       max_tokens: 300,
       messages:   [{ role: "user", content: prompt }],
     })

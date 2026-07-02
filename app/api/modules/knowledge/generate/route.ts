@@ -3,6 +3,7 @@ import { db } from "@/lib/db"
 import { knowledgeArticles } from "@/lib/db/schema"
 import { apiError, apiSuccess, requireCompany } from "@/lib/api-helpers"
 import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 // POST /api/modules/knowledge/generate
 // Генерирует документ по мастер-шаблону Ненси и сохраняет как черновик
@@ -36,7 +37,7 @@ interface GenerateRequest {
   websiteDoc?: boolean
 }
 
-const CLAUDE_MODEL = "claude-sonnet-4-6"
+const CLAUDE_MODEL = AI_MODEL_MAIN
 
 // ─── Мастер-шаблоны (копия из SYSTEM_PROMPT Ненси) ──────────────────────────
 

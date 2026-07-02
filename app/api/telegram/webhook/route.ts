@@ -3,6 +3,7 @@ import { and, desc, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { users, demoTemplates, knowledgeArticles } from "@/lib/db/schema"
 import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 // ─── Telegram helpers ───────────────────────────────────────────────────────
 
@@ -132,7 +133,7 @@ async function askClaude(question: string, context: string, materialsList: Mater
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: AI_MODEL_MAIN,
         max_tokens: 1024,
         system: SYSTEM_PROMPT,
         messages: [
