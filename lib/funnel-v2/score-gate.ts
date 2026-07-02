@@ -255,17 +255,19 @@ async function applyFailDecision(
     return "marked_red_zone_manual"
   }
 
-  return applyFailAction(stage, candidate, { ...gate, failAction: decision.failAction })
+  return applyFailAction(stage, candidate, { ...gate, failAction: decision.failAction }, vacancy)
 }
 
 /**
  * Применить действие для не прошедшего порог кандидата. Идемпотентно.
+ * @param vacancy опционально — для рендера токенов rejectText ({{vacancy}}/{{company}}).
  * @returns строка-диагностика: что реально сделали.
  */
 async function applyFailAction(
   stage: FunnelV2Stage,
   candidate: CandidateForExecutor,
   gate: ScoreGate,
+  vacancy?: VacancyForExecutor,
 ): Promise<string> {
   switch (gate.failAction) {
     // ── Предварительный отказ ──────────────────────────────────────────────
@@ -291,8 +293,26 @@ async function applyFailAction(
     // уже rejected / с существующим pending-отказом).
     // Текст: stage.rejectText (Воронка 3) → rule.rejectText → undefined
     // (дальше действующий стандартный текст вакансии, cron pending-rejections).
+    // Токены РЕНДЕРИМ здесь (как stage-completion-handler): pending-rejections
+    // шлёт сохранённый pendingRejectionText как есть — без рендера кандидату
+    // ушёл бы литерал {{name}}/{{company}}.
     case "reject": {
-      const rejectText = (stage.rejectText ?? "").trim() || (stage.rule.rejectText ?? "").trim() || undefined
+      const raw = (stage.rejectText ?? "").trim() || (stage.rule.rejectText ?? "").trim()
+      let rejectText: string | undefined
+      if (raw) {
+        const { getCandidateFirstName } = await import("@/lib/messaging/candidate-name")
+        const { renderTemplate } = await import("@/lib/template-renderer")
+        const { getAppBaseUrl } = await import("@/lib/funnel-v2/base-url")
+        const { getCompanyName } = await import("@/lib/funnel-v2/runtime-executor")
+        const { firstName } = await getCandidateFirstName(candidate.id)
+        const companyName = vacancy?.companyId ? await getCompanyName(vacancy.companyId) : ""
+        rejectText = renderTemplate(raw, {
+          name:      firstName,
+          vacancy:   vacancy?.title ?? "",
+          company:   companyName,
+          demo_link: `${getAppBaseUrl()}/demo/${candidate.token}`,
+        })
+      }
       await scheduleV2Rejection(candidate, stage.id, stage.rule.rejectDelayMinutes, rejectText)
       return "scheduled_rejection"
     }

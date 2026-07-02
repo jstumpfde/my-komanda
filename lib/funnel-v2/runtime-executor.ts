@@ -20,6 +20,7 @@ import {
 } from "@/lib/db/schema"
 import type { FunnelV2Stage } from "@/lib/funnel-v2/types"
 import { dozhimChainFor, effectiveStageMessageText, hhActionForStatus, normalizeFunnelV2 } from "@/lib/funnel-v2/types"
+import { dozhimLinkVars } from "@/lib/funnel-v2/dozhim-link-vars"
 import { getValidToken } from "@/lib/hh-helpers"
 import { changeNegotiationState, sendNegotiationMessage } from "@/lib/hh-api"
 import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
@@ -76,8 +77,9 @@ export interface StageEntryResult {
 /**
  * Имя компании для подстановки {{company}} — без него кандидату ушёл бы
  * литерал «{{company}}» (renderTemplate оставляет неизвестные переменные).
+ * Экспортируется: score-gate рендерит rejectText теми же переменными.
  */
-async function getCompanyName(companyId: string): Promise<string> {
+export async function getCompanyName(companyId: string): Promise<string> {
   if (!companyId) return ""
   try {
     const [row] = await db
@@ -277,18 +279,20 @@ async function scheduleV2Dozhim(
   }
   const dozhimCompanyName = await getCompanyName(dozhimCompanyId)
 
+  // Ссылки этапа: {{test_link}} обязателен (дефолтные шаблоны дожима test/task
+  // используют его — иначе кандидату уходит литерал); для test/task-стадий
+  // {{demo_link}} тоже ведёт на /test-URL (дожим зовёт к артефакту стадии).
+  const linkVars = dozhimLinkVars(stage.action, candidate.token, getAppBaseUrl())
+
   // Формируем касания по цепочке
   const touches = chain.map((touch, idx) => {
     const delayMs = touch.delayDays * 24 * 60 * 60 * 1000
     const scheduledAt = new Date(now.getTime() + delayMs)
-    // Подставляем имя и ссылку на демо ({{name}}, {{demo_link}})
-    const tokenForUrl = candidate.token
-    const demoUrl = `${getAppBaseUrl()}/demo/${tokenForUrl}`
     const messageText = renderTemplate(touch.text, {
       name:      firstName,
-      demo_link: demoUrl,
       vacancy:   vacancy.title || "",
       company:   dozhimCompanyName,
+      ...linkVars,
     })
     return {
       campaignId:    campaign.id,

@@ -179,3 +179,13 @@ test("resolveAdvanceTarget: текущая стадия не найдена в �
   assert.deepEqual(resolveAdvanceTarget(stages, "st-ghost"),
     { kind: "hold", reason: "stage_not_found" })
 })
+
+test("resolveAdvanceTarget: advanceTo на выключенную стадию НАЗАД → hold advance_to_self (не самопереход)", () => {
+  // [A(off), B(on, current, advanceTo=A)]: firstEnabledFrom(A) вернул бы B —
+  // текущую стадию. Самопереход = повторная отправка входа (риск цикла) → hold.
+  const stages = makeStages()
+  stages[0] = { ...stages[0], enabled: false }                       // A = st-msg (выкл)
+  // current = st-demo (B), advanceTo указывает назад на выключенную A
+  assert.deepEqual(resolveAdvanceTarget(stages, "st-demo", "st-msg"),
+    { kind: "hold", reason: "advance_to_self" })
+})

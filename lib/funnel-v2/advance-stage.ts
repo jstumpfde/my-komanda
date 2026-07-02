@@ -85,7 +85,7 @@ export function firstEnabledStageId(stages: FunnelV2Stage[]): string | null {
 export type AdvanceTarget =
   | { kind: "advance"; stageId: string }
   | { kind: "complete" }
-  | { kind: "hold"; reason: "disabled_tail" | "stage_not_found" }
+  | { kind: "hold"; reason: "disabled_tail" | "stage_not_found" | "advance_to_self" }
 
 export function resolveAdvanceTarget(
   stages: FunnelV2Stage[],
@@ -93,6 +93,10 @@ export function resolveAdvanceTarget(
   advanceTo?: string,
 ): AdvanceTarget {
   const nextId = nextStageId(stages, currentId, advanceTo)
+  // Guard самоперехода: advanceTo на выключенную стадию НАЗАД может дать
+  // «следующую включённую» = текущую → повторная отправка входа стадии
+  // (риск цикла через cron). Вместо самоперехода — ручной разбор.
+  if (nextId === currentId) return { kind: "hold", reason: "advance_to_self" }
   if (nextId) return { kind: "advance", stageId: nextId }
   const idx = stages.findIndex((s) => s.id === currentId)
   if (idx === -1) return { kind: "hold", reason: "stage_not_found" }
@@ -233,7 +237,7 @@ export async function advanceToNextStage(
         ...currentState,
         completedAt:   nowIso,   // стадия пройдена, но двигаться некуда
         scoreForStage: options.scoreForStage ?? currentState.scoreForStage ?? null,
-        holdReason:    target.reason === "disabled_tail" ? "no_enabled_next_stage" : "stage_not_found",
+        holdReason:    target.reason === "disabled_tail" ? "no_enabled_next_stage" : target.reason,
       }
       await db.update(candidates)
         .set({ funnelV2StateJson: heldState, updatedAt: new Date() })
@@ -244,7 +248,7 @@ export async function advanceToNextStage(
       candidateId: candidate.id,
       prevStageId,
       reason:      target.reason,
-      note:        "дальше нет ВКЛЮЧЁННЫХ стадий — оставлен на ручной разбор (НЕ hired)",
+      note:        "продвижение невозможно (выключенный хвост / самопереход / стадия не найдена) — оставлен на ручной разбор (НЕ hired)",
     }))
     return
   }
