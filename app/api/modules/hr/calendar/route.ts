@@ -15,11 +15,15 @@ export async function GET(req: NextRequest) {
     const type = searchParams.get("type")
     const filter = searchParams.get("filter") ?? "all" // mine | hr | all
     const vacancyId = searchParams.get("vacancyId")
+    const candidateId = searchParams.get("candidateId")
 
     const conditions = [eq(calendarEvents.companyId, user.companyId)]
 
     if (vacancyId) {
       conditions.push(eq(calendarEvents.vacancyId, vacancyId))
+    }
+    if (candidateId) {
+      conditions.push(eq(calendarEvents.candidateId, candidateId))
     }
 
     if (start) {

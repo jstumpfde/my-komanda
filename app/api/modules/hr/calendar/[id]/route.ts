@@ -68,6 +68,39 @@ export async function PATCH(
     if (body.interviewStatus !== undefined) updateData.interviewStatus = body.interviewStatus
     if (body.location !== undefined) updateData.location = body.location
     if (body.meetingUrl !== undefined) updateData.meetingUrl = body.meetingUrl
+
+    // Воронка v2 Фаза 2: фиксация итога интервью.
+    const OUTCOME_VALUES = ["held", "no_show", "rescheduled"]
+    const DECISION_VALUES = ["advance", "offer", "reject", "reserve"]
+    let touchesOutcome = false
+    if (body.interviewOutcome !== undefined) {
+      if (body.interviewOutcome !== null && !OUTCOME_VALUES.includes(body.interviewOutcome)) {
+        return apiError("Недопустимое значение interviewOutcome")
+      }
+      updateData.interviewOutcome = body.interviewOutcome
+      touchesOutcome = true
+    }
+    if (body.interviewRating !== undefined) {
+      if (body.interviewRating !== null) {
+        const rating = Number(body.interviewRating)
+        if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+          return apiError("interviewRating должен быть целым числом 1..5")
+        }
+        updateData.interviewRating = rating
+      } else {
+        updateData.interviewRating = null
+      }
+    }
+    if (body.interviewDecision !== undefined) {
+      if (body.interviewDecision !== null && !DECISION_VALUES.includes(body.interviewDecision)) {
+        return apiError("Недопустимое значение interviewDecision")
+      }
+      updateData.interviewDecision = body.interviewDecision
+      touchesOutcome = true
+    }
+    if (body.interviewNotes !== undefined) updateData.interviewNotes = body.interviewNotes
+    if (touchesOutcome) updateData.interviewOutcomeAt = new Date()
+
     if (body.scope !== undefined) {
       updateData.scope = (body.scope === "hr" || body.scope === "personal") ? body.scope : "company"
     }

@@ -122,6 +122,50 @@ interface CandidateNote {
   authorId?: string
 }
 
+// ─── Interview outcome (Воронка v2 Фаза 2) ────────────────────────────────────
+
+type InterviewOutcomeValue = "held" | "no_show" | "rescheduled"
+type InterviewDecisionValue = "advance" | "offer" | "reject" | "reserve"
+
+interface CandidateInterviewEvent {
+  id: string
+  title: string
+  startAt: string
+  endAt: string
+  interviewer: string | null
+  interviewType: string | null
+  interviewFormat: string | null
+  interviewStatus: string | null
+  location: string | null
+  meetingUrl: string | null
+  interviewOutcome: InterviewOutcomeValue | null
+  interviewRating: number | null
+  interviewDecision: InterviewDecisionValue | null
+  interviewNotes: string | null
+  interviewOutcomeAt: string | null
+}
+
+const INTERVIEW_OUTCOME_OPTIONS: { id: InterviewOutcomeValue; label: string }[] = [
+  { id: "held", label: "Состоялось" },
+  { id: "no_show", label: "Не явился" },
+  { id: "rescheduled", label: "Перенесено" },
+]
+
+const INTERVIEW_DECISION_OPTIONS: { id: InterviewDecisionValue; label: string }[] = [
+  { id: "advance", label: "Дальше" },
+  { id: "offer", label: "Оффер" },
+  { id: "reject", label: "Отказ" },
+  { id: "reserve", label: "В резерв" },
+]
+
+function interviewOutcomeLabel(v: string | null): string {
+  return INTERVIEW_OUTCOME_OPTIONS.find(o => o.id === v)?.label ?? "—"
+}
+
+function interviewDecisionLabel(v: string | null): string {
+  return INTERVIEW_DECISION_OPTIONS.find(o => o.id === v)?.label ?? "—"
+}
+
 interface StageHistoryEntry {
   from?: string | null
   to?: string
@@ -910,6 +954,17 @@ export function CandidateDrawer({
   const [editReason, setEditReason] = useState("")
   const [editComment, setEditComment] = useState("")
   const [savingEdit, setSavingEdit] = useState(false)
+
+  // Итоги интервью (Воронка v2 Фаза 2)
+  const [interviewEvents, setInterviewEvents] = useState<CandidateInterviewEvent[]>([])
+  const [interviewEventsLoading, setInterviewEventsLoading] = useState(false)
+  const [editingOutcomeEventId, setEditingOutcomeEventId] = useState<string | null>(null)
+  const [outcomeValue, setOutcomeValue] = useState<InterviewOutcomeValue | "">("")
+  const [ratingValue, setRatingValue] = useState<number | null>(null)
+  const [decisionValue, setDecisionValue] = useState<InterviewDecisionValue | "">("")
+  const [notesValue, setNotesValue] = useState("")
+  const [savingOutcome, setSavingOutcome] = useState(false)
+
   const [activeTab, setActiveTab] = useState("contacts")
   // Открыть карточку на заданной вкладке (напр. клик по колонке «Тест» → результат теста).
   useEffect(() => {
@@ -1091,6 +1146,59 @@ export function CandidateDrawer({
     }
   }
 
+  // Итоги интервью (Воронка v2 Фаза 2)
+  const loadInterviewEvents = useCallback(async (id: string) => {
+    setInterviewEventsLoading(true)
+    try {
+      const res = await fetch(`/api/modules/hr/calendar?candidateId=${id}&type=interview`)
+      if (!res.ok) throw new Error()
+      const data = await res.json() as CandidateInterviewEvent[]
+      const list = Array.isArray(data) ? data : []
+      list.sort((a, b) => new Date(b.startAt).getTime() - new Date(a.startAt).getTime())
+      setInterviewEvents(list)
+    } catch {
+      // не критично
+    } finally {
+      setInterviewEventsLoading(false)
+    }
+  }, [])
+
+  const startEditOutcome = (ev: CandidateInterviewEvent) => {
+    setEditingOutcomeEventId(ev.id)
+    setOutcomeValue(ev.interviewOutcome ?? "")
+    setRatingValue(ev.interviewRating ?? null)
+    setDecisionValue(ev.interviewDecision ?? "")
+    setNotesValue(ev.interviewNotes ?? "")
+  }
+
+  const submitInterviewOutcome = async () => {
+    if (!candidateId || !editingOutcomeEventId) return
+    setSavingOutcome(true)
+    try {
+      const body: Record<string, unknown> = {
+        interviewOutcome: outcomeValue || null,
+        interviewRating: ratingValue,
+        interviewDecision: decisionValue || null,
+        interviewNotes: notesValue.trim() || null,
+      }
+      const res = await fetch(`/api/modules/hr/calendar/${editingOutcomeEventId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => null) as { error?: string } | null
+        throw new Error(j?.error || "")
+      }
+      toast.success("Итог интервью сохранён")
+      await loadInterviewEvents(candidateId)
+    } catch (e) {
+      toast.error(e instanceof Error && e.message ? e.message : "Не удалось сохранить итог")
+    } finally {
+      setSavingOutcome(false)
+    }
+  }
+
   useEffect(() => {
     if (open && candidateId) {
       setCandidate(null)
@@ -1108,10 +1216,13 @@ export function CandidateDrawer({
       setChannelStages([])
       setChannelStagesError(null)
       channelStagesFetchedFor.current = null
+      setInterviewEvents([])
+      setEditingOutcomeEventId(null)
       fetchCandidate(candidateId)
       loadContacts(candidateId)
+      loadInterviewEvents(candidateId)
     }
-  }, [open, candidateId, fetchCandidate, loadContacts])
+  }, [open, candidateId, fetchCandidate, loadContacts, loadInterviewEvents])
 
   // F7: Telegram — получить / сгенерировать ссылку-приглашение
   const loadTgInvite = useCallback(async () => {
@@ -1869,6 +1980,7 @@ export function CandidateDrawer({
               <TabsTrigger value="answers" className="text-[10px] px-1 py-1.5">Анкета</TabsTrigger>
               <TabsTrigger value="test" className="text-[10px] px-1 py-1.5">Тест</TabsTrigger>
               <TabsTrigger value="calls" className="text-[10px] px-1 py-1.5">Коммуникация</TabsTrigger>
+              <TabsTrigger value="interview" className="text-[10px] px-1 py-1.5">Итоги интервью</TabsTrigger>
               <TabsTrigger value="history" className="text-[10px] px-1 py-1.5">История</TabsTrigger>
             </TabsList>
 
@@ -2676,6 +2788,190 @@ export function CandidateDrawer({
                       ? "Оцениваем кандидата по критериям Портрета…"
                       : "Оценка ещё не готова — нажмите «Оценить» или дождитесь автоматического скоринга."
                     }
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* ── Итоги интервью (Воронка v2 Фаза 2) ──────────────────────────── */}
+              <TabsContent value="interview" className="px-6 py-4 pb-28 space-y-4 mt-0">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5" />
+                  Собеседования
+                </h3>
+                {interviewEventsLoading ? (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />Загрузка...
+                  </div>
+                ) : interviewEvents.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">Интервью ещё не назначено</p>
+                ) : (
+                  <div className="space-y-3">
+                    {interviewEvents.map((ev) => (
+                      <div key={ev.id} className="rounded-lg border border-border/60 p-3 space-y-3">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="text-sm font-medium text-foreground">{formatDateTime(ev.startAt)}</span>
+                          {ev.interviewType && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">{ev.interviewType}</Badge>
+                          )}
+                          {ev.interviewFormat && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">{ev.interviewFormat}</Badge>
+                          )}
+                          {ev.interviewStatus && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-0 bg-muted text-muted-foreground">
+                              {ev.interviewStatus}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                          {ev.interviewer && <span>Интервьюер: {ev.interviewer}</span>}
+                          {ev.location && <span>Адрес: {ev.location}</span>}
+                          {ev.meetingUrl && (
+                            <a href={ev.meetingUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                              Ссылка на звонок
+                            </a>
+                          )}
+                        </div>
+
+                        {/* Уже зафиксированный итог — показываем сводкой, если не редактируем */}
+                        {ev.interviewOutcomeAt && editingOutcomeEventId !== ev.id && (
+                          <div className="rounded-md bg-muted/40 p-2.5 space-y-1">
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-0 bg-background">
+                                {interviewOutcomeLabel(ev.interviewOutcome)}
+                              </Badge>
+                              {ev.interviewRating != null && (
+                                <span className="flex items-center gap-0.5 text-amber-500">
+                                  {Array.from({ length: 5 }).map((_, i) => (
+                                    <Star
+                                      key={i}
+                                      className={cn("w-3 h-3", i < (ev.interviewRating ?? 0) ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30")}
+                                    />
+                                  ))}
+                                </span>
+                              )}
+                              {ev.interviewDecision && (
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    "text-[10px] px-1.5 py-0 border-0",
+                                    ev.interviewDecision === "offer" && "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
+                                    ev.interviewDecision === "reject" && "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+                                    (ev.interviewDecision === "advance" || ev.interviewDecision === "reserve") && "bg-muted text-muted-foreground",
+                                  )}
+                                >
+                                  {interviewDecisionLabel(ev.interviewDecision)}
+                                </Badge>
+                              )}
+                              <span className="text-[10px] text-muted-foreground/60 ml-auto">
+                                Зафиксировано {formatDateTime(ev.interviewOutcomeAt)}
+                              </span>
+                            </div>
+                            {ev.interviewNotes && (
+                              <p className="text-xs text-foreground italic">{ev.interviewNotes}</p>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => startEditOutcome(ev)}
+                              className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1 pt-0.5"
+                            >
+                              <Pencil className="w-3 h-3" />Изменить итог
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Форма фиксации итога — либо ещё не заполнено, либо режим правки */}
+                        {(!ev.interviewOutcomeAt || editingOutcomeEventId === ev.id) && (
+                          editingOutcomeEventId === ev.id ? (
+                            <div className="rounded-md border bg-muted/30 p-3 space-y-2.5">
+                              <div className="space-y-1">
+                                <Label className="text-[11px] text-muted-foreground">Состоялось</Label>
+                                <div className="flex gap-1.5 flex-wrap">
+                                  {INTERVIEW_OUTCOME_OPTIONS.map((item) => (
+                                    <button
+                                      key={item.id}
+                                      type="button"
+                                      onClick={() => setOutcomeValue(item.id)}
+                                      className={cn(
+                                        "px-2.5 py-1 rounded-md text-xs border transition-colors",
+                                        outcomeValue === item.id
+                                          ? "bg-primary/10 border-primary text-primary"
+                                          : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30",
+                                      )}
+                                    >
+                                      {item.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+
+                              <div className="space-y-1">
+                                <Label className="text-[11px] text-muted-foreground">Впечатление</Label>
+                                <div className="flex items-center gap-1">
+                                  {[1, 2, 3, 4, 5].map((n) => (
+                                    <button
+                                      key={n}
+                                      type="button"
+                                      onClick={() => setRatingValue(ratingValue === n ? null : n)}
+                                      className="p-0.5"
+                                      title={`${n}/5`}
+                                    >
+                                      <Star className={cn("w-4 h-4", ratingValue != null && n <= ratingValue ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30")} />
+                                    </button>
+                                  ))}
+                                  {ratingValue != null && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setRatingValue(null)}
+                                      className="text-[10px] text-muted-foreground hover:text-foreground ml-1"
+                                    >
+                                      сбросить
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="space-y-1">
+                                <Label className="text-[11px] text-muted-foreground">Решение</Label>
+                                <Select value={decisionValue || undefined} onValueChange={(v) => setDecisionValue(v as InterviewDecisionValue)}>
+                                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Не выбрано" /></SelectTrigger>
+                                  <SelectContent>
+                                    {INTERVIEW_DECISION_OPTIONS.map((item) => (
+                                      <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+
+                              <div className="space-y-1">
+                                <Label className="text-[11px] text-muted-foreground">Заметка</Label>
+                                <Textarea
+                                  value={notesValue}
+                                  onChange={(e) => setNotesValue(e.target.value)}
+                                  placeholder="Впечатления от собеседования…"
+                                  rows={2}
+                                  className="resize-none text-xs"
+                                />
+                              </div>
+
+                              <div className="flex gap-2 pt-1">
+                                <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => void submitInterviewOutcome()} disabled={savingOutcome}>
+                                  {savingOutcome ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                                  Сохранить итог
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setEditingOutcomeEventId(null)} disabled={savingOutcome}>
+                                  Отмена
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => startEditOutcome(ev)}>
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              Зафиксировать итог
+                            </Button>
+                          )
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
               </TabsContent>
