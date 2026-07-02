@@ -225,6 +225,15 @@ export function stageMessages(stage: Pick<FunnelV2Stage, "messages" | "messagePr
   return stage.messages ?? (stage.messagePresetId ? [stage.messagePresetId] : [])
 }
 
+/** Эффективный ТЕКСТ «приглашения» стадии для отправки кандидату (рантайм).
+ *  Источник — stageMessages (messages из редактора, fallback на устаревший
+ *  messagePresetId). Несколько сообщений склеиваются через пустую строку:
+ *  механики досыла отдельными сообщениями в runtime-executor нет — одна
+ *  отправка на вход в стадию. Пусто → "" (исполнитель берёт свой дефолт). */
+export function effectiveStageMessageText(stage: Pick<FunnelV2Stage, "messages" | "messagePresetId">): string {
+  return stageMessages(stage).map(m => (m ?? "").trim()).filter(Boolean).join("\n\n")
+}
+
 /** Дефолтная стадия для нового действия (разрешающее правило, дожим стандарт). */
 export function makeStage(action: StageActionType, idSeed: string): FunnelV2Stage {
   const base: FunnelV2Stage = {

@@ -13,12 +13,13 @@ import { db } from "@/lib/db"
 import {
   candidates,
   vacancies,
+  companies,
   followUpCampaigns,
   followUpMessages,
   hhResponses,
 } from "@/lib/db/schema"
 import type { FunnelV2Stage } from "@/lib/funnel-v2/types"
-import { dozhimChainFor, hhActionForStatus, normalizeFunnelV2 } from "@/lib/funnel-v2/types"
+import { dozhimChainFor, effectiveStageMessageText, hhActionForStatus, normalizeFunnelV2 } from "@/lib/funnel-v2/types"
 import { getValidToken } from "@/lib/hh-helpers"
 import { changeNegotiationState, sendNegotiationMessage } from "@/lib/hh-api"
 import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
@@ -71,6 +72,24 @@ export interface StageEntryResult {
 // ────────────────────────────────────────────────────────────────────────────────
 // Вспомогательные функции
 // ────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Имя компании для подстановки {{company}} — без него кандидату ушёл бы
+ * литерал «{{company}}» (renderTemplate оставляет неизвестные переменные).
+ */
+async function getCompanyName(companyId: string): Promise<string> {
+  if (!companyId) return ""
+  try {
+    const [row] = await db
+      .select({ name: companies.name })
+      .from(companies)
+      .where(eq(companies.id, companyId))
+      .limit(1)
+    return row?.name ?? ""
+  } catch {
+    return ""
+  }
+}
 
 /**
  * Отправить сообщение кандидату через hh negotiations API.
@@ -242,6 +261,22 @@ async function scheduleV2Dozhim(
   // уходит ФАМИЛИЯ или «Аноним»; см. lib/messaging/candidate-name.ts).
   const { firstName } = await getCandidateFirstName(candidate.id)
 
+  // {{company}} в текстах касаний: имя компании (иначе ушёл бы литерал).
+  // companyId бывает не заполнен у caller-а (switchV2BranchOpened) — добираем
+  // по вакансии кандидата.
+  let dozhimCompanyId = vacancy.companyId ?? ""
+  if (!dozhimCompanyId) {
+    try {
+      const [v] = await db
+        .select({ companyId: vacancies.companyId })
+        .from(vacancies)
+        .where(eq(vacancies.id, candidate.vacancyId))
+        .limit(1)
+      dozhimCompanyId = v?.companyId ?? ""
+    } catch { /* company останется пустой строкой */ }
+  }
+  const dozhimCompanyName = await getCompanyName(dozhimCompanyId)
+
   // Формируем касания по цепочке
   const touches = chain.map((touch, idx) => {
     const delayMs = touch.delayDays * 24 * 60 * 60 * 1000
@@ -253,6 +288,7 @@ async function scheduleV2Dozhim(
       name:      firstName,
       demo_link: demoUrl,
       vacancy:   vacancy.title || "",
+      company:   dozhimCompanyName,
     })
     return {
       campaignId:    campaign.id,
@@ -300,6 +336,16 @@ export async function executeStageEntry(
   const tokenForUrl = candidate.token
   const baseUrl = getAppBaseUrl()
   const demoUrl = `${baseUrl}/demo/${tokenForUrl}`
+  // Общий набор переменных рендера для всех типов стадий. {{company}} и
+  // {{demo_link}} подставляются ВЕЗДЕ (message/interview/offer тоже) — кнопки
+  // плейсхолдеров в редакторе честные, литералы кандидату не уходят.
+  const companyName = await getCompanyName(companyId)
+  const baseVars: Record<string, string> = {
+    name:      firstName,
+    vacancy:   vacancy.title ?? "",
+    company:   companyName,
+    demo_link: demoUrl,
+  }
 
   let result: StageEntryResult
 
@@ -307,14 +353,15 @@ export async function executeStageEntry(
 
     // ── Сообщение / касание ────────────────────────────────────────────────
     case "message": {
-      // Текст стадии («Сообщение кандидату» из редактора) — это тело сообщения.
-      // Если HR его задал — рендерим с токенами, иначе стандартный текст.
-      const customMsg = (stage.messagePresetId ?? "").trim()
+      // Текст стадии — эффективные сообщения редактора (stage.messages,
+      // fallback на устаревший messagePresetId; несколько → join через пустую
+      // строку, см. effectiveStageMessageText). Пусто → стандартный текст.
+      const customMsg = effectiveStageMessageText(stage)
       const text = customMsg
-        ? renderTemplate(customMsg, { name: firstName, vacancy: vacancy.title ?? "" })
+        ? renderTemplate(customMsg, baseVars)
         : renderTemplate(
             `${firstName}, добрый день! Хотели уточнить — актуальна ли для вас вакансия «${vacancy.title ?? ""}»?`,
-            { name: firstName, vacancy: vacancy.title ?? "" },
+            baseVars,
           )
 
       const sent = await sendHhMessageToCandidate(candidate.id, companyId, text, stage.hhStatus)
@@ -343,12 +390,13 @@ export async function executeStageEntry(
     // ── Демонстрация ───────────────────────────────────────────────────────
     case "demo": {
       // Отправляем ссылку на /demo/<token> — контент отдаётся через resolveCurrentStageContent
-      const customDemo = (stage.messagePresetId ?? "").trim()
+      // Эффективные сообщения редактора (messages → fallback messagePresetId)
+      const customDemo = effectiveStageMessageText(stage)
       const inviteText = customDemo
-        ? renderTemplate(customDemo, { name: firstName, vacancy: vacancy.title ?? "", demo_link: demoUrl })
+        ? renderTemplate(customDemo, baseVars)
         : renderTemplate(
             `${firstName}, здравствуйте! Подготовили демонстрацию — 15 минут, и вы узнаете всё о задачах, команде и доходе.\n\n${demoUrl}`,
-            { name: firstName, vacancy: vacancy.title ?? "", demo_link: demoUrl },
+            baseVars,
           )
       // Убеждаемся, что URL в сообщении есть
       const finalText = inviteText.includes("/demo/")
@@ -405,10 +453,12 @@ export async function executeStageEntry(
         ? `${firstName}, следующий шаг — практическое задание. Выполните и пришлите ответ по ссылке:\n\n${testUrl}`
         : `${firstName}, следующий шаг — небольшой тест. Займёт несколько минут. Пройдите по ссылке:\n\n${testUrl}`
 
-      const customTest = (stage.messagePresetId ?? "").trim()
+      // Эффективные сообщения редактора (messages → fallback messagePresetId)
+      const customTest = effectiveStageMessageText(stage)
+      const testVars = { ...baseVars, test_link: testUrl }
       const testText = customTest
-        ? renderTemplate(customTest, { name: firstName, vacancy: vacancy.title ?? "", test_link: testUrl })
-        : renderTemplate(inviteBody, { name: firstName, vacancy: vacancy.title ?? "", test_link: testUrl })
+        ? renderTemplate(customTest, testVars)
+        : renderTemplate(inviteBody, testVars)
 
       // Убеждаемся, что ссылка на тест в сообщении есть
       const finalTestText = testText.includes("/test/")
@@ -450,12 +500,13 @@ export async function executeStageEntry(
       // Текст стадии («Сообщение кандидату») — тело приглашения. Если HR его
       // задал — рендерим с токенами (HR сам впишет ссылку-самозапись, если нужна).
       // Иначе — стандартный текст с просьбой написать удобное время.
-      const customInterview = (stage.messagePresetId ?? "").trim()
+      // Эффективные сообщения редактора (messages → fallback messagePresetId)
+      const customInterview = effectiveStageMessageText(stage)
       const interviewText = customInterview
-        ? renderTemplate(customInterview, { name: firstName, vacancy: vacancy.title ?? "" })
+        ? renderTemplate(customInterview, baseVars)
         : renderTemplate(
             `${firstName}, поздравляем! Следующий шаг — собеседование ${modeLabel[mode]} по вакансии «${vacancy.title ?? ""}».\n\nНапишите, пожалуйста, когда вам удобно встретиться (дата и время).`,
-            { name: firstName, vacancy: vacancy.title ?? "" },
+            baseVars,
           )
       void hasSelfLink
 
@@ -479,12 +530,13 @@ export async function executeStageEntry(
     // ── Оффер ───────────────────────────────────────────────────────────────
     // Фаза 3: отправляем текст оффера. Документ — Фаза 4.
     case "offer": {
-      const customOffer = (stage.messagePresetId ?? "").trim()
+      // Эффективные сообщения редактора (messages → fallback messagePresetId)
+      const customOffer = effectiveStageMessageText(stage)
       const offerText = customOffer
-        ? renderTemplate(customOffer, { name: firstName, vacancy: vacancy.title ?? "" })
+        ? renderTemplate(customOffer, baseVars)
         : renderTemplate(
             `${firstName}, поздравляем! Мы готовы сделать вам оффер по вакансии «${vacancy.title ?? ""}». HR напишет вам с деталями в ближайшее время.`,
-            { name: firstName, vacancy: vacancy.title ?? "" },
+            baseVars,
           )
 
       const sentOffer = await sendHhMessageToCandidate(candidate.id, companyId, offerText, stage.hhStatus)
@@ -511,7 +563,7 @@ export async function executeStageEntry(
       // редакторе (видимое поле). Пусто = как раньше, ничего не отправляем.
       const farewell = (stage.farewellText ?? "").trim()
       if (farewell) {
-        const farewellText = renderTemplate(farewell, { name: firstName, vacancy: vacancy.title ?? "" })
+        const farewellText = renderTemplate(farewell, baseVars)
         const sentFarewell = await sendHhMessageToCandidate(candidate.id, companyId, farewellText, stage.hhStatus)
         if (!sentFarewell) {
           console.warn("[funnel-v2/executor] прощание не отправлено", {
@@ -530,6 +582,8 @@ export async function executeStageEntry(
         pendingRejectionStageId: null,
         touchesSent:             prevState?.touchesSent ?? 0,
         dozhimStartedAt:         prevState?.dozhimStartedAt ?? null,
+        holdReason:              null,
+        middlePrequalFromStageId: prevState?.middlePrequalFromStageId ?? null,
       }
 
       await db.update(candidates)
