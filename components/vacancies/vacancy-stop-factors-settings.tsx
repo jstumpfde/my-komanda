@@ -160,14 +160,17 @@ export function VacancyStopFactorsSettings({ vacancyId, initial, onSaved }: Prop
           </div>
         </FactorRow>
 
-        {/* Формат работы */}
+        {/* Формат работы. Семантика инвертируемая на глаз (инцидент 03.07:
+            Юрий отметил «Офис», думая что ОТСЕИВАЕТ офисных, а галочки — кого
+            ПРОПУСКАЕМ) — поэтому явная подпись + живая сводка под галочками. */}
         <FactorRow
           title="Формат работы"
-          help="Если кандидат предпочитает не разрешённый формат — стоп"
+          help="Галочки — форматы, которые ПОДХОДЯТ вакансии. Кандидат, который хочет другой формат, получит авто-отказ"
           enabled={factors.format?.enabled ?? false}
           onToggle={(v) => toggleEnabled("format", v)}
         >
           <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Пропускаем кандидатов с форматом:</p>
             <div className="flex gap-3">
               {FORMAT_OPTIONS.map(f => (
                 <label key={f.id} className="flex items-center gap-1.5 text-xs">
@@ -183,6 +186,20 @@ export function VacancyStopFactorsSettings({ vacancyId, initial, onSaved }: Prop
                 </label>
               ))}
             </div>
+            {(() => {
+              const allowed = factors.format?.allowedFormats ?? []
+              if (allowed.length === 0) {
+                return <p className="text-[11px] text-muted-foreground">Ничего не отмечено — фактор не действует.</p>
+              }
+              const pass = FORMAT_OPTIONS.filter(f => allowed.includes(f.id)).map(f => f.label).join(", ")
+              const cut = FORMAT_OPTIONS.filter(f => !allowed.includes(f.id)).map(f => f.label).join(", ")
+              return (
+                <p className="text-[11px] leading-snug">
+                  <span className="text-success">Пропускаем: {pass}.</span>{" "}
+                  {cut && <span className="text-destructive">Авто-отказ тем, кто хочет: {cut}.</span>}
+                </p>
+              )
+            })()}
             <RejectionText
               refEl={refFormat}
               value={factors.format?.rejectionText ?? ""}
