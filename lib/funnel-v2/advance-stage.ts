@@ -75,6 +75,33 @@ export function firstEnabledStageId(stages: FunnelV2Stage[]): string | null {
   return firstEnabledFrom(stages, 0)
 }
 
+/** Куда двигать кандидата с текущей стадии (чистое решение, без БД).
+ *  Различает ДВА случая nextStageId===null:
+ *   - complete — текущая стадия ПОСЛЕДНЯЯ в массиве (реальный конец воронки;
+ *     прежнее поведение: завершение + legacy stage='hired');
+ *   - hold — дальше в конфиге стадии ЕСТЬ, но все выключены (или текущая не
+ *     найдена в конфиге): кандидата НЕ завершаем и НЕ помечаем hired —
+ *     оставляем на текущей стадии на ручной разбор с пометкой. */
+export type AdvanceTarget =
+  | { kind: "advance"; stageId: string }
+  | { kind: "complete" }
+  | { kind: "hold"; reason: "disabled_tail" | "stage_not_found" }
+
+export function resolveAdvanceTarget(
+  stages: FunnelV2Stage[],
+  currentId: string,
+  advanceTo?: string,
+): AdvanceTarget {
+  const nextId = nextStageId(stages, currentId, advanceTo)
+  if (nextId) return { kind: "advance", stageId: nextId }
+  const idx = stages.findIndex((s) => s.id === currentId)
+  if (idx === -1) return { kind: "hold", reason: "stage_not_found" }
+  // stage='hired' ТОЛЬКО когда текущая — последняя стадия массива (прежнее
+  // поведение). Если дальше есть стадии, но все выключены — ручной разбор.
+  if (idx === stages.length - 1) return { kind: "complete" }
+  return { kind: "hold", reason: "disabled_tail" }
+}
+
 // ────────────────────────────────────────────────────────────────────────────────
 // Параметры и реализация (взаимодействует с БД — Фаза 1)
 // ────────────────────────────────────────────────────────────────────────────────
@@ -179,10 +206,16 @@ export async function advanceToNextStage(
   const targetAdvanceTo = options.advanceTo ?? currentStage?.rule.advanceTo ?? "next"
   const prevStageId = currentState?.stageId ?? null
 
-  // Вычисляем id следующей стадии (выключенные пропускаются)
-  const nextId = prevStageId
-    ? nextStageId(stages, prevStageId, targetAdvanceTo)
-    : firstEnabledStageId(stages)
+  // Куда идём: advance / complete / hold (различаем «реальный конец массива»
+  // и «дальше только выключенные стадии» — второе НЕ hired, см. resolveAdvanceTarget)
+  const target: AdvanceTarget = prevStageId
+    ? resolveAdvanceTarget(stages, prevStageId, targetAdvanceTo)
+    : (() => {
+        const firstId = firstEnabledStageId(stages)
+        if (firstId) return { kind: "advance", stageId: firstId } as const
+        // Вход без включённых стадий: hired НЕ ставим (нечего было пройти).
+        return { kind: "hold", reason: "disabled_tail" } as const
+      })()
 
   const nowIso = new Date().toISOString()
 
@@ -191,9 +224,33 @@ export async function advanceToNextStage(
     await cancelPrevDozhim(candidate.id, prevStageId)
   }
 
-  // Шаг 2: завершение воронки (nextId=null)
-  if (nextId === null) {
-    // Помечаем последнюю стадию как завершённую
+  // Шаг 2а: ручной разбор — дальше только выключенные стадии (или текущая
+  // стадия не найдена в конфиге). Кандидата НЕ завершаем и НЕ помечаем hired:
+  // остаётся на текущей стадии с пометкой holdReason (ждёт HR).
+  if (target.kind === "hold") {
+    if (currentState) {
+      const heldState: FunnelV2State = {
+        ...currentState,
+        completedAt:   nowIso,   // стадия пройдена, но двигаться некуда
+        scoreForStage: options.scoreForStage ?? currentState.scoreForStage ?? null,
+        holdReason:    target.reason === "disabled_tail" ? "no_enabled_next_stage" : "stage_not_found",
+      }
+      await db.update(candidates)
+        .set({ funnelV2StateJson: heldState, updatedAt: new Date() })
+        .where(eq(candidates.id, candidate.id))
+    }
+    console.warn("[funnel-v2/advance]", JSON.stringify({
+      tag:         "funnel-v2/advance-held",
+      candidateId: candidate.id,
+      prevStageId,
+      reason:      target.reason,
+      note:        "дальше нет ВКЛЮЧЁННЫХ стадий — оставлен на ручной разбор (НЕ hired)",
+    }))
+    return
+  }
+
+  // Шаг 2б: завершение воронки — текущая стадия ПОСЛЕДНЯЯ в массиве
+  if (target.kind === "complete") {
     const completedState: FunnelV2State = {
       stageId:                 prevStageId ?? "",
       enteredAt:               currentState?.enteredAt ?? nowIso,
@@ -202,6 +259,8 @@ export async function advanceToNextStage(
       pendingRejectionStageId: null,
       touchesSent:             currentState?.touchesSent ?? 0,
       dozhimStartedAt:         currentState?.dozhimStartedAt ?? null,
+      holdReason:              null,
+      middlePrequalFromStageId: currentState?.middlePrequalFromStageId ?? null,
     }
     await db.update(candidates)
       .set({
@@ -219,6 +278,8 @@ export async function advanceToNextStage(
     }))
     return
   }
+
+  const nextId = target.stageId
 
   // Шаг 3: находим следующую стадию
   const nextStage = stages.find(s => s.id === nextId)
@@ -239,6 +300,9 @@ export async function advanceToNextStage(
     pendingRejectionStageId: null,
     touchesSent:             0,
     dozhimStartedAt:         null,
+    holdReason:              null,   // движение снимает пометку ручного разбора
+    // Анти-цикл «жёлтая зона → предквалификация» переживает продвижения.
+    middlePrequalFromStageId: currentState?.middlePrequalFromStageId ?? null,
   }
 
   // Синк legacy-stage (В4): маппинг action следующей стадии → legacy stage
@@ -337,6 +401,8 @@ export async function scheduleV2Rejection(
     pendingRejectionText:    rejectText ?? null,
     touchesSent:             prevState?.touchesSent             ?? 0,
     dozhimStartedAt:         prevState?.dozhimStartedAt         ?? null,
+    holdReason:              prevState?.holdReason              ?? null,
+    middlePrequalFromStageId: prevState?.middlePrequalFromStageId ?? null,
   }
 
   await db.update(candidates)

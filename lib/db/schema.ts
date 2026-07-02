@@ -114,6 +114,13 @@ export interface FunnelV2State {
   touchesSent:              number
   /** ISO-8601: когда запустили цепочку дожима на текущей стадии */
   dozhimStartedAt:          string | null
+  /** Пометка «застрял на ручном разборе»: стадия пройдена, но дальше в конфиге
+   *  только ВЫКЛЮЧЕННЫЕ стадии (Воронка 3). null/отсутствует = обычный поток. */
+  holdReason?:              string | null
+  /** Анти-цикл жёлтой зоны: id стадии, с которой кандидата уже отправляли на
+   *  предквалификацию (middleAction='prequalification'). Повторно с той же
+   *  стадии не отправляем — ручной разбор. */
+  middlePrequalFromStageId?: string | null
 }
 
 // ── MessageDefaults — редактируемые дефолтные тексты сообщений ──

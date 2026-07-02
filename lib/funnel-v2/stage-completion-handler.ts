@@ -163,6 +163,8 @@ async function applyStageRule(args: {
     pendingRejectionText:    prevState?.pendingRejectionText     ?? null,
     touchesSent:             prevState?.touchesSent             ?? 0,
     dozhimStartedAt:         prevState?.dozhimStartedAt         ?? null,
+    holdReason:              prevState?.holdReason              ?? null,
+    middlePrequalFromStageId: prevState?.middlePrequalFromStageId ?? null,
   }
 
   await db.update(candidates)

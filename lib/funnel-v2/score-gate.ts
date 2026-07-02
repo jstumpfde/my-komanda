@@ -198,30 +198,57 @@ async function applyFailDecision(
 ): Promise<string> {
   // Жёлтая зона → предквалификация (перевод в prequalification-стадию воронки).
   if (decision.zone === "middle" && decision.middleAction === "prequalification") {
+    // Анти-цикл: с ЭТОЙ стадии кандидата уже отправляли на предквалификацию
+    // (маркер в funnelV2StateJson переживает продвижения) → второй раз не шлём,
+    // ручной разбор.
+    if (candidate.funnelV2StateJson?.middlePrequalFromStageId === stage.id) {
+      return "left_for_manual_prequal_repeat"
+    }
     const stages = vacancy?.funnelV2?.stages ?? []
     const curIdx = stages.findIndex(s => s.id === stage.id)
-    // Первая ВКЛЮЧЁННАЯ prequalification-стадия ПОСЛЕ текущей; иначе — любая
-    // включённая prequalification-стадия конфига (кроме текущей).
+    // ТОЛЬКО ВПЕРЁД от текущей: первая включённая prequalification-стадия ПОСЛЕ
+    // текущей. Назад не ищем (иначе цикл по воронке). Нет — ручной разбор.
     const isPrequal = (s: FunnelV2Stage) => s.action === "prequalification" && s.enabled !== false && s.id !== stage.id
-    const target = stages.slice(Math.max(0, curIdx + 1)).find(isPrequal) ?? stages.find(isPrequal)
+    const target = curIdx === -1 ? undefined : stages.slice(curIdx + 1).find(isPrequal)
     if (target && vacancy) {
       const { advanceToNextStage } = await import("@/lib/funnel-v2/advance-stage")
       await advanceToNextStage(candidate, vacancy, { advanceTo: target.id })
+      // Ставим маркер анти-цикла в СВЕЖЕЕ состояние (advance переписал stateJson).
+      try {
+        const [fresh] = await db
+          .select({ funnelV2StateJson: candidates.funnelV2StateJson })
+          .from(candidates)
+          .where(eq(candidates.id, candidate.id))
+          .limit(1)
+        if (fresh?.funnelV2StateJson) {
+          await db.update(candidates)
+            .set({ funnelV2StateJson: { ...fresh.funnelV2StateJson, middlePrequalFromStageId: stage.id } })
+            .where(eq(candidates.id, candidate.id))
+        }
+      } catch (err) {
+        console.warn("[funnel-v2/score-gate] не удалось поставить анти-цикл маркер:", err instanceof Error ? err.message : err)
+      }
       return `advanced_to_prequalification:${target.id}`
     }
-    // Нет стадии предквалификации → безопасная деградация: ручной разбор.
+    // Нет стадии предквалификации впереди → безопасная деградация: ручной разбор.
     return "left_for_manual_no_prequal_stage"
   }
 
   // Красная зона без авто-отказа → ручной разбор с пометкой (видна в отчёте).
   if (decision.zone === "red" && decision.failAction === "manual") {
     const [cur] = await db
-      .select({ stage: candidates.stage })
+      .select({ stage: candidates.stage, reason: candidates.autoProcessingStoppedReason })
       .from(candidates)
       .where(eq(candidates.id, candidate.id))
       .limit(1)
     if (!cur) return "candidate_not_found"
+    // Guard на терминальные стадии (как в applyFailAction).
     if (cur.stage === "rejected") return "already_rejected"
+    if (cur.stage === "hired") return "already_hired"
+    if (cur.stage === "talent_pool") return "already_in_reserve"
+    if (cur.stage === "preliminary_reject") return "already_preliminary_reject"
+    // Не перезаписываем уже заполненную причину (могла поставить другая система).
+    if ((cur.reason ?? "").trim().length > 0) return "already_marked_reason_kept"
     await db.update(candidates)
       .set({ autoProcessingStoppedReason: `funnel_v2_red_zone:${stage.id}`, updatedAt: new Date() })
       .where(eq(candidates.id, candidate.id))

@@ -1114,6 +1114,30 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                 action:      firstStage.action,
               }))
             }
+          } else if (funnelV2.enabled && funnelV2.stages.length > 0 && !firstStageEnabled) {
+            // ВСЕ стадии воронки выключены: в ЛЕГАСИ-автообработку НЕ проваливаемся
+            // (v2 включён — легаси-путь для новых кандидатов отключён осознанно).
+            // Кандидат остаётся на ручном разборе с автостопом; отклик уходит из
+            // очереди (иначе будет крутиться каждый прогон крона).
+            await db.update(candidates)
+              .set({
+                autoProcessingStopped:       true,
+                autoProcessingStoppedReason: "funnel_v2_no_enabled_stage",
+                autoProcessingStoppedAt:     new Date(),
+                updatedAt:                   new Date(),
+              })
+              .where(eq(candidates.id, candidateId))
+            await db.update(hhResponses)
+              .set({ status: "invited", localCandidateId: candidateId })
+              .where(eq(hhResponses.id, resp.id))
+
+            funnelV2Handled = true
+            results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "funnel_v2_no_enabled_stage" })
+            console.warn("[PQ] funnel-v2: все стадии выключены — кандидат на ручном разборе", JSON.stringify({
+              tag:         "process-queue/funnel-v2-no-enabled-stage",
+              candidateId,
+              vacancyId:   localVac.id,
+            }))
           }
         } catch (v2Err) {
           console.error("[PQ] funnel-v2 entry failed, fallback на legacy:",
