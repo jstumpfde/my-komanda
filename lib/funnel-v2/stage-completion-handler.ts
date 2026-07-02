@@ -181,7 +181,8 @@ async function applyStageRule(args: {
   // autoAdvance/ручной разбор) — поведение действующих вакансий не трогается.
   if (stage.rule.scoreGate?.autoEnabled === true) {
     const gateCandidate = { ...updatedCandidate, ...(args.scores ?? {}) }
-    const gate = await evaluateScoreGate(stage, gateCandidate)
+    // vacancy нужна гейту для трёхзонного middleAction='prequalification'.
+    const gate = await evaluateScoreGate(stage, gateCandidate, vacancy)
     if (gate !== null) {
       if (gate.pass) {
         // Прошёл порог по баллу → двигаем дальше (авто-приглашение).
@@ -210,9 +211,11 @@ async function applyStageRule(args: {
 
   // Шаг 2: autoReject — если не пройден любой из заданных порогов
   if (rule.autoReject && (aiFail || objFail)) {
-    // Рендерим текст отказа ({{имя}} и пр.)
+    // Рендерим текст отказа ({{имя}} и пр.).
+    // Приоритет: stage.rejectText (Воронка 3) → rule.rejectText → пусто
+    // (дальше действующий стандартный текст вакансии в cron pending-rejections).
     const { firstName } = await getCandidateFirstName(candidate.id)
-    const rawText = rule.rejectText ?? ""
+    const rawText = (stage.rejectText ?? "").trim().length > 0 ? stage.rejectText! : (rule.rejectText ?? "")
     const renderedText = rawText.trim().length > 0
       ? renderTemplate(rawText, {
           name:    firstName,

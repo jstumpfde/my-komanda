@@ -21,6 +21,19 @@ import type { FunnelV2State } from "@/lib/db/schema"
 // Чистая логика (без БД, без IO — легко тестируется)
 // ────────────────────────────────────────────────────────────────────────────────
 
+/** Стадия включена? enabled===false = выключена, иначе включена (компат). */
+function stageEnabled(s: FunnelV2Stage): boolean {
+  return s.enabled !== false
+}
+
+/** Первая ВКЛЮЧЁННАЯ стадия начиная с индекса from (включительно) или null. */
+function firstEnabledFrom(stages: FunnelV2Stage[], from: number): string | null {
+  for (let i = Math.max(0, from); i < stages.length; i++) {
+    if (stageEnabled(stages[i])) return stages[i].id
+  }
+  return null
+}
+
 /**
  * Вычислить id следующей стадии.
  *
@@ -28,6 +41,10 @@ import type { FunnelV2State } from "@/lib/db/schema"
  * 1. Если `advanceTo` задан и это не строка `'next'` — вернуть его (ветвление).
  * 2. Иначе найти стадию с `id === currentId` и вернуть id следующей по порядку.
  * 3. Если currentId — последняя стадия (или не найдена) — вернуть null.
+ *
+ * Выключенные стадии (enabled===false) пропускаются: кандидат проскакивает на
+ * следующую включённую (в т.ч. если цель явного ветвления выключена).
+ * Отсутствие поля enabled = стадия включена (прежнее поведение).
  *
  * @param stages    Массив стадий воронки (из FunnelV2Config.stages).
  * @param currentId id текущей стадии.
@@ -42,15 +59,20 @@ export function nextStageId(
   // Правило 1: явное ветвление (не 'next')
   if (advanceTo && advanceTo !== "next") {
     // Убеждаемся, что целевая стадия существует; если нет — деградируем к порядку
-    const target = stages.find((s) => s.id === advanceTo)
-    if (target) return target.id
+    const targetIdx = stages.findIndex((s) => s.id === advanceTo)
+    // Цель выключена → идём к следующей включённой после неё.
+    if (targetIdx !== -1) return firstEnabledFrom(stages, targetIdx)
   }
 
-  // Правило 2-3: следующая по порядку
+  // Правило 2-3: следующая ВКЛЮЧЁННАЯ по порядку
   const currentIdx = stages.findIndex((s) => s.id === currentId)
   if (currentIdx === -1) return null          // текущая стадия не найдена
-  const next = stages[currentIdx + 1]
-  return next ? next.id : null               // null = конец воронки
+  return firstEnabledFrom(stages, currentIdx + 1) // null = конец воронки
+}
+
+/** id первой включённой стадии воронки (вход кандидата) или null. */
+export function firstEnabledStageId(stages: FunnelV2Stage[]): string | null {
+  return firstEnabledFrom(stages, 0)
 }
 
 // ────────────────────────────────────────────────────────────────────────────────
@@ -157,10 +179,10 @@ export async function advanceToNextStage(
   const targetAdvanceTo = options.advanceTo ?? currentStage?.rule.advanceTo ?? "next"
   const prevStageId = currentState?.stageId ?? null
 
-  // Вычисляем id следующей стадии
+  // Вычисляем id следующей стадии (выключенные пропускаются)
   const nextId = prevStageId
     ? nextStageId(stages, prevStageId, targetAdvanceTo)
-    : (stages[0]?.id ?? null)
+    : firstEnabledStageId(stages)
 
   const nowIso = new Date().toISOString()
 

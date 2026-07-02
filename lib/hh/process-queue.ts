@@ -1045,8 +1045,11 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
           const descJson = localVac.descriptionJson as Record<string, unknown> | null
           const { normalizeFunnelV2 } = await import("@/lib/funnel-v2/types")
           const funnelV2 = normalizeFunnelV2(descJson?.funnelV2)
-          if (funnelV2.enabled && funnelV2.stages.length > 0) {
-            const firstStage = funnelV2.stages[0]
+          // Вход кандидата — ПЕРВАЯ ВКЛЮЧЁННАЯ стадия (enabled===false пропускаем;
+          // отсутствие поля = включена, прежнее поведение).
+          const firstStageEnabled = funnelV2.stages.find(s => s.enabled !== false)
+          if (funnelV2.enabled && firstStageEnabled) {
+            const firstStage = firstStageEnabled
             const nowIso = new Date().toISOString()
             // Читаем token кандидата для CandidateForExecutor
             const [candRow] = await db

@@ -7,7 +7,7 @@
 
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { nextStageId } from "./advance-stage"
+import { nextStageId, firstEnabledStageId } from "./advance-stage"
 import type { FunnelV2Stage } from "./types"
 
 // ── Фикстура: три стадии по порядку ──────────────────────────────────────────
@@ -97,4 +97,43 @@ test("единственная стадия → null (она же последн
     dozhim: "off",
   }]
   assert.equal(nextStageId(stages, "st-only"), null)
+})
+
+// ── Воронка 3: выключенные стадии (enabled===false) пропускаются ─────────────
+
+function makeStagesWithDisabled(): FunnelV2Stage[] {
+  const stages = makeStages()
+  stages[1] = { ...stages[1], enabled: false } // st-demo выключена
+  return stages
+}
+
+test("enabled=false: следующая по порядку пропускает выключенную", () => {
+  const stages = makeStagesWithDisabled()
+  // st-msg → (st-demo выключена, скачем через неё) → st-hired
+  assert.equal(nextStageId(stages, "st-msg"), "st-hired")
+})
+
+test("enabled=false: advanceTo указывает на выключенную → следующая включённая после неё", () => {
+  const stages = makeStagesWithDisabled()
+  assert.equal(nextStageId(stages, "st-msg", "st-demo"), "st-hired")
+})
+
+test("enabled=false: все последующие выключены → null (конец воронки)", () => {
+  const stages = makeStages().map((s, i) => i === 0 ? s : { ...s, enabled: false })
+  assert.equal(nextStageId(stages, "st-msg"), null)
+})
+
+test("enabled не задан / true → прежнее поведение (ничего не пропускаем)", () => {
+  const stages = makeStages()
+  stages[1] = { ...stages[1], enabled: true }
+  assert.equal(nextStageId(stages, "st-msg"), "st-demo")
+})
+
+test("firstEnabledStageId: первая включённая; пустой список → null", () => {
+  const stages = makeStagesWithDisabled()
+  assert.equal(firstEnabledStageId(stages), "st-msg")
+  const firstOff = stages.map((s, i) => i === 0 ? { ...s, enabled: false } : s)
+  assert.equal(firstEnabledStageId(firstOff), "st-hired")
+  assert.equal(firstEnabledStageId([]), null)
+  assert.equal(firstEnabledStageId(stages.map(s => ({ ...s, enabled: false }))), null)
 })
