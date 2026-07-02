@@ -507,6 +507,18 @@ export async function executeStageEntry(
     // ── Финал — нанят ──────────────────────────────────────────────────────
     // Фаза 3: синкаем legacy stage + funnelV2State.completedAt в БД.
     case "hired": {
+      // Прощание стадии (Воронка 3): шлём ТОЛЬКО если HR задал текст в
+      // редакторе (видимое поле). Пусто = как раньше, ничего не отправляем.
+      const farewell = (stage.farewellText ?? "").trim()
+      if (farewell) {
+        const farewellText = renderTemplate(farewell, { name: firstName, vacancy: vacancy.title ?? "" })
+        const sentFarewell = await sendHhMessageToCandidate(candidate.id, companyId, farewellText, stage.hhStatus)
+        if (!sentFarewell) {
+          console.warn("[funnel-v2/executor] прощание не отправлено", {
+            candidateId: candidate.id, stageId: stage.id,
+          })
+        }
+      }
       const now = new Date()
       // Помечаем кандидата как нанятого в legacy stage и в v2-состоянии
       const prevState = candidate.funnelV2StateJson
