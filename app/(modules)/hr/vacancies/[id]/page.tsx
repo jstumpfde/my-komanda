@@ -2999,31 +2999,8 @@ export default function VacancyPage() {
                         onProcessed={() => { refetchCandidates(); }}
                       />
                     )}
-                    {/* Воронка-v2 (Фаза 1г): быстрый чип «На разбор» — застрявшие
-                        после 1-й части (есть балл ответов демо, не приглашены на
-                        2-ю, не в отказе). Ручная проверка ДО любого авто-отказа:
-                        никакого автоматического действия, только видимость. Когда
-                        чип активен — рядом видно N (кол-во в выборке). */}
-                    <Button
-                      variant={filters.reviewQueue ? "default" : "outline"}
-                      size="sm"
-                      className="h-8 gap-1.5 text-xs"
-                      onClick={() => {
-                        setFilters((f) => ({ ...f, reviewQueue: !f.reviewQueue }))
-                        if (useListPaginated) paginated.setPage(1)
-                      }}
-                      title="Прошли 1-ю часть, но застряли: не приглашены на 2-ю и ещё не в отказе — проверить вручную"
-                    >
-                      <ClipboardList className="w-3.5 h-3.5" />
-                      На разбор
-                      {filters.reviewQueue && (
-                        <Badge className="ml-0.5 h-5 min-w-5 rounded-full px-1 flex items-center justify-center text-xs bg-primary-foreground text-primary">
-                          {useListPaginated
-                            ? paginated.total
-                            : columns.reduce((n, c) => n + c.candidates.length, 0)}
-                        </Badge>
-                      )}
-                    </Button>
+                    {/* Воронка-v2 (Фаза 1г): пресет «На разбор» переехал в дропдаун
+                        «Ещё» (по просьбе Юрия — разгрузить тулбар). */}
                     <CandidateFilters
                       filters={filters}
                       onFiltersChange={(f) => { setFilters(f); if (useListPaginated) paginated.setPage(1) }}
@@ -3046,6 +3023,19 @@ export default function VacancyPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-52">
+                        {/* Воронка-v2 (Фаза 1г): пресет «На разбор» — застрявшие
+                            после 1-й части (есть балл ответов демо, не приглашены
+                            на 2-ю, не в отказе). onSelect+preventDefault — чтобы
+                            переключение фильтра не закрывало меню сразу. */}
+                        <DropdownMenuItem
+                          onSelect={(e) => { e.preventDefault(); setFilters((f) => ({ ...f, reviewQueue: !f.reviewQueue })); if (useListPaginated) paginated.setPage(1) }}
+                          title="Прошли 1-ю часть, но застряли: не приглашены на 2-ю и ещё не в отказе — проверить вручную"
+                        >
+                          <ClipboardList className="w-3.5 h-3.5 mr-2" />
+                          На разбор
+                          {filters.reviewQueue && <Check className="w-3.5 h-3.5 ml-auto" />}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
                         <DropdownMenuLabel className="flex items-center gap-2 py-1 text-xs font-medium text-muted-foreground">
                           {rescoring ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                           {rescoring ? "Переоценка…" : "Переоценить выделенных"}

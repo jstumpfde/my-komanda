@@ -344,23 +344,8 @@ export function HhAutoProcess({
           </>
         ) : (
           <>
-            {/* S2: «Синхронизировать» вынесена из ⚙️-поповера на видное место —
-                только синк (подтянуть новые отклики), без авто-разбора. */}
-            {onSync && (
-              <Button
-                onClick={() => { onSync() }}
-                disabled={syncing}
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs gap-1.5"
-                title={lastSyncLabel
-                  ? `Подтянуть отклики с hh.ru (без отправки сообщений кандидатам) · ${lastSyncLabel}`
-                  : "Подтянуть отклики с hh.ru (без отправки сообщений кандидатам)"}
-              >
-                {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                Синхр.
-              </Button>
-            )}
+            {/* «Синхр.» перенесена в поповер разбора (по просьбе Юрия) — на видном
+                месте только «Разобрать N» + ⚙. */}
             <Button onClick={run} size="sm" className="h-8 text-xs gap-1.5">
               <Play className="w-3.5 h-3.5" />
               {labelButton}
@@ -378,6 +363,23 @@ export function HhAutoProcess({
               </PopoverTrigger>
               <PopoverContent align="end" className="w-80 p-4">
                 <div className="text-sm font-medium mb-3">Настройки разбора hh-откликов</div>
+                {/* «Синхронизировать» (только синк, без отправки сообщений) —
+                    здесь, внутри разбора. */}
+                {onSync && (
+                  <Button
+                    onClick={() => { onSync() }}
+                    disabled={syncing}
+                    variant="outline"
+                    size="sm"
+                    className="w-full h-8 text-xs gap-1.5 mb-3"
+                    title={lastSyncLabel
+                      ? `Подтянуть отклики с hh.ru (без отправки сообщений кандидатам) · ${lastSyncLabel}`
+                      : "Подтянуть отклики с hh.ru (без отправки сообщений кандидатам)"}
+                  >
+                    {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                    Синхронизировать{lastSyncLabel ? ` · ${lastSyncLabel}` : ""}
+                  </Button>
+                )}
                 {settingsContent}
               </PopoverContent>
             </Popover>
