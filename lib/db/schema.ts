@@ -2380,6 +2380,12 @@ export const calendarEvents = pgTable("calendar_events", {
   // #14: адрес офиса (для Офис) / ссылка на видео-звонок (для Онлайн)
   location:    text("location"),
   meetingUrl:  text("meeting_url"),
+  // Воронка v2 Фаза 2: фиксация исхода собеседования HR-ом (всё nullable).
+  interviewOutcome:   text("interview_outcome"),    // held|no_show|rescheduled
+  interviewRating:    integer("interview_rating"),  // впечатление 1-5
+  interviewDecision:  text("interview_decision"),   // advance|offer|reject|reserve
+  interviewNotes:     text("interview_notes"),
+  interviewOutcomeAt: timestamp("interview_outcome_at", { withTimezone: true }),
   scope:       text("scope").notNull().default("company"), // company|hr|personal
   // Внешние участники (не из платформы) — имена/email вручную, free-text.
   externalParticipants: jsonb("external_participants").$type<string[]>().default([]),
