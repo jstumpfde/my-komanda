@@ -129,6 +129,16 @@ export async function GET(
               submittedAt: null,
             }).onConflictDoNothing()
             void switchToTestBranchOpened(candidate.id).catch(() => {})
+            // Воронка v2: переключение ветки дожима А («не открыл») → Б
+            // («открыл, не завершил») для branch=funnelv2:<stageId> — по
+            // образцу markDemoOpened для /demo. Внутри сам проверяет, что
+            // кандидат на v2; fire-and-forget, кандидата не блокируем.
+            void import("@/lib/funnel-v2/runtime-executor")
+              .then(m => m.switchV2BranchOpened(candidate.id))
+              .catch((err) => {
+                console.error("[public/test] switchV2BranchOpened failed:",
+                  err instanceof Error ? err.message : err)
+              })
           }
         }
 

@@ -109,14 +109,29 @@ export type ScoreGateType = "resume" | "anketa" | "block2" | "test" | "portrait"
  *  набрал балл, но не отказываем, а откладываем в резерв). */
 export type ScoreGateFailAction = "preliminary_reject" | "manual" | "reject" | "reserve"
 
+/** Что делать с «жёлтой» (средней) зоной трёхзонного гейта (Воронка 3):
+ *  manual_review — ручной разбор HR (дефолт), prequalification — отправить
+ *  кандидата на стадию предквалификации (доп. AI-вопросы). */
+export type ScoreGateMiddleAction = "manual_review" | "prequalification"
+
 /** Правило прохода стадии по баллу. autoEnabled=false по умолчанию —
  *  без явного включения ничего НЕ гейтится автоматически (обратная
- *  совместимость: действующие вакансии не меняют поведение). */
+ *  совместимость: действующие вакансии не меняют поведение).
+ *
+ *  Три зоны (Воронка 3, аддитивно): если задан thresholdLower —
+ *    score ≥ threshold        → зелёная зона, дальше;
+ *    score <  thresholdLower  → красная зона: отказ, если autoRejectRed===true,
+ *                               иначе ручной разбор с пометкой;
+ *    между ними               → жёлтая зона: middleAction (дефолт manual_review).
+ *  thresholdLower не задан → прежнее двухзонное поведение (единственный threshold). */
 export interface ScoreGate {
   scoreType:  ScoreGateType
-  threshold:  number           // 0–100, дефолт 50
+  threshold:  number           // 0–100, дефолт 50 (верхний порог в трёхзонном режиме)
   failAction: ScoreGateFailAction
   autoEnabled: boolean         // дефолт false — авто-гейт выключен
+  thresholdLower?: number      // нижний порог (0–100, ≤ threshold); задан → три зоны
+  middleAction?: ScoreGateMiddleAction // жёлтая зона; отсутствует = manual_review
+  autoRejectRed?: boolean      // дефолт false — красная зона НЕ авто-режется
 }
 
 export const DEFAULT_SCORE_GATE_THRESHOLD = 50
@@ -136,6 +151,14 @@ export interface FunnelV2Stage {
   color?: StageColor    // цвет бейджа стадии (реестр стадий воронки v2)
   negative?: boolean    // негативная/отказная стадия (напр. предв. отказ)
   terminal?: boolean    // терминальная стадия (из неё нет автоперехода дальше)
+  /** Стадия включена? undefined/true = включена; false = выключена — рантайм
+   *  пропускает её (кандидат проскакивает на следующую включённую). */
+  enabled?: boolean
+  /** Текст отказа стадии (Воронка 3). Приоритетнее rule.rejectText; пусто →
+   *  действующий источник (rule.rejectText → стандартный текст вакансии). */
+  rejectText?: string
+  /** Текст прощания стадии (Воронка 3). Хранится в конфиге; пусто → ничего. */
+  farewellText?: string
   // параметры действия «Интервью»
   interviewMode?: InterviewMode
   scheduling?: SchedulingMode[]   // оба варианта по умолчанию
@@ -191,10 +214,24 @@ export function emptyFunnelV2(): FunnelV2Config {
   return { enabled: false, stages: [] }
 }
 
+/** Стадия включена? Отсутствие поля = включена (обратная совместимость). */
+export function isStageEnabled(stage: Pick<FunnelV2Stage, "enabled">): boolean {
+  return stage.enabled !== false
+}
+
 /** Эффективный список сообщений стадии (обратная совместимость с messagePresetId).
  *  Правило чтения: `stage.messages ?? (stage.messagePresetId ? [stage.messagePresetId] : [])`. */
 export function stageMessages(stage: Pick<FunnelV2Stage, "messages" | "messagePresetId">): string[] {
   return stage.messages ?? (stage.messagePresetId ? [stage.messagePresetId] : [])
+}
+
+/** Эффективный ТЕКСТ «приглашения» стадии для отправки кандидату (рантайм).
+ *  Источник — stageMessages (messages из редактора, fallback на устаревший
+ *  messagePresetId). Несколько сообщений склеиваются через пустую строку:
+ *  механики досыла отдельными сообщениями в runtime-executor нет — одна
+ *  отправка на вход в стадию. Пусто → "" (исполнитель берёт свой дефолт). */
+export function effectiveStageMessageText(stage: Pick<FunnelV2Stage, "messages" | "messagePresetId">): string {
+  return stageMessages(stage).map(m => (m ?? "").trim()).filter(Boolean).join("\n\n")
 }
 
 /** Дефолтная стадия для нового действия (разрешающее правило, дожим стандарт). */
@@ -236,7 +273,17 @@ export function normalizeScoreGate(raw: unknown): ScoreGate | undefined {
   const failAction: ScoreGateFailAction = SCORE_GATE_FAIL_ACTIONS.includes(g.failAction as ScoreGateFailAction)
     ? (g.failAction as ScoreGateFailAction)
     : "preliminary_reject"
-  return { scoreType, threshold, failAction, autoEnabled: g.autoEnabled === true }
+  const out: ScoreGate = { scoreType, threshold, failAction, autoEnabled: g.autoEnabled === true }
+  // Три зоны (аддитивно): поля добавляем ТОЛЬКО когда заданы валидно — старые
+  // конфиги нормализуются байт-в-байт как раньше (двухзонное поведение).
+  if (typeof g.thresholdLower === "number" && Number.isFinite(g.thresholdLower)) {
+    out.thresholdLower = Math.max(0, Math.min(threshold, g.thresholdLower))
+  }
+  if (g.middleAction === "manual_review" || g.middleAction === "prequalification") {
+    out.middleAction = g.middleAction
+  }
+  if (g.autoRejectRed === true) out.autoRejectRed = true
+  return out
 }
 
 const STAGE_COLORS: StageColor[] = [
@@ -258,6 +305,10 @@ export function normalizeFunnelV2(raw: unknown): FunnelV2Config {
         color: STAGE_COLORS.includes(st.color as StageColor) ? st.color : undefined,
         negative: st.negative === true ? true : undefined,
         terminal: st.terminal === true ? true : undefined,
+        // Вкл/выкл стадии: только явный false выключает; иначе undefined (=вкл).
+        enabled: st.enabled === false ? false : undefined,
+        rejectText: typeof st.rejectText === "string" ? st.rejectText : undefined,
+        farewellText: typeof st.farewellText === "string" ? st.farewellText : undefined,
         messages: Array.isArray(st.messages) ? st.messages.filter((m): m is string => typeof m === "string") : undefined,
         avitoStatus: typeof st.avitoStatus === "string" ? st.avitoStatus : undefined,
         rule: {

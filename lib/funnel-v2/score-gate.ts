@@ -30,8 +30,8 @@
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates } from "@/lib/db/schema"
-import type { ScoreGate, ScoreGateType, FunnelV2Stage } from "@/lib/funnel-v2/types"
-import type { CandidateForExecutor } from "@/lib/funnel-v2/runtime-executor"
+import type { ScoreGate, ScoreGateType, ScoreGateMiddleAction, FunnelV2Stage } from "@/lib/funnel-v2/types"
+import type { CandidateForExecutor, VacancyForExecutor } from "@/lib/funnel-v2/runtime-executor"
 import { scheduleV2Rejection } from "@/lib/funnel-v2/advance-stage"
 
 /** Минимальный срез баллов кандидата, нужный гейту. */
@@ -44,10 +44,15 @@ export interface CandidateScores {
   demoBlockScores?: Record<string, { title?: string; score?: number | null }> | null
 }
 
-/** Результат оценки гейта. null = гейт не применяется (ручной разбор / ждём балл). */
+/** Зона трёхзонного гейта (только при заданном thresholdLower). */
+export type ScoreGateZone = "red" | "middle"
+
+/** Результат оценки гейта. null = гейт не применяется (ручной разбор / ждём балл).
+ *  zone/middleAction заполняются ТОЛЬКО в трёхзонном режиме (thresholdLower задан);
+ *  в двухзонном режиме форма решения прежняя (обратная совместимость). */
 export type ScoreGateDecision =
   | { pass: true }
-  | { pass: false; failAction: ScoreGate["failAction"] }
+  | { pass: false; failAction: ScoreGate["failAction"]; zone?: ScoreGateZone; middleAction?: ScoreGateMiddleAction }
   | null
 
 /**
@@ -98,7 +103,25 @@ export function decideScoreGate(stage: FunnelV2Stage, cand: CandidateScores): Sc
   if (score === null) return null
 
   if (score >= gate.threshold) return { pass: true }
-  return { pass: false, failAction: gate.failAction }
+
+  // ── Двухзонный режим (thresholdLower не задан) — прежнее поведение ────────
+  const lowerRaw = gate.thresholdLower
+  if (typeof lowerRaw !== "number" || !isFinite(lowerRaw)) {
+    return { pass: false, failAction: gate.failAction }
+  }
+
+  // ── Трёхзонный режим (Воронка 3) ──────────────────────────────────────────
+  // score < thresholdLower → красная зона: отказ при autoRejectRed, иначе
+  // ручной разбор с пометкой. Между порогами → жёлтая зона: middleAction
+  // (дефолт manual_review). thresholdLower > threshold защитно клампится.
+  const lower = Math.min(lowerRaw, gate.threshold)
+  if (score < lower) {
+    return gate.autoRejectRed === true
+      ? { pass: false, failAction: "reject", zone: "red" }
+      : { pass: false, failAction: "manual", zone: "red" }
+  }
+  const middleAction: ScoreGateMiddleAction = gate.middleAction ?? "manual_review"
+  return { pass: false, failAction: "manual", zone: "middle", middleAction }
 }
 
 /**
@@ -115,6 +138,9 @@ export function decideScoreGate(stage: FunnelV2Stage, cand: CandidateScores): Sc
 export async function evaluateScoreGate(
   stage: FunnelV2Stage,
   candidate: CandidateForExecutor & CandidateScores,
+  /** Вакансия (опционально): нужна ТОЛЬКО для middleAction='prequalification'
+   *  (перевод в стадию предквалификации). Без неё жёлтая зона = ручной разбор. */
+  vacancy?: VacancyForExecutor,
 ): Promise<
   | null
   | { pass: true }
@@ -134,7 +160,7 @@ export async function evaluateScoreGate(
   }
 
   const gate = stage.rule.scoreGate!  // decideScoreGate вернул non-null → gate есть
-  const applied = await applyFailAction(stage, candidate, gate)
+  const applied = await applyFailDecision(stage, candidate, gate, decision, vacancy)
 
   console.log("[funnel-v2/score-gate]", JSON.stringify({
     tag:         "funnel-v2/score-gate/fail",
@@ -142,21 +168,106 @@ export async function evaluateScoreGate(
     stageId:     stage.id,
     scoreType:   gate.scoreType,
     threshold:   gate.threshold,
-    failAction:  gate.failAction,
+    thresholdLower: gate.thresholdLower,
+    zone:        decision.zone,
+    middleAction: decision.middleAction,
+    failAction:  decision.failAction,
     applied,
   }))
 
-  return { pass: false, failAction: gate.failAction, applied }
+  return { pass: false, failAction: decision.failAction, applied }
+}
+
+/**
+ * Применить решение «не прошёл» с учётом зон трёхзонного гейта. Идемпотентно.
+ *
+ * Трёхзонные ветки (только при decision.zone):
+ *   - жёлтая + middleAction='prequalification' → перевод в стадию
+ *     предквалификации (первая включённая prequalification-стадия конфига);
+ *     нет такой стадии / нет vacancy → ручной разбор.
+ *   - красная без авто-отказа → ручной разбор С ПОМЕТКОЙ
+ *     (candidates.auto_processing_stopped_reason = funnel_v2_red_zone:<stageId>).
+ * Остальное — через applyFailAction по decision.failAction (как раньше).
+ */
+async function applyFailDecision(
+  stage: FunnelV2Stage,
+  candidate: CandidateForExecutor,
+  gate: ScoreGate,
+  decision: { pass: false; failAction: ScoreGate["failAction"]; zone?: ScoreGateZone; middleAction?: ScoreGateMiddleAction },
+  vacancy?: VacancyForExecutor,
+): Promise<string> {
+  // Жёлтая зона → предквалификация (перевод в prequalification-стадию воронки).
+  if (decision.zone === "middle" && decision.middleAction === "prequalification") {
+    // Анти-цикл: с ЭТОЙ стадии кандидата уже отправляли на предквалификацию
+    // (маркер в funnelV2StateJson переживает продвижения) → второй раз не шлём,
+    // ручной разбор.
+    if (candidate.funnelV2StateJson?.middlePrequalFromStageId === stage.id) {
+      return "left_for_manual_prequal_repeat"
+    }
+    const stages = vacancy?.funnelV2?.stages ?? []
+    const curIdx = stages.findIndex(s => s.id === stage.id)
+    // ТОЛЬКО ВПЕРЁД от текущей: первая включённая prequalification-стадия ПОСЛЕ
+    // текущей. Назад не ищем (иначе цикл по воронке). Нет — ручной разбор.
+    const isPrequal = (s: FunnelV2Stage) => s.action === "prequalification" && s.enabled !== false && s.id !== stage.id
+    const target = curIdx === -1 ? undefined : stages.slice(curIdx + 1).find(isPrequal)
+    if (target && vacancy) {
+      const { advanceToNextStage } = await import("@/lib/funnel-v2/advance-stage")
+      await advanceToNextStage(candidate, vacancy, { advanceTo: target.id })
+      // Ставим маркер анти-цикла в СВЕЖЕЕ состояние (advance переписал stateJson).
+      try {
+        const [fresh] = await db
+          .select({ funnelV2StateJson: candidates.funnelV2StateJson })
+          .from(candidates)
+          .where(eq(candidates.id, candidate.id))
+          .limit(1)
+        if (fresh?.funnelV2StateJson) {
+          await db.update(candidates)
+            .set({ funnelV2StateJson: { ...fresh.funnelV2StateJson, middlePrequalFromStageId: stage.id } })
+            .where(eq(candidates.id, candidate.id))
+        }
+      } catch (err) {
+        console.warn("[funnel-v2/score-gate] не удалось поставить анти-цикл маркер:", err instanceof Error ? err.message : err)
+      }
+      return `advanced_to_prequalification:${target.id}`
+    }
+    // Нет стадии предквалификации впереди → безопасная деградация: ручной разбор.
+    return "left_for_manual_no_prequal_stage"
+  }
+
+  // Красная зона без авто-отказа → ручной разбор с пометкой (видна в отчёте).
+  if (decision.zone === "red" && decision.failAction === "manual") {
+    const [cur] = await db
+      .select({ stage: candidates.stage, reason: candidates.autoProcessingStoppedReason })
+      .from(candidates)
+      .where(eq(candidates.id, candidate.id))
+      .limit(1)
+    if (!cur) return "candidate_not_found"
+    // Guard на терминальные стадии (как в applyFailAction).
+    if (cur.stage === "rejected") return "already_rejected"
+    if (cur.stage === "hired") return "already_hired"
+    if (cur.stage === "talent_pool") return "already_in_reserve"
+    if (cur.stage === "preliminary_reject") return "already_preliminary_reject"
+    // Не перезаписываем уже заполненную причину (могла поставить другая система).
+    if ((cur.reason ?? "").trim().length > 0) return "already_marked_reason_kept"
+    await db.update(candidates)
+      .set({ autoProcessingStoppedReason: `funnel_v2_red_zone:${stage.id}`, updatedAt: new Date() })
+      .where(eq(candidates.id, candidate.id))
+    return "marked_red_zone_manual"
+  }
+
+  return applyFailAction(stage, candidate, { ...gate, failAction: decision.failAction }, vacancy)
 }
 
 /**
  * Применить действие для не прошедшего порог кандидата. Идемпотентно.
+ * @param vacancy опционально — для рендера токенов rejectText ({{vacancy}}/{{company}}).
  * @returns строка-диагностика: что реально сделали.
  */
 async function applyFailAction(
   stage: FunnelV2Stage,
   candidate: CandidateForExecutor,
   gate: ScoreGate,
+  vacancy?: VacancyForExecutor,
 ): Promise<string> {
   switch (gate.failAction) {
     // ── Предварительный отказ ──────────────────────────────────────────────
@@ -180,8 +291,32 @@ async function applyFailAction(
     // ── Обычный отложенный отказ ───────────────────────────────────────────
     // Переиспользуем scheduleV2Rejection (идемпотентен внутри: пропускает
     // уже rejected / с существующим pending-отказом).
+    // Текст: stage.rejectText (Воронка 3) → rule.rejectText → undefined
+    // (дальше действующий стандартный текст вакансии, cron pending-rejections).
+    // Токены РЕНДЕРИМ здесь (как stage-completion-handler): pending-rejections
+    // шлёт сохранённый pendingRejectionText как есть — без рендера кандидату
+    // ушёл бы литерал {{name}}/{{company}}.
     case "reject": {
-      const rejectText = (stage.rule.rejectText ?? "").trim() || undefined
+      const raw = (stage.rejectText ?? "").trim() || (stage.rule.rejectText ?? "").trim()
+      let rejectText: string | undefined
+      if (raw) {
+        const { getCandidateFirstName } = await import("@/lib/messaging/candidate-name")
+        const { renderTemplate } = await import("@/lib/template-renderer")
+        const { getAppBaseUrl } = await import("@/lib/funnel-v2/base-url")
+        const { getCompanyName } = await import("@/lib/funnel-v2/runtime-executor")
+        const { rejectMessageVars } = await import("@/lib/funnel-v2/reject-vars")
+        const { firstName } = await getCandidateFirstName(candidate.id)
+        const companyName = vacancy?.companyId ? await getCompanyName(vacancy.companyId) : ""
+        // Единый набор переменных отказа (reject-vars) — тот же, что на
+        // легаси-пути stage-completion-handler и в кнопках редактора.
+        rejectText = renderTemplate(raw, rejectMessageVars({
+          firstName,
+          vacancyTitle: vacancy?.title ?? "",
+          companyName,
+          token:        candidate.token,
+          baseUrl:      getAppBaseUrl(),
+        }))
+      }
       await scheduleV2Rejection(candidate, stage.id, stage.rule.rejectDelayMinutes, rejectText)
       return "scheduled_rejection"
     }

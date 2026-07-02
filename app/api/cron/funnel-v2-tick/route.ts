@@ -35,7 +35,7 @@ import { candidates, vacancies, cronRuns } from "@/lib/db/schema"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { normalizeFunnelV2 } from "@/lib/funnel-v2/types"
-import { advanceToNextStage } from "@/lib/funnel-v2/advance-stage"
+import { advanceToNextStage, resolveAdvanceTarget } from "@/lib/funnel-v2/advance-stage"
 import type { CandidateForExecutor, VacancyForExecutor } from "@/lib/funnel-v2/runtime-executor"
 import type { FunnelV2State } from "@/lib/db/schema"
 
@@ -105,16 +105,24 @@ export async function POST(req: NextRequest) {
       return state && !state.completedAt
     })
 
-    if (active.length === 0) {
-      await finishCronRun(run.id, "ok", { checked: 0, advanced: 0, errors: 0 })
+    // Возобновление hold-кандидатов (гвард №4 п.6б): стадия пройдена, но
+    // двигаться было некуда (выключенный хвост/самопереход). Если стадию
+    // включили обратно — resolveAdvanceTarget вернёт advance, продвигаем.
+    const held = rows.filter(r => {
+      const state = r.funnelV2StateJson as FunnelV2State | null
+      return !!state?.holdReason
+    })
+
+    if (active.length === 0 && held.length === 0) {
+      await finishCronRun(run.id, "ok", { checked: 0, advanced: 0, resumed: 0, errors: 0 })
       return NextResponse.json({
-        ok: true, checked: 0, advanced: 0, errors: 0,
+        ok: true, checked: 0, advanced: 0, resumed: 0, errors: 0,
         durationMs: Date.now() - startedAt,
       })
     }
 
     // Загружаем вакансии одним запросом (дедупликация по vacancyId)
-    const vacancyIds = [...new Set(active.map(r => r.vacancyId))]
+    const vacancyIds = [...new Set([...active, ...held].map(r => r.vacancyId))]
     const { inArray } = await import("drizzle-orm")
     const vacRows = await db
       .select({
@@ -134,6 +142,73 @@ export async function POST(req: NextRequest) {
       .where(inArray(vacancies.id, vacancyIds))
 
     const vacMap = new Map(vacRows.map(v => [v.id, v]))
+
+    // ── Возобновление hold-кандидатов ────────────────────────────────────────
+    let resumed = 0
+    for (const row of held) {
+      const state = row.funnelV2StateJson as FunnelV2State
+      const vac = vacMap.get(row.vacancyId)
+      if (!vac || !vac.funnelV2RuntimeEnabled) {
+        details.push({ candidateId: row.id, action: "hold_skip_no_vac_or_flag" })
+        continue
+      }
+      try {
+        const descJson = vac.descriptionJson as Record<string, unknown> | null
+        const funnelV2 = normalizeFunnelV2(descJson?.funnelV2)
+        const currentStage = funnelV2.stages.find(s => s.id === state.stageId)
+        const target = resolveAdvanceTarget(funnelV2.stages, state.stageId, currentStage?.rule.advanceTo)
+        // Возобновляем ТОЛЬКО при advance (стадию впереди включили обратно).
+        // complete из resume-пути не делаем — авто-hired без явного прохода
+        // последней стадии был бы сюрпризом; остаётся HR-у.
+        if (target.kind !== "advance") {
+          details.push({ candidateId: row.id, action: `hold_still:${target.kind === "hold" ? target.reason : target.kind}` })
+          continue
+        }
+        const candidateForV2: CandidateForExecutor = {
+          id:                row.id,
+          token:             row.token ?? "",
+          name:              row.name,
+          email:             row.email,
+          phone:             row.phone,
+          vacancyId:         row.vacancyId,
+          funnelV2StateJson: state,
+        }
+        const vacancyForV2: VacancyForExecutor = {
+          id:                         vac.id,
+          title:                      vac.title,
+          companyId:                  vac.companyId,
+          funnelV2,
+          funnelV2RuntimeEnabled:     true,
+          scheduleEnabled:            vac.scheduleEnabled,
+          scheduleStart:              vac.scheduleStart,
+          scheduleEnd:                vac.scheduleEnd,
+          scheduleTimezone:           vac.scheduleTimezone,
+          scheduleWorkingDays:        vac.scheduleWorkingDays,
+          scheduleExcludedHolidayIds: vac.scheduleExcludedHolidayIds,
+        }
+        await advanceToNextStage(candidateForV2, vacancyForV2)  // новый state: holdReason=null
+        // Чистим СВОЮ пометку (funnel_v2_hold:*); чужие причины не трогаем.
+        const [cur] = await db
+          .select({ reason: candidates.autoProcessingStoppedReason })
+          .from(candidates)
+          .where(eq(candidates.id, row.id))
+          .limit(1)
+        if ((cur?.reason ?? "").startsWith("funnel_v2_hold:")) {
+          await db.update(candidates)
+            .set({ autoProcessingStoppedReason: null, updatedAt: new Date() })
+            .where(eq(candidates.id, row.id))
+        }
+        resumed++
+        details.push({ candidateId: row.id, action: "hold_resumed" })
+      } catch (holdErr) {
+        errors++
+        const msg = holdErr instanceof Error ? holdErr.message : String(holdErr)
+        details.push({ candidateId: row.id, action: "hold_error", error: msg.slice(0, 200) })
+        console.error("[cron/funnel-v2-tick] ошибка возобновления hold-кандидата", {
+          candidateId: row.id, error: msg,
+        })
+      }
+    }
 
     // Обрабатываем каждого активного кандидата
     for (const row of active) {
@@ -210,7 +285,7 @@ export async function POST(req: NextRequest) {
     }
 
     const durationMs = Date.now() - startedAt
-    const meta = { checked, advanced, errors, durationMs }
+    const meta = { checked, advanced, resumed, errors, durationMs }
     console.log(JSON.stringify({ tag: "cron/funnel-v2-tick", ...meta, ts: new Date().toISOString() }))
 
     await finishCronRun(run.id, "ok", meta)

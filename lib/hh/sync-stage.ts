@@ -19,17 +19,20 @@ import { changeNegotiationState } from "@/lib/hh-api"
 import { getStageHhAction, parsePipeline, type StageSlug } from "@/lib/stages"
 import { getEffectiveMessageDefaults } from "@/lib/messaging/effective-message-defaults"
 import { renderTemplate } from "@/lib/template-renderer"
+import { rejectMessageVars } from "@/lib/funnel-v2/reject-vars"
+import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
 
 interface CandidateContext {
   id:        string
   name:      string
   vacancyId: string
   shortId:   string | null
+  token:     string | null
 }
 
 async function loadContext(candidateId: string): Promise<{
   cand: CandidateContext
-  vac:  { title: string; companyId: string; aiProcessSettings: VacancyAiProcessSettings; descriptionJson: unknown }
+  vac:  { title: string; companyId: string; companyName: string; aiProcessSettings: VacancyAiProcessSettings; descriptionJson: unknown }
   hh:   { hhResponseId: string }
 } | null> {
   // Шаг 1: основной запрос — кандидат, вакансия и попытка резолва
@@ -43,16 +46,19 @@ async function loadContext(candidateId: string): Promise<{
       candId:           candidates.id,
       candName:         candidates.name,
       candShortId:      candidates.shortId,
+      candToken:        candidates.token,
       vacancyId:        candidates.vacancyId,
       vacTitle:         vacancies.title,
       vacCompanyId:     vacancies.companyId,
       vacAiSettings:    vacancies.aiProcessSettings,
       vacDescriptionJson: vacancies.descriptionJson,
+      companyName:      companies.name,
       hhResponseId:     hhResponses.hhResponseId,
       hhApplicationId:  hhCandidates.hhApplicationId,
     })
     .from(candidates)
     .innerJoin(vacancies, eq(vacancies.id, candidates.vacancyId))
+    .leftJoin(companies, eq(companies.id, vacancies.companyId))
     .leftJoin(hhResponses, and(
       eq(hhResponses.localCandidateId, candidates.id),
       eq(hhResponses.companyId,        vacancies.companyId),
@@ -86,10 +92,12 @@ async function loadContext(candidateId: string): Promise<{
       name:      row.candName,
       vacancyId: row.vacancyId,
       shortId:   row.candShortId,
+      token:     row.candToken,
     },
     vac: {
       title:             row.vacTitle ?? "",
       companyId:         row.vacCompanyId,
+      companyName:       row.companyName ?? "",
       aiProcessSettings: (row.vacAiSettings as VacancyAiProcessSettings | null) ?? {},
       descriptionJson:   row.vacDescriptionJson,
     },
@@ -118,18 +126,24 @@ export async function trySyncRejectToHh(candidateId: string, customMessage?: str
     // стоп-факторные тексты не страдают, а сырой rejectLetter Портрета
     // корректно получает имя кандидата.
     const { firstName } = await getCandidateFirstName(ctx.cand.id)
+    // Единый набор переменных отказа (reject-vars, гвард №4 п.1): + company и
+    // demo_link — через этот путь уходят и v2-тексты стадий (pending-rejections
+    // → executeRejection), и стоп-факторные/Портрет-письма. Инвариант:
+    // кандидату не уходит литерал {{...}}. renderTemplate идемпотентен —
+    // уже отрендеренные тексты не страдают.
+    const rejectVars = rejectMessageVars({
+      firstName,
+      vacancyTitle: ctx.vac.title,
+      companyName:  ctx.vac.companyName,
+      token:        ctx.cand.token,
+      baseUrl:      getAppBaseUrl(),
+    })
     let message: string
     if (typeof customMessage === "string" && customMessage.trim().length > 0) {
-      message = renderTemplate(customMessage, {
-        name:    firstName,
-        vacancy: ctx.vac.title,
-      })
+      message = renderTemplate(customMessage, rejectVars)
     } else {
       const tpl = ctx.vac.aiProcessSettings.rejectMessage?.trim() || (await getEffectiveMessageDefaults(ctx.vac.companyId)).rejectMessage
-      message = renderTemplate(tpl, {
-        name:    firstName,
-        vacancy: ctx.vac.title,
-      })
+      message = renderTemplate(tpl, rejectVars)
     }
 
     await changeNegotiationState(token.accessToken, ctx.hh.hhResponseId, "discard", message)
@@ -163,6 +177,7 @@ export async function trySyncInviteToHh(candidateId: string): Promise<boolean> {
     let message = renderTemplate(tpl, {
       name:      firstName,
       vacancy:   ctx.vac.title,
+      company:   ctx.vac.companyName,   // инвариант: {{company}} не уходит литералом
       demo_link: demoLink,
     })
     // Если шаблон не содержит ссылки — добавим её в конец, иначе hh
@@ -244,10 +259,14 @@ export async function trySyncStageToHh(candidateId: string, newStage: string): P
 
     if (action === "discard") {
       const tpl = ctx.vac.aiProcessSettings.rejectMessage?.trim() || (await getEffectiveMessageDefaults(ctx.vac.companyId)).rejectMessage
-      const message = renderTemplate(tpl, {
-        name:    firstName,
-        vacancy: ctx.vac.title,
-      })
+      // Единый набор переменных отказа (инвариант: без литералов {{...}})
+      const message = renderTemplate(tpl, rejectMessageVars({
+        firstName,
+        vacancyTitle: ctx.vac.title,
+        companyName:  ctx.vac.companyName,
+        token:        ctx.cand.token,
+        baseUrl:      getAppBaseUrl(),
+      }))
       await changeNegotiationState(token.accessToken, ctx.hh.hhResponseId, "discard", message)
       console.info(`[hh:sync-stage] discard (${newStage}) → ${ctx.hh.hhResponseId} (cand ${ctx.cand.id})`)
       return true
@@ -266,6 +285,7 @@ export async function trySyncStageToHh(candidateId: string, newStage: string): P
     let message = renderTemplate(tpl, {
       name:      firstName,
       vacancy:   ctx.vac.title,
+      company:   ctx.vac.companyName,   // инвариант: {{company}} не уходит литералом
       demo_link: demoLink,
     })
     if (!message.includes(demoLink)) message = `${message}\n\n${demoLink}`
