@@ -4,6 +4,7 @@ import { nanoid } from "nanoid"
 import { db } from "@/lib/db"
 import { candidates, demos, hhCandidates, vacancies } from "@/lib/db/schema"
 import { generateCandidateShortId, isShortId } from "@/lib/short-id"
+import { checkPublicTokenRateLimit } from "@/lib/public/rate-limit-public"
 import { normalizePhone, normalizeEmail } from "@/lib/candidates/normalize-contacts"
 // #19: scheduleAnketaConfirmation больше не вызываем — функция оставлена
 // для совместимости с уже запланированными follow_up_messages, но новые
@@ -73,6 +74,12 @@ export async function POST(
   { params }: { params: Promise<{ token: string }> }
 ) {
   try {
+    // Анти-перебор предсказуемых short_id: не даём массово перезаписывать PII
+    // чужих кандидатов (см. lib/public/rate-limit-public).
+    if (!checkPublicTokenRateLimit(req, "demo-apply")) {
+      return NextResponse.json({ error: "Слишком много запросов, попробуйте позже" }, { status: 429 })
+    }
+
     const { token } = await params
     const body = (await req.json()) as {
       firstName: string

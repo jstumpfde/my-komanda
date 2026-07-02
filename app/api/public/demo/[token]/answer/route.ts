@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { candidates, vacancies } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { isShortId } from "@/lib/short-id"
+import { checkPublicTokenRateLimit } from "@/lib/public/rate-limit-public"
 import { scoreCandidateV2 } from "@/lib/ai-score-candidate-v2"
 import { scoreDemoAnswers } from "@/lib/demo/score-answers"
 import { maybeScheduleSecondDemoInvite } from "@/lib/messaging/second-demo-invite"
@@ -98,6 +99,12 @@ export async function POST(
   { params }: { params: Promise<{ token: string }> },
 ) {
   try {
+    // Анти-перебор предсказуемых short_id: не даём писать ответы за чужого
+    // кандидата массовым перебором (см. lib/public/rate-limit-public).
+    if (!checkPublicTokenRateLimit(req, "demo-answer")) {
+      return apiError("Слишком много запросов, попробуйте позже", 429)
+    }
+
     const { token } = await params
     const body = await req.json()
 

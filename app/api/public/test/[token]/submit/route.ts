@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { candidates, demos, testSubmissions, vacancies, type PostDemoSettings } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { isShortId } from "@/lib/short-id"
+import { checkPublicTokenRateLimit } from "@/lib/public/rate-limit-public"
 import { scoreTestSubmission } from "@/lib/ai-score-test"
 import { scheduleTestAfterMessage } from "@/lib/messaging/test-after-message"
 import {
@@ -41,6 +42,11 @@ export async function POST(
   { params }: { params: Promise<{ token: string }> },
 ) {
   try {
+    // Анти-перебор предсказуемых short_id (см. lib/public/rate-limit-public).
+    if (!checkPublicTokenRateLimit(req, "test-submit")) {
+      return apiError("Слишком много запросов, попробуйте позже", 429)
+    }
+
     const { token } = await params
     const body = await req.json().catch(() => ({})) as {
       answerText?: unknown

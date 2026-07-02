@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { candidates, vacancies, demos, companies, testSubmissions } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { isShortId } from "@/lib/short-id"
+import { checkPublicTokenRateLimit } from "@/lib/public/rate-limit-public"
 import { switchToTestBranchOpened } from "@/lib/followup/switch-branch"
 import { normalizeFunnelV2 } from "@/lib/funnel-v2/types"
 import { resolveCurrentStageContent } from "@/lib/funnel-v2/resolve-content"
@@ -18,10 +19,15 @@ import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
 // contentBlockId текущей стадии кандидата (как в /demo/[token]).
 // Если текущая стадия не test/task — редирект (защита URL, пункт C).
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ token: string }> },
 ) {
   try {
+    // Анти-перебор предсказуемых short_id (см. lib/public/rate-limit-public).
+    if (!checkPublicTokenRateLimit(req, "test-get")) {
+      return apiError("Слишком много запросов, попробуйте позже", 429)
+    }
+
     const { token } = await params
 
     const [candidate] = await db

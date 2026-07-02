@@ -36,6 +36,12 @@ export async function POST(
 
   const body = await req.json()
 
+  // Проект должен принадлежать компании сессии — иначе 404 (не палим существование).
+  const [project] = await db.select().from(internalProjects)
+    .where(and(eq(internalProjects.id, id), eq(internalProjects.tenantId, session.user.companyId)))
+    .limit(1)
+  if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 })
+
   if (body.action === "apply") {
     const [app] = await db.insert(projectApplications).values({
       projectId:    id,
@@ -49,10 +55,12 @@ export async function POST(
   }
 
   if (body.action === "accept" || body.action === "reject") {
+    // Заявка должна относиться к проекту этой компании (projectId = id уже провалидирован выше).
     const [updated] = await db.update(projectApplications)
       .set({ status: body.action === "accept" ? "accepted" : "rejected", resolvedAt: new Date() })
-      .where(eq(projectApplications.id, body.applicationId))
+      .where(and(eq(projectApplications.id, body.applicationId), eq(projectApplications.projectId, id)))
       .returning()
+    if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 })
     return NextResponse.json(updated)
   }
 

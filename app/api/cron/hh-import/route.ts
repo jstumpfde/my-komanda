@@ -64,11 +64,9 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // Записываем запуск только после захвата lock'а — это реальный рабочий
-  // прогон. По cron_runs.duration_ms видно, сколько lock держится (главный
-  // фактор задержки импорта свежих откликов), и реальную частоту прогонов.
-  const run = await startCronRun("hh-import")
-
+  // Всё, что после захвата lock'а — в try/finally, чтобы unlock выполнился на
+  // ЛЮБОМ пути выхода (в т.ч. если startCronRun/запросы бросят исключение).
+  // Иначе lock завис бы до рестарта процесса, и следующий cron вечно ловил 409.
   let imported  = 0
   let processed = 0
   let deferredOffHours = 0
@@ -77,6 +75,12 @@ export async function POST(req: NextRequest) {
   const errors: string[] = []
 
   try {
+    // Записываем запуск только после захвата lock'а — это реальный рабочий
+    // прогон. По cron_runs.duration_ms видно, сколько lock держится (главный
+    // фактор задержки импорта свежих откликов), и реальную частоту прогонов.
+    const run = await startCronRun("hh-import")
+
+    try {
     // P0-53: до основного прохода чистим "застрявшие" hh_responses —
     // status='response' с linked candidate в стадии rejected/hired или
     // autoProcessingStopped=true. Это позволяет основному processHhQueue
@@ -203,26 +207,27 @@ export async function POST(req: NextRequest) {
         errors.push(`processQueue ${companyId}: ${msg}`)
       }
     }))
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    console.error("[hh-import] top-level:", msg)
-    // Lock освобождаем даже на throw — иначе следующий cron получит 409 навсегда
-    // (или до restart процесса, что хуже).
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error("[hh-import] top-level:", msg)
+      await finishCronRun(run.id, "error", { imported, processed, deferredOffHours, skipped, orphanedCleanup }, msg).catch(() => {})
+      return NextResponse.json({ ok: false, error: msg }, { status: 500 })
+    }
+
+    await finishCronRun(run.id, "ok", { imported, processed, deferredOffHours, skipped, orphanedCleanup, errors: errors.length }).catch(() => {})
+
+    return NextResponse.json({
+      ok: true,
+      imported,
+      processed,
+      deferredOffHours,
+      skipped,
+      orphanedCleanup,
+      errors,
+    })
+  } finally {
+    // Гарантированное освобождение lock'а на любом пути выхода (успех, ошибка
+    // обработки, ИЛИ падение startCronRun) — иначе cron вечно возвращал бы 409.
     await db.execute(sql`SELECT pg_advisory_unlock(${HH_IMPORT_LOCK_KEY})`).catch(() => {})
-    await finishCronRun(run.id, "error", { imported, processed, deferredOffHours, skipped, orphanedCleanup }, msg).catch(() => {})
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 })
   }
-
-  await db.execute(sql`SELECT pg_advisory_unlock(${HH_IMPORT_LOCK_KEY})`).catch(() => {})
-  await finishCronRun(run.id, "ok", { imported, processed, deferredOffHours, skipped, orphanedCleanup, errors: errors.length }).catch(() => {})
-
-  return NextResponse.json({
-    ok: true,
-    imported,
-    processed,
-    deferredOffHours,
-    skipped,
-    orphanedCleanup,
-    errors,
-  })
 }

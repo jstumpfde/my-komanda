@@ -8,6 +8,7 @@ import { db } from "@/lib/db"
 import { candidates, vacancies, companies, calendarEvents, users } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { isShortId } from "@/lib/short-id"
+import { checkPublicTokenRateLimit } from "@/lib/public/rate-limit-public"
 import type { CompanyHiringDefaults } from "@/lib/db/schema"
 import type { SchedulePageData, MethodConfig, SlotDay } from "@/lib/schedule-interview-types"
 import { sendToCompanyChannel } from "@/lib/telegram/send-to-company"
@@ -161,10 +162,15 @@ function utcToLocalDateTime(utcDate: Date, tz: string): { ymd: string; hhmm: str
 // ─── GET /api/public/schedule/[token] ────────────────────────────────────────
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ token: string }> },
 ) {
   try {
+    // Анти-перебор предсказуемых short_id (см. lib/public/rate-limit-public).
+    if (!checkPublicTokenRateLimit(req, "schedule-get")) {
+      return apiError("Слишком много запросов, попробуйте позже", 429)
+    }
+
     const { token } = await params
 
     // 1. Резолвим кандидата по token (или short_id)
@@ -366,6 +372,12 @@ export async function POST(
   { params }: { params: Promise<{ token: string }> },
 ) {
   try {
+    // Анти-перебор предсказуемых short_id: не даём массово бронировать/переносить
+    // интервью за чужих кандидатов (см. lib/public/rate-limit-public).
+    if (!checkPublicTokenRateLimit(req, "schedule-post")) {
+      return apiError("Слишком много запросов, попробуйте позже", 429)
+    }
+
     const { token } = await params
     const body = await req.json().catch(() => ({})) as Partial<BookingBody>
 

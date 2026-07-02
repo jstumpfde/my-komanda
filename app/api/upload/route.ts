@@ -38,7 +38,16 @@ const RENDERABLE = new Set([
 
 const MAX_SIZE = 200 * 1024 * 1024 // 200MB
 
+// SVG отклоняем: конвертация (ffmpeg) для него не настроена → сработал бы
+// фолбэк «сохранить оригинал как есть», и .svg с публичного /uploads исполнял бы
+// вложенные скрипты (stored XSS). Растровые изображения/видео/аудио безопасны.
+function isSvg(type: string): boolean {
+  const t = type.toLowerCase()
+  return t === "image/svg+xml" || t.startsWith("image/svg")
+}
+
 function isAcceptedInput(type: string): boolean {
+  if (isSvg(type)) return false
   if (RENDERABLE.has(type)) return true
   // Любое изображение/видео/аудио — даже если нерендеримое, сконвертируем.
   return type.startsWith("image/") || type.startsWith("video/") || type.startsWith("audio/")
@@ -63,6 +72,12 @@ export async function POST(req: NextRequest) {
   }
   if (!isAcceptedInput(file.type)) {
     return NextResponse.json({ error: "Можно загружать изображения, видео, аудио или PDF" }, { status: 400 })
+  }
+  // Защита от подмены MIME (напр. .svg под видом image/png): при сбое
+  // конвертации файл сохраняется с исходным расширением, поэтому .svg отсекаем
+  // и по имени — иначе он попал бы в /uploads и исполнил бы скрипты (stored XSS).
+  if ((file.name.split(".").pop()?.toLowerCase() ?? "") === "svg") {
+    return NextResponse.json({ error: "Формат SVG не поддерживается" }, { status: 400 })
   }
 
   const buffer = Buffer.from(await file.arrayBuffer())

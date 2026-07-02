@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates } from "@/lib/db/schema"
 import { isShortId, generateCandidateShortId } from "@/lib/short-id"
+import { checkPublicTokenRateLimit } from "@/lib/public/rate-limit-public"
 import { generateCandidateToken } from "@/lib/candidate-tokens"
 import { markDemoOpened } from "@/lib/candidates/mark-demo-opened"
 
@@ -32,6 +33,13 @@ export async function GET(
 
   if (!isShortId(token)) {
     return NextResponse.redirect(new URL(`/demo/${token}`, req.url))
+  }
+
+  // Анти-перебор предсказуемых short_id: этот роут СОЗДАЁТ карточки кандидатов,
+  // поэтому перебор мог бы засорять воронку тысячами «Новый кандидат». Режем по
+  // IP (см. lib/public/rate-limit-public).
+  if (!checkPublicTokenRateLimit(req, "demo-visit")) {
+    return new NextResponse("Слишком много запросов, попробуйте позже", { status: 429 })
   }
 
   // Owner — нужна вакансия для нового кандидата.

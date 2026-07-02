@@ -23,6 +23,14 @@ export async function GET(
   const session = await auth()
   if (!session?.user?.companyId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+  // Кейс оффбординга должен принадлежать компании сессии — иначе 404.
+  const [c] = await db
+    .select()
+    .from(offboardingCases)
+    .where(and(eq(offboardingCases.id, id), eq(offboardingCases.tenantId, session.user.companyId)))
+    .limit(1)
+  if (!c) return NextResponse.json({ error: "Case not found" }, { status: 404 })
+
   const surveys = await db
     .select()
     .from(exitSurveys)
@@ -72,8 +80,9 @@ export async function POST(
         wouldRecommend:body.wouldRecommend,
         openFeedback:  body.openFeedback,
       })
-      .where(eq(exitSurveys.id, body.surveyId))
+      .where(and(eq(exitSurveys.id, body.surveyId), eq(exitSurveys.caseId, id)))
       .returning()
+    if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 })
     return NextResponse.json(updated)
   }
 
