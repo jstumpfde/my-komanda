@@ -283,7 +283,7 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose, dripT
                 const active = a.type === stage.action
                 return (
                   <button key={a.type} type="button"
-                    onClick={() => patch(a.type === "interview" ? { ...makeStage("interview", stage.id.slice(3)), id: stage.id, action: "interview", messagePresetId: stage.messagePresetId, messages: stage.messages, title: stage.title, hhStatus: stage.hhStatus } : { action: a.type })}
+                    onClick={() => patch(a.type === "interview" ? { ...makeStage("interview", stage.id.slice(3)), id: stage.id, action: "interview", messagePresetId: stage.messagePresetId, messages: stage.messages, title: stage.title, hhStatus: stage.hhStatus } : { action: a.type, dozhimChain: dozhimChainFor(stage.dozhim, a.type, dripTemplates), dozhimChainOpened: dozhimChainForOpened(stage.dozhim, a.type, dripTemplates) })}
                     className={cn("text-[11px] px-2 py-1 rounded-md border transition-colors", active ? "bg-blue-500/10 border-blue-400 text-blue-700 dark:text-blue-300 font-medium" : "border-border text-muted-foreground hover:bg-muted/50")}>{a.label}</button>
                 )
               })}
