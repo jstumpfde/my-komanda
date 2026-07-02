@@ -65,6 +65,9 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       .set({
         descriptionJson: { ...desc, funnelV2: outConfig },
         funnelV2RuntimeEnabled: effectiveEnabled,
+        // Взаимоисключение с AI чат-ботом (решение Юрия 02.07): чат-бот и v2 —
+        // либо/либо. Включаем движок v2 → выключаем чат-бот.
+        ...(effectiveEnabled ? { aiChatbotEnabled: false } : {}),
         updatedAt: new Date(),
       })
       .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
