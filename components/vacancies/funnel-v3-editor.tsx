@@ -71,6 +71,9 @@ const SCORE_GATE_FAIL_LABEL: Record<ScoreGateFailAction, string> = {
   preliminary_reject: "Предварительный отказ", manual: "Ручное", reject: "Отказ", reserve: "В резерв",
 }
 const DOZHIM_OPTS: DozhimPreset[] = ["off", "soft", "standard", "strong"]
+// Типы стадий, где рантайм РЕАЛЬНО запускает дожим (executeStageEntry →
+// scheduleV2Dozhim). Для остальных секция «Дожим» — пояснение, не редактор.
+const DOZHIM_ACTIONS: StageActionType[] = ["demo", "prequalification", "test", "task"]
 
 interface ContentBlock { id: string; title: string; contentType: string }
 
@@ -370,8 +373,9 @@ function StageDetail({ stage, index, allStages, content, dripTemplates, onPatch,
   const isContent = CONTENT_ACTIONS.includes(stage.action)
   const isPrequal = stage.action === "prequalification"
   // security_check/reference_check — no-op в executeStageEntry (сообщений при
-  // входе нет) → поле «Приглашение» было бы мёртвым, показываем пояснение.
-  const isNoopAction = stage.action === "security_check" || stage.action === "reference_check"
+  // входе нет); hired шлёт ТОЛЬКО «Прощание» → поле «Приглашение» было бы
+  // мёртвым, показываем пояснение.
+  const isNoopAction = stage.action === "security_check" || stage.action === "reference_check" || stage.action === "hired"
 
   // «Выключенный хвост»: после этой стадии в конфиге есть стадии, но все
   // выключены — прошедшие предыдущую включённую стадию зависнут на ручном
@@ -563,7 +567,14 @@ function StageDetail({ stage, index, allStages, content, dripTemplates, onPatch,
                     </SelectContent>
                   </Select>
                   {gate.middleAction === "prequalification" && (
-                    <p className="text-[11px] text-muted-foreground/70">Кандидат уйдёт на ближайшую включённую стадию «Предквалификация»; если её нет — ручной разбор.</p>
+                    <>
+                      <p className="text-[11px] text-muted-foreground/70">Кандидат уйдёт на ближайшую включённую стадию «Предквалификация» НИЖЕ текущей (дальше по списку); если её нет — ручной разбор.</p>
+                      {!stagesAfter.some(s => s.action === "prequalification" && isStageEnabled(s)) && (
+                        <p className="rounded-md border border-amber-400/60 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-700 dark:text-amber-400">
+                          Ниже текущей нет включённой стадии «Предквалификация» — жёлтая зона фактически уйдёт на ручной разбор. Добавьте стадию ниже или выберите «Ручной разбор».
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -587,7 +598,10 @@ function StageDetail({ stage, index, allStages, content, dripTemplates, onPatch,
       <section className="p-4 space-y-3">
         <Label className="text-sm font-medium flex items-center gap-1.5"><MessageSquare className="w-4 h-4" /> Тексты стадии</Label>
         {isNoopAction ? (
-          <p className="text-[11px] text-muted-foreground/70">Тип «{meta.label}» пока не отправляет сообщений при входе — поле «Приглашение» не используется.</p>
+          <p className="text-[11px] text-muted-foreground/70">
+            Тип «{meta.label}» пока не отправляет сообщений при входе — поле «Приглашение» не используется.
+            {stage.action === "hired" && " На этой стадии кандидату уходит только «Прощание» ниже."}
+          </p>
         ) : !isPrequal ? (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -613,6 +627,9 @@ function StageDetail({ stage, index, allStages, content, dripTemplates, onPatch,
                 </div>
               </div>
             ))}
+            {msgList.length > 1 && (
+              <p className="text-[11px] text-muted-foreground/70">Несколько сообщений уйдут кандидату одним сообщением (по абзацам).</p>
+            )}
           </div>
         ) : (
           <p className="text-[11px] text-muted-foreground/70">Предквалификация — бот сам ведёт диалог (вопросы из подключённого блока), отдельное приглашение не требуется.</p>
@@ -627,30 +644,41 @@ function StageDetail({ stage, index, allStages, content, dripTemplates, onPatch,
                 className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:bg-muted/50 font-mono">{ph}</button>
             ))}
           </div>
-          {/* Честная подпись: при какой конфигурации текст РЕАЛЬНО отправляется */}
+          {/* Честная подпись: при какой конфигурации текст РЕАЛЬНО отправляется.
+              Зеркалирует порядок ДВИЖКА: при включённом авто-гейте
+              evaluateScoreGate ТЕРМИНАЛЕН — легаси-шаг autoReject выполняется
+              только пока балл шкалы гейта не посчитан. */}
           {(() => {
-            // ПРИОРИТЕТ: легаси-авто-отказ правила стадии (rule.autoReject +
-            // хотя бы один порог; тумблер во вкладке «Воронка v2», конфиг общий).
-            // stage-completion-handler шлёт rejectText по нему НЕЗАВИСИМО от
-            // состояния гейта по баллу.
             const legacyAutoReject = stage.rule.autoReject === true &&
               (typeof stage.rule.threshold === "number" || typeof stage.rule.objThreshold === "number")
-            if (legacyAutoReject) {
+            const gateAuto = gate?.autoEnabled === true
+            // Легаси-ветка — ТОЛЬКО когда авто-гейт не активен (иначе движок её не выполняет).
+            if (legacyAutoReject && !gateAuto) {
               return <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
                 Отправляется не прошедшим порог авто-отказа (включён в правиле стадии — вкладка «Воронка v2»).
                 Текст: этот «Отказ» → текст правила прохода → стандартный текст отказа вакансии.
               </p>
             }
+            // Оба включены: приоритет у гейта — говорим об этом честно.
+            const bothNote = legacyAutoReject && gateAuto
+              ? <p className="text-[11px] text-muted-foreground/70">Легаси-порог авто-отказа тоже включён: приоритет у гейта по баллу; легаси-порог сработает только пока балл шкалы гейта не посчитан.</p>
+              : null
             if (!gate) return <p className="text-[11px] text-muted-foreground/70">Сейчас не отправляется: гейт по баллу не настроен.</p>
-            if (!gate.autoEnabled) return <p className="text-[11px] text-muted-foreground/70">Сейчас не отправляется: «Автоматический проход» выключен.</p>
+            if (!gateAuto) return <p className="text-[11px] text-muted-foreground/70">Сейчас не отправляется: «Автоматический проход» выключен.</p>
             if (threeZones) {
-              return gate.autoRejectRed === true
-                ? <p className="text-[11px] text-emerald-700 dark:text-emerald-400">Отправляется кандидатам красной зоны (авто-отказ красной зоны включён).</p>
-                : <p className="text-[11px] text-muted-foreground/70">Сейчас не отправляется: красная зона уходит на ручной разбор без сообщения.</p>
+              return <>
+                {gate.autoRejectRed === true
+                  ? <p className="text-[11px] text-emerald-700 dark:text-emerald-400">Отправляется кандидатам красной зоны (авто-отказ красной зоны включён).</p>
+                  : <p className="text-[11px] text-muted-foreground/70">Сейчас не отправляется: красная зона уходит на ручной разбор без сообщения.</p>}
+                {bothNote}
+              </>
             }
-            return gate.failAction === "reject"
-              ? <p className="text-[11px] text-emerald-700 dark:text-emerald-400">Отправляется не прошедшим порог (действие «Отказ»).</p>
-              : <p className="text-[11px] text-muted-foreground/70">Сейчас не отправляется: действие «{SCORE_GATE_FAIL_LABEL[gate.failAction].toLowerCase()}» без сообщения.</p>
+            return <>
+              {gate.failAction === "reject"
+                ? <p className="text-[11px] text-emerald-700 dark:text-emerald-400">Отправляется не прошедшим порог (действие «Отказ»).</p>
+                : <p className="text-[11px] text-muted-foreground/70">Сейчас не отправляется: действие «{SCORE_GATE_FAIL_LABEL[gate.failAction].toLowerCase()}» без сообщения.</p>}
+              {bothNote}
+            </>
           })()}
         </div>
         {stage.action === "hired" && (
@@ -663,7 +691,18 @@ function StageDetail({ stage, index, allStages, content, dripTemplates, onPatch,
         )}
       </section>
 
-      {/* (6) Дожим стадии */}
+      {/* (6) Дожим стадии — редактор только для типов, где рантайм РЕАЛЬНО
+          запускает дожим (executeStageEntry → scheduleV2Dozhim: demo,
+          prequalification, test, task). Для остальных — честное пояснение. */}
+      {!DOZHIM_ACTIONS.includes(stage.action) ? (
+        <section className="p-4 space-y-2">
+          <Label className="text-sm font-medium flex items-center gap-1.5"><Repeat className="w-4 h-4" /> Дожим стадии</Label>
+          <p className="text-[11px] text-muted-foreground/70">
+            Для типа «{meta.label}» рантайм не запускает дожим — цепочки касаний не отправляются.
+            Дожим работает на стадиях: Демонстрация, Предквалификация, Тест-вопросы, Тест-задание.
+          </p>
+        </section>
+      ) : (
       <section className="p-4 space-y-3">
         <Label className="text-sm font-medium flex items-center gap-1.5"><Repeat className="w-4 h-4" /> Дожим стадии</Label>
         <div className="flex gap-1">
@@ -688,6 +727,7 @@ function StageDetail({ stage, index, allStages, content, dripTemplates, onPatch,
           onChange={next => onPatch({ dozhimChainOpened: next })}
         />
       </section>
+      )}
     </div>
   )
 }
