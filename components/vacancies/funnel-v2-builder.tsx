@@ -414,15 +414,32 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose, dripT
               <FieldRow label="Авто-отказ не прошедших">
                 <Switch checked={stage.rule.autoReject} onCheckedChange={v => patchRule({ autoReject: v })} />
               </FieldRow>
-              {gate && (gate.failAction === "preliminary_reject" || gate.failAction === "reject") ? (
-                <FieldRow label={gate.failAction === "preliminary_reject" ? "Текст предварительного отказа (обратимый)" : "Текст отказа"} align="top">
-                  <Textarea value={stage.rule.rejectText ?? ""} onChange={e => patchRule({ rejectText: e.target.value || undefined })} placeholder="Благодарим за интерес. К сожалению…" className="min-h-[110px] text-base md:text-base" />
-                </FieldRow>
-              ) : gate ? (
-                <FieldRow label="Сообщение">
-                  <p className="text-[11px] text-muted-foreground/70 pt-2.5">сообщение не отправляется ({SCORE_GATE_FAIL_LABEL[gate.failAction].toLowerCase()})</p>
-                </FieldRow>
-              ) : (
+              {gate ? (() => {
+                // Слать ли сообщение при непрохождении — настраивается тумблером
+                // (можно молча увести на стадию, напр. предв.отказ на разбор, ИЛИ
+                // послать мягкое сообщение). Дефолт: для отказа/предв.отказа —
+                // слать, для резерва/ручного — молча.
+                const failNotify = stage.rule.failNotify ?? (gate.failAction === "preliminary_reject" || gate.failAction === "reject")
+                const textLabel = gate.failAction === "preliminary_reject" ? "Текст предварительного отказа (обратимый)"
+                  : gate.failAction === "reject" ? "Текст отказа"
+                  : "Текст сообщения"
+                return (
+                  <>
+                    <FieldRow label="Отправлять сообщение кандидату">
+                      <Switch checked={failNotify} onCheckedChange={v => patchRule({ failNotify: v })} />
+                    </FieldRow>
+                    {failNotify ? (
+                      <FieldRow label={textLabel} align="top">
+                        <Textarea value={stage.rule.rejectText ?? ""} onChange={e => patchRule({ rejectText: e.target.value || undefined })} placeholder="Благодарим за интерес. К сожалению…" className="min-h-[110px] text-base md:text-base" />
+                      </FieldRow>
+                    ) : (
+                      <FieldRow label="Сообщение">
+                        <p className="text-[11px] text-muted-foreground/70 pt-2.5">не отправляется — кандидат молча уходит на «{SCORE_GATE_FAIL_LABEL[gate.failAction].toLowerCase()}»</p>
+                      </FieldRow>
+                    )}
+                  </>
+                )
+              })() : (
                 <FieldRow label="Текст отказа" align="top">
                   <Textarea value={stage.rule.rejectText ?? ""} onChange={e => patchRule({ rejectText: e.target.value || undefined })} placeholder="Благодарим за интерес. К сожалению…" className="min-h-[110px] text-base md:text-base" />
                 </FieldRow>

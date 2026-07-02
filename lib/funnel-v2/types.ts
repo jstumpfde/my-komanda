@@ -94,7 +94,8 @@ export interface StageRule {
   rejectDelayMinutes: number  // задержка отказа, дефолт 60 (наследуется, можно переопределить)
   passCriteria?: string       // критерий прохода (описательно / для AI)
   advanceTo?: string          // куда зовём прошедших: "next" (по умолч.) | id стадии (ветвление)
-  rejectText?: string         // текст отказа (пресет/текст)
+  rejectText?: string         // текст сообщения при непрохождении (отказ/предв.отказ/резерв)
+  failNotify?: boolean        // слать ли rejectText кандидату при непрохождении гейта (можно молча увести на стадию)
   scoreGate?: ScoreGate       // правило прохода по баллу (Фаза 1а — модель; рантайм подключит позже)
 }
 
