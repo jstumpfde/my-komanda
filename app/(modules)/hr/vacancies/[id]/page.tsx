@@ -4348,13 +4348,18 @@ export default function VacancyPage() {
 
                 {/* ───────── ТАБ «Кого ищем» (R4 Candidate Spec, новый контур) ───────── */}
                 {settingsSection === "spec" && (
-                  <SpecEditor
-                    vacancyId={id}
-                    portraitScoring={(apiVacancy as { portraitScoring?: boolean } | undefined)?.portraitScoring}
-                    onAdopted={refetchVacancy}
-                    onNavigateNext={() => { setV2SettingsSub("content"); setActiveTab("content"); window.scrollTo({ top: 0, behavior: "smooth" }) }}
-                    vacancyAnketaData={(apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.anketa as Record<string, unknown> | undefined}
-                  />
+                  // #20: Портрет — той же ширины, что и прочие секции настроек
+                  // (max-w-3xl), чтобы нижняя панель выглядела одинаково со всеми
+                  // табами (решение Юрия 02.07).
+                  <div className="max-w-3xl">
+                    <SpecEditor
+                      vacancyId={id}
+                      portraitScoring={(apiVacancy as { portraitScoring?: boolean } | undefined)?.portraitScoring}
+                      onAdopted={refetchVacancy}
+                      onNavigateNext={() => { setV2SettingsSub("content"); setActiveTab("content"); window.scrollTo({ top: 0, behavior: "smooth" }) }}
+                      vacancyAnketaData={(apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.anketa as Record<string, unknown> | undefined}
+                    />
+                  </div>
                 )}
 
                 {/* ───────── ТАБ «Дожим» ───────── */}
@@ -4566,11 +4571,6 @@ export default function VacancyPage() {
                       onPrev={prevStep ? () => goToVacancyStep(prevStep) : undefined}
                       nextLabel={nextStep?.label ?? null}
                       onNext={nextStep ? () => goToVacancyStep(nextStep) : undefined}
-                      // Портрет (SpecEditor) рендерится на всю ширину (без max-w-3xl
-                      // обёртки, в отличие от прочих секций) → и футер тянем на
-                      // всю ширину, чтобы кнопки прижались к правому краю контента,
-                      // а не «висели» по центру (замечание Юрия).
-                      className={settingsSection === "spec" ? "max-w-none" : undefined}
                     />
                   )
                 })()}
