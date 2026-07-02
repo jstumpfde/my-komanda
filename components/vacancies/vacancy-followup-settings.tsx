@@ -506,9 +506,9 @@ export function VacancyFollowupSettings({ vacancyId, tabKey = "followup", onSave
         <div className="space-y-3 pt-1">
           <label className="flex items-start justify-between gap-3 py-2 border-b cursor-pointer">
             <div>
-              <div className="font-medium text-sm">Использовать стоп-слова из «Воронки»</div>
+              <div className="font-medium text-sm">Использовать стоп-слова</div>
               <div className="text-xs text-muted-foreground mt-0.5">
-                P0-22: список стоп-слов теперь редактируется в табе «Воронка» → «Стоп-слова → перевод в Отказ».
+                Список редактируется в этой же вкладке «Портрет» → «Автоответы кандидату» → «Стоп-слова → отказ».
                 Если найдено хотя бы одно совпадение — следующие касания отменяются, стадия → «Отказ».
               </div>
             </div>

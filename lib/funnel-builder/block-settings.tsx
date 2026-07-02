@@ -178,11 +178,17 @@ function StopWordsSettingsWrapped({ vacancyId, onSaved }: BlockSettingsProps) {
   const { data, loaded } = useVacancyData(vacancyId)
   if (!loaded) return <LoadingSpinner />
   return (
-    <VacancyStopWordsSettings
-      vacancyId={vacancyId}
-      initial={data?.stopWordsJson ?? null}
-      onSaved={onSaved}
-    />
+    <div className="space-y-2">
+      <p className="text-xs text-muted-foreground">
+        Тот же список, что и в «Портрете» → «Автоответы кандидату» → «Стоп-слова → отказ» —
+        правьте где удобнее, изменения общие.
+      </p>
+      <VacancyStopWordsSettings
+        vacancyId={vacancyId}
+        initial={data?.stopWordsJson ?? null}
+        onSaved={onSaved}
+      />
+    </div>
   )
 }
 

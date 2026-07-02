@@ -63,6 +63,7 @@ import { useVacancySectionRegister } from "./vacancy-settings-context"
 import { PortraitAdvisor } from "./portrait-advisor"
 import { useContentBlocks } from "@/hooks/use-content-blocks"
 import { DEFAULT_INVITE_MESSAGE, DEFAULT_OFF_HOURS_MESSAGE } from "@/lib/hh/default-messages"
+import { AutoResponderSettings } from "./auto-responder-settings"
 
 // ─── Константы ───────────────────────────────────────────────────────────────
 
@@ -2289,6 +2290,11 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
           </Card>
         )
       })()}
+
+      {/* ── Автоответы кандидату — единый блок: стоп-слова → отказ + FAQ → авто-ответ.
+           Работает независимо от режима (Портрет / Воронка v2 / AI чат-бот),
+           гейт единым тумблером «Включить» (по умолчанию ВЫКЛ). ── */}
+      <AutoResponderSettings vacancyId={vacancyId} />
 
       {/* ── Дожим (напоминания) — встроен в Портрет, чтобы был под рукой (Юрий 30.06).
            Тот же компонент, что в табе «Дожим»; на новой вакансии показывает дефолтные

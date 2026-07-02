@@ -41,6 +41,7 @@ export async function POST(
         stopWordsJson:     vacancies.stopWordsJson,
         salaryMin:         vacancies.salaryMin,
         salaryMax:         vacancies.salaryMax,
+        descriptionJson:   vacancies.descriptionJson,
       })
       .from(vacancies)
       .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
@@ -54,6 +55,12 @@ export async function POST(
 
     // Бот-уточнение: даём HR протестировать поведение в песочнице.
     const sandboxClarify = (await getSpec(id).catch(() => null))?.botClarifyAmbiguous === true
+
+    // Единый блок «Автоответы кандидату» (Портрет) — реакция на стоп-слово.
+    const autoResponder = (vacancy.descriptionJson as { autoResponder?: {
+      stopWordFarewellText?: string
+      stopWordStageAction?:  "none" | "candidate_declined" | "reject"
+    } } | null)?.autoResponder
 
     // Преобразуем history в формат, который понимает processChatbotMessage
     // (через sandboxHistory). Берём только последние 6 ходов — pre-filter
@@ -83,6 +90,8 @@ export async function POST(
         salaryMin:         vacancy.salaryMin,
         salaryMax:         vacancy.salaryMax,
         botClarifyAmbiguous: sandboxClarify,
+        stopWordFarewellText: autoResponder?.stopWordFarewellText,
+        stopWordStageAction:  autoResponder?.stopWordStageAction,
       },
       dryRun:         true,
       sandboxHistory,

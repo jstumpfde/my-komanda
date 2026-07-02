@@ -44,6 +44,17 @@ import { matchStopWordList, matchStopWordWith } from "@/lib/followup/stop-words"
 import { getBaselineStopWords } from "@/lib/followup/effective-stop-words"
 import { getAvitoToken } from "@/lib/channels/avito"
 import { avitoAdapter } from "@/lib/channels/avito"
+import { matchFaqReply, resolveStopWordFarewellText, readStopWordStageAction, type FaqEntry, type StopWordStageAction } from "@/lib/auto-responder/match-faq"
+import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
+import { renderTemplate } from "@/lib/template-renderer"
+
+// Группа «Автоответы кандидату» (единый блок в Портрете, descriptionJson.autoResponder).
+interface VacancyAutoResponder {
+  enabled?:              boolean
+  faq?:                  FaqEntry[]
+  stopWordFarewellText?: string
+  stopWordStageAction?:  StopWordStageAction
+}
 
 // ─── Константы ───────────────────────────────────────────────────────────────
 
@@ -125,8 +136,13 @@ async function applyRejection(args: {
   chatId:           string
   accessToken:      string
   sendFarewellFlag: boolean
+  /** Текст прощального сообщения (если задан — используем вместо FAREWELL_MESSAGE). */
+  farewellText?:    string
+  /** 'candidate' = отказ по инициативе кандидата (напр. стоп-слово в чате) —
+   *  пишем candidates.rejectionInitiator, чтобы отчёт показал «Сам отказ.». */
+  initiator?:       "candidate" | "company"
 }): Promise<boolean> {
-  const { candidateId, reason, userId, chatId, accessToken, sendFarewellFlag } = args
+  const { candidateId, reason, userId, chatId, accessToken, sendFarewellFlag, farewellText, initiator } = args
 
   const [prev] = await db
     .select({ stage: candidates.stage })
@@ -144,6 +160,7 @@ async function applyRejection(args: {
     autoProcessingStopped:       true,
     autoProcessingStoppedReason: reason,
     autoProcessingStoppedAt:     new Date(),
+    ...(initiator ? { rejectionInitiator: initiator } : {}),
     updatedAt:                   new Date(),
   }).where(eq(candidates.id, candidateId))
 
@@ -159,7 +176,7 @@ async function applyRejection(args: {
   ))
 
   if (sendFarewellFlag) {
-    return await sendAvitoMessage(accessToken, userId, chatId, FAREWELL_MESSAGE)
+    return await sendAvitoMessage(accessToken, userId, chatId, farewellText ?? FAREWELL_MESSAGE)
   }
   return false
 }
@@ -342,6 +359,7 @@ export async function processAvitoInbound(
       funnelConfigJson:     vacancies.funnelConfigJson,
       stopWordsJson:        vacancies.stopWordsJson,
       aiProcessSettings:    vacancies.aiProcessSettings,
+      descriptionJson:      vacancies.descriptionJson,
     })
     .from(candidates)
     .innerJoin(vacancies, eq(vacancies.id, candidates.vacancyId))
@@ -369,6 +387,26 @@ export async function processAvitoInbound(
 
   const preview = text.slice(0, 120).replace(/\s+/g, " ")
 
+  const autoResponder = (candVac.descriptionJson as { autoResponder?: VacancyAutoResponder } | null)?.autoResponder
+
+  // 5b. Автоответы кандидату (FAQ) — ДО чат-бота. Гейт autoResponder.enabled,
+  // по умолчанию ВЫКЛ → поведение не меняется. При совпадении отвечаем и
+  // не продолжаем обработку этого сообщения (аналог handled/continue).
+  if (autoResponder?.enabled === true) {
+    const faqReply = matchFaqReply(text, autoResponder.faq)
+    if (faqReply) {
+      const { firstName } = await getCandidateFirstName(candidateId)
+      const rendered = renderTemplate(faqReply, {
+        name:      firstName,
+        vacancy:   candVac.vacancyTitle ?? "",
+        demo_link: "",
+      })
+      const sentOk = await sendAvitoMessage(accessToken, avitoUserId, chatId, rendered)
+      console.info(`[avito/scan-incoming] ${candidateId} auto_responder_faq_sent ok=${sentOk} text="${preview}"`)
+      return
+    }
+  }
+
   // 6. AI чат-бот (если включён и есть промпт).
   const chatbotEnabled = isBlockEnabled(candVac, "ai_chatbot", candVac.aiChatbotEnabled === true)
   const chatbotHasPrompt = (candVac.aiChatbotPrompt ?? "").trim().length > 0
@@ -387,6 +425,8 @@ export async function processAvitoInbound(
           aiChatbotSettings: candVac.aiChatbotSettings,
           aiChatbotPrompt:   candVac.aiChatbotPrompt,
           stopWordsJson:     candVac.stopWordsJson,
+          stopWordFarewellText: autoResponder?.stopWordFarewellText,
+          stopWordStageAction:  autoResponder?.stopWordStageAction,
         },
       })
       if (cb.handled) {
@@ -429,16 +469,39 @@ export async function processAvitoInbound(
         ? matchStopWordList(text, vacStopWords) !== null
         : matchStopWordWith(text, await getBaselineStopWords())
       if (matched) {
+        // Настраиваемая реакция (Юрий 02.07): дефолт 'none' — стадию НЕ трогаем,
+        // реагируем только прощальным сообщением (если текст задан). См.
+        // подробный комментарий в hh/scan-incoming.ts (аналогичная логика).
+        const stageAction = readStopWordStageAction(autoResponder?.stopWordStageAction)
+        const farewellText = resolveStopWordFarewellText(autoResponder?.stopWordFarewellText)
+        let farewellRendered: string | null = null
+        if (farewellText) {
+          const { firstName } = await getCandidateFirstName(candidateId)
+          farewellRendered = renderTemplate(farewellText, {
+            name: firstName, vacancy: candVac.vacancyTitle ?? "", demo_link: "",
+          })
+        }
+
+        if (stageAction === "none") {
+          const sentOk = farewellRendered
+            ? await sendAvitoMessage(accessToken, avitoUserId, chatId, farewellRendered)
+            : false
+          console.info(`[avito/scan-incoming] ${candidateId} stop_word_no_stage_change farewell_sent=${sentOk} text="${preview}"`)
+          return
+        }
+
         const sent = await applyRejection({
           candidateId,
           reason:           "stop_word_regex",
           userId:           avitoUserId,
           chatId,
           accessToken,
-          sendFarewellFlag: true,
+          sendFarewellFlag: !!farewellRendered,
+          farewellText:     farewellRendered ?? undefined,
+          initiator:        stageAction === "candidate_declined" ? "candidate" : "company",
         })
         result.rejectedRegex++
-        console.info(`[avito/scan-incoming] ${candidateId} stop_word farewell=${sent} text="${preview}"`)
+        console.info(`[avito/scan-incoming] ${candidateId} stop_word action=${stageAction} farewell=${sent} text="${preview}"`)
         return
       }
     }

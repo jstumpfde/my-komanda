@@ -34,6 +34,9 @@ import { getBaselineStopWords } from "@/lib/followup/effective-stop-words"
 import { createNotification } from "@/lib/notifications"
 import { sendTelegramAlert } from "@/lib/notifications/telegram"
 import { classifyIncomingMessage, validateAiReply } from "@/lib/ai/security-filter"
+import { resolveStopWordFarewellText, readStopWordStageAction } from "@/lib/auto-responder/match-faq"
+import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
+import { renderTemplate } from "@/lib/template-renderer"
 
 export type IntentCategory =
   | "salary" | "schedule" | "location" | "requirements"
@@ -176,6 +179,11 @@ export interface ProcessVacancy {
    *  baseline. Фикс 02.07: раньше чат-бот всегда читал baseline и игнорировал
    *  список Портрета (кнопка «не работала» при включённом боте). */
   stopWordsJson?: unknown
+  /** Единый блок «Автоответы кандидату» (Портрет, descriptionJson.autoResponder).
+   *  Настраивает реакцию НА СРАБАТЫВАНИЕ стоп-слова: текст прощания + что делать
+   *  со стадией (Юрий 02.07: дефолт 'none' — стадию НЕ трогаем). */
+  stopWordFarewellText?: string | null
+  stopWordStageAction?:  "none" | "candidate_declined" | "reject" | null
 }
 
 export interface ProcessInput {
@@ -899,31 +907,49 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
 
   // 0g. mild_negativity / normal — стандартный пайплайн.
 
-  // 1. Стоп-слова перебивают AI: rejected без AI-вызова и без отправки сообщения.
-  //    Источник — список вакансии (stopWordsJson из Портрета), с фолбэком на
-  //    платформенный baseline, если список пуст (фикс 02.07: раньше всегда
-  //    читался baseline и список Портрета игнорировался при включённом боте).
+  // 1. Стоп-слова перебивают AI: без AI-вызова. Источник — список вакансии
+  //    (stopWordsJson из Портрета), с фолбэком на платформенный baseline,
+  //    если список пуст (фикс 02.07: раньше всегда читался baseline и список
+  //    Портрета игнорировался при включённом боте).
+  //    Реакция на срабатывание — настраиваемая (Юрий 02.07, единый блок
+  //    «Автоответы кандидату»): дефолт 'none' — стадию НЕ трогаем вообще,
+  //    только прощальное сообщение (если текст задан). Опт-ин на автопереход —
+  //    'candidate_declined' (rejectionInitiator='candidate', «Сам отказ.» в
+  //    отчёте) или 'reject' (обычный отказ работодателя, старое поведение).
   const vacStopWords = Array.isArray(vacancy.stopWordsJson)
     ? vacancy.stopWordsJson.filter((s): s is string => typeof s === "string")
     : []
   const effectiveStopWords = vacStopWords.length > 0 ? vacStopWords : await getBaselineStopWords()
   if (stopwordsOn && matchStopWordWith(incomingText, effectiveStopWords)) {
-    if (!dryRun) {
+    const stageAction = readStopWordStageAction(vacancy.stopWordStageAction)
+    const farewellText = resolveStopWordFarewellText(vacancy.stopWordFarewellText)
+    let farewellRendered: string | undefined
+    if (farewellText) {
+      const { firstName } = await getCandidateFirstName(candidateId)
+      farewellRendered = renderTemplate(farewellText, {
+        name: firstName, vacancy: vacancyTitle, demo_link: "",
+      })
+    }
+    if (!dryRun && stageAction !== "none") {
       await db.update(candidates).set({
         stage:                       "rejected",
         autoProcessingStopped:       true,
         autoProcessingStoppedReason: "stop_word_in_chat",
         autoProcessingStoppedAt:     new Date(),
         automationPaused:            true,
+        rejectionInitiator:          stageAction === "candidate_declined" ? "candidate" : "company",
         updatedAt:                   new Date(),
       }).where(eq(candidates.id, candidateId))
     }
     await log({
       candidateId, vacancyId, incoming: incomingText,
       category: "rejection_signal", confidence: 1,
-      reply: null, sent: false, escalated: false, reason: "stop_word",
+      reply: farewellRendered ?? null, sent: false, escalated: false, reason: "stop_word",
     })
-    return { handled: true, action: "rejected", category: "rejection_signal", confidence: 1, escalationReason: "stop_word" }
+    return {
+      handled: true, action: "rejected", category: "rejection_signal", confidence: 1,
+      escalationReason: "stop_word", reply: farewellRendered,
+    }
   }
 
   // 2. Глобальная quota — в sandbox-режиме не дёргаем, чтобы тесты HR не

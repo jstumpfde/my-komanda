@@ -38,6 +38,16 @@ import { matchStopWordList, matchStopWordWith } from "@/lib/followup/stop-words"
 import { getBaselineStopWords } from "@/lib/followup/effective-stop-words"
 import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
 import { processPrequalificationAnswer } from "@/lib/prequalification/process-answer"
+import { matchFaqReply, resolveStopWordFarewellText, readStopWordStageAction, type FaqEntry, type StopWordStageAction } from "@/lib/auto-responder/match-faq"
+import { renderTemplate } from "@/lib/template-renderer"
+
+// Группа «Автоответы кандидату» (единый блок в Портрете, descriptionJson.autoResponder).
+interface VacancyAutoResponder {
+  enabled?:              boolean
+  faq?:                  FaqEntry[]
+  stopWordFarewellText?: string
+  stopWordStageAction?:  StopWordStageAction
+}
 
 // Дефолтные эскалационные шаблоны для callIntent (insist-demo).
 // Используются только если у вакансии не задан кастомный массив в
@@ -168,8 +178,14 @@ async function applyRejection(args: {
   hhResponseId: string
   accessToken: string
   sendFarewellFlag: boolean
+  /** Текст прощального сообщения (если задан — используем вместо FAREWELL_MESSAGE). */
+  farewellText?: string
+  /** 'candidate' = отказ по инициативе кандидата (напр. стоп-слово в чате) —
+   *  пишем candidates.rejectionInitiator, чтобы отчёт показал «Сам отказ.».
+   *  Переиспользуем существующее поле (см. lib/hh/sync-inbound-stages.ts). */
+  initiator?: "candidate" | "company"
 }): Promise<boolean> {
-  const { candidateId, reason, hhResponseId, accessToken, sendFarewellFlag } = args
+  const { candidateId, reason, hhResponseId, accessToken, sendFarewellFlag, farewellText, initiator } = args
 
   // Текущий стейдж нужен для записи в stage_history.
   const [prev] = await db
@@ -191,6 +207,7 @@ async function applyRejection(args: {
     autoProcessingStopped: true,
     autoProcessingStoppedReason: reason,
     autoProcessingStoppedAt: new Date(),
+    ...(initiator ? { rejectionInitiator: initiator } : {}),
     updatedAt: new Date(),
   }).where(eq(candidates.id, candidateId))
 
@@ -206,7 +223,7 @@ async function applyRejection(args: {
   ))
 
   if (sendFarewellFlag) {
-    return await sendFarewell(accessToken, hhResponseId, FAREWELL_MESSAGE)
+    return await sendFarewell(accessToken, hhResponseId, farewellText ?? FAREWELL_MESSAGE)
   }
   return false
 }
@@ -441,6 +458,9 @@ export async function scanIncomingMessages(opts: {
 
     const automation = (candVac?.descriptionJson as { automation?: Record<string, unknown> } | null)?.automation
     const callIntent = (automation?.["callIntent"] as VacancyCallIntent | undefined) ?? {}
+    // Аддитивно, гейт по умолчанию ВЫКЛ: единый блок «Автоответы кандидату»
+    // (Портрет → autoResponder). Стоп-слова НЕ здесь — остаются в stopWordsJson.
+    const autoResponder = (candVac?.descriptionJson as { autoResponder?: VacancyAutoResponder } | null)?.autoResponder
 
     // Проверка channelSources: hh-канал должен быть включён на вакансии.
     // channelSources по умолчанию = ['hh'], так что для большинства вакансий
@@ -473,6 +493,26 @@ export async function scanIncomingMessages(opts: {
 
       const preview = text.slice(0, 120).replace(/\s+/g, " ")
 
+      // Автоответы кандидату (FAQ) — ДО чат-бота. Гейт autoResponder.enabled,
+      // по умолчанию ВЫКЛ → поведение не меняется. При совпадении отвечаем
+      // и НЕ продолжаем обработку этого сообщения (handled, аналог continue).
+      if (autoResponder?.enabled === true) {
+        const faqReply = matchFaqReply(text, autoResponder.faq)
+        if (faqReply) {
+          const { firstName } = await getCandidateFirstName(candidateId)
+          const tokenForUrl = candVac?.candShortId ?? candVac?.candToken ?? candidateId
+          const demoLink = `https://company24.pro/demo/${tokenForUrl}`
+          const rendered = renderTemplate(faqReply, {
+            name:      firstName,
+            vacancy:   candVac?.vacancyTitle ?? "",
+            demo_link: demoLink,
+          })
+          const sentOk = await sendFarewell(accessToken, resp.hhResponseId, rendered)
+          console.info(`[scan-incoming] ${candidateId} auto_responder_faq_sent ok=${sentOk} text="${preview}"`)
+          continue
+        }
+      }
+
       // #15 phase 5/6: AI чат-бот. Если у вакансии включён бот И есть промпт —
       // отдаём сообщение ему. processChatbotMessage сам решает: ответить, эскалировать,
       // отклонить или пропустить. handled=true означает «AI взял на себя» —
@@ -492,6 +532,8 @@ export async function scanIncomingMessages(opts: {
               aiChatbotPrompt:   candVac.aiChatbotPrompt,
               stopWordsJson:     candVac.stopWordsJson,
               botClarifyAmbiguous,
+              stopWordFarewellText: autoResponder?.stopWordFarewellText,
+              stopWordStageAction:  autoResponder?.stopWordStageAction,
             },
           })
           if (cb.handled) {
@@ -565,16 +607,43 @@ export async function scanIncomingMessages(opts: {
             ? matchStopWordList(text, vacStopWords) !== null
             : matchStopWordWith(text, await getBaselineStopWords())
           if (matched) {
+            // Настраиваемая реакция (Юрий 02.07): дефолт 'none' — стадию НЕ
+            // трогаем вообще, реагируем только прощальным сообщением (если
+            // текст задан в Портрете → «Автоответы кандидату» → «Стоп-слова»).
+            // 'candidate_declined' — отказ по инициативе кандидата
+            // (rejectionInitiator='candidate', отчёт покажет «Сам отказ.»).
+            // 'reject' — обычный отказ работодателя (как раньше по умолчанию).
+            const stageAction = readStopWordStageAction(autoResponder?.stopWordStageAction)
+            const farewellText = resolveStopWordFarewellText(autoResponder?.stopWordFarewellText)
+            let farewellRendered: string | null = null
+            if (farewellText) {
+              const { firstName } = await getCandidateFirstName(candidateId)
+              farewellRendered = renderTemplate(farewellText, {
+                name: firstName, vacancy: candVac?.vacancyTitle ?? "", demo_link: "",
+              })
+            }
+
+            if (stageAction === "none") {
+              const sentOk = farewellRendered
+                ? await sendFarewell(accessToken, resp.hhResponseId, farewellRendered)
+                : false
+              console.info(`[scan-incoming] ${candidateId} stop_word_no_stage_change farewell_sent=${sentOk} text="${preview}"`)
+              // Стадию не трогаем — сообщение считаем обработанным, дальше не идём.
+              continue
+            }
+
             const sent = await applyRejection({
               candidateId,
               reason:          "stop_word_regex",
               hhResponseId:    resp.hhResponseId,
               accessToken,
-              sendFarewellFlag: true,
+              sendFarewellFlag: !!farewellRendered,
+              farewellText:    farewellRendered ?? undefined,
+              initiator:       stageAction === "candidate_declined" ? "candidate" : "company",
             })
             result.rejectedRegex++
             rejected = true
-            console.info(`[scan-incoming] ${candidateId} stop_word farewell=${sent} text="${preview}"`)
+            console.info(`[scan-incoming] ${candidateId} stop_word action=${stageAction} farewell=${sent} text="${preview}"`)
             break
           }
         }
