@@ -239,8 +239,21 @@ export async function advanceToNextStage(
         scoreForStage: options.scoreForStage ?? currentState.scoreForStage ?? null,
         holdReason:    target.reason === "disabled_tail" ? "no_enabled_next_stage" : target.reason,
       }
+      // Видимость hold-а HR-у (гвард №4 п.6а): пометка в
+      // auto_processing_stopped_reason (ярлык в отчёте/карточке). Чужую
+      // причину не перезаписываем; tick-возобновление чистит только свою
+      // (funnel_v2_hold:*).
+      const [cur] = await db
+        .select({ reason: candidates.autoProcessingStoppedReason })
+        .from(candidates)
+        .where(eq(candidates.id, candidate.id))
+        .limit(1)
+      const updateSet: Record<string, unknown> = { funnelV2StateJson: heldState, updatedAt: new Date() }
+      if (!(cur?.reason ?? "").trim()) {
+        updateSet.autoProcessingStoppedReason = `funnel_v2_hold:${target.reason}`
+      }
       await db.update(candidates)
-        .set({ funnelV2StateJson: heldState, updatedAt: new Date() })
+        .set(updateSet)
         .where(eq(candidates.id, candidate.id))
     }
     console.warn("[funnel-v2/advance]", JSON.stringify({

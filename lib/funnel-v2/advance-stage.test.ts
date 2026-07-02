@@ -189,3 +189,17 @@ test("resolveAdvanceTarget: advanceTo на выключенную стадию �
   assert.deepEqual(resolveAdvanceTarget(stages, "st-demo", "st-msg"),
     { kind: "hold", reason: "advance_to_self" })
 })
+
+test("resolveAdvanceTarget: возобновление hold — стадию включили обратно → advance (п.6 гвард №4)", () => {
+  // Пока хвост выключен — hold; включили B обратно → advance на B (этим
+  // правилом funnel-v2-tick возобновляет hold-кандидатов).
+  const heldStages = makeStages()
+  heldStages[1] = { ...heldStages[1], enabled: false } // B=st-demo выкл
+  heldStages[2] = { ...heldStages[2], enabled: false } // C=st-hired выкл
+  assert.deepEqual(resolveAdvanceTarget(heldStages, "st-msg"),
+    { kind: "hold", reason: "disabled_tail" })
+
+  const resumedStages = heldStages.map(s => s.id === "st-demo" ? { ...s, enabled: true } : s)
+  assert.deepEqual(resolveAdvanceTarget(resumedStages, "st-msg"),
+    { kind: "advance", stageId: "st-demo" })
+})
