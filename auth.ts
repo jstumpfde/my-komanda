@@ -1,4 +1,4 @@
-import NextAuth, { type DefaultSession } from "next-auth"
+import NextAuth, { type DefaultSession, CredentialsSignin } from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
 import { eq, or, ilike } from "drizzle-orm"
@@ -8,8 +8,15 @@ import { users, companies } from "@/lib/db/schema"
 import type { UserRole } from "@/lib/auth"
 import { VKProvider } from "@/lib/auth/vk-provider"
 import { isPlatformAdminEmail } from "@/lib/platform/auth"
-import { checkPasswordAttempts } from "@/lib/rate-limit"
+import { checkPasswordAttempts, passwordAttemptsRemaining } from "@/lib/rate-limit"
 import { getActingAs } from "@/lib/partner/impersonation"
+
+// Отдельная ошибка для срабатывания лимита попыток входа.
+// next-auth прокидывает `code` в ?code=… → форма отличит лимит от неверного пароля
+// и покажет «Слишком много попыток», а не «Неверный логин или пароль».
+class RateLimitedSignin extends CredentialsSignin {
+  code = "rate_limited"
+}
 
 // Expose a stable ref so the JWT callback can read the DB
 // (needed when updateSession() is called after onboarding saves companyId)
@@ -131,12 +138,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (!login || !password) return null
 
-        // Лимит: 5 попыток за 15 мин по связке email+IP
+        // Лимит: 8 попыток за 15 мин по связке email+IP
         const ip = (req as Record<string, unknown> | undefined)?.headers
           ? String((req as { headers?: Record<string, string> }).headers?.["x-forwarded-for"] ?? "unknown").split(",")[0].trim()
           : "unknown"
         const rlKey = `login:${login.toLowerCase()}:${ip}`
-        if (!checkPasswordAttempts(rlKey)) return null
+        // Лимит 8 попыток за 15 мин. При срабатывании — отдельная ошибка
+        // (code="rate_limited"), чтобы форма не показывала «неверный пароль».
+        if (!checkPasswordAttempts(rlKey)) {
+          throw new RateLimitedSignin()
+        }
 
         const [user] = await db
           .select()
@@ -152,7 +163,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!user || !user.isActive) return null
 
         const isValid = await bcrypt.compare(password, user.passwordHash)
-        if (!isValid) return null
+        if (!isValid) {
+          // Сколько попыток осталось до блокировки — прокидываем в code
+          // (bad_credentials или bad_credentials:N), форма покажет остаток.
+          const left = passwordAttemptsRemaining(rlKey)
+          const err = new CredentialsSignin()
+          err.code = left > 0 && left <= 3 ? `bad_credentials:${left}` : "bad_credentials"
+          throw err
+        }
 
         return {
           id: user.id,

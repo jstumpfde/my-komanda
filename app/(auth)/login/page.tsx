@@ -43,7 +43,15 @@ function LoginForm() {
     setLoading(false)
 
     if (result?.error) {
-      setError("Неверный логин или пароль")
+      const code = result.code ?? ""
+      if (code === "rate_limited") {
+        setError("Слишком много попыток входа. Подождите ~15 минут или сбросьте пароль.")
+      } else if (code.startsWith("bad_credentials:")) {
+        const left = code.split(":")[1]
+        setError(`Неверный логин или пароль. Осталось попыток: ${left}`)
+      } else {
+        setError("Неверный логин или пароль")
+      }
       return
     }
 
