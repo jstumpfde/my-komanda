@@ -7,6 +7,9 @@ import { db } from "@/lib/db"
 import { yandexDirectIntegrations } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 import { exchangeCode, getYandexLogin } from "@/lib/yandex-direct/oauth"
+// База редиректа — из env (НЕ req.url): Next 16 подставляет внутренний origin
+// (http://localhost:3000) — инцидент 02.07.
+import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
 
 const PAGE = "/marketing/yandex-direct"
 
@@ -16,7 +19,7 @@ export async function GET(req: NextRequest) {
   const state = searchParams.get("state")
 
   if (!code || !state) {
-    return NextResponse.redirect(new URL(`${PAGE}?error=missing_params`, req.url))
+    return NextResponse.redirect(new URL(`${PAGE}?error=missing_params`, getAppBaseUrl()))
   }
 
   let companyId: string
@@ -27,14 +30,14 @@ export async function GET(req: NextRequest) {
     userId = parsed.userId
     if (!companyId || !userId) throw new Error("bad state")
   } catch {
-    return NextResponse.redirect(new URL(`${PAGE}?error=invalid_state`, req.url))
+    return NextResponse.redirect(new URL(`${PAGE}?error=invalid_state`, getAppBaseUrl()))
   }
 
   // state не подписан — сверяем с сессией, чтобы нельзя было подменить
   // companyId и привязать свой Яндекс-аккаунт к чужой компании.
   const session = await auth()
   if (!session?.user?.companyId || session.user.companyId !== companyId) {
-    return NextResponse.redirect(new URL(`${PAGE}?error=invalid_state`, req.url))
+    return NextResponse.redirect(new URL(`${PAGE}?error=invalid_state`, getAppBaseUrl()))
   }
 
   try {
@@ -73,9 +76,9 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    return NextResponse.redirect(new URL(`${PAGE}?connected=1`, req.url))
+    return NextResponse.redirect(new URL(`${PAGE}?connected=1`, getAppBaseUrl()))
   } catch (err) {
     console.error("[yandex-direct/callback]", err)
-    return NextResponse.redirect(new URL(`${PAGE}?error=auth_failed`, req.url))
+    return NextResponse.redirect(new URL(`${PAGE}?error=auth_failed`, getAppBaseUrl()))
   }
 }
