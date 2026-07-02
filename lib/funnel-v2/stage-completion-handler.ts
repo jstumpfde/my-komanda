@@ -29,6 +29,7 @@ import type { CandidateForExecutor, VacancyForExecutor } from "@/lib/funnel-v2/r
 import type { StructuredAnswer } from "@/lib/score-test-objective"
 import { renderTemplate } from "@/lib/template-renderer"
 import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
+import { rejectMessageVars } from "@/lib/funnel-v2/reject-vars"
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Вспомогательные загрузчики
@@ -213,17 +214,26 @@ async function applyStageRule(args: {
 
   // Шаг 2: autoReject — если не пройден любой из заданных порогов
   if (rule.autoReject && (aiFail || objFail)) {
-    // Рендерим текст отказа ({{имя}} и пр.).
+    // Рендерим текст отказа ЕДИНЫМ набором переменных (reject-vars; инвариант:
+    // ни один путь не шлёт кандидату литерал {{...}}) — name/vacancy/company/
+    // demo_link, те же, что кнопки-плейсхолдеры редактора и путь score-gate.
     // Приоритет: stage.rejectText (Воронка 3) → rule.rejectText → пусто
     // (дальше действующий стандартный текст вакансии в cron pending-rejections).
     const { firstName } = await getCandidateFirstName(candidate.id)
     const rawText = (stage.rejectText ?? "").trim().length > 0 ? stage.rejectText! : (rule.rejectText ?? "")
-    const renderedText = rawText.trim().length > 0
-      ? renderTemplate(rawText, {
-          name:    firstName,
-          vacancy: vacancy.title ?? "",
-        })
-      : null
+    let renderedText: string | null = null
+    if (rawText.trim().length > 0) {
+      const { getCompanyName } = await import("@/lib/funnel-v2/runtime-executor")
+      const { getAppBaseUrl } = await import("@/lib/funnel-v2/base-url")
+      const companyName = vacancy.companyId ? await getCompanyName(vacancy.companyId) : ""
+      renderedText = renderTemplate(rawText, rejectMessageVars({
+        firstName,
+        vacancyTitle: vacancy.title,
+        companyName,
+        token:        candidate.token,
+        baseUrl:      getAppBaseUrl(),
+      }))
+    }
 
     await scheduleV2Rejection(
       updatedCandidate,

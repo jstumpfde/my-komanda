@@ -304,14 +304,18 @@ async function applyFailAction(
         const { renderTemplate } = await import("@/lib/template-renderer")
         const { getAppBaseUrl } = await import("@/lib/funnel-v2/base-url")
         const { getCompanyName } = await import("@/lib/funnel-v2/runtime-executor")
+        const { rejectMessageVars } = await import("@/lib/funnel-v2/reject-vars")
         const { firstName } = await getCandidateFirstName(candidate.id)
         const companyName = vacancy?.companyId ? await getCompanyName(vacancy.companyId) : ""
-        rejectText = renderTemplate(raw, {
-          name:      firstName,
-          vacancy:   vacancy?.title ?? "",
-          company:   companyName,
-          demo_link: `${getAppBaseUrl()}/demo/${candidate.token}`,
-        })
+        // Единый набор переменных отказа (reject-vars) — тот же, что на
+        // легаси-пути stage-completion-handler и в кнопках редактора.
+        rejectText = renderTemplate(raw, rejectMessageVars({
+          firstName,
+          vacancyTitle: vacancy?.title ?? "",
+          companyName,
+          token:        candidate.token,
+          baseUrl:      getAppBaseUrl(),
+        }))
       }
       await scheduleV2Rejection(candidate, stage.id, stage.rule.rejectDelayMinutes, rejectText)
       return "scheduled_rejection"
