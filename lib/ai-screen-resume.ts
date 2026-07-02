@@ -255,9 +255,14 @@ ${buildWeightsSection(v.aiWeights)}` + AI_SAFETY_PROMPT
   // Backstop к калибровке: без содержательной истории должностей (только годы
   // стажа + soft-skills, либо пустой опыт) высокий балл невозможен — режем до
   // weak-потолка. Стоп-вердикт (score=0) не трогаем.
+  // ВАЖНО (predeploy-guard 02.07): бэкстоп применяем ТОЛЬКО когда workHistory
+  // РЕАЛЬНО передан вызывающим (live-скан process-queue). Если workHistory ===
+  // undefined — данных о должностях у вызова нет (ручная переоценка rescore,
+  // mock-импорт): резать до 44 нельзя, иначе обнулим реальные баллы. Отличаем
+  // «нет данных» (undefined → не режем) от «пустая история» ([] → режем).
   let effVerdict = verdict
   let effScore = score
-  if (effVerdict !== "stop" && effScore > THIN_INPUT_SCORE_CAP && !hasSubstantiveRoleHistory(r)) {
+  if (effVerdict !== "stop" && effScore > THIN_INPUT_SCORE_CAP && r.workHistory !== undefined && !hasSubstantiveRoleHistory(r)) {
     effScore = THIN_INPUT_SCORE_CAP
     effVerdict = "weak"
   }

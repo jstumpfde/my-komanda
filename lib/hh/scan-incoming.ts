@@ -627,8 +627,23 @@ export async function scanIncomingMessages(opts: {
               const sentOk = farewellRendered
                 ? await sendFarewell(accessToken, resp.hhResponseId, farewellRendered)
                 : false
-              console.info(`[scan-incoming] ${candidateId} stop_word_no_stage_change farewell_sent=${sentOk} text="${preview}"`)
-              // Стадию не трогаем — сообщение считаем обработанным, дальше не идём.
+              // Стадию НЕ трогаем, но дожимы ставим на паузу (Юрий 02.07: не
+              // долбить кандидата, написавшего стоп-слово) — automationPaused + отмена
+              // pending-касаний. Решение по стадии остаётся за HR.
+              await db.update(candidates).set({
+                automationPaused:            true,
+                autoProcessingStopped:       true,
+                autoProcessingStoppedReason: "stop_word_no_stage",
+                autoProcessingStoppedAt:     new Date(),
+                updatedAt:                   new Date(),
+              }).where(eq(candidates.id, candidateId))
+              await db.update(followUpMessages).set({
+                status: "cancelled", errorMessage: "stop_word_no_stage",
+              }).where(and(
+                eq(followUpMessages.candidateId, candidateId),
+                eq(followUpMessages.status, "pending"),
+              ))
+              console.info(`[scan-incoming] ${candidateId} stop_word_no_stage_change paused farewell_sent=${sentOk} text="${preview}"`)
               continue
             }
 

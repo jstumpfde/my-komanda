@@ -930,14 +930,20 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
         name: firstName, vacancy: vacancyTitle, demo_link: "",
       })
     }
-    if (!dryRun && stageAction !== "none") {
+    if (!dryRun) {
+      // При стоп-слове ВСЕГДА ставим дожимы на паузу (решение Юрия 02.07: «не
+      // долбить» кандидата, написавшего стоп-слово) — automationPaused=true →
+      // should-stop прекращает исходящие касания. Стадию меняем ТОЛЬКО при
+      // явном действии ('candidate_declined'/'reject'); при 'none' стадия
+      // остаётся прежней (кандидат просто на паузе, HR решает сам).
       await db.update(candidates).set({
-        stage:                       "rejected",
+        ...(stageAction !== "none"
+          ? { stage: "rejected", rejectionInitiator: stageAction === "candidate_declined" ? "candidate" : "company" }
+          : {}),
         autoProcessingStopped:       true,
         autoProcessingStoppedReason: "stop_word_in_chat",
         autoProcessingStoppedAt:     new Date(),
         automationPaused:            true,
-        rejectionInitiator:          stageAction === "candidate_declined" ? "candidate" : "company",
         updatedAt:                   new Date(),
       }).where(eq(candidates.id, candidateId))
     }

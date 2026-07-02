@@ -486,7 +486,22 @@ export async function processAvitoInbound(
           const sentOk = farewellRendered
             ? await sendAvitoMessage(accessToken, avitoUserId, chatId, farewellRendered)
             : false
-          console.info(`[avito/scan-incoming] ${candidateId} stop_word_no_stage_change farewell_sent=${sentOk} text="${preview}"`)
+          // Стадию НЕ трогаем, но дожимы на паузу (Юрий 02.07) — automationPaused
+          // + отмена pending-касаний. Решение по стадии остаётся за HR.
+          await db.update(candidates).set({
+            automationPaused:            true,
+            autoProcessingStopped:       true,
+            autoProcessingStoppedReason: "stop_word_no_stage",
+            autoProcessingStoppedAt:     new Date(),
+            updatedAt:                   new Date(),
+          }).where(eq(candidates.id, candidateId))
+          await db.update(followUpMessages).set({
+            status: "cancelled", errorMessage: "stop_word_no_stage",
+          }).where(and(
+            eq(followUpMessages.candidateId, candidateId),
+            eq(followUpMessages.status, "pending"),
+          ))
+          console.info(`[avito/scan-incoming] ${candidateId} stop_word_no_stage_change paused farewell_sent=${sentOk} text="${preview}"`)
           return
         }
 
