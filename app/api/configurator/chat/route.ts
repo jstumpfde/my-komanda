@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server"
 import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
+import { AI_MODEL_FAST } from "@/lib/ai/models"
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY
-const MODEL = "claude-haiku-4-5-20251001"
+const MODEL = AI_MODEL_FAST
 
 const SYSTEM_PROMPT = `Ты — Нэнси, AI-конфигуратор бизнес-платформы Company24. Ты помогаешь предпринимателям настраивать отчёты, автоматизации и цели в платформе обычным человеческим языком.
 

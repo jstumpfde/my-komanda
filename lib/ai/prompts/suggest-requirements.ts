@@ -1,6 +1,6 @@
 // Группа 25: AI-предложение структурированных требований из описания вакансии.
 // Используется в /api/modules/hr/vacancies/[id]/requirements/suggest.
-// model: claude-sonnet-4-6, temperature 0.3 (немного креатива).
+// model: AI_MODEL_MAIN (см. lib/ai/models.ts). temperature убран — Sonnet 5 не принимает.
 
 export interface SuggestRequirementsPromptInput {
   vacancyTitle:    string

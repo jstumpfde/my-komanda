@@ -11,10 +11,10 @@ import {
   YULIA_SYSTEM_PROMPT,
   YULIA_VACANCY_CREATION_TOOLS,
 } from "./prompts"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
-const MODEL       = "claude-sonnet-4-6"
+const MODEL       = AI_MODEL_MAIN
 const MAX_TOKENS  = 1500
-const TEMPERATURE = 0.3
 
 let _client: Anthropic | null = null
 function client(): Anthropic {
@@ -44,8 +44,8 @@ export interface YuliaResponse {
 export async function runYulia(history: YuliaTurn[]): Promise<YuliaResponse> {
   const resp = await client().messages.create({
     model:       MODEL,
+    thinking: { type: "disabled" },
     max_tokens:  MAX_TOKENS,
-    temperature: TEMPERATURE,
     system:      YULIA_SYSTEM_PROMPT,
     tools:       YULIA_VACANCY_CREATION_TOOLS as unknown as Anthropic.Tool[],
     messages:    history.map(h => ({ role: h.role, content: h.content })),

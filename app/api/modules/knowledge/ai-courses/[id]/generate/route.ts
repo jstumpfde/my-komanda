@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { aiCourseProjects, aiUsageLog } from "@/lib/db/schema"
 import { eq, and } from "drizzle-orm"
 import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -170,7 +171,8 @@ ${combinedText.slice(0, 12000)}
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: AI_MODEL_MAIN,
+        thinking: { type: "disabled" },
         max_tokens: 8192,
         system: "Ты эксперт по созданию корпоративных обучающих курсов. На основе предоставленных материалов создай структурированный курс. Отвечай ТОЛЬКО валидным JSON без markdown.",
         messages: [{ role: "user", content: prompt }],
@@ -218,7 +220,7 @@ ${combinedText.slice(0, 12000)}
       projectId: id,
       inputTokens,
       outputTokens,
-      model: "claude-sonnet-4-6",
+      model: AI_MODEL_MAIN,
       costUsd: cost,
     })
 

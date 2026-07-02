@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk"
 import { requireAuth, apiError, apiSuccess } from "@/lib/api-helpers"
 import { AI_SAFETY_PROMPT } from "@/lib/ai-safety"
 import { logActivity } from "@/lib/activity-log"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 const client = new Anthropic()
 
@@ -128,7 +129,8 @@ export async function POST(req: NextRequest) {
     }
 
     const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
+      model: AI_MODEL_MAIN,
+      thinking: { type: "disabled" },
       max_tokens: 4000,
       system: SYSTEM_PROMPT + AI_SAFETY_PROMPT,
       messages: [{ role: "user", content: body.text.trim() }],

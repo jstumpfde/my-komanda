@@ -12,6 +12,7 @@ import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import { buildSuggestRequirementsPrompt } from "@/lib/ai/prompts/suggest-requirements"
 import { addVacancyTokens } from "@/lib/ai/token-usage"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -92,9 +93,9 @@ export async function POST(
     })
 
     const message = await anthropic.messages.create({
-      model:       "claude-sonnet-4-6",
+      model:       AI_MODEL_MAIN,
+      thinking: { type: "disabled" },
       max_tokens:  1200,
-      temperature: 0.3,
       messages:    [{ role: "user", content: prompt }],
     })
 

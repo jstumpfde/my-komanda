@@ -4,6 +4,7 @@ import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { AI_SAFETY_PROMPT, checkAiRateLimit, handleAiError } from "@/lib/ai-safety"
 import { checkRateLimit } from "@/lib/rate-limit"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 // Сравнение кандидатов: AI-группировка свободных текстовых ответов на ОДИН вопрос
 // в несколько смысловых групп. Возвращает группы со списком candidateId — фронт
@@ -60,7 +61,8 @@ items — номера ответов из списка выше. Покрой �
 
   try {
     const resp = await client.messages.create({
-      model: "claude-sonnet-4-6",
+      model: AI_MODEL_MAIN,
+      thinking: { type: "disabled" },
       max_tokens: 2000,
       system: `Ты группируешь свободные ответы кандидатов в смысловые кластеры. Отвечай ТОЛЬКО валидным JSON.\n${AI_SAFETY_PROMPT}`,
       messages: [{ role: "user", content: prompt }],

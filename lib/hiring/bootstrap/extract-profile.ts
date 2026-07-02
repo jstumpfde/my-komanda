@@ -7,6 +7,7 @@ import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import {
   DEAL_CYCLES, SALES_CHANNELS, makeProductProfile, type ProductProfile,
 } from "@/lib/hiring/product-profile"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 const client = new Anthropic({ baseURL: getClaudeApiUrl() })
 
@@ -89,7 +90,8 @@ function toProfile(raw: RawProduct, i: number): ProductProfile {
 /** Извлекает профиль компании/продуктов из текста сайта. Бросает при невалидном AI-ответе. */
 export async function extractProfileFromSiteText(siteText: string): Promise<ExtractResult> {
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: AI_MODEL_MAIN,
+    thinking: { type: "disabled" },
     max_tokens: 2500,
     system: SYSTEM,
     messages: [{

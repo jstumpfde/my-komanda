@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server"
 import { apiError, apiSuccess, requireCompany } from "@/lib/api-helpers"
 import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 // POST /api/core/generate
 //
@@ -9,7 +10,7 @@ import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
 // { text, title, blocks[] } — где blocks совместимы с типами из
 // components/editor/types.ts (Block[]).
 
-const CLAUDE_MODEL = "claude-sonnet-4-6"
+const CLAUDE_MODEL = AI_MODEL_MAIN
 
 type TargetModule = "knowledge" | "learning" | "hr" | "crm"
 const VALID_TARGETS: Set<TargetModule> = new Set([
@@ -60,6 +61,7 @@ async function callClaude(
     },
     body: JSON.stringify({
       model: CLAUDE_MODEL,
+      thinking: { type: "disabled" },
       max_tokens: 4096,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: userText }],

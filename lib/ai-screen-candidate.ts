@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk"
 import { AI_SAFETY_PROMPT } from "@/lib/ai-safety"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 export interface ScreeningResult {
   score: number
@@ -127,9 +128,9 @@ ${salesSections.length > 0 ? "\nСПЕЦИФИКА ПРОДАЖ:\n" + salesSecti
   }
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 1000,
-    temperature: 0,
+    model: AI_MODEL_MAIN,
+    thinking: { type: "disabled" },
+    max_tokens: 1500, // запас под токенизатор Sonnet 5 (~+30%)
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content: userMessage }],
   })

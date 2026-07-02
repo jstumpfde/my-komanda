@@ -10,6 +10,7 @@ import Anthropic from "@anthropic-ai/sdk"
 import { AI_SAFETY_PROMPT } from "@/lib/ai-safety"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import { addVacancyTokens } from "@/lib/ai/token-usage"
+import { AI_MODEL_FAST } from "@/lib/ai/models"
 
 export type QualificationVerdict = "passed" | "failed" | "unclear"
 
@@ -61,7 +62,7 @@ ${candidateAnswer.trim()}`
   let raw = ""
   try {
     const response = await client.messages.create({
-      model:       "claude-haiku-4-5-20251001",
+      model:       AI_MODEL_FAST,
       max_tokens:  600,
       temperature: 0,
       system:      SYSTEM_PROMPT,

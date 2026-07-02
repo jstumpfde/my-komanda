@@ -4,9 +4,10 @@ import { auth } from "@/auth"
 import { db } from "@/lib/db"
 import { goals, users } from "@/lib/db/schema"
 import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
+import { AI_MODEL_FAST } from "@/lib/ai/models"
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY
-const MODEL = "claude-haiku-4-5-20251001"
+const MODEL = AI_MODEL_FAST
 const TIMEOUT_MS = 10_000
 const FALLBACK =
   "Утренний обзор готов. Посмотрите фокус дня и прогресс по целям ниже."

@@ -7,6 +7,7 @@ import type Anthropic from "@anthropic-ai/sdk"
 import { AI_SAFETY_PROMPT } from "@/lib/ai-safety"
 import { getScoringClient } from "./anthropic-client"
 import type { ScoringSpec, WeightLevel } from "./types"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 // Поля, которые собирает публичная интейк-форма (app/(public)/intake/[token]).
 export interface IntakeData {
@@ -26,7 +27,7 @@ export interface IntakeData {
   topPriority?: string
 }
 
-const MODEL = "claude-sonnet-4-6"
+const MODEL = AI_MODEL_MAIN
 
 const TOOL: Anthropic.Tool = {
   name: "submit_spec",
@@ -96,6 +97,7 @@ export async function intakeToScoringSpec(data: IntakeData): Promise<ScoringSpec
   const client = getScoringClient()
   const response = await client.messages.create({
     model: MODEL,
+    thinking: { type: "disabled" },
     max_tokens: 1500,
     tools: [TOOL],
     tool_choice: { type: "tool", name: "submit_spec" },

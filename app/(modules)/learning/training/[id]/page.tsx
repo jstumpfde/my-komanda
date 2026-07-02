@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 interface Criterion {
   key: string
@@ -50,7 +51,7 @@ interface Evaluation {
   recommendations: string[]
 }
 
-const CLAUDE_MODEL = "claude-sonnet-4-6"
+const CLAUDE_MODEL = AI_MODEL_MAIN
 const MIN_TURNS_FOR_EVAL = 5
 const MAX_TURNS_BEFORE_AUTO_EVAL = 10
 

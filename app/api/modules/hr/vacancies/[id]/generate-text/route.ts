@@ -5,6 +5,7 @@ import { vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import Anthropic from "@anthropic-ai/sdk"
 import { getExamplesForNiche } from "@/lib/templates/vacancy-examples"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -93,8 +94,9 @@ ${examplesText}
 Напиши ТОЛЬКО текст вакансии, без комментариев и пояснений.`
 
     const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1024,
+      model: AI_MODEL_MAIN,
+      thinking: { type: "disabled" },
+      max_tokens: 1536, // запас под токенизатор Sonnet 5 (~+30%)
       messages: [{ role: "user", content: prompt }],
     })
 

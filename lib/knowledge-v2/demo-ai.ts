@@ -1,6 +1,7 @@
 import type { DemoLength } from "@/lib/demo-types"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
-export const CLAUDE_MODEL = "claude-sonnet-4-6"
+export const CLAUDE_MODEL = AI_MODEL_MAIN
 
 export type Tone = "energetic" | "friendly" | "business" | "direct"
 

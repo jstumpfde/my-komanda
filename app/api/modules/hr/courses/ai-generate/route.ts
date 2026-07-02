@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireCompany } from "@/lib/api-helpers"
 import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -276,7 +277,8 @@ ${combinedText.slice(0, 12000)}
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: AI_MODEL_MAIN,
+        thinking: { type: "disabled" },
         max_tokens: 8192,
         system: "Ты — эксперт по созданию обучающих курсов для корпоративного обучения. Создай структурированный курс на основе предоставленных материалов. Ответь строго в JSON формате.",
         messages: [{ role: "user", content: prompt }],

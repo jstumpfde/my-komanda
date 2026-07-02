@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
+import { AI_MODEL_FAST } from "@/lib/ai/models"
 
 export type CandidateIntent =
   | "rejection"
@@ -83,7 +84,7 @@ export async function classifyCandidateResponse(
   let parsed: { intent?: string; confidence?: number; reasoning?: string }
   try {
     const response = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: AI_MODEL_FAST,
       max_tokens: 200,
       messages: [{ role: "user", content: buildPrompt(trimmed, context?.vacancyTitle) }],
     })

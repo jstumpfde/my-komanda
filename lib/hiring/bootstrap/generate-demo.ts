@@ -7,6 +7,7 @@
 import Anthropic from "@anthropic-ai/sdk"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import type { ProductProfile } from "@/lib/hiring/product-profile"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 const client = new Anthropic({ baseURL: getClaudeApiUrl() })
 
@@ -96,7 +97,8 @@ export async function generateDemoFromProfile(opts: {
   if (!facts.trim()) throw new GenerateDemoError("Нет данных для генерации (заполните описание компании или профиль продукта)")
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: AI_MODEL_MAIN,
+    thinking: { type: "disabled" },
     max_tokens: length === "short" ? 1500 : 4500,
     system: length === "short" ? SYSTEM_SHORT : SYSTEM_FULL,
     messages: [{

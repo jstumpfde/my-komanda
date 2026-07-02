@@ -3,6 +3,7 @@ import { db } from "@/lib/db"
 import { knowledgeArticles } from "@/lib/db/schema"
 import { apiError, apiSuccess, requireCompany } from "@/lib/api-helpers"
 import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 // POST /api/core/ocr
 //
@@ -34,7 +35,7 @@ const VALID_TARGETS: Set<TargetModule> = new Set([
   "crm",
 ])
 
-const CLAUDE_MODEL = "claude-sonnet-4-6"
+const CLAUDE_MODEL = AI_MODEL_MAIN
 
 const OCR_SYSTEM_PROMPT =
   "Извлеки весь текст из изображения. Сохрани структуру: заголовки, списки, таблицы. " +
@@ -111,6 +112,7 @@ async function callClaudeVision(
     },
     body: JSON.stringify({
       model: CLAUDE_MODEL,
+      thinking: { type: "disabled" },
       max_tokens: 4096,
       system: OCR_SYSTEM_PROMPT,
       messages: [

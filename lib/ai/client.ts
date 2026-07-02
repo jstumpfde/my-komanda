@@ -4,9 +4,10 @@
 
 import Anthropic from "@anthropic-ai/sdk"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
+import { AI_MODEL_MAIN, AI_MODEL_FAST } from "@/lib/ai/models"
 
-const HAIKU  = "claude-haiku-4-5-20251001"
-const SONNET = "claude-sonnet-4-6"
+const HAIKU  = AI_MODEL_FAST
+const SONNET = AI_MODEL_MAIN
 
 let _client: Anthropic | null = null
 function client(): Anthropic {
@@ -35,6 +36,7 @@ async function call(model: string, prompt: string, system?: string, maxTokens = 
     const resp = await client().messages.create({
       model,
       max_tokens: maxTokens,
+      thinking: { type: "disabled" }, // Sonnet 5: без поля включился бы adaptive (см. lib/ai/models.ts)
       system,
       messages: [{ role: "user", content: prompt }],
     })
@@ -57,6 +59,7 @@ async function callMessages(
     const resp = await client().messages.create({
       model,
       max_tokens: maxTokens,
+      thinking: { type: "disabled" }, // Sonnet 5: без поля включился бы adaptive (см. lib/ai/models.ts)
       system,
       messages: messages.map(m => ({ role: m.role, content: m.content })),
     })
@@ -81,6 +84,7 @@ async function callWithUsage(model: string, prompt: string, system?: string, max
     const resp = await client().messages.create({
       model,
       max_tokens: maxTokens,
+      thinking: { type: "disabled" }, // Sonnet 5: без поля включился бы adaptive (см. lib/ai/models.ts)
       system,
       messages: [{ role: "user", content: prompt }],
     })
@@ -99,6 +103,7 @@ async function callMessagesWithUsage(
     const resp = await client().messages.create({
       model,
       max_tokens: maxTokens,
+      thinking: { type: "disabled" }, // Sonnet 5: без поля включился бы adaptive (см. lib/ai/models.ts)
       system,
       messages: messages.map(m => ({ role: m.role, content: m.content })),
     })

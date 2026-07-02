@@ -13,6 +13,7 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { LENGTH_LABELS, NICHE_LABELS } from "@/lib/demo-types"
 import type { DemoLength, DemoNiche } from "@/lib/demo-types"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 // ─── Options ────────────────────────────────────────────────────────────────
 
@@ -452,7 +453,7 @@ interface ClaudeResult {
   usage: ClaudeUsage
 }
 
-const CLAUDE_MODEL = "claude-sonnet-4-6"
+const CLAUDE_MODEL = AI_MODEL_MAIN
 
 async function callClaudeViaServer(
   text: string,

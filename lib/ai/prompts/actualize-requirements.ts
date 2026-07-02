@@ -4,7 +4,7 @@
 //   add           — чего НЕТ в текущих, но стоит добавить под новую вакансию
 //   maybe_outdated — текущие пункты, которые могли устареть/перестать подходить
 // Используется в /api/modules/hr/vacancies/[id]/requirements/actualize.
-// model: claude-sonnet-4-6, temperature 0.3.
+// model: AI_MODEL_MAIN (см. lib/ai/models.ts). temperature убран — Sonnet 5 не принимает.
 
 export interface ActualizeRequirementsPromptInput {
   vacancyTitle:       string

@@ -8,6 +8,7 @@ import { verifyToken } from "../auth/route"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import { checkRateLimit } from "@/lib/rate-limit"
 import { buildPublicChatContext } from "@/lib/knowledge/public-chat-context"
+import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 const SYSTEM_PROMPT =
   "Ты — Ненси, AI-ассистент корпоративной базы знаний компании. " +
@@ -15,7 +16,7 @@ const SYSTEM_PROMPT =
   "Если ответ есть — дай краткий ответ и укажи название материала в скобках. " +
   "Если не найден — скажи что не нашёл. Отвечай на русском, кратко, 2-4 предложения."
 
-const CLAUDE_MODEL = "claude-sonnet-4-6"
+const CLAUDE_MODEL = AI_MODEL_MAIN
 const MAX_QUESTION_LEN = 2000
 
 export async function POST(req: NextRequest) {
@@ -54,7 +55,8 @@ export async function POST(req: NextRequest) {
     const client = new Anthropic({ baseURL: getClaudeApiUrl() })
     const resp = await client.messages.create({
       model: CLAUDE_MODEL,
-      max_tokens: 1024,
+      thinking: { type: "disabled" },
+      max_tokens: 1536, // запас под токенизатор Sonnet 5 (~+30%)
       system: SYSTEM_PROMPT,
       messages: [
         { role: "user", content: `Материалы компании:\n${context}\n\nВопрос: ${question}` },

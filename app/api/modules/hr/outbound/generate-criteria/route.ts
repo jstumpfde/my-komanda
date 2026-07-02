@@ -13,6 +13,7 @@
 import { NextResponse } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
 import { requireCompany, apiError } from "@/lib/api-helpers"
+import { AI_MODEL_FAST } from "@/lib/ai/models"
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -94,7 +95,7 @@ export async function POST(req: Request) {
 
   try {
     const msg = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: AI_MODEL_FAST,
       max_tokens: 512,
       system: SYSTEM,
       messages: [{ role: "user", content: userMsg }],
