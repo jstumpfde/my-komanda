@@ -306,6 +306,10 @@ export function defaultFunnelV2Stages(seed = "default"): FunnelV2Stage[] {
   //    как таковой настраивается в Портрете (врезка над списком стадий).
   const respond = withScoreGate(makeStage("message", s("respond")), "resume")
   respond.title = "Отклик → приглашение на демо"
+  respond.messages = [
+    "{{name}}, здравствуйте! Спасибо за отклик на «{{vacancy}}». Подготовили короткий обзор должности — 15 минут, и вы узнаете о задачах, команде и условиях. Посмотрите:",
+    "{{demo_link}}",
+  ]
 
   // 2) Демо (1-я часть пути)
   const demo = makeStage("demo", s("demo"))
@@ -314,6 +318,9 @@ export function defaultFunnelV2Stages(seed = "default"): FunnelV2Stage[] {
   // 3) Путь менеджера (2-я часть) — анкета/предквалификация, gate по анкете
   const managerPath = withScoreGate(makeStage("prequalification", s("manager-path")), "anketa")
   managerPath.title = "Путь менеджера (2-я часть)"
+  managerPath.messages = [
+    "{{name}}, отлично — вы прошли первую часть! Предлагаем следующий шаг: {{demo_link}}",
+  ]
 
   // 4) Тест-задание — gate по баллу теста
   const task = withScoreGate(makeStage("task", s("task")), "test")

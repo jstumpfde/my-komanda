@@ -17,7 +17,12 @@ interface StepWords {
 }
 
 // Словарь по реальным типам стадий v2.
+// Флейвор касаний должен соответствовать action стадии (не путать message/demo
+// с интервью-флейвором «встреча/подтвердите время» — тот только для interview).
 export const STEP_WORDS: Record<string, StepWords> = {
+  // message — первое касание/приглашение посмотреть демо-обзор; тот же
+  // флейвор «обзор/демо», что и у demo (осознанный алиас, не interview).
+  message:          { noun: "обзор",   verb: "посмотрите",  verb_done: "досмотрите",  time: "5–7 минут",   link: "demo_link" },
   demo:             { noun: "обзор",   verb: "посмотрите",  verb_done: "досмотрите",  time: "5–7 минут",   link: "demo_link" },
   test:             { noun: "тест",    verb: "пройдите",    verb_done: "завершите",   time: "5–7 минут",   link: "test_link" },
   task:             { noun: "задание", verb: "выполните",   verb_done: "доделайте",   time: "15–20 минут", link: "test_link" },
@@ -25,6 +30,9 @@ export const STEP_WORDS: Record<string, StepWords> = {
   // Живые этапы: verb_done = null → ветка Б НЕ генерится; time = null → строки со {{step_time}} пропускаются.
   interview:        { noun: "встречу", verb: "подтвердите", verb_done: null,          time: null,          link: "demo_link" },
   offer:            { noun: "оффер",   verb: null,          verb_done: null,          time: null,          link: "" },
+  // hired — терминальная позитивная стадия (кандидат уже нанят), «дожимать»
+  // нечего → обе ветки пустые (см. buildDozhimChain).
+  hired:            { noun: "",       verb: null,           verb_done: null,          time: null,          link: "" },
 }
 
 const FALLBACK: StepWords = STEP_WORDS.demo
@@ -124,6 +132,10 @@ export function buildDozhimChain(
     if (branch === "B") return []
     return withDays(templates.offer, preset)
   }
+
+  // Терминальные стадии без «действия» (напр. hired — уже нанят, дожимать
+  // нечего): verb=null и это не interview/offer → обе ветки пустые.
+  if (w.verb === null) return []
 
   // Ветка Б недоступна для живых этапов (verb_done=null).
   if (branch === "B" && !w.verb_done) return []
