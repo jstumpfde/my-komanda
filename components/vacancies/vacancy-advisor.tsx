@@ -994,7 +994,9 @@ function BestPublishTimeCard({ vacancyId, city }: { vacancyId?: string; city?: s
 
   return (
     <div className="rounded-lg border p-3 space-y-2">
-      <p className="text-sm font-semibold">🕐 Лучшее время публикации</p>
+      {/* «Время откликов» (Юрий 03.07): карта меряет, когда кандидаты
+          откликаются — это же и есть лучшее время для публикации. */}
+      <p className="text-sm font-semibold">🕐 Время откликов <span className="font-normal text-muted-foreground">— лучшее время публикации</span></p>
       {!data.enough ? (
         <p className="text-xs text-muted-foreground">
           Пока мало данных для рекомендации ({data.total} откликов). Накопится статистика — покажем, в какие дни и часы кандидаты откликаются активнее.

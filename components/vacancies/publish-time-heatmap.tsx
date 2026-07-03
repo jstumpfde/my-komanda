@@ -152,15 +152,16 @@ export function PublishTimeHeatmap({ data, city }: { data: PublishTimeHeatmapDat
         </div>
       )}
 
-      {/* Под картой — друг под другом: Дни (бары), ниже 24-часовая гистограмма
-          (Юрий 03.07: правую колонку опустить вниз, дизайн хромал). */}
-      <div className="space-y-4 pt-1">
+      {/* Под картой — «Дни» узкой колонкой слева + «Часы» справа в одну строку
+          (Юрий 03.07: дни были растянуты на всю ширину — много пустого места).
+          Часы — тёплый акцент (warning), чтобы карта не была сплошь синей. */}
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-x-8 gap-y-4 items-start pt-1">
         {data.days && data.days.length > 0 && (
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <p className="text-[11px] font-medium text-muted-foreground">Дни (=100%)</p>
             {data.days.slice(0, 7).map(d => (
               <div key={d.dow} className="flex items-center gap-2">
-                <span className="w-16 shrink-0 text-[11px] text-muted-foreground truncate">{d.name}</span>
+                <span className="w-6 shrink-0 text-[11px] text-muted-foreground">{dayShort[d.dow]}</span>
                 <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
                   <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, d.pct)}%` }} />
                 </div>
@@ -186,7 +187,7 @@ export function PublishTimeHeatmap({ data, city }: { data: PublishTimeHeatmapDat
                     className="flex-1 flex items-end h-full"
                   >
                     <div
-                      className={`w-full rounded-t-[2px] ${v <= 0 ? "bg-muted/40" : isHot ? "bg-primary" : "bg-primary/45"}`}
+                      className={`w-full rounded-t-[2px] ${v <= 0 ? "bg-muted/40" : isHot ? "bg-warning" : "bg-warning/40"}`}
                       style={{ height: `${hPct}%` }}
                     />
                   </div>
