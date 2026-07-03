@@ -300,6 +300,18 @@ export const StopFactorCitizenshipSchema = z.object({
   rejectionText: z.string().optional(),
 })
 
+// Родной язык — ПОЛНАЯ КОПИЯ StopFactorCitizenshipSchema по структуре
+// (03.07), домен = hh resume.language[] с level.id==="l1" (родной).
+export const StopFactorNativeLanguageSchema = z.object({
+  enabled:       z.boolean().default(false),
+  // "allow" — пропускаем только allowed (дефолт при отсутствии поля);
+  // "deny" — пропускаем всех, кроме denied.
+  mode:          z.enum(["allow", "deny"]).optional(),
+  allowed:       z.array(z.string()).optional(),
+  denied:        z.array(z.string()).optional(),
+  rejectionText: z.string().optional(),
+})
+
 export const StopFactorSalarySchema = z.object({
   enabled:       z.boolean().default(false),
   maxAmount:     z.number().int().min(0).optional(),
@@ -329,6 +341,7 @@ export const StopFactorsSchema = z.object({
   experience:         StopFactorExperienceSchema.optional(),
   documents:          StopFactorDocumentsSchema.optional(),
   citizenship:        StopFactorCitizenshipSchema.optional(),
+  nativeLanguage:     StopFactorNativeLanguageSchema.optional(),
   salaryExpectation:  StopFactorSalarySchema.optional(),
   driverLicense:      StopFactorDriverLicenseSchema.optional(),
   jobHopping:         StopFactorJobHoppingSchema.optional(),

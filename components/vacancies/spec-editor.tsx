@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/dialog"
 import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
 import { CitizenshipFactorField, citizenshipSummary } from "@/components/vacancies/citizenship-factor-field"
+import { NativeLanguageFactorField, nativeLanguageSummary } from "@/components/vacancies/native-language-factor-field"
 import { toast } from "sonner"
 import {
   Target, Plus, Minus, X, Loader2, ShieldAlert, FileText, Gauge,
@@ -1723,7 +1724,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
     .filter(f => f?.enabled).length
   // Точные требования: стандартные включённые факторы + включённые customFactors
   const exactFactorCount =
-    (["city", "format", "age", "experience", "citizenship", "salaryExpectation", "driverLicense", "jobHopping"] as const)
+    (["city", "format", "age", "experience", "citizenship", "nativeLanguage", "salaryExpectation", "driverLicense", "jobHopping"] as const)
       .filter(k => sf[k]?.enabled).length +
     (sf.customFactors?.filter(f => f.enabled).length ?? 0)
   const dbItems   = normalizeDealBreakers(spec.dealBreakers)
@@ -2147,6 +2148,24 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
             />
             {(() => {
               const s = citizenshipSummary(sf.citizenship)
+              return s.idle
+                ? <FactorSummary idle={s.idle} />
+                : <FactorSummary pass={s.pass} cut={s.cut} />
+            })()}
+          </FactorRow>
+
+          <FactorRow
+            title="Родной язык"
+            help="Родной язык из резюме hh. Разрешить только выбранные, либо исключить"
+            enabled={sf.nativeLanguage?.enabled ?? false}
+            onToggle={v => toggleFactor("nativeLanguage", v)}
+          >
+            <NativeLanguageFactorField
+              value={sf.nativeLanguage}
+              onChange={next => setSf({ ...sf, nativeLanguage: next })}
+            />
+            {(() => {
+              const s = nativeLanguageSummary(sf.nativeLanguage)
               return s.idle
                 ? <FactorSummary idle={s.idle} />
                 : <FactorSummary pass={s.pass} cut={s.cut} />

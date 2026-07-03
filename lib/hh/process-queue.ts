@@ -613,6 +613,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
         workFormat:        extracted.workFormat ?? null,
         relocationReady:   extracted.relocationReady ?? null,
         salaryExpectation: salaryAmount,
+        nativeLanguages:   extracted.nativeLanguages ?? null,
       }
 
       // Эффективный набор стоп-факторов: компанейские дефолты — база,

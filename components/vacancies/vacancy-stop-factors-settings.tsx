@@ -18,6 +18,7 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import type { VacancyStopFactors } from "@/lib/db/schema"
 import { CitizenshipFactorField, citizenshipSummary } from "@/components/vacancies/citizenship-factor-field"
+import { NativeLanguageFactorField, nativeLanguageSummary } from "@/components/vacancies/native-language-factor-field"
 
 const PLACEHOLDERS = ["name", "vacancy", "company"]
 
@@ -53,6 +54,7 @@ export function VacancyStopFactorsSettings({ vacancyId, initial, onSaved }: Prop
   const refAge = useRef<HTMLTextAreaElement | null>(null)
   const refExp = useRef<HTMLTextAreaElement | null>(null)
   const refCit = useRef<HTMLTextAreaElement | null>(null)
+  const refLang = useRef<HTMLTextAreaElement | null>(null)
   const refSalary = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => {
@@ -297,6 +299,32 @@ export function VacancyStopFactorsSettings({ vacancyId, initial, onSaved }: Prop
               refEl={refCit}
               value={factors.citizenship?.rejectionText ?? ""}
               onChange={(v) => set("citizenship", { ...(factors.citizenship ?? { enabled: true }), rejectionText: v })}
+            />
+          </div>
+        </FactorRow>
+
+        {/* Родной язык */}
+        <FactorRow
+          title="Родной язык"
+          help="Родной язык из резюме hh. Разрешить только выбранные, либо исключить"
+          enabled={factors.nativeLanguage?.enabled ?? false}
+          onToggle={(v) => toggleEnabled("nativeLanguage", v)}
+        >
+          <div className="space-y-2">
+            <NativeLanguageFactorField
+              value={factors.nativeLanguage}
+              onChange={(next) => set("nativeLanguage", next)}
+            />
+            {(() => {
+              const s = nativeLanguageSummary(factors.nativeLanguage)
+              return s.idle
+                ? <FactorSummary idle={s.idle} />
+                : <FactorSummary pass={s.pass} cut={s.cut} />
+            })()}
+            <RejectionText
+              refEl={refLang}
+              value={factors.nativeLanguage?.rejectionText ?? ""}
+              onChange={(v) => set("nativeLanguage", { ...(factors.nativeLanguage ?? { enabled: true }), rejectionText: v })}
             />
           </div>
         </FactorRow>

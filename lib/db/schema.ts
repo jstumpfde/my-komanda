@@ -1108,6 +1108,19 @@ export interface VacancyStopFactorSalary {
   maxAmount?:      number     // в рублях
   rejectionText?:  string
 }
+// Родной язык кандидата — ПОЛНАЯ КОПИЯ VacancyStopFactorCitizenship по
+// структуре (03.07), но домен = hh resume.language[] с level.id==="l1"
+// (родной), а не гражданство. Континентов/групп у языков нет — плоский
+// список кодов (см. lib/funnel-builder/native-languages.ts).
+export interface VacancyStopFactorNativeLanguage {
+  enabled:         boolean
+  /** "allow" — пропускаем только allowed (дефолт при отсутствии поля);
+   *  "deny" — пропускаем всех, кроме denied. */
+  mode?:           "allow" | "deny"
+  allowed?:        string[]   // allow-режим: напр. ["rus", "bel"]
+  denied?:         string[]   // deny-режим: напр. ["eng", "ger"]
+  rejectionText?:  string
+}
 export interface VacancyStopFactors {
   city?:               VacancyStopFactorCity
   format?:             VacancyStopFactorFormat
@@ -1115,6 +1128,7 @@ export interface VacancyStopFactors {
   experience?:         VacancyStopFactorExperience
   documents?:          VacancyStopFactorDocuments
   citizenship?:        VacancyStopFactorCitizenship
+  nativeLanguage?:     VacancyStopFactorNativeLanguage
   salaryExpectation?:  VacancyStopFactorSalary
 }
 
