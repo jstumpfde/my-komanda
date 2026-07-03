@@ -46,6 +46,9 @@ export async function PUT(
       // messageOverride: кастомный текст сообщения вместо шаблона вакансии.
       // Актуален только когда sendMessage !== false.
       messageOverride?: string | null
+      // Вид интервью (Звонок|Онлайн|В офис) при переводе в 'interview' —
+      // сохраняется кандидату, страница самозаписи покажет календарь вида.
+      interviewMode?: "phone" | "zoom" | "office" | null
     }
     const stage = body.stage as Stage | undefined
     // undefined → true (backward-compat: параметр не передан = старое поведение)
@@ -94,6 +97,11 @@ export async function PUT(
       .set({
         stage,
         updatedAt: new Date(),
+        // Вид интервью: HR выбрал Звонок/Онлайн/В офис — календарь кандидата
+        // на /schedule покажет именно этот способ встречи.
+        ...(stage === "interview" && (body.interviewMode === "phone" || body.interviewMode === "zoom" || body.interviewMode === "office")
+          ? { interviewMode: body.interviewMode }
+          : {}),
         ...(stopAutoProcessing
           ? {
               autoProcessingStopped: true,

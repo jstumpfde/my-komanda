@@ -68,11 +68,23 @@ export async function scheduleInterviewInvite(args: {
     // 1. Проверяем, что вакансия существует, и заодно читаем настроенный HR-ом
     //    текст приглашения на интервью (vacancies.schedule_invite_text).
     const [vac] = await db
-      .select({ id: vacancies.id, scheduleInviteText: vacancies.scheduleInviteText })
+      .select({ id: vacancies.id, scheduleInviteText: vacancies.scheduleInviteText, descriptionJson: vacancies.descriptionJson })
       .from(vacancies)
       .where(eq(vacancies.id, args.vacancyId))
       .limit(1)
     if (!vac) return { scheduled: false, reason: "vacancy_not_found" }
+
+    // Текст интервью-стадии воронки (Юрий 03.07: «текст редактируем в воронке»).
+    // Первое сообщение стадии action='interview' из funnelV2, если задано.
+    const funnelText = (() => {
+      try {
+        const fv2 = (vac.descriptionJson as { funnelV2?: { stages?: Array<{ action?: string; enabled?: boolean; messages?: string[] }> } } | null)?.funnelV2
+        const st = fv2?.stages?.find(s => s?.action === "interview" && s?.enabled !== false)
+        // ТОЛЬКО messages[] (тексты); messagePresetId — это ID пресета, не текст.
+        const first = Array.isArray(st?.messages) ? st.messages.find(m => typeof m === "string" && m.trim().length > 0) : null
+        return first?.trim() || null
+      } catch { return null }
+    })()
 
     // 2. Дедуп: уже есть pending|sent schedule_invite для этого кандидата.
     const [existing] = await db
@@ -94,13 +106,20 @@ export async function scheduleInterviewInvite(args: {
     //    Приоритет текста: явный override (messageText, разовое переопределение
     //    из карточки кандидата) > настроенный per-вакансия текст
     //    (vacancies.schedule_invite_text) > дефолт DEFAULT_SCHEDULE_INVITE_TEXT.
+    // Приоритет: текст интервью-стадии воронки → per-вакансия шаблон → дефолт.
     const configuredText =
-      typeof vac.scheduleInviteText === "string" && vac.scheduleInviteText.trim().length > 0
+      funnelText
+      ?? (typeof vac.scheduleInviteText === "string" && vac.scheduleInviteText.trim().length > 0
         ? vac.scheduleInviteText.trim()
-        : DEFAULT_SCHEDULE_INVITE_TEXT
-    const text = args.messageText && args.messageText.trim().length > 0
+        : DEFAULT_SCHEDULE_INVITE_TEXT)
+    const textRaw = args.messageText && args.messageText.trim().length > 0
       ? args.messageText.trim()
       : configuredText
+    // Гарантия ссылки-календаря: без {{schedule_link}} кандидат не смог бы
+    // записаться — дописываем строку в конец (Юрий 03.07).
+    const text = textRaw.includes("{{schedule_link}}")
+      ? textRaw
+      : `${textRaw.trimEnd()}\n\nВыберите удобное время: {{schedule_link}}`
     const scheduledAt = new Date(Date.now() + DEFAULT_DELAY_MINUTES * 60_000)
 
     await db.insert(followUpMessages).values({

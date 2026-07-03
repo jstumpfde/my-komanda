@@ -133,9 +133,10 @@ export async function fetchScheduleData(
     // 1. Кандидат
     const [candidate] = await db
       .select({
-        id:        candidates.id,
-        name:      candidates.name,
-        vacancyId: candidates.vacancyId,
+        id:            candidates.id,
+        name:          candidates.name,
+        vacancyId:     candidates.vacancyId,
+        interviewMode: candidates.interviewMode,
       })
       .from(candidates)
       .where(isShortId(token) ? eq(candidates.shortId, token) : eq(candidates.token, token))
@@ -204,7 +205,11 @@ export async function fetchScheduleData(
     //   1) interviewMode интервью-стадии воронки v2 вакансии;
     //   2) sched.defaultInterviewMethod (настройки расписания компании);
     //   3) первый включённый метод (предпочтительно telemost).
-    const funnelMode = interviewModeFromFunnelV2(row.vacancyDescriptionJson)
+    // Вид интервью: выбор HR для ЭТОГО кандидата (candidates.interview_mode)
+    // приоритетнее вида из воронки (Юрий 03.07: Звонок | Онлайн | В офис).
+    const candMode = (candidate.interviewMode === "phone" || candidate.interviewMode === "zoom" || candidate.interviewMode === "office")
+      ? candidate.interviewMode : null
+    const funnelMode = candMode ?? interviewModeFromFunnelV2(row.vacancyDescriptionJson)
     let pinned: MethodConfig | null = null
     if (funnelMode) {
       pinned = pickMethodForMode(funnelMode, enabledMethods)

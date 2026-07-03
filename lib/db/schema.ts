@@ -1559,6 +1559,9 @@ export const candidates = pgTable("candidates", {
   // Дата ПОСЛЕДНЕГО отклика (повторный отклик, напр. на перепубликованную
   // вакансию). NULL = откликался один раз; первый отклик — в created_at.
   lastRespondedAt: timestamp("last_responded_at", { withTimezone: true }),
+  // Вид интервью, выбранный HR при приглашении: 'phone' | 'zoom' | 'office'
+  // (Звонок | Онлайн | В офис). NULL = вид из воронки/дефолта компании.
+  interviewMode: text("interview_mode"),
   score: integer("score"),
   salaryMin: integer("salary_min"),
   salaryMax: integer("salary_max"),

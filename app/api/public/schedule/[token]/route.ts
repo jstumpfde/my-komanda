@@ -176,9 +176,10 @@ export async function GET(
     // 1. Резолвим кандидата по token (или short_id)
     const [candidate] = await db
       .select({
-        id:        candidates.id,
-        name:      candidates.name,
-        vacancyId: candidates.vacancyId,
+        id:            candidates.id,
+        name:          candidates.name,
+        vacancyId:     candidates.vacancyId,
+        interviewMode: candidates.interviewMode,
       })
       .from(candidates)
       .where(isShortId(token) ? eq(candidates.shortId, token) : eq(candidates.token, token))
@@ -244,8 +245,11 @@ export async function GET(
     let enabledMethods = methods.filter(m => m.enabled)
 
     // #26.3: кандидат способ НЕ выбирает — оставляем ровно один актуальный.
-    // Приоритет: interviewMode воронки v2 → sched.defaultInterviewMethod → telemost/первый.
-    const funnelMode = interviewModeFromFunnelV2(row.vacancyDescriptionJson)
+    // Приоритет: выбор HR для кандидата (candidates.interview_mode, Юрий 03.07)
+    // → interviewMode воронки v2 → sched.defaultInterviewMethod → telemost/первый.
+    const candMode = (candidate.interviewMode === "phone" || candidate.interviewMode === "zoom" || candidate.interviewMode === "office")
+      ? candidate.interviewMode : null
+    const funnelMode = candMode ?? interviewModeFromFunnelV2(row.vacancyDescriptionJson)
     let pinned: MethodConfig | null = null
     if (funnelMode) pinned = pickMethodForMode(funnelMode, enabledMethods)
     if (!pinned && sched.defaultInterviewMethod) {
