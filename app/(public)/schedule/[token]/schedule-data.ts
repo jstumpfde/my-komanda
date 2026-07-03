@@ -227,6 +227,16 @@ export async function fetchScheduleData(
     // Оставляем ровно один способ — карточек выбора не показываем.
     if (pinned) enabledMethods = [pinned]
 
+    // Платформа (Телемост/Zoom/Meet) показывается кандидату ТОЛЬКО если HR
+    // явно настроил способы (Юрий 03.07: дефолтный набор молча подставлял
+    // «Яндекс Телемост»). Не настроено → нейтральное «Онлайн-интервью».
+    const methodsConfigured =
+      (Array.isArray(sched.interviewMethodConfigs) && sched.interviewMethodConfigs.length > 0) ||
+      (Array.isArray(sched.interviewMethods) && sched.interviewMethods.length > 0)
+    if (!methodsConfigured) {
+      enabledMethods = enabledMethods.map(m => ({ ...m, label: "" }))
+    }
+
     const defaultMethod  = pinned?.method ?? "phone"
     const defaultDuration = pinned?.duration ?? 60
 

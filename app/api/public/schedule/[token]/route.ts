@@ -260,6 +260,15 @@ export async function GET(
     }
     if (pinned) enabledMethods = [pinned]
 
+    // Платформа (Телемост/Zoom/Meet) — только если способы настроены явно;
+    // дефолтный набор не должен подставлять «Яндекс Телемост» (Юрий 03.07).
+    const methodsConfigured =
+      (Array.isArray(sched.interviewMethodConfigs) && sched.interviewMethodConfigs.length > 0) ||
+      (Array.isArray(sched.interviewMethods) && sched.interviewMethods.length > 0)
+    if (!methodsConfigured) {
+      enabledMethods = enabledMethods.map(m => ({ ...m, label: "" }))
+    }
+
     const defaultMethod  = pinned?.method ?? "phone"
 
     // Для слотов используем длительность выбранного метода
