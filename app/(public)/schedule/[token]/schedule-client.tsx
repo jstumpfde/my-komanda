@@ -357,7 +357,9 @@ export function ScheduleClientPage({ token, initialData, initialError }: Props) 
                 )}>
                   {method === "office" ? "Встреча в офисе"
                     : method === "phone" ? "Телефонное интервью"
-                      : `Онлайн-интервью — ${selectedMethod.label}`}
+                      : selectedMethod.label
+                        ? `Онлайн-интервью — ${selectedMethod.label}`
+                        : "Онлайн-интервью"}
                 </p>
                 {/* Для офиса сразу показываем адрес + метро */}
                 {method === "office" && data.officeAddress && (
