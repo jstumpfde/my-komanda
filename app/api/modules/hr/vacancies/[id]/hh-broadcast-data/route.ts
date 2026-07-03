@@ -34,7 +34,7 @@ export async function POST(
 
     // Проверка принадлежности вакансии компании (tenant-изоляция)
     const [vac] = await db
-      .select({ id: vacancies.id, title: vacancies.title })
+      .select({ id: vacancies.id, title: vacancies.title, hhVacancyId: vacancies.hhVacancyId })
       .from(vacancies)
       .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
       .limit(1)
@@ -168,7 +168,10 @@ export async function POST(
       .map((cid) => result.find((r) => r.id === cid))
       .filter((r): r is NonNullable<typeof r> => !!r)
 
-    return apiSuccess({ items: ordered, vacancyTitle: vac.title })
+    // vacancyHhUrl — ссылка на саму вакансию hh (для варианта «Вакансия» в
+    // рассылке: у вакансии своя ссылка, персональная не нужна).
+    const vacancyHhUrl = vac.hhVacancyId ? `https://hh.ru/vacancy/${vac.hhVacancyId}` : null
+    return apiSuccess({ items: ordered, vacancyTitle: vac.title, vacancyHhUrl })
   } catch (err) {
     if (err instanceof Response) return err
     console.error("[hh-broadcast-data]", err)

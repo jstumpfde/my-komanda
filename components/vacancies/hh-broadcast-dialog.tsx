@@ -76,10 +76,14 @@ function pluralize(n: number, one: string, few: string, many: string): string {
   return many
 }
 
-// Ссылка кандидату по типу шага. Демо/тест используют один и тот же slug
-// (публичные роуты /test и /demo резолвят shortId/token одинаково), поэтому
-// переключение — простая замена сегмента пути.
-function linkForKind(testLink: string, kind: "test" | "demo"): string {
+// Тип ссылки кандидату: тест/демо (персональная, генерируется автоматически)
+// или сама вакансия hh (общая, у вакансии своя ссылка). Юрий 03.07.
+type LinkKind = "test" | "demo" | "vacancy"
+
+// Ссылка кандидату по типу. Демо/тест — один slug (роуты /test и /demo
+// резолвят shortId/token одинаково), «Вакансия» — общий hh-URL вакансии.
+function linkForKind(testLink: string, kind: LinkKind, vacancyHhUrl: string): string {
+  if (kind === "vacancy") return vacancyHhUrl
   if (!testLink) return ""
   return kind === "demo" ? testLink.replace("/test/", "/demo/") : testLink
 }
@@ -128,6 +132,7 @@ export function HhBroadcastDialog({
   const [copied, setCopied] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [vacancyTitle, setVacancyTitle] = useState("")
+  const [vacancyHhUrl, setVacancyHhUrl] = useState("")
   const [savingTpl, setSavingTpl] = useState(false)
   const [savedTpl, setSavedTpl] = useState(false)
   // Менеджер именованных шаблонов рассылки.
@@ -137,7 +142,7 @@ export function HhBroadcastDialog({
   const [tplToast, setTplToast] = useState<string | null>(null) // короткое подтверждение под кнопками
   const tplToastRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Тип ссылки, прикреплённой кандидату (тест/демо) — per кандидат.
-  const [linkKindById, setLinkKindById] = useState<Record<string, "test" | "demo">>({})
+  const [linkKindById, setLinkKindById] = useState<Record<string, LinkKind>>({})
   const [markingAll, setMarkingAll] = useState(false)
   // Темп рассылки: интервал между открытиями чатов (анти-бан) + авто-открытие.
   const [intervalSec, setIntervalSec] = useState(20)
@@ -171,9 +176,10 @@ export function HhBroadcastDialog({
         const err = (await res.json().catch(() => ({}))) as { error?: string }
         throw new Error(err.error || "Ошибка загрузки данных")
       }
-      const data = (await res.json()) as { items: HhBroadcastItem[]; vacancyTitle?: string }
+      const data = (await res.json()) as { items: HhBroadcastItem[]; vacancyTitle?: string; vacancyHhUrl?: string }
       setItems(data.items)
       setVacancyTitle(data.vacancyTitle ?? "")
+      setVacancyHhUrl((data as { vacancyHhUrl?: string }).vacancyHhUrl ?? "")
       // Предзаполняем тексты сообщений
       const msgs: Record<string, string> = {}
       for (const item of data.items) msgs[item.id] = item.personalMessage
@@ -239,8 +245,8 @@ export function HhBroadcastDialog({
   const isSingle = candidateIds.length === 1
   const current = items[currentIdx] ?? null
   const currentMessage = current ? (messages[current.id] ?? current.personalMessage) : ""
-  const currentKind: "test" | "demo" = current ? (linkKindById[current.id] ?? "test") : "test"
-  const currentLink = current ? linkForKind(current.testLink, currentKind) : ""
+  const currentKind: LinkKind = current ? (linkKindById[current.id] ?? "test") : "test"
+  const currentLink = current ? linkForKind(current.testLink, currentKind, vacancyHhUrl) : ""
   const total = items.length
   const processed = sentIds.size + skippedIds.size
 
@@ -261,7 +267,7 @@ export function HhBroadcastDialog({
 
   // Отметить кандидата «тест отправлен» (стадия → test_task_sent, колонка «Тест» = «отп.»).
   // Только если прикреплён ТЕСТ (для демо-ссылки стадию теста не двигаем).
-  const markCandidateSent = useCallback((id: string, kind: "test" | "demo") => {
+  const markCandidateSent = useCallback((id: string, kind: LinkKind) => {
     if (kind !== "test") return
     void fetch(`/api/modules/hr/vacancies/${vacancyId}/hh-broadcast-mark-sent`, {
       method: "POST",
@@ -273,12 +279,12 @@ export function HhBroadcastDialog({
   }, [vacancyId, onSent])
 
   // Сменить тип прикреплённой ссылки (тест/демо) и заменить её прямо в тексте.
-  const changeLinkKind = useCallback((newKind: "test" | "demo") => {
+  const changeLinkKind = useCallback((newKind: LinkKind) => {
     if (!current) return
     const oldKind = linkKindById[current.id] ?? "test"
     if (oldKind === newKind) return
-    const oldLink = linkForKind(current.testLink, oldKind)
-    const newLink = linkForKind(current.testLink, newKind)
+    const oldLink = linkForKind(current.testLink, oldKind, vacancyHhUrl)
+    const newLink = linkForKind(current.testLink, newKind, vacancyHhUrl)
     if (oldLink && newLink) {
       setMessages((prev) => {
         const msg = prev[current.id] ?? current.personalMessage
@@ -374,7 +380,7 @@ export function HhBroadcastDialog({
     if (!current) return ""
     const text = messages[current.id] ?? current.personalMessage
     return toTemplateText(text, {
-      link: linkForKind(current.testLink, linkKindById[current.id] ?? "test"),
+      link: linkForKind(current.testLink, linkKindById[current.id] ?? "test", vacancyHhUrl),
       vacancy: vacancyTitle,
       firstName: current.firstName,
     })
@@ -389,7 +395,7 @@ export function HhBroadcastDialog({
     if (!tpl || !current) return
     setTplName(tpl.name)
     const filled = fromTemplateText(tpl.text, {
-      link: linkForKind(current.testLink, linkKindById[current.id] ?? "test"),
+      link: linkForKind(current.testLink, linkKindById[current.id] ?? "test", vacancyHhUrl),
       vacancy: vacancyTitle,
       firstName: current.firstName,
     })
@@ -508,10 +514,14 @@ export function HhBroadcastDialog({
         {/* Фаза: мастер */}
         {phase === "wizard" && current && (
           <div className="space-y-4 min-w-0">
-            {/* Инструкция */}
-            <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-300">
-              Платформа не отправляет за вас — она открывает чат и кладёт текст
-              в буфер. Вставьте (Ctrl/Cmd+V) и отправьте вручную.
+            {/* Инструкция — три шага (Юрий 03.07) */}
+            <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-300 space-y-1">
+              <p className="font-medium">Как отправить (платформа не отправляет за вас):</p>
+              <ol className="list-decimal list-inside space-y-0.5">
+                <li>Проверьте текст и, если нужно, пересохраните шаблон.</li>
+                <li>Нажмите «Скопировать и открыть чат» — откроется резюме на hh, текст уже в буфере.</li>
+                <li>Войдите в чат и вставьте (Ctrl/Cmd+V) — отправьте сообщение.</li>
+              </ol>
             </div>
 
             {/* Прогресс — только в пакетном режиме */}
@@ -580,13 +590,16 @@ export function HhBroadcastDialog({
               />
               {/* Что прикреплено: тип ссылки (тест/демо) можно переключить — она
                   заменится прямо в тексте. HR видит, что именно уйдёт кандидату. */}
-              {current.testLink ? (
+              {(current.testLink || vacancyHhUrl) ? (
                 <div className="space-y-1">
                   <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
                     <Paperclip className="size-3 shrink-0" />
                     <span className="shrink-0">Ссылка кандидату:</span>
                     <div className="inline-flex items-center gap-0.5">
-                      {([["test", "Тест"], ["demo", "Демо"]] as const).map(([k, label]) => (
+                      {([
+                        ...(current.testLink ? [["test", "Тест"], ["demo", "Демо"]] as const : []),
+                        ...(vacancyHhUrl ? [["vacancy", "Вакансия"]] as const : []),
+                      ]).map(([k, label]) => (
                         <button
                           key={k}
                           type="button"
@@ -604,15 +617,24 @@ export function HhBroadcastDialog({
                   <p className="font-mono text-[11px] text-foreground break-all" title={currentLink}>
                     {currentLink}
                   </p>
+                  {/* Подсказка: демо/тест — персональная ссылка авто-генерится;
+                      «Вакансия» — общая ссылка hh (Юрий 03.07). */}
+                  <p className="text-[10px] text-muted-foreground leading-snug">
+                    {currentKind === "vacancy"
+                      ? "Это общая ссылка на вакансию hh — одинаковая для всех кандидатов."
+                      : "Для «Тест»/«Демо» персональная ссылка кандидата генерируется автоматически."}
+                  </p>
                 </div>
               ) : (
                 <p className="text-[11px] text-destructive">
                   У кандидата нет ссылки.
                 </p>
               )}
-              {current.testLink && !currentMessage.includes(currentLink) && (
+              {/* Ссылки нет в тексте — предупреждаем, только если она вообще есть.
+                  Для «Вакансия» проверяем ту же currentLink (URL вакансии). */}
+              {currentLink && !currentMessage.includes(currentLink) && (
                 <p className="text-[11px] text-destructive">
-                  ⚠ Ссылки нет в тексте — кандидат её не получит. Проверьте сообщение.
+                  ⚠ Ссылки нет в тексте — кандидат её не получит. Проверьте сообщение или переключите тип ссылки.
                 </p>
               )}
             </div>
