@@ -487,6 +487,11 @@ function MustHaveEditor({
   )
 }
 
+// Дефолты фактора «Часовой пояс» при первом включении (поля со schema-default,
+// поэтому fallback должен быть полностью заполнен — просто { enabled: true }
+// не типизируется).
+const TZ_FACTOR_DEFAULTS = { enabled: true, baseUtcOffset: 3, maxDiffHours: 3, penalty: 15 } as const
+
 // ─── Строка стоп-фактора (тумблер + параметры) ───────────────────────────────
 
 function FactorRow({
@@ -2170,6 +2175,47 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                 ? <FactorSummary idle={s.idle} />
                 : <FactorSummary pass={s.pass} cut={s.cut} />
             })()}
+          </FactorRow>
+
+          <FactorRow
+            title="Часовой пояс"
+            help="Не отказ — только штраф к баллу за удалённость пояса"
+            enabled={sf.timezone?.enabled ?? false}
+            onToggle={v => toggleFactor("timezone", v)}
+          >
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">Наш пояс (UTC+)</Label>
+                <Input
+                  type="number"
+                  value={sf.timezone?.baseUtcOffset ?? 3}
+                  onChange={e => setSf({ ...sf, timezone: { ...(sf.timezone ?? TZ_FACTOR_DEFAULTS), baseUtcOffset: e.target.value === "" ? 3 : Number(e.target.value) } })}
+                  className="w-20 h-8 text-sm"
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">Допустимая разница ± часов</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={sf.timezone?.maxDiffHours ?? 3}
+                  onChange={e => setSf({ ...sf, timezone: { ...(sf.timezone ?? TZ_FACTOR_DEFAULTS), maxDiffHours: e.target.value === "" ? 3 : Number(e.target.value) } })}
+                  className="w-20 h-8 text-sm"
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">Штраф к баллу</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={sf.timezone?.penalty ?? 15}
+                  onChange={e => setSf({ ...sf, timezone: { ...(sf.timezone ?? TZ_FACTOR_DEFAULTS), penalty: e.target.value === "" ? 15 : Number(e.target.value) } })}
+                  className="w-20 h-8 text-sm"
+                />
+              </div>
+            </div>
+            <FactorSummary idle={`Кандидатам дальше ±${sf.timezone?.maxDiffHours ?? 3} часов от нашего пояса (UTC+${sf.timezone?.baseUtcOffset ?? 3}) балл снижается на ${sf.timezone?.penalty ?? 15}. Пояс определяется по городу из резюме; неизвестный город не штрафуется.`} />
           </FactorRow>
 
           <FactorRow

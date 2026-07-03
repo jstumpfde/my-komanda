@@ -20,7 +20,7 @@ import { canSendNow } from "@/lib/schedule/can-send-now"
 import { screenResume, type ResumeScreenInput } from "@/lib/ai-screen-resume"
 import { getSpec } from "@/lib/core/spec/store"
 import { buildSpecResumeInput, isSpecScoringEnabled, specHasScoringContent, isPortraitConfigured } from "@/lib/core/spec/resume-input"
-import { scoreResumeByAxes, type AxisScoreResult } from "@/lib/core/spec/axis-scorer"
+import { scoreResumeByAxes, applyTimezonePenalty, type AxisScoreResult } from "@/lib/core/spec/axis-scorer"
 import { scoreCandidateV2 } from "@/lib/ai-score-candidate-v2"
 import { trySyncRejectToHh } from "@/lib/hh/sync-stage"
 import { scheduleRejection, rejectionDelayMinutes } from "@/lib/rejection/execute"
@@ -681,9 +681,13 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             // Осевой скоринг (spec.scoringMode="axes"): считаем поосево, минуя
             // screenResume. При успехе пишем resume_score + ai_score_breakdown.
             let axisResult: AxisScoreResult | null = null
+            // Хойстим Spec наружу try — нужен ниже для мягкого штрафа «Часовой пояс»
+            // (применяется ПОСЛЕ вычисления result.score, независимо от axis/holistic).
+            let specForTimezone: import("@/lib/core/spec/types").CandidateSpec | null = null
             if (isSpecScoringEnabled(localVac.id) || portraitOn) {
               try {
                 const spec = await getSpec(localVac.id)
+                specForTimezone = spec ?? null
                 // Развилка «оси»: если Портрет и spec в режиме осей — оцениваем
                 // поосево. null (нет ключа/пустые оси/ошибка AI) → тихий fallback
                 // на screenResume ниже (поведение holistic не меняем).
@@ -755,6 +759,18 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                   customCriteria:       (anketa.aiCustomCriteria as { label: string; weight: string }[] | undefined) ?? null,
                 },
               }, localVac.id)
+            // Мягкий штраф «Часовой пояс» (Юрий 03-04.07): ПОСЛЕ расчёта балла,
+            // НЕ отказ. Работает и для осевого, и для холистического режима —
+            // breakdown дописывается, только если считали по осям (axisResult).
+            let breakdownToStore: AxisScoreResult | null = axisResult ?? null
+            if (result && specForTimezone) {
+              const tzAdjust = applyTimezonePenalty(result.score, candidateCity, specForTimezone, axisResult)
+              if (tzAdjust.applied) {
+                result.score = tzAdjust.score
+                breakdownToStore = tzAdjust.breakdown
+                console.log(`[timezone-penalty] vacancy=${localVac.id} candidate=${candidateId} — штраф применён, новый балл ${tzAdjust.score}`)
+              }
+            }
             if (result) {
               await db.update(candidates)
                 .set({
@@ -762,7 +778,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                   // Осевой разбор — только когда считали по осям (для «почему»);
                   // при holistic/fallback затираем возможный старый разбор, иначе
                   // блок «почему» объясняет не тот балл, который записан.
-                  aiScoreBreakdown: axisResult ?? null,
+                  aiScoreBreakdown: breakdownToStore,
                 })
                 .where(eq(candidates.id, candidateId))
               {

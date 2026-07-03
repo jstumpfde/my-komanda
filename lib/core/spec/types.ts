@@ -358,6 +358,24 @@ export const StopFactorSalarySchema = z.object({
   rejectionText: z.string().optional(),
 })
 
+/**
+ * Часовой пояс (Юрий 03-04.07): МЯГКИЙ штраф к резюме-баллу, НЕ отказ.
+ * Кандидат из пояса дальше maxDiffHours от baseUtcOffset получает −penalty
+ * к итоговому баллу. Город резолвится через lib/geo/city-timezones.ts
+ * (resolveCityUtcOffset); неизвестный город → штраф НЕ применяется (fail-open).
+ * Применяется в axis-scorer.ts/process-queue.ts ПОСЛЕ расчёта балла — это
+ * единственный стоп-фактор без rejectionText (это не отказ).
+ */
+export const StopFactorTimezoneSchema = z.object({
+  enabled:       z.boolean().default(false),
+  /** Наш часовой пояс, UTC+N. Дефолт 3 (Москва). */
+  baseUtcOffset: z.number().int().min(-12).max(14).default(3),
+  /** Допустимая разница в часах (±), сверх которой применяется штраф. Дефолт 3. */
+  maxDiffHours:  z.number().int().min(0).max(12).default(3),
+  /** Величина снижения балла (0-100). Дефолт 15. */
+  penalty:       z.number().int().min(0).max(100).default(15),
+})
+
 /** Водительские права: требуемые категории (A/B/C/…). Оценивает AI по резюме. */
 export const StopFactorDriverLicenseSchema = z.object({
   enabled:            z.boolean().default(false),
@@ -385,6 +403,8 @@ export const StopFactorsSchema = z.object({
   salaryExpectation:  StopFactorSalarySchema.optional(),
   driverLicense:      StopFactorDriverLicenseSchema.optional(),
   jobHopping:         StopFactorJobHoppingSchema.optional(),
+  /** Мягкий штраф за удалённость часового пояса (не отказ, см. схему выше). */
+  timezone:           StopFactorTimezoneSchema.optional(),
   /** «Добавить свой» — произвольные точные требования фразой (оценивает AI по
    *  резюме): «Образование высшее», «Готовность к командировкам», «Без больших
    *  перерывов в стаже» и т.п. Каждое включённое уходит в стоп-факторы AI. */

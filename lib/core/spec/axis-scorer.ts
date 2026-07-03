@@ -18,6 +18,7 @@ import type { ResumeScreenInput } from "@/lib/ai-screen-resume"
 import type { CandidateSpec } from "@/lib/core/spec/types"
 import { normalizeMustHave, normalizeNiceToHave, normalizeDealBreakers, dealBreakerPenalty } from "@/lib/core/spec/types"
 import { AI_MODEL_FAST } from "@/lib/ai/models"
+import { resolveCityUtcOffset } from "@/lib/geo/city-timezones"
 
 const client = new Anthropic({ baseURL: getClaudeApiUrl() })
 
@@ -262,4 +263,50 @@ ${wh || "  (детальная история не указана)"}
     axes: axisScores,
     penalties: penScores,
   }
+}
+
+/**
+ * Мягкий штраф «Часовой пояс» (Юрий 03-04.07): применяется ПОСЛЕ расчёта
+ * резюме-балла (осевого или холистического) — снижает score, но НЕ отказ.
+ *
+ * Город кандидата резолвится через resolveCityUtcOffset(); неизвестный город
+ * (null) → штраф НЕ применяется (fail-open, как в задаче). Возвращает исходный
+ * score, если фактор выключен, город неизвестен, или разница в пределах нормы.
+ *
+ * Если передан `breakdown` (AxisScoreResult, только режим "axes") — штраф
+ * дописывается туда отдельной записью в penalties[], чтобы «почему» на
+ * карточке кандидата объясняло вычтенные баллы (аналог dealBreaker-штрафа).
+ */
+export function applyTimezonePenalty(
+  score: number,
+  candidateCity: string | null | undefined,
+  spec: CandidateSpec,
+  breakdown?: AxisScoreResult | null,
+): { score: number; breakdown: AxisScoreResult | null; applied: boolean; diffHours?: number } {
+  const tz = spec.stopFactors?.timezone
+  if (!tz?.enabled) return { score, breakdown: breakdown ?? null, applied: false }
+
+  const candidateOffset = resolveCityUtcOffset(candidateCity)
+  if (candidateOffset == null) return { score, breakdown: breakdown ?? null, applied: false }
+
+  const diffHours = Math.abs(candidateOffset - tz.baseUtcOffset)
+  if (diffHours <= tz.maxDiffHours) return { score, breakdown: breakdown ?? null, applied: false }
+
+  const penalty = Math.max(0, Math.min(100, tz.penalty))
+  const nextScore = Math.max(0, score - penalty)
+
+  const sign = candidateOffset > tz.baseUtcOffset ? "+" : "−"
+  const penaltyEntry: PenaltyScore = {
+    text:      "Часовой пояс",
+    magnitude: penalty,
+    triggered: true,
+    applied:   penalty,
+    evidence:  `${sign}${diffHours} ч от вашего пояса (UTC+${tz.baseUtcOffset}) → −${penalty}`,
+  }
+
+  const nextBreakdown: AxisScoreResult | null = breakdown
+    ? { ...breakdown, score: nextScore, penalties: [...breakdown.penalties, penaltyEntry] }
+    : null
+
+  return { score: nextScore, breakdown: nextBreakdown, applied: true, diffHours }
 }
