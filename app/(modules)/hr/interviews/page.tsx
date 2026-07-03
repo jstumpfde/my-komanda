@@ -289,7 +289,16 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
   const loadWaitingCandidates = useCallback(async () => {
     if (!vacancyId) { setWaitingCandidates([]); return }
     try {
-      const res = await fetch(`/api/modules/hr/candidates?vacancyId=${vacancyId}&pageSize=100`)
+      // Серверный фильтр стадии: у вакансии могут быть сотни кандидатов,
+      // первая страница без фильтра не содержала интервьюшников (баг 04.07).
+      const [r1, r2] = await Promise.all([
+        fetch(`/api/modules/hr/candidates?vacancyId=${vacancyId}&pageSize=100&stage=interview`),
+        fetch(`/api/modules/hr/candidates?vacancyId=${vacancyId}&pageSize=100&stage=scheduled`),
+      ])
+      const res = { ok: r1.ok && r2.ok, json: async () => {
+        const [j1, j2] = await Promise.all([r1.json(), r2.json()])
+        return { candidates: [...(j1.candidates ?? []), ...(j2.candidates ?? [])] }
+      } } as Response
       const json = res.ok ? await res.json() : null
       // apiSuccess отдаёт data напрямую (без обёртки); при pageSize — { candidates, total, ... }.
       const list = (json?.candidates ?? json ?? []) as {
