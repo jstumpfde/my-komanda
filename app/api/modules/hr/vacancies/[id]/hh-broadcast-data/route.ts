@@ -81,6 +81,10 @@ export async function POST(
     }
 
     // hh данные: chatId, resumeUrl, name из hh_responses
+    // orderBy desc(createdAt): у кандидата после перепубликации вакансии на hh
+    // (новый id) может быть ДВА отклика — берём НОВЕЙШИЙ (первый в Map),
+    // чтобы мастер открывал АКТУАЛЬНЫЙ чат, а не архивной вакансии, где hh
+    // запрещает писать (Юрий 03.07).
     const hhRows = await db
       .select({
         candidateId: hhResponses.localCandidateId,
@@ -95,6 +99,7 @@ export async function POST(
           inArray(hhResponses.localCandidateId, candidateIds),
         ),
       )
+      .orderBy(desc(hhResponses.createdAt))
 
     const hhByCandidate = new Map<
       string,
