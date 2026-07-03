@@ -18,6 +18,7 @@ import { canSendNow, adjustToWorkingWindow, type VacancySchedule } from "@/lib/s
 //      | { action: 'cancel_batch', messageIds: string[] }
 //      | { action: 'cancel_for_candidate', candidateId }
 //      | { action: 'rename', candidateId, firstName }
+//      | { action: 'requeue', messageId }   — failed/cancelled → pending (now)
 
 const MAX_ITEMS = 500
 // Завершённые (sent/cancelled/failed) показываем только за последнюю неделю —
@@ -296,6 +297,26 @@ export async function POST(
         ))
         .returning({ id: followUpMessages.id })
       return apiSuccess({ cancelled: res.map((r) => r.id), count: res.length })
+    }
+
+    // Вернуть сообщение в очередь (Юрий 03.07: «добавь здесь действия»):
+    // failed → повторить отправку, cancelled → вернуть в очередь. Ставим
+    // pending + scheduledAt=now — уйдёт ближайшим тиком cron/follow-up со
+    // всеми штатными гейтами (окно отправки, пауза, мьютекс дожимов).
+    if (body.action === "requeue") {
+      if (!body.messageId) return apiError("messageId обязателен", 400)
+      if (campaignIds.length === 0) return apiError("Сообщение не найдено", 404)
+      const res = await db
+        .update(followUpMessages)
+        .set({ status: "pending", errorMessage: null, scheduledAt: new Date() })
+        .where(and(
+          eq(followUpMessages.id, body.messageId),
+          inArray(followUpMessages.status, ["failed", "cancelled"]),
+          inArray(followUpMessages.campaignId, campaignIds),
+        ))
+        .returning({ id: followUpMessages.id })
+      if (res.length === 0) return apiError("Сообщение не найдено или уже в очереди", 404)
+      return apiSuccess({ requeued: body.messageId })
     }
 
     if (body.action === "rename") {

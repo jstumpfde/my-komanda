@@ -12,7 +12,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   Loader2, Pencil, Check, X, Trash2, AlertTriangle, Search,
-  ChevronRight, ChevronDown, Users,
+  ChevronRight, ChevronDown, Users, RotateCcw,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -124,6 +124,7 @@ export function MessageQueueJournal({ vacancyId, onChanged }: Props) {
   const [editVal, setEditVal] = useState("")
   const [savingId, setSavingId] = useState<string | null>(null)
   const [cancelingId, setCancelingId] = useState<string | null>(null)
+  const [requeueingId, setRequeueingId] = useState<string | null>(null)
   const [bulkBusy, setBulkBusy] = useState(false)
 
   // Раскрытые строки (полный текст сообщения) и выбор для массовых действий.
@@ -311,6 +312,27 @@ export function MessageQueueJournal({ vacancyId, onChanged }: Props) {
       toast.error("Не удалось удалить сообщение")
     } finally {
       setCancelingId(null)
+    }
+  }
+
+  // Вернуть failed/cancelled сообщение в очередь (Юрий 03.07: действия у
+  // завершённых строк). Сервер ставит pending + scheduledAt=now.
+  async function requeueMessage(messageId: string) {
+    setRequeueingId(messageId)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/message-queue/items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "requeue", messageId }),
+      })
+      if (!res.ok) throw new Error()
+      toast.success("Сообщение возвращено в очередь — уйдёт ближайшей отправкой")
+      await fetchItems()
+      onChanged?.()
+    } catch {
+      toast.error("Не удалось вернуть сообщение в очередь")
+    } finally {
+      setRequeueingId(null)
     }
   }
 
@@ -617,7 +639,21 @@ export function MessageQueueJournal({ vacancyId, onChanged }: Props) {
                             </Button>
                           )}
                         </div>
-                      ) : null /* у ушедших/отменённых действий нет — пусто, без «—» (Юрий 03.07) */}
+                      ) : (m.status === "failed" || m.status === "cancelled") ? (
+                        // Юрий 03.07: «добавь здесь действия» — ошибка/отменено
+                        // можно вернуть в очередь (уйдёт ближайшей отправкой).
+                        <Button
+                          size="icon" variant="ghost"
+                          className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+                          title={m.status === "failed" ? "Повторить отправку" : "Вернуть в очередь"}
+                          onClick={() => requeueMessage(m.messageId)}
+                          disabled={requeueingId === m.messageId || bulkBusy}
+                        >
+                          {requeueingId === m.messageId
+                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            : <RotateCcw className="w-3.5 h-3.5" />}
+                        </Button>
+                      ) : null /* у отправленных действий нет — пусто (Юрий 03.07) */}
                     </DataCell>
                   </DataRow>
                 )

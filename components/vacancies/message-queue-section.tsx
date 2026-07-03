@@ -114,46 +114,47 @@ export function MessageQueueSection({ vacancyId }: Props) {
 
   return (
     <div className="rounded-lg border bg-card p-4 space-y-4">
-      {/* Шапка + статус */}
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h4 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-            <PauseCircle className="w-4 h-4 text-muted-foreground" />
-            Очередь сообщений
-          </h4>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Дожимы, приглашения и уведомления, запланированные для этой вакансии
-          </p>
-        </div>
-        {loading ? (
-          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground shrink-0 mt-0.5" />
-        ) : (
-          <Badge
-            variant={totalPending > 0 ? "secondary" : "outline"}
-            className="text-xs shrink-0"
+      {/* Шапка + пауза + счётчик — В ОДНУ СТРОКУ (Юрий 03.07); длинные
+          пояснения сокращены, полный текст — по наведению (title). */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <h4
+          className="text-sm font-semibold text-foreground flex items-center gap-1.5 cursor-help"
+          title="Дожимы, приглашения и уведомления, запланированные для этой вакансии"
+        >
+          <PauseCircle className="w-4 h-4 text-muted-foreground" />
+          Очередь сообщений
+        </h4>
+        <div className="flex items-center gap-3">
+          {pauseLoading ? (
+            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+          ) : (
+            <Switch
+              id="outbound-paused"
+              checked={data?.paused ?? false}
+              onCheckedChange={handlePauseToggle}
+              disabled={loading || pauseLoading}
+            />
+          )}
+          <Label
+            htmlFor="outbound-paused"
+            className="text-sm cursor-pointer select-none"
+            title={data?.paused
+              ? "Отправки приостановлены — сообщения накапливаются, не уходят"
+              : "Отправки идут в штатном режиме"}
           >
-            {totalPending} в очереди
-          </Badge>
-        )}
-      </div>
-
-      {/* Тумблер паузы */}
-      <div className="flex items-center gap-3">
-        {pauseLoading ? (
-          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-        ) : (
-          <Switch
-            id="outbound-paused"
-            checked={data?.paused ?? false}
-            onCheckedChange={handlePauseToggle}
-            disabled={loading || pauseLoading}
-          />
-        )}
-        <Label htmlFor="outbound-paused" className="text-sm cursor-pointer select-none">
-          {data?.paused
-            ? "Отправки приостановлены — сообщения накапливаются, не уходят"
-            : "Отправки идут в штатном режиме"}
-        </Label>
+            {data?.paused ? "Пауза отправок" : "Отправки идут"}
+          </Label>
+          {loading ? (
+            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground shrink-0" />
+          ) : (
+            <Badge
+              variant={totalPending > 0 ? "secondary" : "outline"}
+              className="text-xs shrink-0"
+            >
+              {totalPending} в очереди
+            </Badge>
+          )}
+        </div>
       </div>
 
       {/* Журнал (инлайн) + Шаблоны рассылки. Кнопки «Возобновить/Очистить» —
