@@ -225,10 +225,17 @@ export async function fetchScheduleData(
     const defaultMethod  = pinned?.method ?? "phone"
     const defaultDuration = pinned?.duration ?? 60
 
-    // 5. Занятые слоты компании на 16 дней (с запасом на TZ-оффсет)
+    // Горизонт самозаписи: сколько дней вперёд показываем кандидату.
+    // Настройка вакансии (descriptionJson.interviewMaxBookingDays) →
+    // company-level schedule.maxBookingDays → дефолт 14. Потолок 30.
+    const djHorizon = (row.vacancyDescriptionJson as { interviewMaxBookingDays?: unknown } | null)?.interviewMaxBookingDays
+    const rawHorizon = Number(djHorizon ?? (sched as { maxBookingDays?: unknown }).maxBookingDays ?? 14)
+    const horizonDays = Number.isFinite(rawHorizon) && rawHorizon >= 1 ? Math.min(30, Math.floor(rawHorizon)) : 14
+
+    // 5. Занятые слоты компании на горизонт (с запасом на TZ-оффсет)
     const now   = new Date()
     const limit = new Date(now)
-    limit.setDate(limit.getDate() + 16)
+    limit.setDate(limit.getDate() + horizonDays + 2)
 
     const bookedEvents = await db
       .select({ startAt: calendarEvents.startAt })
@@ -251,12 +258,13 @@ export async function fetchScheduleData(
       bookedSlotSet.add(`${ymd}T${hhmm}`)
     }
 
-    // 6. Генерируем слоты на 14 рабочих дней в TZ компании
+    // 6. Генерируем слоты на horizonDays КАЛЕНДАРНЫХ дней вперёд в TZ компании
+    // (кандидат видит запись максимум на столько дней — настройка вакансии).
     const days: SlotDay[] = []
     // Начинаем с «завтра» в TZ компании
     const checkDate = new Date(now.getTime() + 24 * 60 * 60 * 1000)
 
-    for (let i = 0; i < 21 && days.length < 14; i++) {
+    for (let i = 0; i < horizonDays; i++) {
       const jsDay = localDayOfWeek(checkDate, timezone)
       const windows = daySchedule[JS_TO_DAY_ID[jsDay]] ?? []
       if (windows.length > 0) {

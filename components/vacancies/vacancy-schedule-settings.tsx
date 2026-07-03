@@ -554,6 +554,8 @@ function InterviewWindowsSection({
 }) {
   const [loading, setLoading]   = useState(true)
   const [schedule, setSchedule] = useState<InterviewDaySchedule>({})
+  // Горизонт самозаписи: сколько дней вперёд видит кандидат ("" = дефолт 14).
+  const [maxDays, setMaxDays]   = useState<string>("")
 
   // Границы рабочего дня в минутах (если заданы и валидны).
   const workStartMin = workStart && /^([01]\d|2[0-3]):[0-5]\d$/.test(workStart)
@@ -576,6 +578,8 @@ function InterviewWindowsSection({
           ? vac.descriptionJson as Record<string, unknown>
           : {}
         setSchedule(normalizeInterviewDaySchedule(dj.interviewDaySchedule) ?? {})
+        const md = Number(dj.interviewMaxBookingDays)
+        setMaxDays(Number.isFinite(md) && md >= 1 ? String(Math.min(30, Math.floor(md))) : "")
       })
       .catch(() => { if (!cancelled) setSchedule({}) })
       .finally(() => { if (!cancelled) setLoading(false) })
@@ -588,7 +592,14 @@ function InterviewWindowsSection({
       method:  "PATCH",
       headers: { "Content-Type": "application/json" },
       // null — окна не заданы → генератор упадёт на company-level fallback.
-      body:    JSON.stringify({ description_json: { interviewDaySchedule: normalized } }),
+      body:    JSON.stringify({ description_json: {
+        interviewDaySchedule: normalized,
+        // null = не задано → дефолт (14 дней).
+        interviewMaxBookingDays: (() => {
+          const n = Number(maxDays)
+          return Number.isFinite(n) && n >= 1 ? Math.min(30, Math.floor(n)) : null
+        })(),
+      } }),
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
@@ -601,7 +612,7 @@ function InterviewWindowsSection({
     sectionKey: `interview-windows:${vacancyId}`,
     tabKey: "ai",
     loaded: !loading,
-    watchedValues: schedule,
+    watchedValues: { schedule, maxDays },
     save,
   })
 
@@ -741,6 +752,26 @@ function InterviewWindowsSection({
             </div>
           )
         })}
+        {/* Горизонт самозаписи: сколько дней вперёд кандидат видит запись
+            (Юрий 03.07). Пусто = дефолт 14; потолок 30. */}
+        <div className="pt-3 border-t space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm">Показывать кандидату дней вперёд</span>
+            <Input
+              type="number"
+              min={1}
+              max={30}
+              value={maxDays}
+              onChange={(e) => setMaxDays(e.target.value)}
+              placeholder="14"
+              className="w-[88px] h-9"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Кандидат на странице самозаписи увидит слоты максимум на столько
+            календарных дней вперёд. Пусто — 14 дней.
+          </p>
+        </div>
       </CardContent>
     </Card>
   )
