@@ -30,20 +30,43 @@ const CHAT_WIDGET_OWNER_ONLY = true
 
 const BADGE_POLL_MS = 60_000
 
-// Докинг окна чата — левый/правый край. Сохраняем выбор в localStorage,
-// чтобы не сбрасывался между визитами. Когда открывается карточка
-// кандидата (CandidateDrawer, выезжает справа), чат автоматом прижимается
-// влево, чтобы обе панели не перекрывали друг друга (см. эффект ниже).
-type DockSide = "left" | "right"
-const DOCK_STORAGE_KEY = "chatWidgetDock"
+// Позиция окна чата (Юрий 03.07): окно таскается мышкой за шапку в любое
+// место экрана, по умолчанию открывается ПО ЦЕНТРУ. Позицию храним в
+// localStorage. Кнопки в шапке — быстрые снапы к левому/правому краю.
+// Когда открывается карточка кандидата (CandidateDrawer, выезжает справа),
+// чат автоматом прижимается к левому краю; при закрытии возвращается.
+type Pos = { x: number; y: number }
+const POS_STORAGE_KEY = "chatWidgetPos"
 
-function readStoredDock(): DockSide {
-  if (typeof window === "undefined") return "right"
+// Фактические габариты окна (зеркалят классы w-[min(960px,…)] / h-[85vh]).
+function windowSize(): { w: number; h: number } {
+  const w = Math.min(960, window.innerWidth - 32)
+  const h = Math.min(Math.round(window.innerHeight * 0.85), window.innerHeight - 32)
+  return { w, h }
+}
+
+function clampPos(p: Pos): Pos {
+  const { w, h } = windowSize()
+  return {
+    x: Math.min(Math.max(p.x, 8), Math.max(8, window.innerWidth - w - 8)),
+    y: Math.min(Math.max(p.y, 8), Math.max(8, window.innerHeight - h - 8)),
+  }
+}
+
+function centerPos(): Pos {
+  const { w, h } = windowSize()
+  return { x: Math.round((window.innerWidth - w) / 2), y: Math.round((window.innerHeight - h) / 2) }
+}
+
+function readStoredPos(): Pos | null {
   try {
-    const v = window.localStorage.getItem(DOCK_STORAGE_KEY)
-    return v === "left" ? "left" : "right"
+    const raw = window.localStorage.getItem(POS_STORAGE_KEY)
+    if (!raw) return null
+    const p = JSON.parse(raw) as Pos
+    if (typeof p?.x !== "number" || typeof p?.y !== "number") return null
+    return clampPos(p)
   } catch {
-    return "right"
+    return null
   }
 }
 
@@ -53,40 +76,80 @@ export function GlobalChatWidget() {
   const [open, setOpen] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [unread, setUnread] = useState(0)
-  const [dock, setDock] = useState<DockSide>("right")
-  // Запоминаем сторону, выбранную пользователем ДО авто-прижатия влево —
-  // чтобы после закрытия карточки кандидата вернуться на неё, а не прыгать.
-  const userDockRef = useRef<DockSide>("right")
+  // Позиция окна (левый верхний угол). null до первого open — центр экрана.
+  const [pos, setPos] = useState<Pos | null>(null)
+  // Позиция, выбранная пользователем ДО авто-прижатия влево — чтобы после
+  // закрытия карточки кандидата вернуться на неё, а не прыгать.
+  const userPosRef = useRef<Pos | null>(null)
+  const dragRef = useRef<{ dx: number; dy: number } | null>(null)
 
   // Карточка кандидата поверх чата — открывается по клику на «Открыть резюме»
   // или на имя кандидата в шапке треда (см. ChatInboxPanel onOpenCandidate).
   const [drawerCandidateId, setDrawerCandidateId] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
 
-  useEffect(() => {
-    const stored = readStoredDock()
-    setDock(stored)
-    userDockRef.current = stored
-  }, [])
-
-  const setDockPersisted = useCallback((side: DockSide) => {
-    userDockRef.current = side
-    setDock(side)
+  const setPosPersisted = useCallback((p: Pos) => {
+    const clamped = clampPos(p)
+    userPosRef.current = clamped
+    setPos(clamped)
     try {
-      window.localStorage.setItem(DOCK_STORAGE_KEY, side)
+      window.localStorage.setItem(POS_STORAGE_KEY, JSON.stringify(clamped))
     } catch {
       /* localStorage недоступен — просто не сохраняем */
     }
   }, [])
 
-  // Авто-режим «рядом»: карточка кандидата открылась — чат прижимается влево
-  // (если был справа), чтобы не перекрываться с выезжающей справа карточкой.
-  // При закрытии карточки возвращаем сторону, которую выбирал пользователь.
+  // Открытие окна: сохранённая позиция или центр экрана (дефолт Юрия 03.07).
+  const openWindow = useCallback(() => {
+    const p = readStoredPos() ?? centerPos()
+    userPosRef.current = p
+    setPos(p)
+    setOpen(true)
+  }, [])
+
+  // Перетаскивание за шапку: pointerdown на шапке (не на кнопках) → двигаем
+  // окно за курсором, на pointerup фиксируем позицию в localStorage.
+  const onHeaderPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || expanded) return
+    if ((e.target as HTMLElement).closest("button")) return
+    const start = pos ?? centerPos()
+    dragRef.current = { dx: e.clientX - start.x, dy: e.clientY - start.y }
+    const onMove = (ev: PointerEvent) => {
+      const d = dragRef.current
+      if (!d) return
+      setPos(clampPos({ x: ev.clientX - d.dx, y: ev.clientY - d.dy }))
+    }
+    const onUp = (ev: PointerEvent) => {
+      const d = dragRef.current
+      dragRef.current = null
+      window.removeEventListener("pointermove", onMove)
+      window.removeEventListener("pointerup", onUp)
+      if (d) setPosPersisted({ x: ev.clientX - d.dx, y: ev.clientY - d.dy })
+    }
+    window.addEventListener("pointermove", onMove)
+    window.addEventListener("pointerup", onUp)
+    e.preventDefault()
+  }, [expanded, pos, setPosPersisted])
+
+  // Снап к краю (кнопки в шапке): держим текущую высоту, меняем только x.
+  const snapTo = useCallback((side: "left" | "right") => {
+    const { w } = windowSize()
+    const y = (pos ?? centerPos()).y
+    setPosPersisted({ x: side === "left" ? 16 : window.innerWidth - w - 16, y })
+  }, [pos, setPosPersisted])
+
+  // Авто-режим «рядом»: карточка кандидата открылась — чат прижимается влево,
+  // чтобы не перекрываться с выезжающей справа карточкой. При закрытии
+  // возвращаем позицию, где окно стояло у пользователя.
   useEffect(() => {
     if (drawerOpen) {
-      if (userDockRef.current === "right") setDock("left")
-    } else {
-      setDock(userDockRef.current)
+      setPos((cur) => {
+        userPosRef.current = cur
+        const y = (cur ?? centerPos()).y
+        return clampPos({ x: 16, y })
+      })
+    } else if (userPosRef.current) {
+      setPos(userPosRef.current)
     }
   }, [drawerOpen])
 
@@ -132,7 +195,7 @@ export function GlobalChatWidget() {
       {!open && (
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={openWindow}
           className={cn(
             // Линия Нэнси: центр 112px (mobile) / 48px (md) от низа; пилюля h-12.
             // Нэнси right-4 + w-16 → занята полоса до 80px; пилюля right-24 = 96px.
@@ -169,16 +232,20 @@ export function GlobalChatWidget() {
             "animate-in slide-in-from-bottom-4 duration-200",
             expanded
               ? "inset-4"
-              : cn(
-                  "bottom-4 h-[85vh] max-h-[calc(100vh-2rem)] w-[min(960px,calc(100vw-2rem))]",
-                  dock === "left" ? "left-4" : "right-4",
-                ),
+              : "h-[85vh] max-h-[calc(100vh-2rem)] w-[min(960px,calc(100vw-2rem))]",
           )}
+          style={expanded ? undefined : { left: (pos ?? { x: 16, y: 16 }).x, top: (pos ?? { x: 16, y: 16 }).y }}
           role="dialog"
           aria-label="Чаты с кандидатами"
         >
-          {/* Шапка окна */}
-          <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border/60 shrink-0">
+          {/* Шапка окна — за неё окно таскается мышкой (см. onHeaderPointerDown) */}
+          <div
+            onPointerDown={onHeaderPointerDown}
+            className={cn(
+              "flex items-center gap-3 px-4 py-2.5 border-b border-border/60 shrink-0 select-none",
+              !expanded && "cursor-move",
+            )}
+          >
             <MessageSquare className="w-4 h-4 text-muted-foreground" />
             <div className="text-sm font-semibold flex-1">
               Чаты
@@ -189,15 +256,26 @@ export function GlobalChatWidget() {
               )}
             </div>
             {!expanded && (
-              <button
-                type="button"
-                onClick={() => setDockPersisted(dock === "left" ? "right" : "left")}
-                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                title={dock === "left" ? "Переместить вправо" : "Переместить влево"}
-                aria-label={dock === "left" ? "Переместить окно вправо" : "Переместить окно влево"}
-              >
-                {dock === "left" ? <PanelRight className="w-4 h-4" /> : <PanelLeft className="w-4 h-4" />}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => snapTo("left")}
+                  className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  title="Прижать к левому краю"
+                  aria-label="Прижать окно к левому краю"
+                >
+                  <PanelLeft className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => snapTo("right")}
+                  className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  title="Прижать к правому краю"
+                  aria-label="Прижать окно к правому краю"
+                >
+                  <PanelRight className="w-4 h-4" />
+                </button>
+              </>
             )}
             <button
               type="button"
