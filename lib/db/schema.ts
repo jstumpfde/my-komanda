@@ -3950,5 +3950,22 @@ export const outreachIntegrations = pgTable("outreach_integrations", {
   createdAt:   timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt:   timestamp("updated_at", { withTimezone: true }).defaultNow(),
 })
+// Самообучающийся ПЛАТФОРМЕННЫЙ (глобальный, без company_id) справочник
+// выученных имён кандидатов. Майнится cron'ом /api/cron/learn-given-names из
+// hh_responses.raw_data по ВСЕЙ платформе: токен hh first_name, которого нет
+// в статическом словаре (lib/messaging/russian-given-names.ts), но который
+// встретился у ≥3 РАЗНЫХ кандидатов и не похож на фамилию (looksLikeSurname) —
+// считается выученным. Чтение — lib/messaging/learned-given-names.ts
+// (getLearnedNamesSet, кэш 10 мин). name_norm — ключ (lower-case).
+export const learnedGivenNames = pgTable("learned_given_names", {
+  nameNorm:    text("name_norm").primaryKey(),        // нормализованное (lower-case) — ключ сравнения
+  displayName: text("display_name").notNull(),        // как встретилось чаще (с оригинальным регистром)
+  occurrences: integer("occurrences").notNull().default(0),  // кол-во РАЗНЫХ кандидатов
+  firstSeen:   timestamp("first_seen", { withTimezone: true }).notNull().defaultNow(),
+  lastSeen:    timestamp("last_seen", { withTimezone: true }).notNull().defaultNow(),
+})
+export type LearnedGivenName    = typeof learnedGivenNames.$inferSelect
+export type NewLearnedGivenName = typeof learnedGivenNames.$inferInsert
+
 export type OutreachIntegration    = typeof outreachIntegrations.$inferSelect
 export type NewOutreachIntegration = typeof outreachIntegrations.$inferInsert

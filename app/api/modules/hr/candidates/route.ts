@@ -7,6 +7,7 @@ import { generateCandidateToken } from "@/lib/candidate-tokens"
 import { generateCandidateShortId } from "@/lib/short-id"
 import { deriveCandidateName } from "@/lib/candidate-name"
 import { resolveGivenNameMeta } from "@/lib/messaging/candidate-name"
+import { getLearnedNamesSet } from "@/lib/messaging/learned-given-names"
 import { hasAnsweredAllRequired } from "@/lib/demo/resolve-questions"
 
 type SortKey =
@@ -263,6 +264,9 @@ function testScoreOf(aiScore: number | null, answersJson: unknown): number | nul
 export async function GET(req: NextRequest) {
   try {
     const user = await requireCompany()
+    // Самообучающийся платформенный справочник имён (кэш 10 мин) — один раз на
+    // запрос, используется в обеих ветках ниже (пагинированной и legacy).
+    const learnedNames = await getLearnedNamesSet()
     const url = new URL(req.url)
     // Принимаем оба варианта имени параметра: vacancyId (новый, camelCase —
     // его шлёт usePaginatedCandidates) и vacancy_id (legacy — useCandidates).
@@ -658,7 +662,7 @@ export async function GET(req: NextRequest) {
         // Имя «под вопросом»: тот же резолвер, что и при отправке ({{name}}).
         // confident=false → бот уйдёт в нейтральное «Здравствуйте» (фамилия/аноним/
         // редкое имя) → HR стоит проверить и при желании вписать вручную.
-        const nameUncertain = !resolveGivenNameMeta({ override: r.firstNameOverride, fullName: r.name }).confident
+        const nameUncertain = !resolveGivenNameMeta({ override: r.firstNameOverride, fullName: r.name, learned: learnedNames }).confident
 
         // Strip служебные поля — не нужны клиенту
         const { demoProgressJson: _drop1, anketaAnswers: _drop2, hhCandidateName: _drop3, firstNameOverride: _drop4, ...rest } = r
@@ -1225,7 +1229,7 @@ export async function GET(req: NextRequest) {
         && !progress?.completedAt
         && (Date.now() - new Date(r.lastActivityAt).getTime()) <= ACTIVE_THRESHOLD_MS
 
-      const nameUncertain = !resolveGivenNameMeta({ override: r.firstNameOverride, fullName: r.name }).confident
+      const nameUncertain = !resolveGivenNameMeta({ override: r.firstNameOverride, fullName: r.name, learned: learnedNames }).confident
 
       return {
         ...r,
