@@ -458,6 +458,7 @@ export async function GET(req: NextRequest) {
           vacancyTitle: vacancies.title,
           createdAt: candidates.createdAt,
           lastRespondedAt: candidates.lastRespondedAt,
+          pendingRejectionReason: candidates.pendingRejectionReason,
           updatedAt: candidates.updatedAt,
           demoProgressJson: candidates.demoProgressJson,
           anketaAnswers: candidates.anketaAnswers,

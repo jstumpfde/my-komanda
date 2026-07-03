@@ -227,6 +227,7 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     isFavorite: c.isFavorite ?? false,
     createdAt: c.createdAt,
     lastRespondedAt: c.lastRespondedAt ?? null,
+    pendingRejectionReason: (c as { pendingRejectionReason?: string | null }).pendingRejectionReason ?? null,
     stage: c.stage ?? null,
     // HR-020: фильтр-поля
     birthDate: c.birthDate ?? undefined,

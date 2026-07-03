@@ -254,7 +254,7 @@ export const AnketaPassInviteSchema = z.object({
    * что и остальной отказной конвейер — cron pending-rejections исполнит).
    * Дефолт "none": не меняем поведение существующих вакансий.
    */
-  failAction: z.enum(["none", "pending_rejection"]).default("none"),
+  failAction: z.enum(["none", "pending_manual", "pending_rejection"]).default("none"),
   /**
    * Задержка (минуты) до авто-исполнения отложенного отказа при failAction=
    * "pending_rejection". За это время HR может отменить в карточке кандидата.

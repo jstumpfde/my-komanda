@@ -397,7 +397,7 @@ export async function POST(
           try {
             const spec = await getSpec(txResult.vacancyId)
             const ap = spec?.anketaPassInvite
-            if (ap?.enabled === true && ap.failAction === "pending_rejection") {
+            if (ap?.enabled === true && (ap.failAction === "pending_rejection" || ap.failAction === "pending_manual")) {
               const [cand] = await db
                 .select({
                   stage:                   candidates.stage,
@@ -419,12 +419,25 @@ export async function POST(
                 !alreadyPassedGate &&
                 !terminalOrAdvancedStages.has(cand.stage ?? "")
               ) {
-                const { scheduleRejection } = await import("@/lib/rejection/execute")
-                await scheduleRejection({
-                  candidateId:  txResult.candidateId,
-                  reason:       "anketa_gate_failed",
-                  delayMinutes: ap.failRejectDelayMinutes,
-                })
+                if (ap.failAction === "pending_manual") {
+                  // «Пред. отказ» БЕЗ авто-отправки (Юрий 03.07: стадия временная,
+                  // 60-мин таймер выключен до отладки). pendingRejectionAt=NULL —
+                  // cron pending-rejections такие не исполняет; HR решает вручную.
+                  await db.update(candidates)
+                    .set({
+                      pendingRejectionReason: "anketa_gate_failed",
+                      pendingRejectionSetAt:  new Date(),
+                      pendingRejectionAt:     null,
+                    })
+                    .where(eq(candidates.id, txResult.candidateId))
+                } else {
+                  const { scheduleRejection } = await import("@/lib/rejection/execute")
+                  await scheduleRejection({
+                    candidateId:  txResult.candidateId,
+                    reason:       "anketa_gate_failed",
+                    delayMinutes: ap.failRejectDelayMinutes,
+                  })
+                }
               }
             }
           } catch (err) {

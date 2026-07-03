@@ -131,6 +131,7 @@ function toListCandidate(c: GlobalCandidate): Candidate & { vacancyTitle: string
     isFavorite: c.isFavorite,
     createdAt: c.createdAt,
     lastRespondedAt: c.lastRespondedAt ?? null,
+    pendingRejectionReason: (c as { pendingRejectionReason?: string | null }).pendingRejectionReason ?? null,
     stage: c.stage,
     photoUrl: c.photoUrl ?? null,
     vacancyTitle: c.vacancyTitle,

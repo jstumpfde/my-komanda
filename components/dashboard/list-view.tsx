@@ -720,10 +720,14 @@ export function ListView({
       header: <SortHeader label="Статус" sortKey="status" sort={sort} onToggle={handleSort} align="center" />,
       renderCell: (candidate) => (
         <div className="text-center">
-          {/* В paginated-режиме все кандидаты завёрнуты в одну
-              синтетическую колонку {title:"Кандидаты"}; columnTitle
-              одинаков у всех. Поэтому лейбл/цвет статуса берём из
-              реального candidate.stage через PLATFORM_STAGES. */}
+          {/* «Пред. отказ»: кандидат не прошёл гейт анкеты, помечен на ручной
+              разбор (pendingRejectionReason), сообщений ему НЕ уходило. Бэдж
+              перекрывает стадию, пока HR не примет решение (Юрий 03.07). */}
+          {(candidate as { pendingRejectionReason?: string | null }).pendingRejectionReason === "anketa_gate_failed" ? (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300">
+              Пред. отказ
+            </span>
+          ) : (
           <span
             className={cn(
               "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap",
@@ -742,6 +746,7 @@ export function ListView({
                 })()
               : (candidate.columnTitle === "Демонстрация" ? "Демо" : candidate.columnTitle)}
           </span>
+          )}
         </div>
       ),
     })
