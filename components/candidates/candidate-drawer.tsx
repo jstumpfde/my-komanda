@@ -1528,7 +1528,13 @@ export function CandidateDrawer({
   // Режим А: текст как есть (содержит {{schedule_link}}).
   // Режим Б: к тексту дописываем строки с выбранными временами и просьбу ответить.
   const buildInviteMessage = useCallback((): string => {
-    if (inviteMode === "link") return inviteText
+    // Режим «ссылка на самозапись»: без {{schedule_link}} кандидат не получил
+    // бы свой календарь (Юрий 03.07) — дописываем ссылку в конец автоматически.
+    if (inviteMode === "link") {
+      return inviteText.includes("{{schedule_link}}")
+        ? inviteText
+        : `${inviteText.trimEnd()}\n\nВыберите удобное время: {{schedule_link}}`
+    }
     const lines = inviteSelectedSlots.map((k) => `• ${formatSlotKey(k)}`)
     const tz = inviteTzLabel ? ` (${inviteTzLabel})` : ""
     return [
@@ -3211,6 +3217,13 @@ export function CandidateDrawer({
                   placeholders={["name", "vacancy", "schedule_link"]}
                   onSaveTemplate={saveInviteTemplate}
                 />
+                {!inviteText.includes("{{schedule_link}}") && (
+                  <p className="text-[11px] text-muted-foreground">
+                    В тексте нет ссылки — персональная ссылка на самозапись будет
+                    добавлена в конец сообщения автоматически
+                    {inviteScheduleLink ? <>: <span className="font-mono break-all">{inviteScheduleLink}</span></> : "."}
+                  </p>
+                )}
               </TabsContent>
 
               {/* Режим Б — HR выбирает 2-3 конкретных времени из окон вакансии */}

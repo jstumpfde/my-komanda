@@ -24,6 +24,7 @@ export const SCHEDULE_INVITE_BRANCH = "schedule_invite"
 const DEFAULT_DELAY_MINUTES = 1
 export const DEFAULT_SCHEDULE_INVITE_TEXT =
   "{{name}}, рады пригласить вас на интервью по вакансии «{{vacancy}}»!\n" +
+  "Выберите удобное время: {{schedule_link}}\n" +
   "До встречи!"
 
 // Гарантирует наличие follow_up_campaigns строки для вакансии — нужно потому,
