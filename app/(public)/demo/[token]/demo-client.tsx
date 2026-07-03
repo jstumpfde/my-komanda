@@ -1892,7 +1892,10 @@ export default function DemoPage() {
 
 // ─── Media recording block ───────────────────────────────────────────────────
 
-const MAX_MEDIA_SIZE = 50 * 1024 * 1024
+// 200 МБ — синхронно с сервером (app/api/upload MAX_SIZE) и nginx
+// client_max_body_size 200m. Было 50 МБ — кандидаты с телефонными видео
+// упирались в «файл превышает допустимый размер» (кейс 03.07).
+const MAX_MEDIA_SIZE = 200 * 1024 * 1024
 const MAX_MEDIA_MB = Math.round(MAX_MEDIA_SIZE / (1024 * 1024))
 
 // iOS-friendly: mp4 первым — Safari не поддерживает webm.
