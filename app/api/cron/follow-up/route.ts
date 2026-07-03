@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { eq, and, lte, gte, ne, isNotNull, inArray, sql } from "drizzle-orm"
+import { eq, and, lte, gte, ne, isNotNull, inArray, sql, desc } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancies, candidates, followUpMessages, followUpCampaigns, hhResponses, companies, users, testSubmissions, vacancySpecs } from "@/lib/db/schema"
 import { changeNegotiationState } from "@/lib/hh-api"
@@ -601,10 +601,14 @@ async function processOneTouch(
     }
   }
 
+  // НОВЕЙШИЙ отклик кандидата: после перепубликации вакансии на hh (новый
+  // hh id, 03.07) у кандидата может быть два negotiation — шлём в свежий чат,
+  // старый (заархивированной вакансии) может быть закрыт для сообщений.
   const [hhResp] = await db
     .select({ hhResponseId: hhResponses.hhResponseId })
     .from(hhResponses)
     .where(eq(hhResponses.localCandidateId, msg.candidateId))
+    .orderBy(desc(hhResponses.createdAt))
     .limit(1)
   if (!hhResp) {
     await db.update(followUpMessages).set({ status: "failed", errorMessage: "no_hh_response_link" }).where(eq(followUpMessages.id, msg.id))

@@ -366,7 +366,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       let candidateId: string | null = resp.localCandidateId ?? null
       // Существующая запись (если найдена) — для защитного backfill
       // пустых полей (city/name/phone/email) при апдейте.
-      let existingCand: { id: string; city: string | null; name: string; phone: string | null; email: string | null } | null = null
+      let existingCand: { id: string; city: string | null; name: string; phone: string | null; email: string | null; stage: string | null } | null = null
 
       // ── НОВОЕ: dedup по hh_resume_id ──────────────────────────────────
       // client.ts при импорте создаёт связку (candidate ↔ hh_resume_id) в
@@ -384,6 +384,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             name: candidates.name,
             phone: candidates.phone,
             email: candidates.email,
+            stage: candidates.stage,
           })
           .from(hhCandidates)
           .innerJoin(candidates, eq(candidates.id, hhCandidates.candidateId))
@@ -405,7 +406,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       // ── /НОВОЕ ─────────────────────────────────────────────────────────
 
       if (!candidateId && localVac) {
-        const cols = { id: candidates.id, city: candidates.city, name: candidates.name, phone: candidates.phone, email: candidates.email }
+        const cols = { id: candidates.id, city: candidates.city, name: candidates.name, phone: candidates.phone, email: candidates.email, stage: candidates.stage }
         if (resp.candidateEmail) {
           const [byEmail] = await db
             .select(cols)
@@ -440,12 +441,30 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       // её сейчас, чтобы тоже применить защитный backfill.
       if (candidateId && !existingCand) {
         const [row] = await db
-          .select({ id: candidates.id, city: candidates.city, name: candidates.name, phone: candidates.phone, email: candidates.email })
+          .select({ id: candidates.id, city: candidates.city, name: candidates.name, phone: candidates.phone, email: candidates.email, stage: candidates.stage })
           .from(candidates)
           .where(eq(candidates.id, candidateId))
           .limit(1)
         if (row) existingCand = row
       }
+
+      // ── Повторный отклик существующего кандидата ──────────────────────
+      // hh после блокировки перепубликует вакансию под НОВЫМ id (03.07:
+      // 134601199 → 134799914), и кандидаты могут откликнуться заново.
+      // Воронка одна: если кандидат уже шёл по ней (стадия дальше стартовой) —
+      // НЕ сбрасываем стадию, НЕ переприглашаем и не гоним по воронке заново;
+      // просто помечаем отклик обработанным. Новый negotiation уже привязан
+      // к кандидату (localCandidateId выше), дожимы уйдут в свежий чат
+      // (follow-up берёт новейшую hh-строку кандидата).
+      if (existingCand && existingCand.stage && !["new"].includes(existingCand.stage)) {
+        await db.update(hhResponses)
+          .set({ status: newStatus })
+          .where(eq(hhResponses.id, resp.id))
+        console.log(`[PQ] repeat response from existing candidate ${existingCand.id} (stage=${existingCand.stage}) — kept stage, no re-invite`)
+        results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "repeat_existing_kept_stage" })
+        continue
+      }
+      // ── /повторный отклик ──────────────────────────────────────────────
 
       let newCandShortId: string | null = null
 
