@@ -264,6 +264,30 @@ export const AnketaPassInviteSchema = z.object({
 })
 export type AnketaPassInvite = z.infer<typeof AnketaPassInviteSchema>
 
+// ─── Telegram-алерты по подходящим кандидатам (Юрий 04.07) ──────────────────
+
+/**
+ * Присылать подходящих кандидатов в Telegram-канал компании
+ * (companies.telegram_bot_token/telegram_chat_id, см. lib/telegram/send-to-company.ts).
+ * Гейт по порогам НЕЗАВИСИМ от триггера: порог резюме проверяется при
+ * trigger="resume_scored", порог ответов — при trigger="gate_passed" (если задан).
+ * null-порог = условие не проверяем (не блокирует отправку).
+ */
+export const TgCandidateAlertsSchema = z.object({
+  /** Включена ли отправка. По умолчанию ВЫКЛ — не спамим, пока HR не включит. */
+  enabled:         z.boolean().default(false),
+  /** Мин. балл AI-резюме (resume_score) для отправки. null = не проверять по резюме. */
+  minResumeScore:  z.number().int().min(0).max(100).nullable().default(null),
+  /** Мин. балл ответов анкеты (demo_answers_score) для отправки. null = не проверять. */
+  minAnswersScore: z.number().int().min(0).max(100).nullable().default(null),
+  /** Слать при прохождении гейта 2-й части демо (anketaPassInvite). Дефолт ВКЛ. */
+  onGatePassed:    z.boolean().default(true),
+  /** Слать при брони интервью. Дефолт ВЫКЛ — бронь уже шлёт своё уведомление
+   *  в канал отдельно (app/api/public/schedule/[token]/route.ts), не дублируем. */
+  onBooked:        z.boolean().default(false),
+})
+export type TgCandidateAlerts = z.infer<typeof TgCandidateAlertsSchema>
+
 // ─── Стоп-факторы ───────────────────────────────────────────────────────────
 
 /**
@@ -660,6 +684,8 @@ export const CandidateSpecSchema = z.object({
   anketaThresholds: AnketaThresholdsSchema.default({}),
   /** Приглашение на 2-ю часть демо прошедшим анкету (балл ≥ порога). */
   anketaPassInvite: AnketaPassInviteSchema.default({}),
+  /** Telegram-алерты по подходящим кандидатам в канал компании. */
+  tgCandidateAlerts: TgCandidateAlertsSchema.default({}),
 
   // ── (d) Профиль / текстовые описания ─────────────────────────────────────
   /**

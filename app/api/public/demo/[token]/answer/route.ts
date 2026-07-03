@@ -10,6 +10,7 @@ import { scoreDemoAnswers } from "@/lib/demo/score-answers"
 import { maybeScheduleSecondDemoInvite } from "@/lib/messaging/second-demo-invite"
 import { isPortraitConfigured } from "@/lib/core/spec/resume-input"
 import { getSpec } from "@/lib/core/spec/store"
+import { maybeSendCandidateAlert } from "@/lib/telegram/candidate-alert"
 
 // Fire-and-forget AI-Портрет (v2) при завершении демо.
 // Для Portrait-вакансий (критерии в Spec, а не в must_have) тоже запускаем v2.
@@ -367,6 +368,18 @@ export async function POST(
           inviteResult.reason === "already_invited" ||
           inviteResult.reason === "already_scheduled"
         if (passedNow) {
+          // Telegram-алерт «подходящий кандидат» (Юрий 04.07) — только на РЕАЛЬНОЕ
+          // прохождение гейта сейчас (scheduled===true), не на повторный сабмит
+          // уже прошедшего (already_invited/already_scheduled) — иначе задвоили бы.
+          if (inviteResult.scheduled) {
+            void maybeSendCandidateAlert({
+              candidateId: txResult.candidateId,
+              vacancyId:   txResult.vacancyId,
+              trigger:     "gate_passed",
+            }).catch((err: unknown) => {
+              console.warn("[candidate-alert] gate_passed failed:", err)
+            })
+          }
           const spec = await getSpec(txResult.vacancyId)
           const ap = spec?.anketaPassInvite
           // Инлайн-переход только в seamless/both. Обратная совместимость:

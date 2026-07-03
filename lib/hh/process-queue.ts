@@ -32,6 +32,7 @@ import { sendWebhook } from "@/lib/webhooks"
 import { resolveVacancyWebhook } from "@/lib/integrations/resolve"
 import { shouldDeferFirstMessage } from "@/lib/messaging/first-messages-chain"
 import { getEffectiveMessageDefaults } from "@/lib/messaging/effective-message-defaults"
+import { maybeSendCandidateAlert } from "@/lib/telegram/candidate-alert"
 
 // Дефолтные тексты (приглашение/автоответ) — НЕ хардкод: резолвятся по компании
 // (платформа→компания), редактируются в UI. Эффективные значения — в `md` ниже,
@@ -779,6 +780,17 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                   })
                 }
               }
+
+              // Telegram-алерт «подходящий кандидат» (Юрий 04.07) — fire-and-forget,
+              // resume_score только что записан впервые (guard выше по коду).
+              void maybeSendCandidateAlert({
+                candidateId,
+                vacancyId: localVac.id,
+                trigger:   "resume_scored",
+                score:     result.score,
+              }).catch((err: unknown) => {
+                console.warn("[candidate-alert] resume_scored failed:", err)
+              })
 
               // Два порога (Сессия 6):
               //   score >= upper          → обычный invite (ничего не делаем здесь).

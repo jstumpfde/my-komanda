@@ -2724,6 +2724,75 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
         )
       })()}
 
+      {/* ── Telegram: подходящие кандидаты (Юрий 04.07) — компактная карточка. ── */}
+      {(() => {
+        const tg = spec.tgCandidateAlerts ?? { enabled: false, minResumeScore: null, minAnswersScore: null, onGatePassed: true, onBooked: false }
+        return (
+          <Card>
+            <CardContent className="pt-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-semibold">Telegram: подходящие кандидаты</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Присылать карточку кандидата в Telegram-канал компании, когда он проходит пороги.
+                  </p>
+                </div>
+                <Switch checked={tg.enabled} onCheckedChange={v => patch({ tgCandidateAlerts: { ...tg, enabled: v } })} />
+              </div>
+              {tg.enabled && (
+                <div className="space-y-3 pt-1">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Мин. балл AI-резюме</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        placeholder="не проверять"
+                        className="h-9"
+                        value={tg.minResumeScore ?? ""}
+                        onChange={e => {
+                          const raw = e.target.value
+                          const v = raw === "" ? null : Math.max(0, Math.min(100, Math.round(Number(raw))))
+                          patch({ tgCandidateAlerts: { ...tg, minResumeScore: Number.isFinite(v) ? v : null } })
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Мин. балл ответов анкеты</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        placeholder="не проверять"
+                        className="h-9"
+                        value={tg.minAnswersScore ?? ""}
+                        onChange={e => {
+                          const raw = e.target.value
+                          const v = raw === "" ? null : Math.max(0, Math.min(100, Math.round(Number(raw))))
+                          patch({ tgCandidateAlerts: { ...tg, minAnswersScore: Number.isFinite(v) ? v : null } })
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <Checkbox
+                      checked={tg.onGatePassed}
+                      onCheckedChange={v => patch({ tgCandidateAlerts: { ...tg, onGatePassed: Boolean(v) } })}
+                      className="mt-0.5"
+                    />
+                    <span className="text-xs">Когда кандидат прошёл гейт 2-й части демо («Путь менеджера»)</span>
+                  </label>
+                  <p className="text-[11px] text-muted-foreground rounded-md bg-muted/40 px-2.5 py-1.5 leading-relaxed">
+                    Бот и чат настраиваются в Настройках HR → Telegram; сообщения идут в канал компании.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )
+      })()}
+
       {/* ── Автоответы кандидату — единый блок: стоп-слова → отказ + FAQ → авто-ответ.
            Работает независимо от режима (Портрет / Воронка v2 / AI чат-бот),
            гейт единым тумблером «Включить» (по умолчанию ВЫКЛ). ── */}
