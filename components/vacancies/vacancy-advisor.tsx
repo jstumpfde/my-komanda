@@ -1019,7 +1019,7 @@ function BestPublishTimeCard({ vacancyId, city }: { vacancyId?: string; city?: s
                     <div key={d.dow} className="flex items-baseline gap-1.5 text-sm">
                       <span className="w-6 shrink-0 font-medium text-muted-foreground">{short[d.dow]}</span>
                       <span className="text-foreground">
-                        {slots.map(s => `${s.range} — ${s.pct.toFixed(2).replace(".", ",")}%`).join(" · ")}
+                        {slots.map(s => `${s.range} — ${s.pct.toFixed(2).replace(".", ",")} % (${s.cnt})`).join(" · ")}
                       </span>
                     </div>
                   )
