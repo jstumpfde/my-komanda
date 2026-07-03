@@ -374,6 +374,14 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
   const nextFormatAfter = (f: InterviewFormat): InterviewFormat =>
     f === "Звонок" ? "Онлайн" : "Офис"
 
+  // Открыть кандидата: в контексте вакансии — боковой панелью (?candidate= диплинк
+  // на табе «Кандидаты»), вне вакансии — страница кандидата (Юрий 04.07).
+  const openCandidate = useCallback((candId: string, candVacancyId?: string | null) => {
+    const vid = candVacancyId || vacancyId
+    if (vid) router.push(`/hr/vacancies/${vid}?tab=candidates&candidate=${candId}`)
+    else router.push(`/hr/candidates/${candId}`)
+  }, [vacancyId, router])
+
   const openCreate = (prefill?: { candidateId: string; name: string; format?: InterviewFormat }) => {
     const now = new Date()
     // #2: интервьюер по умолчанию — текущий пользователь (кто назначает).
@@ -713,7 +721,7 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                     <div className="space-y-1.5">
                       {waitingCandidates.map(c => (
                         <div key={c.id} className="flex items-center gap-2 flex-wrap rounded-lg border bg-card px-3 py-2">
-                          <span className="font-medium text-sm truncate flex-1 min-w-[120px] cursor-pointer hover:text-primary" onClick={() => router.push(`/hr/candidates/${c.id}`)}>{c.name}</span>
+                          <span className="font-medium text-sm truncate flex-1 min-w-[120px] cursor-pointer hover:text-primary" onClick={() => openCandidate(c.id)}>{c.name}</span>
                           {c.stage && <Badge variant="secondary" className="text-[10px] font-normal">{getStageLabel(c.stage)}</Badge>}
                           {c.phone && <a href={`tel:${c.phone}`} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"><Phone className="w-3 h-3" />{c.phone}</a>}
                           <div className="flex items-center gap-1.5 ml-auto">
@@ -747,7 +755,7 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                 <div className="space-y-3">
                   {filtered.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">Нет интервью</p>}
                   {filtered.map(iv => (
-                    <Card key={iv.id} className={cn("overflow-hidden transition-colors hover:border-primary/40 cursor-pointer", iv.byStageOnly && "border-dashed")} onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}>
+                    <Card key={iv.id} className={cn("overflow-hidden transition-colors hover:border-primary/40 cursor-pointer", iv.byStageOnly && "border-dashed")} onClick={() => iv.candidateId ? openCandidate(iv.candidateId) : toast.info("Кандидат не привязан к записи")}>
                       <CardContent className="p-0">
                         <div className="flex items-stretch">
                           {/* Дата/время */}
@@ -860,7 +868,7 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                                 draggable
                                 onDragStart={() => ivDragStart(iv.id)}
                                 onDragEnd={ivDragEnd}
-                                onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}
+                                onClick={() => iv.candidateId ? openCandidate(iv.candidateId) : toast.info("Кандидат не привязан к записи")}
                                 className={cn("cursor-pointer", dragIvId === iv.id && "opacity-40 scale-95")}
                               >
                                 <MiniCard iv={iv} compact />
@@ -910,7 +918,7 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                                 className={cn("rounded-lg border p-2.5 flex items-center justify-between cursor-grab active:cursor-grabbing transition-opacity", STATUS_STYLES[iv.status], dragIvId === iv.id && "opacity-40 scale-95")}
                               >
                                 <div><div className="flex items-center gap-2"><span className="text-sm font-semibold">{iv.candidate}</span><Badge variant="outline" className="text-[10px]">{iv.type}</Badge></div><p className="text-xs text-muted-foreground">{iv.vacancy} · {iv.time}–{iv.endTime} · {iv.format}</p></div>
-                                <Button variant="outline" size="sm" className="h-7 text-xs shrink-0" onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}>Открыть</Button>
+                                <Button variant="outline" size="sm" className="h-7 text-xs shrink-0" onClick={() => iv.candidateId ? openCandidate(iv.candidateId) : toast.info("Кандидат не привязан к записи")}>Открыть</Button>
                               </div>
                             ))}
                           </div>
@@ -974,7 +982,7 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                                       className={cn("rounded-md border px-2 py-1.5 text-[10px] leading-tight cursor-pointer active:cursor-grabbing mb-0.5 transition-opacity flex flex-col justify-center gap-0.5", STATUS_STYLES[iv.status], dragIvId === iv.id && "opacity-40 scale-95")}
                                       style={{ minHeight: `${dur * 56}px` }}
                                       title={`${iv.candidate} · ${iv.type} · ${iv.format} · ${iv.time}–${iv.endTime}`}
-                                      onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}
+                                      onClick={() => iv.candidateId ? openCandidate(iv.candidateId) : toast.info("Кандидат не привязан к записи")}
                                     >
                                       <span className="font-semibold flex items-center gap-1 truncate"><span className={cn("w-1.5 h-1.5 rounded-full shrink-0", STATUS_DOT[iv.status])} />{iv.time} {iv.candidate}</span>
                                       <span className="opacity-70 block truncate pl-2.5">{iv.type} · {iv.format}</span>
@@ -1015,7 +1023,7 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                                 draggable
                                 onDragStart={() => ivDragStart(iv.id)}
                                 onDragEnd={ivDragEnd}
-                                onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}
+                                onClick={() => iv.candidateId ? openCandidate(iv.candidateId) : toast.info("Кандидат не привязан к записи")}
                                 className={cn("transition-all cursor-pointer hover:border-primary/40 active:cursor-grabbing", dragIvId === iv.id && "opacity-40 scale-95")}
                               >
                                 <CardContent className="p-3.5 space-y-2.5">
