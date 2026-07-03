@@ -138,7 +138,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
             hour: c.hour,
             range: hourRange(c.hour),
             cnt: c.cnt,
-            pct: total > 0 ? Math.round((c.cnt / total) * 100) : 0,
+            pct: total > 0 ? Math.round((c.cnt / total) * 10000) / 100 : 0, // с сотыми (1,55%)
           }))
         : []
       return { dow, dayName: DAY_NAMES[dow], slots, dayTotal, lowData: dayTotal < MIN_DAY_TOTAL }
