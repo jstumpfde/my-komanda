@@ -77,6 +77,14 @@ const SOURCE_NOTE: Record<string, string> = {
   neutral:      "имя не распознано — уйдёт нейтральное «Здравствуйте»",
 }
 
+// Короткая версия для строки таблицы (Юрий 03.07: полный текст растягивал
+// строку на 4 строки — в ячейке одна строка, полный текст по наведению).
+const SOURCE_NOTE_SHORT: Record<string, string> = {
+  hh_last_swap: "имя из «Фамилии»",
+  hh_first_raw: "имя не из спр.",
+  neutral:      "имя не распознано",
+}
+
 function fmtTime(iso: string): string {
   try {
     return new Intl.DateTimeFormat("ru-RU", {
@@ -522,22 +530,21 @@ export function MessageQueueJournal({ vacancyId, onChanged }: Props) {
                             )}
                           </div>
                           {note && !m.override && (
-                            <div className="text-[11px] text-amber-600 max-w-[200px]">⚠ {note}</div>
+                            // Одна строка + полный текст по наведению (Юрий 03.07:
+                            // развёрнутое предупреждение раздувало строку таблицы).
+                            <div className="text-[11px] text-amber-600 whitespace-nowrap cursor-help" title={note}>
+                              ⚠ {SOURCE_NOTE_SHORT[m.nameSource] ?? note}
+                            </div>
                           )}
                         </div>
                       )}
                     </DataCell>
-                    {/* Превью / полный текст */}
+                    {/* Сообщение целиком — без обрезки и «нажмите, чтобы
+                        развернуть» (Юрий 03.07: превью = сообщение полностью). */}
                     <DataCell className="align-top">
-                      <p className={cn(
-                        "text-xs text-foreground/90 whitespace-pre-wrap",
-                        isExpanded ? "" : "line-clamp-1",
-                      )}>
+                      <p className="text-xs text-foreground/90 whitespace-pre-wrap">
                         {m.preview}
                       </p>
-                      {!isExpanded && (
-                        <span className="text-[11px] text-muted-foreground/70">нажмите, чтобы развернуть</span>
-                      )}
                     </DataCell>
                     {/* Уйдёт в: для отправленных — время отправки, иначе плановое.
                         Крупно HH:MM (МСК), под ним дата и причина ожидания. */}
@@ -610,9 +617,7 @@ export function MessageQueueJournal({ vacancyId, onChanged }: Props) {
                             </Button>
                           )}
                         </div>
-                      ) : (
-                        <span className="text-[11px] text-muted-foreground/50">—</span>
-                      )}
+                      ) : null /* у ушедших/отменённых действий нет — пусто, без «—» (Юрий 03.07) */}
                     </DataCell>
                   </DataRow>
                 )
