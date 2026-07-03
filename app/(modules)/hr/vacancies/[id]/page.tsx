@@ -4663,11 +4663,9 @@ export default function VacancyPage() {
                       onNext={nextStep ? () => goToVacancyStep(nextStep) : undefined}
                       // #44: футер наследует ширину активной секции настроек (та же
                       // карта пресетов, что и у SettingsTabShell вокруг контента).
+                      // Юрий 03.07 (финал): кнопки у ВСЕХ табов в одном месте —
+                      // правый край ряда с крошками, без спец-отступов.
                       className={SETTINGS_TAB_WIDTH_CLASS[SETTINGS_SECTION_WIDTH[settingsSection] ?? "md"]}
-                      // Портрет: справа AI-панель (w-[340px] + gap-6=24px) — ряд
-                      // кнопок встаёт под правый край ФОРМЫ, а не страницы
-                      // (Юрий 03.07, стрелка «перенести сюда»).
-                      buttonsClassName={settingsSection === "spec" ? "lg:pr-[364px]" : undefined}
                     />
                   )
                 })()}
