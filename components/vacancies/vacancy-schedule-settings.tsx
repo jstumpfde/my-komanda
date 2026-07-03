@@ -180,6 +180,12 @@ export function VacancyScheduleSettings({ vacancyId }: Props) {
   return (
     <>
       <div className="space-y-10">
+      {/* Два календаря с явными подписями (Юрий 04.07): сообщения ≠ интервью. */}
+      <div className="rounded-2xl border-2 border-dashed border-muted-foreground/20 p-4 space-y-4">
+        <div>
+          <p className="text-sm font-semibold">📨 Календарь отправки сообщений</p>
+          <p className="text-xs text-muted-foreground">Когда платформа пишет кандидатам: первые сообщения, дожимы, приглашения. Вне этих часов сообщения ждут окна.</p>
+        </div>
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -421,12 +427,20 @@ export function VacancyScheduleSettings({ vacancyId }: Props) {
         </CardContent>
       </Card>
 
+      </div>
+
       {/* #21 — окна записи на интервью по дням недели (per-вакансия) */}
+      <div className="rounded-2xl border-2 border-dashed border-primary/25 p-4 space-y-4">
+        <div>
+          <p className="text-sm font-semibold">📅 Календарь записи на интервью</p>
+          <p className="text-xs text-muted-foreground">Когда кандидат может выбрать слот на странице самозаписи. Не зависит от календаря сообщений.</p>
+        </div>
       <InterviewWindowsSection
         vacancyId={vacancyId}
         workStart={data.scheduleStart}
         workEnd={data.scheduleEnd}
       />
+      </div>
       </div>
 
       <CustomHolidayDialog
