@@ -144,6 +144,19 @@ export function HhBroadcastDialog({
   // Тип ссылки, прикреплённой кандидату (тест/демо) — per кандидат.
   const [linkKindById, setLinkKindById] = useState<Record<string, LinkKind>>({})
   const [markingAll, setMarkingAll] = useState(false)
+  // Последний выбор (Юрий 03.07): тип ссылки — глобально, шаблон — per-вакансия.
+  // Применяется авто к каждому новому кандидату; хранится в localStorage,
+  // чтобы «в следующий раз захожу — вижу тот же выбор».
+  const lastKindRef = useRef<LinkKind | null>(null)
+  const lastTplRef = useRef<string | null>(null)
+  useEffect(() => {
+    try {
+      const k = window.localStorage.getItem("hhbc:lastKind")
+      if (k === "test" || k === "demo" || k === "vacancy") lastKindRef.current = k
+      const t = window.localStorage.getItem(`hhbc:lastTpl:${vacancyId}`)
+      if (t) lastTplRef.current = t
+    } catch { /* localStorage недоступен */ }
+  }, [vacancyId])
   // Темп рассылки: интервал между открытиями чатов (анти-бан) + авто-открытие.
   const [intervalSec, setIntervalSec] = useState(20)
   const [autoOpen, setAutoOpen] = useState(false)
@@ -247,6 +260,29 @@ export function HhBroadcastDialog({
   const currentMessage = current ? (messages[current.id] ?? current.personalMessage) : ""
   const currentKind: LinkKind = current ? (linkKindById[current.id] ?? "test") : "test"
   const currentLink = current ? linkForKind(current.testLink, currentKind, vacancyHhUrl) : ""
+
+  // Авто-применить последний выбор (тип ссылки + шаблон) к новому кандидату —
+  // если пользователь ещё НЕ трогал этого кандидата вручную (Юрий 03.07:
+  // «открываю следующего — тот же шаблон и вакансия выбраны, жму кнопку»).
+  useEffect(() => {
+    if (!current) return
+    if (messages[current.id] !== undefined || linkKindById[current.id] !== undefined) return
+    const kind = lastKindRef.current
+    const tpl = lastTplRef.current ? templates.find((t) => t.id === lastTplRef.current) : null
+    if (!kind && !tpl) return
+    const effKind: LinkKind = kind ?? "test"
+    if (kind) setLinkKindById((prev) => ({ ...prev, [current.id]: kind }))
+    if (tpl) {
+      setSelectedTplId(tpl.id)
+      setTplName(tpl.name)
+      const filled = fromTemplateText(tpl.text, {
+        link: linkForKind(current.testLink, effKind, vacancyHhUrl),
+        vacancy: vacancyTitle,
+        firstName: current.firstName,
+      })
+      setMessages((prev) => ({ ...prev, [current.id]: filled }))
+    }
+  }, [current?.id, templates]) // eslint-disable-line react-hooks/exhaustive-deps
   const total = items.length
   const processed = sentIds.size + skippedIds.size
 
@@ -292,6 +328,8 @@ export function HhBroadcastDialog({
       })
     }
     setLinkKindById((prev) => ({ ...prev, [current.id]: newKind }))
+    lastKindRef.current = newKind
+    try { window.localStorage.setItem("hhbc:lastKind", newKind) } catch { /* noop */ }
   }, [current, linkKindById])
 
   const copyAndOpen = useCallback(async () => {
@@ -390,6 +428,12 @@ export function HhBroadcastDialog({
   // в textarea и имя в поле названия. Пустое значение = «— Новый —».
   const applyTemplate = useCallback((tplId: string) => {
     setSelectedTplId(tplId)
+    // Запоминаем последний выбранный шаблон (per-вакансия); «— Новый —» очищает.
+    lastTplRef.current = tplId || null
+    try {
+      if (tplId) window.localStorage.setItem(`hhbc:lastTpl:${vacancyId}`, tplId)
+      else window.localStorage.removeItem(`hhbc:lastTpl:${vacancyId}`)
+    } catch { /* noop */ }
     if (!tplId) { setTplName(""); return }
     const tpl = templates.find((t) => t.id === tplId)
     if (!tpl || !current) return
@@ -400,7 +444,7 @@ export function HhBroadcastDialog({
       firstName: current.firstName,
     })
     setMessages((prev) => ({ ...prev, [current.id]: filled }))
-  }, [templates, current, vacancyTitle, linkKindById])
+  }, [templates, current, vacancyTitle, linkKindById, vacancyId])
 
   // POST к менеджеру шаблонов; возвращает обновлённый список или null при ошибке.
   const postTemplate = useCallback(async (
