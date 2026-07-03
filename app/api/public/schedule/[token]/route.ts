@@ -264,9 +264,16 @@ export async function GET(
     // 5. Уже занятые слоты этой компании (type='interview', ближайшие 16 дней)
     // Берём UTC-границы с запасом (+16 д), чтобы не срезать последний день в
     // любой TZ (максимальный оффсет UTC+14).
+    // Горизонт самозаписи (настройка вакансии interviewMaxBookingDays →
+    // company schedule.maxBookingDays → 14; потолок 30) — кандидат видит
+    // слоты максимум на столько календарных дней вперёд.
+    const djHorizon = (row.vacancyDescriptionJson as { interviewMaxBookingDays?: unknown } | null)?.interviewMaxBookingDays
+    const rawHorizon = Number(djHorizon ?? (sched as { maxBookingDays?: unknown }).maxBookingDays ?? 14)
+    const horizonDays = Number.isFinite(rawHorizon) && rawHorizon >= 1 ? Math.min(30, Math.floor(rawHorizon)) : 14
+
     const now   = new Date()
     const limit = new Date(now)
-    limit.setDate(limit.getDate() + 16)
+    limit.setDate(limit.getDate() + horizonDays + 2)
 
     const bookedEvents = await db
       .select({
@@ -300,7 +307,7 @@ export async function GET(
     // «Завтра» в TZ компании: начинаем с now + 24h и определяем локальный день.
     const checkDate = new Date(now.getTime() + 24 * 60 * 60 * 1000)
 
-    for (let i = 0; i < 21 && days.length < 14; i++) {
+    for (let i = 0; i < horizonDays; i++) {
       const jsDay = localDayOfWeek(checkDate, timezone)
       const windows = daySchedule[JS_TO_DAY_ID[jsDay]] ?? []
       if (windows.length > 0) {
