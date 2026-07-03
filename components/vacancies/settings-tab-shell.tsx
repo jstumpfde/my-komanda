@@ -18,7 +18,11 @@ export type SettingsTabWidth = "md" | "lg" | "full"
 export const SETTINGS_TAB_WIDTH_CLASS: Record<SettingsTabWidth, string> = {
   md: "max-w-4xl",
   lg: "max-w-6xl",
-  full: "w-full",
+  // ВАЖНО: именно max-w-none, не w-full — VacancyTabFooter несёт базовый
+  // max-w-3xl, и twMerge перебивает его только другим max-w-* классом.
+  // С "w-full" футер full-секций оставался 768px и кнопки висели по центру
+  // экрана (Юрий 03.07: «в вакансии верно, в портрете нет»).
+  full: "max-w-none",
 }
 
 export interface SettingsTabShellProps {
