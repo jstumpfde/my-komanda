@@ -4641,7 +4641,7 @@ export default function VacancyPage() {
                       // Юрий 03.07 (финал №2): футер НЕ наследует ширину таба —
                       // у ВСЕХ табов кнопки на одной фиксированной позиции
                       // (правый край max-w-6xl), независимо от ширины контента.
-                      className="max-w-6xl"
+                      className="max-w-5xl"
                     />
                   )
                 })()}
@@ -4694,7 +4694,7 @@ export default function VacancyPage() {
                   ) : undefined}
                   // Юрий 03.07 (финал №2): единая фиксированная позиция кнопок
                   // на всех табах — правый край max-w-6xl, не ширина контента.
-                  className="max-w-6xl"
+                  className="max-w-5xl"
                 />
               )
             })()}
