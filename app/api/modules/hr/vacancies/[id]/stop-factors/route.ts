@@ -85,6 +85,17 @@ function sanitize(input: unknown): VacancyStopFactors {
       rejectionText: trimText(src.citizenship.rejectionText),
     }
   }
+  if (src.nativeLanguage) {
+    out.nativeLanguage = {
+      enabled:       Boolean(src.nativeLanguage.enabled),
+      // mode/denied — deny-режим «Исключить языки» (ПОЛНАЯ КОПИЯ citizenship,
+      // тот же гвард: не терять mode/denied при sanitize, см. citizenship выше).
+      mode:          src.nativeLanguage.mode === "deny" ? "deny" as const : undefined,
+      allowed:       stringArray(src.nativeLanguage.allowed),
+      denied:        stringArray(src.nativeLanguage.denied),
+      rejectionText: trimText(src.nativeLanguage.rejectionText),
+    }
+  }
   if (src.salaryExpectation) {
     out.salaryExpectation = {
       enabled:       Boolean(src.salaryExpectation.enabled),

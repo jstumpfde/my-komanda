@@ -21,6 +21,7 @@ export interface ExtractedHhFields {
   keySkills?:          string[]
   skills?:             string[]
   languages?:          string[]
+  nativeLanguages?:    string[]         // коды hh (rus/eng/...) с level.id==="l1" (родной)
   relocationReady?:    boolean | null
   businessTripsReady?: boolean | null
   photoUrl?:           string | null
@@ -77,7 +78,7 @@ type RawResume = {
     primary?: unknown
     additional?: unknown
   } | null
-  language?: Array<{ name?: unknown; level?: { name?: unknown } | null }> | unknown
+  language?: Array<{ id?: unknown; name?: unknown; level?: { id?: unknown; name?: unknown } | null }> | unknown
   relocation?: { type?: { id?: unknown } | null } | null
   business_trip_readiness?: { id?: unknown; name?: unknown } | null
   schedule?: { id?: unknown; name?: unknown } | null
@@ -169,6 +170,18 @@ function parseLanguages(raw: RawResume): string[] {
       return `${l.name}${lvl}`
     })
     .filter((s): s is string => s !== null)
+}
+
+// Родной язык — стоп-фактор «Родной язык» (03.07, ПОЛНАЯ КОПИЯ подхода
+// citizenship). hh отмечает родной язык level.id==="l1" в resume.language[].
+// Возвращает коды языков как их отдаёт hh (rus/eng/...), НЕ названия —
+// матчер (stop-factors-matcher.ts::matchNativeLanguage) сравнивает коды.
+function parseNativeLanguages(raw: RawResume): string[] {
+  if (!Array.isArray(raw.language)) return []
+  return (raw.language as Array<{ id?: unknown; level?: { id?: unknown } | null }>)
+    .filter(l => l?.level?.id === "l1")
+    .map(l => l?.id)
+    .filter((s): s is string => isString(s) && s.length > 0)
 }
 
 function parseExperienceYears(raw: RawResume): number | null {
@@ -332,6 +345,10 @@ export function extractHhResumeFields(raw: unknown): ExtractedHhFields {
   // languages
   const langs = parseLanguages(r)
   if (langs.length > 0) out.languages = langs
+
+  // native languages (родной — level.id==="l1") — стоп-фактор «Родной язык»
+  const nativeLangs = parseNativeLanguages(r)
+  if (nativeLangs.length > 0) out.nativeLanguages = nativeLangs
 
   // work format / relocation / business trips
   out.workFormat = mapWorkFormat(r)

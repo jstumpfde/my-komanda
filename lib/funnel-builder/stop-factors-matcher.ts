@@ -12,6 +12,7 @@ import type {
   VacancyStopFactorAge,
   VacancyStopFactorExperience,
   VacancyStopFactorCitizenship,
+  VacancyStopFactorNativeLanguage,
   VacancyStopFactorSalary,
 } from "@/lib/db/schema"
 import { expandContinentCode, isContinentCode } from "@/lib/funnel-builder/citizenship-countries"
@@ -24,11 +25,12 @@ export interface CandidateStopFactorData {
   relocationReady?:    boolean | null
   salaryExpectation?:  number | null   // ожидаемая ЗП кандидата (resume.salary.amount)
   citizenship?:        string | null   // ISO-2 (RU/BY/...) — пока hh не отдаёт, оставлено для будущего
+  nativeLanguages?:    string[] | null // коды hh (rus/eng/...) с level.id==="l1" (родной)
 }
 
 export interface StopFactorMatch {
   matched:       true
-  factor:        "city" | "age" | "experience" | "format" | "citizenship" | "salaryExpectation"
+  factor:        "city" | "age" | "experience" | "format" | "citizenship" | "nativeLanguage" | "salaryExpectation"
   rejectionText: string
 }
 
@@ -162,6 +164,49 @@ function matchCitizenship(
   }
 }
 
+// Родной язык — ПОЛНАЯ КОПИЯ логики matchCitizenship (allow/deny, легаси
+// mode=allow при отсутствии поля), но без разворота континент-кодов
+// (у языков групп нет — сравнение по прямому множеству кодов).
+function matchNativeLanguage(
+  candidate: CandidateStopFactorData,
+  factor: VacancyStopFactorNativeLanguage,
+): StopFactorMatch | null {
+  if (!factor.enabled) return null
+  const candidateLangs = candidate.nativeLanguages
+  if (!candidateLangs || candidateLangs.length === 0) return null
+  const candidateSet = new Set(candidateLangs.map(l => l.toLowerCase()))
+
+  // mode отсутствует → легаси-поведение = allow (обратная совместимость,
+  // как у гражданства).
+  const mode = factor.mode ?? "allow"
+
+  if (mode === "deny") {
+    const denied = factor.denied ?? []
+    if (denied.length === 0) return null
+    const deniedSet = new Set(denied.map(c => c.toLowerCase()))
+    const hasDenied = [...candidateSet].some(c => deniedSet.has(c))
+    if (!hasDenied) return null
+    return {
+      matched:       true,
+      factor:        "nativeLanguage",
+      rejectionText: factor.rejectionText?.trim() || defaultRejection("nativeLanguage"),
+    }
+  }
+
+  // allow-режим (дефолт): кандидат должен иметь ХОТЯ БЫ ОДИН родной язык
+  // из разрешённого списка — иначе стоп.
+  const allowed = factor.allowed ?? []
+  if (allowed.length === 0) return null
+  const allowedSet = new Set(allowed.map(c => c.toLowerCase()))
+  const hasAllowed = [...candidateSet].some(c => allowedSet.has(c))
+  if (hasAllowed) return null
+  return {
+    matched:       true,
+    factor:        "nativeLanguage",
+    rejectionText: factor.rejectionText?.trim() || defaultRejection("nativeLanguage"),
+  }
+}
+
 function matchSalary(
   candidate: CandidateStopFactorData,
   factor: VacancyStopFactorSalary,
@@ -188,6 +233,7 @@ export function matchStopFactors(
   if (factors.experience)        { const m = matchExperience(candidate, factors.experience);     if (m) return m }
   if (factors.format)            { const m = matchFormat(candidate, factors.format);             if (m) return m }
   if (factors.citizenship)       { const m = matchCitizenship(candidate, factors.citizenship);   if (m) return m }
+  if (factors.nativeLanguage)    { const m = matchNativeLanguage(candidate, factors.nativeLanguage); if (m) return m }
   if (factors.salaryExpectation) { const m = matchSalary(candidate, factors.salaryExpectation);  if (m) return m }
 
   // documents — пока hh не отдаёт надёжно (мед. книжка / водительские права
