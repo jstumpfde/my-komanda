@@ -94,14 +94,29 @@ export function PublishTimeHeatmap({ data, city }: { data: PublishTimeHeatmapDat
   // Порог «горячего» часа — 70% от пикового, подсветим ярче.
   const hotHourThreshold = maxHourTotal * 0.7
 
+  // Топ-5 слотов недели (Юрий 03.07: вместо одного «лучшего» в заголовке).
+  const hourRange = (h: number) =>
+    `${String(h).padStart(2, "0")}:00–${String((h + 1) % 24).padStart(2, "0")}:00`
+  const top5 = [...grid].sort((a, b) => b.cnt - a.cnt).slice(0, 5)
+
   return (
     <div className="rounded-lg border p-3 space-y-3">
-      <p className="text-sm font-semibold">
-        🕐 Лучшее время публикации
-        {data.best && (
-          <span className="text-primary"> — {data.best.dayName}, {data.best.range}</span>
+      {/* Заголовок: «Время откликов» — карта меряет, КОГДА кандидаты откликаются
+          (не «когда публиковать»); топ-5 слотов недели вместо одного лучшего. */}
+      <div className="space-y-1.5">
+        <p className="text-sm font-semibold">🕐 Время откликов</p>
+        {top5.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] text-muted-foreground">Топ-5:</span>
+            {top5.map((c, i) => (
+              <span key={i} className="inline-flex items-baseline gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[11px]">
+                <span className="font-semibold">{dayShort[c.dow]}</span>
+                <span className="tabular-nums">{hourRange(c.hour)}</span>
+              </span>
+            ))}
+          </div>
         )}
-      </p>
+      </div>
 
       {/* Тепловая карта на всю ширину — отдельной строкой сверху */}
       {grid.length > 0 && (
@@ -137,8 +152,9 @@ export function PublishTimeHeatmap({ data, city }: { data: PublishTimeHeatmapDat
         </div>
       )}
 
-      {/* Под картой — 2 колонки: Дни (бары) + 24-часовая гистограмма */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start pt-1">
+      {/* Под картой — друг под другом: Дни (бары), ниже 24-часовая гистограмма
+          (Юрий 03.07: правую колонку опустить вниз, дизайн хромал). */}
+      <div className="space-y-4 pt-1">
         {data.days && data.days.length > 0 && (
           <div className="space-y-2">
             <p className="text-[11px] font-medium text-muted-foreground">Дни (=100%)</p>
