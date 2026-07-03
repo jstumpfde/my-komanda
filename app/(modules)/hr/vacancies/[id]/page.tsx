@@ -1904,7 +1904,9 @@ export default function VacancyPage() {
         case "hire":        return apply("hired", `🎉 ${cand.name} — нанят!`)
         case "advance": {
           const nextId = getNextColumnId(cand.stage ?? "new")
-          if (!nextId) return apply("hired", `🎉 ${cand.name} — нанят!`)
+          // Нет следующего этапа (терминальная/неизвестная стадия) — НЕ нанимаем
+          // молча (инцидент 03.07: галочка «нанимала» со «2-й части»).
+          if (!nextId) { toast.info(`${cand.name}: следующий этап не определён — выберите стадию вручную`); return }
           if (nextId === "interview" && !shouldSkipInterviewInviteConfirm()) {
             interviewConfirmApplyRef.current = async (o) => {
               await apply("interview", `${cand.name} → следующий этап`, o)
@@ -1962,9 +1964,8 @@ export default function VacancyPage() {
     if (action === "advance") {
       const nextId = getNextColumnId(columnId)
       if (!nextId) {
-        setColumns((p) => p.map((c) => c.id !== columnId ? c : { ...c, candidates: c.candidates.filter((x) => x.id !== candidateId), count: c.candidates.filter((x) => x.id !== candidateId).length }))
-        toast.success(`${candidate.name} — нанят!`)
-        await updateStage(candidateId, "hired")
+        // Терминальная/неизвестная колонка — не нанимаем молча (инцидент 03.07).
+        toast.info(`${candidate.name}: следующий этап не определён — перетащите карточку вручную`)
         return
       }
       // Юрий 03.07: переход в interview НЕ молчаливый — открываем окно

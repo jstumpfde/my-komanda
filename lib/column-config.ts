@@ -37,8 +37,22 @@ export const PROGRESS_BY_COLUMN: Record<string, number> = {
   hired:           100,
 }
 
+// Стадии вне COLUMN_ORDER (тест-контур и пр.): куда двигает «Пригласить».
+// Раньше indexOf возвращал -1 → null → advance «нанимал» кандидата со
+// «2-й части» одной галочкой (инцидент 03.07, Тхай). Тест-стадии ведут
+// на интервью; pending — на интервью (решение HR «двинуть дальше»).
+const NEXT_BY_STAGE: Record<string, string> = {
+  test_task_sent: "interview",
+  test_task_done: "interview",
+  test_passed:    "interview",
+  pending:        "interview",
+}
+
 export function getNextColumnId(currentId: string): string | null {
+  const mapped = NEXT_BY_STAGE[currentId]
+  if (mapped) return mapped
   const idx = COLUMN_ORDER.indexOf(currentId as typeof COLUMN_ORDER[number])
+  // Неизвестная стадия (-1) — НЕ двигаем никуда (раньше падали в «нанят»).
   if (idx === -1 || idx === COLUMN_ORDER.length - 1) return null
   return COLUMN_ORDER[idx + 1]
 }
