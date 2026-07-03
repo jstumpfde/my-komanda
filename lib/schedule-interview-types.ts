@@ -32,3 +32,19 @@ export interface SchedulePageData {
   defaultMethod:      string
   days:               SlotDay[]
 }
+
+// Ответ POST /api/public/schedule/[token] — данные для экрана "Вы записаны"
+// (тексты + слот в ISO UTC для календарных ссылок/.ics на клиенте).
+export interface BookingResponse {
+  booked?:        boolean
+  alreadyBooked?: boolean
+  eventId:        string
+  bookedTitle:    string
+  bookedText:     string
+  startAt:        string // ISO UTC
+  endAt:          string // ISO UTC
+  timezone:       string
+  methodLabel:    string
+  location:       string | null
+  vacancyTitle:   string
+}

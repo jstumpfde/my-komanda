@@ -37,6 +37,23 @@ const METHOD_LABELS: Record<string, string> = {
   phone:"Телефон", zoom:"Zoom", telemost:"Яндекс Телемост", meet:"Google Meet", office:"Офис"
 }
 
+// #26.4: платформенный дефолт текстов экрана "Вы записаны" — переопределяется
+// per-вакансия через descriptionJson.interviewBookedScreen {title, text}.
+// {{дата, время}} подставляется из подтверждённого слота.
+const DEFAULT_BOOKED_TITLE = "Вы записаны на интервью!"
+const DEFAULT_BOOKED_TEXT  = "Ждём вас {{дата, время}}. Мы напомним вам накануне и за 2 часа до встречи. Если планы изменятся — просто выберите другое время по этой же ссылке."
+
+function buildBookedScreenTexts(
+  descriptionJson: unknown,
+  dateTimeLabel: string,
+): { bookedTitle: string; bookedText: string } {
+  const custom = (descriptionJson as { interviewBookedScreen?: { title?: unknown; text?: unknown } } | null)?.interviewBookedScreen
+  const titleTpl = (typeof custom?.title === "string" && custom.title.trim()) ? custom.title : DEFAULT_BOOKED_TITLE
+  const textTpl  = (typeof custom?.text  === "string" && custom.text.trim())  ? custom.text  : DEFAULT_BOOKED_TEXT
+  const substitute = (s: string) => s.replaceAll("{{дата, время}}", dateTimeLabel)
+  return { bookedTitle: substitute(titleTpl), bookedText: substitute(textTpl) }
+}
+
 // Подпись часового пояса для кандидата (пояс он не меняет — только читает).
 const TZ_LABELS: Record<string, string> = {
   "Europe/Kaliningrad": "Калининград (UTC+2)",
@@ -434,6 +451,8 @@ export async function POST(
         hiringDefaults:       companies.hiringDefaultsJson,
         // #3.4 Fallback адреса из профиля компании
         companyOfficeAddress: companies.officeAddress,
+        // #26.4: настраиваемые тексты экрана "Вы записаны" (descriptionJson.interviewBookedScreen)
+        vacancyDescriptionJson: vacancies.descriptionJson,
       })
       .from(vacancies)
       .innerJoin(companies, eq(vacancies.companyId, companies.id))
@@ -483,7 +502,27 @@ export async function POST(
       .limit(1)
 
     if (existingSlot) {
-      return apiSuccess({ alreadyBooked: true, eventId: existingSlot.id })
+      const methodLabelExisting = METHOD_LABELS[body.method] ?? body.method
+      const localStartExisting  = utcToLocalDateTime(startAt, timezone)
+      const tzLabelExisting     = timezone === "Europe/Moscow" ? "МСК" : timezone
+      const dateTimeLabelExisting = `${formatDayLabelTz(startAt, timezone)} в ${localStartExisting.hhmm} (${tzLabelExisting})`
+      const { bookedTitle, bookedText } = buildBookedScreenTexts(row.vacancyDescriptionJson, dateTimeLabelExisting)
+      const locationExisting = body.method === "office"
+        ? (sched.officeAddress ?? row.companyOfficeAddress ?? null)
+        : null
+
+      return apiSuccess({
+        alreadyBooked: true,
+        eventId: existingSlot.id,
+        bookedTitle,
+        bookedText,
+        startAt: startAt.toISOString(),
+        endAt:   endAt.toISOString(),
+        timezone,
+        methodLabel: methodLabelExisting,
+        location: locationExisting,
+        vacancyTitle: row.vacancyTitle,
+      })
     }
 
     // 5.5 Анти-двойная-запись (company-wide, все вакансии): слот не должен
@@ -573,7 +612,24 @@ export async function POST(
       (location ? `\n🏢 Адрес: ${location}` : ""),
     ).catch(() => {})
 
-    return apiSuccess({ booked: true, eventId: event.id }, 201)
+    // 9. #26.4 Настраиваемые тексты экрана "Вы записаны" (platform-дефолт в коде,
+    // переопределяется per-вакансия через descriptionJson.interviewBookedScreen).
+    const dayLabel = formatDayLabelTz(startAt, timezone)
+    const dateTimeLabel = `${dayLabel} в ${localStart.hhmm} (${tzLabel})`
+    const { bookedTitle, bookedText } = buildBookedScreenTexts(row.vacancyDescriptionJson, dateTimeLabel)
+
+    return apiSuccess({
+      booked:  true,
+      eventId: event.id,
+      bookedTitle,
+      bookedText,
+      startAt: startAt.toISOString(),
+      endAt:   endAt.toISOString(),
+      timezone,
+      methodLabel,
+      location,
+      vacancyTitle: row.vacancyTitle,
+    }, 201)
   } catch (err) {
     if (err instanceof Response) return err
     console.error("[schedule POST]", err)
