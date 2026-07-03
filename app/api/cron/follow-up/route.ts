@@ -485,13 +485,29 @@ async function processOneTouch(
   // это страховка на случай гонки/пропуска).
   if (isTestFollowup) {
     const [cand] = await db
-      .select({ stage: candidates.stage, autoStopped: candidates.autoProcessingStopped })
+      .select({
+        stage: candidates.stage,
+        autoStopped: candidates.autoProcessingStopped,
+        overrideContentBlockId: candidates.overrideContentBlockId,
+        secondDemoInvitedAt: candidates.secondDemoInvitedAt,
+        demoProgressJson: candidates.demoProgressJson,
+      })
       .from(candidates)
       .where(eq(candidates.id, msg.candidateId))
       .limit(1)
     if (!cand) {
       await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "candidate_missing" }).where(eq(followUpMessages.id, msg.id))
       return { outcome: "cancelled", reason: "candidate_missing" }
+    }
+    // Дожим 2-й части: кандидат ПРОШЁЛ «Путь менеджера» (completedAt демо
+    // обновился ПОСЛЕ выдачи 2-й части) — напоминания больше не нужны.
+    if (cand.overrideContentBlockId && cand.secondDemoInvitedAt) {
+      const completedAtRaw = (cand.demoProgressJson as { completedAt?: string | null } | null)?.completedAt
+      const completedAt = completedAtRaw ? new Date(completedAtRaw) : null
+      if (completedAt && !Number.isNaN(completedAt.getTime()) && completedAt > new Date(cand.secondDemoInvitedAt)) {
+        await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "second_demo_completed" }).where(eq(followUpMessages.id, msg.id))
+        return { outcome: "cancelled", reason: "second_demo_completed" }
+      }
     }
     const subs = await db
       .select({ submittedAt: testSubmissions.submittedAt })

@@ -27,6 +27,9 @@ import {
   vacancies,
 } from "@/lib/db/schema"
 import { getSpec } from "@/lib/core/spec/store"
+import { isFollowUpPreset } from "@/lib/followup/presets"
+import { generateTouchSchedule, mergeMessagesWithDefaults } from "@/lib/followup/schedule"
+import { DEFAULT_TEST_NOT_OPENED } from "@/lib/followup/default-messages"
 import { computeObjectiveGateScore } from "@/lib/demo/objective-gate"
 import { adjustToWorkingWindow } from "@/lib/schedule/can-send-now"
 
@@ -121,6 +124,67 @@ export async function describeSecondDemoInvite(
   }
 }
 
+
+// Дожим «не открыл 2-ю часть» (Юрий 04.07): переиспользуем test-ветку кампании
+// (test_enabled/test_preset/test_messages — тексты переписаны под «Путь
+// менеджера»). Ставится при выдаче override (оба режима: seamless и письмо).
+// Гаснет: при открытии 2-й части (switchToTestBranchOpened в GET /demo) и при
+// её прохождении (guard в cron follow-up: completedAt > second_demo_invited_at).
+async function scheduleSecondDemoDozhim(candidateId: string, vacancyId: string, campaignId: string): Promise<void> {
+  try {
+    const [cfg] = await db
+      .select({
+        testEnabled:  followUpCampaigns.testEnabled,
+        testPreset:   followUpCampaigns.testPreset,
+        testMessages: followUpCampaigns.testMessages,
+      })
+      .from(followUpCampaigns)
+      .where(eq(followUpCampaigns.id, campaignId))
+      .limit(1)
+    const on = !!cfg?.testEnabled && isFollowUpPreset(cfg.testPreset) && cfg.testPreset !== "off"
+    if (!on) return
+    // Дедуп: цепочка уже стоит.
+    const [existing] = await db
+      .select({ id: followUpMessages.id })
+      .from(followUpMessages)
+      .where(and(
+        eq(followUpMessages.candidateId, candidateId),
+        inArray(followUpMessages.branch, ["test_not_opened", "test_opened_not_submitted"]),
+        inArray(followUpMessages.status, ["pending", "sent"]),
+      ))
+      .limit(1)
+    if (existing) return
+    const [vacSched] = await db
+      .select({
+        scheduleEnabled:            vacancies.scheduleEnabled,
+        scheduleStart:              vacancies.scheduleStart,
+        scheduleEnd:                vacancies.scheduleEnd,
+        scheduleTimezone:           vacancies.scheduleTimezone,
+        scheduleWorkingDays:        vacancies.scheduleWorkingDays,
+        scheduleExcludedHolidayIds: vacancies.scheduleExcludedHolidayIds,
+        scheduleCustomHolidays:     vacancies.scheduleCustomHolidays,
+      })
+      .from(vacancies)
+      .where(eq(vacancies.id, vacancyId))
+      .limit(1)
+    const msgs = mergeMessagesWithDefaults(cfg!.testMessages, DEFAULT_TEST_NOT_OPENED)
+    const touches = generateTouchSchedule({
+      campaignId,
+      candidateId,
+      preset:     cfg!.testPreset as "soft" | "standard" | "aggressive",
+      d0Date:     new Date(),
+      d0Source:   "test_invite",
+      messages:   msgs,
+      branch:     "test_not_opened",
+      vacancy:    vacSched ?? {},
+      customDays: null,
+    })
+    if (touches.length > 0) await db.insert(followUpMessages).values(touches)
+  } catch (err) {
+    console.error("[second-demo-invite] dozhim schedule failed:", err instanceof Error ? err.message : err)
+  }
+}
+
 export async function maybeScheduleSecondDemoInvite(args: {
   candidateId: string
   vacancyId:   string
@@ -206,6 +270,8 @@ export async function maybeScheduleSecondDemoInvite(args: {
         .set({ overrideContentBlockId: blockId, secondDemoInvitedAt: new Date() })
         .where(eq(candidates.id, args.candidateId))
 
+      const seamlessCampaignId = await ensureCampaign(args.vacancyId)
+      if (seamlessCampaignId) await scheduleSecondDemoDozhim(args.candidateId, args.vacancyId, seamlessCampaignId)
       console.log("[second-demo-invite]", JSON.stringify({
         tag:             "second-demo-invite/seamless",
         candidateId:     args.candidateId,
@@ -307,6 +373,7 @@ export async function maybeScheduleSecondDemoInvite(args: {
       scheduledAt:     scheduledAt.toISOString(),
     }))
 
+    await scheduleSecondDemoDozhim(args.candidateId, args.vacancyId, campaignId)
     return { scheduled: true, score: gateScore, scheduledAt: scheduledAt.toISOString() }
   } catch (err) {
     console.error("[second-demo-invite] schedule failed:", err instanceof Error ? err.message : err)

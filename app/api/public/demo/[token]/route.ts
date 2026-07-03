@@ -226,6 +226,11 @@ export async function GET(
           eq(followUpMessages.status, "pending"),
         ))
         .catch((err: unknown) => console.error("[demo GET] cancel second_demo_invite failed:", err))
+      // Дожим 2-й части: «не открыл» → «открыл, но не прошёл» (тексты из
+      // test_messages_opened кампании; гейт test_enabled внутри). Fire-and-forget.
+      import("@/lib/followup/switch-branch")
+        .then(m => m.switchToTestBranchOpened(candidate.id))
+        .catch((err: unknown) => console.error("[demo GET] switch test branch failed:", err))
     } else {
       try {
         const [specRow] = await db
