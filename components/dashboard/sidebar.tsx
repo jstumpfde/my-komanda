@@ -223,6 +223,57 @@ export function DashboardSidebar() {
       .catch(() => {})
   }, [pathname])
 
+  // ── Hydration-safe mounted flag ──
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+
+  // ── «Найм → Вакансии»: раскрывающийся список активных вакансий ──
+  // Развёрнутость — localStorage; список грузится лениво, только когда раздел
+  // раскрыт (и ещё не загружен).
+  const VACANCIES_EXPANDED_KEY = 'sidebar:vacanciesExpanded'
+  const [vacanciesExpanded, setVacanciesExpanded] = useState(false)
+  const [vacanciesList, setVacanciesList] = useState<{ id: string; title: string; createdAt: string | null }[] | null>(null)
+  const [vacanciesLoading, setVacanciesLoading] = useState(false)
+
+  useEffect(() => {
+    if (!mounted) return
+    try {
+      setVacanciesExpanded(localStorage.getItem(VACANCIES_EXPANDED_KEY) === 'true')
+    } catch {}
+  }, [mounted])
+
+  const loadVacanciesList = useCallback(() => {
+    if (vacanciesList !== null || vacanciesLoading) return
+    setVacanciesLoading(true)
+    fetch('/api/modules/hr/vacancies?limit=200&scope=active')
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { vacancies?: { id: string; title: string; createdAt: string | null }[] } | null) => {
+        setVacanciesList(Array.isArray(d?.vacancies) ? d.vacancies : [])
+      })
+      .catch(() => setVacanciesList([]))
+      .finally(() => setVacanciesLoading(false))
+  }, [vacanciesList, vacanciesLoading])
+
+  const toggleVacancies = useCallback(() => {
+    setVacanciesExpanded(prev => {
+      const next = !prev
+      try { localStorage.setItem(VACANCIES_EXPANDED_KEY, String(next)) } catch {}
+      if (next) loadVacanciesList()
+      return next
+    })
+  }, [loadVacanciesList])
+
+  // Если развёрнуто уже при загрузке (сохранено в localStorage) — подгружаем список.
+  useEffect(() => {
+    if (mounted && vacanciesExpanded) loadVacanciesList()
+  }, [mounted, vacanciesExpanded]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const vacanciesTop5 = (vacanciesList ?? [])
+    .slice()
+    .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime())
+    .slice(0, 5)
+  const vacanciesHasMore = (vacanciesList?.length ?? 0) > 5
+
   // Active modules — берутся из getVisibleSections(role) на основе роли пользователя
   // platform_admin/platform_manager → все модули
   // director/hr_lead/hr_manager/... → только HR + БЗ (для клиентов)
@@ -370,10 +421,6 @@ export function DashboardSidebar() {
   // Filtered modules: active AND visible
   const visibleModules = activeModules.filter((id) => isModuleVisible(id))
 
-  // ── Hydration-safe mounted flag ──
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
-
   // ── Accordion state: which modules are expanded ──
   // Initial value is deterministic (same on server & client) — no hydration mismatch
   const [expandedModules, setExpandedModules] = useState<Set<ModuleId>>(new Set())
@@ -466,6 +513,90 @@ export function DashboardSidebar() {
       return next
     })
   }, [])
+
+  // «Вакансии» — раскрывающийся пункт меню (после «Рабочего стола»): клик по
+  // шеврону/пункту показывает топ-5 активных вакансий компании + «Все вакансии →».
+  // 0 вакансий → пункт ведёт сразу на /hr/vacancies без раскрытия.
+  const renderVacanciesItem = (pl: string) => {
+    const isVacanciesActive = pathname === '/hr/vacancies' || pathname.startsWith('/hr/vacancies/')
+    const noVacancies = vacanciesList !== null && vacanciesList.length === 0
+
+    if (noVacancies) {
+      return (
+        <SidebarMenuItem key="/hr/vacancies">
+          <SidebarMenuButton
+            asChild
+            isActive={isVacanciesActive}
+            className={cn("hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-9", pl, "text-sidebar-foreground/90")}
+          >
+            <Link href="/hr/vacancies">
+              <Briefcase className="size-4" />
+              <span className="flex-1 text-sm select-none">Вакансии</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      )
+    }
+
+    return (
+      <SidebarMenuItem key="/hr/vacancies">
+        <div className="flex items-center">
+          <SidebarMenuButton
+            asChild
+            isActive={isVacanciesActive && !vacanciesExpanded}
+            className={cn("hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-9 flex-1", pl, "text-sidebar-foreground/90")}
+          >
+            <Link href="/hr/vacancies">
+              <Briefcase className="size-4" />
+              <span className="flex-1 text-sm select-none">Вакансии</span>
+            </Link>
+          </SidebarMenuButton>
+          <button
+            type="button"
+            onClick={toggleVacancies}
+            aria-label={vacanciesExpanded ? "Свернуть список вакансий" : "Развернуть список вакансий"}
+            aria-expanded={vacanciesExpanded}
+            className="shrink-0 h-9 w-7 flex items-center justify-center text-sidebar-foreground/40 hover:text-sidebar-foreground/80 hover:bg-sidebar-accent rounded-md"
+          >
+            <ChevronRight className={cn("size-3.5 transition-transform duration-150", vacanciesExpanded && "rotate-90")} />
+          </button>
+        </div>
+        {vacanciesExpanded && (
+          <div className={cn("mt-0.5 space-y-0.5", pl === "pl-4" ? "pl-4" : "pl-6")}>
+            {vacanciesLoading && vacanciesList === null && (
+              <div className="px-2 py-1.5 text-xs text-sidebar-foreground/40 select-none">Загрузка…</div>
+            )}
+            {vacanciesTop5.map((v) => {
+              const href = `/hr/vacancies/${v.id}?tab=candidates`
+              const isActive = pathname === `/hr/vacancies/${v.id}`
+              return (
+                <Link
+                  key={v.id}
+                  href={href}
+                  className={cn(
+                    "flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors truncate",
+                    isActive
+                      ? "bg-sidebar-accent/60 text-sidebar-foreground"
+                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground/90"
+                  )}
+                >
+                  <span className="truncate select-none">{v.title}</span>
+                </Link>
+              )
+            })}
+            {vacanciesHasMore && (
+              <Link
+                href="/hr/vacancies"
+                className="flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-sidebar-foreground/50 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground/80 transition-colors"
+              >
+                Все вакансии →
+              </Link>
+            )}
+          </div>
+        )}
+      </SidebarMenuItem>
+    )
+  }
 
   const filteredSettings = SETTINGS_MENU.filter((item) => {
     const key = item.href.split('/settings/')[1]
@@ -828,6 +959,9 @@ export function DashboardSidebar() {
                         return (
                           <SidebarMenu key="__root" className="gap-0.5 mt-1">
                             {group.items.filter((item) => isOwner || (isItemVisible(id, item.href) && !(isRestricted && item.href === '/hr/candidates'))).map((item) => {
+                              if (item.href === '/hr/vacancies') {
+                                return renderVacanciesItem("pl-4")
+                              }
                               if (item.divider) {
                                 return (
                                   <div key={item.href} className="px-4 py-1.5 text-[10px] text-sidebar-foreground/30 font-medium tracking-wide select-none">
@@ -904,6 +1038,9 @@ export function DashboardSidebar() {
                           <CollapsibleContent forceMount className="data-[state=closed]:hidden">
                             <SidebarMenu className="gap-0.5 mt-1">
                               {group.items.filter((item) => isOwner || (isItemVisible(id, item.href) && !(isRestricted && item.href === '/hr/candidates'))).map((item) => {
+                                if (item.href === '/hr/vacancies') {
+                                  return renderVacanciesItem("pl-6")
+                                }
                                 if (item.divider) {
                                   return (
                                     <div key={item.href} className="px-6 py-1.5 text-[10px] text-sidebar-foreground/30 font-medium tracking-wide select-none">

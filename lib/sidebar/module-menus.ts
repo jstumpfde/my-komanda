@@ -10,7 +10,7 @@ const MODULE_GROUP_DEFS: Partial<Record<ModuleId, { label: string; hrefs: string
     // Вакансии/Библиотека — табы /hr/workspace; Отделы/Должности/Оргструктура —
     // табы /hr/company-structure. Сами роуты доступны напрямую.
     // «Календарь» вынесен из «Найм» в отдельный пункт меню после CRM (см. sidebar.tsx).
-    { label: 'Найм',       hrefs: ['/hr/workspace', '/hr/candidates', '/hr/held-messages', '/hr/talent-pool', '/hr/report', '/hr/hiring-settings'] },
+    { label: 'Найм',       hrefs: ['/hr/workspace', '/hr/vacancies', '/hr/candidates', '/hr/held-messages', '/hr/talent-pool', '/hr/report', '/hr/hiring-settings'] },
     // Без label → пункты рендерятся плоско (без сворачиваемого под-заголовка):
     // «Структура компании» и «Обучение» вынесены из под-меню Оргструктура/В разработке.
     { label: '', hrefs: ['/hr/company-structure', '/hr/courses'] },
