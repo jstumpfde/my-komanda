@@ -369,12 +369,20 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
     }).catch(() => {})
   }, [])
 
-  const openCreate = (prefill?: { candidateId: string; name: string }) => {
+  // Каскад видов интервью (Юрий 04.07): Звонок → Онлайн, Онлайн → Офис.
+  // После Офиса следующий этап — «Передан», новое интервью не предлагаем по виду.
+  const nextFormatAfter = (f: InterviewFormat): InterviewFormat =>
+    f === "Звонок" ? "Онлайн" : "Офис"
+
+  const openCreate = (prefill?: { candidateId: string; name: string; format?: InterviewFormat }) => {
     const now = new Date()
     // #2: интервьюер по умолчанию — текущий пользователь (кто назначает).
     setCName(prefill?.name ?? ""); setCCandidateId(prefill?.candidateId ?? null)
-    setCVacancyId(vacancyId ?? ""); setCInterviewer(currentUser?.name ?? ""); setCType("HR"); setCFormat("Онлайн")
-    setCInterviewerIds([]); setCTime("10:00"); setCDuration("45")
+    setCVacancyId(vacancyId ?? ""); setCInterviewer(currentUser?.name ?? ""); setCType("HR")
+    const fmt = prefill?.format ?? "Онлайн"
+    setCFormat(fmt)
+    setCInterviewerIds([]); setCTime("10:00")
+    setCDuration(String(methodDurations[fmt] ?? 45))
     setCDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`)
     setCreateOpen(true)
   }
@@ -770,7 +778,7 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                             )}
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                               <Badge variant="outline" className={cn("text-[10px]", iv.type === "Техническое" ? "border-blue-200 text-blue-700 dark:text-blue-400" : iv.type === "HR" ? "border-purple-200 text-purple-700 dark:text-purple-400" : "border-green-200 text-green-700 dark:text-green-400")}>{iv.type}</Badge>
-                              <span className="inline-flex items-center gap-1">{iv.format === "Онлайн" ? <Video className="w-3 h-3" /> : <Building2 className="w-3 h-3" />}{iv.format}</span>
+                              <span className="inline-flex items-center gap-1">{iv.format === "Онлайн" ? <Video className="w-3 h-3" /> : iv.format === "Звонок" ? <Phone className="w-3 h-3" /> : <Building2 className="w-3 h-3" />}{iv.format}</span>
                               <span className="truncate">Интервьюер: <span className="text-foreground font-medium">{iv.interviewer}</span></span>
                               {iv.phone && <a href={`tel:${iv.phone}`} onClick={e => e.stopPropagation()} className="inline-flex items-center gap-1 hover:text-primary"><Phone className="w-3 h-3" />{iv.phone}</a>}
                               <span className="truncate text-muted-foreground/70">· {iv.vacancy}</span>
@@ -796,7 +804,16 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                             </div>
                           </div>
                           {/* Действие */}
-                          <div className="flex items-center px-4 border-l shrink-0">
+                          <div className="flex items-center gap-1 px-4 border-l shrink-0">
+                            {/* Каскад: после прошедшего Звонка → Онлайн, после Онлайна → Офис */}
+                            {iv.status === "Пройдено" && !iv.byStageOnly && iv.candidateId && iv.format !== "Офис" && (
+                              <Button
+                                variant="outline" size="sm" className="gap-1 text-xs h-7"
+                                onClick={(e) => { e.stopPropagation(); openCreate({ candidateId: iv.candidateId as string, name: iv.candidate, format: nextFormatAfter(iv.format) }) }}
+                              >
+                                Далее: {nextFormatAfter(iv.format)}
+                              </Button>
+                            )}
                             <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" tabIndex={-1}><ExternalLink className="h-3.5 w-3.5" /> Открыть</Button>
                           </div>
                         </div>
@@ -1010,7 +1027,7 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                                     <span className="text-sm font-semibold text-primary">{iv.time}</span>
                                     {iv.stage && <Badge variant="secondary" className="text-[10px] font-normal h-5">{iv.stage}</Badge>}
                                     <Badge variant="outline" className="text-[10px] h-5">{iv.type}</Badge>
-                                    <Badge variant="outline" className="text-[10px] h-5 gap-0.5">{iv.format === "Онлайн" ? <Video className="w-3 h-3" /> : <Building2 className="w-3 h-3" />}{iv.format}</Badge>
+                                    <Badge variant="outline" className="text-[10px] h-5 gap-0.5">{iv.format === "Онлайн" ? <Video className="w-3 h-3" /> : iv.format === "Звонок" ? <Phone className="w-3 h-3" /> : <Building2 className="w-3 h-3" />}{iv.format}</Badge>
                                   </div>
                                   {iv.phone && <a href={`tel:${iv.phone}`} onClick={e => e.stopPropagation()} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary"><Phone className="w-3 h-3" />{iv.phone}</a>}
                                   <div className="grid grid-cols-3 gap-1 pt-2.5 border-t">
