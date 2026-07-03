@@ -1924,6 +1924,10 @@ function pickSupportedMime(candidates: string[]): string | null {
   return null
 }
 
+import {
+  compressVideoFile, compressAudioFile,
+} from "@/lib/media/compress-video"
+
 function mimeToExt(mime: string): string {
   if (mime.includes("webm")) return "webm"
   if (mime.includes("mp4")) return "mp4"
@@ -2161,6 +2165,9 @@ function MediaBlock({
 
   // setErrMsg + лог в DevTools кандидата + (опц.) автооткрытие диалога загрузки
   // через 2с — чтобы кандидат не застревал, если запись физически не работает.
+  // Сжатие больших файлов: null = не сжимаем, число = процент (Юрий 03.07).
+  const [compressPct, setCompressPct] = useState<number | null>(null)
+
   const reportErr = useCallback((msg: string, err?: unknown, autoFallbackType?: "video" | "audio") => {
     setErrMsg(msg)
     console.warn("[MediaBlock]", msg, err ?? "")
@@ -2308,6 +2315,28 @@ function MediaBlock({
     setMode("idle")
   }
 
+  // Пережать слишком большой видео/аудио файл в браузере до проходного
+  // размера (Юрий 03.07: не отказывать «файл превышает размер», а сжимать
+  // с визуально неотличимым качеством). null = не получилось (показываем
+  // прежнюю ошибку). Цель 190 МБ — с запасом до серверных 200 МБ.
+  const COMPRESS_TARGET_BYTES = 190 * 1024 * 1024
+  const compressOversized = async (file: Blob, kind: "video" | "audio") => {
+    try {
+      setErrMsg("")
+      setCompressPct(0)
+      setMode("uploading")
+      const res = kind === "video"
+        ? await compressVideoFile(file, { targetBytes: COMPRESS_TARGET_BYTES, onProgress: setCompressPct })
+        : await compressAudioFile(file, { targetBytes: COMPRESS_TARGET_BYTES, onProgress: setCompressPct })
+      return res
+    } catch (err) {
+      console.warn("[MediaBlock] compression failed", err)
+      return null
+    } finally {
+      setCompressPct(null)
+    }
+  }
+
   const pickPhoto = (file: File) => {
     if (file.size > MAX_MEDIA_SIZE) {
       reportErr(`Файл больше ${MAX_MEDIA_MB} МБ. Выберите файл поменьше.`)
@@ -2325,16 +2354,26 @@ function MediaBlock({
     void upload()
   }
 
-  const pickVideoFile = (file: File) => {
+  const pickVideoFile = async (file: File) => {
+    let picked: Blob = file
+    let pickedMime = file.type || "video/mp4"
     if (file.size > MAX_MEDIA_SIZE) {
-      reportErr(`Файл больше ${MAX_MEDIA_MB} МБ. Запишите короче или выберите другой файл.`)
-      return
+      // Слишком большой — пробуем пережать в браузере (даунскейл до FHD +
+      // подгон битрейта). Не вышло → прежняя понятная ошибка.
+      const res = await compressOversized(file, "video")
+      if (!res) {
+        setMode("idle")
+        reportErr(`Файл больше ${MAX_MEDIA_MB} МБ, и сжать его в браузере не получилось. Запишите короче или выберите другой файл.`)
+        return
+      }
+      picked = res.blob
+      pickedMime = res.mime
     }
-    blobRef.current = file
-    blobMimeRef.current = file.type || "video/mp4"
+    blobRef.current = picked
+    blobMimeRef.current = pickedMime
     blobMediaTypeRef.current = "video"
     elapsedRef.current = 0
-    const url = URL.createObjectURL(file)
+    const url = URL.createObjectURL(picked)
     previewUrlRef.current = url
     setPreviewUrl(url)
     setPreviewMime(blobMimeRef.current)
@@ -2342,16 +2381,24 @@ function MediaBlock({
     void upload()
   }
 
-  const pickAudioFile = (file: File) => {
+  const pickAudioFile = async (file: File) => {
+    let picked: Blob = file
+    let pickedMime = file.type || "audio/mp4"
     if (file.size > MAX_MEDIA_SIZE) {
-      reportErr(`Файл больше ${MAX_MEDIA_MB} МБ. Выберите файл поменьше.`)
-      return
+      const res = await compressOversized(file, "audio")
+      if (!res) {
+        setMode("idle")
+        reportErr(`Файл больше ${MAX_MEDIA_MB} МБ, и сжать его в браузере не получилось. Выберите файл поменьше.`)
+        return
+      }
+      picked = res.blob
+      pickedMime = res.mime
     }
-    blobRef.current = file
-    blobMimeRef.current = file.type || "audio/mp4"
+    blobRef.current = picked
+    blobMimeRef.current = pickedMime
     blobMediaTypeRef.current = "audio"
     elapsedRef.current = 0
-    const url = URL.createObjectURL(file)
+    const url = URL.createObjectURL(picked)
     previewUrlRef.current = url
     setPreviewUrl(url)
     setPreviewMime(blobMimeRef.current)
@@ -2360,12 +2407,25 @@ function MediaBlock({
   }
 
   const upload = async () => {
-    const blob = blobRef.current
+    let blob = blobRef.current
     if (!blob) return
     if (blob.size > MAX_MEDIA_SIZE) {
-      reportErr(`Размер файла больше ${MAX_MEDIA_MB} МБ. Попробуйте записать короче.`)
-      setMode("preview")
-      return
+      const kind = blobMediaTypeRef.current
+      if (kind === "video" || kind === "audio") {
+        const res = await compressOversized(blob, kind)
+        if (!res) {
+          reportErr(`Размер файла больше ${MAX_MEDIA_MB} МБ. Попробуйте записать короче.`)
+          setMode("preview")
+          return
+        }
+        blob = res.blob
+        blobRef.current = res.blob
+        blobMimeRef.current = res.mime
+      } else {
+        reportErr(`Размер файла больше ${MAX_MEDIA_MB} МБ. Попробуйте записать короче.`)
+        setMode("preview")
+        return
+      }
     }
 
     setMode("uploading")
@@ -2411,8 +2471,9 @@ function MediaBlock({
         const xhr = new XMLHttpRequest()
         xhr.open("POST", `/api/public/demo/${token}/upload-media`)
         // Тайм-аут: чтобы «зависший» upload не крутился бесконечно без сообщения.
-        // Медиа до 50 МБ на медленном мобильном — даём 3 минуты.
-        xhr.timeout = 180_000
+        // Масштабируем от размера (лимит теперь 200 МБ): 3 мин + 1 мин на
+        // каждые 20 МБ, потолок 15 минут.
+        xhr.timeout = Math.min(900_000, 180_000 + Math.ceil(fileObj.size / (20 * 1024 * 1024)) * 60_000)
         xhr.upload.onprogress = (e) => {
           if (e.lengthComputable) {
             setUploadProgress(Math.round((e.loaded / e.total) * 100))
@@ -2543,7 +2604,7 @@ function MediaBlock({
                   className="hidden"
                   onChange={(e) => {
                     const f = e.target.files?.[0]
-                    if (f) pickVideoFile(f)
+                    if (f) void pickVideoFile(f)
                     e.target.value = ""
                   }}
                 />
@@ -2575,7 +2636,7 @@ function MediaBlock({
                   className="hidden"
                   onChange={(e) => {
                     const f = e.target.files?.[0]
-                    if (f) pickAudioFile(f)
+                    if (f) void pickAudioFile(f)
                     e.target.value = ""
                   }}
                 />
@@ -2729,13 +2790,15 @@ function MediaBlock({
           <div className="flex items-center gap-3">
             <Loader2 className="h-5 w-5 animate-spin text-gray-600" />
             <span className="text-sm text-gray-700">
-              {uploadProgress > 0 ? `Отправка… ${uploadProgress}%` : "Отправка…"}
+              {compressPct !== null
+                ? `Сжимаем ${blobMediaTypeRef.current === "audio" ? "аудио" : "видео"}… ${compressPct}%`
+                : uploadProgress > 0 ? `Отправка… ${uploadProgress}%` : "Отправка…"}
             </span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
             <div
               className="h-full rounded-full transition-all"
-              style={{ width: `${uploadProgress}%`, backgroundColor: brandColor }}
+              style={{ width: `${compressPct ?? uploadProgress}%`, backgroundColor: brandColor }}
             />
           </div>
         </div>
