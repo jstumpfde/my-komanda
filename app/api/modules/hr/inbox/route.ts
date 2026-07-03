@@ -103,8 +103,11 @@ export async function GET(req: NextRequest) {
         ),
       )
       .where(and(...conditions))
-      // Свежие сверху; потолок 800 тредов — защита от подвисания у крупных.
-      .orderBy(desc(hhResponses.syncedAt))
+      // Свежие ПО ПЕРЕПИСКЕ сверху: messagesCachedAt обновляется при каждом
+      // фетче переписки (syncedAt — только время импорта, не двигается, и
+      // потолок 800 молча прятал бы новые ответы старых кандидатов — гвард
+      // 03.07). Поле non-null ровно когда messagesCache непустой.
+      .orderBy(desc(hhResponses.messagesCachedAt))
       .limit(vacancyId ? 2000 : 800)
 
     const threads: GlobalInboxThread[] = rows.map((r) => {
