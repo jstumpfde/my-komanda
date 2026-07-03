@@ -177,25 +177,22 @@ export function ScheduleClientPage({ token, initialData, initialError }: Props) 
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-10">
         <div className="w-full max-w-md">
-          {/* Logo / Company */}
-          <div className="flex items-center gap-3 mb-6 justify-center">
-            {data.companyLogo ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={data.companyLogo} alt={data.companyName} className="w-12 h-12 rounded-xl object-contain bg-white border p-1" />
-            ) : (
-              <div
-                className="w-12 h-12 rounded-xl flex items-center justify-center text-white text-xl font-bold"
-                style={{ backgroundColor: accentColor }}
-              >
-                {data.companyName[0]}
-              </div>
-            )}
-            <div>
+          <div className="bg-white rounded-2xl border shadow-sm p-6">
+            {/* Logo / Company — внутри белой карточки (Юрий 04.07) */}
+            <div className="flex items-center gap-3 mb-5 pb-4 border-b justify-center">
+              {data.companyLogo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={data.companyLogo} alt={data.companyName} className="w-12 h-12 rounded-xl object-contain bg-white border p-1" />
+              ) : (
+                <div
+                  className="w-12 h-12 rounded-xl flex items-center justify-center text-white text-xl font-bold"
+                  style={{ backgroundColor: accentColor }}
+                >
+                  {data.companyName[0]}
+                </div>
+              )}
               <p className="font-semibold text-slate-900">{data.companyName}</p>
             </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border shadow-sm p-6">
             <div className="text-center mb-5">
               <CheckCircle2 className="w-14 h-14 text-emerald-500 mx-auto mb-3" />
               <h1 className="text-xl font-bold text-slate-900">{booking.bookedTitle}</h1>
@@ -305,25 +302,22 @@ export function ScheduleClientPage({ token, initialData, initialError }: Props) 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-lg">
-        {/* Logo / Company */}
-        <div className="flex items-center gap-3 mb-6 justify-center">
-          {data.companyLogo ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={data.companyLogo} alt={data.companyName} className="w-12 h-12 rounded-xl object-contain bg-white border p-1" />
-          ) : (
-            <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center text-white text-xl font-bold"
-              style={{ backgroundColor: accentColor }}
-            >
-              {data.companyName[0]}
-            </div>
-          )}
-          <div>
+        <div className="bg-white rounded-2xl border shadow-sm p-6">
+          {/* Logo / Company — внутри белой карточки (Юрий 04.07) */}
+          <div className="flex items-center gap-3 mb-5 pb-4 border-b justify-center">
+            {data.companyLogo ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={data.companyLogo} alt={data.companyName} className="w-12 h-12 rounded-xl object-contain bg-white border p-1" />
+            ) : (
+              <div
+                className="w-12 h-12 rounded-xl flex items-center justify-center text-white text-xl font-bold"
+                style={{ backgroundColor: accentColor }}
+              >
+                {data.companyName[0]}
+              </div>
+            )}
             <p className="font-semibold text-slate-900">{data.companyName}</p>
           </div>
-        </div>
-
-        <div className="bg-white rounded-2xl border shadow-sm p-6">
           <div className="text-center mb-5">
             <h1 className="text-xl font-bold text-slate-900">
               {data.candidateFirstName || data.candidateName}, выберите удобное время
