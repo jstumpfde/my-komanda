@@ -5131,7 +5131,17 @@ export default function VacancyPage() {
         open={drawerOpen}
         onOpenChange={(open) => {
           setDrawerOpen(open)
-          if (!open) setDrawerCandidateId(null)
+          if (!open) {
+            setDrawerCandidateId(null)
+            // Диплинк ?candidate= (из виджета «Чаты») оставался в URL после
+            // закрытия — и карточка «сама выскакивала» при каждом обновлении
+            // страницы (Юрий 03.07). Закрыли карточку — чистим параметр.
+            if (candidateFromUrl && typeof window !== "undefined") {
+              const url = new URL(window.location.href)
+              url.searchParams.delete("candidate")
+              window.history.replaceState(null, "", url.pathname + url.search + url.hash)
+            }
+          }
         }}
         initialTab={drawerInitialTab}
         onToggleFavorite={handleToggleFavorite}

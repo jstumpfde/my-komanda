@@ -152,6 +152,12 @@ export function VacancyStopFactorsSettings({ vacancyId, initial, onSaved }: Prop
               />
               Засчитывать готовность к переезду как валидную
             </label>
+            {cityCsv.trim()
+              ? <FactorSummary
+                  pass={`Пропускаем: ${cityCsv.trim()}${factors.city?.allowRelocation ? " + готовых к переезду" : ""}.`}
+                  cut="Авто-отказ кандидатам из других городов."
+                />
+              : <FactorSummary idle="Города не указаны — фактор не действует." />}
             <RejectionText
               refEl={refCity}
               value={factors.city?.rejectionText ?? ""}
@@ -233,6 +239,12 @@ export function VacancyStopFactorsSettings({ vacancyId, initial, onSaved }: Prop
                 className="w-20 h-8 text-sm bg-[var(--input-bg)]"
               />
             </div>
+            {(() => {
+              const min = factors.age?.minAge, max = factors.age?.maxAge
+              if (min == null && max == null) return <FactorSummary idle="Границы не заданы — фактор не действует." />
+              const parts = [min != null ? `младше ${min}` : null, max != null ? `старше ${max}` : null].filter(Boolean)
+              return <FactorSummary pass={`Пропускаем: ${min ?? "…"}–${max ?? "…"} лет.`} cut={`Авто-отказ: ${parts.join(" и ")}.`} />
+            })()}
             <RejectionText
               refEl={refAge}
               value={factors.age?.rejectionText ?? ""}
@@ -256,6 +268,9 @@ export function VacancyStopFactorsSettings({ vacancyId, initial, onSaved }: Prop
               placeholder="лет"
               className="w-24 h-8 text-sm bg-[var(--input-bg)]"
             />
+            {factors.experience?.minYears != null
+              ? <FactorSummary pass={`Пропускаем: опыт от ${factors.experience.minYears} лет.`} cut={`Авто-отказ: опыт меньше ${factors.experience.minYears} лет.`} />
+              : <FactorSummary idle="Порог не задан — фактор не действует." />}
             <RejectionText
               refEl={refExp}
               value={factors.experience?.rejectionText ?? ""}
@@ -278,6 +293,9 @@ export function VacancyStopFactorsSettings({ vacancyId, initial, onSaved }: Prop
               placeholder="RU, BY"
               className="h-8 text-sm bg-[var(--input-bg)]"
             />
+            {citizenshipCsv.trim()
+              ? <FactorSummary pass={`Пропускаем: ${citizenshipCsv.trim()}.`} cut="Авто-отказ кандидатам с другим гражданством." />
+              : <FactorSummary idle="Страны не указаны — фактор не действует." />}
             <RejectionText
               refEl={refCit}
               value={factors.citizenship?.rejectionText ?? ""}
@@ -301,6 +319,9 @@ export function VacancyStopFactorsSettings({ vacancyId, initial, onSaved }: Prop
               placeholder="₽"
               className="w-32 h-8 text-sm bg-[var(--input-bg)]"
             />
+            {factors.salaryExpectation?.maxAmount != null
+              ? <FactorSummary pass={`Пропускаем: ожидания до ${factors.salaryExpectation.maxAmount.toLocaleString("ru-RU")} ₽.`} cut="Авто-отказ тем, кто хочет больше." />
+              : <FactorSummary idle="Потолок не задан — фактор не действует." />}
             <RejectionText
               refEl={refSalary}
               value={factors.salaryExpectation?.rejectionText ?? ""}
@@ -371,5 +392,18 @@ function FactorRow({
       </div>
       {enabled && <div className="pl-1">{children}</div>}
     </div>
+  )
+}
+
+// Живая сводка под фактором: зелёным — кого пропускаем, красным — кому
+// авто-отказ (Юрий 03.07, зеркало FactorSummary из spec-editor).
+function FactorSummary({ pass, cut, idle }: { pass?: string | null; cut?: string | null; idle?: string | null }) {
+  if (idle) return <p className="text-[11px] leading-snug text-muted-foreground">{idle}</p>
+  if (!pass && !cut) return null
+  return (
+    <p className="text-[11px] leading-snug">
+      {pass && <span className="text-success">{pass} </span>}
+      {cut && <span className="text-destructive">{cut}</span>}
+    </p>
   )
 }

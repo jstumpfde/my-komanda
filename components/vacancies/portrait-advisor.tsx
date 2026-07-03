@@ -87,7 +87,9 @@ export function PortraitAdvisor({ spec }: { spec: CandidateSpec }) {
           )}
         </div>
 
-        {/* Рекомендации по Портрету (никаких «критично») */}
+        {/* Рекомендации по Портрету (никаких «критично»). Зелёное «заполнен
+            хорошо» НЕ показываем при низкой реалистичности — рядом с красным
+            предупреждением читалось как противоречие (Юрий 03.07). */}
         {recs.length > 0 ? (
           <div className="space-y-1.5">
             <p className="text-xs font-medium text-amber-600 dark:text-amber-400 uppercase tracking-wider">Рекомендации</p>
@@ -106,12 +108,12 @@ export function PortraitAdvisor({ spec }: { spec: CandidateSpec }) {
               </div>
             ))}
           </div>
-        ) : (
+        ) : !realism.warn ? (
           <div className="rounded-lg border p-2.5 flex items-start gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
             <p className="text-xs text-muted-foreground leading-relaxed">Портрет заполнен хорошо — критерии, стоп-факторы и эталон на месте.</p>
           </div>
-        )}
+        ) : null}
 
         <p className="text-[10px] text-muted-foreground leading-relaxed pt-1 border-t">
           Подсказки здесь — только по Портрету (критерии AI-скоринга). Советы по полям вакансии — на вкладке «Вакансия».

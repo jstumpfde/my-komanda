@@ -59,7 +59,6 @@ import {
   type DealBreakerEntry,
   type MidRangeAction,
 } from "@/lib/core/spec/types"
-import { computeRealism, REALISM_TONE_CLASS } from "./spec-editor-helpers"
 import { useVacancySectionRegister } from "./vacancy-settings-context"
 import { PortraitAdvisor } from "./portrait-advisor"
 import { useContentBlocks } from "@/hooks/use-content-blocks"
@@ -508,6 +507,20 @@ function FactorRow({
       </div>
       {enabled && <div className="pl-1">{children}</div>}
     </div>
+  )
+}
+
+// Живая сводка под фактором: зелёным — кого пропускаем, красным — кому
+// авто-отказ (Юрий 03.07: «здесь тоже лучше подписывать» — как у «Формата
+// работы», чтобы семантика каждого фильтра читалась без догадок).
+function FactorSummary({ pass, cut, idle }: { pass?: string | null; cut?: string | null; idle?: string | null }) {
+  if (idle) return <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">{idle}</p>
+  if (!pass && !cut) return null
+  return (
+    <p className="mt-1.5 text-[11px] leading-snug">
+      {pass && <span className="text-success">{pass} </span>}
+      {cut && <span className="text-destructive">{cut}</span>}
+    </p>
   )
 }
 
@@ -2023,6 +2036,12 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                 />
                 Засчитывать готовность к переезду как валидную
               </label>
+              {cityCsv.trim()
+                ? <FactorSummary
+                    pass={`Пропускаем: ${cityCsv.trim()}${sf.city?.allowRelocation ? " + готовых к переезду" : ""}.`}
+                    cut="Авто-отказ кандидатам из других городов."
+                  />
+                : <FactorSummary idle="Города не указаны — фактор не действует." />}
             </div>
           </FactorRow>
 
@@ -2092,6 +2111,12 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                 className="w-20 h-8 text-sm"
               />
             </div>
+            {(() => {
+              const min = sf.age?.minAge, max = sf.age?.maxAge
+              if (min == null && max == null) return <FactorSummary idle="Границы не заданы — фактор не действует." />
+              const parts = [min != null ? `младше ${min}` : null, max != null ? `старше ${max}` : null].filter(Boolean)
+              return <FactorSummary pass={`Пропускаем: ${min ?? "…"}–${max ?? "…"} лет.`} cut={`Авто-отказ: ${parts.join(" и ")}.`} />
+            })()}
           </FactorRow>
 
           <FactorRow
@@ -2107,6 +2132,9 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
               placeholder="лет"
               className="w-24 h-8 text-sm"
             />
+            {sf.experience?.minYears != null
+              ? <FactorSummary pass={`Пропускаем: опыт от ${sf.experience.minYears} лет.`} cut={`Авто-отказ: опыт меньше ${sf.experience.minYears} лет.`} />
+              : <FactorSummary idle="Порог не задан — фактор не действует." />}
           </FactorRow>
 
           <FactorRow
@@ -2121,6 +2149,9 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
               placeholder="RU, BY"
               className="h-8 text-sm"
             />
+            {citizenshipCsv.trim()
+              ? <FactorSummary pass={`Пропускаем: ${citizenshipCsv.trim()}.`} cut="Авто-отказ кандидатам с другим гражданством." />
+              : <FactorSummary idle="Страны не указаны — фактор не действует." />}
           </FactorRow>
 
           <FactorRow
@@ -2136,6 +2167,9 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
               placeholder="₽"
               className="w-32 h-8 text-sm"
             />
+            {sf.salaryExpectation?.maxAmount != null
+              ? <FactorSummary pass={`Пропускаем: ожидания до ${sf.salaryExpectation.maxAmount.toLocaleString("ru-RU")} ₽.`} cut="Авто-отказ тем, кто хочет больше." />
+              : <FactorSummary idle="Потолок не задан — фактор не действует." />}
           </FactorRow>
 
           <FactorRow
@@ -2162,6 +2196,9 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                 )
               })}
             </div>
+            {(sf.driverLicense?.requiredCategories ?? []).length > 0
+              ? <FactorSummary pass={`Пропускаем: есть категории ${(sf.driverLicense!.requiredCategories!).join(", ")}.`} cut="Авто-отказ без указанных категорий." />
+              : <FactorSummary idle="Категории не выбраны — фактор не действует." />}
           </FactorRow>
 
           <FactorRow
@@ -2187,6 +2224,10 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
               />
               <span className="text-muted-foreground">г./лет</span>
             </div>
+            <FactorSummary
+              pass={`Пропускаем: до ${sf.jobHopping?.maxJobs ?? 3} мест за ${sf.jobHopping?.withinYears ?? 2} г.`}
+              cut={`Авто-отказ: больше ${sf.jobHopping?.maxJobs ?? 3} мест за ${sf.jobHopping?.withinYears ?? 2} г.`}
+            />
           </FactorRow>
 
             <div className="pt-1 space-y-1.5">
@@ -2644,8 +2685,8 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
         </CardContent>
       </Card>
 
-      {/* ── (г) Реалистичность портрета ── */}
-      <RealismIndicator spec={spec} />
+      {/* Реалистичность портрета показывает ТОЛЬКО AI-панель справа
+          (PortraitAdvisor) — баннер здесь дублировал её (Юрий 03.07). */}
 
       <p className="text-xs text-muted-foreground pt-1">
         Заполненный Портрет используется для AI-оценки откликов (новый контур).
@@ -2688,24 +2729,5 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
   )
 }
 
-// ─── Индикатор «Реалистичность портрета» (Этап 1b, решение #7) ────────────────
-
-function RealismIndicator({ spec }: { spec: CandidateSpec }) {
-  const { level, tone, warn } = computeRealism(spec)
-  return (
-    <div className={cn("rounded-md border px-3 py-2 text-xs space-y-1", REALISM_TONE_CLASS[tone])}>
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-semibold">Реалистичность портрета: {level}</span>
-        <span className="opacity-70" title="Ориентир, не строгий показатель">
-          сколько кандидатов подойдёт
-        </span>
-      </div>
-      {warn && (
-        <p className="leading-snug">
-          ⚠️ Слишком много жёстких условий — подходящих кандидатов будет мало.
-          Смягчите часть must-have, отключите лишние стоп-факторы или снизьте верхний порог.
-        </p>
-      )}
-    </div>
-  )
-}
+// «Реалистичность портрета» рендерится только в PortraitAdvisor (правая
+// AI-панель) — локальный RealismIndicator удалён как дубль (Юрий 03.07).
