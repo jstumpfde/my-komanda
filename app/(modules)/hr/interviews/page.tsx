@@ -14,10 +14,11 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Video, Building2, ExternalLink, ChevronLeft, ChevronRight, List, CalendarDays, CalendarRange, Clock, Settings, Plus, GripVertical, Pencil, Trash2, Save, X, Bell, BellOff, LayoutGrid, Phone, Check, Minus, FileText, ClipboardCheck, Sparkles } from "lucide-react"
+import { Video, Building2, ExternalLink, ChevronLeft, ChevronRight, List, CalendarDays, CalendarRange, Clock, Settings, Plus, GripVertical, Pencil, Trash2, Save, X, Bell, BellOff, LayoutGrid, Phone, Check, Minus, FileText, ClipboardCheck, Sparkles, CalendarClock, Link2, UserCheck } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { CalendarView } from "@/components/calendar/calendar-view"
+import { getStageLabel } from "@/lib/stages"
 
 // ─── Типы ────────────────────────────────────────────────────
 
@@ -68,6 +69,16 @@ interface Interview {
   // Контекст кандидата (из JOIN в /calendar) — для наполнения карточки.
   aiScore: number | null; resumeScore: number | null; phone: string | null; stage: string | null
   anketaFilled: boolean; tested: boolean; testScore: number | null
+  // Виртуальная карточка «Интервью проведено (по стадии)» — кандидат уже на
+  // стадии final_decision/decision/hired, но события календаря нет (интервью
+  // прошло вне системы или бронирование не создавалось). См. п.2 задачи 04.07.
+  byStageOnly?: boolean
+}
+
+// Кандидат вакансии на стадии interview/scheduled БЕЗ будущего события
+// календаря — «ждёт назначения времени» (п.1 задачи 04.07).
+interface WaitingCandidate {
+  id: string; name: string; stage: string | null; phone: string | null; token: string | null
 }
 
 const today2 = new Date()
@@ -200,10 +211,21 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
 
   const [view, setView] = useState<ViewMode>("list")
   const [interviews, setInterviews] = useState<Interview[]>([])
+  // Кандидаты вакансии на стадии interview/scheduled без будущего события —
+  // «Ждут назначения времени» (только в embedded-режиме, есть vacancyId).
+  const [waitingCandidates, setWaitingCandidates] = useState<WaitingCandidate[]>([])
+  // Кандидаты вакансии на стадии final_decision/decision/hired без ПРОШЕДШЕГО
+  // события type=interview — «Интервью проведено (по стадии)», виртуальные
+  // карточки в «Прошедшие» (п.2 задачи 04.07). Ключ — id кандидата, значение —
+  // стадия (для бейджа/лейбла).
+  const [passedByStageCandidates, setPassedByStageCandidates] = useState<{ id: string; name: string; stage: string }[]>([])
   const [vacOptions, setVacOptions] = useState<{ id: string; title: string }[]>([])
   const [createOpen, setCreateOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const [cName, setCName] = useState("")
+  // Кандидат, для которого открыт диалог из секции «Ждут назначения времени» —
+  // прокидывается в POST /calendar как candidateId, чтобы событие связалось с карточкой.
+  const [cCandidateId, setCCandidateId] = useState<string | null>(null)
   const [cVacancyId, setCVacancyId] = useState("")
   const [cDate, setCDate] = useState("")
   const [cTime, setCTime] = useState("10:00")
@@ -258,6 +280,38 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
   }, [vacancyId])
   useEffect(() => { void loadInterviews() }, [loadInterviews])
 
+  // «Ждут назначения времени» (п.1 задачи 04.07): кандидаты вакансии на
+  // стадии interview/scheduled без будущего события type=interview. Источник —
+  // /api/modules/hr/candidates (то же API, что и список кандидатов): в ответе
+  // уже есть nextInterviewAt (минимальный будущий interview-event по кандидату,
+  // см. app/api/modules/hr/candidates/route.ts), поэтому фильтр — чисто клиентский.
+  // Только в embedded-режиме (таб вакансии) — есть vacancyId.
+  const loadWaitingCandidates = useCallback(async () => {
+    if (!vacancyId) { setWaitingCandidates([]); return }
+    try {
+      const res = await fetch(`/api/modules/hr/candidates?vacancyId=${vacancyId}&pageSize=100`)
+      const json = res.ok ? await res.json() : null
+      // apiSuccess отдаёт data напрямую (без обёртки); при pageSize — { candidates, total, ... }.
+      const list = (json?.candidates ?? json ?? []) as {
+        id: string; name?: string; stage?: string | null; phone?: string | null; token?: string | null; nextInterviewAt?: string | null
+      }[]
+      const waiting = (Array.isArray(list) ? list : [])
+        .filter(c => (c.stage === "interview" || c.stage === "scheduled") && !c.nextInterviewAt)
+        .map(c => ({ id: c.id, name: c.name || "Без имени", stage: c.stage ?? null, phone: c.phone ?? null, token: c.token ?? null }))
+      setWaitingCandidates(waiting)
+
+      // п.2: «Передан» (final_decision) и решение/нанят — считаем интервью
+      // проведённым, даже если бронирования не было (событие календаря — как
+      // фильтруем отсутствие прошедшего события — ниже, через interviews).
+      const PASSED_STAGES = new Set(["final_decision", "decision", "hired"])
+      const passed = (Array.isArray(list) ? list : [])
+        .filter(c => c.stage && PASSED_STAGES.has(c.stage))
+        .map(c => ({ id: c.id, name: c.name || "Без имени", stage: c.stage as string }))
+      setPassedByStageCandidates(passed)
+    } catch { setWaitingCandidates([]); setPassedByStageCandidates([]) }
+  }, [vacancyId])
+  useEffect(() => { void loadWaitingCandidates() }, [loadWaitingCandidates])
+
   // Текущий пользователь (для авто-интервьюера) + команда (для доп. интервьюеров).
   useEffect(() => {
     fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then((j) => {
@@ -270,10 +324,11 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
     }).catch(() => {})
   }, [])
 
-  const openCreate = () => {
+  const openCreate = (prefill?: { candidateId: string; name: string }) => {
     const now = new Date()
     // #2: интервьюер по умолчанию — текущий пользователь (кто назначает).
-    setCName(""); setCVacancyId(vacancyId ?? ""); setCInterviewer(currentUser?.name ?? ""); setCType("HR"); setCFormat("Онлайн")
+    setCName(prefill?.name ?? ""); setCCandidateId(prefill?.candidateId ?? null)
+    setCVacancyId(vacancyId ?? ""); setCInterviewer(currentUser?.name ?? ""); setCType("HR"); setCFormat("Онлайн")
     setCInterviewerIds([]); setCTime("10:00"); setCDuration("45")
     setCDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`)
     setCreateOpen(true)
@@ -292,13 +347,17 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
           startAt: start.toISOString(), endAt: end.toISOString(),
           vacancyId: cVacancyId || null, interviewer: cInterviewer || null,
           interviewType: cType, interviewFormat: cFormat,
+          // Связь события с карточкой кандидата — если диалог открыт из
+          // секции «Ждут назначения времени» (openCreate с prefill).
+          candidateId: cCandidateId || undefined,
           // #3: доп. интервьюеры — участники события (руководитель/директор и т.п.)
           participants: cInterviewerIds.length > 0 ? cInterviewerIds : undefined,
         }),
       })
       if (!res.ok) throw new Error()
       setCreateOpen(false)
-      await loadInterviews()
+      setCCandidateId(null)
+      await Promise.all([loadInterviews(), loadWaitingCandidates()])
       toast.success("Интервью запланировано")
     } catch { toast.error("Не удалось создать интервью") } finally { setCreating(false) }
   }
@@ -377,19 +436,42 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
     ivDragEnd()
   }
 
+  // п.2: интервью-список для вида «Список» = реальные события + виртуальные
+  // «Интервью проведено (по стадии)» для кандидатов final_decision/decision/hired
+  // без ПРОШЕДШЕГО события type=interview. Виртуальная карта датируется «сейчас»,
+  // чтобы попадать в «Прошедшие» (date_before) и не путаться с «Предстоящими».
+  // ТОЛЬКО для списка — Месяц/Неделя/День/Канбан продолжают читать `interviews` как есть (п.4).
+  const interviewsForList = useMemo(() => {
+    if (passedByStageCandidates.length === 0) return interviews
+    const candidateIdsWithPastEvent = new Set(
+      interviews.filter(iv => iv.candidateId && iv.date < new Date()).map(iv => iv.candidateId as string),
+    )
+    const virtualNow = new Date(Date.now() - 1000) // на секунду в прошлом — гарантированно "до сегодня"
+    const virtuals: Interview[] = passedByStageCandidates
+      .filter(c => !candidateIdsWithPastEvent.has(c.id))
+      .map(c => ({
+        id: `stage-virtual-${c.id}`, date: virtualNow, time: "—", endTime: "—",
+        candidate: c.name, vacancy: vacOptions.find(v => v.id === vacancyId)?.title ?? "—",
+        interviewer: "—", type: "HR" as InterviewType, format: "Онлайн" as InterviewFormat, status: "Пройдено" as InterviewStatus,
+        candidateId: c.id, aiScore: null, resumeScore: null, phone: null, stage: c.stage,
+        anketaFilled: false, tested: false, testScore: null, byStageOnly: true,
+      }))
+    return [...interviews, ...virtuals]
+  }, [interviews, passedByStageCandidates, vacOptions, vacancyId])
+
   const currentStage = stages.find(s => s.id === activeStage) || stages[0]
   const filtered = useMemo(() => {
-    if (activeStage === "all") return [...interviews].sort((a, b) => a.date.getTime() - b.date.getTime())
+    if (activeStage === "all") return [...interviewsForList].sort((a, b) => a.date.getTime() - b.date.getTime())
     if (!currentStage) return []
-    const result = filterByCondition(interviews, currentStage.condition)
+    const result = filterByCondition(interviewsForList, currentStage.condition)
     return result.sort((a, b) => currentStage.condition === "date_before" ? b.date.getTime() - a.date.getTime() : a.date.getTime() - b.date.getTime())
-  }, [activeStage, currentStage, interviews])
+  }, [activeStage, currentStage, interviewsForList])
 
   const stageCounts = useMemo(() => {
     const m: Record<string, number> = {}
-    stages.forEach(s => { m[s.id] = filterByCondition(interviews, s.condition).length })
+    stages.forEach(s => { m[s.id] = filterByCondition(interviewsForList, s.condition).length })
     return m
-  }, [stages, interviews])
+  }, [stages, interviewsForList])
 
   const startEdit = (stage: Stage) => {
     setEditingId(stage.id); setEditName(stage.name); setEditEmoji(stage.emoji); setEditColor(stage.color); setEditCondition(stage.condition); setAddMode(false)
@@ -551,7 +633,8 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                     <TabsList className="w-max sm:w-auto">
                       <TabsTrigger value="all" className="gap-1.5">
                         <span>🗂</span> Все
-                        <Badge className="ml-1 text-[10px] px-1.5 h-4 bg-primary/10 text-primary">{interviews.length}</Badge>
+                        {/* п.3: счётчик списка учитывает виртуальные карточки «по стадии» (только Список) */}
+                        <Badge className="ml-1 text-[10px] px-1.5 h-4 bg-primary/10 text-primary">{interviewsForList.length}</Badge>
                       </TabsTrigger>
                       {stages.map(s => (
                         <TabsTrigger key={s.id} value={s.id} className="gap-1.5">
@@ -564,27 +647,82 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                 </div>
               )}
 
+              {/* ═══ «Ждут назначения времени» (п.1 задачи 04.07) ═══
+                  Только в embedded (таб вакансии) и только в виде «Список». */}
+              {view === "list" && vacancyId && waitingCandidates.length > 0 && (
+                <Card className="mb-5 border-amber-300/60 dark:border-amber-800/60 bg-amber-50/40 dark:bg-amber-950/10">
+                  <CardContent className="p-4 space-y-2.5">
+                    <div className="flex items-center gap-2">
+                      <CalendarClock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                      <span className="text-sm font-semibold text-foreground">Ждут назначения времени</span>
+                      <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-amber-300 text-amber-700 dark:text-amber-400">{waitingCandidates.length}</Badge>
+                    </div>
+                    <div className="space-y-1.5">
+                      {waitingCandidates.map(c => (
+                        <div key={c.id} className="flex items-center gap-2 flex-wrap rounded-lg border bg-card px-3 py-2">
+                          <span className="font-medium text-sm truncate flex-1 min-w-[120px] cursor-pointer hover:text-primary" onClick={() => router.push(`/hr/candidates/${c.id}`)}>{c.name}</span>
+                          {c.stage && <Badge variant="secondary" className="text-[10px] font-normal">{getStageLabel(c.stage)}</Badge>}
+                          {c.phone && <a href={`tel:${c.phone}`} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"><Phone className="w-3 h-3" />{c.phone}</a>}
+                          <div className="flex items-center gap-1.5 ml-auto">
+                            {c.token && (
+                              <Button
+                                variant="outline" size="sm" className="h-7 text-xs gap-1"
+                                onClick={() => {
+                                  const url = `${window.location.origin}/schedule/${c.token}`
+                                  navigator.clipboard.writeText(url).then(
+                                    () => toast.success("Ссылка самозаписи скопирована"),
+                                    () => toast.error("Не удалось скопировать ссылку"),
+                                  )
+                                }}
+                              >
+                                <Link2 className="w-3 h-3" /> Скопировать ссылку
+                              </Button>
+                            )}
+                            <Button size="sm" className="h-7 text-xs gap-1" onClick={() => openCreate({ candidateId: c.id, name: c.name })}>
+                              <Plus className="w-3 h-3" /> Запланировать
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* ═══ LIST ════════════════════════════════════════ */}
               {view === "list" && (
                 <div className="space-y-3">
                   {filtered.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">Нет интервью</p>}
                   {filtered.map(iv => (
-                    <Card key={iv.id} className="overflow-hidden transition-colors hover:border-primary/40 cursor-pointer" onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}>
+                    <Card key={iv.id} className={cn("overflow-hidden transition-colors hover:border-primary/40 cursor-pointer", iv.byStageOnly && "border-dashed")} onClick={() => iv.candidateId ? router.push(`/hr/candidates/${iv.candidateId}`) : toast.info("Кандидат не привязан к записи")}>
                       <CardContent className="p-0">
                         <div className="flex items-stretch">
                           {/* Дата/время */}
                           <div className="flex flex-col items-center justify-center min-w-[68px] bg-muted/60 py-3 px-3 border-r">
-                            <span className="text-2xl font-bold leading-none">{iv.date.getDate()}</span>
-                            <span className="text-[10px] font-medium text-muted-foreground mt-0.5">{iv.date.toLocaleDateString("ru-RU", { month: "short" }).toUpperCase()}</span>
-                            <span className="text-xs font-semibold text-primary mt-1">{iv.time}</span>
+                            {iv.byStageOnly ? (
+                              <UserCheck className="w-5 h-5 text-muted-foreground" />
+                            ) : (
+                              <>
+                                <span className="text-2xl font-bold leading-none">{iv.date.getDate()}</span>
+                                <span className="text-[10px] font-medium text-muted-foreground mt-0.5">{iv.date.toLocaleDateString("ru-RU", { month: "short" }).toUpperCase()}</span>
+                                <span className="text-xs font-semibold text-primary mt-1">{iv.time}</span>
+                              </>
+                            )}
                           </div>
                           {/* Кандидат + контекст */}
                           <div className="flex-1 min-w-0 py-3 px-4 flex flex-col justify-center gap-1.5">
                             <div className="flex flex-wrap items-center gap-1.5">
                               <span className="font-semibold text-sm truncate">{iv.candidate}</span>
-                              <Badge variant="outline" className={cn("text-[10px]", STATUS_STYLES[iv.status])}>{iv.status}</Badge>
-                              {iv.stage && <Badge variant="secondary" className="text-[10px] font-normal">{iv.stage}</Badge>}
+                              {iv.byStageOnly ? (
+                                <Badge variant="outline" className="text-[10px] border-dashed">по стадии</Badge>
+                              ) : (
+                                <Badge variant="outline" className={cn("text-[10px]", STATUS_STYLES[iv.status])}>{iv.status}</Badge>
+                              )}
+                              {iv.stage && <Badge variant="secondary" className="text-[10px] font-normal">{getStageLabel(iv.stage)}</Badge>}
                             </div>
+                            {iv.byStageOnly && (
+                              <p className="text-xs text-muted-foreground">Интервью проведено (этап «{getStageLabel(iv.stage)}»)</p>
+                            )}
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                               <Badge variant="outline" className={cn("text-[10px]", iv.type === "Техническое" ? "border-blue-200 text-blue-700 dark:text-blue-400" : iv.type === "HR" ? "border-purple-200 text-purple-700 dark:text-purple-400" : "border-green-200 text-green-700 dark:text-green-400")}>{iv.type}</Badge>
                               <span className="inline-flex items-center gap-1">{iv.format === "Онлайн" ? <Video className="w-3 h-3" /> : <Building2 className="w-3 h-3" />}{iv.format}</span>
