@@ -156,16 +156,16 @@ export function MessageQueueSection({ vacancyId }: Props) {
         </Label>
       </div>
 
-      {/* Журнал (инлайн) + Шаблоны рассылки */}
+      {/* Журнал (инлайн) + Шаблоны рассылки. Кнопки «Возобновить/Очистить» —
+          В ОДНУ СТРОКУ с табами (Юрий 03.07), а не отдельным рядом. */}
       <Tabs defaultValue="journal">
-        <TabsList>
-          <TabsTrigger value="journal">Журнал</TabsTrigger>
-          <TabsTrigger value="templates">Шаблоны рассылки</TabsTrigger>
-          <TabsTrigger value="settings">Настройки очереди</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="journal" className="mt-3 space-y-3">
-          <div className="flex justify-end gap-2">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <TabsList>
+            <TabsTrigger value="journal">Журнал</TabsTrigger>
+            <TabsTrigger value="templates">Шаблоны рассылки</TabsTrigger>
+            <TabsTrigger value="settings">Настройки очереди</TabsTrigger>
+          </TabsList>
+          <div className="flex items-center gap-2">
             {/* Остановить/возобновить рассылку — рядом с «Очистить очередь» (просьба Юрия) */}
             <Button
               variant="outline"
@@ -198,6 +198,9 @@ export function MessageQueueSection({ vacancyId }: Props) {
               </Button>
             )}
           </div>
+        </div>
+
+        <TabsContent value="journal" className="mt-3 space-y-3">
           <MessageQueueJournal key={journalKey} vacancyId={vacancyId} onChanged={fetchData} />
         </TabsContent>
 
