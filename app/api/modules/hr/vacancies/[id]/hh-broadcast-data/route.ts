@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server"
 import { eq, and, inArray, desc } from "drizzle-orm"
 import { db } from "@/lib/db"
+import { DEFAULT_SCHEDULE_INVITE_TEXT } from "@/lib/messaging/schedule-invite"
 import { candidates, vacancies, demos, hhResponses } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { deriveCandidateName } from "@/lib/candidate-name"
@@ -34,7 +35,7 @@ export async function POST(
 
     // Проверка принадлежности вакансии компании (tenant-изоляция)
     const [vac] = await db
-      .select({ id: vacancies.id, title: vacancies.title, hhVacancyId: vacancies.hhVacancyId })
+      .select({ id: vacancies.id, title: vacancies.title, hhVacancyId: vacancies.hhVacancyId, scheduleInviteText: vacancies.scheduleInviteText })
       .from(vacancies)
       .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
       .limit(1)
@@ -171,7 +172,10 @@ export async function POST(
     // vacancyHhUrl — ссылка на саму вакансию hh (для варианта «Вакансия» в
     // рассылке: у вакансии своя ссылка, персональная не нужна).
     const vacancyHhUrl = vac.hhVacancyId ? `https://hh.ru/vacancy/${vac.hhVacancyId}` : null
-    return apiSuccess({ items: ordered, vacancyTitle: vac.title, vacancyHhUrl })
+    // Текст приглашения на интервью для варианта «Интервью» в мастере:
+    // настройка вакансии, пусто → платформенный дефолт.
+    const scheduleInviteText = (vac.scheduleInviteText ?? "").trim() || DEFAULT_SCHEDULE_INVITE_TEXT
+    return apiSuccess({ items: ordered, vacancyTitle: vac.title, vacancyHhUrl, scheduleInviteText })
   } catch (err) {
     if (err instanceof Response) return err
     console.error("[hh-broadcast-data]", err)

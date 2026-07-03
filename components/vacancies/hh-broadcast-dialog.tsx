@@ -78,12 +78,13 @@ function pluralize(n: number, one: string, few: string, many: string): string {
 
 // Тип ссылки кандидату: тест/демо (персональная, генерируется автоматически)
 // или сама вакансия hh (общая, у вакансии своя ссылка). Юрий 03.07.
-type LinkKind = "test" | "demo" | "vacancy"
+type LinkKind = "test" | "demo" | "vacancy" | "interview"
 
 // Ссылка кандидату по типу. Демо/тест — один slug (роуты /test и /demo
 // резолвят shortId/token одинаково), «Вакансия» — общий hh-URL вакансии.
 function linkForKind(testLink: string, kind: LinkKind, vacancyHhUrl: string): string {
   if (kind === "vacancy") return vacancyHhUrl
+  if (kind === "interview") return testLink ? testLink.replace("/test/", "/schedule/") : ""
   if (!testLink) return ""
   return kind === "demo" ? testLink.replace("/test/", "/demo/") : testLink
 }
@@ -133,6 +134,7 @@ export function HhBroadcastDialog({
   const [loadError, setLoadError] = useState<string | null>(null)
   const [vacancyTitle, setVacancyTitle] = useState("")
   const [vacancyHhUrl, setVacancyHhUrl] = useState("")
+  const [scheduleInviteText, setScheduleInviteText] = useState("")
   const [savingTpl, setSavingTpl] = useState(false)
   const [savedTpl, setSavedTpl] = useState(false)
   // Менеджер именованных шаблонов рассылки.
@@ -154,7 +156,7 @@ export function HhBroadcastDialog({
   useEffect(() => {
     try {
       const k = window.localStorage.getItem("hhbc:lastKind")
-      if (k === "test" || k === "demo" || k === "vacancy") lastKindRef.current = k
+      if (k === "test" || k === "demo" || k === "vacancy" || k === "interview") lastKindRef.current = k
       const t = window.localStorage.getItem(`hhbc:lastTpl:${vacancyId}`)
       if (t) lastTplRef.current = t
     } catch { /* localStorage недоступен */ }
@@ -196,6 +198,7 @@ export function HhBroadcastDialog({
       setItems(data.items)
       setVacancyTitle(data.vacancyTitle ?? "")
       setVacancyHhUrl((data as { vacancyHhUrl?: string }).vacancyHhUrl ?? "")
+      setScheduleInviteText((data as { scheduleInviteText?: string }).scheduleInviteText ?? "")
       // Предзаполняем тексты сообщений
       const msgs: Record<string, string> = {}
       for (const item of data.items) msgs[item.id] = item.personalMessage
@@ -326,7 +329,17 @@ export function HhBroadcastDialog({
     if (oldKind === newKind) return
     const oldLink = linkForKind(current.testLink, oldKind, vacancyHhUrl)
     const newLink = linkForKind(current.testLink, newKind, vacancyHhUrl)
-    if (oldLink && newLink) {
+    // «Интервью»: если HR ещё не правил текст этого кандидата — подставляем
+    // целиком шаблон приглашения на интервью (настройка вакансии
+    // scheduleInviteText / платформенный дефолт), с именем и ссылкой.
+    if (newKind === "interview" && scheduleInviteText && !editedIdsRef.current.has(current.id)) {
+      const filled = scheduleInviteText
+        .replaceAll("{{name}}", current.firstName || "")
+        .replaceAll("{{vacancy}}", vacancyTitle)
+        .replaceAll("{{schedule_link}}", newLink)
+      const withLink = filled.includes(newLink) ? filled : `${filled.trimEnd()}\n${newLink}`
+      setMessages((prev) => ({ ...prev, [current.id]: withLink }))
+    } else if (oldLink && newLink) {
       setMessages((prev) => {
         const msg = prev[current.id] ?? current.personalMessage
         return { ...prev, [current.id]: msg.split(oldLink).join(newLink) }
@@ -335,7 +348,7 @@ export function HhBroadcastDialog({
     setLinkKindById((prev) => ({ ...prev, [current.id]: newKind }))
     lastKindRef.current = newKind
     try { window.localStorage.setItem("hhbc:lastKind", newKind) } catch { /* noop */ }
-  }, [current, linkKindById])
+  }, [current, linkKindById, scheduleInviteText, vacancyTitle])
 
   const copyAndOpen = useCallback(async () => {
     if (!current) return
@@ -653,6 +666,7 @@ export function HhBroadcastDialog({
                       {([
                         ...(current.testLink ? [["test", "Тест"], ["demo", "Демо"]] as const : []),
                         ...(vacancyHhUrl ? [["vacancy", "Вакансия"]] as const : []),
+                        ...(current.testLink ? [["interview", "Интервью"]] as const : []),
                       ]).map(([k, label]) => (
                         <button
                           key={k}
@@ -676,7 +690,9 @@ export function HhBroadcastDialog({
                   <p className="text-[10px] text-muted-foreground leading-snug">
                     {currentKind === "vacancy"
                       ? "Это общая ссылка на вакансию hh — одинаковая для всех кандидатов."
-                      : "Для «Тест»/«Демо» персональная ссылка кандидата генерируется автоматически."}
+                      : currentKind === "interview"
+                        ? "Персональная ссылка на выбор времени интервью — генерируется автоматически."
+                        : "Для «Тест»/«Демо» персональная ссылка кандидата генерируется автоматически."}
                   </p>
                 </div>
               ) : (
