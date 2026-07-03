@@ -137,6 +137,9 @@ function buildOrderBy(key: SortKey | null, dir: "asc" | "desc"): SQL[] {
   // id DESC — secondary tiebreaker для стабильной пагинации при равных значениях
   // primary-ключа (например, у двух кандидатов одинаковый прогресс).
   const tiebreak = desc(candidates.id)
+  // Эффективная дата отклика: повторно откликнувшийся поднимается по дате
+  // ПОСЛЕДНЕГО отклика (last_responded_at, миграция 0244), остальные — по created_at.
+  const respDate = sql`COALESCE(${candidates.lastRespondedAt}, ${candidates.createdAt})`
   switch (key) {
     case "favorite":     return [wrap(candidates.isFavorite), desc(candidates.createdAt), tiebreak]
     case "aiScore": return [
@@ -182,7 +185,7 @@ function buildOrderBy(key: SortKey | null, dir: "asc" | "desc"): SQL[] {
       tiebreak,
     ]
     case "responseDate":
-    case "createdAt":    return [wrap(candidates.createdAt), tiebreak]
+    case "createdAt":    return [wrap(respDate), tiebreak]
     case "status":
     case "stage":        return [wrap(STAGE_ORDER_SQL), desc(candidates.createdAt), tiebreak]
     case "hrQueue":      return [
@@ -225,7 +228,7 @@ function buildOrderBy(key: SortKey | null, dir: "asc" | "desc"): SQL[] {
         tiebreak,
       ]
     }
-    default:             return [desc(candidates.createdAt), tiebreak]
+    default:             return [desc(respDate), tiebreak]
   }
 }
 
@@ -454,6 +457,7 @@ export async function GET(req: NextRequest) {
           vacancyId: candidates.vacancyId,
           vacancyTitle: vacancies.title,
           createdAt: candidates.createdAt,
+          lastRespondedAt: candidates.lastRespondedAt,
           updatedAt: candidates.updatedAt,
           demoProgressJson: candidates.demoProgressJson,
           anketaAnswers: candidates.anketaAnswers,

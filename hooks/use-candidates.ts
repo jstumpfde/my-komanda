@@ -89,6 +89,8 @@ export interface ApiCandidate {
   aiScoredAt?: string | null
   isFavorite: boolean | null
   createdAt: string | null
+  // Дата последнего отклика (повторный отклик) — колонка «Дата» показывает её.
+  lastRespondedAt?: string | null
   updatedAt: string | null
   hhResponseId?: string | null
   hhRawData?: unknown

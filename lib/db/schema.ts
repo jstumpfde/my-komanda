@@ -1556,6 +1556,9 @@ export const candidates = pgTable("candidates", {
   // | 'ai_screening' | 'interview' | 'final_decision' | 'scheduled'
   // | 'interviewed' | 'hired' | 'rejected' | 'wants_contact'
   stage: text("stage").default("new"),
+  // Дата ПОСЛЕДНЕГО отклика (повторный отклик, напр. на перепубликованную
+  // вакансию). NULL = откликался один раз; первый отклик — в created_at.
+  lastRespondedAt: timestamp("last_responded_at", { withTimezone: true }),
   score: integer("score"),
   salaryMin: integer("salary_min"),
   salaryMax: integer("salary_max"),

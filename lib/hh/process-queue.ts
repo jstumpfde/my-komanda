@@ -460,6 +460,11 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
         await db.update(hhResponses)
           .set({ status: newStatus })
           .where(eq(hhResponses.id, resp.id))
+        // Дата последнего отклика — чтобы повторный кандидат поднялся в списке
+        // (колонка «Дата» и сортировка берут COALESCE(last_responded_at, created_at)).
+        await db.update(candidates)
+          .set({ lastRespondedAt: new Date() })
+          .where(eq(candidates.id, existingCand.id))
         console.log(`[PQ] repeat response from existing candidate ${existingCand.id} (stage=${existingCand.stage}) — kept stage, no re-invite`)
         results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "repeat_existing_kept_stage" })
         continue

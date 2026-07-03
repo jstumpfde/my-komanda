@@ -339,9 +339,12 @@ export function ListView({
           return mul * (sa - sb)
         }
         case "responseDate": {
-          const ta = (a.createdAt ? new Date(a.createdAt).getTime() : (a.addedAt as Date | undefined)?.getTime?.() ?? 0)
-          const tb = (b.createdAt ? new Date(b.createdAt).getTime() : (b.addedAt as Date | undefined)?.getTime?.() ?? 0)
-          return mul * (ta - tb)
+          const eff = (c: typeof a) => {
+            const last = (c as { lastRespondedAt?: string | Date | null }).lastRespondedAt
+            const d = last ?? c.createdAt ?? (c.addedAt as Date | undefined)
+            return d ? new Date(d as string | Date).getTime() : 0
+          }
+          return mul * (eff(a) - eff(b))
         }
         case "status": {
           return mul * ((STAGE_ORDER[a.columnId] ?? 99) - (STAGE_ORDER[b.columnId] ?? 99))
@@ -680,18 +683,33 @@ export function ListView({
         id: "responseDate",
         gridWidth: "minmax(62px, 0.7fr)",
         header: <SortHeader label="Дата" sortKey="responseDate" sort={sort} onToggle={handleSort} align="center" />,
-        renderCell: (_candidate, ctx) => (
-          <div className="text-center text-sm text-muted-foreground tabular-nums whitespace-nowrap">
-            {ctx.dt ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>{ctx.dt.short}</span>
-                </TooltipTrigger>
-                <TooltipContent>{ctx.dt.full}</TooltipContent>
-              </Tooltip>
-            ) : "—"}
-          </div>
-        ),
+        renderCell: (candidate, ctx) => {
+          // Повторный отклик: показываем дату ПОСЛЕДНЕГО отклика + маркер «×2»,
+          // первый отклик — в ховере (Юрий 03.07: повторные «терялись» в списке).
+          const last = (candidate as { lastRespondedAt?: string | Date | null }).lastRespondedAt
+          const lastDt = last ? formatResponseDate(last) : null
+          const shown = lastDt ?? ctx.dt
+          const isRepeat = !!(lastDt && ctx.dt && lastDt.short !== ctx.dt.short)
+          return (
+            <div className="text-center text-sm text-muted-foreground tabular-nums whitespace-nowrap">
+              {shown ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex items-center gap-0.5">
+                      {shown.short}
+                      {isRepeat && <span className="text-[10px] font-semibold text-primary">×2</span>}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {isRepeat
+                      ? `Повторный отклик: ${shown.full}. Первый отклик: ${ctx.dt?.full}`
+                      : shown.full}
+                  </TooltipContent>
+                </Tooltip>
+              ) : "—"}
+            </div>
+          )
+        },
       })
     }
 

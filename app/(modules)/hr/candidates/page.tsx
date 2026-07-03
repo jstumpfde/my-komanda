@@ -47,6 +47,7 @@ interface GlobalCandidate {
   vacancyTitle: string
   stage: string
   createdAt: string
+  lastRespondedAt?: string | null
   source: string | null
   city: string | null
   demoTotalBlocks: number
@@ -129,6 +130,7 @@ function toListCandidate(c: GlobalCandidate): Candidate & { vacancyTitle: string
     demoCompletedByAnswers: c.demoCompletedByAnswers,
     isFavorite: c.isFavorite,
     createdAt: c.createdAt,
+    lastRespondedAt: c.lastRespondedAt ?? null,
     stage: c.stage,
     photoUrl: c.photoUrl ?? null,
     vacancyTitle: c.vacancyTitle,
