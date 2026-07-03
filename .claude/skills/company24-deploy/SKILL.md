@@ -28,10 +28,18 @@ ssh tz 'cd /var/www/mk-shadow && git fetch origin && git reset --hard origin/mai
     NODE_OPTIONS=--max-old-space-size=6144 pnpm build" > /tmp/shadow-build.log 2>&1 &'
 # NEXT_PUBLIC_BUILD_ID ОБЯЗАТЕЛЕН (git-sha) — без него клиентский
 # StaleDeploymentReload получает "dev" и ломается на следующих деплоях.
-# 2) Проверить сборку ДО переключений: EXIT:0 в логе, есть
-#    .next/prerender-manifest.json и page_client-reference-manifest.js ключевых роутов.
-# 3) Зелёный инстанс: cd /var/www/mk-shadow && PORT=3002 pm2 start pnpm --name mk-next-green -- start
+# 1a) НЕ запускать новую теневую сборку, пока прошлая не напечатала EXIT
+#     (инцидент 03.07 12:xx: reset+build поверх идущей сборки → build-lock,
+#     EXIT:1, а конвейер выкатил ПРЕДЫДУЩИЙ .next). Проверка:
+#       pgrep -f "next build" | while read p; do ps -p $p -o cmd=; done  # пусто = можно
+# 2) Проверить сборку ДО переключений: EXIT:0 в логе (ГЕЙТ — при EXIT:1 СТОП,
+#    не продолжать!), есть .next/prerender-manifest.json и
+#    page_client-reference-manifest.js ключевых роутов.
+# 3) Зелёный инстанс: СНАЧАЛА pm2 delete mk-next-green (мог остаться от прошлой
+#    попытки и «отвечать» на :3002 старым билдом), затем:
+#    cd /var/www/mk-shadow && PORT=3002 pm2 start pnpm --name mk-next-green -- start
 #    → health: curl 127.0.0.1:3002/login = 200, /api/public/build-id = новый sha.
+#    ГЕЙТ: build-id зелёного ≠ ожидаемый sha → СТОП (не переключать nginx).
 # 4) nginx upstream nextapp: 3000 → 3002; nginx -t && systemctl reload nginx (без разрыва соединений).
 # 5) Публика на зелёном → обновить основной: в /var/www/my-komanda:
 #    rm -rf .next-prev && mv .next .next-prev && cp -a /var/www/mk-shadow/.next .next &&
