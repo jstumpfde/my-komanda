@@ -7,9 +7,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { and, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
+import { isOwnerEmail } from "@/lib/owner"
 import { vacancies } from "@/lib/db/schema"
 import { requireCompany } from "@/lib/api-helpers"
-import { isOwnerEmail } from "@/lib/owner"
 import { normalizeFunnelV2, type FunnelV2Config } from "@/lib/funnel-v2/types"
 
 function descObj(v: unknown): Record<string, unknown> {

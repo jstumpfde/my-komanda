@@ -4,7 +4,6 @@ import { useState, useRef, useEffect, useCallback, useMemo, Suspense, type React
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth, isPlatformRole } from "@/lib/auth"
-import { isOwnerEmail } from "@/lib/owner"
 import { useVacancy } from "@/hooks/use-vacancies"
 import { useCandidates, usePaginatedCandidates, type ApiCandidate, type PaginatedSortKey } from "@/hooks/use-candidates"
 import { Pagination } from "@/components/dashboard/pagination"
@@ -94,6 +93,7 @@ import { parsePipeline, resolveVacancyStageOptions, type CompanyStageHhActions, 
 import { BrandingOverrideSwitch } from "@/components/vacancies/branding-override-switch"
 import { VacancySettingsProvider, VacancyTabPendingDot, VacancyTabFooter, useVacancySectionRegister, useSafeSubTabSwitch, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
 import { SettingsTabShell } from "@/components/vacancies/settings-tab-shell"
+import { isOwnerEmail } from "@/lib/owner"
 import {
   ResponsiveContainer,
   BarChart,
@@ -255,8 +255,8 @@ export default function VacancyPage() {
   const id = params.id as string
   // B5: роль поднята наверх — нужна в setCardSettings и useEffect для user-prefs
   const { role, user } = useAuth()
-  // «Воронка 3» — owner-only (тот же email-гейт-полигон, что виды Канбан/Плитки;
-  // API funnel-v2 и так отдаёт 404 не-владельцу).
+  // «Воронка 3» — owner-only (обкатывается; Юрий 03.07 оставил под гейтом,
+  // остальные фичи раскрыты). API funnel-v2 тоже owner-gated.
   const funnelV3Visible = isOwnerEmail(user?.email)
 
   // «Рабочий стол» (/hr/workspace) открывает последнюю посещённую вакансию.
@@ -892,7 +892,7 @@ export default function VacancyPage() {
     // Все режимы доступны админу платформы и директору (см. ViewSettings).
     // Остальным — только «Список»; сохранённый kanban/funnel не гидратируем,
     // иначе застрянут без переключателя режимов.
-    // Виды Канбан/Плитки/Воронка пока обкатываются — только владелец-полигон (email).
+    // Виды Канбан/Плитки/Воронка — owner-only (Юрий 03.07 оставил под гейтом).
     const canAllViews = isOwnerEmail(user?.email)
     setViewModeLocal((canAllViews ? userPrefs.viewMode : "list") as ViewMode)
     // B5: колонки теперь per-company (hiring-defaults), не per-user.

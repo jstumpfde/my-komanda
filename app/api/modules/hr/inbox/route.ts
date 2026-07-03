@@ -15,11 +15,10 @@
 // Тенант-изоляция: requireCompany + JOIN vacancies по companyId (кандидаты
 // только своих вакансий) + скоуп hh_responses по companyId — вторая линия.
 import { NextRequest } from "next/server"
-import { and, eq, isNull } from "drizzle-orm"
+import { and, eq, isNull, isNotNull, desc } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, hhResponses } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
-import { isOwnerEmail } from "@/lib/owner"
 import { getStageLabel } from "@/lib/stages"
 
 export const dynamic = "force-dynamic"
@@ -66,14 +65,10 @@ export async function GET(req: NextRequest) {
     const user = await requireCompany()
     const vacancyId = req.nextUrl.searchParams.get("vacancyId")
 
-    // КРОСС-вакансионный режим (без vacancyId) тянет messagesCache всех
-    // hh-кандидатов компании — тяжело на больших тенантах. Пока виджет «Чаты»
-    // owner-only, зеркалим гейт и на сервере (страховка от прямых поллов).
-    // БЛОКЕР раскрытия всем HR: сначала перенести превью/unread в SQL
-    // (jsonb-выражения по хвосту messagesCache) или добавить пагинацию.
-    if (!vacancyId && !isOwnerEmail(user.email)) {
-      return apiError("forbidden", 403)
-    }
+    // Кросс-вакансионный режим (без vacancyId) открыт всем HR (Юрий 03.07 —
+    // «открыть всё что есть»). Защита от тяжёлых тенантов: берём только
+    // отклики с реальной перепиской (messagesCache непустой) и с лимитом —
+    // треды без сообщений в инбоксе не нужны.
 
     const conditions = [
       eq(vacancies.companyId, user.companyId),
@@ -81,6 +76,9 @@ export async function GET(req: NextRequest) {
       isNull(vacancies.deletedAt),
     ]
     if (vacancyId) conditions.push(eq(candidates.vacancyId, vacancyId))
+    // Кросс-режим: только отклики с сохранённой перепиской (иначе тянули бы
+    // всех hh-кандидатов компании в память).
+    else conditions.push(isNotNull(hhResponses.messagesCache))
 
     const rows = await db
       .select({
@@ -105,6 +103,9 @@ export async function GET(req: NextRequest) {
         ),
       )
       .where(and(...conditions))
+      // Свежие сверху; потолок 800 тредов — защита от подвисания у крупных.
+      .orderBy(desc(hhResponses.syncedAt))
+      .limit(vacancyId ? 2000 : 800)
 
     const threads: GlobalInboxThread[] = rows.map((r) => {
       const cache = Array.isArray(r.messagesCache) ? (r.messagesCache as CachedMessage[]) : []

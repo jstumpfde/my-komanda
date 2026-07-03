@@ -23,10 +23,9 @@ import { isOwnerEmail } from "@/lib/owner"
 import { ChatInboxPanel } from "@/components/chats/chat-inbox-panel"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
 
-// ── Гейт первого этапа ──────────────────────────────────────────────────────
-// Пока обкатывается — виджет виден ТОЛЬКО владельцу-полигону (isOwnerEmail).
-// После визуального ОК Юрия поставить false, чтобы раскрыть всем HR компании.
-const CHAT_WIDGET_OWNER_ONLY = true
+// Виджет «Чаты» открыт всем HR компании (Юрий 03.07 «открыть всё что есть»).
+// Инбокс на сервере защищён фильтром «только с перепиской» + лимитом.
+const CHAT_WIDGET_OWNER_ONLY = false
 
 const BADGE_POLL_MS = 60_000
 
