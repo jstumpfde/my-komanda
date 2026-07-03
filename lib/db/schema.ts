@@ -1094,7 +1094,13 @@ export interface VacancyStopFactorDocuments {
 }
 export interface VacancyStopFactorCitizenship {
   enabled:         boolean
-  allowed?:        string[]   // напр. ["RU", "BY"]
+  /** "allow" — пропускаем только allowed (дефолт, легаси-поведение при
+   *  отсутствии поля); "deny" — пропускаем всех, кроме denied. */
+  mode?:           "allow" | "deny"
+  allowed?:        string[]   // allow-режим: напр. ["RU", "BY"]
+  /** deny-режим: ISO-2 коды и/или континент-коды вида "continent:europe",
+   *  "continent:cis" — разворачиваются в матчере (см. stop-factors-matcher.ts). */
+  denied?:         string[]
   rejectionText?:  string
 }
 export interface VacancyStopFactorSalary {
