@@ -333,7 +333,7 @@ export const DEMO_OPENED_STAGE_SLUGS: StageSlug[] = [
 export const LEGACY_STAGE_LABELS: Record<string, string> = {
   demo: "На демо",
   interviewed: "Прошёл интервью",
-  final_decision: "Финальное решение",
+  final_decision: "Передан",  // передача РОПу/заказчику (Юрий 03.07)
   wants_contact: "Хочет контакт",
   offer: "Оффер",
   preboarding: "Пребординг",

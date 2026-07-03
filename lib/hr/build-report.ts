@@ -335,7 +335,7 @@ async function buildReportInner(companyId: string, opts: BuildReportOptions = {}
       .map(slug => ({
         slug,
         label: slug === "demo" ? "На демо" : slug === "interviewed" ? "Прошёл интервью"
-          : slug === "final_decision" ? "Финальное решение" : slug === "offer" ? "Оффер"
+          : slug === "final_decision" ? "Передан" : slug === "offer" ? "Оффер"
           : slug === "wants_contact" ? "Хочет контакт" : "Резерв",
         count: stageTotals[slug] ?? 0,
         isTerminal: false,

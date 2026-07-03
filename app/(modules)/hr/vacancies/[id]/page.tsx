@@ -2269,7 +2269,7 @@ export default function VacancyPage() {
     { stage: "Демо", count: totalCandidates - (newCol?.candidates.length || 0), color: "#3b82f6" },
     { stage: "Решение", count: (decisionCol?.candidates.length || 0) + afterDecision, color: "#ef4444" },
     { stage: "Интервью", count: (interviewCol?.candidates.length || 0) + (finalDecisionCol?.candidates.length || 0) + (hiredCol?.candidates.length || 0), color: "#8b5cf6" },
-    { stage: "Финальное решение", count: (finalDecisionCol?.candidates.length || 0) + (hiredCol?.candidates.length || 0), color: "#f97316" },
+    { stage: "Передан", count: (finalDecisionCol?.candidates.length || 0) + (hiredCol?.candidates.length || 0), color: "#f97316" },
     { stage: "Нанято", count: hiredCol?.candidates.length || 0, color: "#22c55e" },
   ]
 
