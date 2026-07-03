@@ -445,6 +445,8 @@ export function HhBroadcastDialog({
         setSavedTpl(true)
         setTimeout(() => setSavedTpl(false), 2500)
         showTplToast("Сохранено")
+      } else {
+        showTplToast("Не удалось сохранить шаблон — попробуйте ещё раз")
       }
     } finally {
       setSavingTpl(false)
@@ -463,6 +465,8 @@ export function HhBroadcastDialog({
       const created = next.find((t) => t.name === name && t.text === text)
       if (created) setSelectedTplId(created.id)
       showTplToast("Создан шаблон")
+    } else {
+      showTplToast("Не удалось создать шаблон — попробуйте ещё раз")
     }
   }, [current, tplName, currentAsTemplateText, postTemplate, showTplToast])
 

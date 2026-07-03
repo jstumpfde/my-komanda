@@ -22,39 +22,48 @@ import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 
 type BroadcastTemplate = { id: string; name: string; text: string }
 
-// Найти test-demo вакансии (скоуп по компании) + текущие шаблоны.
-async function loadTestDemo(vacancyId: string, companyId: string) {
+// Шаблоны рассылки храним в vacancies.descriptionJson.broadcastTemplates
+// (раньше — в demo kind='test'.postDemoSettings; у вакансий с динамическими
+// блоками контента demo.kind='block:*', тест-демо нет → сохранение падало
+// 400, инцидент 03.07). Хранилище на самой вакансии не зависит от наличия
+// и типа demo. Fallback-чтение из старого места — для ранее сохранённых.
+async function loadTemplates(vacancyId: string, companyId: string) {
   // tenant-изоляция: вакансия должна принадлежать компании
   const [vac] = await db
-    .select({ id: vacancies.id })
+    .select({ id: vacancies.id, descriptionJson: vacancies.descriptionJson })
     .from(vacancies)
     .where(and(eq(vacancies.id, vacancyId), eq(vacancies.companyId, companyId)))
     .limit(1)
   if (!vac) return null
 
-  const [demo] = await db
-    .select({ id: demos.id, postDemoSettings: demos.postDemoSettings })
-    .from(demos)
-    .where(and(eq(demos.vacancyId, vacancyId), eq(demos.kind, "test")))
-    .limit(1)
-  if (!demo) return { demo: null as null, templates: [] as BroadcastTemplate[] }
-
-  const settings = (demo.postDemoSettings ?? {}) as PostDemoSettings
-  const templates = Array.isArray(settings.broadcastTemplates)
-    ? (settings.broadcastTemplates as BroadcastTemplate[])
+  const desc = (vac.descriptionJson ?? {}) as Record<string, unknown>
+  let templates = Array.isArray(desc.broadcastTemplates)
+    ? (desc.broadcastTemplates as BroadcastTemplate[])
     : []
-  return { demo: { id: demo.id }, templates }
+
+  // Fallback: старое хранилище в demo kind='test' (миграция на лету).
+  if (templates.length === 0) {
+    const [demo] = await db
+      .select({ postDemoSettings: demos.postDemoSettings })
+      .from(demos)
+      .where(and(eq(demos.vacancyId, vacancyId), eq(demos.kind, "test")))
+      .limit(1)
+    const settings = (demo?.postDemoSettings ?? {}) as PostDemoSettings
+    if (Array.isArray(settings.broadcastTemplates)) {
+      templates = settings.broadcastTemplates as BroadcastTemplate[]
+    }
+  }
+  return { templates }
 }
 
-// Записать массив шаблонов обратно в postDemoSettings (jsonb merge).
+// Записать массив шаблонов в vacancies.descriptionJson (jsonb merge).
 async function saveTemplates(vacancyId: string, templates: BroadcastTemplate[]) {
   await db
-    .update(demos)
+    .update(vacancies)
     .set({
-      postDemoSettings: sql`COALESCE(${demos.postDemoSettings}, '{}'::jsonb) || jsonb_build_object('broadcastTemplates', ${JSON.stringify(templates)}::jsonb)`,
-      updatedAt: new Date(),
+      descriptionJson: sql`COALESCE(${vacancies.descriptionJson}, '{}'::jsonb) || jsonb_build_object('broadcastTemplates', ${JSON.stringify(templates)}::jsonb)`,
     })
-    .where(and(eq(demos.vacancyId, vacancyId), eq(demos.kind, "test")))
+    .where(eq(vacancies.id, vacancyId))
 }
 
 export async function GET(
@@ -65,7 +74,7 @@ export async function GET(
     const user = await requireCompany()
     const { id } = await params
 
-    const loaded = await loadTestDemo(id, user.companyId)
+    const loaded = await loadTemplates(id, user.companyId)
     if (!loaded) return apiError("Вакансия не найдена", 404)
 
     return apiSuccess({ templates: loaded.templates })
@@ -99,11 +108,8 @@ export async function POST(
       return apiError("Неизвестное действие", 400)
     }
 
-    const loaded = await loadTestDemo(id, user.companyId)
+    const loaded = await loadTemplates(id, user.companyId)
     if (!loaded) return apiError("Вакансия не найдена", 404)
-    if (!loaded.demo) {
-      return apiError("Сначала настройте тест на вакансии (вкладка «Тест»)", 400)
-    }
 
     let templates = loaded.templates
 
