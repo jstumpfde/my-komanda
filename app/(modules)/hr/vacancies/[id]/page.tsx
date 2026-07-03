@@ -3085,9 +3085,11 @@ export default function VacancyPage() {
                       <>
                         {workTabs.map((t) => (
                           isVacancyLive ? (
-                            <TabsTrigger key={t.value} value={t.value} className="gap-1.5">
-                              <t.icon className="w-3.5 h-3.5" />
-                              <span className="hidden xs:inline sm:inline">{t.label}</span>
+                            <TabsTrigger key={t.value} value={t.value} className="gap-1.5" asChild>
+                              <a href={`/hr/vacancies/${id}?tab=${t.value}`} onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey) return; e.preventDefault() }}>
+                                <t.icon className="w-3.5 h-3.5" />
+                                <span className="hidden xs:inline sm:inline">{t.label}</span>
+                              </a>
                             </TabsTrigger>
                           ) : (
                             <UITooltip key={t.value}>
@@ -3140,11 +3142,17 @@ export default function VacancyPage() {
                     { value: "outbound", icon: UserSearch, label: "Исходящий подбор" },
                     { value: "queue", icon: Inbox, label: "Очередь" },
                   ]).map(tab => (
-                    <TabsTrigger key={tab.value} value={tab.value} className="gap-1.5">
-                      <tab.icon className="w-3.5 h-3.5" />{tab.label}
+                    <TabsTrigger key={tab.value} value={tab.value} className="gap-1.5" asChild>
+                      <a href={`/hr/vacancies/${id}?tab=${tab.value}`} onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey) return; e.preventDefault() }}>
+                        <tab.icon className="w-3.5 h-3.5" />{tab.label}
+                      </a>
                     </TabsTrigger>
                   ))}
-                  <TabsTrigger value="settings" className="gap-1.5"><Settings className="w-3.5 h-3.5" />Настройки</TabsTrigger>
+                  <TabsTrigger value="settings" className="gap-1.5" asChild>
+                    <a href={`/hr/vacancies/${id}?tab=settings`} onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey) return; e.preventDefault() }}>
+                      <Settings className="w-3.5 h-3.5" />Настройки
+                    </a>
+                  </TabsTrigger>
                   </>
                   )}
                 </TabsList>

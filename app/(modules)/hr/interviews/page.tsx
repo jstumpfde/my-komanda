@@ -765,8 +765,8 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                             ) : (
                               <>
                                 <span className="text-2xl font-bold leading-none">{iv.date.getDate()}</span>
-                                <span className="text-[10px] font-medium text-muted-foreground mt-0.5">{iv.date.toLocaleDateString("ru-RU", { month: "short" }).toUpperCase()}</span>
-                                <span className="text-xs font-semibold text-primary mt-1">{iv.time}</span>
+                                <span className="text-[10px] font-medium text-muted-foreground mt-0.5">{iv.date.toLocaleDateString("ru-RU", { month: "short", weekday: "short" }).toUpperCase()}</span>
+                                <span className="text-xs font-semibold text-primary mt-1">{iv.time}{iv.endTime ? `–${iv.endTime}` : ""}</span>
                               </>
                             )}
                           </div>
