@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import { eq, and, isNull, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, vacancies, demos, companies, hhResponses, vacancySpecs } from "@/lib/db/schema"
+import { candidates, vacancies, demos, companies, hhResponses, vacancySpecs, followUpMessages } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { isShortId } from "@/lib/short-id"
 import { checkPublicTokenRateLimit } from "@/lib/public/rate-limit-public"
@@ -214,6 +214,18 @@ export async function GET(
     // на уровне вакансии. Прошедший анкету кандидат видит «Путь менеджера».
     if (candidate.overrideContentBlockId) {
       inviteBlockId = candidate.overrideContentBlockId
+      // Кандидат РЕАЛЬНО открыл 2-ю часть — страховочное письмо-приглашение
+      // (branch='second_demo_invite', режим both) больше не нужно: гасим pending,
+      // чтобы прошедший инлайн не получил «приглашаем на 2-ю часть» задним
+      // числом. Кто ушёл не открыв — письмо остаётся и уйдёт по расписанию.
+      db.update(followUpMessages)
+        .set({ status: "cancelled", errorMessage: "block2_opened" })
+        .where(and(
+          eq(followUpMessages.candidateId, candidate.id),
+          eq(followUpMessages.branch, "second_demo_invite"),
+          eq(followUpMessages.status, "pending"),
+        ))
+        .catch((err: unknown) => console.error("[demo GET] cancel second_demo_invite failed:", err))
     } else {
       try {
         const [specRow] = await db
