@@ -23,6 +23,7 @@ import type { CandidateSortMode } from "@/lib/candidate-sort"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
 import { CandidateTrashSheet } from "@/components/candidates/candidate-trash-sheet"
 import { RediscoverySheet } from "@/components/candidates/rediscovery-sheet"
+import { InterviewInviteConfirm, shouldSkipInterviewInviteConfirm, type InterviewMeetMode } from "@/components/candidates/interview-invite-confirm"
 import { BulkActionsBar, type BulkAction } from "@/components/dashboard/bulk-actions-bar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
@@ -671,6 +672,20 @@ export default function VacancyPage() {
       .map((s) => ({ id: s.id as string, title: s.title ?? null }))
   }, [apiVacancy?.descriptionJson])
 
+  /** Вид встречи по умолчанию для диалога «Пригласить на интервью» — из первой
+   *  стадии воронки v2 с action="interview". Нет воронки/стадии → undefined
+   *  (диалог сам возьмёт 'zoom'). */
+  const defaultInterviewMode = useMemo((): InterviewMeetMode | undefined => {
+    const raw = (apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.funnelV2
+    if (!raw || typeof raw !== "object") return undefined
+    const stages = (raw as { stages?: unknown }).stages
+    if (!Array.isArray(stages)) return undefined
+    const interviewStage = (stages as Array<{ action?: string; interviewMode?: string }>)
+      .find((s) => s.action === "interview" && typeof s.interviewMode === "string")
+    const mode = interviewStage?.interviewMode
+    return mode === "phone" || mode === "zoom" || mode === "office" ? mode : undefined
+  }, [apiVacancy?.descriptionJson])
+
   /**
    * #42: ЕДИНЫЙ источник списка стадий вакансии — и для дропдауна «Стадия» в
    * карточке кандидата, и для секции «Статус в воронке» фильтра. Приоритет:
@@ -1242,6 +1257,15 @@ export default function VacancyPage() {
   // Talent pool suggestion
   const [talentPoolDialogOpen, setTalentPoolDialogOpen] = useState(false)
   const [talentPoolCandidate, setTalentPoolCandidate] = useState<Candidate | null>(null)
+
+  // Диалог подтверждения «Пригласить на интервью» (advance → interview,
+  // Юрий 03.07). Пропускается, если localStorage skipInterviewInviteConfirm=1.
+  const [interviewConfirmOpen, setInterviewConfirmOpen] = useState(false)
+  const [interviewConfirmCandidateId, setInterviewConfirmCandidateId] = useState<string | null>(null)
+  const [interviewConfirmCandidateName, setInterviewConfirmCandidateName] = useState<string>("")
+  // Колбэк реального перемещения карточки — заполняется в момент открытия
+  // диалога тем же кодом, что раньше выполнял advance молча.
+  const interviewConfirmApplyRef = useRef<((opts: { messageOverride: string; interviewMode: InterviewMeetMode }) => Promise<void>) | null>(null)
 
   // AI tools modals
   const [compareOpen, setCompareOpen] = useState(false)
@@ -1868,8 +1892,8 @@ export default function VacancyPage() {
         setRejectDialogOpen(true)
         return
       }
-      const apply = async (target: string, msg: string) => {
-        const ok = await paginated.updateStage(candidateId, target)
+      const apply = async (target: string, msg: string, opts?: { messageOverride?: string; interviewMode?: InterviewMeetMode }) => {
+        const ok = await paginated.updateStage(candidateId, target, opts)
         if (ok) { toast.success(msg); paginated.refetch() }
         else toast.error("Не удалось обновить статус")
       }
@@ -1880,7 +1904,17 @@ export default function VacancyPage() {
         case "hire":        return apply("hired", `🎉 ${cand.name} — нанят!`)
         case "advance": {
           const nextId = getNextColumnId(cand.stage ?? "new")
-          return apply(nextId ?? "hired", nextId ? `${cand.name} → следующий этап` : `🎉 ${cand.name} — нанят!`)
+          if (!nextId) return apply("hired", `🎉 ${cand.name} — нанят!`)
+          if (nextId === "interview" && !shouldSkipInterviewInviteConfirm()) {
+            interviewConfirmApplyRef.current = async (o) => {
+              await apply("interview", `${cand.name} → следующий этап`, o)
+            }
+            setInterviewConfirmCandidateId(candidateId)
+            setInterviewConfirmCandidateName(cand.name)
+            setInterviewConfirmOpen(true)
+            return
+          }
+          return apply(nextId, `${cand.name} → следующий этап`)
         }
         default: return
       }
@@ -1931,6 +1965,25 @@ export default function VacancyPage() {
         setColumns((p) => p.map((c) => c.id !== columnId ? c : { ...c, candidates: c.candidates.filter((x) => x.id !== candidateId), count: c.candidates.filter((x) => x.id !== candidateId).length }))
         toast.success(`${candidate.name} — нанят!`)
         await updateStage(candidateId, "hired")
+        return
+      }
+      // Юрий 03.07: переход в interview НЕ молчаливый — открываем окно
+      // подтверждения (вид встречи + текст приглашения), если HR не отключил
+      // его чекбоксом «Больше не показывать» (localStorage).
+      if (nextId === "interview" && !shouldSkipInterviewInviteConfirm()) {
+        interviewConfirmApplyRef.current = async (opts) => {
+          const moved2 = { ...candidate, progress: PROGRESS_BY_COLUMN[nextId] ?? candidate.progress }
+          setColumns((p) => p.map((c) => {
+            if (c.id === columnId) { const nc = c.candidates.filter((x) => x.id !== candidateId); return { ...c, candidates: nc, count: nc.length } }
+            if (c.id === nextId) { const nc = [...c.candidates, moved2]; return { ...c, candidates: nc, count: nc.length } }
+            return c
+          }))
+          toast.success(`${candidate.name} → следующий этап`)
+          await updateStage(candidateId, nextId, opts)
+        }
+        setInterviewConfirmCandidateId(candidateId)
+        setInterviewConfirmCandidateName(candidate.name)
+        setInterviewConfirmOpen(true)
         return
       }
       const moved = { ...candidate, progress: PROGRESS_BY_COLUMN[nextId] ?? candidate.progress }
@@ -5119,6 +5172,7 @@ export default function VacancyPage() {
         onToggleFavorite={handleToggleFavorite}
         vacancyAnketa={drawerAnketa}
         vacancyPipeline={vacancyPipeline}
+        defaultInterviewMode={defaultInterviewMode}
         // #42: единый источник списка стадий (воронка v2 → pipeline) — тот же,
         // что и в секции «Статус в воронке» фильтра.
         stageOptions={stageOptions}
@@ -5142,6 +5196,26 @@ export default function VacancyPage() {
               return { ...col, candidates: filtered, count: filtered.length }
             })
           })
+        }}
+      />
+
+      {/* Окно подтверждения «Пригласить на интервью» для advance (список/канбан) —
+          Юрий 03.07: не переводить молча, когда следующая стадия = interview. */}
+      <InterviewInviteConfirm
+        open={interviewConfirmOpen}
+        onOpenChange={(o) => {
+          setInterviewConfirmOpen(o)
+          if (!o) {
+            setInterviewConfirmCandidateId(null)
+            setInterviewConfirmCandidateName("")
+            interviewConfirmApplyRef.current = null
+          }
+        }}
+        candidateId={interviewConfirmCandidateId}
+        candidateName={interviewConfirmCandidateName}
+        defaultInterviewMode={defaultInterviewMode}
+        onConfirm={async (opts) => {
+          await interviewConfirmApplyRef.current?.(opts)
         }}
       />
 

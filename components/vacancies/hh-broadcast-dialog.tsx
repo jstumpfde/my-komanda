@@ -47,6 +47,16 @@ export interface HhBroadcastItem {
   hasNoChat: boolean
   personalMessage: string
   testLink: string
+  // «Демо 2» активна только если кандидату уже открыта 2-я часть
+  // (override_content_block_id проставлен на карточке). Юрий 03.07.
+  hasSecondDemo: boolean
+}
+
+// «др. вакансия»: активная вакансия компании с hh-ссылкой (не текущая).
+interface OtherVacancy {
+  id: string
+  title: string
+  hhVacancyId: string
 }
 
 // Именованный шаблон рассылки (хранит ТЕКСТ С ПЛЕЙСХОЛДЕРАМИ).
@@ -76,17 +86,29 @@ function pluralize(n: number, one: string, few: string, many: string): string {
   return many
 }
 
-// Тип ссылки кандидату: тест/демо (персональная, генерируется автоматически)
-// или сама вакансия hh (общая, у вакансии своя ссылка). Юрий 03.07.
-type LinkKind = "test" | "demo" | "vacancy" | "interview"
+// Тип ссылки кандидату (Юрий 03.07): тест/демо-1/демо-2 (персональная,
+// генерируется автоматически, демо-1 и демо-2 — ОДНА ссылка, разное содержимое
+// на стороне кандидата через override_content_block_id), сама вакансия hh,
+// др. вакансия компании (тоже hh, но другая запись) или интервью (вид —
+// отдельно в interviewMode).
+type LinkKind = "test" | "demo1" | "demo2" | "vacancy" | "other_vacancy" | "interview"
+type InterviewMode = "phone" | "zoom" | "office"
 
-// Ссылка кандидату по типу. Демо/тест — один slug (роуты /test и /demo
-// резолвят shortId/token одинаково), «Вакансия» — общий hh-URL вакансии.
-function linkForKind(testLink: string, kind: LinkKind, vacancyHhUrl: string): string {
+// Ссылка кандидату по типу. Демо-1/демо-2/тест — один slug (роуты /test и
+// /demo резолвят shortId/token одинаково; демо-2 это ТА ЖЕ ссылка — контент
+// переключает override_content_block_id на кандидате), «Вакансия» — общий
+// hh-URL текущей вакансии, «др. вакансия» — hh-URL выбранной другой вакансии.
+function linkForKind(
+  testLink: string,
+  kind: LinkKind,
+  vacancyHhUrl: string,
+  otherVacancyHhUrl?: string,
+): string {
   if (kind === "vacancy") return vacancyHhUrl
+  if (kind === "other_vacancy") return otherVacancyHhUrl ? `https://hh.ru/vacancy/${otherVacancyHhUrl}` : ""
   if (kind === "interview") return testLink ? testLink.replace("/test/", "/schedule/") : ""
   if (!testLink) return ""
-  return kind === "demo" ? testLink.replace("/test/", "/demo/") : testLink
+  return kind === "demo1" || kind === "demo2" ? testLink.replace("/test/", "/demo/") : testLink
 }
 
 // Обратная подстановка: видимые значения текущего кандидата → плейсхолдеры,
@@ -135,6 +157,11 @@ export function HhBroadcastDialog({
   const [vacancyTitle, setVacancyTitle] = useState("")
   const [vacancyHhUrl, setVacancyHhUrl] = useState("")
   const [scheduleInviteText, setScheduleInviteText] = useState("")
+  // «др. вакансия» (Юрий 03.07): список активных вакансий компании с hh-ссылкой
+  // (кроме текущей) + выбранная — ТОЛЬКО в state, НЕ в localStorage (выбор
+  // одноразовый, под конкретную рассылку).
+  const [otherVacancies, setOtherVacancies] = useState<OtherVacancy[]>([])
+  const [selectedOtherVacancyId, setSelectedOtherVacancyId] = useState<string>("")
   const [savingTpl, setSavingTpl] = useState(false)
   const [savedTpl, setSavedTpl] = useState(false)
   // Менеджер именованных шаблонов рассылки.
@@ -143,23 +170,36 @@ export function HhBroadcastDialog({
   const [tplName, setTplName] = useState("")
   const [tplToast, setTplToast] = useState<string | null>(null) // короткое подтверждение под кнопками
   const tplToastRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Тип ссылки, прикреплённой кандидату (тест/демо) — per кандидат.
+  // Тип ссылки, прикреплённой кандидату (тест/демо-1/демо-2/...) — per кандидат.
   const [linkKindById, setLinkKindById] = useState<Record<string, LinkKind>>({})
+  // Вид интервью (Звонок/Онлайн/В офис) — per кандидат, дефолт 'phone'.
+  const [interviewModeById, setInterviewModeById] = useState<Record<string, InterviewMode>>({})
   const [markingAll, setMarkingAll] = useState(false)
   // Последний выбор (Юрий 03.07): тип ссылки — глобально, шаблон — per-вакансия.
   // Применяется авто к каждому новому кандидату; хранится в localStorage,
-  // чтобы «в следующий раз захожу — вижу тот же выбор».
+  // чтобы «в следующий раз захожу — вижу тот же выбор». Для «Интервью» вид
+  // хранится склеенным в том же ключе как "interview:phone" — один слот на
+  // «что выбрано в прошлый раз», разбирается в useEffect ниже (split(":")).
   const lastKindRef = useRef<LinkKind | null>(null)
+  const lastInterviewModeRef = useRef<InterviewMode | null>(null)
   const lastTplRef = useRef<string | null>(null)
   // Кого HR редактировал вручную — их авто-подстановка последнего выбора не трогает.
   const editedIdsRef = useRef<Set<string>>(new Set())
+  const LINK_KINDS: readonly LinkKind[] = ["test", "demo1", "demo2", "vacancy", "other_vacancy", "interview"]
   useEffect(() => {
     try {
-      const k = window.localStorage.getItem("hhbc:lastKind")
-      if (k === "test" || k === "demo" || k === "vacancy" || k === "interview") lastKindRef.current = k
+      const raw = window.localStorage.getItem("hhbc:lastKind")
+      if (raw) {
+        const [kindPart, modePart] = raw.split(":")
+        if ((LINK_KINDS as string[]).includes(kindPart)) lastKindRef.current = kindPart as LinkKind
+        if (modePart === "phone" || modePart === "zoom" || modePart === "office") {
+          lastInterviewModeRef.current = modePart
+        }
+      }
       const t = window.localStorage.getItem(`hhbc:lastTpl:${vacancyId}`)
       if (t) lastTplRef.current = t
     } catch { /* localStorage недоступен */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vacancyId])
   // Темп рассылки: интервал между открытиями чатов (анти-бан) + авто-открытие.
   const [intervalSec, setIntervalSec] = useState(20)
@@ -177,9 +217,12 @@ export function HhBroadcastDialog({
     setSentIds(new Set())
     setSkippedIds(new Set())
     setLinkKindById({})
+    setInterviewModeById({})
     setCopied(false)
     setSelectedTplId("")
     setTplName("")
+    setOtherVacancies([])
+    setSelectedOtherVacancyId("")
     editedIdsRef.current = new Set()
     try {
       const res = await fetch(
@@ -194,11 +237,17 @@ export function HhBroadcastDialog({
         const err = (await res.json().catch(() => ({}))) as { error?: string }
         throw new Error(err.error || "Ошибка загрузки данных")
       }
-      const data = (await res.json()) as { items: HhBroadcastItem[]; vacancyTitle?: string; vacancyHhUrl?: string }
+      const data = (await res.json()) as {
+        items: HhBroadcastItem[]
+        vacancyTitle?: string
+        vacancyHhUrl?: string
+        otherVacancies?: OtherVacancy[]
+      }
       setItems(data.items)
       setVacancyTitle(data.vacancyTitle ?? "")
       setVacancyHhUrl((data as { vacancyHhUrl?: string }).vacancyHhUrl ?? "")
       setScheduleInviteText((data as { scheduleInviteText?: string }).scheduleInviteText ?? "")
+      setOtherVacancies(data.otherVacancies ?? [])
       // Предзаполняем тексты сообщений
       const msgs: Record<string, string> = {}
       for (const item of data.items) msgs[item.id] = item.personalMessage
@@ -265,7 +314,13 @@ export function HhBroadcastDialog({
   const current = items[currentIdx] ?? null
   const currentMessage = current ? (messages[current.id] ?? current.personalMessage) : ""
   const currentKind: LinkKind = current ? (linkKindById[current.id] ?? "test") : "test"
-  const currentLink = current ? linkForKind(current.testLink, currentKind, vacancyHhUrl) : ""
+  const currentInterviewMode: InterviewMode = current
+    ? (interviewModeById[current.id] ?? lastInterviewModeRef.current ?? "phone")
+    : "phone"
+  const selectedOtherVacancy = otherVacancies.find((v) => v.id === selectedOtherVacancyId) ?? null
+  const currentLink = current
+    ? linkForKind(current.testLink, currentKind, vacancyHhUrl, selectedOtherVacancy?.hhVacancyId)
+    : ""
 
   // Авто-применить последний выбор (тип ссылки + шаблон) к новому кандидату —
   // если пользователь ещё НЕ трогал этого кандидата вручную (Юрий 03.07:
@@ -275,16 +330,24 @@ export function HhBroadcastDialog({
     // messages предзаполнены дефолтом в loadData — потому проверяем НЕ их, а
     // явную ручную правку (editedIdsRef) и явный выбор типа ссылки.
     if (editedIdsRef.current.has(current.id) || linkKindById[current.id] !== undefined) return
-    const kind = lastKindRef.current
+    // «Демо 2» нельзя авто-применить кандидату, которому она ещё не открыта —
+    // тогда откатываемся на «Демо 1», чтобы не выставить disabled-состояние молча.
+    let kind = lastKindRef.current
+    if (kind === "demo2" && !current.hasSecondDemo) kind = "demo1"
     const tpl = lastTplRef.current ? templates.find((t) => t.id === lastTplRef.current) : null
     if (!kind && !tpl) return
     const effKind: LinkKind = kind ?? "test"
-    if (kind) setLinkKindById((prev) => ({ ...prev, [current.id]: kind }))
+    if (kind) {
+      setLinkKindById((prev) => ({ ...prev, [current.id]: kind as LinkKind }))
+      if (kind === "interview" && lastInterviewModeRef.current) {
+        setInterviewModeById((prev) => ({ ...prev, [current.id]: lastInterviewModeRef.current as InterviewMode }))
+      }
+    }
     if (tpl) {
       setSelectedTplId(tpl.id)
       setTplName(tpl.name)
       const filled = fromTemplateText(tpl.text, {
-        link: linkForKind(current.testLink, effKind, vacancyHhUrl),
+        link: linkForKind(current.testLink, effKind, vacancyHhUrl, selectedOtherVacancy?.hhVacancyId),
         vacancy: vacancyTitle,
         firstName: current.firstName,
       })
@@ -309,26 +372,30 @@ export function HhBroadcastDialog({
     }, 1000)
   }, [intervalSec])
 
-  // Отметить кандидата «тест отправлен» (стадия → test_task_sent, колонка «Тест» = «отп.»).
-  // Только если прикреплён ТЕСТ (для демо-ссылки стадию теста не двигаем).
-  const markCandidateSent = useCallback((id: string, kind: LinkKind) => {
-    if (kind !== "test") return
+  // Отметить кандидата «тест отправлен» (колонка «Тест» = «отп.», стадию НЕ двигаем)
+  // и/или сохранить вид интервью. Юрий 03.07: для kind==='test' шлём маркер теста;
+  // для kind==='interview' шлём interviewMode (маркер теста НЕ ставим — это не тест).
+  const markCandidateSent = useCallback((id: string, kind: LinkKind, interviewMode?: InterviewMode) => {
+    if (kind !== "test" && kind !== "interview") return
+    const payload: { candidateIds: string[]; interviewMode?: InterviewMode } = { candidateIds: [id] }
+    if (kind === "interview" && interviewMode) payload.interviewMode = interviewMode
     void fetch(`/api/modules/hr/vacancies/${vacancyId}/hh-broadcast-mark-sent`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ candidateIds: [id] }),
+      body: JSON.stringify(payload),
     })
       .then((r) => { if (r.ok) onSent?.() }) // обновляем список ПОСЛЕ записи маркера (без гонки)
       .catch(() => {})
   }, [vacancyId, onSent])
 
-  // Сменить тип прикреплённой ссылки (тест/демо) и заменить её прямо в тексте.
+  // Сменить тип прикреплённой ссылки (тест/демо-1/демо-2/вакансия/др.вакансия/
+  // интервью) и заменить её прямо в тексте.
   const changeLinkKind = useCallback((newKind: LinkKind) => {
     if (!current) return
     const oldKind = linkKindById[current.id] ?? "test"
     if (oldKind === newKind) return
-    const oldLink = linkForKind(current.testLink, oldKind, vacancyHhUrl)
-    const newLink = linkForKind(current.testLink, newKind, vacancyHhUrl)
+    const oldLink = linkForKind(current.testLink, oldKind, vacancyHhUrl, selectedOtherVacancy?.hhVacancyId)
+    const newLink = linkForKind(current.testLink, newKind, vacancyHhUrl, selectedOtherVacancy?.hhVacancyId)
     // «Интервью»: если HR ещё не правил текст этого кандидата — подставляем
     // целиком шаблон приглашения на интервью (настройка вакансии
     // scheduleInviteText / платформенный дефолт), с именем и ссылкой.
@@ -347,8 +414,22 @@ export function HhBroadcastDialog({
     }
     setLinkKindById((prev) => ({ ...prev, [current.id]: newKind }))
     lastKindRef.current = newKind
-    try { window.localStorage.setItem("hhbc:lastKind", newKind) } catch { /* noop */ }
-  }, [current, linkKindById, scheduleInviteText, vacancyTitle])
+    try {
+      const mode = newKind === "interview" ? (interviewModeById[current.id] ?? lastInterviewModeRef.current ?? "phone") : null
+      window.localStorage.setItem("hhbc:lastKind", mode ? `${newKind}:${mode}` : newKind)
+    } catch { /* noop */ }
+  }, [current, linkKindById, scheduleInviteText, vacancyTitle, selectedOtherVacancy, interviewModeById])
+
+  // Сменить вид интервью (Звонок/Онлайн/В офис) — ссылка та же, меняется только
+  // подстановка вида для кандидата и запоминание последнего выбора.
+  const changeInterviewMode = useCallback((mode: InterviewMode) => {
+    if (!current) return
+    setInterviewModeById((prev) => ({ ...prev, [current.id]: mode }))
+    lastInterviewModeRef.current = mode
+    if ((linkKindById[current.id] ?? "test") === "interview") {
+      try { window.localStorage.setItem("hhbc:lastKind", `interview:${mode}`) } catch { /* noop */ }
+    }
+  }, [current, linkKindById])
 
   const copyAndOpen = useCallback(async () => {
     if (!current) return
@@ -362,12 +443,13 @@ export function HhBroadcastDialog({
       // clipboard может быть недоступен в некоторых браузерах — тихо игнорируем
     }
     if (url) window.open(url, "_blank", "noopener,noreferrer")
-    // Скопировал = отправляет вручную → сразу отмечаем «тест отправлен».
-    markCandidateSent(current.id, linkKindById[current.id] ?? "test")
+    // Скопировал = отправляет вручную → сразу отмечаем «тест отправлен» / сохраняем вид интервью.
+    const kind = linkKindById[current.id] ?? "test"
+    markCandidateSent(current.id, kind, kind === "interview" ? currentInterviewMode : undefined)
     // Одиночный режим: закрываем окно сразу — HR возвращается к списку и
     // кликает иконку чата у следующего кандидата.
     if (isSingle) onOpenChange(false)
-  }, [current, messages, markCandidateSent, linkKindById, isSingle, onOpenChange])
+  }, [current, messages, markCandidateSent, linkKindById, currentInterviewMode, isSingle, onOpenChange])
 
   // Авто-открытие: когда замок дошёл до 0 и включён авто-режим — открыть чат.
   // window.open после паузы может быть заблокирован попап-блокером браузера —
@@ -385,12 +467,13 @@ export function HhBroadcastDialog({
     if (!current) return
     const sentId = current.id
     setSentIds((prev) => new Set([...prev, sentId]))
-    markCandidateSent(sentId, linkKindById[sentId] ?? "test")
+    const kind = linkKindById[sentId] ?? "test"
+    markCandidateSent(sentId, kind, kind === "interview" ? currentInterviewMode : undefined)
     const next = currentIdx + 1
     if (next >= total) { setPhase("done"); return }
     setCurrentIdx(next)
     startCooldown() // следующий чат откроется не раньше интервала
-  }, [current, currentIdx, total, startCooldown, markCandidateSent, linkKindById])
+  }, [current, currentIdx, total, startCooldown, markCandidateSent, linkKindById, currentInterviewMode])
 
   const skipCurrent = useCallback(() => {
     if (!current) return
@@ -436,11 +519,11 @@ export function HhBroadcastDialog({
     if (!current) return ""
     const text = messages[current.id] ?? current.personalMessage
     return toTemplateText(text, {
-      link: linkForKind(current.testLink, linkKindById[current.id] ?? "test", vacancyHhUrl),
+      link: linkForKind(current.testLink, linkKindById[current.id] ?? "test", vacancyHhUrl, selectedOtherVacancy?.hhVacancyId),
       vacancy: vacancyTitle,
       firstName: current.firstName,
     })
-  }, [current, messages, vacancyTitle, linkKindById])
+  }, [current, messages, vacancyTitle, linkKindById, vacancyHhUrl, selectedOtherVacancy])
 
   // Выбор шаблона из списка — подставить его текст (с раскрытыми плейсхолдерами)
   // в textarea и имя в поле названия. Пустое значение = «— Новый —».
@@ -457,12 +540,12 @@ export function HhBroadcastDialog({
     if (!tpl || !current) return
     setTplName(tpl.name)
     const filled = fromTemplateText(tpl.text, {
-      link: linkForKind(current.testLink, linkKindById[current.id] ?? "test", vacancyHhUrl),
+      link: linkForKind(current.testLink, linkKindById[current.id] ?? "test", vacancyHhUrl, selectedOtherVacancy?.hhVacancyId),
       vacancy: vacancyTitle,
       firstName: current.firstName,
     })
     setMessages((prev) => ({ ...prev, [current.id]: filled }))
-  }, [templates, current, vacancyTitle, linkKindById, vacancyId])
+  }, [templates, current, vacancyTitle, linkKindById, vacancyId, vacancyHhUrl, selectedOtherVacancy])
 
   // POST к менеджеру шаблонов; возвращает обновлённый список или null при ошибке.
   const postTemplate = useCallback(async (
@@ -655,44 +738,99 @@ export function HhBroadcastDialog({
                 rows={6}
                 className="text-sm resize-none"
               />
-              {/* Что прикреплено: тип ссылки (тест/демо) можно переключить — она
-                  заменится прямо в тексте. HR видит, что именно уйдёт кандидату. */}
-              {(current.testLink || vacancyHhUrl) ? (
+              {/* Что прикреплено: тип ссылки можно переключить — она заменится
+                  прямо в тексте. HR видит, что именно уйдёт кандидату. Ряд может
+                  переноситься на 2 строки — это ок (Юрий 03.07). */}
+              {(current.testLink || vacancyHhUrl || otherVacancies.length > 0) ? (
                 <div className="space-y-1">
                   <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
                     <Paperclip className="size-3 shrink-0" />
-                    <span className="shrink-0">Ссылка кандидату:</span>
-                    <div className="inline-flex items-center gap-0.5">
+                    <span className="shrink-0">Ссылка:</span>
+                    <div className="inline-flex flex-wrap items-center gap-0.5">
                       {([
-                        ...(current.testLink ? [["test", "Тест"], ["demo", "Демо"]] as const : []),
+                        ...(current.testLink ? [["demo1", "Демо 1"]] as const : []),
+                        ...(current.testLink ? [["demo2", "Демо 2"]] as const : []),
+                        ...(current.testLink ? [["test", "Тест"]] as const : []),
                         ...(vacancyHhUrl ? [["vacancy", "Вакансия"]] as const : []),
+                        ...(otherVacancies.length > 0 ? [["other_vacancy", "др. вакансия"]] as const : []),
                         ...(current.testLink ? [["interview", "Интервью"]] as const : []),
-                      ]).map(([k, label]) => (
-                        <button
-                          key={k}
-                          type="button"
-                          onClick={() => changeLinkKind(k)}
-                          className={
-                            "rounded px-1.5 py-0.5 transition-colors " +
-                            (currentKind === k
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-background hover:bg-muted text-muted-foreground")
-                          }
-                        >{label}</button>
-                      ))}
+                      ]).map(([k, label]) => {
+                        const disabled = k === "demo2" && !current.hasSecondDemo
+                        return (
+                          <button
+                            key={k}
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => !disabled && changeLinkKind(k)}
+                            title={disabled ? "2-я часть ещё не открыта кандидату" : undefined}
+                            className={
+                              "rounded px-1.5 py-0.5 transition-colors " +
+                              (disabled
+                                ? "opacity-40 cursor-not-allowed bg-background text-muted-foreground"
+                                : currentKind === k
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-background hover:bg-muted text-muted-foreground")
+                            }
+                          >{label}</button>
+                        )
+                      })}
                     </div>
+                    {/* Интервью: вид сегмент-переключателем сразу за чипом, когда выбран. */}
+                    {currentKind === "interview" && (
+                      <div className="inline-flex items-center gap-0.5 pl-1 ml-1 border-l">
+                        {([
+                          ["phone", "Звонок"],
+                          ["zoom", "Онлайн"],
+                          ["office", "В офис"],
+                        ] as const).map(([m, label]) => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => changeInterviewMode(m)}
+                            className={
+                              "rounded px-1.5 py-0.5 transition-colors " +
+                              (currentInterviewMode === m
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-background hover:bg-muted text-muted-foreground")
+                            }
+                          >{label}</button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <p className="font-mono text-[11px] text-foreground break-all" title={currentLink}>
-                    {currentLink}
-                  </p>
-                  {/* Подсказка: демо/тест — персональная ссылка авто-генерится;
-                      «Вакансия» — общая ссылка hh (Юрий 03.07). */}
+                  {/* др. вакансия: выбор конкретной вакансии из активных компании. */}
+                  {currentKind === "other_vacancy" && (
+                    <Select value={selectedOtherVacancyId} onValueChange={setSelectedOtherVacancyId}>
+                      <SelectTrigger className="h-7 max-w-xs text-xs">
+                        <SelectValue placeholder="Выберите вакансию" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {otherVacancies.map((v) => (
+                          <SelectItem key={v.id} value={v.id} className="text-xs">
+                            {v.title}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {currentLink ? (
+                    <p className="font-mono text-[11px] text-foreground break-all" title={currentLink}>
+                      {currentLink}
+                    </p>
+                  ) : currentKind === "other_vacancy" ? (
+                    <p className="text-[11px] text-muted-foreground">Выберите вакансию выше.</p>
+                  ) : null}
+                  {/* Подсказка под ссылкой — зависит от типа (Юрий 03.07). */}
                   <p className="text-[10px] text-muted-foreground leading-snug">
                     {currentKind === "vacancy"
                       ? "Это общая ссылка на вакансию hh — одинаковая для всех кандидатов."
-                      : currentKind === "interview"
-                        ? "Персональная ссылка на выбор времени интервью — генерируется автоматически."
-                        : "Для «Тест»/«Демо» персональная ссылка кандидата генерируется автоматически."}
+                      : currentKind === "other_vacancy"
+                        ? "Общая ссылка на выбранную вакансию hh — одинаковая для всех кандидатов."
+                        : currentKind === "interview"
+                          ? "Персональная ссылка на выбор времени интервью — генерируется автоматически."
+                          : currentKind === "demo2"
+                            ? "Кандидат увидит 2-ю часть («Путь менеджера») по своей демо-ссылке."
+                            : "Для «Тест»/«Демо» персональная ссылка кандидата генерируется автоматически."}
                   </p>
                 </div>
               ) : (

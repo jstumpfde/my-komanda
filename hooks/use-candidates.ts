@@ -292,12 +292,20 @@ export function useCandidates(
 
   // ── Stage mutation ────────────────────────────────────────────────────────
 
-  const updateStage = useCallback(async (candidateId: string, stage: string): Promise<boolean> => {
+  const updateStage = useCallback(async (
+    candidateId: string,
+    stage: string,
+    opts?: { messageOverride?: string; interviewMode?: "phone" | "zoom" | "office" },
+  ): Promise<boolean> => {
     try {
       const res = await fetch(`/api/modules/hr/candidates/${candidateId}/stage`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage }),
+        body: JSON.stringify({
+          stage,
+          ...(opts?.messageOverride ? { messageOverride: opts.messageOverride } : {}),
+          ...(opts?.interviewMode ? { interviewMode: opts.interviewMode } : {}),
+        }),
       })
       if (!res.ok) return false
       // Optimistic update
@@ -581,12 +589,20 @@ export function usePaginatedCandidates({
   }, [writeUrl])
 
   // ── Mutations (повторяют useCandidates — но обновляют локальный state) ────
-  const updateStage = useCallback(async (candidateId: string, stage: string): Promise<boolean> => {
+  const updateStage = useCallback(async (
+    candidateId: string,
+    stage: string,
+    opts?: { messageOverride?: string; interviewMode?: "phone" | "zoom" | "office" },
+  ): Promise<boolean> => {
     try {
       const res = await fetch(`/api/modules/hr/candidates/${candidateId}/stage`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage }),
+        body: JSON.stringify({
+          stage,
+          ...(opts?.messageOverride ? { messageOverride: opts.messageOverride } : {}),
+          ...(opts?.interviewMode ? { interviewMode: opts.interviewMode } : {}),
+        }),
       })
       if (!res.ok) return false
       setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, stage } : c))

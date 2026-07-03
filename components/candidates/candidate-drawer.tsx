@@ -827,6 +827,12 @@ export interface CandidateDrawerProps {
    * (обычное модальное поведение — как было).
    */
   modal?: boolean
+  /**
+   * Вид интервью по умолчанию для диалога «Пригласить на интервью» —
+   * достаётся из стадии action="interview" воронки v2 текущей вакансии
+   * (funnelV2.stages[].interviewMode). Если не задан — используется 'zoom'.
+   */
+  defaultInterviewMode?: "phone" | "zoom" | "office" | null
 }
 
 // Ищем URL видео-визитки в anketaAnswers. Структура такая же, как
@@ -863,6 +869,7 @@ export function CandidateDrawer({
   initialCandidate,
   initialTab,
   modal = true,
+  defaultInterviewMode,
 }: CandidateDrawerProps) {
   const { user } = useAuth()
   const [sheetExpanded, setSheetExpanded] = useState(false)
@@ -881,6 +888,9 @@ export function CandidateDrawer({
   // превью. mode 'link' — ссылка на самозапись (/schedule); mode 'slots' —
   // HR выбирает 2-3 конкретных времени из окон вакансии.
   const [inviteMode, setInviteMode] = useState<"link" | "slots">("link")
+  // Вид встречи (Звонок/Онлайн/В офис) — передаётся в PUT stage interviewMode.
+  // Дефолт — вид из воронки (defaultInterviewMode), иначе 'zoom'.
+  const [inviteMeetMode, setInviteMeetMode] = useState<"phone" | "zoom" | "office">(defaultInterviewMode ?? "zoom")
   const [inviteText, setInviteText] = useState("")            // разовый текст для этого кандидата
   const [inviteTemplate, setInviteTemplate] = useState("")    // текущий шаблон вакансии (для сравнения/сейва)
   const [inviteDefaultText, setInviteDefaultText] = useState("")
@@ -1438,18 +1448,22 @@ export function CandidateDrawer({
     } catch { toast.error("Не удалось запланировать интервью") } finally { setScheduling(false) }
   }
 
-  const handleStageChange = async (newStage: string, messageOverride?: string) => {
+  const handleStageChange = async (
+    newStage: string,
+    messageOverride?: string,
+    interviewMode?: "phone" | "zoom" | "office",
+  ) => {
     if (!candidate || changingStage) return
     setChangingStage(newStage)
     try {
       const res = await fetch(`/api/modules/hr/candidates/${candidate.id}/stage`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          messageOverride && messageOverride.trim().length > 0
-            ? { stage: newStage, messageOverride: messageOverride.trim() }
-            : { stage: newStage },
-        ),
+        body: JSON.stringify({
+          stage: newStage,
+          ...(messageOverride && messageOverride.trim().length > 0 ? { messageOverride: messageOverride.trim() } : {}),
+          ...(interviewMode ? { interviewMode } : {}),
+        }),
       })
       if (!res.ok) throw new Error()
       setCandidate((prev) => prev ? { ...prev, stage: newStage } : prev)
@@ -1472,6 +1486,7 @@ export function CandidateDrawer({
   const openInviteDialog = useCallback(async () => {
     if (!candidate) return
     setInviteMode("link")
+    setInviteMeetMode(defaultInterviewMode ?? "zoom")
     setInviteSelectedSlots([])
     setInviteText("")
     setInviteDays([])
@@ -1558,8 +1573,8 @@ export function CandidateDrawer({
     // Режим А: если {{schedule_link}} убрали из текста — кандидат не получит
     // ссылку. Мягко предупреждаем, но не блокируем (HR мог намеренно).
     setConfirmInterviewOpen(false)
-    await handleStageChange("interview", buildInviteMessage())
-  }, [candidate, inviteMode, inviteSelectedSlots, buildInviteMessage, handleStageChange])
+    await handleStageChange("interview", buildInviteMessage(), inviteMeetMode)
+  }, [candidate, inviteMode, inviteSelectedSlots, buildInviteMessage, handleStageChange, inviteMeetMode])
 
   // #31: сохранить текущий текст в шаблон вакансии (vacancies.schedule_invite_text).
   const saveInviteTemplate = useCallback(async (text: string) => {
@@ -3198,6 +3213,34 @@ export function CandidateDrawer({
               <Loader2 className="w-5 h-5 animate-spin mr-2" /> Загрузка…
             </div>
           ) : (
+            <div className="space-y-3">
+              {/* Вид встречи — передаётся в PUT stage interviewMode, кандидат
+                  увидит его на странице самозаписи /schedule. */}
+              <div className="space-y-1.5">
+                <Label className="text-xs">Вид встречи</Label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {([
+                    { v: "phone", label: "Звонок" },
+                    { v: "zoom", label: "Онлайн" },
+                    { v: "office", label: "В офис" },
+                  ] as const).map((m) => (
+                    <button
+                      key={m.v}
+                      type="button"
+                      onClick={() => setInviteMeetMode(m.v)}
+                      className={cn(
+                        "text-sm px-2.5 py-1.5 rounded-md border transition-colors",
+                        inviteMeetMode === m.v
+                          ? "bg-purple-600 border-purple-600 text-white font-medium"
+                          : "border-border text-muted-foreground hover:bg-muted/50",
+                      )}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
             <Tabs value={inviteMode} onValueChange={(v) => setInviteMode(v as "link" | "slots")} className="w-full">
               <TabsList className="grid grid-cols-2 w-full">
                 <TabsTrigger value="link">Ссылка на самозапись</TabsTrigger>
@@ -3291,6 +3334,7 @@ export function CandidateDrawer({
                 </div>
               </TabsContent>
             </Tabs>
+            </div>
           )}
 
           <DialogFooter>
