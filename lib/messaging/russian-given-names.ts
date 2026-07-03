@@ -59,3 +59,26 @@ export function isKnownGivenName(token: string | null | undefined): boolean {
   if (!first) return false
   return NAME_SET.has(normalizeNameToken(first))
 }
+
+// Фамильные суффиксы (регистронезависимо, после normalizeNameToken). Используется
+// майнингом learned_given_names (lib/db/schema.ts) — токены, похожие на фамилию,
+// НЕ обучаются автоматически, даже если встретились у ≥3 разных кандидатов.
+// Порядок: длинные/специфичные суффиксы раньше коротких, чтобы не давать ложных
+// срабатываний («-ин»/«-ын» короче «-ский» и т.п., но здесь порядок не влияет на
+// корректность — просто читаемость).
+const SURNAME_SUFFIXES = [
+  "ский", "ская", "цкий", "цкая",
+  "ова", "ев", "ева", "ёв", "ёва", "ов",
+  "ина", "ын", "ына", "ин",
+  "енко", "чук", "юк", "ук",
+  "ян", "швили", "дзе", "оглы",
+]
+
+/** Похоже ли слово на фамилию по типичному русскому/СНГ суффиксу? */
+export function looksLikeSurname(token: string | null | undefined): boolean {
+  if (!token) return false
+  const first = token.trim().split(/\s+/)[0] ?? ""
+  if (!first) return false
+  const norm = normalizeNameToken(first)
+  return SURNAME_SUFFIXES.some((suf) => norm.endsWith(suf))
+}

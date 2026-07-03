@@ -16,7 +16,8 @@
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, hhResponses } from "@/lib/db/schema"
-import { isKnownGivenName } from "@/lib/messaging/russian-given-names"
+import { isKnownGivenName, normalizeNameToken } from "@/lib/messaging/russian-given-names"
+import { getLearnedNamesSet } from "@/lib/messaging/learned-given-names"
 
 export interface CandidateFirstName {
   firstName: string  // имя для подстановки {{name}}
@@ -87,11 +88,20 @@ export interface GivenNameMeta {
 
 // Мета-резолвер: имя + ОТКУДА взято + уверенность. Единственный источник правды
 // для определения имени; pickGivenName — тонкая обёртка над ним.
+//
+// `learned` — НЕОБЯЗАТЕЛЬНОЕ множество нормализованных (lower-case) имён из
+// самообучающегося платформенного справочника (lib/messaging/learned-given-names.ts
+// → getLearnedNamesSet). Передаётся СНАРУЖИ, чтобы резолвер оставался чистым (без
+// обращения к БД) — вызывающий код с async-контекстом подгружает Set сам.
+// Токен из hh_first_raw, найденный в learned, ведёт себя как опознанный
+// словарём (source="hh_first", confident=true) — предупреждение «⚠ имя не из
+// справочника» больше не показывается.
 export function resolveGivenNameMeta(opts: {
   override?: string | null
   hhFirst?: string | null
   hhLast?:  string | null
   fullName?: string | null
+  learned?: Set<string>
 }): GivenNameMeta {
   const override = (opts.override ?? "").trim()
   if (override && isRealName(override)) {
@@ -101,6 +111,7 @@ export function resolveGivenNameMeta(opts: {
   const hhFirst  = (opts.hhFirst ?? "").trim()
   const hhLast   = (opts.hhLast ?? "").trim()
   const fullName = (opts.fullName ?? "").trim()
+  const learned  = opts.learned
   const fullWords = fullName.split(/\s+/).filter(Boolean)
   const w1f = word1(hhFirst)
   const w1l = word1(hhLast)
@@ -118,6 +129,11 @@ export function resolveGivenNameMeta(opts: {
       return { firstName: w, source: "fullname", confident: true }
     }
   }
+  if (w1f && learned && learned.has(normalizeNameToken(w1f)) && isRealName(w1f)) {
+    // Выученное платформой имя (встретилось у ≥3 разных кандидатов, не похоже
+    // на фамилию) — трактуем как опознанное словарём.
+    return { firstName: w1f, source: "hh_first", confident: true }
+  }
   if (hhFirst && isRealName(hhFirst)) {
     // Имя не из словаря (редкое/нерусское) — берём hh first_name как есть, но
     // НЕ уверены: вдруг это фамилия. Такие строки HR стоит проверить.
@@ -132,6 +148,7 @@ export function pickGivenName(opts: {
   hhFirst?: string | null
   hhLast?:  string | null
   fullName?: string | null
+  learned?: Set<string>
 }): string {
   return resolveGivenNameMeta(opts).firstName
 }
@@ -172,8 +189,12 @@ export async function getCandidateFirstName(candidateId: string): Promise<Candid
     console.warn("[candidate-name] hh lookup failed:", err instanceof Error ? err.message : err)
   }
 
+  // 2b. Самообучающийся платформенный справочник (see lib/messaging/learned-given-names.ts).
+  //     async-контекст уже есть здесь — подгружаем Set, fail-safe внутри модуля.
+  const learned = await getLearnedNamesSet()
+
   // 3. Единый чистый резолвер (override HR → словарь имён, устойчив к перепутанным полям hh).
-  const firstName = pickGivenName({ override, hhFirst: hhFirstName, hhLast: hhLastName, fullName })
+  const firstName = pickGivenName({ override, hhFirst: hhFirstName, hhLast: hhLastName, fullName, learned })
   // Ручная коррекция или опознанное имя — это НЕ fallback.
   const recognized =
     (!!override && isRealName(override)) ||

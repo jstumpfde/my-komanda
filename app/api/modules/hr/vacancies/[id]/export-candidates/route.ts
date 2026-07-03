@@ -7,6 +7,7 @@ import { candidates, vacancies, demos, hhResponses } from "@/lib/db/schema"
 import { requireCompany, apiError } from "@/lib/api-helpers"
 import { deriveCandidateName } from "@/lib/candidate-name"
 import { pickGivenName } from "@/lib/messaging/candidate-name"
+import { getLearnedNamesSet } from "@/lib/messaging/learned-given-names"
 import { logAudit, ipFromRequest } from "@/lib/audit/log"
 import { DEFAULT_TEST_INVITE_TEXT } from "@/lib/messaging/test-invite"
 
@@ -270,6 +271,7 @@ async function buildXlsx(
   fields: string[],
 ): Promise<{ response: Response; count: number }> {
   const rows = await db.select().from(candidates).where(where).orderBy(desc(candidates.createdAt))
+  const learned = await getLearnedNamesSet()
 
   // Шаблон приглашения на тест (для колонки «Персональное сообщение»): берём
   // testInviteMessage из боевого теста вакансии, иначе — дефолт.
@@ -375,7 +377,7 @@ async function buildXlsx(
     const hhFirst = (rawName?.resume?.first_name ?? rawName?.first_name ?? "").trim()
     const hhLast  = (rawName?.resume?.last_name ?? "").trim()
     const fullNm  = deriveCandidateName(c.name, c.anketaAnswers, hh?.name ?? null) || ""
-    const firstName = pickGivenName({ hhFirst, hhLast, fullName: fullNm })
+    const firstName = pickGivenName({ hhFirst, hhLast, fullName: fullNm, learned })
     const personalMessage = inviteTpl
       .replaceAll("{{name}}", firstName)
       .replaceAll("{{vacancy}}", vacTitle || "")

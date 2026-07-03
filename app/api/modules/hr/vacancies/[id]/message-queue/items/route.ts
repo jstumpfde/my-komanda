@@ -5,6 +5,7 @@ import { vacancies, followUpMessages, followUpCampaigns, candidates, hhResponses
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { renderTemplate } from "@/lib/template-renderer"
 import { resolveGivenNameMeta } from "@/lib/messaging/candidate-name"
+import { getLearnedNamesSet } from "@/lib/messaging/learned-given-names"
 import { canSendNow, adjustToWorkingWindow, type VacancySchedule } from "@/lib/schedule/can-send-now"
 
 // Ревизия очереди исходящих: журнал касаний с превью текста (имя уже подставлено),
@@ -155,6 +156,7 @@ export async function GET(
       hhMap.set(h.candidateId, { first, last })
     }
 
+    const learned = await getLearnedNamesSet()
     let needsCheck = 0
     const items = msgs.map((m) => {
       const cand = candMap.get(m.candidateId)
@@ -164,6 +166,7 @@ export async function GET(
         hhFirst:  hh?.first,
         hhLast:   hh?.last,
         fullName: cand?.name,
+        learned,
       })
       const isPending = m.status === "pending" || m.status === "sending"
       // «Проверить» имеет смысл только для ещё не ушедших — правка override

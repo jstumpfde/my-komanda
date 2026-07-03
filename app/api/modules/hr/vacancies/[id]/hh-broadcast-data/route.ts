@@ -5,6 +5,7 @@ import { candidates, vacancies, demos, hhResponses } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { deriveCandidateName } from "@/lib/candidate-name"
 import { pickGivenName } from "@/lib/messaging/candidate-name"
+import { getLearnedNamesSet } from "@/lib/messaging/learned-given-names"
 import { DEFAULT_TEST_INVITE_TEXT } from "@/lib/messaging/test-invite"
 import { nanoid } from "nanoid"
 
@@ -117,11 +118,12 @@ export async function POST(
       })
     }
 
+    const learned = await getLearnedNamesSet()
     const result = rows.map((c) => {
       const hh = hhByCandidate.get(c.id)
       const fullName = deriveCandidateName(c.name, c.anketaAnswers, hh?.name ?? null)
       // Имя через единый резолвер: словарь имён, устойчив к перепутанным полям hh.
-      const firstName = pickGivenName({ hhFirst: hh?.hhFirst, hhLast: hh?.hhLast, fullName })
+      const firstName = pickGivenName({ hhFirst: hh?.hhFirst, hhLast: hh?.hhLast, fullName, learned })
 
       const testSlug = c.shortId ?? c.token
       const testLink = testSlug ? `https://company24.pro/test/${testSlug}` : ""
