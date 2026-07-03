@@ -127,13 +127,20 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       // Процент слота — доля ВНУТРИ этого дня недели (cnt / dayTotal), а не от
       // общего total: числа крупнее и читаются как «когда в этот день пик».
       const dayTotal = dayCells.reduce((s, c) => s + c.cnt, 0)
-      const slots = dayCells.slice(0, 2).map(c => ({
-        hour: c.hour,
-        range: hourRange(c.hour),
-        cnt: c.cnt,
-        pct: dayTotal > 0 ? Math.round((c.cnt / dayTotal) * 100) : 0,
-      }))
-      return { dow, dayName: DAY_NAMES[dow], slots }
+      // Порог выборки (Юрий 04.07: «Чт 01:00 — 27%» из 4 откликов при 15 за
+      // день — статистический шум). День без минимум 20 откликов и слоты
+      // с < 3 откликами не показываем как «лучшее время».
+      const MIN_DAY_TOTAL = 20
+      const MIN_SLOT_CNT = 3
+      const slots = dayTotal >= MIN_DAY_TOTAL
+        ? dayCells.slice(0, 2).filter(c => c.cnt >= MIN_SLOT_CNT).map(c => ({
+            hour: c.hour,
+            range: hourRange(c.hour),
+            cnt: c.cnt,
+            pct: dayTotal > 0 ? Math.round((c.cnt / dayTotal) * 100) : 0,
+          }))
+        : []
+      return { dow, dayName: DAY_NAMES[dow], slots, dayTotal, lowData: dayTotal < MIN_DAY_TOTAL }
     })
 
     return NextResponse.json({
