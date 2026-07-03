@@ -383,6 +383,53 @@ export async function POST(
               .limit(1)
             advanceToBlockId = cand?.overrideContentBlockId ?? null
           }
+        } else if (inviteResult.reason === "below_threshold") {
+          // Реально НЕ прошёл гейт (объективный балл ниже порога И AI-оценка
+          // ниже порога, а не техническая причина вроде выключенной настройки
+          // или отсутствия кампании) — «предварительный отказ» (Юрий 03.07):
+          // если в Портрете включён failAction=pending_rejection, планируем
+          // отложенный отказ через тот же канон scheduleRejection, что и
+          // остальной отказной конвейер (стоп-факторы, funnel v2). Текст
+          // берём из штатного источника (vacancy.aiProcessSettings.rejectMessage
+          // / company-level дефолт) — scheduleRejection без message оставляет
+          // pendingRejectionMessage=null, и executeRejection→trySyncRejectToHh
+          // сам подставит generic-текст вакансии при исполнении.
+          try {
+            const spec = await getSpec(txResult.vacancyId)
+            const ap = spec?.anketaPassInvite
+            if (ap?.enabled === true && ap.failAction === "pending_rejection") {
+              const [cand] = await db
+                .select({
+                  stage:                   candidates.stage,
+                  pendingRejectionAt:      candidates.pendingRejectionAt,
+                  overrideContentBlockId:  candidates.overrideContentBlockId,
+                })
+                .from(candidates)
+                .where(eq(candidates.id, txResult.candidateId))
+                .limit(1)
+
+              const terminalOrAdvancedStages = new Set([
+                "interview", "decision", "offer", "hired", "rejected", "test_task_sent",
+              ])
+              const alreadyPassedGate = !!cand?.overrideContentBlockId
+
+              if (
+                cand &&
+                !cand.pendingRejectionAt &&
+                !alreadyPassedGate &&
+                !terminalOrAdvancedStages.has(cand.stage ?? "")
+              ) {
+                const { scheduleRejection } = await import("@/lib/rejection/execute")
+                await scheduleRejection({
+                  candidateId:  txResult.candidateId,
+                  reason:       "anketa_gate_failed",
+                  delayMinutes: ap.failRejectDelayMinutes,
+                })
+              }
+            }
+          } catch (err) {
+            console.error("[demo answer] anketa gate fail-rejection failed:", err instanceof Error ? err.message : err)
+          }
         }
       } catch (err) {
         console.error("[demo answer] second-demo-invite failed:", err instanceof Error ? err.message : err)

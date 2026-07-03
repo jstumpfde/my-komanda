@@ -18,7 +18,7 @@ import type { FunnelV2State } from "@/lib/db/schema"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { canSendNow, type VacancySchedule } from "@/lib/schedule/can-send-now"
-import { executeRejection } from "@/lib/rejection/execute"
+import { executeRejection, cancelScheduledRejection } from "@/lib/rejection/execute"
 import { sanitizeRejectionText } from "@/lib/rejection/legal-guard"
 import { trySyncRejectToHh } from "@/lib/hh/sync-stage"
 
@@ -87,6 +87,15 @@ async function run_(_req: NextRequest) {
     const errors: string[] = []
 
     for (const row of due) {
+      // Гейтовый авто-отказ (anketa_gate_failed): если кандидат за время
+      // задержки продвинулся по воронке (HR перевёл на 2-ю часть/интервью/
+      // оффер) — отказ НЕ исполняем, pending снимаем. Иначе ручное решение
+      // HR перечёркивалось бы таймером (03.07). Прочие reason'ы не трогаем.
+      if (row.reason === "anketa_gate_failed" &&
+          ["test_task_sent", "interview", "decision", "offer", "hired"].includes(row.stage ?? "")) {
+        await cancelScheduledRejection(row.candidateId).catch(() => {})
+        continue
+      }
       // Рабочее время вакансии: вне его — пропускаем, отказ ждёт след. прогона.
       const sched = canSendNow(row.vac as VacancySchedule)
       if (!sched.allowed) { deferredOffHours++; continue }

@@ -245,6 +245,22 @@ export const AnketaPassInviteSchema = z.object({
    */
   failScreenTitle: z.string().max(200).default(""),
   failScreenText:  z.string().max(2000).default(""),
+  /**
+   * Что делать с кандидатом, НЕ прошедшим гейт (below_threshold — реально не
+   * набрал порог, а не техническая причина вроде выключенной настройки).
+   * "none" — ничего (текущее поведение, мягкий экран «Спасибо»).
+   * "pending_rejection" — запланировать отложенный отказ через
+   * failRejectDelayMinutes (тот же механизм candidates.pendingRejectionAt,
+   * что и остальной отказной конвейер — cron pending-rejections исполнит).
+   * Дефолт "none": не меняем поведение существующих вакансий.
+   */
+  failAction: z.enum(["none", "pending_rejection"]).default("none"),
+  /**
+   * Задержка (минуты) до авто-исполнения отложенного отказа при failAction=
+   * "pending_rejection". За это время HR может отменить в карточке кандидата.
+   * Дефолт 60 (совпадает с общим rejectionDelayMinutes-паттерном Портрета).
+   */
+  failRejectDelayMinutes: z.number().int().min(1).max(10080).default(60),
 })
 export type AnketaPassInvite = z.infer<typeof AnketaPassInviteSchema>
 

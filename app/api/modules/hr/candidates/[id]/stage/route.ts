@@ -73,6 +73,22 @@ export async function PUT(
 
     const stopAutoProcessing = stage === "rejected"
 
+    // Ручное решение HR отменяет отложенный авто-отказ по гейту анкеты
+    // (reason='anketa_gate_failed'): человек сам решил, куда двигать кандидата —
+    // таймер «предварительного отказа» не должен сработать позже. v2/прочие
+    // pending-отказы не трогаем (у них своя механика).
+    await db.update(candidates)
+      .set({
+        pendingRejectionAt:      null,
+        pendingRejectionReason:  null,
+        pendingRejectionSetAt:   null,
+        pendingRejectionMessage: null,
+      })
+      .where(and(
+        eq(candidates.id, id),
+        eq(candidates.pendingRejectionReason, "anketa_gate_failed"),
+      ))
+
     const [updated] = await db
       .update(candidates)
       .set({

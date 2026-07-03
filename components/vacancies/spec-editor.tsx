@@ -2533,7 +2533,14 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
       {(() => {
         // getSpec отдаёт сырой спек без дефолтов → у старых вакансий поля нет.
         // Fallback, иначе ap.enabled крашит Портрет (инцидент 30.06).
-        const ap = spec.anketaPassInvite ?? { enabled: false, passThreshold: 35, aiEvalThreshold: 55, contentBlockId: null, messageText: "", delaySeconds: 900, transferMode: "both" as const, inlineContinue: true, passScreenTitle: "", passScreenText: "", passScreenButtonLabel: "", failScreenTitle: "", failScreenText: "" }
+        const ap = spec.anketaPassInvite ?? { enabled: false, passThreshold: 35, aiEvalThreshold: 55, contentBlockId: null, messageText: "", delaySeconds: 900, transferMode: "both" as const, inlineContinue: true, passScreenTitle: "", passScreenText: "", passScreenButtonLabel: "", failScreenTitle: "", failScreenText: "", failAction: "none" as const, failRejectDelayMinutes: 60 }
+        // Действие для НЕ прошедших гейт (старые спеки без поля → "none").
+        const failAction: "none" | "pending_rejection" =
+          (ap as { failAction?: "none" | "pending_rejection" }).failAction === "pending_rejection" ? "pending_rejection" : "none"
+        const failRejectDelayMinutes =
+          typeof (ap as { failRejectDelayMinutes?: number }).failRejectDelayMinutes === "number"
+            ? (ap as { failRejectDelayMinutes?: number }).failRejectDelayMinutes as number
+            : 60
         // Порог AI-оценки может отсутствовать у старых спеков — дефолт 55 (как в схеме).
         const aiEvalThreshold = typeof ap.aiEvalThreshold === "number" ? ap.aiEvalThreshold : 55
         // Режим перехода. Обратная совместимость: старые спеки без transferMode →
@@ -2673,6 +2680,42 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                         rows={3} maxLength={2000}
                       />
                     </div>
+                  </div>
+
+                  {/* Предварительный отказ для НЕ прошедших гейт (Юрий 03.07) */}
+                  <div className="space-y-3 border-t pt-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Если не прошёл гейт</Label>
+                      <Select
+                        value={failAction}
+                        onValueChange={v => patch({ anketaPassInvite: { ...ap, failAction: v as "none" | "pending_rejection" } })}
+                      >
+                        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Ничего не делать</SelectItem>
+                          <SelectItem value="pending_rejection">Предварительный отказ (авто-отправка через N минут)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {failAction === "pending_rejection" && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Задержка перед отказом, минут</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={10080}
+                          className="h-9 w-32"
+                          value={failRejectDelayMinutes}
+                          onChange={e => {
+                            const v = Number(e.target.value)
+                            patch({ anketaPassInvite: { ...ap, failRejectDelayMinutes: Number.isFinite(v) && v > 0 ? Math.floor(v) : 60 } })
+                          }}
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                          Отказ уйдёт автоматически через {failRejectDelayMinutes} мин — за это время его можно отменить в карточке кандидата.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
