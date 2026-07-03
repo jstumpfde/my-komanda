@@ -829,7 +829,7 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait, onOpenChatbot }: { 
   if (loading) return <div className="flex items-center justify-center py-16 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Загрузка…</div>
 
   return (
-    <div className="space-y-3 max-w-3xl">
+    <div className="space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">

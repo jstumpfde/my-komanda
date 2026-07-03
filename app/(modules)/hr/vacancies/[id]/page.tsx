@@ -93,6 +93,7 @@ import { OutboundPauseMenuItem } from "@/components/vacancies/outbound-pause-con
 import { parsePipeline, resolveVacancyStageOptions, type CompanyStageHhActions, type CompanyStagePalette, type FunnelV2StageLite } from "@/lib/stages"
 import { BrandingOverrideSwitch } from "@/components/vacancies/branding-override-switch"
 import { VacancySettingsProvider, VacancyTabPendingDot, VacancyTabFooter, useVacancySectionRegister, useSafeSubTabSwitch, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
+import { SettingsTabShell, SETTINGS_TAB_WIDTH_CLASS, type SettingsTabWidth } from "@/components/vacancies/settings-tab-shell"
 import {
   ResponsiveContainer,
   BarChart,
@@ -1164,6 +1165,34 @@ export default function VacancyPage() {
       .filter(s => isPlatformAdmin || s.section !== "funnel-builder")
       .filter(s => funnelV3Visible || s.section !== "funnel-v3")
   }, [isPlatformAdmin, funnelV3Visible])
+
+  // #44 (03.07): пресеты ширины контента по табу/секции (см. SettingsTabShell).
+  // Используется и в самих TabsContent-обёртках, и здесь — чтобы нижняя
+  // панель (VacancyTabFooter) унаследовала ТУ ЖЕ ширину/выравнивание, что и
+  // контент активного таба (кнопки «Сохранить/Далее» прижаты к правому краю
+  // контента, а не к правому краю окна).
+  const SETTINGS_SECTION_WIDTH: Record<SettingsSectionId, SettingsTabWidth> = {
+    page: "lg",
+    sources: "lg",
+    messages: "lg",
+    funnel: "lg",
+    "funnel-builder": "full",
+    "funnel-v2": "full",
+    "funnel-v3": "full",
+    spec: "full",
+    followup: "full",
+    aichatbot: "lg",
+    ai: "lg",
+    integrations: "lg",
+  }
+  const VACANCY_TAB_WIDTH: Partial<Record<string, SettingsTabWidth>> = {
+    anketa: "full",
+    content: "full",
+    queue: "full",
+    outbound: "full",
+    candidates: "full",
+    analytics: "full",
+  }
 
   // Переход к шагу канонического ряда (используется «Далее»/«Назад» нижней панели).
   const goToVacancyStep = useCallback((step: VacancyStep) => {
@@ -3290,22 +3319,19 @@ export default function VacancyPage() {
                 }
                 const getIsActive = (s: typeof settingsSubTabs[number]) =>
                   s.kind === "tab" ? activeTab === s.value : activeTab === "settings" && settingsSection === s.section
-                // Разбиваем: на lg+ все 10 в строке; на <lg первые 5 видны, 6-10 в «Ещё»
-                // Если активный пункт попал в «скрытые» — добавляем его перед «Ещё» (на мобильных)
                 // «Воронка v2» (beta) видна всем пользователям (Юрий 26.06).
                 // «Воронка» (старый funnel-builder) — только платформенному администратору.
                 // «Воронка 3» — только владельцу-полигону (owner-only).
                 const subTabs = settingsSubTabs
                   .filter(s => isPlatformAdmin || s.section !== "funnel-builder")
                   .filter(s => funnelV3Visible || s.section !== "funnel-v3")
-                const VISIBLE_COUNT_SM = 5
-                const visibleTabs = subTabs.slice(0, VISIBLE_COUNT_SM)
-                const overflowTabs = subTabs.slice(VISIBLE_COUNT_SM)
-                const activeOverflow = overflowTabs.find(getIsActive)
+                // Юрий 03.07: горизонтальный скролл-бар наезжал на подписи табов.
+                // Вместо overflow-x-auto + «Ещё»-бургера — единый ряд с переносом
+                // на вторую строку (flex-wrap). На мобильной ширине перенос — ожидаемое
+                // поведение, отдельная ветка не нужна.
                 return (
                   <div className="mb-4 border-b -mx-4 px-4 sm:mx-0 sm:px-0">
-                    {/* lg+: все 10 в одной строке (overflow-x-auto как запасной) */}
-                    <div className="hidden lg:flex items-center gap-1 overflow-x-auto">
+                    <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
                       {subTabs.map((s) => {
                         const isActive = getIsActive(s)
                         return (
@@ -3314,7 +3340,7 @@ export default function VacancyPage() {
                             type="button"
                             onClick={() => handleSubTabClick(s)}
                             className={cn(
-                              "inline-flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0",
+                              "inline-flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap",
                               isActive ? "border-primary text-foreground font-medium" : "border-transparent text-muted-foreground hover:text-foreground"
                             )}
                           >
@@ -3323,75 +3349,14 @@ export default function VacancyPage() {
                         )
                       })}
                     </div>
-                    {/* <lg: первые 5 + активный из «скрытых» + бургер «Ещё» */}
-                    <div className="flex lg:hidden items-center gap-0.5 overflow-x-auto">
-                      {visibleTabs.map((s) => {
-                        const isActive = getIsActive(s)
-                        return (
-                          <button
-                            key={s.kind === "section" ? `section-${s.section}` : s.value}
-                            type="button"
-                            onClick={() => handleSubTabClick(s)}
-                            className={cn(
-                              "inline-flex items-center gap-1.5 px-2.5 py-2 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0",
-                              isActive ? "border-primary text-foreground font-medium" : "border-transparent text-muted-foreground hover:text-foreground"
-                            )}
-                          >
-                            <s.icon className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">{s.label}</span>
-                          </button>
-                        )
-                      })}
-                      {/* Если активный пункт в «скрытых» — показать его отдельно */}
-                      {activeOverflow && (
-                        <button
-                          key={`active-overflow-${activeOverflow.kind === "section" ? activeOverflow.section : activeOverflow.value}`}
-                          type="button"
-                          onClick={() => handleSubTabClick(activeOverflow)}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-2 text-sm border-b-2 -mb-px border-primary text-foreground font-medium whitespace-nowrap shrink-0"
-                        >
-                          <activeOverflow.icon className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">{activeOverflow.label}</span>
-                        </button>
-                      )}
-                      {/* Бургер «Ещё» для скрытых пунктов */}
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button
-                            type="button"
-                            className={cn(
-                              "inline-flex items-center gap-1 px-2.5 py-2 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0",
-                              activeOverflow
-                                ? "border-primary text-foreground font-medium"
-                                : "border-transparent text-muted-foreground hover:text-foreground"
-                            )}
-                          >
-                            <span className="hidden sm:inline">Ещё</span>
-                            <ChevronDown className="w-3.5 h-3.5" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
-                          {overflowTabs.map((s) => {
-                            const isActive = getIsActive(s)
-                            return (
-                              <DropdownMenuItem
-                                key={s.kind === "section" ? `section-${s.section}` : s.value}
-                                onClick={() => handleSubTabClick(s)}
-                                className={cn("gap-2", isActive && "font-medium text-primary")}
-                              >
-                                <s.icon className="w-3.5 h-3.5 shrink-0" />{s.label}
-                                {isActive && <Check className="w-3.5 h-3.5 ml-auto" />}
-                              </DropdownMenuItem>
-                            )
-                          })}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
                   </div>
                 )
               })()}
 
               <TabsContent value="anketa">
+                {/* Вакансия — двухколоночный layout (форма + AI-советник),
+                    как «Портрет» — full, иначе панель советника зажимается. */}
+                <SettingsTabShell width="full">
                 <AnketaTab
                   vacancyId={id}
                   descriptionJson={apiVacancy?.descriptionJson}
@@ -3416,6 +3381,7 @@ export default function VacancyPage() {
                   onSavingChange={setAnketaSaving}
                   registerHandle={registerAnketaHandle}
                 />
+                </SettingsTabShell>
               </TabsContent>
 
               <TabsContent value="candidates">
@@ -3488,6 +3454,7 @@ export default function VacancyPage() {
                   Фаза 1 — легаси demo/test показываются как первые блоки,
                   рантайм их по-прежнему читает по kind. */}
               <TabsContent value="content">
+                <SettingsTabShell width="full">
                 <ContentBlocksTab
                   vacancyId={id}
                   vacancyTitle={vacancyTitle}
@@ -3504,6 +3471,7 @@ export default function VacancyPage() {
                     window.scrollTo({ top: 0, behavior: "smooth" })
                   }}
                 />
+                </SettingsTabShell>
               </TabsContent>
 
               {/* #62: «Инбокс» — единый чат-инбокс по вакансии (список переписок
@@ -3522,12 +3490,13 @@ export default function VacancyPage() {
 
               {/* #23: «Очередь сообщений» — отдельный таб (раньше был в Настройки→Источники) */}
               <TabsContent value="queue">
-                <div className="max-w-3xl">
+                <SettingsTabShell width="full">
                   <MessageQueueSection vacancyId={id} />
-                </div>
+                </SettingsTabShell>
               </TabsContent>
 
               <TabsContent value="outbound">
+                <SettingsTabShell width="full">
                 <OutboundSourcingTab
                   vacancyId={id}
                   vacancyTitle={apiVacancy?.title ?? null}
@@ -3552,6 +3521,7 @@ export default function VacancyPage() {
                     return typeof a?.educationLevel === "string" ? (a!.educationLevel as string) : null
                   })()}
                 />
+                </SettingsTabShell>
               </TabsContent>
 
               <TabsContent value="analytics">
@@ -3859,7 +3829,7 @@ export default function VacancyPage() {
 
                 {/* ───────── ТАБ «Страница и брендинг» ───────── */}
                 {settingsSection === "page" && (
-                <div className="space-y-6 max-w-3xl">
+                <SettingsTabShell width="lg" className="space-y-6">
                   <div>
                     <h3 className="text-lg font-semibold text-foreground mb-1">Публичная страница</h3>
                     <p className="text-sm text-muted-foreground">Настройка страницы вакансии для кандидатов</p>
@@ -4146,12 +4116,12 @@ export default function VacancyPage() {
                         </div>
                       </CardContent>
                     </Card>
-                </div>
+                </SettingsTabShell>
                 )}
 
                 {/* ───────── ТАБ «Источники» ───────── */}
                 {settingsSection === "sources" && (
-                <div className="space-y-6 max-w-3xl">
+                <SettingsTabShell width="lg" className="space-y-6">
                   <div>
                     <h3 className="text-lg font-semibold text-foreground mb-1">Источники кандидатов</h3>
                     <p className="text-sm text-muted-foreground mb-3">Подключение сервисов для импорта откликов</p>
@@ -4296,12 +4266,12 @@ export default function VacancyPage() {
                       ? (apiVacancy!.descriptionJson as Record<string, unknown>).miniFormFields as Array<{ id: string; label: string; type: string; required: boolean; placeholder?: string; options?: string[] }>
                       : undefined}
                   />
-                </div>
+                </SettingsTabShell>
                 )}
 
                 {/* ───────── ТАБ «Сообщения» ───────── */}
                 {settingsSection === "messages" && (
-                <div className="space-y-6 max-w-3xl">
+                <SettingsTabShell width="lg" className="space-y-6">
                   {(apiVacancy as { funnelBuilderEnabled?: boolean } | undefined)?.funnelBuilderEnabled && (
                     <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
                       <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
@@ -4374,12 +4344,12 @@ export default function VacancyPage() {
                     initialText={(apiVacancy as { scheduleInviteText?: string } | undefined)?.scheduleInviteText ?? ""}
                     onSaved={() => refetchVacancy()}
                   />
-                </div>
+                </SettingsTabShell>
                 )}
 
-                {/* ───────── ТАБ «Демо и воронка» ───────── */}
+                {/* ───────── ТАБ «Демо и воронка» (легаси, недостижим напрямую — редиректится на funnel-builder) ───────── */}
                 {settingsSection === "funnel" && (
-                <div className="space-y-6 max-w-3xl">
+                <SettingsTabShell width="lg" className="space-y-6">
                   {(apiVacancy as { funnelBuilderEnabled?: boolean } | undefined)?.funnelBuilderEnabled && (
                     <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
                       <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
@@ -4422,19 +4392,19 @@ export default function VacancyPage() {
                     initial={((apiVacancy?.descriptionJson as { finalScreens?: FinalScreensConfig } | null | undefined)?.finalScreens) ?? null}
                   />
                   <PostDemoSettings vacancyId={id} />
-                </div>
+                </SettingsTabShell>
                 )}
 
                 {/* ───────── ТАБ «Конструктор воронки [Beta]» — только для платформенного администратора ───────── */}
                 {settingsSection === "funnel-builder" && isPlatformAdmin && (
-                <div className="space-y-6 max-w-3xl">
+                <SettingsTabShell width="full" className="space-y-6">
                   <FunnelBuilder vacancyId={id} />
-                </div>
+                </SettingsTabShell>
                 )}
 
                 {/* ───────── Воронка v2 (beta, видна всем) ───────── */}
                 {settingsSection === "funnel-v2" && (
-                <div className="space-y-6">
+                <SettingsTabShell width="full" className="space-y-6">
                   <FunnelV2Builder vacancyId={id} onOpenPortrait={() => {
                     setSettingsSection("spec")
                     const sp = new URLSearchParams(window.location.search)
@@ -4448,14 +4418,14 @@ export default function VacancyPage() {
                     router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
                     window.scrollTo({ top: 0, behavior: "smooth" })
                   }} />
-                </div>
+                </SettingsTabShell>
                 )}
 
                 {/* ───────── Воронка 3 (owner-only: единый конструктор поверх движка v2) ───────── */}
                 {settingsSection === "funnel-v3" && funnelV3Visible && (
-                <div className="space-y-6">
+                <SettingsTabShell width="full" className="space-y-6">
                   <FunnelV3Editor vacancyId={id} />
-                </div>
+                </SettingsTabShell>
                 )}
 
                 {/* ───────── ТАБ «Кого ищем» (R4 Candidate Spec, новый контур) ───────── */}
@@ -4475,7 +4445,7 @@ export default function VacancyPage() {
 
                 {/* ───────── ТАБ «Дожим» ───────── */}
                 {settingsSection === "followup" && (
-                <div className="space-y-6 max-w-3xl">
+                <SettingsTabShell width="full" className="space-y-6">
                   {(apiVacancy as { funnelBuilderEnabled?: boolean } | undefined)?.funnelBuilderEnabled && (
                     <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
                       <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
@@ -4531,12 +4501,12 @@ export default function VacancyPage() {
                   />
                   <VacancyFollowupSettings vacancyId={id} />
                   <VacancyTestFollowupSettings vacancyId={id} />
-                </div>
+                </SettingsTabShell>
                 )}
 
-                {/* ───────── ТАБ «AI чат-бот» ───────── */}
+                {/* ───────── ТАБ «AI чат-бот» (легаси, недостижим напрямую — редиректится на funnel-builder) ───────── */}
                 {settingsSection === "aichatbot" && (
-                <div className="space-y-6 max-w-3xl">
+                <SettingsTabShell width="lg" className="space-y-6">
                   {(apiVacancy as { funnelBuilderEnabled?: boolean } | undefined)?.funnelBuilderEnabled && (
                     <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
                       <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
@@ -4546,15 +4516,19 @@ export default function VacancyPage() {
                     </div>
                   )}
                   <AiChatbotSettings vacancyId={id} onSaved={() => refetchVacancy()} />
-                </div>
+                </SettingsTabShell>
                 )}
 
                 {/* ───────── ТАБ «Расписание» (бывший «AI сценарии») ───────── */}
-                {settingsSection === "ai" && <ScheduleTab vacancyId={id} />}
+                {settingsSection === "ai" && (
+                <SettingsTabShell width="lg">
+                  <ScheduleTab vacancyId={id} />
+                </SettingsTabShell>
+                )}
 
                 {/* ───────── ТАБ «Интеграции» ───────── */}
                 {settingsSection === "integrations" && (
-                <div className="space-y-6 max-w-3xl">
+                <SettingsTabShell width="lg" className="space-y-6">
 
                   {/* Уровень 3: per-vacancy override интеграций */}
                   <div className="rounded-lg border bg-card p-5 space-y-5">
@@ -4662,7 +4636,7 @@ export default function VacancyPage() {
                     tabKey="integrations"
                   />
 
-                </div>
+                </SettingsTabShell>
                 )}
 
                 {/* #20 — ЕДИНАЯ нижняя панель настроек (эталон = таб «Вакансия»):
@@ -4682,9 +4656,9 @@ export default function VacancyPage() {
                       onPrev={prevStep ? () => goToVacancyStep(prevStep) : undefined}
                       nextLabel={nextStep?.label ?? null}
                       onNext={nextStep ? () => goToVacancyStep(nextStep) : undefined}
-                      // Портрет (SpecEditor) — полноширинный, поэтому его нижняя
-                      // панель тоже на всю ширину, кнопки у правого края (как «Вакансия»).
-                      className={settingsSection === "spec" ? "max-w-none" : undefined}
+                      // #44: футер наследует ширину активной секции настроек (та же
+                      // карта пресетов, что и у SettingsTabShell вокруг контента).
+                      className={SETTINGS_TAB_WIDTH_CLASS[SETTINGS_SECTION_WIDTH[settingsSection] ?? "md"]}
                     />
                   )
                 })()}
@@ -4711,10 +4685,8 @@ export default function VacancyPage() {
               // «Далее» у них скрываем, оставляя только крошки навигации слева.
               const ownsOwnNext = activeTab === "anketa" || activeTab === "content"
               const showNext = !ownsOwnNext && !!nextStep
-              // #44: конфиг-табы выравниваем по ширине контента (max-w-3xl, как эталон
-              // «Вакансия»). Широкие рабочие табы с таблицами (Кандидаты/Аналитика)
-              // — панель на всю ширину, иначе крошки повисли бы слева под таблицей.
-              const wideTab = activeTab === "candidates" || activeTab === "analytics"
+              // #44: футер наследует ширину активного верхнего таба (та же карта
+              // пресетов, что и у SettingsTabShell вокруг контента этого таба).
               return (
                 <VacancyTabFooter
                   onAllVacancies={() => router.push("/hr/vacancies")}
@@ -4723,7 +4695,7 @@ export default function VacancyPage() {
                   nextLabel={showNext ? nextStep!.label : null}
                   onNext={showNext ? () => goToVacancyStep(nextStep!) : undefined}
                   showSave={false}
-                  className={wideTab ? "max-w-none" : undefined}
+                  className={SETTINGS_TAB_WIDTH_CLASS[VACANCY_TAB_WIDTH[activeTab] ?? "md"]}
                 />
               )
             })()}

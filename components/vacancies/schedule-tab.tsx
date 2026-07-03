@@ -12,7 +12,7 @@ export interface ScheduleTabProps {
 
 export function ScheduleTab({ vacancyId }: ScheduleTabProps) {
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold">Расписание отправки сообщений</h2>
         <p className="text-sm text-muted-foreground">
