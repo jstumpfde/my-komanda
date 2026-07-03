@@ -149,6 +149,8 @@ export function HhBroadcastDialog({
   // чтобы «в следующий раз захожу — вижу тот же выбор».
   const lastKindRef = useRef<LinkKind | null>(null)
   const lastTplRef = useRef<string | null>(null)
+  // Кого HR редактировал вручную — их авто-подстановка последнего выбора не трогает.
+  const editedIdsRef = useRef<Set<string>>(new Set())
   useEffect(() => {
     try {
       const k = window.localStorage.getItem("hhbc:lastKind")
@@ -176,6 +178,7 @@ export function HhBroadcastDialog({
     setCopied(false)
     setSelectedTplId("")
     setTplName("")
+    editedIdsRef.current = new Set()
     try {
       const res = await fetch(
         `/api/modules/hr/vacancies/${vacancyId}/hh-broadcast-data`,
@@ -266,7 +269,9 @@ export function HhBroadcastDialog({
   // «открываю следующего — тот же шаблон и вакансия выбраны, жму кнопку»).
   useEffect(() => {
     if (!current) return
-    if (messages[current.id] !== undefined || linkKindById[current.id] !== undefined) return
+    // messages предзаполнены дефолтом в loadData — потому проверяем НЕ их, а
+    // явную ручную правку (editedIdsRef) и явный выбор типа ссылки.
+    if (editedIdsRef.current.has(current.id) || linkKindById[current.id] !== undefined) return
     const kind = lastKindRef.current
     const tpl = lastTplRef.current ? templates.find((t) => t.id === lastTplRef.current) : null
     if (!kind && !tpl) return
@@ -627,12 +632,13 @@ export function HhBroadcastDialog({
               </label>
               <Textarea
                 value={currentMessage}
-                onChange={(e) =>
+                onChange={(e) => {
+                  editedIdsRef.current.add(current.id)
                   setMessages((prev) => ({
                     ...prev,
                     [current.id]: e.target.value,
                   }))
-                }
+                }}
                 rows={6}
                 className="text-sm resize-none"
               />
