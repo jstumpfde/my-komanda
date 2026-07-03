@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect, useCallback, Suspense } from "react"
+import { useRef, useState, useMemo, useEffect, useCallback, Suspense } from "react"
 import { useRouter } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
@@ -23,7 +23,7 @@ import { getStageLabel } from "@/lib/stages"
 // ─── Типы ────────────────────────────────────────────────────
 
 type InterviewType = "Техническое" | "HR" | "Финальное"
-type InterviewFormat = "Онлайн" | "Офис"
+type InterviewFormat = "Звонок" | "Онлайн" | "Офис"
 type InterviewStatus = "Подтверждено" | "Ожидает" | "Пройдено" | "Не явился" | "Отменено"
 type ViewMode = "list" | "calendar" | "week" | "kanban" | "day"
 type StageCondition = "manual" | "date_before" | "date_today" | "date_after" | "status_confirmed" | "status_pending" | "status_cancelled"
@@ -111,7 +111,7 @@ function mapEventToInterview(ev: CalEvent, vacMap: Map<string, string>): Intervi
   else status = "Подтверждено"
   const type: InterviewType = (["Техническое", "HR", "Финальное"] as const).includes(ev.interviewType as InterviewType)
     ? (ev.interviewType as InterviewType) : "HR"
-  const format: InterviewFormat = ev.interviewFormat === "Офис" ? "Офис" : "Онлайн"
+  const format: InterviewFormat = ev.interviewFormat === "Офис" ? "Офис" : ev.interviewFormat === "Звонок" ? "Звонок" : "Онлайн"
   return {
     id: ev.id,
     date: start,
@@ -226,6 +226,42 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
   // Кандидат, для которого открыт диалог из секции «Ждут назначения времени» —
   // прокидывается в POST /calendar как candidateId, чтобы событие связалось с карточкой.
   const [cCandidateId, setCCandidateId] = useState<string | null>(null)
+  // Поиск кандидата по ФИО в выбранной вакансии (Юрий 04.07).
+  const [candSearch, setCandSearch] = useState<Array<{ id: string; name: string; stage: string | null }>>([])
+  const [candSearchLoading, setCandSearchLoading] = useState(false)
+  const candSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Длительность по виду интервью из настроек компании (звонок/онлайн/офис).
+  const [methodDurations, setMethodDurations] = useState<Record<string, number>>({})
+  useEffect(() => {
+    fetch("/api/modules/hr/company/hiring-defaults")
+      .then(r => r.ok ? r.json() : null)
+      .then(j => {
+        const cfgs = (j?.hiringDefaults?.schedule?.interviewMethodConfigs ?? j?.schedule?.interviewMethodConfigs) as Array<{ method: string; enabled?: boolean; duration?: number }> | undefined
+        if (!Array.isArray(cfgs)) return
+        const map: Record<string, number> = {}
+        for (const c of cfgs) {
+          if (!c?.enabled || !c.duration) continue
+          if (c.method === "phone") map["Звонок"] = c.duration
+          else if (c.method === "office") map["Офис"] = c.duration
+          else map["Онлайн"] = map["Онлайн"] ?? c.duration
+        }
+        setMethodDurations(map)
+      })
+      .catch(() => {})
+  }, [])
+  const searchCandidates = useCallback((q: string, vacId: string) => {
+    if (candSearchTimer.current) clearTimeout(candSearchTimer.current)
+    if (!q.trim() || !vacId) { setCandSearch([]); return }
+    candSearchTimer.current = setTimeout(async () => {
+      try {
+        setCandSearchLoading(true)
+        const res = await fetch(`/api/modules/hr/candidates?vacancyId=${vacId}&pageSize=8&search=${encodeURIComponent(q.trim())}`)
+        if (!res.ok) { setCandSearch([]); return }
+        const j = await res.json()
+        setCandSearch((j.candidates ?? []).map((c: { id: string; name: string; stage?: string | null }) => ({ id: c.id, name: c.name, stage: c.stage ?? null })))
+      } catch { setCandSearch([]) } finally { setCandSearchLoading(false) }
+    }, 300)
+  }, [])
   const [cVacancyId, setCVacancyId] = useState("")
   const [cDate, setCDate] = useState("")
   const [cTime, setCTime] = useState("10:00")
@@ -1094,18 +1130,42 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
           <DialogHeader><DialogTitle>Запланировать интервью</DialogTitle></DialogHeader>
           <div className="space-y-3 pt-1">
             <div className="space-y-1">
-              <Label htmlFor="c-name">Кандидат *</Label>
-              <Input id="c-name" value={cName} onChange={e => setCName(e.target.value)} placeholder="Имя кандидата" />
-            </div>
-            <div className="space-y-1">
               <Label htmlFor="c-vacancy">Вакансия</Label>
-              <Select value={cVacancyId || "none"} onValueChange={v => setCVacancyId(v === "none" ? "" : v)}>
+              <Select value={cVacancyId || "none"} onValueChange={v => { setCVacancyId(v === "none" ? "" : v); setCandSearch([]); setCCandidateId(null) }}>
                 <SelectTrigger id="c-vacancy"><SelectValue placeholder="Не указана" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Не указана</SelectItem>
                   {vacOptions.map(v => <SelectItem key={v.id} value={v.id}>{v.title}</SelectItem>)}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="c-name">Кандидат *</Label>
+              <Input
+                id="c-name"
+                value={cName}
+                onChange={e => { setCName(e.target.value); setCCandidateId(null); searchCandidates(e.target.value, cVacancyId) }}
+                placeholder={cVacancyId ? "Начните вводить ФИО…" : "Сначала выберите вакансию"}
+                autoComplete="off"
+              />
+              {/* Подсказки по кандидатам выбранной вакансии */}
+              {candSearch.length > 0 && !cCandidateId && (
+                <div className="rounded-md border bg-popover shadow-sm divide-y max-h-52 overflow-y-auto">
+                  {candSearch.map(c => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted/60 flex items-center justify-between gap-2"
+                      onClick={() => { setCName(c.name); setCCandidateId(c.id); setCandSearch([]) }}
+                    >
+                      <span className="truncate">{c.name}</span>
+                      {c.stage && <span className="text-[10px] text-muted-foreground shrink-0">{getStageLabel(c.stage)}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {candSearchLoading && <p className="text-[11px] text-muted-foreground">Ищу…</p>}
+              {cCandidateId && <p className="text-[11px] text-emerald-600">Кандидат привязан — интервью появится в его карточке.</p>}
             </div>
             <div className="grid grid-cols-3 gap-2">
               <div className="space-y-1 col-span-1">
@@ -1160,10 +1220,15 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
               </div>
               <div className="space-y-1">
                 <Label htmlFor="c-format">Формат</Label>
-                <Select value={cFormat} onValueChange={setCFormat}>
+                <Select value={cFormat} onValueChange={(f) => {
+                  setCFormat(f)
+                  // Длительность по виду — из настроек компании (если заданы).
+                  const d = methodDurations[f]
+                  if (d) setCDuration(String(d))
+                }}>
                   <SelectTrigger id="c-format"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {["Онлайн", "Офис"].map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                    {["Звонок", "Онлайн", "Офис"].map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
