@@ -1012,7 +1012,7 @@ function BestPublishTimeCard({ vacancyId, city }: { vacancyId?: string; city?: s
             if (rows.length === 0) return null
             return (
               <div className="space-y-0.5">
-                <p className="text-[10px] text-muted-foreground">% — доля от всех откликов за период (сумма всех слотов < 100%)</p>
+                <p className="text-[10px] text-muted-foreground">% — доля от всех откликов за период</p>
                 {rows.map(d => {
                   const slots = [...d.slots].sort((a, b) => a.hour - b.hour)
                   return (
