@@ -132,12 +132,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       // с < 3 откликами не показываем как «лучшее время».
       const MIN_DAY_TOTAL = 20
       const MIN_SLOT_CNT = 3
+      // Процент — от ВСЕХ откликов периода (total=100%), решение Юрия 04.07.
       const slots = dayTotal >= MIN_DAY_TOTAL
         ? dayCells.slice(0, 2).filter(c => c.cnt >= MIN_SLOT_CNT).map(c => ({
             hour: c.hour,
             range: hourRange(c.hour),
             cnt: c.cnt,
-            pct: dayTotal > 0 ? Math.round((c.cnt / dayTotal) * 100) : 0,
+            pct: total > 0 ? Math.round((c.cnt / total) * 100) : 0,
           }))
         : []
       return { dow, dayName: DAY_NAMES[dow], slots, dayTotal, lowData: dayTotal < MIN_DAY_TOTAL }
