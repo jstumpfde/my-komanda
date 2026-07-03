@@ -93,7 +93,7 @@ import { OutboundPauseMenuItem } from "@/components/vacancies/outbound-pause-con
 import { parsePipeline, resolveVacancyStageOptions, type CompanyStageHhActions, type CompanyStagePalette, type FunnelV2StageLite } from "@/lib/stages"
 import { BrandingOverrideSwitch } from "@/components/vacancies/branding-override-switch"
 import { VacancySettingsProvider, VacancyTabPendingDot, VacancyTabFooter, useVacancySectionRegister, useSafeSubTabSwitch, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
-import { SettingsTabShell, SETTINGS_TAB_WIDTH_CLASS, type SettingsTabWidth } from "@/components/vacancies/settings-tab-shell"
+import { SettingsTabShell } from "@/components/vacancies/settings-tab-shell"
 import {
   ResponsiveContainer,
   BarChart,
@@ -1166,33 +1166,10 @@ export default function VacancyPage() {
       .filter(s => funnelV3Visible || s.section !== "funnel-v3")
   }, [isPlatformAdmin, funnelV3Visible])
 
-  // #44 (03.07): пресеты ширины контента по табу/секции (см. SettingsTabShell).
-  // Используется и в самих TabsContent-обёртках, и здесь — чтобы нижняя
-  // панель (VacancyTabFooter) унаследовала ТУ ЖЕ ширину/выравнивание, что и
-  // контент активного таба (кнопки «Сохранить/Далее» прижаты к правому краю
-  // контента, а не к правому краю окна).
-  const SETTINGS_SECTION_WIDTH: Record<SettingsSectionId, SettingsTabWidth> = {
-    page: "lg",
-    sources: "lg",
-    messages: "lg",
-    funnel: "lg",
-    "funnel-builder": "full",
-    "funnel-v2": "full",
-    "funnel-v3": "full",
-    spec: "full",
-    followup: "full",
-    aichatbot: "lg",
-    ai: "lg",
-    integrations: "lg",
-  }
-  const VACANCY_TAB_WIDTH: Partial<Record<string, SettingsTabWidth>> = {
-    anketa: "full",
-    content: "full",
-    queue: "full",
-    outbound: "full",
-    candidates: "full",
-    analytics: "full",
-  }
+  // #44 (03.07, финал №2): карты ширин футера по табам удалены — нижняя
+  // панель (VacancyTabFooter) везде фиксированной ширины max-w-6xl, кнопки
+  // на одной позиции на всех табах (решение Юрия). Ширину КОНТЕНТА табов
+  // по-прежнему задают SettingsTabShell-обёртки на местах рендера.
 
   // Переход к шагу канонического ряда (используется «Далее»/«Назад» нижней панели).
   const goToVacancyStep = useCallback((step: VacancyStep) => {
@@ -4661,11 +4638,10 @@ export default function VacancyPage() {
                       onPrev={prevStep ? () => goToVacancyStep(prevStep) : undefined}
                       nextLabel={nextStep?.label ?? null}
                       onNext={nextStep ? () => goToVacancyStep(nextStep) : undefined}
-                      // #44: футер наследует ширину активной секции настроек (та же
-                      // карта пресетов, что и у SettingsTabShell вокруг контента).
-                      // Юрий 03.07 (финал): кнопки у ВСЕХ табов в одном месте —
-                      // правый край ряда с крошками, без спец-отступов.
-                      className={SETTINGS_TAB_WIDTH_CLASS[SETTINGS_SECTION_WIDTH[settingsSection] ?? "md"]}
+                      // Юрий 03.07 (финал №2): футер НЕ наследует ширину таба —
+                      // у ВСЕХ табов кнопки на одной фиксированной позиции
+                      // (правый край max-w-6xl), независимо от ширины контента.
+                      className="max-w-6xl"
                     />
                   )
                 })()}
@@ -4716,7 +4692,9 @@ export default function VacancyPage() {
                       Предпросмотр вакансии
                     </Button>
                   ) : undefined}
-                  className={SETTINGS_TAB_WIDTH_CLASS[VACANCY_TAB_WIDTH[activeTab] ?? "md"]}
+                  // Юрий 03.07 (финал №2): единая фиксированная позиция кнопок
+                  // на всех табах — правый край max-w-6xl, не ширина контента.
+                  className="max-w-6xl"
                 />
               )
             })()}
