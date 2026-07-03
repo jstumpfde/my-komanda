@@ -17,6 +17,7 @@ import { ShieldAlert, Loader2, Save } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import type { VacancyStopFactors } from "@/lib/db/schema"
+import { CitizenshipFactorField, citizenshipSummary } from "@/components/vacancies/citizenship-factor-field"
 
 const PLACEHOLDERS = ["name", "vacancy", "company"]
 
@@ -41,10 +42,9 @@ export function VacancyStopFactorsSettings({ vacancyId, initial, onSaved }: Prop
   const [loaded, setLoaded] = useState(!!initial)
   const [saving, setSaving] = useState(false)
 
-  // CSV-формы для списочных полей. Храним строки отдельно от factors, чтобы
-  // не мучить пользователя нормализацией пробелов на каждом keystroke.
+  // CSV-форма для города. Гражданство теперь редактируется чипами через
+  // CitizenshipFactorField (см. ниже) — своего CSV-состояния не требует.
   const [cityCsv, setCityCsv] = useState("")
-  const [citizenshipCsv, setCitizenshipCsv] = useState("")
 
   // Refs для PlaceholderBadges — каждый стоп-фактор имеет свою textarea
   // под текст отказа.
@@ -72,7 +72,6 @@ export function VacancyStopFactorsSettings({ vacancyId, initial, onSaved }: Prop
   // Когда factors меняется извне — синхронизируем CSV-поля.
   useEffect(() => {
     setCityCsv((factors.city?.allowedCities ?? []).join(", "))
-    setCitizenshipCsv((factors.citizenship?.allowed ?? []).join(", "))
   }, [factors])
 
   const set = <K extends keyof VacancyStopFactors>(key: K, value: VacancyStopFactors[K]) => {
@@ -87,9 +86,6 @@ export function VacancyStopFactorsSettings({ vacancyId, initial, onSaved }: Prop
         ...factors,
         city: factors.city
           ? { ...factors.city, allowedCities: csvToList(cityCsv) }
-          : undefined,
-        citizenship: factors.citizenship
-          ? { ...factors.citizenship, allowed: csvToList(citizenshipCsv) }
           : undefined,
         documents: { enabled: false },
       }
@@ -282,20 +278,21 @@ export function VacancyStopFactorsSettings({ vacancyId, initial, onSaved }: Prop
         {/* Гражданство */}
         <FactorRow
           title="Гражданство"
-          help="Список разрешённых стран. Через запятую: RU, BY"
+          help="Разрешить только выбранные страны, либо исключить страны/континенты"
           enabled={factors.citizenship?.enabled ?? false}
           onToggle={(v) => toggleEnabled("citizenship", v)}
         >
           <div className="space-y-2">
-            <Input
-              value={citizenshipCsv}
-              onChange={(e) => setCitizenshipCsv(e.target.value)}
-              placeholder="RU, BY"
-              className="h-8 text-sm bg-[var(--input-bg)]"
+            <CitizenshipFactorField
+              value={factors.citizenship}
+              onChange={(next) => set("citizenship", next)}
             />
-            {citizenshipCsv.trim()
-              ? <FactorSummary pass={`Пропускаем: ${citizenshipCsv.trim()}.`} cut="Авто-отказ кандидатам с другим гражданством." />
-              : <FactorSummary idle="Страны не указаны — фактор не действует." />}
+            {(() => {
+              const s = citizenshipSummary(factors.citizenship)
+              return s.idle
+                ? <FactorSummary idle={s.idle} />
+                : <FactorSummary pass={s.pass} cut={s.cut} />
+            })()}
             <RejectionText
               refEl={refCit}
               value={factors.citizenship?.rejectionText ?? ""}

@@ -36,6 +36,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
 import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
+import { CitizenshipFactorField, citizenshipSummary } from "@/components/vacancies/citizenship-factor-field"
 import { toast } from "sonner"
 import {
   Target, Plus, Minus, X, Loader2, ShieldAlert, FileText, Gauge,
@@ -1385,9 +1386,10 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
   const [conflictsChecking, setConflictsChecking]   = useState(false)
   const [conflictsResult, setConflictsResult]       = useState<ConflictItem[] | null>(null)
 
-  // CSV-строки для списочных стоп-факторов (как в VacancyStopFactorsSettings)
+  // CSV-строка для города (как в VacancyStopFactorsSettings). Гражданство
+  // теперь редактируется чипами через CitizenshipFactorField — своего
+  // CSV-состояния не требует.
   const [cityCsv, setCityCsv]               = useState("")
-  const [citizenshipCsv, setCitizenshipCsv] = useState("")
 
   useEffect(() => {
     let cancelled = false
@@ -1399,7 +1401,6 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
           setSpec(d.spec)
           setSource(d.source ?? null)
           setCityCsv((d.spec.stopFactors.city?.allowedCities ?? []).join(", "))
-          setCitizenshipCsv((d.spec.stopFactors.citizenship?.allowed ?? []).join(", "))
         }
       })
       .catch(() => {})
@@ -1434,9 +1435,6 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
         city: spec.stopFactors.city
           ? { ...spec.stopFactors.city, allowedCities: csvToList(cityCsv) }
           : undefined,
-        citizenship: spec.stopFactors.citizenship
-          ? { ...spec.stopFactors.citizenship, allowed: csvToList(citizenshipCsv) }
-          : undefined,
       },
     }
     const res = await fetch(`/api/core/spec/${vacancyId}`, {
@@ -1461,7 +1459,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
     sectionKey:    `core-spec:${vacancyId}`,
     tabKey:        "spec",
     loaded,
-    watchedValues: { spec, cityCsv, citizenshipCsv },
+    watchedValues: { spec, cityCsv },
     save,
   })
 
@@ -2139,19 +2137,20 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
 
           <FactorRow
             title="Гражданство"
-            help="Список разрешённых стран. Через запятую: RU, BY"
+            help="Разрешить только выбранные страны, либо исключить страны/континенты"
             enabled={sf.citizenship?.enabled ?? false}
             onToggle={v => toggleFactor("citizenship", v)}
           >
-            <Input
-              value={citizenshipCsv}
-              onChange={e => setCitizenshipCsv(e.target.value)}
-              placeholder="RU, BY"
-              className="h-8 text-sm"
+            <CitizenshipFactorField
+              value={sf.citizenship}
+              onChange={next => setSf({ ...sf, citizenship: next })}
             />
-            {citizenshipCsv.trim()
-              ? <FactorSummary pass={`Пропускаем: ${citizenshipCsv.trim()}.`} cut="Авто-отказ кандидатам с другим гражданством." />
-              : <FactorSummary idle="Страны не указаны — фактор не действует." />}
+            {(() => {
+              const s = citizenshipSummary(sf.citizenship)
+              return s.idle
+                ? <FactorSummary idle={s.idle} />
+                : <FactorSummary pass={s.pass} cut={s.cut} />
+            })()}
           </FactorRow>
 
           <FactorRow

@@ -14,6 +14,7 @@ import type {
   VacancyStopFactorCitizenship,
   VacancyStopFactorSalary,
 } from "@/lib/db/schema"
+import { expandContinentCode, isContinentCode } from "@/lib/funnel-builder/citizenship-countries"
 
 export interface CandidateStopFactorData {
   city?:               string | null
@@ -107,14 +108,53 @@ function matchFormat(
   }
 }
 
+// Континент-коды (напр. "continent:europe", "continent:cis") разворачиваются
+// В МАТЧЕРЕ, а не при сохранении в UI. Причина: UI хранит компактный чип
+// "continent:europe" — его легко показать/удалить одним чипом; если бы мы
+// разворачивали при сохранении, редактирование потеряло бы группировку
+// (пришлось бы держать отдельное поле "какие чипы были континентами").
+// Разворот на лету дешёвый (статический словарь, никаких запросов).
+function expandCodes(codes: string[]): Set<string> {
+  const out = new Set<string>()
+  for (const code of codes) {
+    if (isContinentCode(code)) {
+      for (const c of expandContinentCode(code)) out.add(c)
+    } else {
+      out.add(code.toUpperCase())
+    }
+  }
+  return out
+}
+
 function matchCitizenship(
   candidate: CandidateStopFactorData,
   factor: VacancyStopFactorCitizenship,
 ): StopFactorMatch | null {
   if (!factor.enabled) return null
+  if (!candidate.citizenship) return null
+  const candidateCode = candidate.citizenship.toUpperCase()
+
+  // mode отсутствует → легаси-поведение = allow (обратная совместимость со
+  // старыми записями {enabled:true, allowed:[...]} без поля mode).
+  const mode = factor.mode ?? "allow"
+
+  if (mode === "deny") {
+    const denied = factor.denied ?? []
+    if (denied.length === 0) return null
+    const deniedSet = expandCodes(denied)
+    if (!deniedSet.has(candidateCode)) return null
+    return {
+      matched:       true,
+      factor:        "citizenship",
+      rejectionText: factor.rejectionText?.trim() || defaultRejection("citizenship"),
+    }
+  }
+
+  // allow-режим (дефолт)
   const allowed = factor.allowed ?? []
-  if (allowed.length === 0 || !candidate.citizenship) return null
-  if (allowed.includes(candidate.citizenship)) return null
+  if (allowed.length === 0) return null
+  const allowedSet = expandCodes(allowed)
+  if (allowedSet.has(candidateCode)) return null
   return {
     matched:       true,
     factor:        "citizenship",

@@ -291,7 +291,12 @@ export const StopFactorDocumentsSchema = z.object({
 
 export const StopFactorCitizenshipSchema = z.object({
   enabled:       z.boolean().default(false),
+  // "allow" — пропускаем только allowed (дефолт при отсутствии поля, легаси
+  // поведение); "deny" — пропускаем всех, кроме denied (континент-коды вида
+  // "continent:europe" разворачиваются в матчере).
+  mode:          z.enum(["allow", "deny"]).optional(),
   allowed:       z.array(z.string()).optional(),
+  denied:        z.array(z.string()).optional(),
   rejectionText: z.string().optional(),
 })
 
