@@ -1,5 +1,7 @@
 "use client"
 
+import React from "react"
+
 import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import {
   Sheet,
@@ -856,6 +858,34 @@ function findVideoVizitkaUrl(answers: unknown): string | null {
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
+
+
+// Предохранитель карточки (Юрий 04.07: «Что-то пошло не так» на весь экран при
+// быстром переключении табов). Ловит рендер-ошибку контента таба и показывает
+// мягкий ретрай внутри карточки, не убивая страницу. Сбрасывается сменой ключа.
+class DrawerTabBoundary extends React.Component<{ resetKey: string; children: React.ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+  static getDerivedStateFromError() { return { failed: true } }
+  componentDidCatch(err: unknown) { console.error("[candidate-drawer] tab crashed:", err) }
+  componentDidUpdate(prev: { resetKey: string }) {
+    if (prev.resetKey !== this.props.resetKey && this.state.failed) this.setState({ failed: false })
+  }
+  render() {
+    if (this.state.failed) {
+      return (
+        <div className="px-6 py-10 text-center space-y-3">
+          <p className="text-sm text-muted-foreground">Не удалось отобразить вкладку.</p>
+          <button
+            type="button"
+            className="text-sm text-primary underline underline-offset-2"
+            onClick={() => this.setState({ failed: false })}
+          >Попробовать снова</button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 export function CandidateDrawer({
   candidateId,
@@ -1991,6 +2021,7 @@ export function CandidateDrawer({
           </ScrollArea>
         ) : candidate && derived ? (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
+          <DrawerTabBoundary resetKey={`${candidate?.id ?? ""}:${activeTab}`}>
             <ScoresPanel candidate={candidate} />
             <TabsList className="flex flex-wrap justify-start gap-1 mx-3 mt-3 shrink-0 h-auto">
               <TabsTrigger value="contacts" className="text-[10px] px-1 py-1.5">Резюме</TabsTrigger>
@@ -3080,6 +3111,7 @@ export function CandidateDrawer({
                 )}
               </TabsContent>
             </div>
+          </DrawerTabBoundary>
           </Tabs>
         ) : null}
 
