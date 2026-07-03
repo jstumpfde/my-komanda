@@ -477,6 +477,9 @@ export async function GET(req: NextRequest) {
         .leftJoin(hhResponses, and(
           eq(hhResponses.localCandidateId, candidates.id),
           eq(hhResponses.companyId, user.companyId),
+          // Только НОВЕЙШИЙ отклик: у повторно откликнувшихся ×2 строки
+          // hh_responses задваивали кандидата в списке (Юрий 04.07).
+          sql`${hhResponses.id} = (SELECT r2.id FROM hh_responses r2 WHERE r2.local_candidate_id = ${candidates.id} AND r2.company_id = ${user.companyId} ORDER BY r2.created_at DESC LIMIT 1)`,
         ))
         .where(whereExpr)
         .orderBy(desc(candidates.createdAt))
@@ -613,15 +616,21 @@ export async function GET(req: NextRequest) {
         const completed = Array.from(completedByBlockId.values())
         // Итого: уроки + анкета + спасибо
         const completedPages = completedLessons.size + (hasAnketa ? 1 : 0) + (hasThanks ? 1 : 0)
-        const demoCompletedBlocks = demoTotalBlocks > 0
-          ? Math.min(completedPages, demoTotalBlocks)
+        // Fallback для блочных вакансий (нет kind='demo' → нет карты уроков):
+        // считаем по собственному прогрессу кандидата (totalBlocks из dp).
+        const dpTotal = Number((progress as { totalBlocks?: unknown } | null)?.totalBlocks ?? 0)
+        const fallbackTotal = demoTotalBlocks === 0 && dpTotal > 0 ? dpTotal : 0
+        const effTotal = demoTotalBlocks > 0 ? demoTotalBlocks : fallbackTotal
+        const fallbackCompleted = fallbackTotal > 0 ? completed.length : completedPages
+        const demoCompletedBlocks = effTotal > 0
+          ? Math.min(demoTotalBlocks > 0 ? completedPages : fallbackCompleted, effTotal)
           : completedPages
         // Считаем процент честно по страницам (completed/total).
         // Раньше при наличии __complete__ маркера выставляли 100%, но это давало
         // ложные срабатывания: 4 страницы из 17 = 100% если кандидат когда-то
         // нажал "Завершить", даже если реально прошёл мало.
-        const progressPercent = demoTotalBlocks > 0
-          ? Math.min(100, Math.round((demoCompletedBlocks / demoTotalBlocks) * 100))
+        const progressPercent = effTotal > 0
+          ? Math.min(100, Math.round((demoCompletedBlocks / effTotal) * 100))
           : null
 
         // «Демо пройдено по ответам»: кандидат ответил на все обязательные
@@ -676,7 +685,7 @@ export async function GET(req: NextRequest) {
           ...rest,
           name: displayName,
           nameUncertain,
-          demoTotalBlocks,
+          demoTotalBlocks: effTotal,
           demoCompletedBlocks,
           progressPercent,
           demoCompletedByAnswers,

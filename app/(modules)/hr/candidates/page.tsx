@@ -59,6 +59,8 @@ interface GlobalCandidate {
   aiScore?: number | null
   demoAnswersScore?: number | null
   resumeScore?: number | null
+  aiScoreV2?: number | null
+  overrideContentBlockId?: string | null
   nameUncertain?: boolean
   testScore?: number | null
   testStatus?: "submitted" | "in_progress" | "opened" | "sent" | null
@@ -117,6 +119,8 @@ function toListCandidate(c: GlobalCandidate): Candidate & { vacancyTitle: string
     lastSeen: new Date(c.createdAt),
     aiScore: c.aiScore ?? undefined,
     resumeScore: c.resumeScore ?? null,
+    aiScoreV2: c.aiScoreV2 ?? null,
+    overrideContentBlockId: c.overrideContentBlockId ?? null,
     demoAnswersScore: c.demoAnswersScore ?? null,
     nameUncertain: c.nameUncertain === true,
     testScore: c.testScore ?? null,
