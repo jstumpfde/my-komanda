@@ -1131,7 +1131,9 @@ export function NancyAssistant() {
       <button
         onClick={() => { unlockAudio(); setOpen(true) }}
         className={cn(
-          "fixed bottom-20 md:bottom-4 right-4 z-50",
+          // md:bottom-1 — прижата к самому низу (Юрий 03.07: аватар перекрывал
+          // кнопки «Сохранить» футера; футер резервирует полосу снизу).
+          "fixed bottom-20 md:bottom-1 right-4 z-50",
           "h-16 w-16 rounded-full shadow-lg border-2 border-primary",
           "overflow-hidden hover:scale-105 active:scale-95 transition-transform",
           "flex items-center justify-center bg-violet-600 text-white",

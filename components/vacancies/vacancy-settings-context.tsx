@@ -394,7 +394,10 @@ export function VacancyTabFooter(props: {
     // TabsContent → кнопки прижимались к правому краю viewport, а не к краю
     // контентной колонки. max-w-3xl совпадает с обёрткой секций настроек
     // (space-y-6 max-w-3xl) и линией-разделителем над кнопками.
-    <div className={cn("flex items-center justify-between mt-6 pt-4 border-t gap-3 max-w-3xl", props.className)}>
+    // md:mb-20 — резерв под плавающие виджеты (Нэнси + «Чаты» прижаты к низу,
+    // md:bottom-1/3): кнопки «Сохранить/Далее» не оказываются под ними при
+    // прокрутке в самый низ (Юрий 03.07: виджеты перекрывали кнопки).
+    <div className={cn("flex items-center justify-between mt-6 pt-4 border-t gap-3 max-w-3xl md:mb-20", props.className)}>
       {/* Снизу-слева: хлебные крошки навигации */}
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={onAllVacancies}>

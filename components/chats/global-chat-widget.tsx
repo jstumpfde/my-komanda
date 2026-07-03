@@ -199,7 +199,10 @@ export function GlobalChatWidget() {
           className={cn(
             // Линия Нэнси: центр 112px (mobile) / 48px (md) от низа; пилюля h-12.
             // Нэнси right-4 + w-16 → занята полоса до 80px; пилюля right-24 = 96px.
-            "fixed bottom-[88px] md:bottom-6 right-24 z-50",
+            // md:bottom-3 — на одной центр-линии с Нэнси (md:bottom-1, h-16):
+            // виджеты прижаты к низу, чтобы не перекрывать кнопки футера
+            // (Юрий 03.07); футер резервирует полосу снизу.
+            "fixed bottom-[88px] md:bottom-3 right-24 z-50",
             "h-12 rounded-full pl-4 pr-5 shadow-lg",
             "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900",
             "flex items-center gap-2 hover:scale-105 active:scale-95 transition-transform",
