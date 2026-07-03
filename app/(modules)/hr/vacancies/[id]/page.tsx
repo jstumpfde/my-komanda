@@ -1290,6 +1290,10 @@ export default function VacancyPage() {
   // когда handle становится доступен.
   const [anketaHandle, setAnketaHandle] = useState<AnketaTabHandle | null>(null)
   const [anketaSaving, setAnketaSaving] = useState(false)
+  // Flush несохранённого контента (ContentBlocksTab.registerFlush) — вызывается
+  // кнопкой «Далее» единого нижнего ряда перед переходом (Юрий 03.07).
+  const contentFlushRef = useRef<(() => void) | null>(null)
+  const registerContentFlush = useCallback((fn: () => void) => { contentFlushRef.current = fn }, [])
   const registerAnketaHandle = useCallback((h: AnketaTabHandle) => setAnketaHandle(h), [])
   // «Сохранить анкету в библиотеку» из дропдауна «Действия» доступно с любой вкладки:
   // если AnketaTab ещё не смонтирован (другая вкладка) — переключаемся на «anketa»
@@ -3458,6 +3462,7 @@ export default function VacancyPage() {
                 <ContentBlocksTab
                   vacancyId={id}
                   vacancyTitle={vacancyTitle}
+                  registerFlush={registerContentFlush}
                   funnelV2RuntimeEnabled={apiVacancy?.funnelV2RuntimeEnabled === true}
                   onNavigateNext={() => {
                     // Далее → следующий этап после «Контент»: для платформенного
@@ -4684,21 +4689,35 @@ export default function VacancyPage() {
               const idx = vacancySteps.findIndex(s => s.kind === "tab" && s.value === activeTab)
               const prevStep = idx > 0 ? vacancySteps[idx - 1] : null
               const nextStep = idx >= 0 && idx < vacancySteps.length - 1 ? vacancySteps[idx + 1] : null
-              // «Вакансия» и «Контент» рендерят собственную кнопку «Далее» внутри
-              // редактора (AnketaTab/ContentBlocksTab) — чтобы не задваивать, здесь
-              // «Далее» у них скрываем, оставляя только крошки навигации слева.
-              const ownsOwnNext = activeTab === "anketa" || activeTab === "content"
-              const showNext = !ownsOwnNext && !!nextStep
-              // #44: футер наследует ширину активного верхнего таба (та же карта
-              // пресетов, что и у SettingsTabShell вокруг контента этого таба).
+              // Юрий 03.07: ЕДИНЫЙ ряд под линией на всех табах — кнопки
+              // «Вакансии» (Предпросмотр/Сохранить/Далее через AnketaTabHandle)
+              // и «Контента» (Далее с flush через registerFlush) переехали СЮДА,
+              // собственных нижних рядов у редакторов больше нет.
+              const isAnketa = activeTab === "anketa"
+              const isContent = activeTab === "content"
+              const showNext = !!nextStep
               return (
                 <VacancyTabFooter
                   onAllVacancies={() => router.push("/hr/vacancies")}
                   prevLabel={prevStep?.label ?? null}
                   onPrev={prevStep ? () => goToVacancyStep(prevStep) : undefined}
                   nextLabel={showNext ? nextStep!.label : null}
-                  onNext={showNext ? () => goToVacancyStep(nextStep!) : undefined}
-                  showSave={false}
+                  onNext={showNext
+                    ? async () => {
+                        if (isAnketa) await anketaHandle?.save()
+                        if (isContent) contentFlushRef.current?.()
+                        goToVacancyStep(nextStep!)
+                      }
+                    : undefined}
+                  showSave={isAnketa}
+                  onSave={isAnketa ? async () => { await anketaHandle?.save() } : undefined}
+                  saving={isAnketa ? anketaSaving : undefined}
+                  extraButtons={isAnketa ? (
+                    <Button variant="outline" size="sm" className="gap-1.5 h-9 text-xs" onClick={() => anketaHandle?.openPreview()}>
+                      <Eye className="w-3.5 h-3.5" />
+                      Предпросмотр вакансии
+                    </Button>
+                  ) : undefined}
                   className={SETTINGS_TAB_WIDTH_CLASS[VACANCY_TAB_WIDTH[activeTab] ?? "md"]}
                 />
               )

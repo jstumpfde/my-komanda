@@ -379,9 +379,11 @@ export function VacancyTabFooter(props: {
    *  как у эталона «Вакансия»). Для широких табов (Кандидаты/Аналитика) можно
    *  передать "max-w-none", чтобы панель растянулась под таблицу. */
   className?: string
-  /** Доп. классы РЯДА КНОПОК (напр. lg:pr-[364px] у Портрета — кнопки под
-   *  правым краем формы, левее AI-панели). На крошки/линию не влияет. */
+  /** Доп. классы ГРУППЫ КНОПОК справа (напр. lg:pr-[364px] у Портрета —
+   *  кнопки под правым краем формы, левее AI-панели). На крошки не влияет. */
   buttonsClassName?: string
+  /** Доп. кнопки перед «Сохранить» (напр. «Предпросмотр вакансии» у анкеты). */
+  extraButtons?: React.ReactNode
 }) {
   const ctx = useVacancySettings()
   const { onAllVacancies, prevLabel, onPrev, nextLabel, onNext } = props
@@ -391,32 +393,15 @@ export function VacancyTabFooter(props: {
   const saveLabel = ctx && ctx.pendingCount > 1
     ? `Сохранить настройки (${ctx.pendingCount} изменения)`
     : ctx ? "Сохранить настройки" : "Сохранить"
-  const hasButtons = (showSave && !!saveHandler) || (!!nextLabel && !!onNext)
   return (
-    // #44 + эталон «Вакансия» (Юрий 03.07 «видишь разницу?»): ДВА ряда —
-    // кнопки [Сохранить]·[Далее] НАД разделительной линией по правому краю
-    // контента, крошки навигации ОТДЕЛЬНО под линией. buttonsClassName двигает
-    // только ряд кнопок (у Портрета — под край формы, левее AI-панели).
-    // md:mb-20 — резерв под плавающие виджеты (Нэнси + «Чаты» прижаты к низу).
-    <div className={cn("mt-6 max-w-3xl md:mb-20", props.className)}>
-      {hasButtons && (
-        <div className={cn("flex items-center justify-end gap-3", props.buttonsClassName)}>
-          {showSave && saveHandler && (
-            <Button size="sm" className="gap-1.5 h-9 text-xs" onClick={() => { void saveHandler() }} disabled={saving}>
-              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-              {saveLabel}
-            </Button>
-          )}
-          {nextLabel && onNext && (
-            <Button size="sm" variant="default" className="gap-1.5 h-9 text-xs" onClick={onNext} disabled={saving}>
-              {nextLabel}
-              <ChevronRight className="w-3.5 h-3.5" />
-            </Button>
-          )}
-        </div>
-      )}
-      {/* Линия + крошки — как на «Вакансии»: под линией только навигация */}
-      <div className={cn("flex items-center gap-2 pt-4 border-t", hasButtons && "mt-4")}>
+    // Юрий 03.07 (финал): ЕДИНЫЙ вид на всех табах — ОДИН ряд ПОД линией:
+    // слева крошки навигации, справа [доп.]·[Сохранить]·[Далее].
+    // buttonsClassName двигает только группу кнопок (у Портрета — под край
+    // формы, левее AI-панели). md:mb-20 — резерв под плавающие виджеты
+    // (Нэнси + «Чаты» прижаты к низу и не перекрывают кнопки).
+    <div className={cn("flex items-center justify-between gap-3 mt-6 pt-4 border-t max-w-3xl md:mb-20", props.className)}>
+      {/* Слева: хлебные крошки навигации */}
+      <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={onAllVacancies}>
           <ChevronLeft className="w-3.5 h-3.5" />
           Все вакансии
@@ -425,6 +410,22 @@ export function VacancyTabFooter(props: {
           <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={onPrev}>
             <ChevronLeft className="w-3.5 h-3.5" />
             {prevLabel}
+          </Button>
+        )}
+      </div>
+      {/* Справа: [доп. кнопки] · [Сохранить] · [Далее → {next}] */}
+      <div className={cn("flex items-center gap-3", props.buttonsClassName)}>
+        {props.extraButtons}
+        {showSave && saveHandler && (
+          <Button size="sm" className="gap-1.5 h-9 text-xs" onClick={() => { void saveHandler() }} disabled={saving}>
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            {saveLabel}
+          </Button>
+        )}
+        {nextLabel && onNext && (
+          <Button size="sm" variant="default" className="gap-1.5 h-9 text-xs" onClick={onNext} disabled={saving}>
+            {nextLabel}
+            <ChevronRight className="w-3.5 h-3.5" />
           </Button>
         )}
       </div>

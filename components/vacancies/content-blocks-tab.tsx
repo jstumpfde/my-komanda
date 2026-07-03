@@ -72,10 +72,16 @@ interface ContentBlocksTabProps {
    * При false (default) — тумблеры как обычно.
    */
   funnelV2RuntimeEnabled?: boolean
+  /** Отдаёт наружу flush (сохранить несохранённое) — единый нижний ряд
+   *  (VacancyTabFooter) вызывает его перед «Далее» (Юрий 03.07). */
+  registerFlush?: (fn: () => void) => void
 }
 
-export function ContentBlocksTab({ vacancyId, onNavigateNext, funnelV2RuntimeEnabled = false }: ContentBlocksTabProps) {
+export function ContentBlocksTab({ vacancyId, onNavigateNext, funnelV2RuntimeEnabled = false, registerFlush }: ContentBlocksTabProps) {
   const { blocks, loading, error, createBlock: apiCreateBlock, updateBlock, flush, saveSettings, deleteBlock, reorder, setLiveBattle } = useContentBlocks(vacancyId)
+
+  // Свежий flush — наружу для единого нижнего ряда (кнопка «Далее» в page.tsx).
+  useEffect(() => { registerFlush?.(flush) }, [registerFlush, flush])
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
@@ -695,21 +701,9 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext, funnelV2RuntimeEna
         )}
       </div>
 
-      {/* Далее → следующий этап (Воронка) — внизу справа, единообразно с анкетой.
-          Если контент ещё сохраняется — сначала сохраняем («Сохранить и далее»). */}
-      {onNavigateNext && (
-        <div className="flex items-center justify-end pt-3 mt-3 border-t">
-          <Button
-            size="sm"
-            variant="default"
-            className="gap-1.5 h-9 text-xs"
-            onClick={() => { flush(); onNavigateNext?.() }}
-          >
-            {saveStatus === "saving" ? "Сохранить и далее" : "Далее"}
-            <ChevronRight className="w-3.5 h-3.5" /> Воронка
-          </Button>
-        </div>
-      )}
+      {/* «Далее» здесь больше НЕ рендерится — кнопка в едином нижнем ряду с
+          крошками (VacancyTabFooter в page.tsx; flush прокинут через
+          registerFlush, несохранённое уходит перед переходом). Юрий 03.07. */}
 
       {/* Диалог подтверждения удаления */}
       <AlertDialog open={!!deleteConfirmId} onOpenChange={open => { if (!open) setDeleteConfirmId(null) }}>

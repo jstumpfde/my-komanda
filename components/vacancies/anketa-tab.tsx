@@ -2545,22 +2545,9 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
       </Section>
       </div>
 
-      {/* Actions */}
-      <div className="flex items-center gap-3 justify-end mt-4">
-        <Button variant="outline" size="sm" className="gap-1.5 h-9 text-xs" onClick={() => { setPreviewFullscreen(true); setPreviewOpen(true) }}>
-          <Eye className="w-3.5 h-3.5" />
-          Предпросмотр вакансии
-        </Button>
-        <Button size="sm" className="gap-1.5 h-9 text-xs" onClick={save} disabled={saving}>
-          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-          Сохранить
-        </Button>
-        {onNavigateTab && (
-          <Button size="sm" variant="default" className="gap-1.5 h-9 text-xs" onClick={async () => { await save(); onNavigateTab("spec") }} disabled={saving}>
-            Далее &rarr; Портрет
-          </Button>
-        )}
-      </div>
+      {/* Кнопки «Предпросмотр/Сохранить/Далее» здесь больше НЕ рендерятся —
+          они в едином нижнем ряду с крошками (VacancyTabFooter в page.tsx,
+          через AnketaTabHandle; Юрий 03.07: один ряд под линией). */}
 
       {/* Preview modal */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
