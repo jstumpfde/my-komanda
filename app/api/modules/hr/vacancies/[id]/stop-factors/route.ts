@@ -76,7 +76,12 @@ function sanitize(input: unknown): VacancyStopFactors {
   if (src.citizenship) {
     out.citizenship = {
       enabled:       Boolean(src.citizenship.enabled),
+      // mode/denied — deny-режим «Исключить страны/континенты» (03.07).
+      // Гвард: sanitize их вырезал → deny-настройка молча терялась при
+      // сохранении через таб «Воронка» (spec-путь сохранял корректно).
+      mode:          src.citizenship.mode === "deny" ? "deny" as const : undefined,
       allowed:       stringArray(src.citizenship.allowed),
+      denied:        stringArray(src.citizenship.denied),
       rejectionText: trimText(src.citizenship.rejectionText),
     }
   }

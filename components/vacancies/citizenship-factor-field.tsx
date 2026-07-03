@@ -153,7 +153,10 @@ export function CitizenshipFactorField({ value, onChange }: Props) {
               </div>
             </div>
 
-            {mode === "deny" && (
+            {/* Континенты доступны в ОБОИХ режимах — матчер разворачивает
+                continent:* и в allow, и в deny (минор гварда 03.07: сценарий
+                «Разрешить только СНГ» одним чипом не менее естественен). */}
+            {(
               <div className="space-y-1.5">
                 <p className="text-[11px] font-medium text-muted-foreground">Континенты</p>
                 <div className="flex flex-wrap gap-1.5">
