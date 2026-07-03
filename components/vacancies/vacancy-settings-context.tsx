@@ -395,11 +395,11 @@ export function VacancyTabFooter(props: {
     : ctx ? "Сохранить настройки" : "Сохранить"
   return (
     // Юрий 03.07 (финал): ЕДИНЫЙ вид на всех табах — ОДИН ряд ПОД линией:
-    // слева крошки навигации, справа [доп.]·[Сохранить]·[Далее].
-    // buttonsClassName двигает только группу кнопок (у Портрета — под край
-    // формы, левее AI-панели). md:mb-20 — резерв под плавающие виджеты
-    // (Нэнси + «Чаты» прижаты к низу и не перекрывают кнопки).
-    <div className={cn("flex items-center justify-between gap-3 mt-6 pt-4 border-t max-w-3xl md:mb-20", props.className)}>
+    // слева крошки навигации, справа [доп.]·[Сохранить]·[Далее]. Ширина
+    // фиксированная (max-w-6xl с мест рендера) — кнопки всегда в одной
+    // позиции; плавающие Нэнси/«Чаты» стоят правее в ЭТОЙ ЖЕ полосе
+    // (их bottom выровнен на центр ряда), резервная полоса не нужна.
+    <div className={cn("flex items-center justify-between gap-3 mt-6 pt-4 border-t max-w-3xl", props.className)}>
       {/* Слева: хлебные крошки навигации */}
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={onAllVacancies}>
