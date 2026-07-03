@@ -67,6 +67,12 @@ const SLUG_TO_MODULE_ID: Partial<Record<string, ModuleId>> = {
   'sales':       'sales',
   'logistics':   'warehouse',
   'warehouse':   'warehouse',
+  // Аудит 04.07: без этих записей лицензионный фильтр молча вырезал модули
+  // у ЛЮБОГО клиента с активной подпиской (не по продуктовому флагу, а как
+  // побочка недостающей записи). Видят их по-прежнему только владельцы и
+  // компании с явной лицензией learning/knowledge в tenant_modules.
+  'learning':    'learning',
+  'knowledge':   'knowledge',
 }
 
 const MODULE_SHORT: Record<ModuleId, string> = {
