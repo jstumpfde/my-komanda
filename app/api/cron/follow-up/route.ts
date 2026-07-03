@@ -470,7 +470,10 @@ async function processOneTouch(
       await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "test_submitted" }).where(eq(followUpMessages.id, msg.id))
       return { outcome: "cancelled", reason: "test_submitted" }
     }
-    if (cand.stage === "rejected" || cand.stage === "hired" || cand.autoStopped) {
+    // Поздние стадии (интервью и дальше) = HR уже принял решение вручную —
+    // напоминание про тест неактуально (Юрий 03.07: ручная смена стадии
+    // отменяет автосообщения прошлых этапов).
+    if (["rejected", "hired", "interview", "scheduled", "interviewed", "final_decision", "offer"].includes(cand.stage ?? "") || cand.autoStopped) {
       await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "stage_terminal" }).where(eq(followUpMessages.id, msg.id))
       return { outcome: "cancelled", reason: "stage_terminal" }
     }
@@ -504,7 +507,8 @@ async function processOneTouch(
       await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "test_opened" }).where(eq(followUpMessages.id, msg.id))
       return { outcome: "cancelled", reason: "test_opened" }
     }
-    if (cand.stage === "rejected" || cand.stage === "hired" || cand.autoStopped) {
+    // Поздние стадии — как в isTestReminder: ручное решение HR отменяет дожим.
+    if (["rejected", "hired", "interview", "scheduled", "interviewed", "final_decision", "offer"].includes(cand.stage ?? "") || cand.autoStopped) {
       await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "stage_terminal" }).where(eq(followUpMessages.id, msg.id))
       return { outcome: "cancelled", reason: "stage_terminal" }
     }
@@ -717,6 +721,21 @@ async function processOneTouch(
     // «2-я часть демо»: одним вызовом текст + перевод hh-этапа (assessment =
     // «Тестовое задание») и нашей стадии — параметры из spec.anketaPassInvite.
     if (isSecondDemoInvite) {
+      // Кандидата уже двинули дальше вручную (интервью/решение/оффер/наём/отказ)
+      // или автоматика остановлена — приглашение на 2-ю часть неактуально.
+      // Без этого гварда advanceToStage ниже ДАУНГРЕЙДИЛ бы interview → test_task_sent.
+      {
+        const [c0] = await db
+          .select({ stage: candidates.stage, autoStopped: candidates.autoProcessingStopped })
+          .from(candidates)
+          .where(eq(candidates.id, msg.candidateId))
+          .limit(1)
+        const LATE_STAGES = new Set(["interview", "scheduled", "interviewed", "final_decision", "offer", "hired", "rejected"])
+        if (!c0 || c0.autoStopped || LATE_STAGES.has(c0.stage ?? "")) {
+          await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "stage_advanced" }).where(eq(followUpMessages.id, msg.id))
+          return { outcome: "cancelled", reason: "stage_advanced" }
+        }
+      }
       const [specRow] = await db
         .select({ spec: vacancySpecs.spec })
         .from(vacancySpecs)
