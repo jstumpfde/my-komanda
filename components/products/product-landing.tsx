@@ -1,9 +1,17 @@
 import Link from "next/link"
-import { ArrowRight, ChevronRight, HelpCircle, Layers, Sparkles } from "lucide-react"
+import { ArrowRight, BarChart3, ChevronRight, HelpCircle, Layers, Sparkles } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import {
   Accordion,
   AccordionContent,
@@ -146,6 +154,80 @@ export function ProductLanding({ product, parent }: ProductLandingProps) {
                 </Card>
               ))}
             </div>
+          </div>
+        </section>
+      )}
+
+      {/* Example report */}
+      {product.exampleReport && (
+        <section className="border-t">
+          <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 md:py-20">
+            <div className="mb-2 flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-violet-600" />
+              <h2 className="text-lg font-semibold">{product.exampleReport.title}</h2>
+            </div>
+            <p className="mb-8 text-sm text-muted-foreground">
+              {product.exampleReport.disclaimer}
+            </p>
+
+            {/* KPI cards */}
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+              {product.exampleReport.kpis.map((kpi) => (
+                <Card key={kpi.label}>
+                  <CardContent className="pt-6">
+                    <p className="text-xs text-muted-foreground">{kpi.label}</p>
+                    <p className="mt-1 text-xl font-bold tabular-nums tracking-tight">
+                      {kpi.value}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            {/* Managers table */}
+            <Card className="mt-6">
+              <CardContent className="pt-6">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Менеджер</TableHead>
+                      <TableHead className="text-right">Звонков</TableHead>
+                      <TableHead className="text-right">Ср. оценка</TableHead>
+                      <TableHead className="text-right">Чек-лист</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {product.exampleReport.managers.map((m) => (
+                      <TableRow key={m.name}>
+                        <TableCell className="font-medium">{m.name}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {m.calls.toLocaleString("ru-RU")}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {m.avgScore.toLocaleString("ru-RU", { minimumFractionDigits: 1 })}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {m.checklistPercent}%
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            {/* Insights */}
+            {product.exampleReport.insights.length > 0 && (
+              <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                {product.exampleReport.insights.map((insight, i) => (
+                  <Card key={i}>
+                    <CardContent className="pt-6">
+                      <p className="text-sm leading-relaxed">{insight}</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </div>
         </section>
       )}
