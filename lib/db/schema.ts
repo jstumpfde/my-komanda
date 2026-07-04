@@ -14,6 +14,7 @@ import {
   bigint,
   doublePrecision,
   uniqueIndex,
+  numeric,
 } from "drizzle-orm/pg-core"
 
 // ─── Modules ──────────────────────────────────────────────────────────────────
@@ -4037,6 +4038,8 @@ export const telegramUserbotSessions = pgTable("telegram_userbot_sessions", {
   lastError:        text("last_error"),
   dailyLimit:       integer("daily_limit").notNull().default(20),     // макс. отправок в сутки (анти-спам)
   lastConnectedAt:  timestamp("last_connected_at", { withTimezone: true }),
+  dmWatchEnabled:   boolean("dm_watch_enabled").notNull().default(true),   // авто-атрибуция входящих ЛС (drizzle/0251)
+  dmLastCheckedAt:  timestamp("dm_last_checked_at", { withTimezone: true }),
   createdAt:        timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt:        timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [
@@ -4055,6 +4058,7 @@ export const telegramPostingChats = pgTable("telegram_posting_chats", {
   type:        text("type").notNull(),               // 'group' | 'channel' | 'user'
   category:    text("category"),                      // 'job' | 'product' | NULL
   isEnabled:   boolean("is_enabled").notNull().default(true),
+  costPerPost: numeric("cost_per_post", { precision: 10, scale: 2 }),  // ₽ за размещение (drizzle/0251)
   createdAt:   timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt:   timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [
@@ -4072,6 +4076,8 @@ export const telegramScheduledPosts = pgTable("telegram_scheduled_posts", {
   body:          text("body").notNull(),                // текст поста (plain text, переводы строк сохраняются)
   imagePath:     text("image_path"),                     // путь загруженной картинки (/uploads/...)
   chatIds:       jsonb("chat_ids").notNull(),             // массив id из telegram_posting_chats
+  linkUrl:       text("link_url"),                        // куда вести трекинг-ссылку /go/{code} (drizzle/0251)
+  staggerMinutes: integer("stagger_minutes").notNull().default(0), // разнос отправки по чатам, мин.; 0=все сразу (drizzle/0251)
   scheduledAt:   timestamp("scheduled_at", { withTimezone: true }).notNull(),
   repeatRule:    text("repeat_rule").notNull().default("none"), // 'none' | 'daily' | 'weekly'
   status:        text("status").notNull().default("scheduled"), // scheduled|sending|sent|error|paused
@@ -4100,3 +4106,57 @@ export const telegramPostDeliveries = pgTable("telegram_post_deliveries", {
 ])
 export type TelegramPostDelivery    = typeof telegramPostDeliveries.$inferSelect
 export type NewTelegramPostDelivery = typeof telegramPostDeliveries.$inferInsert
+
+// ─── Telegram-атрибуция (drizzle/0251) ─────────────────────────────────────
+// Три слоя: (1) трекинг-ссылки в постах, (2) авто-атрибуция входящих ЛС через
+// userbot, (3) сводка по каналам с расходами (см. lib/telegram-posting/analytics.ts).
+
+// Уникальная трекинг-ссылка на конкретный чат в рамках поста. code — 8 симв.
+// base62 (lib/telegram-posting/link-code.ts), редирект /go/{code} инкрементит clicks.
+export const telegramPostLinks = pgTable("telegram_post_links", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  postId:     uuid("post_id").notNull().references(() => telegramScheduledPosts.id, { onDelete: "cascade" }),
+  chatId:     uuid("chat_id").notNull().references(() => telegramPostingChats.id, { onDelete: "cascade" }),
+  code:       text("code").notNull(),
+  targetUrl:  text("target_url").notNull(),
+  clicks:     integer("clicks").notNull().default(0),
+  createdAt:  timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex("telegram_post_links_code_uq").on(t.code),
+  unique("telegram_post_links_post_chat_uq").on(t.postId, t.chatId),
+])
+export type TelegramPostLink    = typeof telegramPostLinks.$inferSelect
+export type NewTelegramPostLink = typeof telegramPostLinks.$inferInsert
+
+// Лог кликов по трекинг-ссылкам. Сырой IP не храним — только sha256(ip+соль).
+export const telegramLinkClicks = pgTable("telegram_link_clicks", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  linkId:     uuid("link_id").notNull().references(() => telegramPostLinks.id, { onDelete: "cascade" }),
+  clickedAt:  timestamp("clicked_at", { withTimezone: true }).defaultNow().notNull(),
+  userAgent:  text("user_agent"),
+  ipHash:     text("ip_hash"),
+}, (t) => [
+  index("telegram_link_clicks_link_id_idx").on(t.linkId),
+])
+export type TelegramLinkClick    = typeof telegramLinkClicks.$inferSelect
+export type NewTelegramLinkClick = typeof telegramLinkClicks.$inferInsert
+
+// Лиды из входящих ЛС (кто-то написал владельцу лично после того, как увидел
+// пост в чате). source_confidence: 'common_chat' | 'timing' | 'manual'.
+export const telegramDmLeads = pgTable("telegram_dm_leads", {
+  id:                 uuid("id").primaryKey().defaultRandom(),
+  userId:             uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  tgUserId:           text("tg_user_id").notNull(),
+  tgUsername:         text("tg_username"),
+  displayName:        text("display_name"),
+  firstMessageAt:     timestamp("first_message_at", { withTimezone: true }).notNull(),
+  firstMessageText:   text("first_message_text"),
+  sourceChatId:       uuid("source_chat_id").references(() => telegramPostingChats.id, { onDelete: "set null" }),
+  sourceConfidence:   text("source_confidence"), // 'common_chat' | 'timing' | 'manual'
+  notes:              text("notes"),
+  createdAt:          timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  unique("telegram_dm_leads_user_tg_uq").on(t.userId, t.tgUserId),
+])
+export type TelegramDmLead    = typeof telegramDmLeads.$inferSelect
+export type NewTelegramDmLead = typeof telegramDmLeads.$inferInsert

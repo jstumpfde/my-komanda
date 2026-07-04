@@ -16,6 +16,7 @@ import {
 } from "@/lib/db/schema"
 import { getActiveClient } from "./client"
 import { publicDir } from "@/lib/uploads-path"
+import { getOrCreatePostLink, applyLinkToMessage } from "./post-links"
 
 const TICK_SLEEP_BUDGET_MS = 4 * 60_000 // 4 минуты суммарных пауз за тик
 const DELIVERY_WINDOW_MS = 12 * 60 * 60 * 1000 // 12 часов (окно "уже отправлено в этом запуске")
@@ -36,6 +37,31 @@ function resolveImageAbsPath(imagePath: string): string {
   // получить абсолютный путь, "перебивающий" базу в path.join.
   const rel = imagePath.replace(/^\/+/, "")
   return publicDir(rel)
+}
+
+/**
+ * Момент отправки для конкретного чата при разнесении по времени
+ * (stagger_minutes > 0): чаты, отсортированные по id (стабильный порядок
+ * между тиками), равномерно распределяются на staggerMinutes от scheduledAt.
+ * allChatIds — ВСЕ выбранные чаты поста (не только ещё не отправленные) —
+ * иначе позиция "сползает" по мере отправки чатов в предыдущих тиках.
+ */
+function buildDueAtMap(
+  allChatIds: string[],
+  scheduledAt: Date,
+  staggerMinutes: number
+): Map<string, Date> {
+  const sorted = [...allChatIds].sort()
+  const map = new Map<string, Date>()
+  if (staggerMinutes <= 0 || sorted.length <= 1) {
+    for (const id of sorted) map.set(id, scheduledAt)
+    return map
+  }
+  const stepMinutes = staggerMinutes / (sorted.length - 1)
+  sorted.forEach((id, index) => {
+    map.set(id, new Date(scheduledAt.getTime() + index * stepMinutes * 60_000))
+  })
+  return map
 }
 
 export interface ProcessDuePostsResult {
@@ -117,6 +143,24 @@ export async function processDuePosts(): Promise<ProcessDuePostsResult> {
         continue
       }
 
+      // Разнесение по времени: считаем dueAt по ПОЛНОМУ списку выбранных чатов
+      // поста (chatIds), не по pending — позиция в порядке должна быть стабильной
+      // между тиками независимо от того, что уже отправлено.
+      const dueAtMap = buildDueAtMap(chatIds, post.scheduledAt, post.staggerMinutes ?? 0)
+      const dueNow = pending.filter((c) => {
+        const dueAt = dueAtMap.get(c.id) ?? post.scheduledAt
+        return dueAt.getTime() <= now.getTime()
+      })
+      if (dueNow.length === 0) {
+        // Все оставшиеся чаты ждут своего времени в разносе — пост остаётся
+        // 'scheduled', следующий тик проверит снова (без delivery-записи).
+        await db
+          .update(telegramScheduledPosts)
+          .set({ status: "scheduled", updatedAt: new Date() })
+          .where(eq(telegramScheduledPosts.id, post.id))
+        continue
+      }
+
       // Дневной лимит отправок владельца аккаунта (анти-спам) — считается по
       // ВСЕМ постам пользователя за 24 часа, не по одному посту.
       const dailyLimit = await getDailyLimit(post.userId)
@@ -154,7 +198,7 @@ export async function processDuePosts(): Promise<ProcessDuePostsResult> {
       }
 
       try {
-        for (const chat of pending) {
+        for (const chat of dueNow) {
           if (remainingQuota <= 0) {
             break
           }
@@ -168,7 +212,11 @@ export async function processDuePosts(): Promise<ProcessDuePostsResult> {
             // редких случаях); getInputEntity принимает PeerID как number —
             // для подавляющего большинства групп/каналов этого достаточно.
             const peer = await client.getInputEntity(Number(chat.tgPeerId))
-            const message = post.body
+            let message = post.body
+            if (post.linkUrl) {
+              const trackingUrl = await getOrCreatePostLink(post.id, chat.id, post.linkUrl)
+              message = applyLinkToMessage(message, trackingUrl)
+            }
             let tgMessageId: string | null = null
 
             if (post.imagePath) {
@@ -198,8 +246,12 @@ export async function processDuePosts(): Promise<ProcessDuePostsResult> {
             result.deliveriesFailed++
           }
 
-          // Пауза между чатами (кроме случая, когда это был последний в списке).
-          const isLast = chat === pending[pending.length - 1]
+          // Пауза между чатами, отправленными В ЭТОТ ТИК (кроме последнего).
+          // При разносе по времени чаты и так разделены stagger-интервалом —
+          // доп. пауза 30-90с не нужна между чатами, которые ждали своего часа
+          // в разных тиках, но по-прежнему нужна между несколькими чатами,
+          // "созревшими" одновременно в рамках одного тика.
+          const isLast = chat === dueNow[dueNow.length - 1]
           if (!isLast) {
             const pause = randomPauseMs()
             sleepBudgetUsedMs += pause

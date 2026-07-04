@@ -1,6 +1,8 @@
 "use client"
 
+import { useState } from "react"
 import { Switch } from "@/components/ui/switch"
+import { Input } from "@/components/ui/input"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
@@ -13,6 +15,7 @@ export interface ChatRow {
   type: string
   category: string | null
   isEnabled: boolean
+  costPerPost: string | null
 }
 
 const TYPE_ICON: Record<string, typeof Users> = { group: Users, channel: Hash, user: UserIcon }
@@ -20,7 +23,31 @@ const TYPE_LABEL: Record<string, string> = { group: "Группа", channel: "К
 
 interface Props {
   chats: ChatRow[]
-  onPatch: (id: string, patch: { category?: string | null; is_enabled?: boolean }) => Promise<void>
+  onPatch: (id: string, patch: { category?: string | null; is_enabled?: boolean; cost_per_post?: number | null }) => Promise<void>
+}
+
+function CostInput({ chat, onPatch }: { chat: ChatRow; onPatch: Props["onPatch"] }) {
+  const [value, setValue] = useState(chat.costPerPost ?? "")
+
+  function commit() {
+    const trimmed = value.trim()
+    if (trimmed === (chat.costPerPost ?? "")) return
+    if (!trimmed) { onPatch(chat.id, { cost_per_post: null }); return }
+    const n = Number(trimmed)
+    if (!Number.isFinite(n) || n < 0) { setValue(chat.costPerPost ?? ""); return }
+    onPatch(chat.id, { cost_per_post: n })
+  }
+
+  return (
+    <Input
+      className="h-8 w-[100px] text-xs text-right"
+      inputMode="decimal"
+      placeholder="—"
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={commit}
+    />
+  )
 }
 
 export function TelegramChatsSection({ chats, onPatch }: Props) {
@@ -38,6 +65,7 @@ export function TelegramChatsSection({ chats, onPatch }: Props) {
               <th className="px-4 py-2.5 font-medium">Название</th>
               <th className="px-4 py-2.5 font-medium">Тип</th>
               <th className="px-4 py-2.5 font-medium">Категория</th>
+              <th className="px-4 py-2.5 font-medium text-right">₽/пост</th>
               <th className="px-4 py-2.5 font-medium text-center">Включён</th>
             </tr>
           </thead>
@@ -67,6 +95,9 @@ export function TelegramChatsSection({ chats, onPatch }: Props) {
                       </SelectContent>
                     </Select>
                   </td>
+                  <td className="px-4 py-2.5 text-right">
+                    <CostInput chat={c} onPatch={onPatch} />
+                  </td>
                   <td className="px-4 py-2.5 text-center">
                     <Switch checked={c.isEnabled} onCheckedChange={(v) => onPatch(c.id, { is_enabled: v })} />
                   </td>
@@ -75,7 +106,7 @@ export function TelegramChatsSection({ chats, onPatch }: Props) {
             })}
             {chats.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
+                <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
                   Чатов ещё нет — подключите аккаунт и нажмите «Обновить список чатов».
                 </td>
               </tr>

@@ -4,15 +4,23 @@ import { useCallback, useEffect, useState } from "react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Send } from "lucide-react"
 import { TelegramAccountSection, type AccountStatus } from "./telegram-account-section"
 import { TelegramChatsSection, type ChatRow } from "./telegram-chats-section"
 import { TelegramPostsSection, type PostRow } from "./telegram-posts-section"
+import { TelegramLeadsSection, type LeadRow } from "./telegram-leads-section"
+import { TelegramAnalyticsSection, type ChannelAnalyticsRow } from "./telegram-analytics-section"
 import { toast } from "sonner"
 
 interface Props {
   defaultCategory: "vacancy" | "product"
   title: string
+}
+
+interface AnalyticsData {
+  items: ChannelAnalyticsRow[]
+  totals: { postsSent: number; clicks: number; leads: number; spend: number; cpl: number | null }
 }
 
 export function TelegramPostingView({ defaultCategory, title }: Props) {
@@ -25,6 +33,15 @@ export function TelegramPostingView({ defaultCategory, title }: Props) {
 
   const [posts, setPosts] = useState<PostRow[]>([])
   const [postsLoading, setPostsLoading] = useState(true)
+
+  const [leads, setLeads] = useState<LeadRow[]>([])
+  const [leadsLoading, setLeadsLoading] = useState(true)
+
+  const [analytics, setAnalytics] = useState<AnalyticsData>({
+    items: [],
+    totals: { postsSent: 0, clicks: 0, leads: 0, spend: 0, cpl: null },
+  })
+  const [analyticsLoading, setAnalyticsLoading] = useState(true)
 
   const loadStatus = useCallback(async () => {
     setStatusLoading(true)
@@ -53,9 +70,29 @@ export function TelegramPostingView({ defaultCategory, title }: Props) {
     } finally { setPostsLoading(false) }
   }, [defaultCategory])
 
+  const loadLeads = useCallback(async () => {
+    setLeadsLoading(true)
+    try {
+      const res = await fetch("/api/modules/telegram-posting/leads")
+      const data = await res.json()
+      if (res.ok) setLeads(data.items ?? [])
+    } finally { setLeadsLoading(false) }
+  }, [])
+
+  const loadAnalytics = useCallback(async () => {
+    setAnalyticsLoading(true)
+    try {
+      const res = await fetch("/api/modules/telegram-posting/analytics")
+      const data = await res.json()
+      if (res.ok) setAnalytics({ items: data.items ?? [], totals: data.totals })
+    } finally { setAnalyticsLoading(false) }
+  }, [])
+
   useEffect(() => { loadStatus() }, [loadStatus])
   useEffect(() => { loadChats() }, [loadChats])
   useEffect(() => { loadPosts() }, [loadPosts])
+  useEffect(() => { loadLeads() }, [loadLeads])
+  useEffect(() => { loadAnalytics() }, [loadAnalytics])
 
   async function syncChats() {
     setSyncing(true)
@@ -70,7 +107,7 @@ export function TelegramPostingView({ defaultCategory, title }: Props) {
     } finally { setSyncing(false) }
   }
 
-  async function patchChat(id: string, patch: { category?: string | null; is_enabled?: boolean }) {
+  async function patchChat(id: string, patch: { category?: string | null; is_enabled?: boolean; cost_per_post?: number | null }) {
     try {
       const res = await fetch(`/api/modules/telegram-posting/chats/${id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch),
@@ -78,6 +115,7 @@ export function TelegramPostingView({ defaultCategory, title }: Props) {
       const data = await res.json()
       if (!res.ok) { toast.error(data.error || "Не удалось обновить чат"); return }
       await loadChats()
+      await loadAnalytics()
     } catch {
       toast.error("Ошибка сети")
     }
@@ -96,7 +134,7 @@ export function TelegramPostingView({ defaultCategory, title }: Props) {
                 <h1 className="text-lg font-semibold">{title}</h1>
               </div>
               <p className="text-sm text-muted-foreground mt-1">
-                Личный Telegram-аккаунт, реестр чатов и очередь отложенных постов с расписанием.
+                Личный Telegram-аккаунт, реестр чатов, очередь отложенных постов и атрибуция источников.
               </p>
             </div>
 
@@ -109,15 +147,36 @@ export function TelegramPostingView({ defaultCategory, title }: Props) {
                 syncing={syncing}
               />
 
-              <TelegramChatsSection chats={chats} onPatch={patchChat} />
+              <Tabs defaultValue="posts">
+                <TabsList>
+                  <TabsTrigger value="posts">Посты</TabsTrigger>
+                  <TabsTrigger value="chats">Чаты</TabsTrigger>
+                  <TabsTrigger value="leads">Лиды</TabsTrigger>
+                  <TabsTrigger value="analytics">Аналитика</TabsTrigger>
+                </TabsList>
 
-              <TelegramPostsSection
-                category={defaultCategory}
-                posts={posts}
-                chats={chats}
-                loading={postsLoading}
-                onReload={loadPosts}
-              />
+                <TabsContent value="posts" className="mt-4">
+                  <TelegramPostsSection
+                    category={defaultCategory}
+                    posts={posts}
+                    chats={chats}
+                    loading={postsLoading}
+                    onReload={async () => { await loadPosts(); await loadAnalytics() }}
+                  />
+                </TabsContent>
+
+                <TabsContent value="chats" className="mt-4">
+                  <TelegramChatsSection chats={chats} onPatch={patchChat} />
+                </TabsContent>
+
+                <TabsContent value="leads" className="mt-4">
+                  <TelegramLeadsSection chats={chats} leads={leads} loading={leadsLoading} onReload={loadLeads} />
+                </TabsContent>
+
+                <TabsContent value="analytics" className="mt-4">
+                  <TelegramAnalyticsSection rows={analytics.items} totals={analytics.totals} loading={analyticsLoading} />
+                </TabsContent>
+              </Tabs>
             </div>
           </div>
         </main>

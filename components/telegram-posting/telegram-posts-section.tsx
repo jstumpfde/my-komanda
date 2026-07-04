@@ -25,6 +25,8 @@ export interface PostRow {
   body: string
   imagePath: string | null
   chatIds: string[]
+  linkUrl: string | null
+  staggerMinutes: number
   scheduledAt: string
   repeatRule: string
   status: string
@@ -42,6 +44,14 @@ interface DeliveryRow {
 }
 
 const REPEAT_LABEL: Record<string, string> = { none: "Нет", daily: "Ежедневно", weekly: "Еженедельно" }
+const STAGGER_OPTIONS: { value: string; label: string }[] = [
+  { value: "0",   label: "Все сразу" },
+  { value: "30",  label: "30 минут" },
+  { value: "60",  label: "1 час" },
+  { value: "120", label: "2 часа" },
+  { value: "240", label: "4 часа" },
+  { value: "480", label: "8 часов" },
+]
 const STATUS_LABEL: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   scheduled: { label: "Запланирован", variant: "secondary" },
   sending:   { label: "Отправляется", variant: "default" },
@@ -79,6 +89,8 @@ export function TelegramPostsSection({ category, posts, chats, loading, onReload
   const [selectedChats, setSelectedChats] = useState<Set<string>>(new Set())
   const [scheduledAt, setScheduledAt] = useState("")
   const [repeatRule, setRepeatRule] = useState("none")
+  const [linkUrl, setLinkUrl] = useState("")
+  const [staggerMinutes, setStaggerMinutes] = useState("0")
   const [saving, setSaving] = useState(false)
 
   function openCreate() {
@@ -87,6 +99,8 @@ export function TelegramPostsSection({ category, posts, chats, loading, onReload
     const in1h = new Date(Date.now() + 60 * 60 * 1000)
     setScheduledAt(toDatetimeLocal(in1h.toISOString()))
     setRepeatRule("none")
+    setLinkUrl("")
+    setStaggerMinutes("0")
     setSheetOpen(true)
   }
 
@@ -96,6 +110,8 @@ export function TelegramPostsSection({ category, posts, chats, loading, onReload
     setSelectedChats(new Set(p.chatIds))
     setScheduledAt(toDatetimeLocal(p.scheduledAt))
     setRepeatRule(p.repeatRule)
+    setLinkUrl(p.linkUrl ?? "")
+    setStaggerMinutes(String(p.staggerMinutes ?? 0))
     setSheetOpen(true)
   }
 
@@ -127,6 +143,8 @@ export function TelegramPostsSection({ category, posts, chats, loading, onReload
         title: title.trim(),
         body,
         image_path: imagePath,
+        link_url: linkUrl.trim() || null,
+        stagger_minutes: Number(staggerMinutes) || 0,
         chat_ids: [...selectedChats],
         scheduled_at: new Date(scheduledAt).toISOString(),
         repeat_rule: repeatRule,
@@ -225,6 +243,7 @@ export function TelegramPostsSection({ category, posts, chats, loading, onReload
                   <div className="text-xs text-muted-foreground truncate">
                     {p.chatIds.length} чат(ов) · {new Date(p.scheduledAt).toLocaleString("ru", { timeZone: "Europe/Moscow" })} МСК
                     {p.repeatRule !== "none" && <> · повтор: {REPEAT_LABEL[p.repeatRule]}</>}
+                    {p.staggerMinutes > 0 && <> · разнос: {STAGGER_OPTIONS.find((o) => o.value === String(p.staggerMinutes))?.label ?? `${p.staggerMinutes} мин.`}</>}
                   </div>
                 </div>
                 <Badge variant={st.variant}>{st.label}</Badge>
@@ -334,6 +353,20 @@ export function TelegramPostsSection({ category, posts, chats, loading, onReload
               </div>
             </div>
 
+            <div className="space-y-1.5">
+              <Label>Ссылка в посте (куда ведёт)</Label>
+              <Input
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+                placeholder="https://company24.pro/vacancy/..."
+              />
+              <p className="text-xs text-muted-foreground">
+                Если в тексте есть плейсхолдер {"{ссылка}"} — трекинг-метка подставится вместо него,
+                иначе добавится отдельной строкой в конец. Во многих чатах внешние ссылки запрещены —
+                тогда оставь поле пустым, источник определится по общим чатам и времени.
+              </p>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Дата и время (МСК)</Label>
@@ -350,6 +383,22 @@ export function TelegramPostsSection({ category, posts, chats, loading, onReload
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Разнести по времени</Label>
+              <Select value={staggerMinutes} onValueChange={setStaggerMinutes}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {STAGGER_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Разнесение повышает точность определения источника: по времени первого сообщения
+                в личку видно, из какого чата пришёл человек.
+              </p>
             </div>
           </SheetBody>
           <SheetFooter>

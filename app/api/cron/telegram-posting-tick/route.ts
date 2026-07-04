@@ -5,6 +5,9 @@
 // суммарных пауз, остальное — в следующий тик), логирует в
 // telegram_post_deliveries, планирует repeat (daily/weekly).
 //
+// После рассылки — авто-атрибуция входящих ЛС (scanDmLeadsForAllActiveSessions,
+// drizzle/0251): ошибки лидов логируются, но НЕ ломают статус тика отправки.
+//
 // Защита: X-Cron-Secret. Запись в cron_runs через startCronRun/finishCronRun.
 //
 // Crontab на сервере (рекомендуется раз в 5 минут):
@@ -16,6 +19,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { processDuePosts } from "@/lib/telegram-posting/sender"
+import { scanDmLeadsForAllActiveSessions } from "@/lib/telegram-posting/dm-leads"
 
 export const maxDuration = 300
 
@@ -28,8 +32,17 @@ async function handle(req: NextRequest) {
   const run = await startCronRun(CRON_NAME).catch(() => null)
   try {
     const result = await processDuePosts()
-    if (run) await finishCronRun(run.id, "ok", { ...result })
-    return NextResponse.json({ ok: true, ...result })
+
+    let dmLeads: Awaited<ReturnType<typeof scanDmLeadsForAllActiveSessions>> | null = null
+    try {
+      dmLeads = await scanDmLeadsForAllActiveSessions()
+    } catch (err) {
+      // Падение атрибуции ЛС не должно ломать успешный тик отправки постов.
+      console.error("[telegram-posting-tick] dm-leads scan failed:", err)
+    }
+
+    if (run) await finishCronRun(run.id, "ok", { ...result, dmLeads })
+    return NextResponse.json({ ok: true, ...result, dmLeads })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     if (run) await finishCronRun(run.id, "error", null, msg)

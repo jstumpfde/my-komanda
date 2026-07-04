@@ -1,4 +1,5 @@
-// PATCH { category?, is_enabled? } — пометить чат категорией job/product или вкл/выкл.
+// PATCH { category?, is_enabled?, cost_per_post? } — пометить чат категорией
+// job/product, вкл/выкл, или задать стоимость размещения (₽/пост, для аналитики).
 import { and, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { telegramPostingChats } from "@/lib/db/schema"
@@ -21,6 +22,15 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     }
     if (typeof body.is_enabled === "boolean") {
       patch.isEnabled = body.is_enabled
+    }
+    if (body.cost_per_post !== undefined) {
+      if (body.cost_per_post === null || body.cost_per_post === "") {
+        patch.costPerPost = null
+      } else {
+        const n = Number(body.cost_per_post)
+        if (!Number.isFinite(n) || n < 0) return apiError("Некорректная стоимость размещения", 400)
+        patch.costPerPost = n.toFixed(2)
+      }
     }
 
     const [updated] = await db

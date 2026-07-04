@@ -6,6 +6,7 @@ import { telegramScheduledPosts } from "@/lib/db/schema"
 import { apiError, apiSuccess, requirePlatformAdmin } from "@/lib/api-helpers"
 
 const ALLOWED_REPEAT = new Set(["none", "daily", "weekly"])
+const MAX_STAGGER_MINUTES = 480 // 8ч — не ломает DELIVERY_WINDOW_MS (12ч) в sender.ts
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -25,6 +26,16 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     }
     if (body.image_path !== undefined) {
       patch.imagePath = body.image_path || null
+    }
+    if (body.link_url !== undefined) {
+      patch.linkUrl = typeof body.link_url === "string" && body.link_url.trim() ? body.link_url.trim() : null
+    }
+    if (body.stagger_minutes !== undefined) {
+      const n = Number(body.stagger_minutes)
+      if (!Number.isFinite(n) || n < 0 || n > MAX_STAGGER_MINUTES) {
+        return apiError(`Разнесение по времени — от 0 до ${MAX_STAGGER_MINUTES} мин.`, 400)
+      }
+      patch.staggerMinutes = n
     }
     if (Array.isArray(body.chat_ids)) {
       if (body.chat_ids.length === 0) return apiError("Выберите хотя бы один чат", 400)
