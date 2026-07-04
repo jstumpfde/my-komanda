@@ -1,6 +1,5 @@
 import NextAuth, { type DefaultSession, CredentialsSignin } from "next-auth"
 import Credentials from "next-auth/providers/credentials"
-import GoogleProvider from "next-auth/providers/google"
 import { eq, or, ilike } from "drizzle-orm"
 import bcrypt from "bcryptjs"
 import { db } from "@/lib/db"
@@ -90,10 +89,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     newUser: "/register",
   },
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID ?? "",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
-    }),
+    // Google-провайдер удалён (04.07, Юрий): сервис ограничен в РФ.
     VKProvider({
       clientId: process.env.VK_CLIENT_ID ?? "",
       clientSecret: process.env.VK_CLIENT_SECRET ?? "",
