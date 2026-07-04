@@ -632,10 +632,10 @@ export function ListView({
           const day = d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })
           const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
           return (
-            <div className="flex items-center justify-center gap-1 text-[13px] whitespace-nowrap" title="Ближайшее интервью">
+            <div className="flex items-center justify-center gap-0.5 text-[13px] whitespace-nowrap" title="Ближайшее интервью">
               <CalendarClock className="w-3.5 h-3.5 text-primary/70 shrink-0" />
               <span className="font-medium text-foreground">{day}</span>
-              <span className="text-muted-foreground">{time}</span>
+              <span className="text-muted-foreground ml-1">{time}</span>
             </div>
           )
         },
