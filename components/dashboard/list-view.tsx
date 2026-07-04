@@ -432,24 +432,26 @@ export function ListView({
       list.push({
         id: "vacancy",
         gridWidth: "minmax(112px, 0.9fr)",
-        header: <div className="text-muted-foreground">Вакансия</div>,
+        header: <div className="text-muted-foreground text-center w-full">Вакансия</div>,
         renderCell: (candidate) => {
           const vc = candidate as { vacancyTitle?: string | null; vacancyId?: string | null }
           const title = vc.vacancyTitle ?? "—"
           if (vc.vacancyId && onVacancyClick) {
             return (
-              <button
-                type="button"
-                title={`Открыть вакансию: ${title}`}
-                className="text-[13px] text-muted-foreground hover:text-primary hover:underline truncate min-w-0 text-left"
-                onClick={(e) => { e.stopPropagation(); onVacancyClick(vc.vacancyId!) }}
-              >
-                {title}
-              </button>
+              <div className="flex justify-center min-w-0">
+                <button
+                  type="button"
+                  title={`Открыть вакансию: ${title}`}
+                  className="text-[13px] text-muted-foreground hover:text-primary hover:underline truncate min-w-0 text-center"
+                  onClick={(e) => { e.stopPropagation(); onVacancyClick(vc.vacancyId!) }}
+                >
+                  {title}
+                </button>
+              </div>
             )
           }
           return (
-            <div className="text-[13px] text-muted-foreground truncate min-w-0" title={title}>{title}</div>
+            <div className="text-[13px] text-muted-foreground truncate min-w-0 text-center" title={title}>{title}</div>
           )
         },
       })
