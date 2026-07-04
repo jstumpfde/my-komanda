@@ -256,4 +256,14 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Настройки',  href: '/email-marketing/settings',  icon: 'Settings' },
     ],
   },
+  business_assistant: {
+    id: 'business_assistant',
+    name: 'Бизнес-ассистент',
+    description: 'Поиск выгодных предложений: авиабилеты и далее другие категории',
+    icon: 'Plane',
+    basePath: '/business-assistant',
+    menuItems: [
+      { label: 'Авиабилеты', href: '/business-assistant/flights', icon: 'Plane' },
+    ],
+  },
 }
