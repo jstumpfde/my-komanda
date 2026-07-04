@@ -15,6 +15,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (body.source_chat_id !== undefined) {
       patch.sourceChatId = body.source_chat_id || null
       patch.sourceConfidence = body.source_chat_id ? "manual" : null
+      // Ручной выбор — окончательный, больше не размножаем лид по кандидатам
+      // в аналитике (см. analytics/route.ts).
+      patch.candidateChatIds = null
     }
     if (body.notes !== undefined) {
       patch.notes = typeof body.notes === "string" && body.notes.trim() ? body.notes.trim() : null

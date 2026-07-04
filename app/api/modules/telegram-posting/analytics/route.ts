@@ -1,7 +1,12 @@
 // GET — сводка по каналам: постов отправлено, кликов по трекинг-ссылкам,
-// лидов (по source_chat_id), расход (постов × cost_per_post), CPL.
-// Плюс строка «не определён» — лиды без source_chat_id.
-import { eq, and, sql, isNull } from "drizzle-orm"
+// лидов, расход (постов × cost_per_post), CPL.
+// Полностью автоматически, без ручного выбора: лид с source_confidence=
+// 'ambiguous' (человек состоит сразу в нескольких наших чатах) засчитывается
+// В КАЖДЫЙ чат-кандидат — так владелец видит реальную нагрузку по каждой
+// группе, не теряя и не додумывая, откуда именно пришёл конкретный человек.
+// Плюс строка «не определён» — лиды без единого совпадения (ни общего чата,
+// ни совпадения по содержанию, ни по времени).
+import { eq, and, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import {
   telegramPostingChats,
@@ -56,23 +61,35 @@ export async function GET() {
       .where(eq(telegramScheduledPosts.userId, userId))
       .groupBy(telegramPostLinks.chatId)
 
-    const leadsByChat = await db
+    // Берём лиды сырыми (не агрегируем в SQL) — у 'ambiguous' лида несколько
+    // чатов-кандидатов в jsonb, разложить это на группы проще в JS.
+    const leads = await db
       .select({
-        chatId: telegramDmLeads.sourceChatId,
-        count: sql<number>`count(*)::int`,
+        sourceChatId:     telegramDmLeads.sourceChatId,
+        sourceConfidence: telegramDmLeads.sourceConfidence,
+        candidateChatIds: telegramDmLeads.candidateChatIds,
       })
       .from(telegramDmLeads)
-      .where(and(eq(telegramDmLeads.userId, userId), sql`${telegramDmLeads.sourceChatId} IS NOT NULL`))
-      .groupBy(telegramDmLeads.sourceChatId)
+      .where(eq(telegramDmLeads.userId, userId))
 
-    const [{ unattributedLeads }] = await db
-      .select({ unattributedLeads: sql<number>`count(*)::int` })
-      .from(telegramDmLeads)
-      .where(and(eq(telegramDmLeads.userId, userId), isNull(telegramDmLeads.sourceChatId)))
+    const leadsMap = new Map<string, number>()
+    let unattributedLeads = 0
+    for (const lead of leads) {
+      if (lead.sourceConfidence === "ambiguous" && Array.isArray(lead.candidateChatIds) && lead.candidateChatIds.length > 0) {
+        // Учитываем лид В КАЖДОМ чате-кандидате — не гадаем, показываем всю
+        // нагрузку так, как её честно можно посчитать автоматически.
+        for (const chatId of lead.candidateChatIds as string[]) {
+          leadsMap.set(chatId, (leadsMap.get(chatId) ?? 0) + 1)
+        }
+      } else if (lead.sourceChatId) {
+        leadsMap.set(lead.sourceChatId, (leadsMap.get(lead.sourceChatId) ?? 0) + 1)
+      } else {
+        unattributedLeads++
+      }
+    }
 
     const deliveryMap = new Map(deliveryCounts.map((r) => [r.chatId, r.count]))
     const clicksMap = new Map(clicksByChat.map((r) => [r.chatId, r.clicks]))
-    const leadsMap = new Map(leadsByChat.map((r) => [r.chatId as string, r.count]))
 
     const rows: ChannelAnalyticsRow[] = chats.map((c) => {
       const postsSent = deliveryMap.get(c.id) ?? 0

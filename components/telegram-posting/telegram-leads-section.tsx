@@ -27,7 +27,7 @@ export interface LeadRow {
 
 const CONFIDENCE_LABEL: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
   common_chat: { label: "Общий чат", variant: "default" },
-  ambiguous:   { label: "Похоже — уточните", variant: "secondary" },
+  ambiguous:   { label: "Несколько чатов", variant: "secondary" },
   keyword:     { label: "По содержанию", variant: "secondary" },
   timing:      { label: "По времени (слабый)", variant: "outline" },
   manual:      { label: "Вручную", variant: "outline" },
@@ -146,8 +146,9 @@ export function TelegramLeadsSection({ leads, chats, loading, onReload }: Props)
                             <Badge variant={conf.variant} className="cursor-help">{conf.label}</Badge>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[280px] text-xs">
-                            Состоит сразу в нескольких ваших чатах — вероятно один из:{" "}
-                            {l.candidateChatTitles.join(", ")}. Выберите верный в «Источник».
+                            Состоит сразу в нескольких ваших чатах: {l.candidateChatTitles.join(", ")}.
+                            Учтён в статистике каждого из них автоматически — уточнять источник
+                            вручную не обязательно, но при желании можно поправить в «Источник».
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>

@@ -27,9 +27,16 @@ interface Props {
 export function TelegramAnalyticsSection({ rows, totals, loading }: Props) {
   return (
     <div className="rounded-xl border border-border shadow-sm bg-card">
-      <div className="p-4 border-b border-border flex items-center gap-2">
-        <BarChart3 className="h-4 w-4 text-violet-600" />
-        <h2 className="text-sm font-semibold">Аналитика по каналам</h2>
+      <div className="p-4 border-b border-border">
+        <div className="flex items-center gap-2">
+          <BarChart3 className="h-4 w-4 text-violet-600" />
+          <h2 className="text-sm font-semibold">Аналитика по каналам</h2>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Если человек состоит сразу в нескольких ваших чатах, лид автоматически
+          учитывается в каждом из них — «Итого» может быть больше числа лидов
+          на вкладке «Лиды».
+        </p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
