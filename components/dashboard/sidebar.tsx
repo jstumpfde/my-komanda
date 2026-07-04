@@ -73,6 +73,16 @@ const SLUG_TO_MODULE_ID: Partial<Record<string, ModuleId>> = {
   // компании с явной лицензией learning/knowledge в tenant_modules.
   'learning':    'learning',
   'knowledge':   'knowledge',
+  // Аудит 04.07 (продолжение): та же дыра для модулей без записи в seed.ts —
+  // slug совпадает с moduleId (конвенция уже установлена для learning/knowledge
+  // выше). Другой конвенции для slug в кодовой базе не найдено (grep по
+  // modules.slug/tenant_modules) — реальные slug создаются вручную в админке.
+  'tasks':           'tasks',
+  'booking':         'booking',
+  'dialer':          'dialer',
+  'qc':              'qc',
+  'b2b':             'b2b',
+  'email_marketing': 'email_marketing',
 }
 
 const MODULE_SHORT: Record<ModuleId, string> = {
@@ -88,6 +98,7 @@ const MODULE_SHORT: Record<ModuleId, string> = {
   booking:   'БРН',
   dialer:    'ЗВН',
   qc:        'ОКК',
+  email_marketing: 'ЕМЛ',
 }
 
 // Module accent colors for visual distinction
@@ -104,6 +115,7 @@ const MODULE_COLORS: Record<ModuleId, string> = {
   booking:   'text-teal-500',
   dialer:    'text-red-500',
   qc:        'text-indigo-500',
+  email_marketing: 'text-rose-500',
 }
 
 const MODULE_BG_COLORS: Record<ModuleId, string> = {
@@ -119,6 +131,7 @@ const MODULE_BG_COLORS: Record<ModuleId, string> = {
   booking:   'bg-teal-500/10',
   dialer:    'bg-red-500/10',
   qc:        'bg-indigo-500/10',
+  email_marketing: 'bg-rose-500/10',
 }
 
 const MODULE_BORDER_COLORS: Record<ModuleId, string> = {
@@ -134,6 +147,7 @@ const MODULE_BORDER_COLORS: Record<ModuleId, string> = {
   booking:   '#14b8a6',
   dialer:    '#ef4444',
   qc:        '#6366f1',
+  email_marketing: '#f43f5e',
 }
 
 // Group colors for style C (colored icons + badge)

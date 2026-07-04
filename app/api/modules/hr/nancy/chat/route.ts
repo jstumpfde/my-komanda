@@ -28,6 +28,8 @@ import type { NancyVoiceSettings } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 import { getClaudeApiUrls } from "@/lib/claude-proxy"
 import { AI_MODEL_MAIN } from "@/lib/ai/models"
+import { checkRateLimit } from "@/lib/rate-limit"
+import { checkAiRateLimit } from "@/lib/ai-safety"
 
 export interface NancyAction {
   type:
@@ -383,6 +385,14 @@ export async function POST(req: Request) {
   } catch (res) {
     return res as Response
   }
+
+  // Rate-limit — Нэнси дёргает AI на каждое сообщение, риск накрутки costов.
+  const tenantId = user.companyId || user.id || "default"
+  if (!checkRateLimit(`nancy-chat:${tenantId}`, 20, 60_000)) {
+    return apiError("Слишком частые запросы. Подождите несколько секунд.", 429)
+  }
+  const dailyLimit = checkAiRateLimit(tenantId)
+  if (dailyLimit) return apiError(dailyLimit.message, 429)
 
   let body: NancyChatRequest
   try {

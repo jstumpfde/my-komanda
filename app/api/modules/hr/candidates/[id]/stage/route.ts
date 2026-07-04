@@ -7,15 +7,19 @@ import { trySyncStageToHh, trySyncRejectToHh, trySyncInviteToHh } from "@/lib/hh
 import { sendWebhook } from "@/lib/webhooks"
 import { sendToBitrix } from "@/lib/bitrix"
 import { scheduleInterviewInvite } from "@/lib/messaging/schedule-invite"
+import { ALL_STAGE_SLUGS, LEGACY_STAGE_LABELS, type StageSlug } from "@/lib/stages"
 
-const VALID_STAGES = [
-  "new", "primary_contact", "demo", "demo_opened", "decision",
-  "anketa_filled", "ai_screening", "interview", "final_decision",
-  "hired", "rejected", "talent_pool", "pending", "preboarding",
-  // Этап 2: исходы тестового задания (lib/stages.ts test_passed/test_failed).
-  "test_task_done", "test_passed", "test_failed",
-] as const
-type Stage = (typeof VALID_STAGES)[number]
+// Валидные значения stage = канонические 19 слугов (lib/stages.ts,
+// ЕДИНЫЙ ИСТОЧНИК ПРАВДЫ) + legacy-слуги второй параллельной системы
+// статусов (баг B9), которые всё ещё живые в БД и активно пишутся здесь
+// и в других роутах (talent_pool, final_decision, demo, pending, preboarding).
+// Раньше был захардкожен урезанный legacy-список без части канона (напр.
+// без 'scheduled') → кнопка «На интервью» (stage="scheduled") падала 400.
+const VALID_STAGES: readonly string[] = [
+  ...ALL_STAGE_SLUGS,
+  ...Object.keys(LEGACY_STAGE_LABELS),
+]
+type Stage = StageSlug | keyof typeof LEGACY_STAGE_LABELS
 
 // Стейджи «после приглашения». Если кандидат уже был в одном из них
 // и его переводят в primary_contact — это внутренняя ручная корректировка,
@@ -54,7 +58,7 @@ export async function PUT(
     // undefined → true (backward-compat: параметр не передан = старое поведение)
     const sendMessage = body.sendMessage !== false
 
-    if (!stage || !(VALID_STAGES as readonly string[]).includes(stage)) {
+    if (!stage || !VALID_STAGES.includes(stage)) {
       return apiError(
         `Invalid stage. Must be one of: ${VALID_STAGES.join(", ")}`,
         400

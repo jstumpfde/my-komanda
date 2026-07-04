@@ -5,9 +5,15 @@ import { db } from "@/lib/db"
 import { compareShares, vacancies } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { buildComparison } from "@/lib/compare/build-comparison"
+import { checkRateLimit } from "@/lib/rate-limit"
 
-export async function GET(_req: Request, ctx: { params: Promise<{ token: string }> }) {
+export async function GET(req: Request, ctx: { params: Promise<{ token: string }> }) {
   try {
+    const ip = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown"
+    if (!checkRateLimit(`compare-share:${ip}`, 30, 60000)) {
+      return apiError("Слишком много запросов, попробуйте позже", 429)
+    }
+
     const { token } = await ctx.params
     if (!token) return apiError("token required", 400)
 

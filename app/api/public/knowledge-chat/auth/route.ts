@@ -3,6 +3,7 @@ import { createHmac } from "crypto"
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { companies } from "@/lib/db/schema"
+import { checkRateLimit, checkPasswordAttempts } from "@/lib/rate-limit"
 
 // ─── HMAC token helpers (shared between /auth and /context) ───────────────
 
@@ -46,6 +47,11 @@ export function verifyToken(token: string): { companyId?: string; exp?: number }
 // ─── POST: validate code + password, issue a short-lived token ────────────
 
 export async function POST(req: NextRequest) {
+  const ip = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown"
+  if (!checkRateLimit(`kchat-auth:${ip}`, 10, 60000)) {
+    return NextResponse.json({ error: "Слишком много запросов, попробуйте позже" }, { status: 429 })
+  }
+
   let body: { code?: string; password?: string }
   try {
     body = await req.json()
@@ -58,6 +64,10 @@ export async function POST(req: NextRequest) {
 
   if (!code || !password) {
     return NextResponse.json({ error: "Укажите код и пароль" }, { status: 400 })
+  }
+
+  if (!checkPasswordAttempts(`kchat-auth:${code}:${ip}`)) {
+    return NextResponse.json({ error: "Слишком много попыток. Попробуйте через 15 минут." }, { status: 429 })
   }
 
   const [company] = await db

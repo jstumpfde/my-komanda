@@ -222,7 +222,7 @@ export async function GET(
       })
       .from(vacancies)
       .innerJoin(companies, eq(vacancies.companyId, companies.id))
-      .where(eq(vacancies.id, candidate.vacancyId))
+      .where(and(eq(vacancies.id, candidate.vacancyId), isNull(vacancies.deletedAt)))
       .limit(1)
 
     if (!row) return apiError("Вакансия не найдена", 404)
@@ -456,7 +456,7 @@ export async function POST(
       })
       .from(vacancies)
       .innerJoin(companies, eq(vacancies.companyId, companies.id))
-      .where(eq(vacancies.id, candidate.vacancyId))
+      .where(and(eq(vacancies.id, candidate.vacancyId), isNull(vacancies.deletedAt)))
       .limit(1)
 
     if (!row) return apiError("Вакансия не найдена", 404)

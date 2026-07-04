@@ -5,6 +5,8 @@ import { vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { processChatbotMessage, type ChatbotSettings } from "@/lib/ai/chatbot-processor"
 import { getSpec } from "@/lib/core/spec/store"
+import { checkRateLimit } from "@/lib/rate-limit"
+import { checkAiRateLimit } from "@/lib/ai-safety"
 
 // Группа 33: песочница для тестирования AI чат-бота.
 // Получает текущее сообщение «от кандидата» + историю (в памяти UI),
@@ -24,6 +26,15 @@ export async function POST(
   try {
     const user = await requireCompany()
     const { id } = await params
+
+    // Rate-limit — песочница гоняет полный processChatbotMessage (AI-вызов)
+    // на каждое сообщение, риск накрутки costов.
+    const tenantId = user.companyId || user.id || "default"
+    if (!checkRateLimit(`sandbox-message:${tenantId}`, 20, 60_000)) {
+      return apiError("Слишком частые запросы. Подождите несколько секунд.", 429)
+    }
+    const dailyLimit = checkAiRateLimit(tenantId)
+    if (dailyLimit) return apiError(dailyLimit.message, 429)
 
     const body = await req.json().catch(() => ({})) as SandboxBody
     const message = typeof body.message === "string" ? body.message.trim() : ""

@@ -16,7 +16,8 @@ import { isoDate } from "@/lib/yandex-direct/sync"
 export async function GET(req: NextRequest) {
   try {
     const user = await requireCompany()
-    const days = Math.min(Number(new URL(req.url).searchParams.get("days") ?? "14") || 14, 90)
+    const daysParam = Number(new URL(req.url).searchParams.get("days"))
+    const days = Number.isFinite(daysParam) && daysParam > 0 ? Math.min(daysParam, 90) : 14
 
     const [integration] = await db
       .select()

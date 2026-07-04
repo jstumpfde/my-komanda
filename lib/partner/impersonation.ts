@@ -127,6 +127,10 @@ export async function getActingAs(): Promise<ActingAsResolved | null> {
 }
 
 // Пишет подписанную httpOnly-куку. Вызывать из server-action.
+// TTL 8 часов — сессия партнёр→клиент НЕ должна жить бессрочно до закрытия
+// браузера (баг-фикс: раньше кука ставилась без maxAge).
+const ACTING_AS_MAX_AGE_SECONDS = 8 * 60 * 60 // 28800
+
 export async function setActingAs(payload: Omit<ActingAsPayload, "issuedAt">): Promise<void> {
   const full: ActingAsPayload = { ...payload, issuedAt: Date.now() }
   const store = await cookies()
@@ -135,6 +139,7 @@ export async function setActingAs(payload: Omit<ActingAsPayload, "issuedAt">): P
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
+    maxAge: ACTING_AS_MAX_AGE_SECONDS,
   })
 }
 

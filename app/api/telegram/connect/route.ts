@@ -4,17 +4,19 @@ import { db } from "@/lib/db"
 import { users } from "@/lib/db/schema"
 import { requireAuth } from "@/lib/api-helpers"
 
-// POST /api/telegram/connect — link a Telegram chat_id to a user by email.
-// Called from a settings UI or an admin panel. Auth required.
+// POST /api/telegram/connect — привязать telegram chat_id к ТЕКУЩЕМУ пользователю.
+// Личность берётся ИЗ СЕССИИ, а не из тела запроса: иначе любой залогиненный мог
+// бы перезаписать telegramChatId чужого сотрудника по email (IDOR, аудит 04.07).
 export async function POST(req: NextRequest) {
+  let sessionUser
   try {
-    await requireAuth()
+    sessionUser = await requireAuth()
   } catch (err) {
     if (err instanceof Response) return err
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  let body: { chatId?: number | string; email?: string }
+  let body: { chatId?: number | string }
   try {
     body = await req.json()
   } catch {
@@ -22,10 +24,13 @@ export async function POST(req: NextRequest) {
   }
 
   const chatId = body.chatId !== undefined && body.chatId !== null ? String(body.chatId).trim() : ""
-  const email = (body.email || "").trim().toLowerCase()
+  const email = (sessionUser.email || "").trim().toLowerCase()
 
-  if (!chatId || !email) {
-    return NextResponse.json({ error: "chatId и email обязательны" }, { status: 400 })
+  if (!chatId) {
+    return NextResponse.json({ error: "chatId обязателен" }, { status: 400 })
+  }
+  if (!email) {
+    return NextResponse.json({ error: "У текущего пользователя нет email" }, { status: 400 })
   }
 
   const [user] = await db

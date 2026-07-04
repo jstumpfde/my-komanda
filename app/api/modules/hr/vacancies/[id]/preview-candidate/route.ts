@@ -3,6 +3,7 @@ import { db } from "@/lib/db"
 import { candidates, vacancies } from "@/lib/db/schema"
 import { and, eq } from "drizzle-orm"
 import { requireCompany } from "@/lib/api-helpers"
+import { generateCandidateToken } from "@/lib/candidate-tokens"
 
 export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -31,7 +32,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
     }
 
     // Создаём нового
-    const newToken = Math.random().toString(36).slice(2) + Date.now().toString(36)
+    const newToken = generateCandidateToken()
     const [created] = await db.insert(candidates).values({
       vacancyId,
       name: PREVIEW_NAME,

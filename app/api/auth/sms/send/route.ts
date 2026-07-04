@@ -8,6 +8,12 @@ function generateCode(): string {
 }
 
 export async function POST(req: NextRequest) {
+  // SMS-логин не подключён ни к одному UI, но роут публичный и создаёт
+  // director-аккаунты + жжёт баланс SMS.ru (аудит 04.07). Отключён до явного
+  // включения фичи через env SMS_LOGIN_ENABLED=true.
+  if (process.env.SMS_LOGIN_ENABLED !== "true") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 })
+  }
   try {
     const body = await req.json() as { phone?: string }
     const rawPhone = body.phone ?? ""

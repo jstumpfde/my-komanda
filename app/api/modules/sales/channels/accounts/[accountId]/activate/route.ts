@@ -88,7 +88,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ acc
         config,
         updatedAt: new Date(),
       })
-      .where(eq(salesChannelAccounts.id, accountId))
+      .where(and(eq(salesChannelAccounts.id, accountId), eq(salesChannelAccounts.tenantId, user.companyId)))
 
     if (!webhookSet) {
       return apiError(`Токен принят, но не удалось зарегистрировать webhook: ${setRes.description ?? ""}`, 502)
@@ -119,7 +119,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     await db
       .update(salesChannelAccounts)
       .set({ isActive: false, config, updatedAt: new Date() })
-      .where(eq(salesChannelAccounts.id, accountId))
+      .where(and(eq(salesChannelAccounts.id, accountId), eq(salesChannelAccounts.tenantId, user.companyId)))
 
     return apiSuccess({ connected: false })
   } catch (err) {

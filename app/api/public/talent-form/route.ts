@@ -4,9 +4,15 @@ import { NextRequest, NextResponse } from "next/server"
 import { eq, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { formTrackingLinks, talentPoolEntries } from "@/lib/db/schema"
+import { checkRateLimit } from "@/lib/rate-limit"
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown"
+    if (!checkRateLimit(`talent-form:${ip}`, 15, 60000)) {
+      return NextResponse.json({ error: "Слишком много запросов, попробуйте позже" }, { status: 429 })
+    }
+
     const body = await req.json().catch(() => ({})) as {
       slug?: string; name?: string; email?: string; phone?: string
       telegram?: string; position?: string; company?: string; comment?: string

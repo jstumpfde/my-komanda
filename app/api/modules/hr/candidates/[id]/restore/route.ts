@@ -18,7 +18,7 @@
 // состояние нашей платформы.
 
 import { NextRequest } from "next/server"
-import { eq, and } from "drizzle-orm"
+import { eq, and, inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
@@ -88,8 +88,20 @@ export async function POST(
         stageHistory: [...history, restoreEntry],
         updatedAt:    now,
       })
-      .where(eq(candidates.id, id))
+      // TOCTOU-защита: UPDATE сам скоупим по компании (а не только SELECT
+      // выше), чтобы между проверкой и записью нельзя было подменить
+      // владельца. У candidates нет company_id — изоляция через вакансию
+      // компании (тот же приём, что в stage/route.ts).
+      .where(and(
+        eq(candidates.id, id),
+        inArray(
+          candidates.vacancyId,
+          db.select({ id: vacancies.id }).from(vacancies).where(eq(vacancies.companyId, user.companyId)),
+        ),
+      ))
       .returning({ id: candidates.id, stage: candidates.stage })
+
+    if (!updated) return apiError("Candidate not found", 404)
 
     return apiSuccess({
       id:       updated?.id ?? id,

@@ -133,8 +133,12 @@ export async function PUT(
     const [updated] = await db
       .update(vacancies)
       .set(updates)
-      .where(eq(vacancies.id, id))
+      .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
       .returning()
+
+    if (!updated) {
+      return apiError("Vacancy not found", 404)
+    }
 
     const changedFields = Object.keys(updates).filter(k => k !== "updatedAt")
     logActivity({ companyId: user.companyId, userId: user.id!, action: "update", entityType: "vacancy", entityId: id, entityTitle: updated.title, module: "hr", details: { changedFields }, request: req })

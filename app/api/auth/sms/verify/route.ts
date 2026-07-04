@@ -4,6 +4,11 @@ import { smsCodes, users } from "@/lib/db/schema"
 import { eq, and, gt, desc } from "drizzle-orm"
 
 export async function POST(req: NextRequest) {
+  // Отключён вместе с /api/auth/sms/send (создавал director-аккаунты без
+  // верификации; аудит 04.07). Включается через env SMS_LOGIN_ENABLED=true.
+  if (process.env.SMS_LOGIN_ENABLED !== "true") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 })
+  }
   try {
     const body = await req.json() as { phone?: string; code?: string }
     const rawPhone = body.phone ?? ""

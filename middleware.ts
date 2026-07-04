@@ -41,6 +41,8 @@ const PUBLIC_PREFIXES = [
   "/v/",
   "/f/",                // публичная форма Резерва (tracking-ссылка)
   "/join/",
+  "/invite/",           // публичная страница принятия инвайта по токен-ссылке
+                        // (рассчитана на неавторизованного пользователя)
   "/api/auth",          // sign-in/out + forgot-password/reset-password
   "/api/cron/",         // cron-эндпоинты — защищены X-Cron-Secret в самом роуте,
                         // а не сессией NextAuth.

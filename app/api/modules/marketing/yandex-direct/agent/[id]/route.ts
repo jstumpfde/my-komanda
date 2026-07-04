@@ -2,12 +2,12 @@
 // POST body: { action: "apply" | "dismiss" }
 
 import { NextRequest } from "next/server"
-import { apiError, apiSuccess, requireCompany } from "@/lib/api-helpers"
+import { apiError, apiSuccess, requireDirector } from "@/lib/api-helpers"
 import { applyAction, dismissAction } from "@/lib/yandex-direct/agent"
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const user = await requireCompany()
+    const user = await requireDirector()
     const { id } = await ctx.params
     const body = await req.json().catch(() => ({}))
     const action = body.action

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { accessRequests } from "@/lib/db/schema"
+import { checkRateLimit } from "@/lib/rate-limit"
 
 // POST /api/public/partner-application
 //
@@ -14,6 +15,11 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown"
+    if (!checkRateLimit(`partner-app:${ip}`, 5, 60000)) {
+      return NextResponse.json({ error: "Слишком много запросов, попробуйте позже" }, { status: 429 })
+    }
+
     const body = await req.json().catch(() => null)
     if (!body || typeof body !== "object") {
       return NextResponse.json({ error: "Некорректный запрос" }, { status: 400 })

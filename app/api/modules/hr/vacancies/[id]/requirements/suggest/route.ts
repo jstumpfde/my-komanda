@@ -13,6 +13,8 @@ import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import { buildSuggestRequirementsPrompt } from "@/lib/ai/prompts/suggest-requirements"
 import { addVacancyTokens } from "@/lib/ai/token-usage"
 import { AI_MODEL_MAIN } from "@/lib/ai/models"
+import { checkAiRateLimit } from "@/lib/ai-safety"
+import { checkRateLimit } from "@/lib/rate-limit"
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -61,6 +63,13 @@ export async function POST(
   try {
     const user = await requireCompany()
     const { id } = await params
+
+    const tenantId = user.companyId || user.id || "default"
+    if (!checkRateLimit(`requirements-suggest:${tenantId}`, 20, 60_000)) {
+      return apiError("Слишком частые запросы. Подождите несколько секунд.", 429)
+    }
+    const dailyLimit = checkAiRateLimit(tenantId)
+    if (dailyLimit) return apiError(dailyLimit.message, 429)
 
     const [vacancy] = await db
       .select({

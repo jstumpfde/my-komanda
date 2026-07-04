@@ -6,12 +6,18 @@ import { sql } from "drizzle-orm"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { generateCandidateToken } from "@/lib/candidate-tokens"
 import { generateCandidateShortId } from "@/lib/short-id"
+import { checkRateLimit } from "@/lib/rate-limit"
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ slug: string }> },
 ) {
   try {
+    const ip = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown"
+    if (!checkRateLimit(`vacancy-apply:${ip}`, 15, 60000)) {
+      return apiError("Слишком много запросов, попробуйте позже", 429)
+    }
+
     const { slug } = await params
     const body = await req.json()
 

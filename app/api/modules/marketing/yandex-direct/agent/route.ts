@@ -1,7 +1,7 @@
 // Запуск AI-оптимизатора вручную (кнопка «Запустить анализ»).
 // GET — последние действия/рекомендации агента.
 
-import { apiError, apiSuccess, requireCompany } from "@/lib/api-helpers"
+import { apiError, apiSuccess, requireCompany, requireDirector } from "@/lib/api-helpers"
 import { listRecentActions, runOptimizer } from "@/lib/yandex-direct/agent"
 
 export async function GET() {
@@ -17,7 +17,7 @@ export async function GET() {
 
 export async function POST() {
   try {
-    const user = await requireCompany()
+    const user = await requireDirector()
     const result = await runOptimizer(user.companyId)
     return apiSuccess(result)
   } catch (err) {

@@ -36,6 +36,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Лимит использований исчерпан" }, { status: 410 })
   }
 
+  // Защита от tenant-эскейпа: пользователь уже состоит в ДРУГОЙ компании —
+  // нельзя молча перезаписать его companyId/role данными из чужой ссылки.
+  if (session.user.companyId && session.user.companyId !== link.companyId) {
+    return NextResponse.json(
+      { error: "Вы уже состоите в другой компании. Сначала покиньте текущую." },
+      { status: 409 }
+    )
+  }
+
   // Обновить companyId и роль пользователя
   await db
     .update(users)

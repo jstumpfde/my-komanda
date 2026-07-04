@@ -15,10 +15,9 @@ const HEADER = "x-platform-admin-key"
 export function requirePlatformKey(req: NextRequest): NextResponse | null {
   const expected = process.env.PLATFORM_ADMIN_KEY
   if (!expected) {
-    return NextResponse.json(
-      { error: "PLATFORM_ADMIN_KEY not configured on server" },
-      { status: 500 },
-    )
+    // Ключ не сконфигурирован — отдаём 404, как будто роута не существует,
+    // а не 500 с именем env (не раскрываем структуру платформенных эндпоинтов).
+    return NextResponse.json({ error: "Not found" }, { status: 404 })
   }
   const got = req.headers.get(HEADER)
   if (!got || got !== expected) {
