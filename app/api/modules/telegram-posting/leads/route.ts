@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
       conditions.push(eq(telegramDmLeads.sourceChatId, source))
     }
 
-    const items = await db
+    const rows = await db
       .select({
         id:                telegramDmLeads.id,
         tgUserId:          telegramDmLeads.tgUserId,
@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
         firstMessageText:  telegramDmLeads.firstMessageText,
         sourceChatId:      telegramDmLeads.sourceChatId,
         sourceConfidence:  telegramDmLeads.sourceConfidence,
+        candidateChatIds:  telegramDmLeads.candidateChatIds,
         notes:             telegramDmLeads.notes,
         createdAt:         telegramDmLeads.createdAt,
         sourceChatTitle:   telegramPostingChats.title,
@@ -42,6 +43,22 @@ export async function GET(req: NextRequest) {
       .where(and(...conditions))
       .orderBy(desc(telegramDmLeads.firstMessageAt))
       .limit(limit)
+
+    // Для лидов с несколькими кандидатами (source_confidence='ambiguous')
+    // подтягиваем названия чатов-кандидатов — UI покажет их во всплывающей
+    // подсказке, чтобы владелец выбирал одним кликом из своих же чатов.
+    const allChats = await db
+      .select({ id: telegramPostingChats.id, title: telegramPostingChats.title })
+      .from(telegramPostingChats)
+      .where(eq(telegramPostingChats.userId, user.id as string))
+    const chatTitleById = new Map(allChats.map((c) => [c.id, c.title]))
+
+    const items = rows.map((r) => ({
+      ...r,
+      candidateChatTitles: Array.isArray(r.candidateChatIds)
+        ? (r.candidateChatIds as string[]).map((id) => chatTitleById.get(id) ?? "?")
+        : null,
+    }))
 
     const [{ count }] = await db
       .select({ count: sql<number>`count(*)::int` })

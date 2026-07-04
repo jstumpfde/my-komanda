@@ -1,18 +1,23 @@
-// Авто-атрибуция входящих ЛС владельца через userbot: если кто-то написал в
-// личку владельцу, пытаемся определить, из какого чата человек пришёл — три
-// слоя, по убыванию приоритета:
-//   (а) общий чат из telegram_posting_chats — НЕ зависит от давности поста
-//       (Telegram видит общую группу хоть через год после публикации);
-//   (б) сопоставление по содержанию — ключевые слова первого сообщения лида
-//       против словаря постов, отправленных в каждый чат (тоже НЕ зависит от
-//       давности — совпадение "Сурин"/"Mida Grande"/название вакансии работает
-//       и для поста месячной давности в "спящей" группе);
+// Авто-атрибуция входящих ЛС владельца через userbot: кто-то увидел пост в
+// чате, кликнул на ник владельца и написал в личку — обычно ОБЫЧНОЕ сообщение
+// без конкретики ("Здравствуйте, сколько стоит?"), содержание тут почти не
+// помогает. Три слоя, по убыванию приоритета:
+//   (а) ОБЩИЙ ЧАТ (GetCommonChats) — главный сигнал, НЕ зависит от текста
+//       сообщения и от давности поста: Telegram видит общее членство в группе
+//       хоть спустя год после публикации. Если общий чат один — уверенно.
+//       Если общих чатов НЕСКОЛЬКО (человек состоит в паре наших групп) —
+//       система не гадает молча: помечает 'ambiguous' и сохраняет всех
+//       кандидатов, владелец выбирает сам на вкладке «Лиды» (один клик).
+//   (б) сопоставление по содержанию — ТОЛЬКО когда общих чатов вообще нет
+//       (человек не состоит ни в одной нашей группе, например увидел
+//       пересланное сообщение). Работает лишь если текст называет что-то
+//       конкретное ("Сурин", "Mida Grande") — редкий случай, не основа.
 //   (в) тайминг (последняя доставка перед сообщением) — САМЫЙ СЛАБЫЙ резерв,
 //       используется только если (а) и (б) ничего не дали. НЕ работает для
 //       старых постов/неактивных групп — оставлен как последний шанс, не основа.
 
 import { Api } from "telegram"
-import { and, eq, desc, lte, inArray, count as sqlCount } from "drizzle-orm"
+import { and, eq, desc, lte, inArray, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import {
   telegramUserbotSessions,
@@ -114,14 +119,18 @@ function pickUnambiguousWinner(scores: Array<{ chatId: string; score: number }>)
   return null
 }
 
-async function pickMostActiveChat(chatIds: string[]): Promise<string | null> {
+/** Тай-брейк СРЕДИ УЖЕ ПОДТВЕРЖДЁННЫХ общих чатов (не среди всех подряд) —
+ * берём тот, куда пост уходил позже всех. Используется только чтобы
+ * предзаполнить предположение в UI, когда общих чатов несколько; итоговый
+ * source_confidence в этом случае — 'ambiguous', не 'common_chat'. */
+async function pickMostRecentChat(chatIds: string[]): Promise<string | null> {
   if (chatIds.length === 0) return null
   const rows = await db
-    .select({ chatId: telegramPostDeliveries.chatId, cnt: sqlCount() })
+    .select({ chatId: telegramPostDeliveries.chatId, latest: sql<string>`max(${telegramPostDeliveries.sentAt})` })
     .from(telegramPostDeliveries)
     .where(and(inArray(telegramPostDeliveries.chatId, chatIds), eq(telegramPostDeliveries.status, "sent")))
     .groupBy(telegramPostDeliveries.chatId)
-    .orderBy(desc(sqlCount()))
+    .orderBy(desc(sql`max(${telegramPostDeliveries.sentAt})`))
     .limit(1)
   return rows[0]?.chatId ?? chatIds[0] ?? null
 }
@@ -223,7 +232,7 @@ export async function scanDmLeads(userId: string): Promise<ScanDmLeadsResult> {
         const userEntity = dialog.entity as { firstName?: string; lastName?: string; username?: string } | undefined
         const displayName = [userEntity?.firstName, userEntity?.lastName].filter(Boolean).join(" ") || null
 
-        const { sourceChatId, sourceConfidence } = await resolveSource(
+        const { sourceChatId, sourceConfidence, candidateChatIds } = await resolveSource(
           client as unknown as { invoke: (req: unknown) => Promise<{ chats?: Array<{ id: unknown }> }> },
           dialog.entity,
           userId,
@@ -242,6 +251,7 @@ export async function scanDmLeads(userId: string): Promise<ScanDmLeadsResult> {
           firstMessageText: firstMessageText || null,
           sourceChatId,
           sourceConfidence,
+          candidateChatIds,
         })
         result.newLeads++
       } catch (err) {
@@ -271,6 +281,12 @@ function unmarkPeerId(peerId: string): string {
   return peerId
 }
 
+interface ResolvedSource {
+  sourceChatId: string | null
+  sourceConfidence: string | null
+  candidateChatIds: string[] | null
+}
+
 async function resolveSource(
   client: { invoke: (req: unknown) => Promise<{ chats?: Array<{ id: unknown }> }> },
   dialogEntity: unknown,
@@ -279,7 +295,7 @@ async function resolveSource(
   firstMessageAt: Date,
   ownChats: Array<{ id: string; tgPeerId: string }>,
   vocabulary: Map<string, Set<string>>
-): Promise<{ sourceChatId: string | null; sourceConfidence: string | null }> {
+): Promise<ResolvedSource> {
   // (а) Общие чаты с лидом — самый надёжный сигнал, не зависит от давности
   // поста (Telegram видит общую группу хоть спустя год после публикации).
   // GetCommonChats — сырой MTProto-вызов, ему нужен InputUser (id+access_hash
@@ -304,24 +320,33 @@ async function resolveSource(
   }
 
   if (matchingOwnChatIds.length === 1) {
-    return { sourceChatId: matchingOwnChatIds[0], sourceConfidence: "common_chat" }
+    // Единственный общий чат — не зависит ни от текста сообщения, ни от даты
+    // поста: сильный сигнал сам по себе.
+    return { sourceChatId: matchingOwnChatIds[0], sourceConfidence: "common_chat", candidateChatIds: null }
   }
   if (matchingOwnChatIds.length > 1) {
-    // Несколько общих чатов — пробуем разрешить неоднозначность по содержанию
-    // сообщения (см. ниже), иначе берём самый активный из совпавших.
+    // Человек состоит сразу в НЕСКОЛЬКИХ наших чатах — пробуем разрешить по
+    // содержанию сообщения (реально сработает редко: обычные первые сообщения
+    // вида "Здравствуйте, сколько стоит?" ничего не называют по имени).
     const disambiguated = pickUnambiguousWinner(
       scoreChatsByKeywords(firstMessageText, vocabulary, new Set(matchingOwnChatIds))
     )
-    const chatId = disambiguated ?? (await pickMostActiveChat(matchingOwnChatIds))
-    if (chatId) return { sourceChatId: chatId, sourceConfidence: "common_chat" }
+    if (disambiguated) {
+      return { sourceChatId: disambiguated, sourceConfidence: "common_chat", candidateChatIds: null }
+    }
+    // Не удалось выбрать однозначно — ЧЕСТНО помечаем как требующее уточнения
+    // владельцем, вместо того чтобы молча угадать. sourceChatId — лишь
+    // предзаполненное предположение (самый недавний пост среди кандидатов).
+    const suggested = await pickMostRecentChat(matchingOwnChatIds)
+    return { sourceChatId: suggested, sourceConfidence: "ambiguous", candidateChatIds: matchingOwnChatIds }
   }
 
-  // (б) Сопоставление по содержанию — ключевые слова первого сообщения лида
-  // против словаря постов чата. Тоже НЕ зависит от давности поста/активности
-  // группы — работает и для поста месячной давности в "спящей" группе.
+  // (б) Сопоставление по содержанию — только если общих чатов вообще нет
+  // (человек не состоит ни в одной нашей группе — например, увидел пересланное
+  // сообщение). Ключевые слова первого сообщения против словаря постов чата.
   const keywordWinner = pickUnambiguousWinner(scoreChatsByKeywords(firstMessageText, vocabulary))
   if (keywordWinner) {
-    return { sourceChatId: keywordWinner, sourceConfidence: "keyword" }
+    return { sourceChatId: keywordWinner, sourceConfidence: "keyword", candidateChatIds: null }
   }
 
   // (в) Тайминг — САМЫЙ СЛАБЫЙ резерв, только если (а) и (б) ничего не дали.
@@ -343,8 +368,8 @@ async function resolveSource(
     .limit(1)
 
   if (latestDelivery && latestDelivery.sentAt.getTime() >= windowStart.getTime()) {
-    return { sourceChatId: latestDelivery.chatId, sourceConfidence: "timing" }
+    return { sourceChatId: latestDelivery.chatId, sourceConfidence: "timing", candidateChatIds: null }
   }
 
-  return { sourceChatId: null, sourceConfidence: null }
+  return { sourceChatId: null, sourceConfidence: null, candidateChatIds: null }
 }

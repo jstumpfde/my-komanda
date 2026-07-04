@@ -4142,7 +4142,10 @@ export type TelegramLinkClick    = typeof telegramLinkClicks.$inferSelect
 export type NewTelegramLinkClick = typeof telegramLinkClicks.$inferInsert
 
 // Лиды из входящих ЛС (кто-то написал владельцу лично после того, как увидел
-// пост в чате). source_confidence: 'common_chat' | 'timing' | 'manual'.
+// пост в чате). source_confidence: 'common_chat' | 'keyword' | 'ambiguous' |
+// 'timing' | 'manual'. candidate_chat_ids заполняется ТОЛЬКО когда общих чатов
+// с лидом несколько и не удалось однозначно выбрать — sourceChatId тогда лишь
+// предположение (самый недавний из кандидатов), а UI честно помечает "уточните".
 export const telegramDmLeads = pgTable("telegram_dm_leads", {
   id:                 uuid("id").primaryKey().defaultRandom(),
   userId:             uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -4152,7 +4155,8 @@ export const telegramDmLeads = pgTable("telegram_dm_leads", {
   firstMessageAt:     timestamp("first_message_at", { withTimezone: true }).notNull(),
   firstMessageText:   text("first_message_text"),
   sourceChatId:       uuid("source_chat_id").references(() => telegramPostingChats.id, { onDelete: "set null" }),
-  sourceConfidence:   text("source_confidence"), // 'common_chat' | 'timing' | 'manual'
+  sourceConfidence:   text("source_confidence"), // 'common_chat' | 'keyword' | 'ambiguous' | 'timing' | 'manual'
+  candidateChatIds:   jsonb("candidate_chat_ids"), // string[] чатов-кандидатов, если source_confidence='ambiguous'
   notes:              text("notes"),
   createdAt:          timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [

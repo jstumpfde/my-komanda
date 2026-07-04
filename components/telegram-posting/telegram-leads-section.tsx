@@ -21,11 +21,13 @@ export interface LeadRow {
   sourceChatId: string | null
   sourceChatTitle: string | null
   sourceConfidence: string | null
+  candidateChatTitles: string[] | null
   notes: string | null
 }
 
 const CONFIDENCE_LABEL: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
   common_chat: { label: "Общий чат", variant: "default" },
+  ambiguous:   { label: "Похоже — уточните", variant: "secondary" },
   keyword:     { label: "По содержанию", variant: "secondary" },
   timing:      { label: "По времени (слабый)", variant: "outline" },
   manual:      { label: "Вручную", variant: "outline" },
@@ -137,7 +139,23 @@ export function TelegramLeadsSection({ leads, chats, loading, onReload }: Props)
                     </Select>
                   </td>
                   <td className="px-4 py-2.5">
-                    {conf ? <Badge variant={conf.variant}>{conf.label}</Badge> : <span className="text-xs text-muted-foreground">—</span>}
+                    {conf && l.candidateChatTitles && l.candidateChatTitles.length > 1 ? (
+                      <TooltipProvider delayDuration={200}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant={conf.variant} className="cursor-help">{conf.label}</Badge>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[280px] text-xs">
+                            Состоит сразу в нескольких ваших чатах — вероятно один из:{" "}
+                            {l.candidateChatTitles.join(", ")}. Выберите верный в «Источник».
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    ) : conf ? (
+                      <Badge variant={conf.variant}>{conf.label}</Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-2.5 min-w-[180px]">
                     <Input
