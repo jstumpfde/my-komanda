@@ -100,6 +100,12 @@ export async function executeRejection(args: {
     await cancelScheduledRejection(candidateId)
     return { rejected: false }
   }
+  // M-1: кандидат уже нанят — отложенный отказ не должен его перезаписывать
+  // (мог быть нанят вручную HR за время задержки отказа). Просто снимаем pending.
+  if (prev.stage === "hired") {
+    await cancelScheduledRejection(candidateId)
+    return { rejected: false }
+  }
 
   const fromStage = prev.stage ?? "new"
   const history = (prev.stageHistory as Array<Record<string, unknown>> | null) ?? []
