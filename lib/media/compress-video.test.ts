@@ -12,8 +12,8 @@ test("битрейт: типичный кейс — 300МБ файл, цель 1
   assert.ok(b > 2_000_000 && b < 2_500_000, String(b))
 })
 
-test("битрейт: короткий ролик упирается в потолок 8 Mbps", () => {
-  assert.equal(computeVideoBitrate(190 * MB, 30), 8_000_000)
+test("битрейт: короткий ролик упирается в потолок 6 Mbps", () => {
+  assert.equal(computeVideoBitrate(190 * MB, 30), 6_000_000)
 })
 
 test("битрейт: очень длинный ролик упирается в пол 1.2 Mbps", () => {
@@ -25,19 +25,19 @@ test("битрейт: нулевая/кривая длительность → C
   assert.throws(() => computeVideoBitrate(190 * MB, NaN), CompressionUnsupportedError)
 })
 
-test("размеры: 4K → длинная сторона 1920, пропорции и чётность", () => {
+test("размеры: 4K → длинная сторона 1280, пропорции и чётность", () => {
   const { width, height } = fitDimensions(3840, 2160)
-  assert.equal(width, 1920)
-  assert.equal(height, 1080)
+  assert.equal(width, 1280)
+  assert.equal(height, 720)
 })
 
 test("размеры: портретное 4K → высота капается", () => {
   const { width, height } = fitDimensions(2160, 3840)
-  assert.equal(height, 1920)
-  assert.equal(width, 1080)
+  assert.equal(height, 1280)
+  assert.equal(width, 720)
 })
 
-test("размеры: FHD и меньше не трогаем", () => {
-  assert.deepEqual(fitDimensions(1920, 1080), { width: 1920, height: 1080 })
+test("размеры: HD и меньше не трогаем, FHD ужимается", () => {
   assert.deepEqual(fitDimensions(1280, 720), { width: 1280, height: 720 })
+  assert.deepEqual(fitDimensions(1920, 1080), { width: 1280, height: 720 })
 })

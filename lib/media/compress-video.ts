@@ -21,8 +21,8 @@ export class CompressionFailedError extends Error {
 
 const AUDIO_BITRATE = 128_000
 const MIN_VIDEO_BITRATE = 1_200_000
-const MAX_VIDEO_BITRATE = 8_000_000
-const MAX_LONG_SIDE = 1920
+const MAX_VIDEO_BITRATE = 6_000_000 // Юрий 04.07: качество ниже FullHD — файлы легче, доставка надёжнее
+const MAX_LONG_SIDE = 1280 // HD вместо FullHD (Юрий 04.07)
 const CAPTURE_FPS = 30
 
 /** Битрейт видео под целевой размер: 90% бюджета минус аудио, с полом и потолком. */
