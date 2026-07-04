@@ -162,10 +162,22 @@ export async function processDuePosts(): Promise<ProcessDuePostsResult> {
       continue
     }
 
-    await db
+    // Атомарный claim: UPDATE условен на status='scheduled' (не просто
+    // WHERE id=...) — если два тика крона пересекутся по времени (напр.
+    // ручной запуск совпал с расписанием, или дублирующийся crontab на
+    // сервере), только ОДИН из них получит claimed.length===1 и продолжит
+    // отправку; второй увидит 0 обновлённых строк и молча пропустит пост
+    // (не будет второй попытки отправки в тот же чат).
+    const claimed = await db
       .update(telegramScheduledPosts)
       .set({ status: "sending", updatedAt: new Date() })
-      .where(eq(telegramScheduledPosts.id, post.id))
+      .where(and(eq(telegramScheduledPosts.id, post.id), eq(telegramScheduledPosts.status, "scheduled")))
+      .returning({ id: telegramScheduledPosts.id })
+    if (claimed.length === 0) {
+      // Пост уже забрал параллельный запуск (или статус сменился между
+      // select due и этим UPDATE) — не наш, пропускаем.
+      continue
+    }
 
     try {
       const chatIds = Array.isArray(post.chatIds) ? (post.chatIds as string[]) : []
