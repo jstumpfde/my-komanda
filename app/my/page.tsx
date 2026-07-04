@@ -5,7 +5,11 @@
 // продуктовая фича с настройками для всех, а личный справочник одного
 // конкретного человека.
 import { useMemo, useState } from "react"
-import { KeyRound, Search, ExternalLink, ArrowRight, Check } from "lucide-react"
+import {
+  KeyRound, Search, ExternalLink, ArrowRight, Check,
+  Briefcase, Radar, Phone, TrendingUp, Settings, Users, Handshake,
+  type LucideIcon,
+} from "lucide-react"
 
 interface Account {
   email: string
@@ -23,6 +27,12 @@ interface Service {
   accounts: Account[]
   sub?: string[]
   emptyNote?: string
+  // Иконка-марка слева (44px, как в исходном личном лаунчере) — icon ИЛИ
+  // markText (короткая надпись типа "HH"), не оба сразу.
+  icon?: LucideIcon
+  markText?: string
+  markClass: string
+  btnClass: string
 }
 
 const SECTIONS: { label: string; services: Service[] }[] = [
@@ -36,6 +46,9 @@ const SECTIONS: { label: string; services: Service[] }[] = [
         url: "company24.pro",
         loginUrl: "https://company24.pro/admin-login",
         loginLabel: "Войти по ключу",
+        icon: Briefcase,
+        markClass: "bg-gradient-to-br from-violet-500 to-indigo-700",
+        btnClass: "bg-violet-600 hover:bg-violet-500",
         accounts: [
           { email: "jstumpf.de@gmail.com", role: "Платформа-админ", note: "главный · passkey" },
           { email: "j.stumpf@yandex.ru", role: "Директор", note: "ИП Штумпф" },
@@ -55,6 +68,9 @@ const SECTIONS: { label: string; services: Service[] }[] = [
         desc: "Аналитика конкурентов: отзывы (Google Maps/2GIS), SMM, сайты, инсайты, брендбук",
         url: "marketradar24.ru",
         loginUrl: "https://marketradar24.ru",
+        icon: Radar,
+        markClass: "bg-gradient-to-br from-teal-400 to-cyan-600",
+        btnClass: "bg-teal-600 hover:bg-teal-500",
         sub: ["SEO-GEO", "Лендинги (land-pres)", "Контент-фабрика"],
         accounts: [
           { email: "jstumpf.de@gmail.com", role: "Админ" },
@@ -76,6 +92,9 @@ const SECTIONS: { label: string; services: Service[] }[] = [
         desc: "AI-анализ звонков/чатов/встреч ОП: оценки, коучинг, Битрикс/amoCRM",
         url: "radar.company24.pro/admin/call-agent",
         loginUrl: "https://radar.company24.pro/admin/call-agent",
+        icon: Phone,
+        markClass: "bg-gradient-to-br from-amber-400 to-orange-600",
+        btnClass: "bg-orange-600 hover:bg-orange-500",
         accounts: [
           { email: "jstumpf.de@gmail.com", role: "Owner", note: "Орлинк" },
           { email: "admin@company24.ru", role: "Owner", note: "Орлинк" },
@@ -86,6 +105,9 @@ const SECTIONS: { label: string; services: Service[] }[] = [
         key: "leadgen",
         name: "Leadgen",
         desc: "Лидогенерация: сбор компаний по ИНН/сегментам, обогащение, воронки",
+        icon: TrendingUp,
+        markClass: "bg-gradient-to-br from-emerald-400 to-green-600",
+        btnClass: "bg-emerald-600 hover:bg-emerald-500",
         accounts: [
           { email: "jstumpf.de@gmail.com", role: "Platform", note: "полный доступ" },
           { email: "admin", role: "Client", note: "MarketRadar24" },
@@ -98,6 +120,9 @@ const SECTIONS: { label: string; services: Service[] }[] = [
         desc: "Парсер hh.ru: сбор кандидатов/лидов",
         url: "marketradar24.ru/parser",
         loginUrl: "https://marketradar24.ru/parser/",
+        markText: "HH",
+        markClass: "bg-gradient-to-br from-red-500 to-rose-700",
+        btnClass: "bg-rose-600 hover:bg-rose-500",
         accounts: [
           { email: "jstumpf.de@gmail.com", role: "Админ", note: "единственный" },
         ],
@@ -113,6 +138,9 @@ const SECTIONS: { label: string; services: Service[] }[] = [
         desc: "Управление всеми продуктами и клиентами",
         url: "radar.company24.pro/admin",
         loginUrl: "https://radar.company24.pro/admin",
+        icon: Settings,
+        markClass: "bg-gradient-to-br from-sky-400 to-blue-600",
+        btnClass: "bg-sky-600 hover:bg-sky-500",
         accounts: [
           { email: "jstumpf.de@gmail.com", role: "Админ" },
         ],
@@ -123,6 +151,9 @@ const SECTIONS: { label: string; services: Service[] }[] = [
         desc: "Список всех компаний-клиентов Company24 — открой любую и нажми «Войти как клиент», чтобы попасть в её кабинет",
         url: "company24.pro/admin/clients",
         loginUrl: "https://company24.pro/admin/clients",
+        icon: Users,
+        markClass: "bg-gradient-to-br from-fuchsia-400 to-purple-600",
+        btnClass: "bg-fuchsia-600 hover:bg-fuchsia-500",
         accounts: [],
         emptyNote: "не отдельный аккаунт — жмёшь «Войти» и выбираешь компанию на месте",
       },
@@ -132,6 +163,9 @@ const SECTIONS: { label: string; services: Service[] }[] = [
         desc: "Партнёрская программа · кабинет партнёра",
         url: "company24.pro/partner",
         loginUrl: "https://company24.pro/partner",
+        icon: Handshake,
+        markClass: "bg-gradient-to-br from-pink-400 to-rose-600",
+        btnClass: "bg-pink-600 hover:bg-pink-500",
         accounts: [],
         emptyNote: "аккаунтов пока нет",
       },
@@ -236,9 +270,14 @@ export default function MyPage() {
             </div>
 
             <div className="space-y-3">
-              {section.services.map((svc) => (
+              {section.services.map((svc) => {
+                const Icon = svc.icon
+                return (
                 <div key={svc.key} className="rounded-2xl border border-slate-800 bg-gradient-to-b from-slate-900 to-slate-950 overflow-hidden">
                   <div className="flex items-center gap-3.5 p-4">
+                    <div className={`shrink-0 w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold text-sm ${svc.markClass}`}>
+                      {Icon ? <Icon className="w-5 h-5" /> : svc.markText}
+                    </div>
                     <div className="min-w-0 flex-1">
                       <div className="text-[15px] font-semibold tracking-tight">{svc.name}</div>
                       <div className="text-xs text-slate-500 mt-0.5 leading-snug">{svc.desc}</div>
@@ -249,7 +288,7 @@ export default function MyPage() {
                         href={svc.loginUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors"
+                        className={`shrink-0 inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white transition-colors ${svc.btnClass}`}
                       >
                         {svc.loginLabel === "Войти по ключу" && <KeyRound className="w-3.5 h-3.5" />}
                         {svc.loginLabel ?? "Войти"}
@@ -297,7 +336,8 @@ export default function MyPage() {
                     </div>
                   ) : null}
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         ))}
