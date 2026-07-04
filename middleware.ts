@@ -28,6 +28,7 @@ export const runtime = "nodejs"
 // Маршруты доступны без авторизации
 const PUBLIC_PREFIXES = [
   "/login",
+  "/admin-login",       // личная страница входа по ключу (passkey) для владельца платформы
   "/dev-login",
   "/register",
   "/forgot-password",   // страница запроса сброса пароля (без логина)

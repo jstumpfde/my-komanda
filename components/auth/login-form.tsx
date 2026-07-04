@@ -7,9 +7,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Briefcase, ArrowRight, Eye, EyeOff, KeyRound } from "lucide-react"
+import { Briefcase, ArrowRight, Eye, EyeOff } from "lucide-react"
 import Link from "next/link"
-import { loginWithPasskey } from "@/lib/auth/passkey-client"
 
 // ─── VK / Яндекс иконки (простые монохром-бейджи в брендовых цветах) ──────────
 
@@ -37,39 +36,14 @@ function LoginForm({ vkEnabled, yandexEnabled }: { vkEnabled: boolean; yandexEna
   const router = useRouter()
   const searchParams = useSearchParams()
   const callbackUrl = searchParams.get("callbackUrl") ?? "/"
-  // Вход по ключу — служебный, только по прямой ссылке (?key=1). Обычным
-  // пользователям он не нужен, для них — VK/Яндекс и пароль.
-  const showPasskey = searchParams.get("key") === "1"
   const oauthError = searchParams.get("error")
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPw, setShowPw] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [pkLoading, setPkLoading] = useState(false)
   const [oauthLoading, setOauthLoading] = useState<"vk" | "yandex" | null>(null)
   const [error, setError] = useState("")
-
-  const handlePasskey = async () => {
-    setError("")
-    setPkLoading(true)
-    try {
-      const token = await loginWithPasskey()
-      const result = await signIn("passkey", { token, redirect: false })
-      if (result?.error) {
-        setError("Вход по ключу не удался. Войдите паролем.")
-        return
-      }
-      router.push(callbackUrl)
-      router.refresh()
-    } catch (err) {
-      // Отмена пользователем (NotAllowedError) — молча, без ошибки-крика.
-      if (err instanceof Error && err.name === "NotAllowedError") return
-      setError(err instanceof Error ? err.message : "Вход по ключу не удался")
-    } finally {
-      setPkLoading(false)
-    }
-  }
 
   const handleOAuth = (provider: "vk" | "yandex") => {
     setOauthLoading(provider)
@@ -241,26 +215,6 @@ function LoginForm({ vkEnabled, yandexEnabled }: { vkEnabled: boolean; yandexEna
                 <a href="mailto:hello@company24.pro">Нужна помощь?</a>
               </p>
             </form>
-
-            {/* Вход по ключу (passkey) — служебный, только по ссылке ?key=1 */}
-            {showPasskey && (
-              <>
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
-                  <div className="relative flex justify-center text-xs"><span className="bg-card px-2 text-muted-foreground">или</span></div>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full h-11 gap-2"
-                  onClick={handlePasskey}
-                  disabled={pkLoading}
-                >
-                  <KeyRound className="w-4 h-4" />
-                  {pkLoading ? "Проверяем ключ..." : "Войти по ключу"}
-                </Button>
-              </>
-            )}
 
             <p className="text-center text-sm text-muted-foreground">
               Нет аккаунта?{" "}
