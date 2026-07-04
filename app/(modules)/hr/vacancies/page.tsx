@@ -344,6 +344,11 @@ export function VacanciesView({ embedded = false }: { embedded?: boolean }) {
   // Корзина теперь отдельный таб (scope="trash"). Удаление навсегда — через
   // общий диалог PermanentDeleteDialog (ввод названия для подтверждения).
   const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<ApiVacancy | null>(null)
+  // Подтверждение архивации — с опцией «отказать оставшимся» (guard-находка 05.07,
+  // POST reject-remaining). По умолчанию чекбокс ВЫКЛ.
+  const [archiveTarget, setArchiveTarget] = useState<ApiVacancy | null>(null)
+  const [archiveRejectRemaining, setArchiveRejectRemaining] = useState(false)
+  const [archiveBusy, setArchiveBusy] = useState(false)
   // Create vacancy — быстрое создание пустой анкеты
   const [creating, setCreating] = useState(false)
 
@@ -444,10 +449,20 @@ export function VacanciesView({ embedded = false }: { embedded?: boolean }) {
     }
   }, [refetch])
 
-  const handleArchive = useCallback(async (v: ApiVacancy) => {
+  // Открывает диалог подтверждения архивации (чекбокс «отказать оставшимся»
+  // по умолчанию выключен) — сама архивация в handleArchiveConfirm.
+  const handleArchive = useCallback((v: ApiVacancy) => {
+    setArchiveRejectRemaining(false)
+    setArchiveTarget(v)
+  }, [])
+
+  const handleArchiveConfirm = useCallback(async () => {
+    if (!archiveTarget) return
+    const v = archiveTarget
+    setArchiveBusy(true)
     try {
       // Принцип: в архив уходит ОСТАНОВЛЕННАЯ вакансия. Если активна — сначала
-      // останавливаем, затем архивируем (без подтверждений, одним действием).
+      // останавливаем, затем архивируем (одним действием).
       if (v.status === "active" || v.status === "published") {
         await fetch(`/api/modules/hr/vacancies/${v.id}`, {
           method: "PUT",
@@ -462,11 +477,36 @@ export function VacanciesView({ embedded = false }: { embedded?: boolean }) {
       })
       if (!res.ok) throw new Error()
       toast.success("Вакансия перенесена в архив")
+
+      if (archiveRejectRemaining) {
+        try {
+          const rejectRes = await fetch(`/api/modules/hr/vacancies/${v.id}/reject-remaining`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reason: "vacancy_closed_reject_remaining" }),
+          })
+          if (rejectRes.ok) {
+            const data = await rejectRes.json().catch(() => ({})) as { scheduled?: number }
+            const n = data.scheduled ?? 0
+            toast.success(n > 0
+              ? `Запланирован отказ оставшимся кандидатам: ${n}`
+              : "Активных кандидатов для отказа не найдено")
+          } else {
+            toast.error("Вакансия в архиве, но не удалось запланировать отказ оставшимся кандидатам")
+          }
+        } catch {
+          toast.error("Вакансия в архиве, но не удалось запланировать отказ оставшимся кандидатам")
+        }
+      }
+
       refetch()
     } catch {
       toast.error("Не удалось архивировать вакансию")
+    } finally {
+      setArchiveBusy(false)
+      setArchiveTarget(null)
     }
-  }, [refetch])
+  }, [archiveTarget, archiveRejectRemaining, refetch])
 
   const handleDeleteConfirm = useCallback(async () => {
     if (!deleteTarget) return
@@ -834,6 +874,37 @@ export function VacanciesView({ embedded = false }: { embedded?: boolean }) {
             )}
           </div>
         </div>
+
+      {/* Подтверждение архивации — с опцией «отказать оставшимся». */}
+      <AlertDialog open={!!archiveTarget} onOpenChange={(open) => !open && !archiveBusy && setArchiveTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Перенести в архив?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Вакансия «{archiveTarget?.title}» будет перенесена в архив.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <label className="flex items-start gap-2 px-1 py-2 text-sm cursor-pointer">
+            <Checkbox
+              checked={archiveRejectRemaining}
+              onCheckedChange={(v) => setArchiveRejectRemaining(v === true)}
+              className="mt-0.5"
+            />
+            <span>
+              Также отказать оставшимся активным кандидатам
+              <span className="block text-xs text-muted-foreground">
+                Кандидатам без решения будет запланирован отказ (уже принятых и кандидатов в оффере не затронет)
+              </span>
+            </span>
+          </label>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={archiveBusy}>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={handleArchiveConfirm} disabled={archiveBusy}>
+              {archiveBusy ? "Архивируем..." : "В архив"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Soft delete confirmation */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>

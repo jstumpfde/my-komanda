@@ -4,6 +4,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { hhActionForStatus, STAGE_STATUSES } from "./types"
+import { getDefaultPipeline, getStageHhAction } from "@/lib/stages"
 
 test("отказ → discard (все варианты)", () => {
   assert.equal(hhActionForStatus("отказ"), "discard")
@@ -30,8 +31,22 @@ test("новый / оффер → null (не менять стадию на hh)"
   assert.equal(hhActionForStatus("оффер"), null)
 })
 
-test("принят → hired (05.07 фикс: у hh ЕСТЬ состояние hired)", () => {
+test("принят → hired (карта поддерживает значение, у hh ЕСТЬ состояние hired)", () => {
+  // hhActionForStatus — это перевод «текст статуса → hh-действие» (без учёта
+  // компании). Реальный пуш в hh для стадии hired/started_work — opt-in
+  // (см. lib/stages.ts PLATFORM_STAGES): дефолт null, включается компанией
+  // явно через hiringDefaults.stageHhActions.hired = "hired".
   assert.equal(hhActionForStatus("принят"), "hired")
+})
+
+test("opt-in (05.07): платформенный дефолт для hired — null, пока компания не включит явно", () => {
+  const pipeline = getDefaultPipeline("standard")
+  assert.equal(getStageHhAction("hired", pipeline), null)
+})
+
+test("opt-in (05.07): явный stageHhActions.hired=\"hired\" в hiringDefaults компании включает пуш", () => {
+  const pipeline = getDefaultPipeline("standard", { hired: "hired" })
+  assert.equal(getStageHhAction("hired", pipeline), "hired")
 })
 
 test("пусто / undefined / null → null", () => {
