@@ -1716,6 +1716,10 @@ export const candidates = pgTable("candidates", {
   // drizzle/0226 — Фаза 0 рантайма воронки v2. NULL = кандидат в легаси-пути,
   // не вошёл в v2-воронку. Структура — FunnelV2State (объявлен выше в этом файле).
   funnelV2StateJson: jsonb("funnel_v2_state_json").$type<FunnelV2State | null>(),
+  // drizzle/0247 — ФЗ-152: момент обезличивания ПДн отказанного кандидата по
+  // истечении срока хранения компании. NOT NULL = персональные данные вычищены
+  // (имя→«Удалён», контакты/резюме/анкеты/фото очищены), крон не трогает повторно.
+  personalDataErasedAt: timestamp("personal_data_erased_at", { withTimezone: true }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })
@@ -3317,6 +3321,18 @@ export const passwordResetTokens = pgTable("password_reset_tokens", {
   ipAddress:  text("ip_address"),
   userAgent:  text("user_agent"),
   createdAt:  timestamp("created_at").defaultNow().notNull(),
+})
+
+// drizzle/0248 — одноразовый код привязки Telegram-бота базы знаний к
+// пользователю платформы. Раньше бот привязывался по «/start email» без
+// верификации владения (аудит 04.07) — теперь код выдаётся в UI залогиненному
+// пользователю (личность подтверждена сессией) и одноразово гасится при /start.
+export const telegramLinkCodes = pgTable("telegram_link_codes", {
+  id:        uuid("id").primaryKey().defaultRandom(),
+  userId:    uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  code:      text("code").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 })
 
 // ─── Follow-up Campaigns (Воронка дожима) ────────────────────────────────────

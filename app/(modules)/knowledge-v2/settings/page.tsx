@@ -22,6 +22,7 @@ import {
   Save as SaveIcon,
   X as XIcon,
   Brain,
+  KeyRound,
 } from "lucide-react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
@@ -47,6 +48,12 @@ interface TelegramSettings {
   botUsername: string | null
   webhookSet: boolean
   webhookUrl?: string
+}
+
+interface LinkCodeResponse {
+  code: string
+  expiresAt: string
+  botUsername: string | null
 }
 
 interface FlaggedItem {
@@ -131,6 +138,13 @@ export default function KnowledgeSettingsPage() {
   const [settings, setSettings] = useState<TelegramSettings | null>(null)
   const [tokenInput, setTokenInput] = useState("")
   const [tgOpen, setTgOpen] = useState(false)
+
+  // Привязка личного Telegram сотрудника к боту БЗ — одноразовый код
+  // вместо привязки по голому email (аудит 04.07, дыра без проверки владения).
+  const [linkOpen, setLinkOpen] = useState(false)
+  const [linkCode, setLinkCode] = useState<LinkCodeResponse | null>(null)
+  const [linkGenerating, setLinkGenerating] = useState(false)
+  const [linkSecondsLeft, setLinkSecondsLeft] = useState(0)
 
   // Freshness
   const [freshness, setFreshness] = useState<FreshnessResponse | null>(null)
@@ -325,6 +339,36 @@ export default function KnowledgeSettingsPage() {
       toast.error("Ошибка сети")
     } finally {
       setDisconnecting(false)
+    }
+  }
+
+  // Обратный отсчёт до истечения кода — чисто визуальный (сервер — источник
+  // истины по TTL), чтобы сотрудник видел, что код скоро протухнет.
+  useEffect(() => {
+    if (!linkCode) return
+    const tick = () => {
+      const left = Math.max(0, Math.round((new Date(linkCode.expiresAt).getTime() - Date.now()) / 1000))
+      setLinkSecondsLeft(left)
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [linkCode])
+
+  async function handleGenerateLinkCode() {
+    setLinkGenerating(true)
+    try {
+      const res = await fetch("/api/telegram/link-code", { method: "POST" })
+      const data = await res.json().catch(() => null) as (LinkCodeResponse & { error?: string }) | null
+      if (!res.ok || !data) {
+        toast.error(data?.error || "Не удалось получить код")
+        return
+      }
+      setLinkCode(data)
+    } catch {
+      toast.error("Ошибка сети")
+    } finally {
+      setLinkGenerating(false)
     }
   }
 
@@ -647,6 +691,95 @@ export default function KnowledgeSettingsPage() {
                             </Button>
                           )}
                         </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Accordion: Привязать мой Telegram ───────────────────── */}
+                  <div className="rounded-xl shadow-sm border border-border bg-card overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setLinkOpen((v) => !v)}
+                      className="w-full flex items-center justify-between gap-4 p-6 text-left hover:bg-muted/40 transition-colors"
+                      aria-expanded={linkOpen}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="rounded-lg bg-muted p-2 shrink-0">
+                          <KeyRound className="w-5 h-5 text-foreground" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-base font-medium truncate">Привязать мой Telegram</p>
+                          <p className="text-xs text-muted-foreground truncate mt-0.5">
+                            Чтобы спрашивать базу знаний прямо в Telegram
+                          </p>
+                        </div>
+                      </div>
+                      <ChevronDown
+                        className={cn(
+                          "w-5 h-5 text-muted-foreground shrink-0 transition-transform",
+                          linkOpen && "rotate-180",
+                        )}
+                      />
+                    </button>
+
+                    {linkOpen && (
+                      <div className="border-t border-border p-6 space-y-4">
+                        {!connected ? (
+                          <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                            Сначала подключите Telegram-бота компании выше
+                          </div>
+                        ) : (
+                          <>
+                            <p className="text-sm text-muted-foreground">
+                              Получите одноразовый код и отправьте его боту{" "}
+                              {settings?.botUsername ? (
+                                <a
+                                  href={`https://t.me/${settings.botUsername}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-primary hover:underline inline-flex items-center gap-0.5"
+                                >
+                                  @{settings.botUsername}
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              ) : (
+                                "компании"
+                              )}{" "}
+                              командой <code className="px-1 py-0.5 rounded bg-muted text-xs">/start КОД</code>.
+                              Код действует 15 минут и одноразовый.
+                            </p>
+
+                            {linkCode && linkSecondsLeft > 0 ? (
+                              <div className="rounded-lg border border-border bg-muted/30 p-4 text-center space-y-2">
+                                <p className="text-2xl font-mono font-semibold tracking-[0.3em]">
+                                  {linkCode.code}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Истекает через {Math.floor(linkSecondsLeft / 60)}:{String(linkSecondsLeft % 60).padStart(2, "0")}
+                                </p>
+                              </div>
+                            ) : linkCode && linkSecondsLeft <= 0 ? (
+                              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-900/20 p-4 text-center text-sm text-amber-700 dark:text-amber-400">
+                                Код истёк — получите новый
+                              </div>
+                            ) : null}
+
+                            <div className="flex justify-end">
+                              <Button
+                                onClick={handleGenerateLinkCode}
+                                disabled={linkGenerating}
+                                variant={linkCode && linkSecondsLeft > 0 ? "outline" : "default"}
+                              >
+                                {linkGenerating ? (
+                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                ) : (
+                                  <KeyRound className="w-4 h-4 mr-2" />
+                                )}
+                                {linkCode ? "Получить новый код" : "Получить код"}
+                              </Button>
+                            </div>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>

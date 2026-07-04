@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import { and, desc, eq } from "drizzle-orm"
+import { and, desc, eq, gt } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { users, demoTemplates, knowledgeArticles } from "@/lib/db/schema"
+import { users, demoTemplates, knowledgeArticles, telegramLinkCodes } from "@/lib/db/schema"
 import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
 import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
@@ -164,25 +164,42 @@ async function askClaude(question: string, context: string, materialsList: Mater
 
 // ─── Handlers ──────────────────────────────────────────────────────────────
 
-async function handleStart(chatId: number, email: string) {
-  const trimmed = email.trim().toLowerCase()
-  if (!trimmed) {
-    await sendMessage(chatId, "Укажите email: `/start your@email.ru`")
+// Привязка по одноразовому коду (аудит 04.07: раньше привязывали по голому
+// email без проверки владения — любой мог написать боту чужой email и
+// увести чужую переписку с базой знаний). Код выдаётся ТОЛЬКО залогиненному
+// пользователю в UI платформы (/knowledge-v2/settings), TTL 15 минут.
+async function handleStart(chatId: number, code: string) {
+  const trimmed = code.trim()
+  if (!/^\d{6}$/.test(trimmed)) {
+    await sendMessage(
+      chatId,
+      "Код не найден или истёк. Получите новый код в настройках платформы (База знаний → Telegram-бот) и отправьте `/start КОД`.",
+    )
     return
   }
-  const [user] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.email, trimmed))
+
+  const [row] = await db
+    .select({ userId: telegramLinkCodes.userId })
+    .from(telegramLinkCodes)
+    .where(and(eq(telegramLinkCodes.code, trimmed), gt(telegramLinkCodes.expiresAt, new Date())))
     .limit(1)
-  if (!user) {
-    await sendMessage(chatId, "Пользователь с таким email не найден. Обратитесь к администратору.")
+
+  if (!row) {
+    await sendMessage(
+      chatId,
+      "Код не найден или истёк. Получите новый код в настройках платформы (База знаний → Telegram-бот) и отправьте `/start КОД`.",
+    )
     return
   }
+
   await db
     .update(users)
     .set({ telegramChatId: String(chatId) })
-    .where(eq(users.id, user.id))
+    .where(eq(users.id, row.userId))
+
+  // Гасим код сразу — одноразовый.
+  await db.delete(telegramLinkCodes).where(eq(telegramLinkCodes.userId, row.userId))
+
   await sendMessage(chatId, "✅ Аккаунт подключён. Теперь можно задавать вопросы базе знаний — просто напишите сообщение.")
 }
 
@@ -200,7 +217,7 @@ async function handleAsk(chatId: number, question: string) {
     .limit(1)
 
   if (!user || !user.companyId) {
-    await sendMessage(chatId, "Для подключения бота отправьте команду `/start ВАШЕ_EMAIL`")
+    await sendMessage(chatId, "Для подключения бота отправьте `/start КОД` (код — в настройках платформы, раздел «База знаний → Telegram-бот»).")
     return
   }
 
@@ -250,8 +267,8 @@ export async function POST(req: NextRequest) {
 
   try {
     if (text.startsWith("/start")) {
-      const email = text.slice("/start".length).trim()
-      await handleStart(chatId, email)
+      const code = text.slice("/start".length).trim()
+      await handleStart(chatId, code)
     } else if (text.startsWith("/ask")) {
       const question = text.slice("/ask".length).trim()
       await handleAsk(chatId, question)
@@ -260,7 +277,7 @@ export async function POST(req: NextRequest) {
         chatId,
         "*AI-ассистент базы знаний*\n\n" +
           "Команды:\n" +
-          "`/start EMAIL` — привязать аккаунт\n" +
+          "`/start КОД` — привязать аккаунт (код возьмите в настройках платформы)\n" +
           "`/ask ВОПРОС` — спросить у базы знаний\n\n" +
           "Или просто напишите вопрос обычным сообщением.",
       )

@@ -79,7 +79,11 @@ function DataRetentionBlock({ defaults, onPatch }: {
     <Card className="max-w-3xl">
       <CardHeader className="pb-3">
         <CardTitle className="text-sm font-medium">Хранение данных кандидатов</CardTitle>
-        <CardDescription>В соответствии с ФЗ-152 персональные данные отказанных кандидатов будут автоматически удалены</CardDescription>
+        <CardDescription>
+          В соответствии с ФЗ-152 у отказанных кандидатов по истечении выбранного срока
+          автоматически удаляются персональные данные (имя, контакты, резюме, фото, ответы
+          анкет и файлы). Обезличенная запись остаётся в статистике найма. Проверка — раз в сутки.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <Select value={dataRetention} onValueChange={handleChange} disabled={saving}>
