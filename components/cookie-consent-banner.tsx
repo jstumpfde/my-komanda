@@ -121,75 +121,84 @@ export function CookieConsentBanner() {
 
   if (!visible) return null
 
+  if (!showSettings) {
+    // Компактная плашка на всю ширину — не плавающая карточка, без большой
+    // тени/скруглений. Одна строка на десктопе; на мобиле текст и кнопки
+    // в два ровных ряда, без переусложнённой вёрстки.
+    return (
+      <div className="fixed inset-x-0 bottom-0 z-[100] border-t border-border bg-card/98 backdrop-blur-sm shadow-[0_-2px_12px_rgba(0,0,0,0.08)]">
+        <div className="mx-auto max-w-5xl px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-4">
+          <p className="text-xs text-muted-foreground leading-snug flex-1 min-w-0">
+            Мы используем cookie для работы сайта и, с вашего согласия, для аналитики и
+            маркетинга. Подробнее — в{" "}
+            <a href="/privacy" className="underline underline-offset-2 hover:text-foreground whitespace-nowrap">
+              Политике конфиденциальности
+            </a>
+            .
+          </p>
+          <div className="flex items-center gap-1.5 shrink-0 justify-end">
+            <button
+              type="button"
+              onClick={() => setShowSettings(true)}
+              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 px-1.5"
+            >
+              Настроить
+            </button>
+            <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={rejectOptional}>
+              Отклонить
+            </Button>
+            <Button size="sm" className="h-7 px-3 text-xs" onClick={acceptAll}>
+              Принять все
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="fixed inset-x-0 bottom-0 z-[100] p-3 sm:p-4 flex justify-center">
-      <Card className="w-full max-w-2xl shadow-2xl border-border">
-        <CardContent className="p-4 sm:p-5">
-          {!showSettings ? (
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-              <Cookie className="hidden sm:block h-6 w-6 text-violet-600 shrink-0" />
-              <p className="text-sm text-muted-foreground leading-relaxed flex-1">
-                Мы используем cookie для работы сайта и, с вашего согласия, для аналитики и
-                маркетинга. Подробнее — в{" "}
-                <a href="/privacy" className="underline underline-offset-2 hover:text-foreground">
-                  Политике конфиденциальности
-                </a>
-                .
-              </p>
-              <div className="flex items-center gap-2 shrink-0">
-                <Button variant="ghost" size="sm" onClick={() => setShowSettings(true)}>
-                  <Settings2 className="h-4 w-4 mr-1" />
-                  Настроить
-                </Button>
-                <Button variant="outline" size="sm" onClick={rejectOptional}>
-                  Отклонить необязательные
-                </Button>
-                <Button size="sm" onClick={acceptAll}>
-                  Принять все
-                </Button>
+      <Card className="w-full max-w-md shadow-xl border-border">
+        <CardContent className="p-4">
+          <div className="space-y-3.5">
+            <div className="flex items-center gap-2">
+              <Cookie className="h-4 w-4 text-violet-600" />
+              <h2 className="text-sm font-semibold">Настройки cookie</h2>
+            </div>
+
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium">Необходимые</p>
+                  <p className="text-xs text-muted-foreground">Авторизация, сессия, базовая работа сайта.</p>
+                </div>
+                <Switch checked disabled />
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium">Аналитика</p>
+                  <p className="text-xs text-muted-foreground">Обезличенная статистика посещений.</p>
+                </div>
+                <Switch checked={analytics} onCheckedChange={setAnalytics} />
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium">Маркетинг</p>
+                  <p className="text-xs text-muted-foreground">Персонализация предложений и рассылок.</p>
+                </div>
+                <Switch checked={marketing} onCheckedChange={setMarketing} />
               </div>
             </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Cookie className="h-5 w-5 text-violet-600" />
-                <h2 className="text-sm font-semibold">Настройки cookie</h2>
-              </div>
 
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-medium">Необходимые</p>
-                    <p className="text-xs text-muted-foreground">Авторизация, сессия, базовая работа сайта. Всегда включены.</p>
-                  </div>
-                  <Switch checked disabled />
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-medium">Аналитика</p>
-                    <p className="text-xs text-muted-foreground">Обезличенная статистика посещений для улучшения сайта.</p>
-                  </div>
-                  <Switch checked={analytics} onCheckedChange={setAnalytics} />
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-medium">Маркетинг</p>
-                    <p className="text-xs text-muted-foreground">Персонализация предложений и рекламных сообщений.</p>
-                  </div>
-                  <Switch checked={marketing} onCheckedChange={setMarketing} />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-1">
-                <Button variant="outline" size="sm" onClick={() => setShowSettings(false)}>
-                  Назад
-                </Button>
-                <Button size="sm" onClick={saveSelection}>
-                  Сохранить выбор
-                </Button>
-              </div>
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={() => setShowSettings(false)}>
+                Назад
+              </Button>
+              <Button size="sm" className="h-7 px-3 text-xs" onClick={saveSelection}>
+                Сохранить выбор
+              </Button>
             </div>
-          )}
+          </div>
         </CardContent>
       </Card>
     </div>

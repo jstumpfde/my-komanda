@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { OPERATOR_REQUISITES } from "@/lib/legal/operator-requisites"
 import {
   Users, Megaphone, DollarSign, Truck, Brain, MessageSquare, BarChart3,
   Target, Zap, ArrowRight, Check, X, Minus,
@@ -1831,8 +1832,17 @@ export default function LandingPage() {
               </div>
             ))}
           </div>
-          <div className="border-t border-gray-800 pt-8 text-center text-xs text-gray-600">
-            &copy; 2026 Company24.pro. Все права защищены.
+          <div className="border-t border-gray-800 pt-8 text-center text-xs text-gray-600 space-y-1.5">
+            <p>
+              {OPERATOR_REQUISITES.legalName}, ИНН {OPERATOR_REQUISITES.inn}, ОГРНИП {OPERATOR_REQUISITES.ogrnip},{" "}
+              {OPERATOR_REQUISITES.legalAddress}
+            </p>
+            <p>
+              <a href={`mailto:${OPERATOR_REQUISITES.email}`} className="hover:text-gray-400">{OPERATOR_REQUISITES.email}</a>
+              {" · "}
+              <a href={`tel:${OPERATOR_REQUISITES.phone.replace(/[^\d+]/g, "")}`} className="hover:text-gray-400">{OPERATOR_REQUISITES.phone}</a>
+            </p>
+            <p>&copy; 2026 Company24.pro. Все права защищены.</p>
           </div>
         </div>
       </footer>
