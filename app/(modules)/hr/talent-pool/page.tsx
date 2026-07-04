@@ -21,8 +21,8 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
   Plus, Upload, Rocket, Users, Mail, BarChart3, Search,
-  MoreHorizontal, Heart, Pause, Play, Sparkles, Send,
-  TrendingUp, Eye, MessageSquare, UserPlus, Clock, Trash2, GripVertical,
+  MoreHorizontal, Heart, Pause, Play, Send,
+  TrendingUp, Eye, MessageSquare, UserPlus, Clock, Trash2,
   ClipboardList, ChevronDown, ChevronRight, FileText, ArrowUpDown,
   Archive, RotateCcw,
 } from "lucide-react"
@@ -53,24 +53,6 @@ interface TalentCandidate {
   scoreBreakdown: ScoreBreakdown
   _type?: "entry" | "candidate"
   lifecycle?: "active" | "archived" | "trashed"
-}
-
-interface CampaignStep {
-  id: string
-  day: number
-  text: string
-  channel: "tg" | "whatsapp" | "email"
-}
-
-interface Campaign {
-  id: string
-  name: string
-  candidates: number
-  currentStep: number
-  totalSteps: number
-  openRate: number
-  status: "active" | "paused" | "completed"
-  steps: CampaignStep[]
 }
 
 // ─── Status config ──────────────────────────────────────
@@ -125,9 +107,7 @@ export function TalentPoolView({ embedded = false }: { embedded?: boolean }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
   const [candidates, setCandidates] = useState<TalentCandidate[]>([])
-  const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [addOpen, setAddOpen] = useState(false)
-  const [campaignOpen, setCampaignOpen] = useState(false)
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [lifecycleTab, setLifecycleTab] = useState<"active" | "archived" | "trashed">("active")
@@ -224,7 +204,6 @@ export function TalentPoolView({ embedded = false }: { embedded?: boolean }) {
   const [form, setForm] = useState({ name: "", position: "", company: "", source: "", email: "", phone: "", telegram: "", comment: "" })
 
   // Campaign form
-  const [campForm, setCampForm] = useState({ name: "", type: "invite", steps: [{ id: "ns1", day: 0, text: "", channel: "tg" as const }] as CampaignStep[] })
 
   const handleAdd = async () => {
     if (!form.name.trim()) return
@@ -299,13 +278,6 @@ export function TalentPoolView({ embedded = false }: { embedded?: boolean }) {
     await loadAll()
   }
 
-  const handleCreateCampaign = () => {
-    if (!campForm.name.trim()) return
-    setCampaigns((p) => [...p, { id: `c-${Date.now()}`, name: campForm.name, candidates: 0, currentStep: 0, totalSteps: campForm.steps.length, openRate: 0, status: "active", steps: campForm.steps }])
-    setCampForm({ name: "", type: "invite", steps: [{ id: "ns1", day: 0, text: "", channel: "tg" }] })
-    setCampaignOpen(false)
-    toast.success("Кампания создана")
-  }
 
   const archivedCount = candidates.filter((c) => (c.lifecycle ?? "active") === "archived").length
   const trashedCount = candidates.filter((c) => (c.lifecycle ?? "active") === "trashed").length
@@ -505,7 +477,7 @@ export function TalentPoolView({ embedded = false }: { embedded?: boolean }) {
                     </label>
                   </Button>
                   <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => setAddOpen(true)}><Plus className="w-3.5 h-3.5" /><span className="hidden sm:inline">Добавить</span></Button>
-                  <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setCampaignOpen(true)}><Rocket className="w-3.5 h-3.5" /><span className="hidden sm:inline">Запустить кампанию</span></Button>
+                  <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setActiveTab("campaigns")}><Rocket className="w-3.5 h-3.5" /><span className="hidden sm:inline">Запустить кампанию</span></Button>
                 </div>
 
                 <TableCard>
@@ -631,69 +603,6 @@ export function TalentPoolView({ embedded = false }: { embedded?: boolean }) {
             </div>
             <div className="grid gap-1"><Label className="text-xs">Комментарий</Label><Textarea value={form.comment} onChange={(e) => setForm({ ...form, comment: e.target.value })} rows={2} placeholder="Заметки..." /></div>
             <Button onClick={handleAdd} disabled={!form.name.trim()}>Добавить</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Create campaign dialog */}
-      <Dialog open={campaignOpen} onOpenChange={setCampaignOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Создать кампанию</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="grid gap-1"><Label className="text-xs">Название *</Label><Input value={campForm.name} onChange={(e) => setCampForm({ ...campForm, name: e.target.value })} placeholder="Продажники Q3 2026" /></div>
-            <div className="grid gap-1">
-              <Label className="text-xs">Тип кампании</Label>
-              <Select value={campForm.type} onValueChange={(v) => setCampForm({ ...campForm, type: v })}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="invite">Разовое приглашение на вакансию</SelectItem>
-                  <SelectItem value="drip">Серия касаний (капельный маркетинг)</SelectItem>
-                  <SelectItem value="content">Прогрев контентом</SelectItem>
-                  <SelectItem value="reminder">Напоминание через N месяцев</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Steps */}
-            <div className="space-y-2">
-              <Label className="text-xs">Серия касаний</Label>
-              {campForm.steps.map((step, i) => (
-                <div key={step.id} className="flex items-start gap-2 p-3 bg-muted/30 rounded-lg">
-                  <GripVertical className="w-4 h-4 text-muted-foreground/30 mt-1 shrink-0" />
-                  <div className="flex-1 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-muted-foreground">Шаг {i + 1}</span>
-                      <span className="text-xs text-muted-foreground">День</span>
-                      <Input type="number" className="w-16 h-7 text-xs" value={step.day} onChange={(e) => { const ns = [...campForm.steps]; ns[i] = { ...ns[i], day: parseInt(e.target.value) || 0 }; setCampForm({ ...campForm, steps: ns }) }} />
-                      <Select value={step.channel} onValueChange={(v) => { const ns = [...campForm.steps]; ns[i] = { ...ns[i], channel: v as CampaignStep["channel"] }; setCampForm({ ...campForm, steps: ns }) }}>
-                        <SelectTrigger className="w-28 h-7 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent><SelectItem value="tg">Telegram</SelectItem><SelectItem value="whatsapp">WhatsApp</SelectItem><SelectItem value="email">Email</SelectItem></SelectContent>
-                      </Select>
-                      <button onClick={() => setCampForm({ ...campForm, steps: campForm.steps.filter((_, j) => j !== i) })} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-3 h-3" /></button>
-                    </div>
-                    <Textarea className="text-sm" rows={2} value={step.text} onChange={(e) => { const ns = [...campForm.steps]; ns[i] = { ...ns[i], text: e.target.value }; setCampForm({ ...campForm, steps: ns }) }} placeholder="Текст сообщения..." />
-                  </div>
-                </div>
-              ))}
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="text-xs gap-1" onClick={() => setCampForm({ ...campForm, steps: [...campForm.steps, { id: `ns-${Date.now()}`, day: (campForm.steps[campForm.steps.length - 1]?.day || 0) + 7, text: "", channel: "tg" }] })}><Plus className="w-3 h-3" />Добавить шаг</Button>
-                <Button variant="outline" size="sm" className="text-xs gap-1" onClick={() => { setCampForm({ ...campForm, steps: campForm.steps.map((s) => ({ ...s, text: s.text || `[AI] Персонализированное сообщение для шага на день ${s.day}` })) }); toast.success("Тексты сгенерированы") }}><Sparkles className="w-3 h-3" />Сгенерировать AI</Button>
-              </div>
-            </div>
-
-            {/* Anti-spam */}
-            <Card>
-              <CardContent className="p-3 space-y-2">
-                <p className="text-xs font-semibold text-muted-foreground">Антиспам настройки</p>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>Не писать чаще раза в</span><Input type="number" className="w-14 h-7 text-xs" defaultValue={3} /><span>дней</span>
-                </div>
-                <p className="text-[11px] text-muted-foreground">• Остановить если кандидат ответил "не интересно"</p>
-                <p className="text-[11px] text-muted-foreground">• Отправка только в рабочие часы (9:00 – 19:00)</p>
-              </CardContent>
-            </Card>
-
-            <Button onClick={handleCreateCampaign} disabled={!campForm.name.trim()}>Создать кампанию</Button>
           </div>
         </DialogContent>
       </Dialog>
