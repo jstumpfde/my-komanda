@@ -432,24 +432,26 @@ export function ListView({
       list.push({
         id: "vacancy",
         gridWidth: "minmax(112px, 0.9fr)",
-        header: <div className="text-muted-foreground">Вакансия</div>,
+        header: <div className="text-muted-foreground text-center w-full">Вакансия</div>,
         renderCell: (candidate) => {
           const vc = candidate as { vacancyTitle?: string | null; vacancyId?: string | null }
           const title = vc.vacancyTitle ?? "—"
           if (vc.vacancyId && onVacancyClick) {
             return (
-              <button
-                type="button"
-                title={`Открыть вакансию: ${title}`}
-                className="text-[13px] text-muted-foreground hover:text-primary hover:underline truncate min-w-0 text-left"
-                onClick={(e) => { e.stopPropagation(); onVacancyClick(vc.vacancyId!) }}
-              >
-                {title}
-              </button>
+              <div className="flex justify-center min-w-0">
+                <button
+                  type="button"
+                  title={`Открыть вакансию: ${title}`}
+                  className="text-[13px] text-muted-foreground hover:text-primary hover:underline truncate min-w-0 text-center"
+                  onClick={(e) => { e.stopPropagation(); onVacancyClick(vc.vacancyId!) }}
+                >
+                  {title}
+                </button>
+              </div>
             )
           }
           return (
-            <div className="text-[13px] text-muted-foreground truncate min-w-0" title={title}>{title}</div>
+            <div className="text-[13px] text-muted-foreground truncate min-w-0 text-center" title={title}>{title}</div>
           )
         },
       })
@@ -632,10 +634,10 @@ export function ListView({
           const day = d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })
           const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
           return (
-            <div className="flex items-center justify-center gap-1 text-[13px] whitespace-nowrap" title="Ближайшее интервью">
+            <div className="flex items-center justify-center gap-0.5 text-[13px] whitespace-nowrap" title="Ближайшее интервью">
               <CalendarClock className="w-3.5 h-3.5 text-primary/70 shrink-0" />
               <span className="font-medium text-foreground">{day}</span>
-              <span className="text-muted-foreground">{time}</span>
+              <span className="text-muted-foreground ml-1">{time}</span>
             </div>
           )
         },
