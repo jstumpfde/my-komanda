@@ -20,10 +20,13 @@ test("исходящий: наша стадия → hh-действие (по к
   assert.equal(platformStageToHhAction("rejected"), "discard")
 })
 
-test("исходящий: оффер/нанят/новый и внутренние → null (у hh нет состояния)", () => {
+test("исходящий: нанят → hired (05.07 фикс: у hh ЕСТЬ состояние hired)", () => {
+  assert.equal(platformStageToHhAction("hired"), "hired")
+  assert.equal(platformStageToHhAction("started_work"), "hired")
+})
+
+test("исходящий: оффер/новый и внутренние → null (у hh нет отдельного состояния «оффер»)", () => {
   assert.equal(platformStageToHhAction("offer_sent"), null)
-  assert.equal(platformStageToHhAction("hired"), null)
-  assert.equal(platformStageToHhAction("started_work"), null)
   assert.equal(platformStageToHhAction("new"), null)
   assert.equal(platformStageToHhAction("demo_opened"), null)
   assert.equal(platformStageToHhAction("anketa_filled"), null)
@@ -37,6 +40,8 @@ test("исходящий: проекция на hh state-id", () => {
   assert.equal(platformStageToHhState("test_task_sent"), "assessment")
   assert.equal(platformStageToHhState("interview"), "interview")
   assert.equal(platformStageToHhState("rejected"), "discard_by_employer")
+  assert.equal(platformStageToHhState("hired"), "hired")
+  assert.equal(platformStageToHhState("started_work"), "hired")
   assert.equal(platformStageToHhState("offer_sent"), null)
 })
 
@@ -47,6 +52,7 @@ test("входящий: hh-состояние → наша стадия", () => 
   assert.equal(hhStateToPlatformStage("interview"), "interview")
   assert.equal(hhStateToPlatformStage("discard_by_employer"), "rejected")
   assert.equal(hhStateToPlatformStage("discard_by_applicant"), "rejected")
+  assert.equal(hhStateToPlatformStage("hired"), "hired")
 })
 
 test("входящий: response и неизвестные → null (не трогать)", () => {
@@ -66,14 +72,17 @@ test("candidate-declined только для discard_by_applicant", () => {
 
 test("двусторонняя согласованность (round-trip для основных стадий)", () => {
   // Стадия → hh-state → обратно в стадию должно давать эквивалент.
-  for (const stage of ["primary_contact", "test_task_sent", "interview", "rejected"] as const) {
+  for (const stage of ["primary_contact", "test_task_sent", "interview", "rejected", "hired"] as const) {
     const st = platformStageToHhState(stage)
     assert.ok(st, `нет hh-state для ${stage}`)
     const back = hhStateToPlatformStage(st)
-    // interview↔interview, test↔test, rejected↔rejected, primary_contact↔primary_contact
+    // interview↔interview, test↔test, rejected↔rejected, primary_contact↔primary_contact, hired↔hired
     if (stage === "rejected") assert.equal(back, "rejected")
     else assert.equal(back, stage)
   }
+  // started_work → hh "hired" → обратно наша стадия "hired" (НЕ started_work,
+  // т.к. у hh только одно состояние на обе наши терминальные стадии).
+  assert.equal(hhStateToPlatformStage(platformStageToHhState("started_work")), "hired")
 })
 
 test("hhStatusStringToHhAction: русские v2-статусы", () => {
@@ -81,8 +90,9 @@ test("hhStatusStringToHhAction: русские v2-статусы", () => {
   assert.equal(hhStatusStringToHhAction("тестовое задание"), "assessment")
   assert.equal(hhStatusStringToHhAction("интервью"), "interview")
   assert.equal(hhStatusStringToHhAction("первичный контакт"), "invitation")
+  // "принят" — 05.07 фикс: у hh ЕСТЬ состояние hired, пушим.
+  assert.equal(hhStatusStringToHhAction("принят"), "hired")
   assert.equal(hhStatusStringToHhAction("оффер"), null)
-  assert.equal(hhStatusStringToHhAction("принят"), null)
   assert.equal(hhStatusStringToHhAction("новый"), null)
   assert.equal(hhStatusStringToHhAction(""), null)
   assert.equal(hhStatusStringToHhAction(null), null)
@@ -95,6 +105,7 @@ test("ярлыки hh-состояний (read-only показ #16)", () => {
   assert.equal(hhStateLabel("assessment"), "Тестовое задание")
   assert.equal(hhStateLabel("discard_by_applicant"), "Кандидат отказался")
   assert.equal(hhStateLabel("consider"), "Первичный контакт")
+  assert.equal(hhStateLabel("hired"), "Выход на работу")
   assert.equal(hhStateLabel(null), null)
   // неизвестное — возвращаем как есть (не выдумываем)
   assert.equal(hhStateLabel("weird_state"), "weird_state")

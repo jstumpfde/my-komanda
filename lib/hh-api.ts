@@ -345,7 +345,10 @@ export async function changeNegotiationState(
   negotiationId: string,
   // invitation/assessment/discard — legacy 3 действия (обратная совместимость).
   // interview/consider — добавлены для воронки v2 (стадии «Интервью»/«Первичный контакт»).
-  action: "invitation" | "discard" | "assessment" | "interview" | "consider",
+  // hired — добавлено 05.07: у hh ЕСТЬ состояние "hired" ("Выход на работу",
+  // подтверждено через api.hh.ru/dictionaries → negotiations_state), правит
+  // ошибочное допущение "у hh нет офера/найма" (см. lib/hh/stage-mapping.ts).
+  action: "invitation" | "discard" | "assessment" | "interview" | "consider" | "hired",
   message?: string,
   _vacancyId?: string,
   _resumeId?: string,
@@ -357,10 +360,12 @@ export async function changeNegotiationState(
   //   interview  → interview (Собеседование)
   //   consider   → consider (Подумать / первичный контакт)
   //   discard    → discard_by_employer (Отказ)
+  //   hired      → hired (Выход на работу)
   const hhAction = action === "invitation" ? "phone_interview"
     : action === "assessment" ? "assessment"
     : action === "interview" ? "interview"
     : action === "consider" ? "consider"
+    : action === "hired" ? "hired"
     : "discard_by_employer"
   // Финальный страж: чистим текст от неподставленных {{переменных}} и артефактов
   // ПЕРЕД отправкой (Юрий 27.06). Битый/пустой текст — стадию меняем, но текст не шлём.

@@ -243,7 +243,7 @@ export async function trySyncStageToHh(candidateId: string, newStage: string): P
       .from(companies)
       .where(eq(companies.id, ctx.vac.companyId))
       .limit(1)
-    const companyHhActions = (companyRow?.hiringDefaults as { stageHhActions?: Record<string, "invitation" | "discard" | "assessment" | null> } | null)?.stageHhActions
+    const companyHhActions = (companyRow?.hiringDefaults as { stageHhActions?: Record<string, "invitation" | "discard" | "assessment" | "hired" | null> } | null)?.stageHhActions
 
     const pipeline = parsePipeline(
       (ctx.vac.descriptionJson as Record<string, unknown> | null)?.pipeline,
@@ -275,6 +275,14 @@ export async function trySyncStageToHh(candidateId: string, newStage: string): P
     if (action === "assessment") {
       await changeNegotiationState(token.accessToken, ctx.hh.hhResponseId, "assessment")
       console.info(`[hh:sync-stage] assessment (${newStage}) → ${ctx.hh.hhResponseId} (cand ${ctx.cand.id})`)
+      return true
+    }
+
+    // hired: без сообщения (текст «поздравляем» уходит отдельно, если настроен) —
+    // просто двигаем hh-папку в "Выход на работу" (05.07, см. stage-mapping.ts).
+    if (action === "hired") {
+      await changeNegotiationState(token.accessToken, ctx.hh.hhResponseId, "hired")
+      console.info(`[hh:sync-stage] hired (${newStage}) → ${ctx.hh.hhResponseId} (cand ${ctx.cand.id})`)
       return true
     }
 

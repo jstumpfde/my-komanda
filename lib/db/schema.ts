@@ -283,8 +283,9 @@ export interface CompanyHiringDefaults {
   defaultBrandCompanyId?: string
   // Маппинг воронки → hh.ru на уровне компании: какое действие hh.ru шлётся
   // при входе кандидата в стадию. Ключ — slug стадии, значение —
-  // "invitation"|"discard"|null. Дефолт для вакансий, где воронка не кастомизирована.
-  stageHhActions?: Record<string, "invitation" | "discard" | "assessment" | null>
+  // "invitation"|"discard"|"assessment"|"hired"|null. Дефолт для вакансий, где
+  // воронка не кастомизирована.
+  stageHhActions?: Record<string, "invitation" | "discard" | "assessment" | "hired" | null>
   // Палитра стадий на уровне компании: переименование и перекраска.
   // Применяется как soft-дефолт — per-vacancy customLabel/customColor перекрывает.
   stageLabels?: Record<string, string>

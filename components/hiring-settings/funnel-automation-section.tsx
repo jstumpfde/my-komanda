@@ -139,7 +139,10 @@ interface SortableStageRowProps {
   isSystem: boolean
   color: StageColor
   label: string
-  hhAction: "invitation" | "discard" | "assessment" | null
+  // "hired" добавлено в lib/stages.ts HhAction 05.07 (пуш "Выход на работу" в
+  // hh) — тип здесь только расширен, чтобы не ломать сборку; UI для выбора
+  // "hired" в этом редакторе не добавлялся (вне зоны текущей задачи).
+  hhAction: "invitation" | "discard" | "assessment" | "hired" | null
   hhStage: string
   avitoVal: string
   onToggle: (slug: StageSlug, value: boolean) => void

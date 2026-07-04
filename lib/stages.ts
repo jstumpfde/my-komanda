@@ -33,7 +33,10 @@ export type StageSlug =
   | "preliminary_reject"
   | "rejected"
 
-export type HhAction = "invitation" | "discard" | "assessment" | null
+// "hired" добавлено 05.07: у hh ЕСТЬ состояние hired ("Выход на работу",
+// подтверждено через api.hh.ru/dictionaries → negotiations_state) — правит
+// ошибочное допущение "у hh нет офера/найма" (см. lib/hh/stage-mapping.ts).
+export type HhAction = "invitation" | "discard" | "assessment" | "hired" | null
 
 export type StageColor =
   | "slate"
@@ -240,7 +243,10 @@ export const PLATFORM_STAGES: Record<StageSlug, StageDefinition> = {
     slug: "hired",
     defaultLabel: "Нанят",
     defaultColor: "green",
-    defaultHhAction: null,
+    // hh: action="hired" → hh-состояние "Выход на работу" (05.07, см.
+    // lib/hh/stage-mapping.ts). Идемпотентно: если кандидат позже дойдёт
+    // и до started_work, повторный push в тот же hh-state — не проблема.
+    defaultHhAction: "hired",
     isSystem: false,
     isTerminal: true,
     sortOrder: 13,
@@ -250,7 +256,7 @@ export const PLATFORM_STAGES: Record<StageSlug, StageDefinition> = {
     slug: "started_work",
     defaultLabel: "Выход на работу",
     defaultColor: "emerald",
-    defaultHhAction: null,
+    defaultHhAction: "hired",
     isSystem: false,
     isTerminal: true,
     sortOrder: 14,
@@ -429,7 +435,7 @@ export type CompanyStagePalette = {
 function defaultHhActionFor(slug: StageSlug, companyHhActions?: CompanyStageHhActions): HhAction {
   if (companyHhActions && slug in companyHhActions) {
     const v = companyHhActions[slug]
-    return v === "invitation" || v === "discard" || v === "assessment" ? v : null
+    return v === "invitation" || v === "discard" || v === "assessment" || v === "hired" ? v : null
   }
   return PLATFORM_STAGES[slug].defaultHhAction
 }
@@ -508,7 +514,7 @@ export function parsePipeline(
       ? (savedColor as StageColor)
       : (companyPalette?.colors?.[slug] ?? null)
     const hhAction: HhAction =
-      saved.hhAction === "invitation" || saved.hhAction === "discard" || saved.hhAction === "assessment"
+      saved.hhAction === "invitation" || saved.hhAction === "discard" || saved.hhAction === "assessment" || saved.hhAction === "hired"
         ? saved.hhAction
         : null
     return {
