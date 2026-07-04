@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { useAuth, ROLE_LABELS } from "@/lib/auth"
 import type { UserCustomSchedule } from "@/lib/db/schema"
+import { PasskeySection } from "@/components/settings/passkey-section"
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -551,6 +552,9 @@ export default function ProfileSettingsPage() {
                   </Button>
                 </CardContent>
               </Card>
+
+              {/* ═══ Ключи входа (passkey) ══════════════════════════ */}
+              <PasskeySection />
 
               {/* ═══ Мой рабочий график ══════════════════════════
                   Личный график сотрудника (users.custom_schedule).

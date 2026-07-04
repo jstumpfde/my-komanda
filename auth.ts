@@ -10,6 +10,7 @@ import { VKProvider } from "@/lib/auth/vk-provider"
 import { isPlatformAdminEmail } from "@/lib/platform/auth"
 import { checkPasswordAttempts, passwordAttemptsRemaining } from "@/lib/rate-limit"
 import { getActingAs } from "@/lib/partner/impersonation"
+import { openPasskeyToken } from "@/lib/auth/webauthn"
 
 // Отдельная ошибка для срабатывания лимита попыток входа.
 // next-auth прокидывает `code` в ?code=… → форма отличит лимит от неверного пароля
@@ -126,6 +127,32 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }),
         ]
       : []),
+    // Passkey/WebAuthn: сам ключ проверяется в /api/auth/passkey/auth/verify,
+    // сюда приходит уже ОДНОРАЗОВЫЙ подписанный токен (userId, TTL 60с).
+    // Парольный путь ниже не затрагивается.
+    Credentials({
+      id: "passkey",
+      name: "passkey",
+      credentials: { token: { label: "Passkey token", type: "text" } },
+      async authorize(credentials) {
+        const token = credentials?.token as string | undefined
+        const opened = openPasskeyToken(token)
+        if (!opened) return null
+        const [user] = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, opened.userId))
+          .limit(1)
+        if (!user || !user.isActive) return null
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role as UserRole,
+          companyId: user.companyId ?? null,
+        }
+      },
+    }),
     Credentials({
       name: "credentials",
       credentials: {

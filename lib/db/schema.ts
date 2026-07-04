@@ -3335,6 +3335,21 @@ export const telegramLinkCodes = pgTable("telegram_link_codes", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 })
 
+// drizzle/0249 — WebAuthn/passkey: беспарольный вход по ключу устройства
+// (Face ID / отпечаток / аппаратный ключ). Пароль остаётся запасным входом.
+// publicKey/credentialId хранятся в base64url; counter — защита от клонирования.
+export const webauthnCredentials = pgTable("webauthn_credentials", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  userId:       uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  credentialId: text("credential_id").notNull().unique(),
+  publicKey:    text("public_key").notNull(),
+  counter:      bigint("counter", { mode: "number" }).notNull().default(0),
+  transports:   text("transports").array(),
+  deviceName:   text("device_name"),
+  createdAt:    timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  lastUsedAt:   timestamp("last_used_at", { withTimezone: true }),
+})
+
 // ─── Follow-up Campaigns (Воронка дожима) ────────────────────────────────────
 // Цепочка автоматических напоминаний кандидату с hh.ru, если он не открыл
 // демо или не допрошёл его до конца. Настраивается на уровне вакансии:
