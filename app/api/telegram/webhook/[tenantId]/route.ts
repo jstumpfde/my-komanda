@@ -1,17 +1,28 @@
 import { NextRequest, NextResponse } from "next/server"
-import { and, desc, eq, gt } from "drizzle-orm"
+import { and, eq, gt } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { companies, users, demoTemplates, knowledgeArticles, telegramLinkCodes } from "@/lib/db/schema"
+import { companies, users, telegramLinkCodes } from "@/lib/db/schema"
 import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
 import { AI_MODEL_MAIN } from "@/lib/ai/models"
+import { retrieveKnowledgeContext, type RetrievalMaterialRef } from "@/lib/knowledge/retrieval"
+import { checkAiTokenLimit, logAiUsage } from "@/lib/knowledge/token-limits"
+import { tgGetFile, tgDownloadFile } from "@/lib/telegram/candidate-bot"
+import { transcribeVoice, isTelegramSttConfigured } from "@/lib/knowledge/telegram-voice"
 
 // ─── Types ─────────────────────────────────────────────────────────────────
+
+interface TelegramVoice {
+  file_id: string
+  file_size?: number
+  duration?: number
+}
 
 interface TelegramMessage {
   message_id: number
   chat: { id: number; type: string }
   from?: { id: number; first_name?: string; username?: string }
   text?: string
+  voice?: TelegramVoice
 }
 
 interface TelegramUpdate {
@@ -19,15 +30,13 @@ interface TelegramUpdate {
   message?: TelegramMessage
 }
 
-interface MaterialRef {
-  id: string
-  name: string
-  type: "demo" | "article"
-}
+type MaterialRef = RetrievalMaterialRef
 
 interface ClaudeResponse {
   answer: string
   cited: MaterialRef[]
+  inputTokens: number
+  outputTokens: number
 }
 
 // ─── Telegram ──────────────────────────────────────────────────────────────
@@ -50,62 +59,9 @@ async function sendMessage(token: string, chatId: number, text: string) {
 }
 
 // ─── Knowledge base context ────────────────────────────────────────────────
-
-const MAX_PER_TYPE = 10
-const EXCERPT_LEN = 300
-
-function stripHtml(s: string): string {
-  return s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
-}
-
-function demoExcerpt(sections: unknown): string {
-  if (!Array.isArray(sections) || sections.length === 0) return ""
-  const first = sections[0] as { blocks?: { content?: string }[] }
-  if (!Array.isArray(first?.blocks)) return ""
-  return first.blocks
-    .map((b) => stripHtml(b.content || ""))
-    .filter(Boolean)
-    .join(" ")
-    .slice(0, EXCERPT_LEN)
-}
-
-async function loadContext(companyId: string): Promise<{ context: string; materialsList: MaterialRef[] }> {
-  const [demos, articles] = await Promise.all([
-    db
-      .select({ id: demoTemplates.id, name: demoTemplates.name, sections: demoTemplates.sections })
-      .from(demoTemplates)
-      .where(eq(demoTemplates.tenantId, companyId))
-      .orderBy(desc(demoTemplates.updatedAt))
-      .limit(MAX_PER_TYPE),
-    db
-      .select({ id: knowledgeArticles.id, title: knowledgeArticles.title, content: knowledgeArticles.content })
-      .from(knowledgeArticles)
-      .where(and(
-        eq(knowledgeArticles.tenantId, companyId),
-        eq(knowledgeArticles.status, "published"),
-      ))
-      .orderBy(desc(knowledgeArticles.updatedAt))
-      .limit(MAX_PER_TYPE),
-  ])
-
-  const parts: string[] = []
-  const materialsList: MaterialRef[] = []
-  let idx = 1
-  for (const d of demos) {
-    parts.push(`[${idx}] «${d.name}» (презентация)\n${demoExcerpt(d.sections) || "(нет содержания)"}`)
-    materialsList.push({ id: d.id, name: d.name, type: "demo" })
-    idx++
-  }
-  for (const a of articles) {
-    parts.push(`[${idx}] «${a.title}» (статья)\n${stripHtml(a.content || "").slice(0, EXCERPT_LEN) || "(нет содержания)"}`)
-    materialsList.push({ id: a.id, name: a.title, type: "article" })
-    idx++
-  }
-  return {
-    context: parts.join("\n\n") || "В базе знаний пока нет материалов.",
-    materialsList,
-  }
-}
+// Ранжирование по релевантности вопросу (semantic RAG), общее с ai-search
+// и публичным чатом — см. lib/knowledge/retrieval.ts. Раньше здесь был
+// "сырой дамп" последних 10 материалов без ранжирования.
 
 // ─── Claude ────────────────────────────────────────────────────────────────
 
@@ -141,12 +97,20 @@ async function askClaude(question: string, context: string, materialsList: Mater
       console.error("[telegram multitenant] Claude", res.status)
       return null
     }
-    const data = await res.json() as { content?: { type: string; text?: string }[] }
+    const data = await res.json() as {
+      content?: { type: string; text?: string }[]
+      usage?: { input_tokens?: number; output_tokens?: number }
+    }
     const answer = data.content?.find((c) => c.type === "text")?.text?.trim() || ""
     if (!answer) return null
     const lowered = answer.toLowerCase()
     const cited = materialsList.filter((m) => m.name && lowered.includes(m.name.toLowerCase())).slice(0, 3)
-    return { answer, cited }
+    return {
+      answer,
+      cited,
+      inputTokens: data.usage?.input_tokens ?? 0,
+      outputTokens: data.usage?.output_tokens ?? 0,
+    }
   } catch (err) {
     console.error("[telegram multitenant] Claude fetch failed", err)
     return null
@@ -226,7 +190,14 @@ async function handleAsk(token: string, tenantId: string, chatId: number, questi
     return
   }
 
-  const { context, materialsList } = await loadContext(tenantId)
+  // Hard-stop: не тратим Claude, если лимит AI-токенов компании исчерпан.
+  const limitCheck = await checkAiTokenLimit(tenantId)
+  if (!limitCheck.allowed) {
+    await sendMessage(token, chatId, limitCheck.message ?? "Лимит AI-токенов на этот месяц исчерпан.")
+    return
+  }
+
+  const { context, materialsList } = await retrieveKnowledgeContext(tenantId, question)
   const result = await askClaude(question, context, materialsList)
 
   if (!result) {
@@ -238,10 +209,64 @@ async function handleAsk(token: string, tenantId: string, chatId: number, questi
     return
   }
 
+  void logAiUsage({
+    tenantId,
+    userId: user.id,
+    action: "knowledge_telegram_ask",
+    inputTokens: result.inputTokens,
+    outputTokens: result.outputTokens,
+    model: AI_MODEL_MAIN,
+  })
+
   const sourceLine = result.cited.length > 0
     ? `\n\n📎 _Источник: ${result.cited.map((c) => c.name).join(", ")}_`
     : ""
   await sendMessage(token, chatId, `📚 *Ответ из базы знаний:*\n\n${result.answer}${sourceLine}`)
+}
+
+// Bot API отдаёт файл только до 20 МБ — голосовые Telegram (Opus) почти
+// всегда меньше, но проверяем явно до попытки скачать.
+const TELEGRAM_FILE_DOWNLOAD_LIMIT = 20 * 1024 * 1024
+
+async function handleVoice(token: string, tenantId: string, chatId: number, voice: TelegramVoice) {
+  if (!isTelegramSttConfigured()) {
+    await sendMessage(
+      token,
+      chatId,
+      "🎤 Голосовые сообщения пока не поддерживаются ботом. Напишите вопрос текстом.",
+    )
+    return
+  }
+
+  if (typeof voice.file_size === "number" && voice.file_size > TELEGRAM_FILE_DOWNLOAD_LIMIT) {
+    await sendMessage(token, chatId, "Голосовое сообщение слишком длинное. Сформулируйте вопрос текстом.")
+    return
+  }
+
+  const file = await tgGetFile(token, voice.file_id)
+  if (!file) {
+    await sendMessage(token, chatId, "Не удалось скачать голосовое сообщение. Попробуйте ещё раз или напишите текстом.")
+    return
+  }
+
+  const buf = await tgDownloadFile(token, file.filePath)
+  if (!buf) {
+    await sendMessage(token, chatId, "Не удалось скачать голосовое сообщение. Попробуйте ещё раз или напишите текстом.")
+    return
+  }
+
+  const transcribed = await transcribeVoice(buf)
+  if (!transcribed.ok || !transcribed.text) {
+    await sendMessage(
+      token,
+      chatId,
+      "Не удалось распознать голосовое сообщение. Попробуйте ещё раз или напишите вопрос текстом.",
+    )
+    return
+  }
+
+  // Дальше — тот же пайплайн, что и текстовый вопрос.
+  await handleAsk(token, tenantId, chatId, transcribed.text)
 }
 
 // ─── Route handler ─────────────────────────────────────────────────────────
@@ -283,14 +308,24 @@ export async function POST(
   }
 
   const message = update.message
-  if (!message || typeof message.text !== "string") {
+  if (!message) {
+    return NextResponse.json({ ok: true })
+  }
+  if (typeof message.text !== "string" && !message.voice) {
+    // Ни текст, ни голос (фото/стикер/документ и т.п.) — молча игнорируем.
     return NextResponse.json({ ok: true })
   }
 
   const chatId = message.chat.id
-  const text = message.text.trim()
 
   try {
+    if (message.voice) {
+      await handleVoice(token, tenantId, chatId, message.voice)
+      return NextResponse.json({ ok: true })
+    }
+
+    const text = (message.text ?? "").trim()
+
     if (text.startsWith("/start")) {
       const code = text.slice("/start".length).trim()
       await handleStart(token, tenantId, chatId, code)
@@ -305,7 +340,7 @@ export async function POST(
           "Команды:\n" +
           "`/start КОД` — привязать аккаунт (код возьмите в настройках платформы)\n" +
           "`/ask ВОПРОС` — спросить у базы знаний\n\n" +
-          "Или просто напишите вопрос обычным сообщением.",
+          "Или просто напишите вопрос обычным сообщением (текстом или голосом).",
       )
     } else {
       await handleAsk(token, tenantId, chatId, text)

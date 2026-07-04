@@ -7,7 +7,8 @@ import Anthropic from "@anthropic-ai/sdk"
 import { verifyToken } from "../auth/route"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import { checkRateLimit } from "@/lib/rate-limit"
-import { buildPublicChatContext } from "@/lib/knowledge/public-chat-context"
+import { retrieveKnowledgeContext } from "@/lib/knowledge/retrieval"
+import { checkAiTokenLimit, logAiUsage } from "@/lib/knowledge/token-limits"
 import { AI_MODEL_MAIN } from "@/lib/ai/models"
 
 const SYSTEM_PROMPT =
@@ -49,7 +50,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "AI временно недоступен" }, { status: 500 })
   }
 
-  const { context, materialsList } = await buildPublicChatContext(payload.companyId)
+  // Hard-stop: анонимный эндпоинт жжёт токены компании — не пускаем сверх лимита.
+  const limitCheck = await checkAiTokenLimit(payload.companyId)
+  if (!limitCheck.allowed) {
+    return NextResponse.json({ error: limitCheck.message }, { status: 429 })
+  }
+
+  // Ранжирование по релевантности вопросу — общее с ai-search и Telegram-ботом
+  // (lib/knowledge/retrieval.ts). Раньше здесь был сырой дамп последних материалов.
+  const { context, materialsList } = await retrieveKnowledgeContext(payload.companyId, question)
 
   try {
     const client = new Anthropic({ baseURL: getClaudeApiUrl() })
@@ -66,6 +75,15 @@ export async function POST(req: NextRequest) {
     if (!answer) {
       return NextResponse.json({ error: "Пустой ответ" }, { status: 502 })
     }
+
+    void logAiUsage({
+      tenantId: payload.companyId,
+      action: "knowledge_public_chat",
+      inputTokens: resp.usage?.input_tokens ?? 0,
+      outputTokens: resp.usage?.output_tokens ?? 0,
+      model: CLAUDE_MODEL,
+    })
+
     return NextResponse.json({ answer, materialsList })
   } catch (err) {
     console.error("[public-ask/answer] Claude error:", err instanceof Error ? err.message : err)
