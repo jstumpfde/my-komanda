@@ -163,6 +163,22 @@ const MODULE_KEYS = [
 
 **Важно:** `business_assistant` НЕ добавляется в `ALL_MODULES_LIST` / `CLIENT_MODULES_LIST` в `lib/auth.tsx` (роли не видят его по умолчанию) — это осознанное решение дизайна, модуль скрыт, пока не готов показывать всем клиентам.
 
+- [ ] **Step 3b: Показ модуля в сайдбаре при включении через enabled_modules**
+
+Обнаружено при верификации: `components/dashboard/sidebar.tsx` НЕ показывает модуль, даже если он в `companies.enabled_modules`, потому что (а) есть отдельный хардкод-список `ALL_MODULE_KEYS`, по которому нормализуются ключи (строка ~274), и (б) финальный список модулей — это ПЕРЕСЕЧЕНИЕ базового ролевого списка (`vis.modules`, у директора = `['hr']`) с `enabled_modules` (строка ~308). То есть `enabled_modules` может только урезать, но не добавлять модуль сверх ролевого списка.
+
+Фикс (две правки в `sidebar.tsx`):
+1. В `ALL_MODULE_KEYS` (Set) добавить `'business_assistant'` — иначе ключ отбрасывается при нормализации `companyEnabledModules`.
+2. Сразу после вычисления `finalModules` (перед `safeModules`) добавить аддитивное включение — так модуль остаётся скрытым по умолчанию (у компаний без оверрайда `companyEnabledModules === null`) и появляется ТОЛЬКО у явно включивших:
+```typescript
+    if (companyEnabledModules?.includes('business_assistant' as ModuleId) && !finalModules.includes('business_assistant' as ModuleId)) {
+      finalModules.push('business_assistant' as ModuleId)
+    }
+```
+3. Дополнить карты стилей модулей (`MODULE_SHORT`, `MODULE_COLORS`, `MODULE_BG_COLORS`, `MODULE_BORDER_COLORS` — все `Record<ModuleId, string>`) записями `business_assistant` (и заодно давно отсутствовавшего `email_marketing`), иначе расширение `ModuleId` даёт ошибку неполного `Record`. Пример: `business_assistant: 'text-rose-500'` и т.п.
+
+`isModuleVisible` (`lib/hooks/use-sidebar-visibility.ts`) по умолчанию возвращает `true` для незнакомых модулей — дополнительных правок не требует.
+
 - [ ] **Step 4: Проверить типы**
 
 Run: `pnpm exec tsc --noEmit`
@@ -681,11 +697,14 @@ export default function FlightsSearchPage() {
   }
 
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={true}>
       <DashboardSidebar />
       <SidebarInset>
-        <DashboardHeader title="Авиабилеты" />
+        <DashboardHeader />
         <div className="p-6 space-y-6 max-w-5xl mx-auto w-full">
+          <h1 className="text-2xl font-semibold flex items-center gap-2">
+            <Plane className="w-6 h-6" /> Авиабилеты
+          </h1>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
