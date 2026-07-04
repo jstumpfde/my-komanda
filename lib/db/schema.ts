@@ -1399,7 +1399,22 @@ export const testSubmissions = pgTable("test_submissions", {
   answerText:  text("answer_text"),
   fileUrl:     text("file_url"),
   // Структурированные ответы кандидата на вопросы task-блоков теста.
-  // Формат: { answers: StructuredAnswer[], objective: ObjectiveResult|null }.
+  // Формат: { answers: StructuredAnswer[], objective: ObjectiveResult|null,
+  //           scoringStatus?: 'pending'|'done'|'failed'|'manual',
+  //           scoringAttempts?: number }.
+  // scoringStatus (05.07) — состояние фонового AI-скоринга свободных ответов
+  // (processTestScoring в lib/ai-score-test.ts, вызывается из
+  // app/api/public/test/[token]/submit/route.ts и cron test-scoring-retry):
+  //   pending — AI ещё считает (или ждёт ретрая после временного сбоя)
+  //   done    — балл посчитан успешно
+  //   failed  — все ретраи прогона исчерпаны, балл не посчитан (HR видит «оцен…»)
+  //   manual  — testCheckMode='manual', AI не запускается, ждёт ручной проверки HR
+  // scoringAttempts — число прогонов processTestScoring; при
+  // >= MAX_SCORING_ATTEMPTS cron перестаёт подбирать запись (потолок токенов).
+  // Без этих полей балл оставался null навсегда без индикации причины —
+  // cron test-scoring-retry подбирает pending/failed старше 10 минут.
+  // У старых записей (до 05.07) ключей нет — cron их не трогает, UI показывает
+  // «сдан», как раньше.
   answersJson: jsonb("answers_json"),
   aiScore:     integer("ai_score"),
   aiReasoning: text("ai_reasoning"),
