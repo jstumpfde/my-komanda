@@ -4020,3 +4020,32 @@ export type NewLearnedGivenName = typeof learnedGivenNames.$inferInsert
 
 export type OutreachIntegration    = typeof outreachIntegrations.$inferSelect
 export type NewOutreachIntegration = typeof outreachIntegrations.$inferInsert
+
+// 152-ФЗ: журнал согласий на обработку персональных данных / cookie / рекламные
+// рассылки. Пишется публичным POST /api/consent (баннер cookie, чекбоксы
+// регистрации/подписки). userId — если посетитель уже авторизован, иначе null
+// (анонимный посетитель — идентифицируется visitorId, UUID в localStorage/cookie).
+// documentVersion — дата редакции текста документа на момент согласия (см.
+// PRIVACY_POLICY_VERSION и др. константы версий на самих страницах), чтобы
+// при будущих правках текста можно было доказать, на какую именно редакцию
+// было дано согласие. details — свободный jsonb (напр. выбранные категории
+// cookie: {analytics: true, marketing: false}).
+export const consentLog = pgTable("consent_log", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  userId:          uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  visitorId:       text("visitor_id"),                 // анонимный id (cookie/localStorage), если userId нет
+  consentType:     text("consent_type").notNull(),     // 'cookie' | 'privacy_policy' | 'marketing'
+  action:          text("action").notNull(),           // 'accepted' | 'rejected' | 'partial'
+  documentVersion: text("document_version").notNull(), // дата редакции текста, напр. "2026-07-04"
+  details:         jsonb("details"),                    // напр. {analytics:true, marketing:false}
+  ipAddress:       text("ip_address"),
+  userAgent:       text("user_agent"),
+  createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("consent_log_created_idx").on(t.createdAt),
+  index("consent_log_user_idx").on(t.userId),
+  index("consent_log_visitor_idx").on(t.visitorId),
+  index("consent_log_type_idx").on(t.consentType),
+])
+export type ConsentLog    = typeof consentLog.$inferSelect
+export type NewConsentLog = typeof consentLog.$inferInsert
