@@ -96,6 +96,41 @@ export async function tgSendMessage(
   }
 }
 
+// ─── Файлы (запасной канал загрузки видео-визитки) ────────────────────────────
+
+/**
+ * Лимит Bot API на СКАЧИВАНИЕ файла через getFile/file — 20 МБ. Это лимит
+ * самого Telegram (не наш), обойти нельзя обычным Bot API. Если кандидат
+ * прислал файл крупнее — file_path Telegram не отдаёт вовсе (getFile упадёт
+ * или недоступен файл), поэтому проверяем ДО скачивания по message.*.file_size.
+ */
+export const TG_BOT_API_DOWNLOAD_LIMIT = 20 * 1024 * 1024
+
+/** Результат getFile: путь на серверах Telegram для последующего скачивания. */
+export async function tgGetFile(botToken: string, fileId: string): Promise<{ filePath: string; fileSize?: number } | null> {
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${encodeURIComponent(fileId)}`)
+    if (!res.ok) return null
+    const data = await res.json() as { ok: boolean; result?: { file_path?: string; file_size?: number } }
+    if (!data.ok || !data.result?.file_path) return null
+    return { filePath: data.result.file_path, fileSize: data.result.file_size }
+  } catch {
+    return null
+  }
+}
+
+/** Скачивает содержимое файла с серверов Telegram (после tgGetFile). */
+export async function tgDownloadFile(botToken: string, filePath: string): Promise<Buffer | null> {
+  try {
+    const res = await fetch(`https://api.telegram.org/file/bot${botToken}/${filePath}`)
+    if (!res.ok) return null
+    const arrayBuf = await res.arrayBuffer()
+    return Buffer.from(arrayBuf)
+  } catch {
+    return null
+  }
+}
+
 // ─── Deep-link ────────────────────────────────────────────────────────────────
 
 /** Формирует deep-link для кандидата: t.me/<botUsername>?start=<inviteToken> */

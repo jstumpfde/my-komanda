@@ -1,7 +1,8 @@
 // Универсальный рендерер шаблонов с поддержкой 5 legacy-синтаксисов.
 //
 // Canonical:   {{name}}, {{vacancy}}, {{company}}, {{demo_link}},
-//              {{salary_from}}, {{salary_to}}, {{interview_at}}
+//              {{salary_from}}, {{salary_to}}, {{interview_at}},
+//              {{tg_upload_link}} (запасной канал загрузки видео через бота)
 // Legacy (читаем для обратной совместимости, навсегда):
 //   - {{key}} / {key} / [key] / любой регистр / русские алиасы из ALIASES.
 //
@@ -62,6 +63,9 @@ const ALIASES: Record<string, string> = {
   "salary_to":                 "salary_to",
   "дата_время":                "interview_at",
   "interview_at":              "interview_at",
+  // ─── запасной канал загрузки видео (Telegram-бот) ───
+  "ссылка_на_бота":            "tg_upload_link",
+  "tg_upload_link":            "tg_upload_link",
 }
 
 // Регулярка единым проходом ловит:

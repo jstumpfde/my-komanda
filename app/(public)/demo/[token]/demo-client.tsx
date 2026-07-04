@@ -1756,6 +1756,7 @@ export default function DemoPage() {
                     isRequired={block.mediaRequired !== false}
                     previewMode={isPreviewMode}
                     uploadedAnswers={mediaUploaded}
+                    tgUploadLink={data.candidateTelegramDeepLink}
                     onUploaded={(subKey, ans) =>
                       setMediaUploaded((prev) => ({ ...prev, [subKey]: ans }))
                     }
@@ -1779,6 +1780,7 @@ export default function DemoPage() {
                     existing={mediaUploaded[block.id]}
                     previewMode={isPreviewMode}
                     skipped={!!mediaSkipped[block.id]}
+                    tgUploadLink={data.candidateTelegramDeepLink}
                     onUploaded={(ans) => {
                       setMediaUploaded((prev) => ({ ...prev, [block.id]: ans }))
                       // Если кандидат сначала пропустил, а потом всё-таки загрузил —
@@ -1958,6 +1960,7 @@ function VideoInterviewBlock({
   isRequired,
   previewMode,
   uploadedAnswers,
+  tgUploadLink,
   onUploaded,
   onUploadingChange,
 }: {
@@ -1968,6 +1971,7 @@ function VideoInterviewBlock({
   isRequired:       boolean
   previewMode?:     boolean
   uploadedAnswers:  Record<string, MediaAnswer>
+  tgUploadLink?:    string | null
   onUploaded:       (subKey: string, ans: MediaAnswer) => void
   onUploadingChange?: (subKey: string, uploading: boolean) => void
 }) {
@@ -2061,6 +2065,7 @@ function VideoInterviewBlock({
               existing={existing}
               previewMode={previewMode}
               skipped={false}
+              tgUploadLink={tgUploadLink}
               onUploaded={(ans) => handleQuestionUploaded(i, ans)}
               onUploadingChange={(uploading) => onUploadingChange?.(subKey, uploading)}
             />
@@ -2108,6 +2113,7 @@ function MediaBlock({
   onSkip,
   onUnskip,
   onUploadingChange,
+  tgUploadLink,
 }: {
   block: Block
   token: string
@@ -2119,6 +2125,11 @@ function MediaBlock({
   onSkip?: () => void
   onUnskip?: () => void
   onUploadingChange?: (uploading: boolean) => void
+  // Кандидат не может загрузить видео/аудио → запасной канал через
+  // Telegram-бота (персональная deep-link ссылка). null/undefined — у
+  // компании бот не подключён, кнопку не показываем (server-side gate:
+  // ссылка приходит только если vacancy.candidateBotUsername заполнен).
+  tgUploadLink?: string | null
 }) {
   const allowVideo = block.mediaAllowVideo ?? true
   const allowAudio = block.mediaAllowAudio ?? false
@@ -2134,6 +2145,13 @@ function MediaBlock({
   const [uploadProgress, setUploadProgress] = useState<number>(0)
   const [errMsg, setErrMsg] = useState("")
   const [result, setResult] = useState<MediaAnswer | null>(existing ?? null)
+  // Запасной канал №1 (04.07, Юрий): прикрепить файл по публичной ссылке
+  // на облако (Яндекс.Диск / Google Drive / Mail.ru), если сама загрузка не
+  // получается. cloudLinkBusy — идёт серверное скачивание по ссылке.
+  const [cloudLinkOpen, setCloudLinkOpen] = useState(false)
+  const [cloudLinkValue, setCloudLinkValue] = useState("")
+  const [cloudLinkBusy, setCloudLinkBusy] = useState(false)
+  const [cloudLinkError, setCloudLinkError] = useState("")
 
   // Сообщаем родителю, когда идёт реальная отправка файла на сервер —
   // нужно, чтобы заблокировать кнопку «Завершить» пока не закончится upload.
@@ -2526,6 +2544,46 @@ function MediaBlock({
     }
   }
 
+  // Запасной канал №1: кандидат сам загрузил файл в облако и прислал
+  // публичную ссылку — сервер сам скачивает (POST attach-link) и прикрепляет
+  // ответ ТЕМ ЖЕ путём, что обычная загрузка (переиспользуем success-path:
+  // setResult/onUploaded/setMode("done"), без дублирования записи ответа).
+  const attachByLink = async () => {
+    const url = cloudLinkValue.trim()
+    if (!url) return
+    setCloudLinkBusy(true)
+    setCloudLinkError("")
+    try {
+      const res = await fetch(`/api/public/demo/${token}/attach-link`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, blockId: block.id }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.url) {
+        setCloudLinkError(data?.error || "Не получилось скачать файл по ссылке. Проверьте, что доступ по ссылке включён.")
+        setCloudLinkBusy(false)
+        return
+      }
+      const answer: MediaAnswer = {
+        url:  data.url,
+        mediaType: (data.mediaType as "video" | "audio" | "photo") || blobMediaTypeRef.current || "video",
+        size: data.size,
+        mime: data.mime,
+      }
+      setResult(answer)
+      onUploaded(answer)
+      setErrMsg("")
+      setCloudLinkOpen(false)
+      setCloudLinkValue("")
+      setCloudLinkBusy(false)
+      setMode("done")
+    } catch {
+      setCloudLinkError("Нет связи с сервером. Проверьте интернет и попробуйте снова.")
+      setCloudLinkBusy(false)
+    }
+  }
+
   const iconClass = "h-6 w-6"
   const bigBtnBase = "h-12 min-w-12 px-4 rounded-xl font-medium inline-flex items-center justify-center gap-2 text-sm transition-colors"
 
@@ -2556,6 +2614,89 @@ function MediaBlock({
       {errMsg && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {errMsg}
+        </div>
+      )}
+
+      {/* Запасной канал №1 (главный, Юрий 04.07 — в РФ Telegram иногда режется
+          провайдерами и видео через него идёт плохо): кандидат сам загружает
+          файл в облако, даёт доступ по ссылке — мы скачиваем сами. */}
+      {errMsg && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 space-y-3">
+          <p className="text-sm text-blue-900 leading-relaxed">
+            Не получается загрузить? Загрузите видео на свой Яндекс.Диск, Google Drive
+            или Облако Mail.ru, включите доступ по ссылке (разрешите скачивание) и
+            вставьте ссылку — мы загрузим сами.
+          </p>
+          {!cloudLinkOpen ? (
+            <button
+              type="button"
+              onClick={() => setCloudLinkOpen(true)}
+              className={`${bigBtnBase} text-white`}
+              style={{ backgroundColor: brandColor }}
+            >
+              <Upload className={iconClass} />
+              Прикрепить по ссылке
+            </button>
+          ) : (
+            <div className="space-y-2">
+              <input
+                type="url"
+                inputMode="url"
+                placeholder="https://disk.yandex.ru/... или https://drive.google.com/..."
+                value={cloudLinkValue}
+                onChange={(e) => { setCloudLinkValue(e.target.value); setCloudLinkError("") }}
+                disabled={cloudLinkBusy}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {cloudLinkError && (
+                <p className="text-xs text-red-700">{cloudLinkError}</p>
+              )}
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => void attachByLink()}
+                  disabled={cloudLinkBusy || !cloudLinkValue.trim()}
+                  className={`${bigBtnBase} text-white disabled:opacity-60`}
+                  style={{ backgroundColor: brandColor }}
+                >
+                  {cloudLinkBusy ? (
+                    <>
+                      <Loader2 className={`${iconClass} animate-spin`} />
+                      Скачиваем…
+                    </>
+                  ) : (
+                    <>
+                      <Send className={iconClass} />
+                      Прикрепить по ссылке
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Запасной канал №2 (второстепенный): отправить видео нашему
+          Telegram-боту. Кнопка появляется только если у компании подключён
+          бот (tgUploadLink приходит с сервера, gate там). */}
+      {errMsg && tgUploadLink && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 space-y-3">
+          <p className="text-sm text-blue-900 leading-relaxed">
+            Или отправьте видео нашему Telegram-боту — оно прикрепится автоматически.
+          </p>
+          <a
+            href={tgUploadLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors"
+            style={{ backgroundColor: "#2AABEE" }}
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4" aria-hidden="true">
+              <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.941z"/>
+            </svg>
+            Отправить в Telegram-бот
+          </a>
         </div>
       )}
 

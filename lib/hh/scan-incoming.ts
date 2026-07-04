@@ -23,7 +23,7 @@
 
 import { and, asc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { hhResponses, candidates, followUpMessages, hhCandidates, vacancies } from "@/lib/db/schema"
+import { hhResponses, candidates, followUpMessages, hhCandidates, vacancies, companies } from "@/lib/db/schema"
 // channelSources — используется ниже для проверки что hh-канал включён на вакансии.
 import { getValidToken } from "@/lib/hh-helpers"
 import { classifyCandidateResponse } from "@/lib/ai/classify-candidate-response"
@@ -39,6 +39,8 @@ import { getBaselineStopWords } from "@/lib/followup/effective-stop-words"
 import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
 import { processPrequalificationAnswer } from "@/lib/prequalification/process-answer"
 import { matchFaqReply, resolveStopWordFarewellText, readStopWordStageAction, type FaqEntry, type StopWordStageAction } from "@/lib/auto-responder/match-faq"
+import { matchUploadProblemKeyword, DEFAULT_UPLOAD_PROBLEM_REPLY, DEFAULT_UPLOAD_PROBLEM_REPLY_NO_TG } from "@/lib/auto-responder/upload-fallback"
+import { buildCandidateDeepLink, generateInviteToken } from "@/lib/telegram/candidate-bot"
 import { renderTemplate } from "@/lib/template-renderer"
 
 // Группа «Автоответы кандидату» (единый блок в Портрете, descriptionJson.autoResponder).
@@ -511,6 +513,49 @@ export async function scanIncomingMessages(opts: {
           console.info(`[scan-incoming] ${candidateId} auto_responder_faq_sent ok=${sentOk} text="${preview}"`)
           continue
         }
+      }
+
+      // Платформенный дефолт (04.07, Юрий): «не могу загрузить видео» —
+      // НЕЗАВИСИМО от autoResponder.enabled (это дефолт всей платформы, а не
+      // настройка вакансии). Срабатывает, только если HR НЕ покрыл этот кейс
+      // своей FAQ-парой выше (чтобы не дублировать ответ). Порядок каналов
+      // в тексте — облако первично, Telegram-бот вторично (TG в РФ иногда
+      // режется провайдерами). Текст редактируемый — lib/auto-responder/upload-fallback.ts.
+      if (matchUploadProblemKeyword(text)) {
+        const { firstName } = await getCandidateFirstName(candidateId)
+        let tgUploadLink: string | null = null
+        try {
+          const [companyRow] = await db
+            .select({ candidateBotUsername: companies.candidateBotUsername })
+            .from(companies)
+            .where(eq(companies.id, candVac?.companyId ?? ""))
+            .limit(1)
+          if (companyRow?.candidateBotUsername) {
+            let inviteToken = (await db
+              .select({ t: candidates.telegramInviteToken })
+              .from(candidates)
+              .where(eq(candidates.id, candidateId))
+              .limit(1))[0]?.t ?? null
+            if (!inviteToken) {
+              inviteToken = generateInviteToken()
+              await db.update(candidates)
+                .set({ telegramInviteToken: inviteToken, updatedAt: new Date() })
+                .where(eq(candidates.id, candidateId))
+            }
+            tgUploadLink = buildCandidateDeepLink(companyRow.candidateBotUsername, inviteToken)
+          }
+        } catch (err) {
+          console.warn(`[scan-incoming] ${candidateId} upload_fallback_tg_link_error`, err)
+        }
+        const template = tgUploadLink ? DEFAULT_UPLOAD_PROBLEM_REPLY : DEFAULT_UPLOAD_PROBLEM_REPLY_NO_TG
+        const rendered = renderTemplate(template, {
+          name:           firstName,
+          vacancy:        candVac?.vacancyTitle ?? "",
+          tg_upload_link: tgUploadLink ?? "",
+        })
+        const sentOk = await sendFarewell(accessToken, resp.hhResponseId, rendered)
+        console.info(`[scan-incoming] ${candidateId} upload_fallback_reply_sent ok=${sentOk} tg=${!!tgUploadLink} text="${preview}"`)
+        continue
       }
 
       // #15 phase 5/6: AI чат-бот. Если у вакансии включён бот И есть промпт —

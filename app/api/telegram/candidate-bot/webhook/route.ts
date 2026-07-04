@@ -9,14 +9,20 @@
 // Команды:
 // /start <inviteToken> — связать telegram chat_id с кандидатом
 // /stop               — отписаться (candidates.telegram_opt_out = true)
+// video/video_note/audio/voice/document(video-mime) — запасной канал
+//   загрузки видео-визитки (04.07): скачиваем через getFile, сохраняем как
+//   /api/public/demo/[token]/upload-media, прикрепляем к anketaAnswers.
 // любой текст          — сохранить как входящее сообщение кандидата
 
 import { NextRequest, NextResponse } from "next/server"
 import { eq, and } from "drizzle-orm"
+import path from "path"
+import { promises as fs } from "fs"
 import { db } from "@/lib/db"
 import { candidates, companies, vacancies } from "@/lib/db/schema"
 import type { TgMessage } from "@/lib/db/schema"
-import { tgSendMessage } from "@/lib/telegram/candidate-bot"
+import { tgSendMessage, tgGetFile, tgDownloadFile, TG_BOT_API_DOWNLOAD_LIMIT } from "@/lib/telegram/candidate-bot"
+import { publicDir } from "@/lib/uploads-path"
 import { sql } from "drizzle-orm"
 
 // ─── Telegram update types ────────────────────────────────────────────────────
@@ -27,17 +33,54 @@ interface TgFrom {
   first_name?: string
 }
 
+interface TgPhotoSize {
+  file_id:   string
+  file_size?: number
+}
+
+interface TgVideo {
+  file_id:   string
+  file_name?: string
+  mime_type?: string
+  file_size?: number
+  duration?:  number
+}
+
+interface TgDocument {
+  file_id:   string
+  file_name?: string
+  mime_type?: string
+  file_size?: number
+}
+
+interface TgVoice {
+  file_id:   string
+  mime_type?: string
+  file_size?: number
+  duration?:  number
+}
+
 interface TgMessage_ {
-  message_id: number
-  chat:       { id: number; type: string }
-  from?:      TgFrom
-  text?:      string
+  message_id:  number
+  chat:        { id: number; type: string }
+  from?:       TgFrom
+  text?:       string
+  video?:      TgVideo
+  video_note?: TgVideo
+  audio?:      TgDocument & { duration?: number }
+  voice?:      TgVoice
+  document?:   TgDocument
+  photo?:      TgPhotoSize[]
 }
 
 interface TgUpdate {
   update_id: number
   message?:  TgMessage_
 }
+
+// Форматы документов, которые принимаем как видео (кандидаты иногда шлют
+// «файлом», а не «видео», особенно с iPhone).
+const DOCUMENT_VIDEO_MIME = new Set(["video/mp4", "video/quicktime", "video/webm", "video/x-msvideo", "video/x-matroska"])
 
 // ─── Route handler ────────────────────────────────────────────────────────────
 
@@ -73,14 +116,34 @@ export async function POST(req: NextRequest) {
   }
 
   const msg = update.message
-  if (!msg || typeof msg.text !== "string") {
+  if (!msg) {
     return NextResponse.json({ ok: true })
   }
 
   const chatId   = msg.chat.id
-  const text     = msg.text.trim()
   const username = msg.from?.username ?? null
   const token    = company.candidateBotToken
+
+  // Медиа (видео/видео-заметка/голос/аудио/документ-как-видео) — запасной
+  // канал загрузки. Проверяем ДО текста: сообщение с медиа обычно caption'а
+  // не имеет, но если бы имело — приоритет у медиа.
+  const media = msg.video ?? msg.video_note ?? msg.voice ?? msg.audio
+    ?? (msg.document && DOCUMENT_VIDEO_MIME.has((msg.document.mime_type ?? "").toLowerCase()) ? msg.document : undefined)
+
+  if (media) {
+    try {
+      await handleMedia(token, chatId, media, msg, company.id)
+    } catch (err) {
+      console.error("[candidate-bot webhook] media", err)
+    }
+    return NextResponse.json({ ok: true })
+  }
+
+  if (typeof msg.text !== "string") {
+    return NextResponse.json({ ok: true })
+  }
+
+  const text = msg.text.trim()
 
   try {
     if (text.startsWith("/start")) {
@@ -225,4 +288,133 @@ async function handleIncoming(
   await db.update(candidates)
     .set({ tgMessages: updated, updatedAt: new Date() })
     .where(eq(candidates.id, row.id))
+}
+
+// blockId-заглушка для видео, пришедшего через запасной Telegram-канал —
+// на демо-странице кандидат обычно грузит одну видео-визитку, у Telegram
+// нет понятия «для какого блока анкеты» это видео. Если у кандидата уже
+// есть настоящий media-блок в anketaAnswers — HR увидит оба варианта в
+// карточке (fallback не затирает существующий upload).
+const TELEGRAM_FALLBACK_BLOCK_ID = "telegram-fallback-media"
+
+function extFromMime(mime: string | undefined, fallback: string): string {
+  const map: Record<string, string> = {
+    "video/mp4":        "mp4",
+    "video/quicktime":  "mov",
+    "video/webm":       "webm",
+    "video/x-matroska": "mkv",
+    "video/x-msvideo":  "avi",
+    "audio/ogg":        "ogg",
+    "audio/mpeg":       "mp3",
+    "audio/mp4":        "m4a",
+  }
+  return map[(mime ?? "").toLowerCase()] ?? fallback
+}
+
+/**
+ * Кандидат прислал видео/аудио боту напрямую (запасной канал, когда загрузка
+ * на демо-странице не работает). Скачиваем через getFile (лимит Bot API —
+ * 20 МБ, TG_BOT_API_DOWNLOAD_LIMIT), сохраняем ТУДА ЖЕ, куда пишет обычная
+ * загрузка (/api/public/demo/[token]/upload-media — publicDir("uploads",
+ * "candidates", candidateId)), и прикрепляем в candidates.anketaAnswers —
+ * тем же форматом записи, чтобы HR видел файл в карточке кандидата как
+ * обычный media-ответ.
+ */
+async function handleMedia(
+  botToken:  string,
+  chatId:    number,
+  media:     { file_id: string; file_size?: number; mime_type?: string; file_name?: string; duration?: number },
+  msg:       TgMessage_,
+  companyId: string,
+) {
+  // Найти кандидата по chat_id В РАМКАХ КОМПАНИИ — та же tenant-изоляция,
+  // что и в handleIncoming/handleStart.
+  const [row] = await db
+    .select({
+      id:             candidates.id,
+      telegramOptOut: candidates.telegramOptOut,
+      anketaAnswers:  candidates.anketaAnswers,
+    })
+    .from(candidates)
+    .innerJoin(vacancies, and(
+      eq(candidates.vacancyId, vacancies.id),
+      eq(vacancies.companyId, companyId),
+    ))
+    .where(eq(candidates.telegramChatId, String(chatId)))
+    .limit(1)
+
+  if (!row || row.telegramOptOut) return
+
+  // Лимит Bot API на скачивание — 20 МБ. Telegram сам сжимает видео,
+  // отправленное «как видео» (не «как файл») — в описании задачи это ok;
+  // если всё равно крупнее — просим прислать короче/сжатое.
+  if (typeof media.file_size === "number" && media.file_size > TG_BOT_API_DOWNLOAD_LIMIT) {
+    await tgSendMessage(botToken, chatId,
+      "Файл слишком большой для отправки через бота (лимит Telegram — 20 МБ). " +
+      "Пришлите файл покороче или более сжатый — например, отправьте его именно " +
+      "как видео (не «файлом»), Telegram сам его сожмёт.",
+    )
+    return
+  }
+
+  const fileInfo = await tgGetFile(botToken, media.file_id)
+  if (!fileInfo) {
+    await tgSendMessage(botToken, chatId,
+      "Не получилось скачать файл. Попробуйте отправить его ещё раз.",
+    )
+    return
+  }
+
+  const buffer = await tgDownloadFile(botToken, fileInfo.filePath)
+  if (!buffer || buffer.length === 0) {
+    await tgSendMessage(botToken, chatId,
+      "Не получилось скачать файл. Попробуйте отправить его ещё раз.",
+    )
+    return
+  }
+
+  const isVoiceOrAudio = !!msg.voice || !!msg.audio
+  const mediaType: "video" | "audio" = isVoiceOrAudio ? "audio" : "video"
+  const mime = media.mime_type
+    ?? (mediaType === "audio" ? "audio/ogg" : "video/mp4")
+  const ext = extFromMime(mime, mediaType === "audio" ? "ogg" : "mp4")
+
+  const relativeDir = path.join("uploads", "candidates", row.id)
+  const absoluteDir = publicDir(relativeDir)
+  await fs.mkdir(absoluteDir, { recursive: true })
+
+  const fileName = `${TELEGRAM_FALLBACK_BLOCK_ID}-${Date.now()}.${ext}`
+  await fs.writeFile(path.join(absoluteDir, fileName), buffer)
+  const publicUrl = "/" + path.posix.join(relativeDir.split(path.sep).join("/"), fileName)
+
+  const answerObj = {
+    url:  publicUrl,
+    mediaType,
+    ...(typeof media.duration === "number" ? { duration: media.duration } : {}),
+    size: buffer.length,
+    mime,
+  }
+
+  // Тот же формат, что /api/public/demo/[token]/upload-media — upsert по
+  // blockId в массиве anketaAnswers (нормализуем массив/объект на всякий
+  // случай, как и там).
+  const rawAnswers = row.anketaAnswers as unknown
+  let existing: any[]
+  if (Array.isArray(rawAnswers)) {
+    existing = rawAnswers
+  } else if (rawAnswers && typeof rawAnswers === "object") {
+    existing = Object.values(rawAnswers as Record<string, any>)
+  } else {
+    existing = []
+  }
+  const idx = existing.findIndex((a: any) => a?.blockId === TELEGRAM_FALLBACK_BLOCK_ID)
+  const entry = { blockId: TELEGRAM_FALLBACK_BLOCK_ID, answer: answerObj, answeredAt: new Date().toISOString() }
+  if (idx >= 0) existing[idx] = entry
+  else existing.push(entry)
+
+  await db.update(candidates)
+    .set({ anketaAnswers: existing, updatedAt: new Date() })
+    .where(eq(candidates.id, row.id))
+
+  await tgSendMessage(botToken, chatId, "Видео получено и прикреплено ✅")
 }
