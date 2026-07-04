@@ -4,6 +4,7 @@ import { knowledgeArticles } from "@/lib/db/schema"
 import { apiError, apiSuccess, requireCompany } from "@/lib/api-helpers"
 import { getClaudeMessagesUrl } from "@/lib/claude-proxy"
 import { AI_MODEL_MAIN } from "@/lib/ai/models"
+import { checkAiTokenLimit, logAiUsage } from "@/lib/knowledge/token-limits"
 
 // POST /api/modules/knowledge/generate
 // Генерирует документ по мастер-шаблону Ненси и сохраняет как черновик
@@ -248,6 +249,12 @@ export async function POST(req: NextRequest) {
       return apiError("ANTHROPIC_API_KEY не настроен", 503)
     }
 
+    // ── Лимит AI-токенов: hard-stop перед вызовом Claude ─────────────────
+    const limitCheck = await checkAiTokenLimit(user.companyId)
+    if (!limitCheck.allowed) {
+      return apiError(limitCheck.message ?? "Лимит AI-токенов исчерпан", 429)
+    }
+
     // ── Call Claude ──────────────────────────────────────────────────────
     const contextBits: string[] = [`Тема: ${topic}`]
     if (body.department) contextBits.push(`Отдел: ${body.department}`)
@@ -282,11 +289,21 @@ export async function POST(req: NextRequest) {
 
     const data = (await claudeRes.json()) as {
       content?: { type: string; text?: string }[]
+      usage?: { input_tokens?: number; output_tokens?: number }
     }
     const content = data.content?.find((c) => c.type === "text")?.text?.trim() ?? ""
     if (!content) {
       return apiError("Пустой ответ от Claude", 502)
     }
+
+    void logAiUsage({
+      tenantId: user.companyId,
+      userId: user.id,
+      action: "knowledge_generate",
+      inputTokens: data.usage?.input_tokens ?? 0,
+      outputTokens: data.usage?.output_tokens ?? 0,
+      model: CLAUDE_MODEL,
+    })
 
     // ── Save as draft article ────────────────────────────────────────────
     const title = extractTitle(content, `${template.label}: ${topic}`)

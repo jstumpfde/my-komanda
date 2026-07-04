@@ -22,6 +22,22 @@ type WebsiteDocType =
   | "consent"
   | "user_agreement"
 
+// Держим в синхроне со списком DocType в app/api/modules/knowledge/generate/route.ts.
+// Любой тип здесь ДОЛЖЕН существовать в DOC_TEMPLATES на бэкенде.
+type GenerateType =
+  | WebsiteDocType
+  | "regulation"
+  | "instruction"
+  | "sales_script"
+  | "onboarding"
+  | "job_description"
+  | "faq"
+  | "test"
+
+const WEBSITE_DOC_TYPES = new Set<GenerateType>([
+  "privacy_policy", "offer", "cookie_policy", "consent", "user_agreement",
+])
+
 const CREATE_ROLES = ["platform_admin", "platform_manager", "director", "hr_lead", "hr_manager"]
 
 // Compact emoji grid for the custom-type picker
@@ -41,7 +57,7 @@ interface TypePill {
   emoji: string
   title: string
   href: string | null
-  generateType?: WebsiteDocType
+  generateType?: GenerateType
 }
 
 interface Group {
@@ -50,39 +66,36 @@ interface Group {
   items: TypePill[]
 }
 
+// Плитки без href и без generateType — мёртвый UI (нет фичи за кнопкой),
+// поэтому они НЕ показываются (см. DEFAULT_GROUPS ниже, отфильтровано).
+// Что осталось: рабочие ссылки (демо/статья), AI-генерация по мастер-шаблону
+// (см. DOC_TEMPLATES в app/api/modules/knowledge/generate/route.ts).
 const DEFAULT_GROUPS: Group[] = [
   {
     emoji: "👥",
     label: "Найм, адаптация и обучение",
     items: [
       { emoji: "👋", title: "Презентация должности", href: "/knowledge-v2/create/demo" },
-      { emoji: "🚀", title: "Онбординг",             href: null },
-      { emoji: "🎓", title: "Обучающий курс",        href: null },
-      { emoji: "🎬", title: "Видеоурок",             href: null },
-      { emoji: "📝", title: "Скрипт",                href: null },
-      { emoji: "🎯", title: "Аттестация",            href: null },
-      { emoji: "📊", title: "Оценка 360°",           href: null },
+      { emoji: "🚀", title: "Онбординг",             href: null, generateType: "onboarding" },
+      { emoji: "📝", title: "Скрипт продаж",         href: null, generateType: "sales_script" },
+      { emoji: "🎯", title: "Аттестация / тест",     href: null, generateType: "test" },
     ],
   },
   {
     emoji: "📋",
     label: "Документы",
     items: [
-      { emoji: "📋", title: "Регламент",     href: null },
-      { emoji: "📄", title: "Инструкция",    href: null },
-      { emoji: "📑", title: "Шаблон",        href: null },
-      { emoji: "💼", title: "Должностная",   href: null },
+      { emoji: "📋", title: "Регламент",     href: null, generateType: "regulation" },
+      { emoji: "📄", title: "Инструкция",    href: null, generateType: "instruction" },
+      { emoji: "💼", title: "Должностная",   href: null, generateType: "job_description" },
     ],
   },
   {
     emoji: "📚",
     label: "Знания",
     items: [
-      { emoji: "📚", title: "Статья",     href: "/knowledge-v2/create/article" },
-      { emoji: "💡", title: "Кейс",       href: null },
-      { emoji: "🎬", title: "Видеообзор", href: null },
-      { emoji: "❓", title: "FAQ",        href: null },
-      { emoji: "📖", title: "Wiki",       href: null },
+      { emoji: "📚", title: "Статья", href: "/knowledge-v2/create/article" },
+      { emoji: "❓", title: "FAQ",    href: null, generateType: "faq" },
     ],
   },
   {
@@ -94,16 +107,6 @@ const DEFAULT_GROUPS: Group[] = [
       { emoji: "🍪", title: "Cookie-политика",               href: null, generateType: "cookie_policy" },
       { emoji: "✍️", title: "Согласие на обработку ПД",      href: null, generateType: "consent" },
       { emoji: "📜", title: "Пользовательское соглашение",   href: null, generateType: "user_agreement" },
-    ],
-  },
-  {
-    emoji: "🤝",
-    label: "Для клиентов",
-    items: [
-      { emoji: "📘", title: "Руководство",       href: null },
-      { emoji: "🛠", title: "Решение проблем",   href: null },
-      { emoji: "📦", title: "Продукт",           href: null },
-      { emoji: "🎥", title: "Видео",             href: null },
     ],
   },
 ]
@@ -262,13 +265,17 @@ export default function KnowledgeV2CreatePage() {
   // page until reload. Persistence is a follow-up task.
   const [groups, setGroups] = useState<Group[]>(DEFAULT_GROUPS)
 
-  // ── Website doc generation modal ───────────────────────────────────────
+  // ── AI-generate-by-template modal (доки «Для сайта» + остальные мастер-шаблоны) ──
   const [websiteDoc, setWebsiteDoc] = useState<TypePill | null>(null)
   const [companyInn, setCompanyInn] = useState("")
   const [contactEmail, setContactEmail] = useState("")
   const [siteDomain, setSiteDomain] = useState("")
+  // Для не-website шаблонов (регламент/инструкция/скрипт и т.п.) — тема документа.
+  const [genTopic, setGenTopic] = useState("")
+  const [genDepartment, setGenDepartment] = useState("")
   const [generating, setGenerating] = useState(false)
   const [generated, setGenerated] = useState<{ articleId: string; title: string } | null>(null)
+  const isWebsiteDocType = !!websiteDoc?.generateType && WEBSITE_DOC_TYPES.has(websiteDoc.generateType)
 
   // Prefill company data
   useEffect(() => {
@@ -286,6 +293,8 @@ export default function KnowledgeV2CreatePage() {
   function openWebsiteDoc(item: TypePill) {
     setWebsiteDoc(item)
     setGenerated(null)
+    setGenTopic("")
+    setGenDepartment("")
   }
 
   function closeWebsiteDoc() {
@@ -295,6 +304,11 @@ export default function KnowledgeV2CreatePage() {
 
   async function handleGenerateWebsiteDoc() {
     if (!websiteDoc?.generateType) return
+    const websiteType = isWebsiteDocType
+    if (!websiteType && !genTopic.trim()) {
+      toast.error("Укажите тему документа")
+      return
+    }
     setGenerating(true)
     try {
       const res = await fetch("/api/modules/knowledge/generate", {
@@ -302,11 +316,14 @@ export default function KnowledgeV2CreatePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: websiteDoc.generateType,
-          topic: `${websiteDoc.title} для ${siteDomain || "сайта компании"}`,
-          companyInn: companyInn.trim() || undefined,
-          contactEmail: contactEmail.trim() || undefined,
-          siteDomain: siteDomain.trim() || undefined,
-          websiteDoc: true,
+          topic: websiteType
+            ? `${websiteDoc.title} для ${siteDomain || "сайта компании"}`
+            : genTopic.trim(),
+          department: !websiteType ? (genDepartment.trim() || undefined) : undefined,
+          companyInn: websiteType ? (companyInn.trim() || undefined) : undefined,
+          contactEmail: websiteType ? (contactEmail.trim() || undefined) : undefined,
+          siteDomain: websiteType ? (siteDomain.trim() || undefined) : undefined,
+          websiteDoc: websiteType || undefined,
         }),
       })
       const data = await res.json() as { ok?: true; articleId?: string; title?: string; error?: string }
@@ -487,39 +504,66 @@ export default function KnowledgeV2CreatePage() {
             <div className="space-y-4">
               <p className="text-xs text-muted-foreground">
                 Документ генерируется AI по мастер-шаблону. После создания — проверьте и отредактируйте в редакторе.
-                Рекомендуем показать юристу перед публикацией.
+                {isWebsiteDocType && " Рекомендуем показать юристу перед публикацией."}
               </p>
 
-              <div className="space-y-2">
-                <Label htmlFor="doc-inn" className="text-sm">ИНН компании</Label>
-                <Input
-                  id="doc-inn"
-                  value={companyInn}
-                  onChange={(e) => setCompanyInn(e.target.value)}
-                  placeholder="7700000000"
-                />
-              </div>
+              {isWebsiteDocType ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="doc-inn" className="text-sm">ИНН компании</Label>
+                    <Input
+                      id="doc-inn"
+                      value={companyInn}
+                      onChange={(e) => setCompanyInn(e.target.value)}
+                      placeholder="7700000000"
+                    />
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="doc-email" className="text-sm">Email для обращений</Label>
-                <Input
-                  id="doc-email"
-                  type="email"
-                  value={contactEmail}
-                  onChange={(e) => setContactEmail(e.target.value)}
-                  placeholder="privacy@example.ru"
-                />
-              </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="doc-email" className="text-sm">Email для обращений</Label>
+                    <Input
+                      id="doc-email"
+                      type="email"
+                      value={contactEmail}
+                      onChange={(e) => setContactEmail(e.target.value)}
+                      placeholder="privacy@example.ru"
+                    />
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="doc-domain" className="text-sm">Домен сайта</Label>
-                <Input
-                  id="doc-domain"
-                  value={siteDomain}
-                  onChange={(e) => setSiteDomain(e.target.value)}
-                  placeholder="example.ru"
-                />
-              </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="doc-domain" className="text-sm">Домен сайта</Label>
+                    <Input
+                      id="doc-domain"
+                      value={siteDomain}
+                      onChange={(e) => setSiteDomain(e.target.value)}
+                      placeholder="example.ru"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="doc-topic" className="text-sm">Тема документа</Label>
+                    <Input
+                      id="doc-topic"
+                      value={genTopic}
+                      onChange={(e) => setGenTopic(e.target.value)}
+                      placeholder="Например: приём и выдача товара на складе"
+                      autoFocus
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="doc-department" className="text-sm">Отдел (необязательно)</Label>
+                    <Input
+                      id="doc-department"
+                      value={genDepartment}
+                      onChange={(e) => setGenDepartment(e.target.value)}
+                      placeholder="Например: склад, продажи"
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="flex justify-end gap-2 pt-2">
                 <Button variant="outline" onClick={closeWebsiteDoc} disabled={generating}>
@@ -544,9 +588,11 @@ export default function KnowledgeV2CreatePage() {
                 <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1 mb-2">
                   {generated.title}
                 </p>
-                <p className="text-[11px] text-amber-700 dark:text-amber-400 italic">
-                  ⚠️ Сгенерировано AI. Рекомендуем проверку юристом.
-                </p>
+                {isWebsiteDocType && (
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400 italic">
+                    ⚠️ Сгенерировано AI. Рекомендуем проверку юристом.
+                  </p>
+                )}
               </div>
 
               <div className="flex justify-end gap-2">
@@ -555,7 +601,11 @@ export default function KnowledgeV2CreatePage() {
                 </Button>
                 <Button
                   onClick={() => {
-                    router.push(`/knowledge-v2/editor?id=${generated.articleId}&type=article`)
+                    // Статьи живут в knowledge_articles и редактируются на
+                    // /knowledge-v2/create/article — НЕ /knowledge-v2/editor
+                    // (тот компонент — MaterialEditor, читает/пишет
+                    // demo_templates, для статьи это была бы неверная таблица).
+                    router.push(`/knowledge-v2/create/article?id=${generated.articleId}`)
                   }}
                 >
                   <ExternalLink className="size-4 mr-2" />

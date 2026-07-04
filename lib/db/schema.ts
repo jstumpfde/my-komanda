@@ -369,6 +369,11 @@ export interface CompanyHiringDefaults {
   // первым). Отсутствие/пустой массив → DEFAULT_SEND_PRIORITY_ORDER.
   // Значения — SendPriorityGroup из lib/messaging/send-priority.ts.
   sendPriorityOrder?: string[]
+  // База знаний: лимит AI-токенов/мес, переопределяющий платформенный дефолт
+  // (platform_settings.ai_monthly_token_limit, см. lib/knowledge/token-limits.ts).
+  // undefined/null → используется платформенный дефолт. 0 — зарезервировано
+  // под «безлимит» на будущее, сейчас UI такого не предлагает.
+  aiMonthlyTokenLimit?: number | null
 }
 
 // ── CompanyLegalContact (drizzle/0177) ──
