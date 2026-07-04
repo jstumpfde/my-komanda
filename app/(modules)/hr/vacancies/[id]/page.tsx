@@ -1744,7 +1744,42 @@ export default function VacancyPage() {
   const handleLaunchVacancy  = () => { updateVacancyStatus("active");                 toast.success("Вакансия запущена") }
   const handlePauseVacancy   = () => { updateVacancyStatus(VACANCY_STATUS_ON_PAUSE);   toast.warning("Вакансия приостановлена") }
   const handleResumeVacancy  = () => { updateVacancyStatus(VACANCY_STATUS_ON_RESUME);  toast.success("Вакансия возобновлена") }
-  const handleCloseVacancy   = () => { updateVacancyStatus(VACANCY_STATUS_ON_CLOSE);   toast("Вакансия закрыта и отправлена в архив") }
+  // Закрытие вакансии — открывает диалог подтверждения с опцией «отказать
+  // оставшимся» (guard-находка 05.07, чекбокс по умолчанию выключен).
+  const [closeDialogOpen, setCloseDialogOpen] = useState(false)
+  const [closeRejectRemaining, setCloseRejectRemaining] = useState(false)
+  const [closeBusy, setCloseBusy] = useState(false)
+  const handleCloseVacancy = () => { setCloseRejectRemaining(false); setCloseDialogOpen(true) }
+  const handleCloseVacancyConfirm = async () => {
+    setCloseBusy(true)
+    try {
+      await updateVacancyStatus(VACANCY_STATUS_ON_CLOSE)
+      toast("Вакансия закрыта и отправлена в архив")
+      if (closeRejectRemaining) {
+        try {
+          const res = await fetch(`/api/modules/hr/vacancies/${id}/reject-remaining`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reason: "vacancy_closed_reject_remaining" }),
+          })
+          if (res.ok) {
+            const data = await res.json().catch(() => ({})) as { scheduled?: number }
+            const n = data.scheduled ?? 0
+            toast.success(n > 0
+              ? `Запланирован отказ оставшимся кандидатам: ${n}`
+              : "Активных кандидатов для отказа не найдено")
+          } else {
+            toast.error("Вакансия закрыта, но не удалось запланировать отказ оставшимся кандидатам")
+          }
+        } catch {
+          toast.error("Вакансия закрыта, но не удалось запланировать отказ оставшимся кандидатам")
+        }
+      }
+    } finally {
+      setCloseBusy(false)
+      setCloseDialogOpen(false)
+    }
+  }
 
   // Восстановить: из архива → status active; из корзины → очистка deleted_at (PATCH).
   const handleRestoreVacancy = async () => {
@@ -4974,6 +5009,37 @@ export default function VacancyPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Подтверждение закрытия вакансии — с опцией «отказать оставшимся». */}
+      <AlertDialog open={closeDialogOpen} onOpenChange={(o) => !closeBusy && setCloseDialogOpen(o)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Закрыть вакансию?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Вакансия будет закрыта и перенесена в архив.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <label className="flex items-start gap-2 px-1 py-2 text-sm cursor-pointer">
+            <Checkbox
+              checked={closeRejectRemaining}
+              onCheckedChange={(v) => setCloseRejectRemaining(v === true)}
+              className="mt-0.5"
+            />
+            <span>
+              Также отказать оставшимся активным кандидатам
+              <span className="block text-xs text-muted-foreground">
+                Кандидатам без решения будет запланирован отказ (уже принятых и кандидатов в оффере не затронет)
+              </span>
+            </span>
+          </label>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={closeBusy}>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={(e) => { e.preventDefault(); handleCloseVacancyConfirm() }} disabled={closeBusy}>
+              {closeBusy ? "Закрываем..." : "Закрыть"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Talent Pool suggestion dialog */}
       <AlertDialog open={talentPoolDialogOpen} onOpenChange={setTalentPoolDialogOpen}>

@@ -11,7 +11,7 @@
 //     что и остальные company-level настройки — см. CompanyHiringDefaults);
 //   - checkAiTokenLimit() — hard-stop перед AI-вызовом модуля знаний.
 
-import { eq, and, sql } from "drizzle-orm"
+import { eq, and, or, like, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { aiUsageLog, companies } from "@/lib/db/schema"
 import { getPlatformSetting, setPlatformSetting } from "@/lib/platform/settings"
@@ -54,6 +54,14 @@ export async function getEffectiveAiMonthlyTokenLimit(companyId: string): Promis
   return platformDefault
 }
 
+/**
+ * Токены за месяц ТОЛЬКО по действиям модуля знаний/обучения — action
+ * "knowledge_*" (генерация статей, AI-поиск, публичный/Telegram чат-бот
+ * знаний) и "course_*" (AI-курсы — тот же бэкенд знаний/обучения, отдельный
+ * префикс action). aiUsageLog — общий журнал по ВСЕМ AI-фичам платформы
+ * (чат-бот кандидатов, скоринг и т.д.), поэтому без фильтра по action лимит
+ * модуля знаний считал бы чужой расход (guard-находка 05.07).
+ */
 export async function getMonthTokensUsed(companyId: string): Promise<number> {
   const now = new Date()
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
@@ -62,7 +70,11 @@ export async function getMonthTokensUsed(companyId: string): Promise<number> {
       total: sql<number>`COALESCE(SUM(${aiUsageLog.inputTokens} + ${aiUsageLog.outputTokens}), 0)::int`,
     })
     .from(aiUsageLog)
-    .where(and(eq(aiUsageLog.tenantId, companyId), sql`${aiUsageLog.createdAt} >= ${startOfMonth}`))
+    .where(and(
+      eq(aiUsageLog.tenantId, companyId),
+      sql`${aiUsageLog.createdAt} >= ${startOfMonth}`,
+      or(like(aiUsageLog.action, "knowledge_%"), like(aiUsageLog.action, "course_%")),
+    ))
   return row?.total ?? 0
 }
 

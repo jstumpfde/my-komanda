@@ -243,10 +243,13 @@ export const PLATFORM_STAGES: Record<StageSlug, StageDefinition> = {
     slug: "hired",
     defaultLabel: "Нанят",
     defaultColor: "green",
-    // hh: action="hired" → hh-состояние "Выход на работу" (05.07, см.
-    // lib/hh/stage-mapping.ts). Идемпотентно: если кандидат позже дойдёт
-    // и до started_work, повторный push в тот же hh-state — не проблема.
-    defaultHhAction: "hired",
+    // hh: action="hired" → hh-состояние "Выход на работу" (см.
+    // lib/hh/stage-mapping.ts). Платформенный дефолт — null (opt-in):
+    // компания включает пуш явно через hiringDefaults.stageHhActions.hired
+    // = "hired" (см. defaultHhActionFor ниже). Идемпотентно: если кандидат
+    // позже дойдёт и до started_work, повторный push в тот же hh-state —
+    // не проблема.
+    defaultHhAction: null,
     isSystem: false,
     isTerminal: true,
     sortOrder: 13,
@@ -256,7 +259,8 @@ export const PLATFORM_STAGES: Record<StageSlug, StageDefinition> = {
     slug: "started_work",
     defaultLabel: "Выход на работу",
     defaultColor: "emerald",
-    defaultHhAction: "hired",
+    // Opt-in — см. комментарий у hired.defaultHhAction выше.
+    defaultHhAction: null,
     isSystem: false,
     isTerminal: true,
     sortOrder: 14,

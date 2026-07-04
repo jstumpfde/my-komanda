@@ -11,6 +11,7 @@ import {
   isCandidateInitiatedDiscard,
   hhStateLabel,
 } from "./stage-mapping"
+import { getDefaultPipeline, getStageHhAction } from "@/lib/stages"
 
 test("исходящий: наша стадия → hh-действие (по карте Юрия)", () => {
   assert.equal(platformStageToHhAction("primary_contact"), "invitation")
@@ -20,9 +21,25 @@ test("исходящий: наша стадия → hh-действие (по к
   assert.equal(platformStageToHhAction("rejected"), "discard")
 })
 
-test("исходящий: нанят → hired (05.07 фикс: у hh ЕСТЬ состояние hired)", () => {
+test("исходящий: нанят → hired (карта поддерживает значение, у hh ЕСТЬ состояние hired)", () => {
+  // Эта карта — «что означает hired», а не «когда пушим». Сам маппинг
+  // по-прежнему умеет вернуть "hired" — им пользуется getStageHhAction
+  // ТОЛЬКО когда компания явно включила pipeline-action для стадии.
   assert.equal(platformStageToHhAction("hired"), "hired")
   assert.equal(platformStageToHhAction("started_work"), "hired")
+})
+
+test("opt-in (05.07): платформенный дефолт для hired/started_work — null, пуш выключен пока компания не включит явно", () => {
+  const pipeline = getDefaultPipeline("standard")
+  assert.equal(getStageHhAction("hired", pipeline), null)
+  assert.equal(getStageHhAction("started_work", pipeline), null)
+})
+
+test("opt-in (05.07): явный stageHhActions.hired=\"hired\" в hiringDefaults компании включает пуш", () => {
+  const pipeline = getDefaultPipeline("standard", { hired: "hired" })
+  assert.equal(getStageHhAction("hired", pipeline), "hired")
+  // started_work не переопределён компанией отдельно → остаётся null (opt-in per-стадийно).
+  assert.equal(getStageHhAction("started_work", pipeline), null)
 })
 
 test("исходящий: оффер/новый и внутренние → null (у hh нет отдельного состояния «оффер»)", () => {

@@ -140,8 +140,8 @@ interface SortableStageRowProps {
   color: StageColor
   label: string
   // "hired" добавлено в lib/stages.ts HhAction 05.07 (пуш "Выход на работу" в
-  // hh) — тип здесь только расширен, чтобы не ломать сборку; UI для выбора
-  // "hired" в этом редакторе не добавлялся (вне зоны текущей задачи).
+  // hh); opt-in — платформенный дефолт для стадий hired/started_work null,
+  // компания включает явно этим селектом (guard-находка 05.07).
   hhAction: "invitation" | "discard" | "assessment" | "hired" | null
   hhStage: string
   avitoVal: string
@@ -150,7 +150,7 @@ interface SortableStageRowProps {
   onMoveDown: (slug: StageSlug) => void
   onColorChange: (slug: StageSlug, color: StageColor) => void
   onLabelChange: (slug: StageSlug, value: string) => void
-  onHhActionChange: (slug: StageSlug, value: "invitation" | "discard" | "assessment" | null) => void
+  onHhActionChange: (slug: StageSlug, value: "invitation" | "discard" | "assessment" | "hired" | null) => void
   onHhStageChange: (slug: StageSlug, value: string) => void
   onAvitoChange: (slug: StageSlug, value: string) => void
 }
@@ -286,7 +286,7 @@ function SortableStageRow({
           onValueChange={(v) =>
             onHhActionChange(
               slug,
-              v === "invitation" || v === "discard" || v === "assessment" ? v : null,
+              v === "invitation" || v === "discard" || v === "assessment" || v === "hired" ? v : null,
             )
           }
         >
@@ -298,6 +298,7 @@ function SortableStageRow({
             <SelectItem value="invitation">Пригласить</SelectItem>
             <SelectItem value="assessment">Тестовое задание</SelectItem>
             <SelectItem value="discard">Отказать</SelectItem>
+            <SelectItem value="hired">Выход на работу (hired)</SelectItem>
           </SelectContent>
         </Select>
       </td>
@@ -352,9 +353,9 @@ export function FunnelAutomationSection({
 }) {
   // ── Единая таблица стадий ──
   const [stageHhActions, setStageHhActions] = useState<
-    Record<string, "invitation" | "discard" | "assessment" | null>
+    Record<string, "invitation" | "discard" | "assessment" | "hired" | null>
   >(
-    (defaults.stageHhActions as Record<string, "invitation" | "discard" | "assessment" | null>) ?? {},
+    (defaults.stageHhActions as Record<string, "invitation" | "discard" | "assessment" | "hired" | null>) ?? {},
   )
   // ── Маппинг стадий→hh-стадии переговоров (новое поле, хранится в stageHhStages) ──
   // Используем stageAvitoActions как резервное поле не трогая его; hh-стадии —
@@ -496,7 +497,7 @@ export function FunnelAutomationSection({
     setStageLabels(preset.stageLabels ?? {})
     setStageColors(preset.stageColors ?? {})
     setStageHhActions(
-      (preset.stageHhActions ?? {}) as Record<string, "invitation" | "discard" | "assessment" | null>
+      (preset.stageHhActions ?? {}) as Record<string, "invitation" | "discard" | "assessment" | "hired" | null>
     )
     setStageAvitoActions(preset.stageAvitoActions ?? {})
     setAppliedPreset(preset.id)
