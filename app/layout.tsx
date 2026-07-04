@@ -1,10 +1,10 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
-import { Analytics } from '@vercel/analytics/next'
 import { Providers } from '@/components/providers'
 import { Toaster } from '@/components/ui/sonner'
 import { StaleDeploymentReload } from '@/components/stale-deployment-reload'
 import { CookieConsentBanner } from '@/components/cookie-consent-banner'
+import { AnalyticsGate } from '@/components/analytics-gate'
 import {
   getPlatformTitle,
   getPlatformDescription,
@@ -82,7 +82,7 @@ export default function RootLayout({
         <Toaster position="top-right" />
         <StaleDeploymentReload />
         <CookieConsentBanner />
-        <Analytics />
+        <AnalyticsGate />
       </body>
     </html>
   )

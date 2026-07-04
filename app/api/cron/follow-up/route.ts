@@ -75,7 +75,7 @@ function startOfTodayMsk(): Date {
   return new Date(`${get("year")}-${get("month")}-${get("day")}T00:00:00+03:00`)
 }
 
-type TouchOutcome = "sent" | "cancelled" | "failed" | "skipped"
+type TouchOutcome = "sent" | "cancelled" | "failed" | "skipped" | "held"
 
 interface TouchResult {
   outcome: TouchOutcome
@@ -234,6 +234,7 @@ async function processCampaignTouches(now: Date) {
   let touchCancelled = 0
   let touchFailed = 0
   let touchSkipped = 0
+  let touchHeld = 0
   const reasonBreakdown: Record<string, number> = {}
 
   // Кэш per-company задержек на этот run.
@@ -255,6 +256,7 @@ async function processCampaignTouches(now: Date) {
     if (result.outcome === "sent")      touchSent++
     else if (result.outcome === "cancelled") touchCancelled++
     else if (result.outcome === "failed")    touchFailed++
+    else if (result.outcome === "held")      touchHeld++
     else                                     touchSkipped++
 
     if (result.reason) {
@@ -284,6 +286,7 @@ async function processCampaignTouches(now: Date) {
     cancelled:  touchCancelled,
     failed:     touchFailed,
     skipped:    touchSkipped,
+    held:       touchHeld,
     lastDelayMs,
     bailedEarly,
     reasons:    reasonBreakdown,
@@ -766,12 +769,19 @@ async function processOneTouch(
         // hh-этап не трогаем — только текст. sendNegotiationMessage проводит
         // текст через guardOutgoingMessage (чистит неподставленные {{переменные}}
         // и артефакты) — раньше здесь был raw fetch мимо стража (баг #5).
+        let held1 = false
         try {
-          await sendNegotiationMessage(tokenResult.accessToken, hhResp.hhResponseId, finalText, vacancy.companyId)
+          await sendNegotiationMessage(tokenResult.accessToken, hhResp.hhResponseId, finalText, vacancy.companyId, () => { held1 = true })
         } catch (err) {
           const msg2 = err instanceof Error ? err.message : String(err)
           await db.update(followUpMessages).set({ status: "failed", errorMessage: msg2.slice(0, 200) }).where(eq(followUpMessages.id, msg.id))
           return { outcome: "failed", reason: "hh_send_failed", delayMs }
+        }
+        if (held1) {
+          // Страж придержал сообщение (messageGuardHold) — НЕ доставлено кандидату,
+          // ждёт ручной отправки на /hr/held-messages. Не помечаем "sent".
+          await db.update(followUpMessages).set({ status: "held" }).where(eq(followUpMessages.id, msg.id))
+          return { outcome: "held", reason: "message_guard_hold", delayMs }
         }
       }
       // Наша стадия (если задана и кандидат не в терминальной).
@@ -793,16 +803,23 @@ async function processOneTouch(
     // sendNegotiationMessage проводит текст через guardOutgoingMessage перед
     // отправкой (чистит неподставленные {{переменные}}/артефакты, шлёт алерт
     // при проблеме) — раньше здесь был raw fetch мимо стража (баг #5).
+    let held2 = false
     try {
-      await sendNegotiationMessage(tokenResult.accessToken, hhResp.hhResponseId, finalText, vacancy.companyId)
+      await sendNegotiationMessage(tokenResult.accessToken, hhResp.hhResponseId, finalText, vacancy.companyId, () => { held2 = true })
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
-      const reason = errMsg.startsWith("HH message") ? "guard_empty" : "hh_send_failed"
+      const reason = errMsg.startsWith("HH_GUARD_EMPTY:") ? "guard_empty" : "hh_send_failed"
       await db.update(followUpMessages).set({
         status: "failed",
         errorMessage: errMsg.slice(0, 200),
       }).where(eq(followUpMessages.id, msg.id))
       return { outcome: "failed", reason, delayMs }
+    }
+    if (held2) {
+      // Страж придержал сообщение (messageGuardHold) — НЕ доставлено кандидату,
+      // ждёт ручной отправки на /hr/held-messages. Не помечаем "sent".
+      await db.update(followUpMessages).set({ status: "held" }).where(eq(followUpMessages.id, msg.id))
+      return { outcome: "held", delayMs }
     }
     await db.update(followUpMessages).set({
       status: "sent",

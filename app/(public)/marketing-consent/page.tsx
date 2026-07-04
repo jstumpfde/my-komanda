@@ -69,10 +69,9 @@ export default function MarketingConsentPage() {
             момент — любым из способов:
           </p>
           <ul className="list-disc pl-5 space-y-1 text-sm leading-relaxed text-gray-700">
-            <li>перейти по ссылке «отписаться», которая присутствует в каждом рекламном сообщении;</li>
-            <li>отключить рассылку в настройках личного кабинета;</li>
             <li>направить заявление на e-mail{" "}
-              <a href={`mailto:${v.email}`} className={LINK}>{v.email}</a>.</li>
+              <a href={`mailto:${v.email}`} className={LINK}>{v.email}</a>{" "}
+              с указанием контактных данных, по которым была направлена рассылка.</li>
           </ul>
           <p className={P}>
             Отзыв согласия прекращает рассылку в срок не более 3 (трёх) рабочих дней и не

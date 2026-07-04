@@ -97,6 +97,9 @@ export function CookieConsentBanner() {
     } catch {
       // ignore
     }
+    // Уведомляет AnalyticsGate (и другие возможные потребители согласия в
+    // будущем) о смене решения — без перезагрузки страницы.
+    window.dispatchEvent(new Event("c24:consent-updated"))
     setVisible(false)
     setShowSettings(false)
   }

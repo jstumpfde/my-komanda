@@ -399,6 +399,9 @@ export async function sendNegotiationMessage(
   negotiationId: string,
   message: string,
   companyId?: string,   // для per-company Telegram-алерта стража (необязателен)
+  onHeld?: () => void,  // вызывается ВМЕСТО отправки, если сообщение придержано (held_messages) —
+                        // опционален для обратной совместимости со старыми вызовами, которые не
+                        // отличали held от sent (см. предеплой-ревью 04.07)
 ): Promise<void> {
   // Финальный страж текста перед отправкой. Пустой/битый после чистки — не шлём.
   const g = guardOutgoingMessage(message)
@@ -406,9 +409,12 @@ export async function sendNegotiationMessage(
     console.warn("[outgoing-guard] sendNegotiationMessage", { negotiationId, issues: g.issues })
     void maybeAlertGuardIssue(g.issues, { source: "sendNegotiationMessage", negotiationId, companyId })
     // Hold (Option 2): если включён — придерживаем, НЕ шлём.
-    if (await maybeHoldMessage({ companyId, hhResponseId: negotiationId, text: g.text, issues: g.issues, source: "sendNegotiationMessage" })) return
+    if (await maybeHoldMessage({ companyId, hhResponseId: negotiationId, text: g.text, issues: g.issues, source: "sendNegotiationMessage" })) {
+      onHeld?.()
+      return
+    }
   }
-  if (!g.safe) throw new Error(`HH message ${negotiationId} skipped: empty after guard`)
+  if (!g.safe) throw new Error(`HH_GUARD_EMPTY: message ${negotiationId} skipped: empty after guard`)
   const body = new URLSearchParams()
   body.set("message", g.text)
   const res = await fetch(`${HH_API_BASE}/negotiations/${negotiationId}/messages`, {
@@ -422,6 +428,6 @@ export async function sendNegotiationMessage(
   })
   if (!res.ok) {
     const text = await res.text()
-    throw new Error(`HH message ${negotiationId} failed: ${res.status} ${text}`)
+    throw new Error(`HH_API_ERROR: message ${negotiationId} failed: ${res.status} ${text}`)
   }
 }
