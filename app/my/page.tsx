@@ -128,7 +128,7 @@ const SECTIONS: { label: string; services: Service[] }[] = [
       },
       {
         key: "partner",
-        name: "Партнёрка",
+        name: "Партнёры",
         desc: "Партнёрская программа · кабинет партнёра",
         url: "company24.pro/partner",
         loginUrl: "https://company24.pro/partner",
