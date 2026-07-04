@@ -4,6 +4,7 @@ import { Analytics } from '@vercel/analytics/next'
 import { Providers } from '@/components/providers'
 import { Toaster } from '@/components/ui/sonner'
 import { StaleDeploymentReload } from '@/components/stale-deployment-reload'
+import { CookieConsentBanner } from '@/components/cookie-consent-banner'
 import {
   getPlatformTitle,
   getPlatformDescription,
@@ -80,6 +81,7 @@ export default function RootLayout({
         </Providers>
         <Toaster position="top-right" />
         <StaleDeploymentReload />
+        <CookieConsentBanner />
         <Analytics />
       </body>
     </html>
