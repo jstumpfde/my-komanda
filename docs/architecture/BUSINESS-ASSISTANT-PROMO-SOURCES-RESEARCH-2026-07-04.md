@@ -20,36 +20,59 @@ Admitad-пул купонов + курируемый/скрейпинговый 
 
 **Три реалистичных источника для MVP (по убыванию отдачи):**
 
-1. **Admitad (партнёрская сеть) — фид промокодов.** Самый надёжный каркас.
-   Admitad отдаёт вебмастеру **выгрузку купонов/промокодов** в CSV/XML/RSS +
-   есть **Publisher API, метод «Купоны»** — описание акции, ссылка с меткой,
-   кодовое слово, размер скидки, срок действия. Тысячи мерчантов РФ (маркетплейсы,
-   доставка, услуги). Комиссия — как у любой CPA. Это машиночитаемый фид, который
-   можно тянуть кроном и складывать в свою ленту (как flight_deals).
-   - Publisher API «Купоны»: https://developers.admitad.com/ru/knowledge-base/article/%D0%BA%D1%83%D0%BF%D0%BE%D043D%D1%8B (см. также account.admitad.com/ru/developers/doc)
-   - Помощь по купонам: https://help.admitad.com/ru/topic/10-kupony-i-promokody
+1. **Партнёрские CPA-сети с машиночитаемым фидом купонов.** Подтверждено прямым
+   открытием документации: у **трёх** сетей есть отдельный технический продукт
+   «фид промокодов» (не просто трекинг-ссылки) — их можно тянуть кроном и
+   складывать в свою ленту (как `flight_deals`). По удобству/открытости:
 
-2. **ePN / Cityads / Travelpayouts** — вторичные CPA-сети с похожими купон-инструментами
-   (у Travelpayouts мы уже зарегистрируемся ради авиа/отелей — часть их промо-офферов
-   можно переиспользовать для travel-промокодов). Дают охват тех мерчантов, кого нет
-   в Admitad.
+   - **ePN — самый чистый и открыто задокументированный.** REST API:
+     `GET https://app.epn.bz/coupons` (параметры `limit,offset,typeId,themeId,offerId,isPersonal`),
+     заголовок `X-ACCESS-TOKEN`; вспомогательные `GET /coupons/offers` (магазины),
+     `/coupons/types`, `/coupons/themes` (категории). Поля: `code,url,name,description,
+     dateFrom,dateTo,typeId,offerId`. Типы: 10=скидка, 11=подарок, 12=бесплатная доставка.
+     Доки: https://epn.bz/en/faq/documentation
+   - **CityAds** — `GET /api/rest/webmaster/xml/coupons` (XML/JSON/CSV/XLS), параметр
+     авторизации `remote_auth`; поля `id,name,promo_code,discount,coupon_type,offer_name,
+     geo,active_to,is_exclusive`; фильтры по региону/категории/типу/статусу. UI-выгрузка
+     тоже есть. Доки: https://cityads.com/api/dev/webmaster/goods-coupons?lang=ru ,
+     http://userdocs.cityads.com/docs/udocs/ru/latest/content/tools/coupon.html
+   - **Admitad (ныне холдинг Mitgo)** — метод API «Купоны»
+     `GET https://api.admitad.com/coupons/?region=..&limit=..`, OAuth2 Bearer +
+     RSS/CSV/XML-выгрузка. Самый большой каталог мерчантов РФ, НО офиц. доки сейчас
+     за антибот-защитой (developers.admitad.com → developers.mitgo.com → 403) —
+     точные поля/лимиты уточнить после регистрации паблишером.
+     Ориентир: https://help.admitad.com/ru/advertiser/topic/170-kupony-i-skidki
+   - (ActionPay — тоже есть экспорт XML/CSV/RSS, но публичная дока слабее.)
 
-3. **Курируемые нишевые источники (бани/рестораны/развлечения)** — где партнёрского
+   Модель у всех — CPA (комиссия с продажи по трекинг-ссылке); купон-фид отдаётся
+   паблишеру-агрегатору. Порог входа демократичный: регистрация вебмастером +
+   модерация площадки (сайт/канал), обычно до суток.
+
+2. **Курируемые нишевые источники (бани/рестораны/развлечения)** — где партнёрского
    фида нет, лента наполняется полу-вручную или парсингом (как Telegram-лента у
    авиабилетов). Основной канал скидок в этой нише — **групповые купоны и банковский
    кэшбэк**, а не мерчант-промокоды (см. п.3).
 
+⚠️ **Travelpayouts для промокодов НЕ подходит** (частая путаница): «промокоды
+Travelpayouts» = бонус повышенной комиссии САМОМУ вебмастеру, а не скидочные коды
+для покупателя. Это travel-affiliate конструктор (для авиа/отелей — да, для радара
+промокодов — нет).
+
 ## 2. Агрегаторы промокодов (РФ) с партнёркой/API
 
-| Источник | API/фид | Профиль |
+| Источник | Купон-API/фид | Профиль |
 |---|---|---|
-| **Admitad** | ✅ CSV/XML/RSS + Publisher API «Купоны» | Основной, тысячи мерчантов |
-| ePN (admitad group) | ✅ купон-инструменты | Маркетплейсы, travel |
-| Cityads | партнёрка, купоны | Игры, финансы, товары |
-| Промокоды.ру / Купоника / Picodi | витрины (в осн. через Admitad-фиды) | Готовые витрины, не источник данных |
+| **ePN** | ✅ открытый REST `app.epn.bz/coupons` (X-ACCESS-TOKEN) | Лучше всех задокументирован; маркетплейсы, travel |
+| **CityAds** | ✅ `/api/rest/webmaster/xml/coupons` (XML/JSON/CSV) | Финансы, travel, e-commerce |
+| **Admitad (Mitgo)** | ✅ `api.admitad.com/coupons/` + RSS/CSV/XML (доки за антиботом) | Крупнейший каталог мерчантов РФ |
+| ActionPay | 🟡 экспорт XML/CSV/RSS, дока слабее | Доп. охват |
+| Travelpayouts / Gdeslon / Alanbase | ❌ не купон-фид (travel-affiliate / товарный фид / SaaS) | Не подходят под радар |
+| Промокоды.ру / Купоника / Picodi / Promokodus | витрины поверх сетей + свой парсинг | Конкуренты, не источник |
 
-Практически все крупные RU-витрины промокодов сами тянут данные из Admitad/ePN —
-т.е. подключившись к Admitad-фиду, мы получаем тот же массив, что и они, напрямую.
+Крупные RU-витрины промокодов сами тянут данные из этих сетей + доскрейпливают
+сайты мерчантов (Promokodus прямо говорит «90% трафика — SEO, сбор не только из
+партнёрской сети, но и с сайтов рекламодателей/соцсетей»). Подключившись к
+ePN/CityAds/Admitad-фидам, мы получаем тот же машиночитаемый массив напрямую.
 
 ## 3. Бани/сауны и рестораны — реальность ниши (ключевой интерес Юрия)
 
@@ -98,21 +121,27 @@ Admitad-пул купонов + курируемый/скрейпинговый 
 
 ## 5. Рекомендация к реализации (когда дойдём до Промокодов)
 
-- **Фаза 1:** подключить **Admitad Coupons feed/API** → крон тянет промокоды в
-  таблицу `promo_deals` (аналог `flight_deals`), страница `/business-assistant/promo`
-  с фильтром по категориям. Даёт сразу широкий охват + комиссию.
+- **Фаза 1:** подключить купон-фид сети → крон тянет промокоды в таблицу
+  `promo_deals` (аналог `flight_deals`), страница `/business-assistant/promo` с
+  фильтром по категориям. **Начинать с ePN** (самый открытый REST-API, можно
+  прототипировать сразу) → добавить **CityAds** и **Admitad** для охвата.
 - **Фаза 2:** добавить **Biglion/групповые купоны** для ниши бани/рестораны/СПА
   (то, чем Юрий больше всего интересовался) — отдельная категория/вкладка.
 - **Фаза 3:** курируемая Telegram-лента промо-сливов (userbot, как у авиа).
 
-**Нужно от Юрия (позже, оргшаги):** регистрация вебмастером в **Admitad**
-(admitad.com, подтверждение площадки) + при желании в Biglion-партнёрке. Отдельные
-ключи, не пересекаются с Travelpayouts.
+Тот же мок-первый паттерн, что у авиа/отелей: клиент-провайдер с моком без ключей,
+реальный вызов при наличии токена сети.
+
+**Нужно от Юрия (позже, оргшаги):** регистрация вебмастером в **ePN** (epn.bz) и/или
+**Admitad** (admitad.com) + **CityAds** — подтверждение площадки, получить
+access-token каждой сети. При желании — Biglion-партнёрка для бань/ресторанов.
+Ключи отдельные, с Travelpayouts не пересекаются.
 
 **Sources:**
-- https://help.admitad.com/ru/topic/10-kupony-i-promokody
-- https://developers.admitad.com/ru/knowledge-base/article/купоны
-- https://www.biglion.ru/services/beauty/sauna
-- https://www.tbank.ru/gorod/restaurants/
-- https://www.restoclub.ru/msk/news/actions
-- https://b2b.leclick.ru/
+- https://epn.bz/en/faq/documentation (ePN Coupons API — эндпоинты/поля)
+- https://cityads.com/api/dev/webmaster/goods-coupons?lang=ru (CityAds Coupons API)
+- https://help.admitad.com/ru/advertiser/topic/170-kupony-i-skidki (Admitad купоны)
+- http://blog.actionpay.ru/2014/09/17/promokody/ (ActionPay фид)
+- https://www.biglion.ru/services/beauty/sauna (Biglion бани/сауны)
+- https://www.tbank.ru/gorod/restaurants/ (Т-Банк рестораны/кэшбэк)
+- https://www.restoclub.ru/msk/news/actions (Restoclub акции ресторанов)
