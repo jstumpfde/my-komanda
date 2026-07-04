@@ -5,7 +5,7 @@
 // продуктовая фича с настройками для всех, а личный справочник одного
 // конкретного человека.
 import { useMemo, useState } from "react"
-import { KeyRound, Search, ExternalLink, Copy, Check } from "lucide-react"
+import { KeyRound, Search, ExternalLink, ArrowRight, Check } from "lucide-react"
 
 interface Account {
   email: string
@@ -118,6 +118,15 @@ const SECTIONS: { label: string; services: Service[] }[] = [
         ],
       },
       {
+        key: "clients",
+        name: "Клиенты (все компании)",
+        desc: "Список всех компаний-клиентов Company24 — открой любую и нажми «Войти как клиент», чтобы попасть в её кабинет",
+        url: "company24.pro/admin/clients",
+        loginUrl: "https://company24.pro/admin/clients",
+        accounts: [],
+        emptyNote: "не отдельный аккаунт — жмёшь «Войти» и выбираешь компанию на месте",
+      },
+      {
         key: "partner",
         name: "Партнёрка",
         desc: "Партнёрская программа · кабинет партнёра",
@@ -146,21 +155,24 @@ function roleClass(role: string) {
   return ROLE_STYLES[role] ?? "bg-muted text-muted-foreground border-border"
 }
 
-function CopyButton({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false)
+// Одна кнопка на аккаунт: копирует email И сразу открывает вкладку входа —
+// чтобы в открывшейся форме сразу вставить email (Cmd+V), без лишнего шага.
+function AccountEnterButton({ email, loginUrl }: { email: string; loginUrl?: string }) {
+  const [done, setDone] = useState(false)
   return (
     <button
       type="button"
       onClick={() => {
-        navigator.clipboard.writeText(value)
-        setCopied(true)
-        setTimeout(() => setCopied(false), 1200)
+        navigator.clipboard.writeText(email)
+        setDone(true)
+        setTimeout(() => setDone(false), 1200)
+        if (loginUrl) window.open(loginUrl, "_blank", "noopener,noreferrer")
       }}
-      className="shrink-0 inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-      title="Копировать логин"
+      className="shrink-0 inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+      title="Скопировать email и открыть вход"
     >
-      {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-      {copied ? "Скопировано" : "Копировать"}
+      {done ? <Check className="w-3 h-3 text-emerald-500" /> : <ArrowRight className="w-3 h-3" />}
+      {done ? "Скопировано" : "Войти"}
     </button>
   )
 }
@@ -197,7 +209,7 @@ export default function MyPage() {
           </span>
         </div>
         <p className="mt-3 text-sm text-slate-400 leading-relaxed">
-          Клик по аккаунту открывает вход в новой вкладке. Иконка справа — копировать логин.
+          Кнопка «Войти» у аккаунта копирует email и сразу открывает вкладку входа — остаётся вставить (Cmd+V) и ввести пароль.
         </p>
 
         <div className="relative mt-5 mb-6">
@@ -264,11 +276,8 @@ export default function MyPage() {
                   {svc.accounts.length > 0 ? (
                     <div className="border-t border-slate-800">
                       {svc.accounts.map((acc, i) => (
-                        <a
+                        <div
                           key={acc.email + i}
-                          href={svc.loginUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
                           className="flex items-center gap-2.5 px-4 py-2 border-t border-white/5 first:border-t-0 hover:bg-white/5 transition-colors"
                         >
                           <span className={`shrink-0 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border ${roleClass(acc.role)}`}>
@@ -278,15 +287,8 @@ export default function MyPage() {
                             <span className="block font-mono text-[13px] truncate">{acc.email}</span>
                             {acc.note && <span className="block text-[11px] text-slate-500">{acc.note}</span>}
                           </span>
-                          <span
-                            role="button"
-                            tabIndex={-1}
-                            onClick={(e) => { e.preventDefault(); e.stopPropagation() }}
-                            className="shrink-0"
-                          >
-                            <CopyButton value={acc.email} />
-                          </span>
-                        </a>
+                          <AccountEnterButton email={acc.email} loginUrl={svc.loginUrl} />
+                        </div>
                       ))}
                     </div>
                   ) : svc.emptyNote && svc.accounts.length === 0 ? (
