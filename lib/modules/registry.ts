@@ -258,7 +258,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
   },
   business_assistant: {
     id: 'business_assistant',
-    name: 'Бизнес-ассистент',
+    name: 'Мой ассистент',
     description: 'Поиск выгодных предложений: авиабилеты и далее другие категории',
     icon: 'Plane',
     basePath: '/business-assistant',
