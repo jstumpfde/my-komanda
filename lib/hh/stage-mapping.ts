@@ -16,9 +16,15 @@
 //   interview           — «Собеседование»
 //   discard_by_employer — «Отказ» работодателя
 //   discard_by_applicant— кандидат сам отклонил приглашение (ТОЛЬКО входящий сигнал)
+//   hired               — «Выход на работу» (есть в справочнике hh
+//                         negotiations_state; проверено 05.07 через
+//                         api.hh.ru/dictionaries — ИСПРАВЛЕНИЕ ошибочного
+//                         допущения "у hh нет офера/найма", см.
+//                         SCOUT-RESULTS-2026-07-02.md)
 //
-//   У hh НЕТ отдельных состояний «Оффер» и «Нанят» — поэтому для наших стадий
-//   offer_sent/hired исходящего пуша в hh не делаем (map → null).
+//   У hh НЕТ отдельного состояния «Оффер» (только текст сообщения, без
+//   смены папки) — для стадии offer_sent исходящий пуш по-прежнему не
+//   делаем (map → null). Для hired/started_work — пушим action="hired".
 //
 // Где нет соответствия → null («не трогать»): исходящий пуш не отправляем,
 // входящий сигнал не двигает нашу стадию.
@@ -27,7 +33,7 @@ import type { StageSlug } from "@/lib/stages"
 
 // hh-действие для changeNegotiationState (PUT /negotiations/{action}/{id}).
 // Совпадает с сигнатурой lib/hh-api.ts changeNegotiationState.
-export type HhOutboundAction = "invitation" | "assessment" | "interview" | "consider" | "discard"
+export type HhOutboundAction = "invitation" | "assessment" | "interview" | "consider" | "discard" | "hired"
 
 // hh-состояние negotiation (id коллекции). Входящий сигнал берём из
 // hhResponses.status (туда import-responses пишет item.state.id).
@@ -39,6 +45,7 @@ export type HhNegotiationState =
   | "interview"
   | "discard_by_employer"
   | "discard_by_applicant"
+  | "hired"
 
 // ─── ИСХОДЯЩИЙ: наша стадия → действие hh ────────────────────────────────────
 //
@@ -47,7 +54,7 @@ export type HhNegotiationState =
 //   Тестовое (test_task_sent)           → assessment
 //   Собеседование (interview/scheduled) → interview
 //   Оффер (offer_sent)                  → нет hh-состояния → null (не пушим)
-//   Нанят (hired/started_work)          → нет hh-состояния → null (не пушим)
+//   Нанят (hired/started_work)          → hired (action="hired", "Выход на работу")
 //   Отказ (rejected)                    → discard_by_employer (action="discard")
 //   Остальные (new/demo/анкета/скрининг/…) → null (внутренние, hh не трогаем)
 //
@@ -64,7 +71,16 @@ export function platformStageToHhAction(stage: string | null | undefined): HhOut
       return "interview"
     case "rejected":
       return "discard" // → discard_by_employer
-    // offer_sent / hired / started_work — у hh нет соответствующего состояния.
+    // hired / started_work — у hh есть состояние hired («Выход на работу»,
+    // проверено 05.07 через api.hh.ru/dictionaries: negotiations_state
+    // содержит { id: "hired", name: "Выход на работу" }). Обе наши терминальные
+    // стадии «после оффера» пушим в него — идемпотентно, кандидат попадёт
+    // в эту стадию только один раз.
+    case "hired":
+    case "started_work":
+      return "hired"
+    // offer_sent — у hh нет отдельного состояния «оффер» (это только текст
+    // сообщения без смены папки), поэтому пуш не делаем.
     // new / demo_opened / anketa_filled / ai_screening / test_task_done /
     // test_passed / test_failed / internship / reference_check / decision —
     // внутренние стадии, hh-папку не трогаем.
@@ -85,6 +101,7 @@ export function platformStageToHhState(stage: string | null | undefined): HhNego
     case "assessment": return "assessment"
     case "interview":  return "interview"
     case "discard":    return "discard_by_employer"
+    case "hired":      return "hired"
   }
 }
 
@@ -95,6 +112,9 @@ export function platformStageToHhState(stage: string | null | undefined): HhNego
 //   interview                  → interview
 //   discard_by_employer        → rejected (мы отказали; initiator=company)
 //   discard_by_applicant       → rejected (кандидат сам; initiator=candidate)
+//   hired                      → hired («Выход на работу» — входящий сигнал
+//                                считаем нашей стадией "Нанят"; started_work
+//                                остаётся ручным переводом HR)
 //   response                   → null (новый отклик — не двигаем нашу стадию;
 //                                fallback «оставить предыдущий»)
 //
@@ -111,6 +131,8 @@ export function hhStateToPlatformStage(hhState: string | null | undefined): Stag
     case "discard_by_employer":
     case "discard_by_applicant":
       return "rejected"
+    case "hired":
+      return "hired"
     // response / invited / orphaned / claimed / hidden / прочее — не двигаем.
     default:
       return null
@@ -134,7 +156,11 @@ export function hhStatusStringToHhAction(status?: string | null): HhOutboundActi
   if (t.includes("тест")) return platformStageToHhAction("test_task_sent")
   if (t.includes("интервью") || t.includes("собес")) return platformStageToHhAction("interview")
   if (t.includes("первичн") || t.includes("контакт")) return platformStageToHhAction("primary_contact")
-  // оффер / принят / новый — нет hh-состояния → null (не двигаем hh-папку).
+  // «принят» — Юрий 26.06 предполагал, что нет hh-состояния, но у hh ЕСТЬ
+  // hired («Выход на работу», проверено 05.07 через api.hh.ru/dictionaries) —
+  // пушим. «оффер» — по-прежнему null (у hh нет отдельного состояния «оффер»).
+  if (t.includes("принят")) return platformStageToHhAction("hired")
+  // оффер / новый — нет hh-состояния → null (не двигаем hh-папку).
   return null
 }
 
@@ -160,6 +186,7 @@ export const HH_STATE_LABELS: Record<string, string> = {
   discard:              "Отказ",
   discard_by_employer:  "Отказ работодателя",
   discard_by_applicant: "Кандидат отказался",
+  hired:                "Выход на работу",
   // Локальные/технические статусы hhResponses.status, встречающиеся в БД:
   invited:              "Приглашён",
   hidden:               "Скрыт",

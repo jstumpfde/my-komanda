@@ -61,13 +61,15 @@ export function dozhimChainForOpened(preset: DozhimPreset, action?: StageActionT
 /** Статусы hh/Avito (маппинг «вход в стадию → статус»). Сработает при рантайме. */
 export const STAGE_STATUSES = ["новый", "первичный контакт", "интервью", "тестовое задание", "оффер", "принят", "отказ"]
 
-/** Маппинг STAGE_STATUSES → действие hh-воронки (решение Юрия 26.06):
+/** Маппинг STAGE_STATUSES → действие hh-воронки (решение Юрия 26.06, поправка 05.07):
  *   первичный контакт → invitation (phone_interview) · тестовое задание → assessment
- *   интервью → interview · отказ → discard · остальные (новый/оффер/принят) → null (не менять).
+ *   интервью → interview · отказ → discard · принят → hired (у hh ЕСТЬ состояние
+ *   "Выход на работу", проверено 05.07 через api.hh.ru/dictionaries — правит
+ *   ошибочное допущение 26.06) · оффер/новый → null (не менять).
  *  null = текст уходит, но hh-папка кандидата не трогается. */
 export function hhActionForStatus(
   status?: string | null,
-): "invitation" | "assessment" | "interview" | "discard" | null {
+): "invitation" | "assessment" | "interview" | "discard" | "hired" | null {
   // Делегируем центральному модулю маппинга (lib/hh/stage-mapping.ts), чтобы
   // исходящий пуш v2 шёл через единую утверждённую карту стадий (#16/#23).
   // "consider" в v2-статусах не используется → сузим тип до legacy-набора.
