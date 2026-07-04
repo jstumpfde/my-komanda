@@ -15,10 +15,10 @@ import { toast } from "sonner"
 import { Plus, X } from "lucide-react"
 import type { CompanyHiringDefaults, InterviewTimeRange } from "@/lib/db/schema"
 import {
-  INTERVIEW_METHOD_ORDER,
   INTERVIEW_METHOD_LABELS,
   getInterviewMethodConfigs,
   type MethodConfig,
+  type InterviewMethodKey,
 } from "@/lib/hiring/interview-methods"
 import { resolveDaySchedule, type DayId, type DaySchedule } from "@/lib/schedule/day-windows"
 
@@ -58,6 +58,27 @@ const BUFFER_OPTIONS = [
   { value: 15, label: "15 мин" },
   { value: 30, label: "30 мин" },
 ]
+
+// ── Три вида интервью (видимая модель) → маппятся на methodConfigs (данные) ──
+
+/** Диапазон длительности с шагом 5 мин для select-а вида интервью */
+function durationRangeOptions(min: number, max: number): { value: number; label: string }[] {
+  const out: { value: number; label: string }[] = []
+  for (let v = min; v <= max; v += 5) {
+    out.push({ value: v, label: `${v} мин` })
+  }
+  return out
+}
+
+const CALL_DURATION_OPTIONS   = durationRangeOptions(5, 60)   // Звонок: 5–60, дефолт 15
+const ONLINE_DURATION_OPTIONS = durationRangeOptions(5, 60)   // Онлайн: 5–60, дефолт 25
+const OFFICE_DURATION_OPTIONS = durationRangeOptions(5, 120)  // В офисе: 5–120, дефолт 45
+
+const CALL_DEFAULT_DURATION   = 15
+const ONLINE_DEFAULT_DURATION = 25
+const OFFICE_DEFAULT_DURATION = 45
+
+const ONLINE_PLATFORMS: InterviewMethodKey[] = ["telemost", "zoom", "meet"]
 
 // Шаг сетки слотов для записи (готовые варианты, без ручного ввода).
 const SLOT_STEP_OPTIONS = [
@@ -135,7 +156,17 @@ export function InterviewSection({
 
   function toggleMethod(method: string) {
     setMethodConfigs(prev =>
-      prev.map(c => (c.method === method ? { ...c, enabled: !c.enabled } : c))
+      prev.map(c => {
+        if (c.method !== method) return c
+        const enabled = !c.enabled
+        // При первом включении подставляем дефолт вида, если длительность ещё не настроена
+        // пользователем (осталась на общем нормализованном дефолте 45 мин).
+        if (enabled && c.duration === 45) {
+          const viewDefault = method === "phone" ? CALL_DEFAULT_DURATION : OFFICE_DEFAULT_DURATION
+          return { ...c, enabled, duration: viewDefault }
+        }
+        return { ...c, enabled }
+      })
     )
   }
 
@@ -148,6 +179,54 @@ export function InterviewSection({
   function setMethodBuffer(method: string, buffer: number) {
     setMethodConfigs(prev =>
       prev.map(c => (c.method === method ? { ...c, buffer } : c))
+    )
+  }
+
+  // ── Хелперы для вида «Онлайн» (объединяет telemost/zoom/meet в один UI-блок) ──
+
+  function getOnlineConfig(): MethodConfig {
+    // Выбранная платформа — первая включённая из ONLINE_PLATFORMS; иначе телемост (дефолт).
+    const active = ONLINE_PLATFORMS.map(m => methodConfigs.find(c => c.method === m))
+      .find(c => c?.enabled)
+    return active ?? methodConfigs.find(c => c.method === "telemost")!
+  }
+
+  function toggleOnline() {
+    const current = getOnlineConfig()
+    const nextEnabled = !current.enabled
+    setMethodConfigs(prev =>
+      prev.map(c => {
+        if (!ONLINE_PLATFORMS.includes(c.method)) return c
+        if (nextEnabled) {
+          // включаем — активной становится ранее выбранная (или дефолтная) платформа
+          if (c.method !== current.method) return { ...c, enabled: false }
+          // При первом включении подставляем дефолт вида «Онлайн», если длительность
+          // ещё не настроена пользователем (осталась на общем дефолте 45 мин).
+          const duration = c.duration === 45 ? ONLINE_DEFAULT_DURATION : c.duration
+          return { ...c, enabled: true, duration }
+        }
+        return { ...c, enabled: false }
+      })
+    )
+  }
+
+  function setOnlinePlatform(method: InterviewMethodKey) {
+    setMethodConfigs(prev =>
+      prev.map(c =>
+        ONLINE_PLATFORMS.includes(c.method) ? { ...c, enabled: c.method === method } : c
+      )
+    )
+  }
+
+  function setOnlineDuration(duration: number) {
+    setMethodConfigs(prev =>
+      prev.map(c => (ONLINE_PLATFORMS.includes(c.method) ? { ...c, duration } : c))
+    )
+  }
+
+  function setOnlineBuffer(buffer: number) {
+    setMethodConfigs(prev =>
+      prev.map(c => (ONLINE_PLATFORMS.includes(c.method) ? { ...c, buffer } : c))
     )
   }
 
@@ -232,8 +311,11 @@ export function InterviewSection({
     }
   }
 
-  // ── Определяем, включён ли офис ──
-  const officeEnabled = methodConfigs.find(c => c.method === "office")?.enabled ?? false
+  // ── Определяем состояния трёх видов интервью ──
+  const phoneConfig  = methodConfigs.find(c => c.method === "phone")!
+  const officeConfig = methodConfigs.find(c => c.method === "office")!
+  const onlineConfig = getOnlineConfig()
+  const officeEnabled = officeConfig?.enabled ?? false
 
   return (
     <div className="space-y-4 max-w-3xl">
@@ -249,98 +331,284 @@ export function InterviewSection({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
-          {INTERVIEW_METHOD_ORDER.map(method => {
-            const cfg = methodConfigs.find(c => c.method === method)
-            if (!cfg) return null
-            const label = INTERVIEW_METHOD_LABELS[method]
-            return (
-              <div
-                key={method}
+          {/* Вид 1: Звонок по телефону */}
+          <div
+            className={cn(
+              "flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors",
+              phoneConfig.enabled ? "border-border bg-background" : "border-border/60 bg-muted/20"
+            )}
+          >
+            <Switch
+              checked={phoneConfig.enabled}
+              onCheckedChange={() => toggleMethod("phone")}
+              className="shrink-0"
+            />
+            <span className={cn("text-sm flex-1", !phoneConfig.enabled && "text-muted-foreground")}>
+              Звонок по телефону
+            </span>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">Длит.</span>
+              <Select
+                value={String(phoneConfig.duration)}
+                onValueChange={val => setMethodDuration("phone", parseInt(val, 10))}
+                disabled={!phoneConfig.enabled}
+              >
+                <SelectTrigger className="h-8 w-[90px] text-xs bg-[var(--input-bg)]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CALL_DURATION_OPTIONS.map(o => (
+                    <SelectItem key={o.value} value={String(o.value)} className="text-xs">
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">Буфер</span>
+              <Select
+                value={String(phoneConfig.buffer)}
+                onValueChange={val => setMethodBuffer("phone", parseInt(val, 10))}
+                disabled={!phoneConfig.enabled}
+              >
+                <SelectTrigger className="h-8 w-[100px] text-xs bg-[var(--input-bg)]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {BUFFER_OPTIONS.map(o => (
+                    <SelectItem key={o.value} value={String(o.value)} className="text-xs">
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {phoneConfig.enabled && (
+              <button
+                type="button"
+                onClick={() => setDefaultMethod("phone")}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors",
-                  cfg.enabled ? "border-border bg-background" : "border-border/60 bg-muted/20"
+                  "flex items-center gap-1.5 text-xs whitespace-nowrap transition-colors",
+                  defaultMethod === "phone"
+                    ? "text-primary font-medium"
+                    : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                {/* Тумблер + название */}
-                <Switch
-                  checked={cfg.enabled}
-                  onCheckedChange={() => toggleMethod(method)}
-                  className="shrink-0"
-                />
-                <span className={cn("text-sm flex-1", !cfg.enabled && "text-muted-foreground")}>
-                  {label}
+                <span className={cn(
+                  "size-3.5 rounded-full border-2 flex items-center justify-center shrink-0",
+                  defaultMethod === "phone"
+                    ? "border-primary bg-primary"
+                    : "border-muted-foreground/50"
+                )}>
+                  {defaultMethod === "phone" && <span className="size-1.5 rounded-full bg-white" />}
                 </span>
+                По умолчанию
+              </button>
+            )}
+          </div>
 
-                {/* Длительность */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">Длит.</span>
-                  <Select
-                    value={String(cfg.duration)}
-                    onValueChange={val => setMethodDuration(method, parseInt(val, 10))}
-                    disabled={!cfg.enabled}
-                  >
-                    <SelectTrigger className="h-8 w-[90px] text-xs bg-[var(--input-bg)]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DURATION_OPTIONS.map(o => (
-                        <SelectItem key={o.value} value={String(o.value)} className="text-xs">
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+          {/* Вид 2: Онлайн (платформа выбирается под-селектом) */}
+          <div
+            className={cn(
+              "rounded-lg border px-3 py-2.5 transition-colors space-y-2",
+              onlineConfig.enabled ? "border-border bg-background" : "border-border/60 bg-muted/20"
+            )}
+          >
+            <div className="flex items-center gap-3">
+              <Switch
+                checked={onlineConfig.enabled}
+                onCheckedChange={toggleOnline}
+                className="shrink-0"
+              />
+              <span className={cn("text-sm flex-1", !onlineConfig.enabled && "text-muted-foreground")}>
+                Онлайн
+              </span>
 
-                {/* Буфер */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">Буфер</span>
-                  <Select
-                    value={String(cfg.buffer)}
-                    onValueChange={val => setMethodBuffer(method, parseInt(val, 10))}
-                    disabled={!cfg.enabled}
-                  >
-                    <SelectTrigger className="h-8 w-[100px] text-xs bg-[var(--input-bg)]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {BUFFER_OPTIONS.map(o => (
-                        <SelectItem key={o.value} value={String(o.value)} className="text-xs">
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground whitespace-nowrap">Длит.</span>
+                <Select
+                  value={String(onlineConfig.duration)}
+                  onValueChange={val => setOnlineDuration(parseInt(val, 10))}
+                  disabled={!onlineConfig.enabled}
+                >
+                  <SelectTrigger className="h-8 w-[90px] text-xs bg-[var(--input-bg)]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ONLINE_DURATION_OPTIONS.map(o => (
+                      <SelectItem key={o.value} value={String(o.value)} className="text-xs">
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-                {/* Способ по умолчанию */}
-                {cfg.enabled && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground whitespace-nowrap">Буфер</span>
+                <Select
+                  value={String(onlineConfig.buffer)}
+                  onValueChange={val => setOnlineBuffer(parseInt(val, 10))}
+                  disabled={!onlineConfig.enabled}
+                >
+                  <SelectTrigger className="h-8 w-[100px] text-xs bg-[var(--input-bg)]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BUFFER_OPTIONS.map(o => (
+                      <SelectItem key={o.value} value={String(o.value)} className="text-xs">
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {onlineConfig.enabled && (
+                <button
+                  type="button"
+                  onClick={() => setDefaultMethod(onlineConfig.method)}
+                  className={cn(
+                    "flex items-center gap-1.5 text-xs whitespace-nowrap transition-colors",
+                    defaultMethod === onlineConfig.method
+                      ? "text-primary font-medium"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <span className={cn(
+                    "size-3.5 rounded-full border-2 flex items-center justify-center shrink-0",
+                    defaultMethod === onlineConfig.method
+                      ? "border-primary bg-primary"
+                      : "border-muted-foreground/50"
+                  )}>
+                    {defaultMethod === onlineConfig.method && (
+                      <span className="size-1.5 rounded-full bg-white" />
+                    )}
+                  </span>
+                  По умолчанию
+                </button>
+              )}
+            </div>
+
+            {/* Под-выбор платформы — только когда вид «Онлайн» включён */}
+            {onlineConfig.enabled && (
+              <div className="flex items-center gap-4 pl-[3.25rem]">
+                {ONLINE_PLATFORMS.map(platform => (
                   <button
+                    key={platform}
                     type="button"
-                    onClick={() => setDefaultMethod(method)}
+                    onClick={() => setOnlinePlatform(platform)}
                     className={cn(
                       "flex items-center gap-1.5 text-xs whitespace-nowrap transition-colors",
-                      defaultMethod === method
+                      onlineConfig.method === platform
                         ? "text-primary font-medium"
                         : "text-muted-foreground hover:text-foreground"
                     )}
                   >
                     <span className={cn(
                       "size-3.5 rounded-full border-2 flex items-center justify-center shrink-0",
-                      defaultMethod === method
+                      onlineConfig.method === platform
                         ? "border-primary bg-primary"
                         : "border-muted-foreground/50"
                     )}>
-                      {defaultMethod === method && (
+                      {onlineConfig.method === platform && (
                         <span className="size-1.5 rounded-full bg-white" />
                       )}
                     </span>
-                    По умолчанию
+                    {INTERVIEW_METHOD_LABELS[platform]}
                   </button>
-                )}
+                ))}
               </div>
-            )
-          })}
+            )}
+          </div>
+
+          {/* Вид 3: В офисе */}
+          <div
+            className={cn(
+              "flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors",
+              officeConfig.enabled ? "border-border bg-background" : "border-border/60 bg-muted/20"
+            )}
+          >
+            <Switch
+              checked={officeConfig.enabled}
+              onCheckedChange={() => toggleMethod("office")}
+              className="shrink-0"
+            />
+            <span className={cn("text-sm flex-1", !officeConfig.enabled && "text-muted-foreground")}>
+              В офисе
+            </span>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">Длит.</span>
+              <Select
+                value={String(officeConfig.duration)}
+                onValueChange={val => setMethodDuration("office", parseInt(val, 10))}
+                disabled={!officeConfig.enabled}
+              >
+                <SelectTrigger className="h-8 w-[90px] text-xs bg-[var(--input-bg)]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {OFFICE_DURATION_OPTIONS.map(o => (
+                    <SelectItem key={o.value} value={String(o.value)} className="text-xs">
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">Буфер</span>
+              <Select
+                value={String(officeConfig.buffer)}
+                onValueChange={val => setMethodBuffer("office", parseInt(val, 10))}
+                disabled={!officeConfig.enabled}
+              >
+                <SelectTrigger className="h-8 w-[100px] text-xs bg-[var(--input-bg)]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {BUFFER_OPTIONS.map(o => (
+                    <SelectItem key={o.value} value={String(o.value)} className="text-xs">
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {officeConfig.enabled && (
+              <button
+                type="button"
+                onClick={() => setDefaultMethod("office")}
+                className={cn(
+                  "flex items-center gap-1.5 text-xs whitespace-nowrap transition-colors",
+                  defaultMethod === "office"
+                    ? "text-primary font-medium"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <span className={cn(
+                  "size-3.5 rounded-full border-2 flex items-center justify-center shrink-0",
+                  defaultMethod === "office"
+                    ? "border-primary bg-primary"
+                    : "border-muted-foreground/50"
+                )}>
+                  {defaultMethod === "office" && <span className="size-1.5 rounded-full bg-white" />}
+                </span>
+                По умолчанию
+              </button>
+            )}
+          </div>
+
+          <p className="text-xs text-muted-foreground pt-1">
+            Выключенный вид не предлагается кандидатам и в планировщике.
+          </p>
 
           {/* Адрес офиса — только когда офис включён */}
           {officeEnabled && (
