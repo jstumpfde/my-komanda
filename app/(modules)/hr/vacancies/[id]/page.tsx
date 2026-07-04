@@ -218,6 +218,7 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     nameUncertain: c.nameUncertain === true,
     testScore: c.testScore ?? null,
     testStatus: c.testStatus ?? null,
+    testScoringStatus: c.testScoringStatus ?? null,
     isActive: (c as { isActive?: boolean }).isActive ?? false,
     demoProgressJson: c.demoProgressJson as Candidate["demoProgressJson"],
     demoTotalBlocks: (c as { demoTotalBlocks?: number }).demoTotalBlocks,

@@ -87,6 +87,10 @@ export interface Candidate {
   // (submitted/in_progress/opened/sent).
   testScore?: number | null
   testStatus?: "submitted" | "in_progress" | "opened" | "sent" | "failed" | null
+  // Состояние фонового AI-скоринга (05.07) — см. hooks/use-candidates.ts.
+  // Отличает «сдан, AI считает/ретраит» (pending/failed) от «сдан, ждёт
+  // ручной проверки HR» (manual) при testScore==null.
+  testScoringStatus?: "pending" | "done" | "failed" | "manual" | null
   // «Активен сейчас» — проходит демо/тест в последние 30 минут.
   isActive?: boolean
   /** Название вакансии — показывается в глобальном списке кандидатов (showVacancyColumn). */

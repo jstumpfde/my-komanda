@@ -64,6 +64,7 @@ interface GlobalCandidate {
   nameUncertain?: boolean
   testScore?: number | null
   testStatus?: "submitted" | "in_progress" | "opened" | "sent" | null
+  testScoringStatus?: "pending" | "done" | "failed" | "manual" | null
   nextInterviewAt?: string | null
   salaryMin?: number | null
   salaryMax?: number | null
@@ -125,6 +126,7 @@ function toListCandidate(c: GlobalCandidate): Candidate & { vacancyTitle: string
     nameUncertain: c.nameUncertain === true,
     testScore: c.testScore ?? null,
     testStatus: c.testStatus ?? null,
+    testScoringStatus: c.testScoringStatus ?? null,
     nextInterviewAt: c.nextInterviewAt ?? null,
     isActive: c.isActive,
     demoProgressJson: c.demoProgressJson as Candidate["demoProgressJson"],
