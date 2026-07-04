@@ -14,9 +14,9 @@ export interface CardDisplaySettings {
   showSalary: boolean
   showSalaryFull: boolean
   showScore: boolean          // колонка «AI-оцен.» (оценка анкеты)
-  showResumeScore?: boolean   // колонка «AI-резм.» (скоринг резюме); undefined = показывать
-  showPortraitScore?: boolean // колонка «AI-Порт» (оценка по Портрету, ai_score_v2); undefined = показывать
-  showAnswersScore?: boolean  // колонка «Демо1» (AI-оценка ответов анкеты, ai_score); undefined = показывать
+  showResumeScore?: boolean   // колонка «AI резюме» (скоринг резюме); undefined = показывать
+  showPortraitScore?: boolean // колонка «AI портрет» (оценка по Портрету, ai_score_v2); undefined = показывать
+  showAnswersScore?: boolean  // колонка «AI анкета» (AI-оценка ответов анкеты демо, demo_answers_score); undefined = показывать
   showTestScore?: boolean     // колонка «Тест» (балл/статус теста); undefined = показывать
   showNextInterview?: boolean // колонка «Интервью» (ближайшее); undefined = показывать
   showAge: boolean
@@ -36,12 +36,12 @@ export interface CardDisplaySettings {
 // Статус) сюда НЕ входят — они всегда видны. Добавил колонку с новым ключом в
 // list-view — добавь сюда строку, и тумблер появится автоматически (и наоборот).
 // Порядок строго совпадает с порядком колонок в list-view.tsx (слева→направо):
-// AI-резм. → Демо → Демо1 → AI-Порт → AI-оцен. → Тест → Интервью → Зарплата → …
+// AI резюме → Демо → AI анкета → AI портрет → AI-оцен. → Тест → Интервью → Зарплата → …
 export const CANDIDATE_COLUMN_TOGGLES: Array<{ key: keyof CardDisplaySettings; label: string }> = [
   { key: "showResumeScore",   label: "AI резюме" },
   { key: "showProgress",      label: "Прогресс демо" },
-  { key: "showAnswersScore",  label: "AI-ан (балл ответов демо)" },
-  { key: "showPortraitScore", label: "AI-Портрет" },
+  { key: "showAnswersScore",  label: "AI анкета (балл ответов демо)" },
+  { key: "showPortraitScore", label: "AI портрет" },
   { key: "showScore",         label: "AI оценка" },
   { key: "showTestScore",     label: "Тест" },
   { key: "showNextInterview", label: "Интервью" },
