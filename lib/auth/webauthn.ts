@@ -74,7 +74,12 @@ export function resolveRp(req: { headers: { get(name: string): string | null } }
   const forwardedHost = req.headers.get("x-forwarded-host")
   const host = (forwardedHost || req.headers.get("host") || "company24.pro").split(",")[0].trim()
   const hostname = host.split(":")[0]
-  const proto = (req.headers.get("x-forwarded-proto") || (hostname === "localhost" ? "http" : "https")).split(",")[0].trim()
+  // Прод всегда https; http только для локалки. НЕ доверяем x-forwarded-proto:
+  // подтверждено логами (04.07) — приходит "http" даже для реальных https-
+  // запросов пользователя, из-за чего WebAuthn отклонял регистрацию ключа
+  // («Unexpected registration response origin»). Тот же баг и фикс, что на
+  // market-radar (см. память passkey-marketradar-done.md).
+  const proto = (hostname === "localhost" || hostname === "127.0.0.1") ? "http" : "https"
   return { rpID: hostname, rpName: "Company24", origin: `${proto}://${host}` }
 }
 
