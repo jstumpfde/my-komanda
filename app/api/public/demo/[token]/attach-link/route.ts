@@ -173,7 +173,7 @@ export async function POST(
     if (!blockId) return apiError("blockId обязателен", 400)
 
     const provider = detectProvider(url)
-    if (!provider) return apiError("Некорректная ссылка", 400)
+    if (!provider) return apiError("Поддерживаются ссылки Яндекс.Диск, Google Drive и Облако Mail.ru. Загрузите видео в одно из этих облаков и вставьте ссылку на файл.", 400)
 
     const resolved = await resolveDownloadUrl(url, provider)
     if ("error" in resolved) return apiError(resolved.error, 422)

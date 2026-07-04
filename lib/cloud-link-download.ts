@@ -58,7 +58,9 @@ export function detectProvider(url: string): CloudProvider | null {
   if (host === "cloud.mail.ru" || host.endsWith(".cloud.mail.ru")) {
     return "mail_ru"
   }
-  return "direct"
+  // Произвольные прямые URL запрещены: серверное скачивание по ссылке от
+  // кандидата — SSRF-вектор (внутренние адреса, метаданные, локальные порты).
+  return null
 }
 
 /**
