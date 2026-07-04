@@ -1337,14 +1337,15 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
           } else {
             // Сообщение кандидату НЕ дошло (429/5xx от hh) — не переводим
             // в invited, иначе пойдут дожимы без первого приглашения.
-            // Сохраняем привязку кандидата и оставляем status='response':
-            // следующий прогон крона повторит отправку.
+            // Сохраняем привязку кандидата и ВОЗВРАЩАЕМ status='response':
+            // следующий прогон крона повторит отправку. C-2: раньше status
+            // не трогали (комментарий обещал 'response', код молчал) — строка
+            // оставалась в 'claimed' навсегда, CAS выше требует 'response' →
+            // отклик становился осиротевшим (claimed, но никем не подбирается).
             console.error("[PQ] hh changeState failed, оставляем в очереди на ретрай:", msg)
-            if (candidateId) {
-              await db.update(hhResponses)
-                .set({ localCandidateId: candidateId })
-                .where(eq(hhResponses.id, resp.id))
-            }
+            await db.update(hhResponses)
+              .set({ status: "response", ...(candidateId ? { localCandidateId: candidateId } : {}) })
+              .where(eq(hhResponses.id, resp.id))
             results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "hh_send_failed_retry", error: msg.slice(0, 200) })
             continue
           }
@@ -1495,6 +1496,18 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
 
     } catch (err: unknown) {
       console.error("[PQ] FAIL", resp.candidateName, err instanceof Error ? err.message : err)
+      // C-2: если ошибка произошла ПОСЛЕ атомарного claim (status='claimed')
+      // и ДО финального update в 'invited' — возвращаем в очередь ('response'),
+      // иначе отклик навсегда «осиротевший» (claimed, но не обрабатывается ни
+      // этим прогоном, ни следующими — CAS выше требует status='response').
+      // Условие по WHERE status='claimed' safety-net: если статус уже успели
+      // продвинуть дальше (invited) — не трогаем.
+      await db.update(hhResponses)
+        .set({ status: "response" })
+        .where(and(eq(hhResponses.id, resp.id), eq(hhResponses.status, "claimed")))
+        .catch((resetErr) => {
+          console.error("[PQ] failed to reset claimed→response for", resp.hhResponseId, resetErr)
+        })
       results.push({
         id:    resp.hhResponseId,
         name:  resp.candidateName,

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { eq, and, lte, gte, ne, isNotNull, inArray, sql, desc } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancies, candidates, followUpMessages, followUpCampaigns, hhResponses, companies, users, testSubmissions, vacancySpecs } from "@/lib/db/schema"
-import { changeNegotiationState } from "@/lib/hh-api"
+import { changeNegotiationState, sendNegotiationMessage } from "@/lib/hh-api"
 import { getValidToken } from "@/lib/hh-helpers"
 import { shouldStopFollowUp } from "@/lib/followup/should-stop"
 import { canSendNow } from "@/lib/schedule/can-send-now"
@@ -763,17 +763,15 @@ async function processOneTouch(
         // changeNegotiationState шлёт текст И двигает hh-этап (PUT /negotiations/{action}/{id}).
         await changeNegotiationState(tokenResult.accessToken, hhResp.hhResponseId, hhAction, finalText, campaign.vacancyId, undefined, vacancy.companyId)
       } else {
-        // hh-этап не трогаем — только текст.
-        const f = new URLSearchParams(); f.set("message", finalText)
-        const r = await fetch(`https://api.hh.ru/negotiations/${hhResp.hhResponseId}/messages`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${tokenResult.accessToken}`, "User-Agent": "Company24.pro/1.0", "Content-Type": "application/x-www-form-urlencoded" },
-          body: f.toString(),
-        })
-        if (!r.ok) {
-          const e = await r.text()
-          await db.update(followUpMessages).set({ status: "failed", errorMessage: `hh_${r.status}: ${e.slice(0, 200)}` }).where(eq(followUpMessages.id, msg.id))
-          return { outcome: "failed", reason: `hh_${r.status}`, delayMs }
+        // hh-этап не трогаем — только текст. sendNegotiationMessage проводит
+        // текст через guardOutgoingMessage (чистит неподставленные {{переменные}}
+        // и артефакты) — раньше здесь был raw fetch мимо стража (баг #5).
+        try {
+          await sendNegotiationMessage(tokenResult.accessToken, hhResp.hhResponseId, finalText, vacancy.companyId)
+        } catch (err) {
+          const msg2 = err instanceof Error ? err.message : String(err)
+          await db.update(followUpMessages).set({ status: "failed", errorMessage: msg2.slice(0, 200) }).where(eq(followUpMessages.id, msg.id))
+          return { outcome: "failed", reason: "hh_send_failed", delayMs }
         }
       }
       // Наша стадия (если задана и кандидат не в терминальной).
@@ -792,23 +790,17 @@ async function processOneTouch(
       return { outcome: "sent", delayMs }
     }
 
-    const form = new URLSearchParams()
-    form.set("message", finalText)
-    const res = await fetch(`https://api.hh.ru/negotiations/${hhResp.hhResponseId}/messages`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${tokenResult.accessToken}`,
-        "User-Agent": "Company24.pro/1.0",
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: form.toString(),
-    })
-    if (!res.ok) {
-      const errText = await res.text()
-      const reason  = `hh_${res.status}`
+    // sendNegotiationMessage проводит текст через guardOutgoingMessage перед
+    // отправкой (чистит неподставленные {{переменные}}/артефакты, шлёт алерт
+    // при проблеме) — раньше здесь был raw fetch мимо стража (баг #5).
+    try {
+      await sendNegotiationMessage(tokenResult.accessToken, hhResp.hhResponseId, finalText, vacancy.companyId)
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err)
+      const reason = errMsg.startsWith("HH message") ? "guard_empty" : "hh_send_failed"
       await db.update(followUpMessages).set({
         status: "failed",
-        errorMessage: `${reason}: ${errText.slice(0, 200)}`,
+        errorMessage: errMsg.slice(0, 200),
       }).where(eq(followUpMessages.id, msg.id))
       return { outcome: "failed", reason, delayMs }
     }

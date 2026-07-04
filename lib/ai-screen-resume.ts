@@ -97,6 +97,14 @@ const WEIGHT_AXIS_LABELS: Record<string, string> = {
   salary_match:        "Зарплатные ожидания vs позиция",
   management:          "Опыт управления",
   education:           "Профильное образование",
+  // #7: остальные 5 из 9 осей Spec.scoringWeights (lib/core/spec/resume-input.ts
+  // маппит их сюда) — раньше не имели меток и терялись по факту (не передавались
+  // вовсе), хотя HR настраивал их вес в «Портрете».
+  tenure_stability:    "Стабильность (средний срок работы на местах)",
+  results_in_numbers:  "Результаты в цифрах (измеримые достижения)",
+  soft_skills_fit:     "Соответствие soft-skills",
+  company_size_match:  "Соответствие масштаба компаний",
+  location_readiness:  "Локация / готовность к удалёнке-релокации",
 }
 const WEIGHT_LEVEL_LABELS: Record<string, string> = {
   critical:  "Критично (ключевой критерий — снижает балл сильнее всего)",

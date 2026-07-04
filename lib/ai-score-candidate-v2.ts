@@ -299,14 +299,18 @@ export async function scoreCandidateV2(
 
   // Финальный score считаем сами по весам — не доверяем модели в арифметике.
   const finalScore = computeWeightedScore(comparison.criteria_scores, weights)
+  const hasDealBreaker = comparison.triggered_deal_breakers.length > 0
   // Если deal-breaker сработал — максимум 30 (правило промпта).
-  const cappedScore = comparison.triggered_deal_breakers.length > 0
+  const cappedScore = hasDealBreaker
     ? Math.min(30, finalScore)
     : finalScore
 
   return {
     score:    cappedScore,
-    decision: deriveDecision(cappedScore),
+    // Deal-breaker — стоп-фактор по смыслу: решение обязано быть "reject",
+    // а не "weak" (deriveDecision по капу 30 давал "weak", т.к. 30 >= 20 —
+    // deal-breaker игнорировался при финальном решении).
+    decision: hasDealBreaker ? "reject" : deriveDecision(cappedScore),
     extracted_facts:         facts,
     criteria_scores:         comparison.criteria_scores,
     reasoning:               comparison.reasoning,

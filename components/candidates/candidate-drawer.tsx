@@ -1240,7 +1240,11 @@ export function CandidateDrawer({
       setHhError(null)
       setHhDraft("")
       hhFetchRef.current = null
-      setActiveTab("contacts")
+      // Баг #8: этот эффект и эффект «открыть на initialTab» (выше) оба реагируют
+      // на open/candidateId — этот шёл вторым и безусловно затирал вкладку на
+      // «Контакты», перечёркивая initialTab (напр. клик по колонке «Тест» должен
+      // был открыть карточку сразу на вкладке теста). Теперь уважаем initialTab.
+      setActiveTab(initialTab || "contacts")
       setTgInviteLink(null)
       setTgDraft("")
       setTgMessages([])
@@ -1253,7 +1257,7 @@ export function CandidateDrawer({
       loadContacts(candidateId)
       loadInterviewEvents(candidateId)
     }
-  }, [open, candidateId, fetchCandidate, loadContacts, loadInterviewEvents])
+  }, [open, candidateId, initialTab, fetchCandidate, loadContacts, loadInterviewEvents])
 
   // F7: Telegram — получить / сгенерировать ссылку-приглашение
   const loadTgInvite = useCallback(async () => {

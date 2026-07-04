@@ -23,7 +23,8 @@ function annotateImportance(n: NiceToHaveItem): string {
  * - aiRequiredHardSkills ← spec.mustHave (v2) || spec.portraitRequiredSkills (v1)
  * - aiStopFactors ← dealBreakers + portraitKnockouts + структурные стоп-факторы текстом
  * - screeningQuestions ← niceToHave || portraitNiceSkills
- * - aiWeights ← маппинг 9-осевых весов Spec → 5-ключевой формат screenResume
+ * - aiWeights ← маппинг всех 9 осей весов Spec в формат screenResume (#7:
+ *   раньше маппились только 4, остальные 5 терялись молча)
  */
 export function buildSpecResumeInput(
   resume: ResumeScreenInput["resume"],
@@ -112,10 +113,17 @@ export function buildSpecResumeInput(
     if (w >= 5)  return "nice"
     return "irrelevant"
   }
+  // #7: раньше передавались только 4 из 9 осей (остальные 5 молча терялись,
+  // хотя HR настраивал их вес в «Портрете») — теперь передаём все 9.
   if (sw.relevant_experience > 0) aiWeights["industry_experience"] = toLevel(sw.relevant_experience)
   if (sw.hard_skills > 0) aiWeights["specific_skills"] = toLevel(sw.hard_skills)
   if (sw.managerial_match > 0) aiWeights["management"] = toLevel(sw.managerial_match)
   if (sw.education > 0) aiWeights["education"] = toLevel(sw.education)
+  if (sw.tenure_stability > 0) aiWeights["tenure_stability"] = toLevel(sw.tenure_stability)
+  if (sw.results_in_numbers > 0) aiWeights["results_in_numbers"] = toLevel(sw.results_in_numbers)
+  if (sw.soft_skills_fit > 0) aiWeights["soft_skills_fit"] = toLevel(sw.soft_skills_fit)
+  if (sw.company_size_match > 0) aiWeights["company_size_match"] = toLevel(sw.company_size_match)
+  if (sw.location_readiness > 0) aiWeights["location_readiness"] = toLevel(sw.location_readiness)
 
   return {
     resume,

@@ -77,7 +77,11 @@ async function run_(_req: NextRequest) {
       .where(and(
         isNotNull(candidates.pendingRejectionAt),
         lte(candidates.pendingRejectionAt, sql`now()`),
-        sql`${candidates.stage} <> 'rejected'`,
+        // M-1: исключаем и rejected (уже отказан), и hired — кандидат мог быть
+        // нанят вручную за время задержки отложенного отказа (до 5ч по
+        // умолчанию), и без этого условия отложенный отказ перезаписывал бы
+        // его обратно в rejected.
+        sql`${candidates.stage} NOT IN ('rejected', 'hired')`,
       ))
       .orderBy(candidates.pendingRejectionAt)
       .limit(MAX_PER_RUN)

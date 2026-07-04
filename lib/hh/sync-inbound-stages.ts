@@ -169,6 +169,14 @@ export async function syncInboundHhStages(vacancyId: string): Promise<InboundSyn
       }
       if (isDiscard) {
         // Проставляем инициатора отказа + машинную причину для отчёта.
+        // C-1: autoProcessingStopped обязателен здесь — иначе shouldStopFollowUp
+        // (lib/followup/should-stop.ts) не видит причины остановиться (stage=
+        // 'rejected' не входит в её ADVANCED_STAGES), и кандидат, который сам
+        // отказался на hh (discard_by_applicant), продолжает получать дожимы
+        // бесконечно. Ручной перевод в rejected (stage/route.ts) этот флаг уже
+        // ставит — здесь (входящий hh-синк) он терялся.
+        updateSet.autoProcessingStopped = true
+        updateSet.autoProcessingStoppedAt = new Date()
         if (isCandidateInitiatedDiscard(hhState)) {
           updateSet.rejectionInitiator = "candidate"
           updateSet.autoProcessingStoppedReason = "hh_discard_by_applicant"
