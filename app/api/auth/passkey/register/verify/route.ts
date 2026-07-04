@@ -23,8 +23,14 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null) as { response?: RegistrationResponseJSON; deviceName?: string } | null
   if (!body?.response) return NextResponse.json({ error: "Нет данных" }, { status: 400 })
 
-  const challenge = openChallenge(req.cookies.get(CHALLENGE_COOKIE)?.value, "reg")
+  const rawCookie = req.cookies.get(CHALLENGE_COOKIE)?.value
+  const challenge = openChallenge(rawCookie, "reg")
   if (!challenge || challenge.userId !== user.id) {
+    // ВРЕМЕННО: диагностика (убрать после отладки).
+    console.error("PASSKEY_REG_CHALLENGE_FAIL", JSON.stringify({
+      hasCookie: !!rawCookie, hasChallenge: !!challenge,
+      challengeUserId: challenge?.userId, sessionUserId: user.id,
+    }))
     return NextResponse.json({ error: "Сессия регистрации истекла, попробуйте снова" }, { status: 400 })
   }
 
@@ -39,7 +45,10 @@ export async function POST(req: NextRequest) {
       expectedRPID: rpID,
       requireUserVerification: false,
     })
-  } catch {
+  } catch (e) {
+    // ВРЕМЕННО: диагностика (убрать после отладки).
+    const detail = e instanceof Error ? e.message : String(e)
+    console.error("PASSKEY_REG_VERIFY_FAIL", JSON.stringify({ detail, expectedOrigin: origin, expectedRPID: rpID, host: req.headers.get("host"), xfh: req.headers.get("x-forwarded-host"), xfp: req.headers.get("x-forwarded-proto") }))
     return NextResponse.json({ error: "Не удалось проверить ключ" }, { status: 400 })
   }
 
