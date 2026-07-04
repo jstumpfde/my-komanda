@@ -1,14 +1,20 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Coins, TrendingUp, Gauge, Loader2 } from "lucide-react"
+import { Coins, TrendingUp, Gauge, Loader2, Pencil, Check, X as XIcon } from "lucide-react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
 } from "recharts"
+import { useAuth } from "@/lib/auth"
+import { toast } from "sonner"
+
+const DIRECTOR_ROLES = ["director", "client", "platform_admin", "admin"]
 
 interface UsageRecent {
   id: string
@@ -31,12 +37,16 @@ interface UsagePayload {
 }
 
 const ACTION_LABELS: Record<string, string> = {
-  knowledge_ask:    "Ненси (вопрос)",
-  course_generate:  "Генерация курса",
-  course_regenerate:"Пересборка курса",
-  document_parse:   "Импорт документа",
-  voice_parse:      "Импорт с голоса",
-  vacancy_generate: "Генерация вакансии",
+  knowledge_ask:          "Ненси (вопрос)",
+  knowledge_ai_search:    "Поиск по базе знаний",
+  knowledge_generate:     "Генерация материала",
+  knowledge_telegram_ask: "Telegram-бот (вопрос)",
+  knowledge_public_chat:  "Публичный чат (вопрос)",
+  course_generate:        "Генерация курса",
+  course_regenerate:      "Пересборка курса",
+  document_parse:         "Импорт документа",
+  voice_parse:            "Импорт с голоса",
+  vacancy_generate:       "Генерация вакансии",
 }
 
 function formatNumber(n: number): string {
@@ -51,11 +61,25 @@ function formatDay(iso: string): string {
   return new Date(iso).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })
 }
 
+interface TokenLimitPayload {
+  override: number | null
+  platformDefault: number
+  effectiveLimit: number
+  used: number
+}
+
 export default function TokensPage() {
+  const { role } = useAuth()
+  const isDirector = DIRECTOR_ROLES.includes(role)
   const [data, setData] = useState<UsagePayload | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  const [limitInfo, setLimitInfo] = useState<TokenLimitPayload | null>(null)
+  const [editingLimit, setEditingLimit] = useState(false)
+  const [limitInput, setLimitInput] = useState("")
+  const [savingLimit, setSavingLimit] = useState(false)
+
+  const loadUsage = () => {
     fetch("/api/ai/usage")
       .then(async (r) => {
         if (!r.ok) return null
@@ -69,7 +93,57 @@ export default function TokensPage() {
         setLoading(false)
       })
       .catch(() => setLoading(false))
+  }
+
+  const loadLimitInfo = () => {
+    if (!isDirector) return
+    fetch("/api/modules/knowledge/token-limit")
+      .then((r) => r.ok ? r.json() : null)
+      .then((d: TokenLimitPayload | null) => {
+        if (!d) return
+        setLimitInfo(d)
+      })
+      .catch(() => {})
+  }
+
+  useEffect(() => {
+    loadUsage()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    loadLimitInfo()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDirector])
+
+  const openEditLimit = () => {
+    setLimitInput(limitInfo?.override != null ? String(limitInfo.override) : "")
+    setEditingLimit(true)
+  }
+
+  const saveLimit = async (clear: boolean) => {
+    setSavingLimit(true)
+    try {
+      const res = await fetch("/api/modules/knowledge/token-limit", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ limit: clear ? null : Number(limitInput) }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(d.error || "Не удалось сохранить лимит")
+        return
+      }
+      toast.success(clear ? "Возвращён платформенный дефолт" : "Лимит сохранён")
+      setEditingLimit(false)
+      loadLimitInfo()
+      loadUsage()
+    } catch {
+      toast.error("Ошибка сети")
+    } finally {
+      setSavingLimit(false)
+    }
+  }
 
   const monthPercent = data?.month
     ? Math.min(100, (data.month.tokens / Math.max(1, data.limit)) * 100)
@@ -115,20 +189,80 @@ export default function TokensPage() {
                       <div className="text-xs text-muted-foreground mt-1">~{formatUsd(data.month.cost)}</div>
                     </div>
                     <div className="rounded-xl border border-border p-5">
-                      <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
-                        <Gauge className="w-3.5 h-3.5" />
-                        Лимит тарифа
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+                          <Gauge className="w-3.5 h-3.5" />
+                          Лимит тарифа
+                        </div>
+                        {isDirector && !editingLimit && (
+                          <button
+                            type="button"
+                            onClick={openEditLimit}
+                            className="text-muted-foreground hover:text-foreground transition"
+                            title="Изменить лимит компании"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
-                      <div className="text-2xl font-semibold mt-2">{formatNumber(data.limit)}</div>
-                      <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
-                        <div
-                          className="h-full bg-primary transition-all"
-                          style={{ width: `${monthPercent}%` }}
-                        />
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        {monthPercent.toFixed(1)}% использовано
-                      </div>
+
+                      {editingLimit ? (
+                        <div className="mt-2 space-y-2">
+                          <Input
+                            type="number"
+                            min={1}
+                            value={limitInput}
+                            onChange={(e) => setLimitInput(e.target.value)}
+                            placeholder={`Платформенный дефолт: ${formatNumber(limitInfo?.platformDefault ?? data.limit)}`}
+                            className="h-9 text-sm"
+                          />
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              size="sm"
+                              className="h-7 px-2 gap-1"
+                              disabled={savingLimit || !limitInput.trim()}
+                              onClick={() => saveLimit(false)}
+                            >
+                              <Check className="w-3 h-3" />
+                              Сохранить
+                            </Button>
+                            {limitInfo?.override != null && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2"
+                                disabled={savingLimit}
+                                onClick={() => saveLimit(true)}
+                              >
+                                Сбросить на дефолт
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2"
+                              disabled={savingLimit}
+                              onClick={() => setEditingLimit(false)}
+                            >
+                              <XIcon className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="text-2xl font-semibold mt-2">{formatNumber(data.limit)}</div>
+                          <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
+                            <div
+                              className="h-full bg-primary transition-all"
+                              style={{ width: `${monthPercent}%` }}
+                            />
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {monthPercent.toFixed(1)}% использовано
+                            {limitInfo?.override != null && " · своё значение"}
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
 

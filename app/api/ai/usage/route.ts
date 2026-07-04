@@ -2,9 +2,7 @@ import { eq, and, desc, sql, gte } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { aiUsageLog, users } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
-
-// Soft monthly token cap — no tariff wiring yet. Plug real plan limits here later.
-const DEFAULT_MONTHLY_LIMIT = 2_000_000
+import { getEffectiveAiMonthlyTokenLimit } from "@/lib/knowledge/token-limits"
 
 export async function GET() {
   try {
@@ -81,6 +79,8 @@ export async function GET() {
       .orderBy(desc(aiUsageLog.createdAt))
       .limit(50)
 
+    const limit = await getEffectiveAiMonthlyTokenLimit(user.companyId)
+
     return apiSuccess({
       today: {
         tokens: todayTokens,
@@ -90,7 +90,7 @@ export async function GET() {
         tokens: monthTokens,
         cost: Number(totals?.monthCost ?? "0"),
       },
-      limit: DEFAULT_MONTHLY_LIMIT,
+      limit,
       daily,
       recent,
     })
