@@ -60,6 +60,8 @@ const PUBLIC_PREFIXES = [
   "/api/dev",
   "/api/public/",
   "/api/tts",
+  "/api/consent",       // публичная запись согласия (cookie-баннер/подписка) — без сессии,
+                        // роут сам валидирует тело запроса, не требует авторизации
   "/intake/",
   "/vacancy-view/",
   "/demo/",
@@ -78,6 +80,7 @@ const PUBLIC_PREFIXES = [
   "/changelog",
   "/privacy",
   "/terms",
+  "/marketing-consent", // согласие на рекламную рассылку (152-ФЗ/38-ФЗ) — публичный юр.документ
   "/status",
   "/team",
   // Webhook кандидатского TG-бота: запросы приходят от серверов Telegram (без
