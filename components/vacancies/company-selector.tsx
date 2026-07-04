@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { toast } from "sonner"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -31,19 +32,6 @@ interface CompanySelectorProps {
   onModeChange: (mode: "own" | "client") => void
   onCompanyChange: (id: string | null) => void
   onContactChange: (id: string | null) => void
-}
-
-// Mock data — заглушка-пример (реальные компании-клиенты ещё не подключены к БD).
-// Оставлена ОДНА компания как образец; реальный список должен тянуться из таблицы companies.
-const MOCK_COMPANIES: CompanyOption[] = [
-  { id: "1", name: 'ООО "Ромашка"', inn: "7701234567", city: "Москва" },
-]
-
-const MOCK_CONTACTS: Record<string, ContactOption[]> = {
-  "1": [
-    { id: "1", firstName: "Иван", lastName: "Петров", position: "Генеральный директор" },
-    { id: "2", firstName: "Мария", lastName: "Сидорова", position: "HR-директор" },
-  ],
 }
 
 function OwnCompanyInfo() {
@@ -93,8 +81,33 @@ export function CompanySelector({
   const [searchQuery, setSearchQuery] = useState("")
   const [companyModalOpen, setCompanyModalOpen] = useState(false)
   const [contactModalOpen, setContactModalOpen] = useState(false)
-  const [localCompanies, setLocalCompanies] = useState<CompanyOption[]>(MOCK_COMPANIES)
-  const [localContacts, setLocalContacts] = useState<Record<string, ContactOption[]>>(MOCK_CONTACTS)
+  const [localCompanies, setLocalCompanies] = useState<CompanyOption[]>([])
+  // Контакты кешируем по companyId, чтобы не дёргать API при каждом рендере.
+  const [localContacts, setLocalContacts] = useState<Record<string, ContactOption[]>>({})
+
+  // Реальный список компаний-клиентов из модуля продаж (tenant-scoped на сервере).
+  useEffect(() => {
+    if (mode !== "client") return
+    fetch("/api/modules/sales/companies")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json: { companies?: CompanyOption[] } | null) => {
+        setLocalCompanies(Array.isArray(json?.companies) ? json!.companies : [])
+      })
+      .catch(() => setLocalCompanies([]))
+  }, [mode])
+
+  // Контакты выбранной компании — подгружаем при выборе (и для уже сохранённой
+  // компании при открытии вакансии), если ещё не в кеше.
+  useEffect(() => {
+    if (mode !== "client" || !clientCompanyId) return
+    if (localContacts[clientCompanyId]) return
+    fetch(`/api/modules/sales/contacts?company_id=${encodeURIComponent(clientCompanyId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json: { contacts?: ContactOption[] } | null) => {
+        setLocalContacts((prev) => ({ ...prev, [clientCompanyId]: Array.isArray(json?.contacts) ? json!.contacts : [] }))
+      })
+      .catch(() => setLocalContacts((prev) => ({ ...prev, [clientCompanyId]: [] })))
+  }, [mode, clientCompanyId, localContacts])
 
   const filteredCompanies = searchQuery
     ? localCompanies.filter(
@@ -106,35 +119,55 @@ export function CompanySelector({
 
   const contacts = clientCompanyId ? (localContacts[clientCompanyId] || []) : []
 
-  const handleCompanyCreate = (data: CompanyFormData) => {
-    const newId = String(Date.now())
-    const newCompany: CompanyOption = {
-      id: newId,
-      name: data.name,
-      inn: data.inn || null,
-      city: data.city || null,
+  const handleCompanyCreate = async (data: CompanyFormData) => {
+    try {
+      const res = await fetch("/api/modules/sales/companies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      })
+      if (!res.ok) throw new Error()
+      const company = await res.json() as CompanyOption
+      setLocalCompanies((prev) => [{ id: company.id, name: company.name, inn: company.inn, city: company.city }, ...prev])
+      setLocalContacts((prev) => ({ ...prev, [company.id]: [] }))
+      onCompanyChange(company.id)
+      onContactChange(null)
+      setCompanyModalOpen(false)
+    } catch {
+      toast.error("Не удалось создать компанию-клиента")
     }
-    setLocalCompanies((prev) => [newCompany, ...prev])
-    setLocalContacts((prev) => ({ ...prev, [newId]: [] }))
-    onCompanyChange(newId)
-    setCompanyModalOpen(false)
   }
 
-  const handleContactCreate = (data: ContactFormData) => {
+  const handleContactCreate = async (data: ContactFormData) => {
     if (!clientCompanyId) return
-    const newId = String(Date.now())
-    const newContact: ContactOption = {
-      id: newId,
-      firstName: data.firstName,
-      lastName: data.lastName,
-      position: data.position || null,
+    try {
+      const res = await fetch("/api/modules/sales/contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          company_id: clientCompanyId,
+          first_name: data.firstName,
+          last_name: data.lastName,
+          middle_name: data.middleName,
+          position: data.position,
+          department: data.department,
+          phone: data.phone,
+          mobile: data.mobile,
+          email: data.email,
+          telegram: data.telegram,
+        }),
+      })
+      if (!res.ok) throw new Error()
+      const contact = await res.json() as ContactOption
+      setLocalContacts((prev) => ({
+        ...prev,
+        [clientCompanyId]: [...(prev[clientCompanyId] || []), { id: contact.id, firstName: contact.firstName, lastName: contact.lastName, position: contact.position }],
+      }))
+      onContactChange(contact.id)
+      setContactModalOpen(false)
+    } catch {
+      toast.error("Не удалось создать контакт")
     }
-    setLocalContacts((prev) => ({
-      ...prev,
-      [clientCompanyId]: [...(prev[clientCompanyId] || []), newContact],
-    }))
-    onContactChange(newId)
-    setContactModalOpen(false)
   }
 
   return (
