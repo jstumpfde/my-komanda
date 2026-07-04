@@ -8,7 +8,7 @@ import { redirect } from "next/navigation"
 export const dynamic = "force-dynamic"
 
 const SECTIONS = new Set([
-  "branding", "companies", "cron", "deadlines", "emergency", "logs",
+  "branding", "companies", "consent-log", "cron", "deadlines", "emergency", "logs",
   "migrations", "presence", "templates", "vacancies", "yulia",
 ])
 

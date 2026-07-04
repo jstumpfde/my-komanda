@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { PresenceTab } from "./presence-tab"
+import { ConsentLogTab } from "./consent-log-tab"
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
@@ -212,6 +213,7 @@ export function PlatformAdminClient({
           <TabsTrigger value="branding">Брендинг и SEO</TabsTrigger>
           <TabsTrigger value="emergency" className="text-red-600">Emergency</TabsTrigger>
           <TabsTrigger value="logs">Логи действий</TabsTrigger>
+          <TabsTrigger value="consent-log">Согласия</TabsTrigger>
         </TabsList>
 
         <TabsContent value="presence" className="mt-4">
@@ -249,6 +251,9 @@ export function PlatformAdminClient({
         </TabsContent>
         <TabsContent value="logs" className="mt-4">
           <LogsTab items={recentActions} />
+        </TabsContent>
+        <TabsContent value="consent-log" className="mt-4">
+          <ConsentLogTab />
         </TabsContent>
       </Tabs>
     </div>
