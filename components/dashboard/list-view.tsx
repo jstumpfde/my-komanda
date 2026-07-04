@@ -195,13 +195,16 @@ const STAGE_ORDER: Record<string, number> = {
 const restrictToHorizontalAxis: Modifier = ({ transform }) => ({ ...transform, y: 0 })
 
 function SortHeader({
-  label, sortKey, sort, onToggle, align = "left",
+  label, sortKey, sort, onToggle, align = "left", title,
 }: {
   label: string
   sortKey: ListSortKey
   sort: ListSortState | null
   onToggle: (key: ListSortKey) => void
   align?: "left" | "center" | "right"
+  /** Тултип с расшифровкой заголовка (что за балл/колонка и откуда берётся).
+   *  Нужен, когда label — сокращение (ширина колонки фиксирована под бейдж). */
+  title?: string
 }) {
   const active = sort?.key === sortKey
   const dir = active ? sort!.dir : null
@@ -211,6 +214,7 @@ function SortHeader({
       type="button"
       onClick={() => onToggle(sortKey)}
       aria-sort={ariaSort}
+      title={title}
       className={cn(
         // Эталон иконок сортировки портала — как в DataHeadCell (ListFilter
         // перед заголовком, opacity-40 неактивна). ListFilter по умолчанию
@@ -272,9 +276,9 @@ export function ListView({
   const showResponseDate = settings.showResponseDate !== false
   const showCity         = settings.showCity
   const showScore        = settings.showScore          // AI-оцен. (оценка анкеты)
-  const showResumeScore  = settings.showResumeScore !== false  // AI-резм. (undefined = вкл)
-  const showPortraitScore = settings.showPortraitScore !== false  // AI-Порт (undefined = вкл)
-  const showAnswersScore = settings.showAnswersScore !== false   // Демо1 — AI-балл ответов анкеты (undefined = вкл)
+  const showResumeScore  = settings.showResumeScore !== false  // «AI резюме» (undefined = вкл)
+  const showPortraitScore = settings.showPortraitScore !== false  // «AI портрет» (undefined = вкл)
+  const showAnswersScore = settings.showAnswersScore !== false   // «AI анкета» — AI-балл ответов анкеты (undefined = вкл)
   const showTestScore    = settings.showTestScore !== false    // Тест (балл/статус; по умолчанию вкл)
   const showNextInterview = settings.showNextInterview !== false // Интервью (ближайшее; по умолчанию вкл)
   const showSalary       = settings.showSalary || settings.showSalaryFull
@@ -458,15 +462,26 @@ export function ListView({
     }
 
     // Порядок колонок по умолчанию (слева → вправо):
-    // ФИО (закреплена) → AI-резм. → Демо → Демо1 → AI-Порт → Тест → Интервью → …
+    // ФИО (закреплена) → AI резюме → Демо → AI анкета → AI портрет → Тест → Интервью → …
+    // (заголовки читаемые с 05.07; было AI-резм./Демо1/AI-Порт — обрубки без
+    // расшифровки. Порядок и id колонок НЕ менялись, только подписи + title.)
     // Пользователь может перетаскивать колонки; сброс возвращает этот порядок.
 
     if (showResumeScore) {
-      // AI-резм. — AI-скор резюме (фикс, w-8 badge)
+      // AI резюме — AI-скор резюме (фикс, w-8 badge)
       list.push({
         id: "resumeScore",
         gridWidth: "56px",
-        header: <SortHeader label="AI-резм." sortKey="resumeScore" sort={sort} onToggle={handleSort} align="center" />,
+        header: (
+          <SortHeader
+            label="AI резюме"
+            sortKey="resumeScore"
+            sort={sort}
+            onToggle={handleSort}
+            align="center"
+            title="AI-скор резюме по Портрету (0–100)"
+          />
+        ),
         renderCell: (candidate) => (
           <div className="flex items-center justify-center" title="AI-скор резюме по Портрету">
             {candidate.resumeScore != null ? (
@@ -493,7 +508,16 @@ export function ListView({
       list.push({
         id: "progress",
         gridWidth: "minmax(56px, 0.7fr)",
-        header: <SortHeader label="Демо" sortKey="progress" sort={sort} onToggle={handleSort} align="center" />,
+        header: (
+          <SortHeader
+            label="Демо"
+            sortKey="progress"
+            sort={sort}
+            onToggle={handleSort}
+            align="center"
+            title="Прогресс прохождения демо/анкеты (сколько шагов из скольки пройдено)"
+          />
+        ),
         renderCell: (candidate, ctx) => (
           <div className="flex items-center justify-center">
             <DemoProgressBar
@@ -514,13 +538,27 @@ export function ListView({
     }
 
     if (showAnswersScore) {
-      // AI-ан — AI-балл ответов на вопросы анкеты демо (candidates.demo_answers_score).
-      // Вычисляется после прохождения демо на основании текстовых ответов кандидата.
+      // AI анкета (было «AI-ан», нечитаемо) — AI-балл ответов на вопросы
+      // анкеты демо (candidates.demo_answers_score). НЕ «второе демо» —
+      // проверено по коду (lib/demo/score-answers.ts, lib/messaging/
+      // second-demo-invite.ts): это скоринг ОТВЕТОВ анкеты первого демо,
+      // а «второе демо» — отдельная downstream-фича, которая ЧИТАЕТ этот
+      // балл как гейт, но не тождественна колонке. Вычисляется после
+      // прохождения демо на основании текстовых ответов кандидата.
       // Отдельно от aiScore (туда пишут v1/v2-скоринг резюме — была бы гонка).
       list.push({
         id: "answersScore",
         gridWidth: "56px",
-        header: <SortHeader label="AI-ан" sortKey="answersScore" sort={sort} onToggle={handleSort} align="center" />,
+        header: (
+          <SortHeader
+            label="AI анкета"
+            sortKey="answersScore"
+            sort={sort}
+            onToggle={handleSort}
+            align="center"
+            title="AI-балл ответов на вопросы анкеты демо (0–100)"
+          />
+        ),
         renderCell: (candidate) => (
           <div className="flex items-center justify-center" title="AI-балл ответов анкеты демо">
             {candidate.demoAnswersScore != null ? (
@@ -547,7 +585,16 @@ export function ListView({
       list.push({
         id: "portraitScore",
         gridWidth: "56px",
-        header: <SortHeader label="AI-Порт" sortKey="portraitScore" sort={sort} onToggle={handleSort} align="center" />,
+        header: (
+          <SortHeader
+            label="AI портрет"
+            sortKey="portraitScore"
+            sort={sort}
+            onToggle={handleSort}
+            align="center"
+            title="Оценка по Портрету — скоринг по критериям «Что хотим видеть» (0–100)"
+          />
+        ),
         renderCell: (candidate) => (
           <div className="flex items-center justify-center" title="Оценка по Портрету (скоринг по критериям «Что хотим видеть»)">
             {candidate.aiScoreV2 != null ? (
@@ -570,12 +617,21 @@ export function ListView({
 
     if (showTestScore) {
       // Тест — лесенка: балл (бейдж) → «сдан» (отправил, балла ещё нет) →
-      // «пишет» (заполняет, черновик) → «пер.» (открыл) → «отп.»
+      // «запол.» (заполняет, черновик) → «пер.» (открыл) → «отп.»
       // (отправлен) → «—» (не было).
       list.push({
         id: "testScore",
         gridWidth: "56px",
-        header: <SortHeader label="Тест" sortKey="testScore" sort={sort} onToggle={handleSort} align="center" />,
+        header: (
+          <SortHeader
+            label="Тест"
+            sortKey="testScore"
+            sort={sort}
+            onToggle={handleSort}
+            align="center"
+            title="Результат тестового задания: балл AI-проверки, либо статус (отправлен/открыл/заполняет/сдан)"
+          />
+        ),
         renderCell: (candidate) => (
           <div
             className={cn(
@@ -604,13 +660,23 @@ export function ListView({
                 {candidate.testScore}
               </Badge>
             ) : candidate.testStatus === "submitted" ? (
-              <span className="text-success text-[11px] font-medium">сдан</span>
+              <span
+                className="text-success text-[11px] font-medium"
+                title="Тест отправлен, балл ещё не готов (идёт AI-проверка)"
+              >
+                сдан
+              </span>
             ) : candidate.testStatus === "in_progress" ? (
-              <span className="text-blue-600 dark:text-blue-500 text-[11px] font-medium">заб</span>
+              <span
+                className="text-blue-600 dark:text-blue-500 text-[11px] font-medium"
+                title="Кандидат заполняет тест прямо сейчас (черновик, ещё не отправил)"
+              >
+                запол.
+              </span>
             ) : candidate.testStatus === "opened" ? (
-              <span className="text-muted-foreground text-[11px]">пер.</span>
+              <span className="text-muted-foreground text-[11px]" title="Кандидат открыл тест, но ещё не начал отвечать">пер.</span>
             ) : candidate.testStatus === "sent" ? (
-              <span className="text-muted-foreground text-[11px]">отп.</span>
+              <span className="text-muted-foreground text-[11px]" title="Тест отправлен кандидату, ещё не открывал">отп.</span>
             ) : candidate.testStatus === "failed" ? (
               <span className="text-destructive text-[11px] font-medium" title="Отправка теста не прошла (нет hh-чата / hh отклонил)">ошибка</span>
             ) : (
@@ -754,11 +820,23 @@ export function ListView({
     })
 
     if (showSource) {
-      // Источник — фикс (значки "hh"/"av" короткие)
+      // Источник — фикс (значки "hh"/"av" короткие). Ширина чуть увеличена
+      // (72→84px), чтобы влезло полное слово «Источник» (было обрублено
+      // «Источн.», нечитаемо клиенту); таблица горизонтально скроллится, так
+      // что это безопасно для layout.
       list.push({
         id: "source",
-        gridWidth: "72px",
-        header: <SortHeader label="Источн." sortKey="source" sort={sort} onToggle={handleSort} align="center" />,
+        gridWidth: "84px",
+        header: (
+          <SortHeader
+            label="Источник"
+            sortKey="source"
+            sort={sort}
+            onToggle={handleSort}
+            align="center"
+            title="Откуда пришёл отклик кандидата (hh.ru / Avito / Telegram / LinkedIn)"
+          />
+        ),
         renderCell: (candidate) => (
           <div className="text-center">
             <Badge variant="outline" className={cn("text-[10px] border", getSourceColor(candidate.source))}>
