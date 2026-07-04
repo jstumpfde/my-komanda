@@ -112,6 +112,12 @@ export interface ApiCandidate {
   // sent (отправлен) / failed (отправка упала) / null.
   testScore?: number | null
   testStatus?: "submitted" | "in_progress" | "opened" | "sent" | "failed" | null
+  // Состояние ФОНОВОГО AI-скоринга свободных ответов теста (05.07, из
+  // test_submissions.answers_json.scoringStatus) — независимо от testStatus.
+  // Когда testStatus='submitted' И testScore==null, testScoringStatus говорит
+  // ПОЧЕМУ балла ещё нет: pending/failed — AI считает/повторяет попытку,
+  // manual — testCheckMode='manual', ждёт ручной проверки HR (не баг).
+  testScoringStatus?: "pending" | "done" | "failed" | "manual" | null
   // «Активен сейчас» — активность (демо/тест) за последние 30 минут.
   isActive?: boolean
   // Захват причины отказа (заполняется при stage="rejected").
