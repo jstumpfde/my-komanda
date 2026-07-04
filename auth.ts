@@ -1,5 +1,6 @@
 import NextAuth, { type DefaultSession, CredentialsSignin } from "next-auth"
 import Credentials from "next-auth/providers/credentials"
+import YandexProvider from "next-auth/providers/yandex"
 import { eq, or, ilike } from "drizzle-orm"
 import bcrypt from "bcryptjs"
 import { db } from "@/lib/db"
@@ -93,6 +94,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     VKProvider({
       clientId: process.env.VK_CLIENT_ID ?? "",
       clientSecret: process.env.VK_CLIENT_SECRET ?? "",
+    }),
+    YandexProvider({
+      clientId: process.env.YANDEX_CLIENT_ID ?? "",
+      clientSecret: process.env.YANDEX_CLIENT_SECRET ?? "",
     }),
     // Dev-only: вход без пароля по userId (development или ALLOW_DEV_LOGIN=true)
     ...(process.env.NODE_ENV === "development" ||
@@ -208,18 +213,52 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     // Разрешаем все маршруты — контроль доступа в middleware.ts
     authorized: () => true,
-    async jwt({ token, user, trigger, session: sessionData }) {
+    // OAuth-вход (VK/Яндекс): платформа закрытая (доступ по заявке/приглашению),
+    // аккаунт НЕ создаётся автоматически. Пускаем только если email из
+    // OAuth-профиля совпадает с уже существующим активным пользователем.
+    // Credentials/passkey/dev уже проверены внутри своих authorize() — пропускаем.
+    async signIn({ user, account }) {
+      if (account?.type !== "oauth") return true
+      const email = user.email?.toLowerCase()
+      if (!email) return false
+      const [existing] = await db
+        .select({ id: users.id, isActive: users.isActive })
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1)
+      if (!existing || !existing.isActive) return false
+      return true
+    },
+    async jwt({ token, user, account, trigger, session: sessionData }) {
       if (user) {
-        // Initial sign-in: populate token from the user returned by authorize()
-        token.id = user.id as string
-        token.role = ((user.role as UserRole) ?? "client") as string
-        token.companyId = (user.companyId ?? null) as string | null
-        // Load permissions + firstName/lastName on first sign-in
-        if (user.id) {
-          const fresh = await getFreshUserFields(user.id)
-          token.permissions = fresh.permissions
-          token.firstName = fresh.firstName
-          token.lastName = fresh.lastName
+        if (account?.type === "oauth") {
+          // OAuth-профиль отдаёт СВОЙ id (VK/Яндекс), не наш UUID — находим
+          // реальную запись по email (signIn callback уже проверил, что она есть).
+          const email = user.email?.toLowerCase()
+          const [existing] = email
+            ? await db.select().from(users).where(eq(users.email, email)).limit(1)
+            : []
+          if (existing) {
+            token.id = existing.id
+            token.role = existing.role as UserRole
+            token.companyId = existing.companyId ?? null
+            const fresh = await getFreshUserFields(existing.id)
+            token.permissions = fresh.permissions
+            token.firstName = fresh.firstName
+            token.lastName = fresh.lastName
+          }
+        } else {
+          // Initial sign-in via credentials/passkey/dev: populate token from authorize()
+          token.id = user.id as string
+          token.role = ((user.role as UserRole) ?? "client") as string
+          token.companyId = (user.companyId ?? null) as string | null
+          // Load permissions + firstName/lastName on first sign-in
+          if (user.id) {
+            const fresh = await getFreshUserFields(user.id)
+            token.permissions = fresh.permissions
+            token.firstName = fresh.firstName
+            token.lastName = fresh.lastName
+          }
         }
       }
       // updateSession() fires with trigger === "update".
