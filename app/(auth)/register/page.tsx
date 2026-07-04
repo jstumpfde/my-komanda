@@ -191,7 +191,7 @@ export default function RegisterPage() {
                     />
                     <span>
                       Я согласен на обработку персональных данных в соответствии с{" "}
-                      <a href="/politicahr2026" target="_blank" className="underline hover:opacity-80">ФЗ-152</a>.
+                      <a href="/privacy" target="_blank" className="underline hover:opacity-80">Политикой конфиденциальности</a>.
                       {" "}Данные используются для целей регистрации и связи.
                     </span>
                   </label>
