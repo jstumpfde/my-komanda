@@ -5,6 +5,7 @@ import { and, eq, desc } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { telegramScheduledPosts } from "@/lib/db/schema"
 import { apiError, apiSuccess, requirePlatformAdmin } from "@/lib/api-helpers"
+import { validatePostLength } from "@/lib/telegram-posting/sender"
 
 const ALLOWED_CATEGORIES = new Set(["vacancy", "product"])
 const ALLOWED_REPEAT = new Set(["none", "daily", "weekly"])
@@ -58,6 +59,8 @@ export async function POST(req: NextRequest) {
     if (!Number.isFinite(staggerMinutes) || staggerMinutes < 0 || staggerMinutes > MAX_STAGGER_MINUTES) {
       return apiError(`Разнесение по времени — от 0 до ${MAX_STAGGER_MINUTES} мин.`, 400)
     }
+    const lengthError = validatePostLength(bodyText, Boolean(imagePath), Boolean(linkUrl))
+    if (lengthError) return apiError(lengthError, 400)
 
     const [created] = await db
       .insert(telegramScheduledPosts)

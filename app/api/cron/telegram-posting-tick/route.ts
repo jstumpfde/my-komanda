@@ -20,6 +20,7 @@ import { checkCronAuth } from "@/lib/cron/auth"
 import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { processDuePosts } from "@/lib/telegram-posting/sender"
 import { scanDmLeadsForAllActiveSessions } from "@/lib/telegram-posting/dm-leads"
+import { autoSyncStaleChatsForAllActiveSessions } from "@/lib/telegram-posting/chats"
 
 export const maxDuration = 300
 
@@ -41,8 +42,17 @@ async function handle(req: NextRequest) {
       console.error("[telegram-posting-tick] dm-leads scan failed:", err)
     }
 
-    if (run) await finishCronRun(run.id, "ok", { ...result, dmLeads })
-    return NextResponse.json({ ok: true, ...result, dmLeads })
+    let chatsSync: Awaited<ReturnType<typeof autoSyncStaleChatsForAllActiveSessions>> | null = null
+    try {
+      chatsSync = await autoSyncStaleChatsForAllActiveSessions()
+    } catch (err) {
+      // Пересинк чатов — не критичен для тика: не найденные новые чаты
+      // просто подождут следующего успешного запуска.
+      console.error("[telegram-posting-tick] chats auto-sync failed:", err)
+    }
+
+    if (run) await finishCronRun(run.id, "ok", { ...result, dmLeads, chatsSync })
+    return NextResponse.json({ ok: true, ...result, dmLeads, chatsSync })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     if (run) await finishCronRun(run.id, "error", null, msg)

@@ -121,6 +121,18 @@ export function TelegramPostingView({ defaultCategory, title }: Props) {
     }
   }
 
+  async function deleteChat(id: string) {
+    try {
+      const res = await fetch(`/api/modules/telegram-posting/chats/${id}`, { method: "DELETE" })
+      const data = await res.json()
+      if (!res.ok) { toast.error(data.error || "Не удалось удалить чат"); return }
+      toast.success("Чат удалён из реестра")
+      await loadChats()
+    } catch {
+      toast.error("Ошибка сети")
+    }
+  }
+
   return (
     <SidebarProvider defaultOpen={true}>
       <DashboardSidebar />
@@ -166,7 +178,7 @@ export function TelegramPostingView({ defaultCategory, title }: Props) {
                 </TabsContent>
 
                 <TabsContent value="chats" className="mt-4">
-                  <TelegramChatsSection chats={chats} onPatch={patchChat} />
+                  <TelegramChatsSection chats={chats} onPatch={patchChat} onDelete={deleteChat} />
                 </TabsContent>
 
                 <TabsContent value="leads" className="mt-4">

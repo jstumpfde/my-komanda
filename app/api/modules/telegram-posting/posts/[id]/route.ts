@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { telegramScheduledPosts } from "@/lib/db/schema"
 import { apiError, apiSuccess, requirePlatformAdmin } from "@/lib/api-helpers"
+import { validatePostLength } from "@/lib/telegram-posting/sender"
 
 const ALLOWED_REPEAT = new Set(["none", "daily", "weekly"])
 const MAX_STAGGER_MINUTES = 480 // 8ч — не ломает DELIVERY_WINDOW_MS (12ч) в sender.ts
@@ -54,6 +55,21 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (body.status === "paused" || body.status === "scheduled") {
       patch.status = body.status
     }
+
+    // Проверка лимита длины по ИТОГОВОМУ состоянию поста (patch — частичный,
+    // берём текущие значения там, где поле не менялось).
+    const [existing] = await db
+      .select({ body: telegramScheduledPosts.body, imagePath: telegramScheduledPosts.imagePath, linkUrl: telegramScheduledPosts.linkUrl })
+      .from(telegramScheduledPosts)
+      .where(and(eq(telegramScheduledPosts.id, id), eq(telegramScheduledPosts.userId, user.id as string)))
+      .limit(1)
+    if (!existing) return apiError("Пост не найден", 404)
+
+    const effectiveBody = patch.body ?? existing.body
+    const effectiveImagePath = patch.imagePath !== undefined ? patch.imagePath : existing.imagePath
+    const effectiveLinkUrl = patch.linkUrl !== undefined ? patch.linkUrl : existing.linkUrl
+    const lengthError = validatePostLength(effectiveBody, Boolean(effectiveImagePath), Boolean(effectiveLinkUrl))
+    if (lengthError) return apiError(lengthError, 400)
 
     const [updated] = await db
       .update(telegramScheduledPosts)

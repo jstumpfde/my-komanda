@@ -4040,6 +4040,7 @@ export const telegramUserbotSessions = pgTable("telegram_userbot_sessions", {
   lastConnectedAt:  timestamp("last_connected_at", { withTimezone: true }),
   dmWatchEnabled:   boolean("dm_watch_enabled").notNull().default(true),   // авто-атрибуция входящих ЛС (drizzle/0251)
   dmLastCheckedAt:  timestamp("dm_last_checked_at", { withTimezone: true }),
+  chatsLastSyncedAt: timestamp("chats_last_synced_at", { withTimezone: true }), // авто-пересинк списка чатов (drizzle/0253)
   createdAt:        timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt:        timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [

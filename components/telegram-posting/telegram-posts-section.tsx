@@ -15,7 +15,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
 import {
-  Plus, Loader2, Pencil, Trash2, Pause, Play, ChevronDown, ChevronUp, ImagePlus, X,
+  Plus, Loader2, Pencil, Trash2, Pause, Play, ChevronDown, ChevronUp, ImagePlus, X, Send,
 } from "lucide-react"
 import type { ChatRow } from "./telegram-chats-section"
 
@@ -42,6 +42,12 @@ interface DeliveryRow {
   error: string | null
   tgMessageId: string | null
 }
+
+// Зеркало лимитов из lib/telegram-posting/sender.ts — константы, НЕ импорт
+// (тот файл серверный, тянет GramJS, нельзя в клиентский компонент).
+const TELEGRAM_CAPTION_LIMIT = 1024
+const TELEGRAM_TEXT_LIMIT = 4096
+const TRACKING_LINK_RESERVE = 60
 
 const REPEAT_LABEL: Record<string, string> = { none: "Нет", daily: "Ежедневно", weekly: "Еженедельно" }
 const STAGGER_OPTIONS: { value: string; label: string }[] = [
@@ -92,6 +98,7 @@ export function TelegramPostsSection({ category, posts, chats, loading, onReload
   const [linkUrl, setLinkUrl] = useState("")
   const [staggerMinutes, setStaggerMinutes] = useState("0")
   const [saving, setSaving] = useState(false)
+  const [testSending, setTestSending] = useState(false)
 
   function openCreate() {
     setEditing(null)
@@ -130,9 +137,28 @@ export function TelegramPostsSection({ category, posts, chats, loading, onReload
     } finally { setUploading(false) }
   }
 
+  async function sendTest() {
+    if (!body.trim()) { toast.error("Укажите текст поста"); return }
+    if (overLimit) { toast.error(`Текст длиннее лимита Telegram (${lengthLimit} симв.)`); return }
+    setTestSending(true)
+    try {
+      const res = await fetch("/api/modules/telegram-posting/posts/test-send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body, image_path: imagePath }),
+      })
+      const data = await res.json()
+      if (!res.ok) { toast.error(data.error || "Не удалось отправить тест"); return }
+      toast.success("Отправлено в «Избранное» вашего Telegram — проверьте, как выглядит")
+    } catch {
+      toast.error("Ошибка сети")
+    } finally { setTestSending(false) }
+  }
+
   async function save() {
     if (!title.trim()) { toast.error("Укажите название"); return }
     if (!body.trim()) { toast.error("Укажите текст поста"); return }
+    if (overLimit) { toast.error(`Текст длиннее лимита Telegram (${lengthLimit} симв.)`); return }
     if (selectedChats.size === 0) { toast.error("Выберите хотя бы один чат"); return }
     if (!scheduledAt) { toast.error("Укажите дату и время"); return }
 
@@ -212,6 +238,11 @@ export function TelegramPostsSection({ category, posts, chats, loading, onReload
   }
 
   const chatOptions = chats.filter((c) => c.isEnabled)
+
+  const hasImage = Boolean(imagePath)
+  const hasLink = Boolean(linkUrl.trim())
+  const lengthLimit = (hasImage ? TELEGRAM_CAPTION_LIMIT : TELEGRAM_TEXT_LIMIT) - (hasLink ? TRACKING_LINK_RESERVE : 0)
+  const overLimit = body.length > lengthLimit
 
   return (
     <div className="rounded-xl border border-border shadow-sm bg-card">
@@ -307,6 +338,11 @@ export function TelegramPostsSection({ category, posts, chats, loading, onReload
             <div className="space-y-1.5">
               <Label>Текст поста</Label>
               <Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={8} placeholder="Текст, который увидят в чате…" />
+              <p className={`text-xs ${overLimit ? "text-red-500" : "text-muted-foreground"}`}>
+                {body.length} / {lengthLimit} символов
+                {hasImage ? " — лимит Telegram для подписи к картинке" : ""}
+                {hasLink ? " (с учётом места под ссылку)" : ""}
+              </p>
             </div>
 
             <div className="space-y-1.5">
@@ -402,7 +438,11 @@ export function TelegramPostsSection({ category, posts, chats, loading, onReload
             </div>
           </SheetBody>
           <SheetFooter>
-            <Button onClick={save} disabled={saving}>
+            <Button variant="outline" onClick={sendTest} disabled={testSending || overLimit || !body.trim()}>
+              {testSending ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Send className="h-4 w-4 mr-1.5" />}
+              Отправить себе (тест)
+            </Button>
+            <Button onClick={save} disabled={saving || overLimit}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
               {editing ? "Сохранить" : "Запланировать"}
             </Button>

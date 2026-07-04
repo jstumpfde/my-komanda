@@ -1,10 +1,12 @@
 // Синхронизация списка диалогов (группы/каналы/личка) из Telegram-аккаунта
 // владельца платформы в реестр telegram_posting_chats.
 
-import { eq, and } from "drizzle-orm"
+import { eq, and, lt, or, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { telegramPostingChats } from "@/lib/db/schema"
+import { telegramPostingChats, telegramUserbotSessions } from "@/lib/db/schema"
 import { getActiveClient } from "./client"
+
+const AUTO_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000 // 6 часов — не только по кнопке
 
 type ChatType = "group" | "channel" | "user"
 
@@ -56,4 +58,40 @@ export async function syncChats(userId: string): Promise<{ synced: number; total
   } finally {
     await client.disconnect().catch(() => {})
   }
+}
+
+export interface AutoSyncResult {
+  sessionsSynced: number
+  errors: number
+}
+
+/** Пересинк чатов для активных сессий, которые не синкались >6ч — не только
+ * по ручной кнопке «Обновить список чатов». Вызывается из cron-тика. */
+export async function autoSyncStaleChatsForAllActiveSessions(): Promise<AutoSyncResult> {
+  const staleBefore = new Date(Date.now() - AUTO_SYNC_INTERVAL_MS)
+  const sessions = await db
+    .select({ userId: telegramUserbotSessions.userId })
+    .from(telegramUserbotSessions)
+    .where(
+      and(
+        eq(telegramUserbotSessions.status, "active"),
+        or(isNull(telegramUserbotSessions.chatsLastSyncedAt), lt(telegramUserbotSessions.chatsLastSyncedAt, staleBefore))
+      )
+    )
+
+  const result: AutoSyncResult = { sessionsSynced: 0, errors: 0 }
+  for (const s of sessions) {
+    try {
+      await syncChats(s.userId)
+      await db
+        .update(telegramUserbotSessions)
+        .set({ chatsLastSyncedAt: new Date(), updatedAt: new Date() })
+        .where(eq(telegramUserbotSessions.userId, s.userId))
+      result.sessionsSynced++
+    } catch (err) {
+      console.error("[chats] auto-sync failed for user", s.userId, err)
+      result.errors++
+    }
+  }
+  return result
 }

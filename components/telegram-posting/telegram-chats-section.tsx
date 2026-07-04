@@ -3,10 +3,11 @@
 import { useState } from "react"
 import { Switch } from "@/components/ui/switch"
 import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
-import { Users, Hash, User as UserIcon, MessageCircle } from "lucide-react"
+import { Users, Hash, User as UserIcon, MessageCircle, Trash2 } from "lucide-react"
 
 export interface ChatRow {
   id: string
@@ -24,6 +25,7 @@ const TYPE_LABEL: Record<string, string> = { group: "Группа", channel: "К
 interface Props {
   chats: ChatRow[]
   onPatch: (id: string, patch: { category?: string | null; is_enabled?: boolean; cost_per_post?: number | null }) => Promise<void>
+  onDelete: (id: string) => Promise<void>
 }
 
 function CostInput({ chat, onPatch }: { chat: ChatRow; onPatch: Props["onPatch"] }) {
@@ -50,7 +52,12 @@ function CostInput({ chat, onPatch }: { chat: ChatRow; onPatch: Props["onPatch"]
   )
 }
 
-export function TelegramChatsSection({ chats, onPatch }: Props) {
+export function TelegramChatsSection({ chats, onPatch, onDelete }: Props) {
+  async function handleDelete(c: ChatRow) {
+    if (!window.confirm(`Удалить «${c.title}» из реестра? Если по чату уже есть посты/клики — потребуется отключить вместо удаления.`)) return
+    await onDelete(c.id)
+  }
+
   return (
     <div className="rounded-xl border border-border shadow-sm bg-card">
       <div className="p-4 border-b border-border flex items-center gap-2">
@@ -67,6 +74,7 @@ export function TelegramChatsSection({ chats, onPatch }: Props) {
               <th className="px-4 py-2.5 font-medium">Категория</th>
               <th className="px-4 py-2.5 font-medium text-right">₽/пост</th>
               <th className="px-4 py-2.5 font-medium text-center">Включён</th>
+              <th className="px-4 py-2.5 font-medium w-8"></th>
             </tr>
           </thead>
           <tbody>
@@ -101,12 +109,17 @@ export function TelegramChatsSection({ chats, onPatch }: Props) {
                   <td className="px-4 py-2.5 text-center">
                     <Switch checked={c.isEnabled} onCheckedChange={(v) => onPatch(c.id, { is_enabled: v })} />
                   </td>
+                  <td className="px-4 py-2.5">
+                    <Button size="icon" variant="ghost" className="h-8 w-8 text-red-600" onClick={() => handleDelete(c)}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </td>
                 </tr>
               )
             })}
             {chats.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
+                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
                   Чатов ещё нет — подключите аккаунт и нажмите «Обновить список чатов».
                 </td>
               </tr>
