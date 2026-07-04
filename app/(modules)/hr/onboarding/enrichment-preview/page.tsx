@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -22,7 +22,6 @@ import {
   ChevronUp,
   Edit3,
   Save,
-  Paperclip,
 } from "lucide-react"
 import {
   INDUSTRIES,
@@ -42,7 +41,7 @@ import {
 import { saveCompany, generateId } from "@/lib/company-storage"
 import type { Company } from "@/lib/company-types"
 
-// ─── Mock enrichment data ─────────────────────────────────────────────────────
+// ─── Enrichment draft ─────────────────────────────────────────────────────────
 
 interface EnrichmentDraft {
   // Block 1
@@ -66,25 +65,28 @@ interface EnrichmentDraft {
   sales_manager_type: "rop" | "owner" | "none"
 }
 
-const MOCK_DRAFT: EnrichmentDraft = {
-  name: "ГК Орлинк",
-  city: "Москва",
-  founded_year: 2009,
-  industry: "Строительство",
-  revenue_range: "5M-15M",
-  product_name: "Металлоконструкции",
-  product_description:
-    "Проектирование и монтаж металлоконструкций для промышленных объектов",
+const EMPTY_DRAFT: EnrichmentDraft = {
+  name: "",
+  city: "",
+  founded_year: new Date().getFullYear(),
+  industry: INDUSTRIES[0],
+  revenue_range: REVENUE_RANGES[0].value,
+  product_name: "",
+  product_description: "",
   avg_check: "",
-  sales_type: "cold",
-  deal_cycle: "long_1_6m",
-  segments: ["B2B", "B2G"],
+  sales_type: SALES_TYPES[0].value,
+  deal_cycle: DEAL_CYCLES[0].value,
+  segments: [],
   crm_status: "none",
   crm_name: "",
   sales_scripts: "no",
   training_system: "no",
-  sales_manager_type: "owner",
+  sales_manager_type: "none",
 }
+
+// Заполнение автоматического обогащения из внешних источников (реестр юрлиц,
+// сайт компании) пока не подключено — честно показываем пустой черновик,
+// который HR заполняет вручную, а не выдуманные данные.
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -240,10 +242,11 @@ function CollapsibleBlock({ title, summary, expanded, onToggle, children }: Bloc
 
 export default function EnrichmentPreviewPage() {
   const router = useRouter()
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const [draft, setDraft] = useState<EnrichmentDraft>(MOCK_DRAFT)
-  const [expandedBlock, setExpandedBlock] = useState<1 | 2 | 3 | null>(null)
+  const [draft, setDraft] = useState<EnrichmentDraft>(EMPTY_DRAFT)
+  // Автообогащение ещё не подключено — начинаем с раскрытого первого блока,
+  // чтобы пользователь сразу видел, что поля пустые и их нужно заполнить.
+  const [expandedBlock, setExpandedBlock] = useState<1 | 2 | 3 | null>(1)
 
   const toggleBlock = (block: 1 | 2 | 3) => {
     setExpandedBlock(expandedBlock === block ? null : block)
@@ -253,23 +256,27 @@ export default function EnrichmentPreviewPage() {
     setDraft((prev) => ({ ...prev, ...partial }))
   }
 
-  // Summaries
-  const summary1 = [
-    draft.name,
-    draft.city,
-    `${yearsFromFounded(draft.founded_year)} лет`,
-    revenueLabel(draft.revenue_range) + "/мес",
-  ]
-    .filter(Boolean)
-    .join(" • ")
+  // Summaries (честные — пустые поля показываем как «не заполнено», а не выдумываем)
+  const summary1 = draft.name || draft.city
+    ? [
+        draft.name || "Название — укажите",
+        draft.city || "Город — укажите",
+        `${yearsFromFounded(draft.founded_year)} лет`,
+        revenueLabel(draft.revenue_range) + "/мес",
+      ]
+        .filter(Boolean)
+        .join(" • ")
+    : "Заполните основные данные"
 
-  const summary2 = [
-    draft.product_name,
-    draft.segments.join(", "),
-    draft.avg_check ? `чек — ${draft.avg_check}` : "чек — укажите",
-  ]
-    .filter(Boolean)
-    .join(" • ")
+  const summary2 = draft.product_name || draft.segments.length > 0
+    ? [
+        draft.product_name || "Продукт — укажите",
+        draft.segments.join(", "),
+        draft.avg_check ? `чек — ${draft.avg_check}` : "чек — укажите",
+      ]
+        .filter(Boolean)
+        .join(" • ")
+    : "Заполните продукт и продажи"
 
   const summary3 = `CRM: ${crmStatusLabel(draft.crm_status)} • Скрипты: ${salesScriptsLabel(draft.sales_scripts)}`
 
@@ -323,11 +330,11 @@ export default function EnrichmentPreviewPage() {
           {/* Header */}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <span className="text-2xl">✨</span>
-              <h1 className="text-2xl font-bold text-foreground">Мы подготовили черновик</h1>
+              <h1 className="text-2xl font-bold text-foreground">Заполните профиль компании</h1>
             </div>
             <p className="text-muted-foreground">
-              Отредактируйте под себя — нажмите «Изменить» в любом разделе
+              Автоматический поиск данных пока не подключён — заполните поля вручную,
+              нажмите «Изменить» в любом разделе
             </p>
           </div>
 
@@ -523,34 +530,11 @@ export default function EnrichmentPreviewPage() {
             </div>
           </CollapsibleBlock>
 
-          {/* Source attribution */}
-          <p className="text-xs text-muted-foreground text-center">
-            Откуда данные: реестр юрлиц, сайт компании
-          </p>
-
-          {/* Clarify with file */}
-          <div className="text-center">
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx"
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
-            >
-              <Paperclip className="w-3 h-3" />
-              Хотите уточнить? Загрузите КП или прайс
-            </button>
-          </div>
-
           {/* CTA buttons */}
           <div className="space-y-3 pt-2">
             <Button className="w-full h-12 gap-2 font-semibold" onClick={handleSave}>
               <Save className="w-4 h-4" />
-              Всё верно — сохранить
+              Сохранить
               <ArrowRight className="w-4 h-4" />
             </Button>
             <Button
@@ -558,7 +542,7 @@ export default function EnrichmentPreviewPage() {
               className="w-full text-muted-foreground"
               onClick={() => router.push("/hr/vacancies/create")}
             >
-              Хочу заполнить заново вручную
+              Заполнить через полную анкету
             </Button>
           </div>
         </div>

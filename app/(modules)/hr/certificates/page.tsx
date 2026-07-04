@@ -92,16 +92,12 @@ export default function CertificatesPage() {
                       Курс
                     </Link>
                   </Button>
-                  {cert.pdfUrl ? (
+                  {cert.pdfUrl && (
                     <Button size="sm" className="flex-1 h-7 text-xs" asChild>
                       <a href={cert.pdfUrl} target="_blank" rel="noopener noreferrer">
                         <ExternalLink className="size-3 mr-1" />
                         Скачать
                       </a>
-                    </Button>
-                  ) : (
-                    <Button size="sm" variant="secondary" className="flex-1 h-7 text-xs" disabled>
-                      PDF скоро
                     </Button>
                   )}
                 </div>
