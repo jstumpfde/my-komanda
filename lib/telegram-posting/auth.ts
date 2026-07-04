@@ -45,6 +45,14 @@ async function getRow(userId: string) {
   return row ?? null
 }
 
+/** Возвращает Date для установки first_activated_at ТОЛЬКО если он ещё не
+ * задан (для разгона суточного лимита — важна дата ПЕРВОГО подключения, не
+ * дата последнего реконнекта). null — если уже был задан ранее (не трогаем). */
+async function firstActivatedAtIfUnset(userId: string): Promise<Date | null> {
+  const row = await getRow(userId)
+  return row?.firstActivatedAt ? null : new Date()
+}
+
 /** Шаг 1: отправить код подтверждения на телефон. */
 export async function startLogin(userId: string, phone: string): Promise<{ ok: true }> {
   const { apiId, apiHash } = getApiCredentials()
@@ -96,12 +104,14 @@ export async function confirmCode(
       )
       // Успех без 2FA — сохраняем УЖЕ залогиненную сессию.
       const finalSession = client.session.save() as unknown as string
+      const firstActivatedAt = await firstActivatedAtIfUnset(userId)
       await upsertSession(userId, {
         sessionString: encryptSessionString(finalSession),
         phoneCodeHash: null,
         status: "active",
         lastError: null,
         lastConnectedAt: new Date(),
+        ...(firstActivatedAt ? { firstActivatedAt } : {}),
       })
       return { ok: true, need2fa: false }
     } catch (err) {
@@ -141,12 +151,14 @@ export async function confirmPassword(userId: string, password: string): Promise
     await client.invoke(new Api.auth.CheckPassword({ password: passwordSrpCheck }))
 
     const finalSession = client.session.save() as unknown as string
+    const firstActivatedAt = await firstActivatedAtIfUnset(userId)
     await upsertSession(userId, {
       sessionString: encryptSessionString(finalSession),
       phoneCodeHash: null,
       status: "active",
       lastError: null,
       lastConnectedAt: new Date(),
+      ...(firstActivatedAt ? { firstActivatedAt } : {}),
     })
     return { ok: true }
   } catch (err) {
