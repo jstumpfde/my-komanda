@@ -263,6 +263,15 @@ function testScoreOf(aiScore: number | null, answersJson: unknown): number | nul
   return null
 }
 
+// Состояние фонового AI-скоринга (05.07, из answersJson.scoringStatus — БЕЗ
+// отдельной колонки). Нужно колонке «Тест» чтобы отличить «сдан, балл
+// AI ещё считает/ретраит» (pending/failed — не баг, показываем «оценивается…»)
+// от «сдан, ждёт РУЧНОЙ проверки» (manual, testCheckMode='manual').
+function testScoringStatusOf(answersJson: unknown): "pending" | "done" | "failed" | "manual" | null {
+  const status = (answersJson as { scoringStatus?: unknown } | null)?.scoringStatus
+  return status === "pending" || status === "done" || status === "failed" || status === "manual" ? status : null
+}
+
 // GET /api/modules/hr/candidates?vacancy_id=...&stage=new,demo,...
 export async function GET(req: NextRequest) {
   try {
@@ -549,7 +558,7 @@ export async function GET(req: NextRequest) {
       // Состояние теста для колонки «Тест» (как в пер-вакансионном списке):
       // последняя test_submission на кандидата + приглашения (follow_up).
       const gCandidateIds = rows.map(r => r.id)
-      const gTestByCandidate = new Map<string, { score: number | null; answersCount: number; submitted: boolean }>()
+      const gTestByCandidate = new Map<string, { score: number | null; answersCount: number; submitted: boolean; scoringStatus: "pending" | "done" | "failed" | "manual" | null }>()
       const gTestLiveInvited = new Set<string>()
       const gTestFailedInvited = new Set<string>()
       if (gCandidateIds.length > 0) {
@@ -573,6 +582,7 @@ export async function GET(req: NextRequest) {
             score: testScoreOf(s.aiScore, s.answersJson),
             answersCount,
             submitted: s.submittedAt != null,
+            scoringStatus: testScoringStatusOf(s.answersJson),
           })
         }
         const invRows = await db
@@ -672,6 +682,7 @@ export async function GET(req: NextRequest) {
           testStatus = null
         }
         const testScore = test?.score ?? null
+        const testScoringStatus = test?.scoringStatus ?? null
 
         // Имя «под вопросом»: тот же резолвер, что и при отправке ({{name}}).
         // confident=false → бот уйдёт в нейтральное «Здравствуйте» (фамилия/аноним/
@@ -692,6 +703,7 @@ export async function GET(req: NextRequest) {
           isActive,
           testScore,
           testStatus,
+          testScoringStatus,
         }
       })
 
@@ -1075,7 +1087,7 @@ export async function GET(req: NextRequest) {
     // кандидата. score — число (AI/автопроверка) либо null; answersCount —
     // сколько вопросов реально отвечено (черновик = автосохранение по ходу);
     // submitted — нажал ли «Отправить» (submitted_at задан).
-    const testByCandidateId = new Map<string, { score: number | null; answersCount: number; submitted: boolean }>()
+    const testByCandidateId = new Map<string, { score: number | null; answersCount: number; submitted: boolean; scoringStatus: "pending" | "done" | "failed" | "manual" | null }>()
     if (candidateIds.length > 0) {
       const subRows = await db
         .select({
@@ -1097,6 +1109,7 @@ export async function GET(req: NextRequest) {
           score: testScoreOf(s.aiScore, s.answersJson),
           answersCount,
           submitted: s.submittedAt != null,
+          scoringStatus: testScoringStatusOf(s.answersJson),
         })
       }
     }
@@ -1256,6 +1269,7 @@ export async function GET(req: NextRequest) {
         demoCompletedByAnswers,
         testScore: test?.score ?? null,
         testStatus,
+        testScoringStatus: test?.scoringStatus ?? null,
         isActive,
         nextInterviewAt: nextInterviewByCandidateId.get(r.id) ?? null,
       }

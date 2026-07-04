@@ -659,6 +659,29 @@ export function ListView({
               >
                 {candidate.testScore}
               </Badge>
+            ) : candidate.testStatus === "submitted" && candidate.testScoringStatus === "manual" ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-muted-foreground text-[11px] font-medium cursor-default">
+                    ручная
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Тест сдан. Проверка вручную — балл ждёт оценки HR (в настройках теста включён режим «Ручная проверка»).
+                </TooltipContent>
+              </Tooltip>
+            ) : candidate.testStatus === "submitted"
+              && (candidate.testScoringStatus === "pending" || candidate.testScoringStatus === "failed") ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-blue-600 dark:text-blue-500 text-[11px] font-medium cursor-default whitespace-nowrap">
+                    оцен…
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Тест сдан, AI ещё оценивает ответы (временная задержка — сеть/лимиты). Система автоматически повторит попытку в фоне, балл обновится без действий HR.
+                </TooltipContent>
+              </Tooltip>
             ) : candidate.testStatus === "submitted" ? (
               <span
                 className="text-success text-[11px] font-medium"

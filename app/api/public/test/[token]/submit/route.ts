@@ -5,12 +5,10 @@ import { candidates, demos, testSubmissions, vacancies, type PostDemoSettings } 
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { isShortId } from "@/lib/short-id"
 import { checkPublicTokenRateLimit } from "@/lib/public/rate-limit-public"
-import { scoreTestSubmission } from "@/lib/ai-score-test"
-import { scheduleTestAfterMessage } from "@/lib/messaging/test-after-message"
+import { processTestScoring, buildTestAiText } from "@/lib/ai-score-test"
 import {
   scoreObjective,
   collectTaskQuestions,
-  resolveOptionPoints,
   type StructuredAnswer,
   type ObjectiveResult,
 } from "@/lib/score-test-objective"
@@ -19,7 +17,6 @@ import type { Question } from "@/lib/course-types"
 import { onTestSubmitted } from "@/lib/funnel-v2/stage-completion-handler"
 
 const MIN_ANSWER_LEN = 10
-const DEFAULT_PASSING_SCORE = 70
 
 // Приём ответа кандидата на тестовое задание. Token — единственный ключ.
 //
@@ -136,44 +133,31 @@ export async function POST(
 
     // Текст для AI = ответы + per-question критерий «ИИ-проверка» (если задан).
     // В карточку HR пишем чистый freeText, а в AI-оценку — обогащённый, чтобы
-    // критерий конкретного вопроса реально влиял на балл.
-    let aiText = freeText
-    if (hasStructured) {
-      const qById = new Map(taskQuestions.map((q) => [q.id, q]))
-      const parts: string[] = []
-      for (const a of structured) {
-        const val = a.value.trim()
-        if (!val) continue
-        const q = qById.get(a.questionId)
-        const readable = val.split("|||").map((s) => s.trim()).filter(Boolean).join(", ")
-        let line = `${q?.text || "Вопрос"}: ${readable}`
-        // Для выборных вопросов даём AI «подходящие варианты» — отмеченные HR
-        // зелёным ✓ (correctOptions). Так AI судит «подходит/не подходит», в т.ч.
-        // ответ «Другое», который баллами не оценить.
-        const opts = q?.options ?? []
-        // «Подходящие» = отмеченные ✓ ИЛИ варианты с положительным баллом
-        // (per-option режим). Объединяем по индексам.
-        const correctIdx = new Set<number>(q?.correctOptions ?? [])
-        if (q && (q.answerType === "single" || q.answerType === "multiple")) {
-          resolveOptionPoints(q).forEach((p, i) => { if (p > 0) correctIdx.add(i) })
-        }
-        const correct = [...correctIdx]
-          .map((idx) => opts[idx])
-          .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
-        if (correct.length) line += `\n  (подходящие варианты: ${correct.join(", ")})`
-        const crit = (q?.aiCriteria || "").trim()
-        if (crit) line += `\n  (критерий оценки: ${crit})`
-        parts.push(line)
-      }
-      aiText = parts.join("\n\n")
-    }
+    // критерий конкретного вопроса реально влиял на балл. Билдер общий с cron
+    // test-scoring-retry (lib/ai-score-test.ts) — повторная оценка зависших
+    // считается по тем же правилам, что и первичная.
+    const aiText = hasStructured ? buildTestAiText(taskQuestions, structured) : freeText
+
+    // Признак состояния AI-скоринга (scoringStatus в answersJson, БЕЗ миграции —
+    // переиспользуем существующий jsonb). Решаем заранее по testCheckMode и
+    // наличию свободного текста — тот же расчёт, что и в начале processTestScoring,
+    // чтобы HR сразу увидел корректный статус, не дожидаясь фонового тика.
+    const settingsForStatus = (demo?.postDemoSettings as PostDemoSettings | null) ?? {}
+    const checkModeForStatus = settingsForStatus.testCheckMode === "auto" || settingsForStatus.testCheckMode === "manual"
+      ? settingsForStatus.testCheckMode
+      : "assisted"
+    const willRunAi = checkModeForStatus !== "manual" && aiText.trim().length > 0
+    const initialScoringStatus: "pending" | "done" | "manual" =
+      checkModeForStatus === "manual" ? "manual" : willRunAi ? "pending" : "done"
 
     const finalValues = {
       // answerText сохраняем для обратной совместимости с карточкой HR
       // (показывает консолидированный текст). Если структурированный тест без
       // текстовых ответов — null.
       answerText:  hasStructured ? (freeText || null) : (answerText || null),
-      answersJson: hasStructured ? { answers: structured, objective } : null,
+      answersJson: hasStructured
+        ? { answers: structured, objective, scoringStatus: initialScoringStatus }
+        : { scoringStatus: initialScoringStatus },
       // Объективный балл проставляем сразу (если он есть). AI может дополнить.
       aiScore:     objective && objective.maxPoints > 0 ? objective.score : null,
       // Фиксируем факт отправки — отличает финал от черновика-автосохранения.
@@ -239,87 +223,5 @@ export async function POST(
   } catch (err) {
     console.error("[public/test submit]", err)
     return apiError("Внутренняя ошибка", 500)
-  }
-}
-
-// ─── Фоновый скоринг (не блокирует ответ кандидату) ──────────────────────
-async function processTestScoring(args: {
-  submissionId: string
-  candidateId:  string
-  vacancyId:    string
-  freeText:     string
-  objective:    ObjectiveResult | null
-  settings:     PostDemoSettings
-}): Promise<void> {
-  const { submissionId, candidateId, vacancyId, freeText, objective, settings } = args
-
-  // Обратная совместимость: undefined → 'assisted'.
-  const checkMode = settings.testCheckMode === "auto" || settings.testCheckMode === "manual"
-    ? settings.testCheckMode
-    : "assisted"
-
-  // manual — AI не запускаем вовсе (объективный балл уже записан при insert).
-  if (checkMode === "manual") return
-
-  const passingScore = typeof settings.testPassingScore === "number"
-    ? settings.testPassingScore
-    : DEFAULT_PASSING_SCORE
-  const taskText = typeof settings.testTaskInstructions === "string" ? settings.testTaskInstructions : ""
-
-  const hasObjective = !!objective && objective.maxPoints > 0
-  const hasFreeText = freeText.trim().length > 0
-
-  // Итоговый балл. Приоритет: объективный % (если есть оцениваемые баллы),
-  // плюс усреднение с AI при наличии свободного текста. Если нет ни того, ни
-  // другого — выходим (стадия test_task_done, HR проверит руками).
-  let finalScore: number | null = hasObjective ? objective!.score : null
-
-  if (hasFreeText) {
-    try {
-      const result = await scoreTestSubmission({
-        taskText,
-        answerText: freeText,
-        hrPrompt: settings.testAiPrompt,
-      })
-      finalScore = hasObjective
-        ? Math.round((objective!.score + result.score) / 2)
-        : result.score
-      const reasoning = hasObjective
-        ? `Автопроверка: ${objective!.gotPoints} из ${objective!.maxPoints} баллов (${objective!.score}%). ${result.reasoning}`
-        : result.reasoning
-      await db.update(testSubmissions)
-        .set({ aiScore: finalScore, aiReasoning: reasoning })
-        .where(eq(testSubmissions.id, submissionId))
-    } catch (err) {
-      console.error("[test scoring] AI failed:", err instanceof Error ? err.message : err)
-      // AI упал — остаётся объективный балл (если был), его и используем.
-    }
-  } else if (hasObjective) {
-    // Только объективные вопросы — фиксируем итог и обоснование.
-    await db.update(testSubmissions)
-      .set({
-        aiScore: objective!.score,
-        aiReasoning: `Автопроверка: ${objective!.gotPoints} из ${objective!.maxPoints} баллов (${objective!.score}%).`,
-      })
-      .where(eq(testSubmissions.id, submissionId))
-  }
-
-  if (finalScore == null) return // нечего оценивать автоматически
-
-  // auto: стадия по порогу (колонка «Статус» → прошёл/не прошёл) + сообщение
-  // после теста только при прохождении.
-  if (checkMode === "auto") {
-    const passed = finalScore >= passingScore
-    await db.update(candidates)
-      .set({ stage: passed ? "test_passed" : "test_failed", updatedAt: new Date() })
-      .where(eq(candidates.id, candidateId))
-
-    if (passed && settings.testAfterMessage && settings.testAfterMessage.trim().length > 0) {
-      await scheduleTestAfterMessage({
-        candidateId,
-        vacancyId,
-        messageText: settings.testAfterMessage,
-      })
-    }
   }
 }
