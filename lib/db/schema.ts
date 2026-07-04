@@ -4020,3 +4020,83 @@ export type NewLearnedGivenName = typeof learnedGivenNames.$inferInsert
 
 export type OutreachIntegration    = typeof outreachIntegrations.$inferSelect
 export type NewOutreachIntegration = typeof outreachIntegrations.$inferInsert
+
+// ─── Telegram-постинг (drizzle/0250) ───────────────────────────────────────
+// Личный userbot-аккаунт владельца платформы (MTProto/GramJS) для постинга
+// отложенных сообщений в Telegram-чаты/каналы (job-борды и маркетинг).
+// Один активный ряд на пользователя (unique user_id). session_string хранится
+// зашифрованным (lib/telegram-posting/crypto.ts, AES-256-GCM).
+
+export const telegramUserbotSessions = pgTable("telegram_userbot_sessions", {
+  id:               uuid("id").primaryKey().defaultRandom(),
+  userId:           uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  phone:            text("phone"),
+  sessionString:    text("session_string"),                   // зашифровано (iv:tag:ciphertext base64)
+  phoneCodeHash:    text("phone_code_hash"),                  // временный, между шагами логина
+  status:           text("status").notNull().default("pending_code"), // pending_code|pending_password|active|error
+  lastError:        text("last_error"),
+  dailyLimit:       integer("daily_limit").notNull().default(20),     // макс. отправок в сутки (анти-спам)
+  lastConnectedAt:  timestamp("last_connected_at", { withTimezone: true }),
+  createdAt:        timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt:        timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex("telegram_userbot_sessions_user_id_uq").on(t.userId),
+])
+export type TelegramUserbotSession    = typeof telegramUserbotSessions.$inferSelect
+export type NewTelegramUserbotSession = typeof telegramUserbotSessions.$inferInsert
+
+// Реестр диалогов Telegram (группы/каналы/личка), синкается из аккаунта владельца.
+export const telegramPostingChats = pgTable("telegram_posting_chats", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  userId:      uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  tgPeerId:    text("tg_peer_id").notNull(),        // id диалога в Telegram
+  accessHash:  text("access_hash"),
+  title:       text("title").notNull(),
+  type:        text("type").notNull(),               // 'group' | 'channel' | 'user'
+  category:    text("category"),                      // 'job' | 'product' | NULL
+  isEnabled:   boolean("is_enabled").notNull().default(true),
+  createdAt:   timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt:   timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  unique("telegram_posting_chats_user_peer_uq").on(t.userId, t.tgPeerId),
+])
+export type TelegramPostingChat    = typeof telegramPostingChats.$inferSelect
+export type NewTelegramPostingChat = typeof telegramPostingChats.$inferInsert
+
+// Отложенные посты — очередь сообщений в Telegram с расписанием и повтором.
+export const telegramScheduledPosts = pgTable("telegram_scheduled_posts", {
+  id:            uuid("id").primaryKey().defaultRandom(),
+  userId:        uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  category:      text("category").notNull(),          // 'vacancy' | 'product' — раздел создания
+  title:         text("title").notNull(),              // внутреннее имя для списка
+  body:          text("body").notNull(),                // текст поста (plain text, переводы строк сохраняются)
+  imagePath:     text("image_path"),                     // путь загруженной картинки (/uploads/...)
+  chatIds:       jsonb("chat_ids").notNull(),             // массив id из telegram_posting_chats
+  scheduledAt:   timestamp("scheduled_at", { withTimezone: true }).notNull(),
+  repeatRule:    text("repeat_rule").notNull().default("none"), // 'none' | 'daily' | 'weekly'
+  status:        text("status").notNull().default("scheduled"), // scheduled|sending|sent|error|paused
+  lastError:     text("last_error"),
+  createdAt:     timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt:     timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  index("telegram_scheduled_posts_user_status_idx").on(t.userId, t.status),
+  index("telegram_scheduled_posts_scheduled_at_idx").on(t.scheduledAt),
+])
+export type TelegramScheduledPost    = typeof telegramScheduledPosts.$inferSelect
+export type NewTelegramScheduledPost = typeof telegramScheduledPosts.$inferInsert
+
+// Лог доставок — одна строка на попытку отправки поста в конкретный чат.
+export const telegramPostDeliveries = pgTable("telegram_post_deliveries", {
+  id:            uuid("id").primaryKey().defaultRandom(),
+  postId:        uuid("post_id").notNull().references(() => telegramScheduledPosts.id, { onDelete: "cascade" }),
+  chatId:        uuid("chat_id").notNull().references(() => telegramPostingChats.id, { onDelete: "cascade" }),
+  sentAt:        timestamp("sent_at", { withTimezone: true }).defaultNow().notNull(),
+  status:        text("status").notNull(),          // 'sent' | 'failed'
+  error:         text("error"),
+  tgMessageId:   text("tg_message_id"),
+}, (t) => [
+  index("telegram_post_deliveries_post_id_idx").on(t.postId),
+  index("telegram_post_deliveries_chat_id_idx").on(t.chatId),
+])
+export type TelegramPostDelivery    = typeof telegramPostDeliveries.$inferSelect
+export type NewTelegramPostDelivery = typeof telegramPostDeliveries.$inferInsert

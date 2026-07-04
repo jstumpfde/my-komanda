@@ -20,6 +20,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Аналитика найма',  href: '/hr/analytics',         icon: 'BarChart3' },
       { label: 'Интервью',         href: '/hr/interviews',        icon: 'CalendarDays' },
       { label: 'Календарь',        href: '/hr/calendar',          icon: 'Calendar' },
+      { label: 'Telegram-постинг', href: '/hr/telegram-posting',  icon: 'Send' },
       { label: 'Настройки HR',     href: '/hr/hiring-settings',   icon: 'Settings' },
       // Адаптация
       { label: 'Ввод информации',         href: '/hr/onboarding',              icon: 'GraduationCap' },
@@ -134,6 +135,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'SEO',             href: '/marketing/seo',         icon: 'Search' },
       { label: 'Рекламные кампании', href: '/marketing/campaigns', icon: 'Megaphone' },
       { label: 'Яндекс.Директ',   href: '/marketing/yandex-direct', icon: 'Target' },
+      { label: 'Telegram-постинг', href: '/marketing/telegram-posting', icon: 'Send' },
       { label: 'Соцсети',         href: '/marketing/social',      icon: 'Globe' },
       { label: 'Email-рассылки',  href: '/marketing/email',       icon: 'MessageSquare' },
       { label: 'Лендинги',        href: '/marketing/landings',    icon: 'Layers' },
