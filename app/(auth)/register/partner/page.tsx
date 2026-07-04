@@ -8,6 +8,20 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Handshake, Send, CheckCircle2, ArrowLeft } from "lucide-react"
 import Link from "next/link"
+import { PRIVACY_POLICY_VERSION, MARKETING_CONSENT_VERSION } from "@/lib/legal/operator-requisites"
+
+// Пишет факт согласия в журнал 152-ФЗ (см. /admin/platform → Согласия).
+// Best-effort — ошибка записи лога не должна мешать успешной отправке заявки.
+function logConsents(email: string, marketing: boolean) {
+  const fire = (consentType: string, documentVersion: string) =>
+    fetch("/api/consent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ consentType, action: "accepted", documentVersion, visitorId: email }),
+    }).catch(() => {})
+  void fire("privacy_policy", PRIVACY_POLICY_VERSION)
+  if (marketing) void fire("marketing", MARKETING_CONSENT_VERSION)
+}
 
 function Spinner() {
   return (
@@ -28,6 +42,8 @@ export default function PartnerRegisterPage() {
   const [error, setError] = useState("")
   const [submitted, setSubmitted] = useState(false)
   const [consent, setConsent] = useState(false)
+  const [marketingConsent, setMarketingConsent] = useState(false)
+  const [oferta, setOferta] = useState(false)
 
   const formatPhone = (digits: string) => {
     if (digits.length === 0) return ""
@@ -69,6 +85,7 @@ export default function PartnerRegisterPage() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) { setError(data.error ?? "Ошибка отправки"); return }
       setSubmitted(true)
+      logConsents(email.trim().toLowerCase(), marketingConsent)
     } catch {
       setError("Ошибка соединения. Попробуйте ещё раз.")
     } finally {
@@ -184,21 +201,49 @@ export default function PartnerRegisterPage() {
                     </p>
                   )}
 
-                  <label className="flex items-start gap-2 text-xs text-gray-600 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={consent}
-                      onChange={(e) => setConsent(e.target.checked)}
-                      className="mt-0.5 h-4 w-4 rounded border-gray-300 cursor-pointer flex-shrink-0"
-                    />
-                    <span>
-                      Я согласен на обработку персональных данных в соответствии с{" "}
-                      <a href="/privacy" target="_blank" className="underline hover:opacity-80">Политикой конфиденциальности</a>.
-                      {" "}Данные используются для целей регистрации и связи.
-                    </span>
-                  </label>
+                  <div className="space-y-2">
+                    <label className="flex items-start gap-2 text-xs text-gray-600 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={consent}
+                        onChange={(e) => setConsent(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 rounded border-gray-300 cursor-pointer flex-shrink-0"
+                      />
+                      <span>
+                        Даю согласие на обработку персональных данных в соответствии с{" "}
+                        <a href="/privacy" target="_blank" className="underline hover:opacity-80">Политикой обработки персональных данных</a>.
+                      </span>
+                    </label>
 
-                  <Button type="submit" className="w-full h-11 font-semibold" disabled={loading || !consent}>
+                    <label className="flex items-start gap-2 text-xs text-gray-600 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={marketingConsent}
+                        onChange={(e) => setMarketingConsent(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 rounded border-gray-300 cursor-pointer flex-shrink-0"
+                      />
+                      <span>
+                        Даю{" "}
+                        <a href="/marketing-consent" target="_blank" className="underline hover:opacity-80">согласие на получение информационной и рекламной рассылки</a>
+                        {" "}(необязательно).
+                      </span>
+                    </label>
+
+                    <label className="flex items-start gap-2 text-xs text-gray-600 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={oferta}
+                        onChange={(e) => setOferta(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 rounded border-gray-300 cursor-pointer flex-shrink-0"
+                      />
+                      <span>
+                        Принимаю условия{" "}
+                        <a href="/terms" target="_blank" className="underline hover:opacity-80">Оферты</a>.
+                      </span>
+                    </label>
+                  </div>
+
+                  <Button type="submit" className="w-full h-11 font-semibold" disabled={loading || !consent || !oferta}>
                     {loading ? (
                       <span className="flex items-center gap-2"><Spinner /> Отправляем...</span>
                     ) : (
