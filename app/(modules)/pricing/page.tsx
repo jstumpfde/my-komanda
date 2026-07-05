@@ -87,6 +87,8 @@ export default function PriceMonitorObjectsPage() {
       { id: "unit", default: 300, min: 160 },
       { id: "zk", default: 150, min: 80 },
       ...matrixPeriods.map((p) => ({ id: `p${p}`, default: 110, min: 80 })),
+      { id: "occ30", default: 110, min: 80 },
+      { id: "occ90", default: 110, min: 80 },
       { id: "checked", default: 130, min: 100 },
     ],
     [matrixPeriods],
@@ -340,6 +342,8 @@ export default function PriceMonitorObjectsPage() {
                       {matrixPeriods.map((p) => (
                         <col key={p} style={{ width: matrixCols.widths[`p${p}`] }} />
                       ))}
+                      <col style={{ width: matrixCols.widths.occ30 }} />
+                      <col style={{ width: matrixCols.widths.occ90 }} />
                       <col style={{ width: matrixCols.widths.checked }} />
                     </colgroup>
                     <TableHeader>
@@ -361,6 +365,14 @@ export default function PriceMonitorObjectsPage() {
                             />
                           </TableHead>
                         ))}
+                        <TableHead className="text-right relative" title="Заполняемость (оценка) — занятый день это бронь или ручной блок">
+                          Загрузка 30д
+                          <span className={RESIZER_CLASS} onMouseDown={(e) => matrixCols.onResizeStart("occ30", e)} />
+                        </TableHead>
+                        <TableHead className="text-right relative" title="Заполняемость (оценка) — занятый день это бронь или ручной блок">
+                          Загрузка 90д
+                          <span className={RESIZER_CLASS} onMouseDown={(e) => matrixCols.onResizeStart("occ90", e)} />
+                        </TableHead>
                         <TableHead className="relative">
                           Проверено
                           <span className={RESIZER_CLASS} onMouseDown={(e) => matrixCols.onResizeStart("checked", e)} />
@@ -412,6 +424,12 @@ export default function PriceMonitorObjectsPage() {
                               </TableCell>
                             )
                           })}
+                          <TableCell className="text-right">
+                            <OccupancyValue pct={row.occupancy?.["30"] ?? null} />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <OccupancyValue pct={row.occupancy?.["90"] ?? null} />
+                          </TableCell>
                           <TableCell className="text-muted-foreground whitespace-nowrap">
                             {row.lastCheckedAt ? formatRelativeTime(row.lastCheckedAt) : "ещё не проверялось"}
                           </TableCell>
@@ -493,6 +511,11 @@ export default function PriceMonitorObjectsPage() {
       />
     </SidebarProvider>
   )
+}
+
+function OccupancyValue({ pct }: { pct: number | null }) {
+  if (pct == null) return <span className="text-muted-foreground">—</span>
+  return <span className="font-medium">{pct}%</span>
 }
 
 function AddObjectDialog({

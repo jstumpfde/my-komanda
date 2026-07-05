@@ -58,8 +58,12 @@ export interface RunResult {
   competitorsSeen: number
   competitorsNew: number
   competitorSnapshots: number
+  occupancyHorizons?: number[]
   errors: string[]
 }
+
+/** Заполняемость (оценка) по горизонтам — ключи "30"/"90", значение % или null (нет данных) */
+export type OccupancyByHorizon = Record<string, number | null>
 
 export interface ComparisonPriceCell {
   total: number | null
@@ -111,6 +115,7 @@ export interface OverviewRow {
   isActive: boolean
   lastCheckedAt: string | null
   prices: Record<string, OverviewPriceCell>
+  occupancy: Record<string, number | null>
 }
 
 export interface OverviewData {

@@ -103,6 +103,7 @@ export default function PriceMonitorObjectDetailPage() {
     autoDiscover: boolean
     complexFilter: string | null
   } | null>(null)
+  const [occupancy, setOccupancy] = useState<Record<string, number | null> | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const [comparison, setComparison] = useState<ComparisonData | null>(null)
@@ -123,6 +124,7 @@ export default function PriceMonitorObjectDetailPage() {
       setObject(data.object)
       setCompanySettings(data.companySettings)
       setEffectiveSettings(data.effectiveSettings)
+      setOccupancy(data.occupancy ?? null)
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "Не удалось загрузить объект")
     }
@@ -312,6 +314,12 @@ export default function PriceMonitorObjectDetailPage() {
                     </Badge>
                   )}
                 </div>
+                {object && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Заполняемость (оценка): 30 дн — {occupancy?.["30"] != null ? `${occupancy["30"]}%` : "нет данных"} ·
+                    {" "}90 дн — {occupancy?.["90"] != null ? `${occupancy["90"]}%` : "нет данных"}
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <Button variant="outline" onClick={() => setSettingsOpen(true)}>

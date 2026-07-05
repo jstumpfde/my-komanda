@@ -4325,3 +4325,21 @@ export const priceMonitorSettings = pgTable("price_monitor_settings", {
 })
 export type PriceMonitorSettings    = typeof priceMonitorSettings.$inferSelect
 export type NewPriceMonitorSettings = typeof priceMonitorSettings.$inferInsert
+
+// Заполняемость (occupancy) объекта по календарю Airbnb — оценка (занятый день
+// = бронь ИЛИ ручной блок хозяина, календарь их не различает). competitorId
+// сейчас всегда NULL (наш объект); поле — задел на будущее сравнение с рынком.
+export const priceMonitorOccupancy = pgTable("price_monitor_occupancy", {
+  id:             uuid("id").primaryKey().defaultRandom(),
+  objectId:       uuid("object_id").notNull().references(() => priceMonitorObjects.id, { onDelete: "cascade" }),
+  competitorId:   uuid("competitor_id").references(() => priceMonitorCompetitors.id, { onDelete: "cascade" }), // NULL = наш объект
+  horizonDays:    integer("horizon_days").notNull(), // 30 | 90
+  occupiedDays:   integer("occupied_days").notNull(),
+  totalDays:      integer("total_days").notNull(),
+  occupancyPct:   numeric("occupancy_pct").notNull(),
+  capturedAt:     timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("price_monitor_occupancy_object_captured_idx").on(t.objectId, t.capturedAt),
+])
+export type PriceMonitorOccupancy    = typeof priceMonitorOccupancy.$inferSelect
+export type NewPriceMonitorOccupancy = typeof priceMonitorOccupancy.$inferInsert

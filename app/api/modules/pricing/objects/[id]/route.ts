@@ -6,6 +6,7 @@ import { db } from "@/lib/db"
 import { priceMonitorObjects, priceMonitorSettings, type PriceMonitorObjectSettings } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { getEffectiveSettings } from "@/lib/price-monitor/run-monitor"
+import { loadLatestOccupancy } from "@/lib/price-monitor/occupancy"
 
 async function loadOwnedObject(companyId: string, id: string) {
   const [object] = await db
@@ -30,8 +31,9 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
       .limit(1)
 
     const effectiveSettings = getEffectiveSettings(object, companySettings ?? null)
+    const occupancy = await loadLatestOccupancy(object.id)
 
-    return apiSuccess({ object, companySettings: companySettings ?? null, effectiveSettings })
+    return apiSuccess({ object, companySettings: companySettings ?? null, effectiveSettings, occupancy })
   } catch (err) {
     if (err instanceof Response) return err
     return apiError("Внутренняя ошибка сервера", 500)

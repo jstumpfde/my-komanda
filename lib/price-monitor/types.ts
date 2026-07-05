@@ -56,6 +56,18 @@ export interface HostListing {
   pictureUrl: string | null
 }
 
+export interface CalendarDay {
+  date: string // YYYY-MM-DD
+  available: boolean // false = занято: бронь ИЛИ ручной блок хозяина (сайдкар не различает)
+  minNights: number | null
+}
+
+export interface CalendarResponse {
+  days: CalendarDay[]
+  total: number
+  availableCount: number
+}
+
 export interface PriceSource {
   id: PriceSourceId
   /** Достать листинг по внешнему id (координаты, тип, вместимость) */
@@ -73,4 +85,6 @@ export interface PriceSource {
   parseListingUrl(url: string): string | null
   /** Все объявления хозяина по одному known room id (для привязки аккаунта) */
   hostListings(roomExternalId: string, currency?: string): Promise<HostListing[]>
+  /** Календарь доступности листинга (для расчёта заполняемости — оценка, блок≠бронь) */
+  getCalendar(externalId: string): Promise<CalendarResponse>
 }

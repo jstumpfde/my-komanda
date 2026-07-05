@@ -6,6 +6,7 @@ import { and, desc, eq, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { priceMonitorObjects, priceMonitorSettings, priceMonitorSnapshots } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { loadLatestOccupancy } from "@/lib/price-monitor/occupancy"
 
 const DEFAULT_PERIODS = [1, 3, 5, 7, 10, 14, 15, 25, 28, 30]
 const DEFAULT_CURRENCY = "RUB"
@@ -22,6 +23,7 @@ export interface OverviewRow {
   isActive: boolean
   lastCheckedAt: string | null
   prices: Record<string, OverviewPriceCell>
+  occupancy: Record<string, number | null>
 }
 
 export interface OverviewData {
@@ -88,6 +90,8 @@ export async function GET() {
           }
         }
 
+        const occupancy = await loadLatestOccupancy(object.id)
+
         return {
           objectId: object.id,
           name: object.name,
@@ -95,6 +99,7 @@ export async function GET() {
           isActive: object.isActive,
           lastCheckedAt: object.lastCheckedAt ? object.lastCheckedAt.toISOString() : null,
           prices,
+          occupancy,
         }
       }),
     )

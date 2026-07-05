@@ -3,7 +3,9 @@ import { db } from "@/lib/db"
 import {
   priceMonitorCompetitors,
   priceMonitorObjects,
+  priceMonitorOccupancy,
   priceMonitorSettings,
+  type NewPriceMonitorOccupancy,
   type NewPriceMonitorSnapshot,
   type PriceMonitorObject,
   type PriceMonitorSettings,
@@ -25,6 +27,9 @@ const PLATFORM_DEFAULTS = {
 
 // Пауза между запросами к сайдкару — не давим на Airbnb с одного IP.
 const THROTTLE_MS = 1500
+// Горизонты расчёта заполняемости (occupancy) — «загружены ли мы» на
+// ближайшие 30 и 90 дней.
+const OCCUPANCY_HORIZONS = [30, 90]
 // Заезд для среза цен по умолчанию: завтра (то, что гость видит при брони
 // «на днях»); переопределяется settings_json.leadDays объекта.
 const DEFAULT_CHECKIN_LEAD_DAYS = 1
@@ -108,6 +113,30 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+// Считает заполняемость на горизонт дней вперёд от сегодня (включительно) по
+// дням календаря сайдкара. totalDays — сколько дней окна реально нашлись в
+// календаре (сайдкар может отдавать не все дни горизонта); если 0 — горизонт
+// пропускается (недостаточно данных).
+export function computeOccupancyForHorizon(
+  days: Array<{ date: string; available: boolean }>,
+  todayIso: string,
+  horizonDays: number,
+): { occupiedDays: number; totalDays: number; occupancyPct: number } | null {
+  const endIso = addDaysIso(todayIso, horizonDays - 1)
+  const windowDays = days.filter((d) => d.date >= todayIso && d.date <= endIso)
+  const totalDays = windowDays.length
+  if (totalDays === 0) return null
+  const occupiedDays = windowDays.filter((d) => !d.available).length
+  const occupancyPct = Math.round((occupiedDays / totalDays) * 100)
+  return { occupiedDays, totalDays, occupancyPct }
+}
+
+function addDaysIso(dateIso: string, days: number): string {
+  const d = new Date(`${dateIso}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
 export interface RunResult {
   objectId: string
   periods: number[]
@@ -115,6 +144,7 @@ export interface RunResult {
   competitorsSeen: number
   competitorsNew: number
   competitorSnapshots: number
+  occupancyHorizons: number[]
   errors: string[]
 }
 
@@ -140,6 +170,7 @@ export async function runObjectMonitor(object: PriceMonitorObject): Promise<RunR
     competitorsSeen: 0,
     competitorsNew: 0,
     competitorSnapshots: 0,
+    occupancyHorizons: [],
     errors: [],
   }
 
@@ -255,6 +286,35 @@ export async function runObjectMonitor(object: PriceMonitorObject): Promise<RunR
       result.errors.push(`период ${nights}н, поиск конкурентов: ${err instanceof Error ? err.message : err}`)
     }
     await sleep(THROTTLE_MS)
+  }
+
+  // Заполняемость (occupancy) нашего объекта из календаря — «загружены ли
+  // мы» на ближайшие 30/90 дней. Сбой календаря НЕ валит прогон (цены уже
+  // собраны выше). Не считаем для конкурентов — только наш объект.
+  await sleep(THROTTLE_MS)
+  try {
+    const calendar = await source.getCalendar(object.externalId)
+    const todayIso = now.toISOString().slice(0, 10)
+    const occupancyRows: NewPriceMonitorOccupancy[] = []
+    for (const horizonDays of OCCUPANCY_HORIZONS) {
+      const occ = computeOccupancyForHorizon(calendar.days, todayIso, horizonDays)
+      if (!occ) continue
+      occupancyRows.push({
+        objectId: object.id,
+        competitorId: null,
+        horizonDays,
+        occupiedDays: occ.occupiedDays,
+        totalDays: occ.totalDays,
+        occupancyPct: occ.occupancyPct.toString(),
+        capturedAt,
+      })
+      result.occupancyHorizons.push(horizonDays)
+    }
+    if (occupancyRows.length > 0) {
+      await db.insert(priceMonitorOccupancy).values(occupancyRows)
+    }
+  } catch (err) {
+    result.errors.push(`заполняемость (календарь): ${err instanceof Error ? err.message : err}`)
   }
 
   if (snapshots.length > 0) {
