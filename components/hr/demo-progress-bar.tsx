@@ -239,6 +239,10 @@ export function DemoProgressBar({
       : "bg-transparent"
   // "Не начато" — когда нет данных вообще ИЛИ кандидат ещё не сделал ни одного шага.
   // Если демо пройдено по ответам — это НЕ «не начато».
+  // Юрий 05.07: в списке кандидатов (variant="list") noProgress рендерится как
+  // «—» (единый пустой формат со всеми другими пустыми ячейками колонок),
+  // БЕЗ прогресс-точек; «Не начато» ушло в title-тултип. Канбан (variant=
+  // "kanban") НЕ трогаем — там подпись "Не начато" остаётся как была.
   const noProgress = !completedByAnswers
     && (!hasData || (hasFraction && cur === 0) || (!hasFraction && (pct ?? 0) === 0))
   // Возвращаем процент вместо дроби — completedBlocks может быть подсчитан
@@ -278,6 +282,16 @@ export function DemoProgressBar({
         || demoProgress.hasAudioAnswer === true
         || (Array.isArray(demoProgress.ctaClicks) && demoProgress.ctaClicks.length > 0))
     : hasVideoVizitka === true
+
+  // Юрий 05.07: демо не начато → единый пустой формат «—» (как в других
+  // пустых ячейках списка), без сегментов-точек. «Не начато» — в тултип
+  // (title на обёртке ячейки в list-view.tsx уже показывает общее описание
+  // колонки; здесь даём title конкретно на «—», чтобы не потерять смысл).
+  if (noProgress) {
+    return (
+      <span className="text-muted-foreground/40 text-sm" title="Не начато">—</span>
+    )
+  }
 
   return (
     <div className={cn("flex flex-col items-center gap-1 w-full max-w-[105px] mx-auto", className)}>

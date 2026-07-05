@@ -507,11 +507,14 @@ export function ListView({
     }
 
     if (showProgress) {
-      // Демо — сегменты-«шаги». Ширина намеренно узкая: DemoProgressBar сам
-      // ограничен max-w-[105px] и адаптируется под количество точек (tot).
+      // Демо — сегменты-«шаги». DemoProgressBar сам ограничен max-w-[105px] и
+      // адаптируется под количество точек (tot); контенту без прогресса
+      // теперь достаточно ширины «—» (05.07, «Не начато» ушло в тултип).
+      // 80px — замер (Inter): заголовок «Демо» 32.2px + иконка сортировки
+      // 14px + gap 6px ≈ 52px, плюс запас под легко читаемую полосу сегментов.
       list.push({
         id: "progress",
-        gridWidth: "minmax(56px, 0.7fr)",
+        gridWidth: "80px",
         header: (
           <SortHeader
             label="Демо"
@@ -600,7 +603,11 @@ export function ListView({
                     <span className="text-muted-foreground/40 text-xs">—</span>
                   )}
                   {hasParts && (
-                    <span className="mt-0.5 text-[9px] leading-none text-muted-foreground/70 tabular-nums">
+                    // Юрий 05.07: было text-[9px] text-muted-foreground/70 —
+                    // едва читалось в обеих темах. 10px + secondary-foreground
+                    // (обычный контраст, не приглушённый /70) — заметно, но
+                    // компактно (колонка 68px не раздувается).
+                    <span className="mt-0.5 text-[10px] leading-none text-secondary-foreground font-medium tabular-nums">
                       {partsAnswered}/{partsTotal}
                     </span>
                   )}
@@ -628,7 +635,10 @@ export function ListView({
       // (отправлен) → «—» (не было).
       list.push({
         id: "testScore",
-        gridWidth: "56px",
+        // 52px — замер (Inter): заголовок «Тест» 28.2px + иконка 14px + gap
+        // 6px ≈ 48px (связывающий минимум); контент (балл w-8=32px или
+        // самый длинный статус «ошибка» ~39px) уже, заголовок — потолок.
+        gridWidth: "52px",
         header: (
           <SortHeader
             label="Тест"
@@ -718,10 +728,12 @@ export function ListView({
     }
 
     if (showNextInterview) {
-      // Интервью — ближайшее (дата/время)
+      // Интервью — ближайшее (дата/время). 90px — замер (Inter): контент
+      // icon(14px)+gap(2px)+«05.07»(32.5px,13px/medium)+ml-1(4px)+«12:34»
+      // (32.5px,13px) ≈ 85px; заголовок «Интервью» 61.3px+icon14+gap6 ≈ 81px.
       list.push({
         id: "nextInterview",
-        gridWidth: "minmax(92px, 0.9fr)",
+        gridWidth: "90px",
         header: <SortHeader label="Интервью" sortKey="nextInterview" sort={sort} onToggle={handleSort} align="center" />,
         renderCell: (candidate) => {
           const iso = candidate.nextInterviewAt
@@ -741,10 +753,11 @@ export function ListView({
     }
 
     if (showSalary) {
-      // Зарплата — ужата (длинных чисел редко > 7 симв)
+      // Зарплата — 84px, замер (Inter): заголовок «Зарплата» 58.8px+icon14+
+      // gap6 ≈ 79px (связывающий минимум); контент «2 000 000 ₽» ≈ 73px влезает.
       list.push({
         id: "salary",
-        gridWidth: "minmax(88px, 1fr)",
+        gridWidth: "84px",
         header: <SortHeader label="Зарплата" sortKey="salary" sort={sort} onToggle={handleSort} align="center" />,
         renderCell: (candidate) => {
           // Salary — single expected value (валюта берётся из
@@ -776,10 +789,12 @@ export function ListView({
     }
 
     if (showResponseDate) {
-      // Дата — "DD.MM.YY"
+      // Дата — "DD.MM.YY". 76px — замер (Inter): контент "05.07.26" (54.5px)
+      // + маркер повторного отклика "×2" (gap-0.5 2px + ~9px, 10px/600) ≈ 66px;
+      // запас на тултип-иконку курсора/hover не требуется отдельно.
       list.push({
         id: "responseDate",
-        gridWidth: "minmax(62px, 0.7fr)",
+        gridWidth: "76px",
         header: <SortHeader label="Дата" sortKey="responseDate" sort={sort} onToggle={handleSort} align="center" />,
         renderCell: (candidate, ctx) => {
           // Повторный отклик: показываем дату ПОСЛЕДНЕГО отклика + маркер «×2»,
@@ -811,10 +826,16 @@ export function ListView({
       })
     }
 
-    // Статус — сужен (всегда показывается)
+    // Статус (всегда показывается). 150px — замер (Inter): самый длинный
+    // платформенный лейбл стадии «Предварительный отказ» (127.8px, 11px/500)
+    // + px-2 паддинг бейджа (16px) ≈ 144px — раньше при 104px он вылезал за
+    // пределы ячейки (не обрезаясь — whitespace-nowrap без overflow-hidden).
+    // Кастомные лейблы HR (customLabel per-vacancy) длиннее — за пределом не
+    // обрезаем (whitespace-nowrap), это осознанный компромисс: 99% реальных
+    // подписей короче, а обрезание платформенных названий стадий недопустимо.
     list.push({
       id: "status",
-      gridWidth: "minmax(104px, 1.1fr)",
+      gridWidth: "150px",
       header: <SortHeader label="Статус" sortKey="status" sort={sort} onToggle={handleSort} align="center" />,
       renderCell: (candidate) => (
         <div className="text-center">
@@ -850,13 +871,15 @@ export function ListView({
     })
 
     if (showSource) {
-      // Источник — фикс (значки "hh"/"av" короткие). Ширина чуть увеличена
-      // (72→84px), чтобы влезло полное слово «Источник» (было обрублено
-      // «Источн.», нечитаемо клиенту); таблица горизонтально скроллится, так
-      // что это безопасно для layout.
+      // Источник — фикс. 92px (05.07, было 84px): заголовок «Источник» с
+      // иконкой сортировки — 78.6px по факту (замер Inter), при 84px оставалось
+      // ~2.7px с каждой стороны — заголовок выглядел прижатым к правому краю
+      // (визуально не на одной оси с бейджем-контентом, у которого от природы
+      // много воздуха). 92px даёт заголовку тот же комфортный запас (~7px с
+      // каждой стороны), что и у других колонок.
       list.push({
         id: "source",
-        gridWidth: "84px",
+        gridWidth: "92px",
         header: (
           <SortHeader
             label="Источник"
@@ -924,13 +947,19 @@ export function ListView({
   }
 
   // ─── gridTemplateColumns из закреплённых + упорядоченных движимых ──────────
-  // ☐ — 24px, justify-end. ★ — 28px, justify-center.
-  // -ml-3 на ★ и Кандидате схлопывает gap до ~4px edge-to-edge.
-  // Кандидат: minmax(200px, 2fr) — вмещает ФИО, длиннее → «…».
+  // Единый механизм зазора (Юрий 05.07): везде gap-4 (16px, CSS gap на grid-
+  // контейнере) — раньше часть «зазора» пряталась в -ml-3 (маскировали gap-3=
+  // 12px под чекбоксом/звездой/именем), из-за чего visually зазоры были
+  // неровными. -ml-3 убраны, ширины колонок ниже — по фактическому контенту
+  // (см. комментарии у каждой колонки), БЕЗ доп. паддингов внутри ячеек.
+  // ☐ — 24px, justify-end. ★ — 28px, justify-center (иконка 16px + hover-паддинг).
+  // Кандидат — единственная эластичная колонка (fr): всё освободившееся от
+  // сужения остальных колонок место достаётся ФИО. minmax(200px, 1fr) —
+  // вмещает ФИО, длиннее → «…» (truncate уже был и остаётся).
   const cols: string[] = []
   if (selectionEnabled) cols.push("24px")               // ☐ — фикс (компактнее)
   cols.push("28px")                                     // ★ — фикс (w-7, ужато)
-  cols.push("minmax(200px, 2fr)")                       // Кандидат — закреплён
+  cols.push("minmax(200px, 1fr)")                       // Кандидат — закреплён, единственный fr
   for (const c of orderedColumns) cols.push(c.gridWidth)
   if (showActions) {
     // База: 3 иконки (advance/reject/open) = 80px, +28px на «Запланировать интервью».
@@ -943,10 +972,12 @@ export function ListView({
   // из minmax(Npx, …)). Нужна, чтобы при узком экране сетка ПЕРЕПОЛНЯЛА контейнер
   // и включался горизонтальный скролл (контейнер overflow-x-auto), а не обрезалась.
   // На широком экране сетка тянется по fr (minWidth — только нижняя граница).
+  // +(cols.length-1)*16 — реальные CSS-gap между треками (gap-4=16px, единый
+  // зазор везде, см. комментарий выше), не константа «на глаз».
   const minTableWidth = cols.reduce((sum, c) => {
     const m = c.match(/minmax\(\s*(\d+)px/) ?? c.match(/^(\d+)px$/)
     return sum + (m ? parseInt(m[1], 10) : 0)
-  }, 0) + 16 // запас на gap/паддинги
+  }, 0) + Math.max(0, cols.length - 1) * 16
   const gridStyle = { gridTemplateColumns: cols.join(" "), minWidth: `${minTableWidth}px` }
 
   // ─── Selection helpers ──────────────────────────────────────────────────
@@ -1021,7 +1052,7 @@ export function ListView({
         onDragEnd={handleDragEnd}
       >
         <div
-          className="grid gap-3 pl-1 pr-4 py-2.5 bg-muted/60 border-b border-border text-[13px] font-medium text-muted-foreground tracking-normal items-center"
+          className="grid gap-4 pl-1 pr-4 py-2.5 bg-muted/60 border-b border-border text-[13px] font-medium text-muted-foreground tracking-normal items-center"
           style={gridStyle}
         >
           {selectionEnabled && (
@@ -1033,7 +1064,7 @@ export function ListView({
               />
             </div>
           )}
-          <div className="flex items-center justify-center -ml-3">
+          <div className="flex items-center justify-center">
             <button
               type="button"
               onClick={() => handleSort("favorite")}
@@ -1052,7 +1083,7 @@ export function ListView({
               ))}
             </button>
           </div>
-          <div className="-ml-3">
+          <div>
             {onSortChange ? (
               <SortHeader label="Кандидат" sortKey="name" sort={sort} onToggle={handleSort} align="left" />
             ) : (
@@ -1098,7 +1129,7 @@ export function ListView({
             <div
               key={candidate.id}
               className={cn(
-                "grid gap-3 pl-1 pr-4 items-center hover:bg-muted/40 transition-colors min-h-[56px] text-[14px] cursor-pointer",
+                "grid gap-4 pl-1 pr-4 items-center hover:bg-muted/40 transition-colors min-h-[56px] text-[14px] cursor-pointer",
                 i % 2 === 0 ? "" : "bg-muted/20",
                 isSelected && "bg-primary/5 hover:bg-primary/10"
               )}
@@ -1120,7 +1151,7 @@ export function ListView({
               )}
 
               {/* Favorite */}
-              <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-center -ml-3">
+              <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-center">
                 <button
                   type="button"
                   onClick={() => onToggleFavorite?.(candidate.id, !candidate.isFavorite)}
@@ -1132,7 +1163,7 @@ export function ListView({
               </div>
 
               {/* Name + experience */}
-              <div className="flex items-center gap-3 min-w-0 -ml-3">
+              <div className="flex items-center gap-3 min-w-0">
                 <CandidateAvatar
                   candidateId={candidate.id}
                   name={candidate.name}
