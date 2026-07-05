@@ -44,6 +44,18 @@ export interface SearchNearbyParams {
   currency?: string
 }
 
+export interface HostListing {
+  externalId: string
+  name: string | null
+  roomType: string | null
+  propertyType: string | null
+  isSuperHost: boolean | null
+  isNewListing: boolean | null
+  rating: number | null
+  reviewCount: number | null
+  pictureUrl: string | null
+}
+
 export interface PriceSource {
   id: PriceSourceId
   /** Достать листинг по внешнему id (координаты, тип, вместимость) */
@@ -59,4 +71,6 @@ export interface PriceSource {
   ): Promise<PriceQuote>
   /** Разобрать URL объявления → externalId (null, если это не ссылка источника) */
   parseListingUrl(url: string): string | null
+  /** Все объявления хозяина по одному known room id (для привязки аккаунта) */
+  hostListings(roomExternalId: string, currency?: string): Promise<HostListing[]>
 }

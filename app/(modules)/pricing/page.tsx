@@ -19,7 +19,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { LineChart, Building2, Loader2, Plus } from "lucide-react"
+import { LineChart, Building2, Loader2, Plus, Link2 } from "lucide-react"
 import { toast } from "sonner"
 import { formatRelativeTime } from "@/components/pricing/format"
 import type { PriceMonitorObject } from "@/components/pricing/types"
@@ -28,6 +28,7 @@ export default function PriceMonitorObjectsPage() {
   const [objects, setObjects] = useState<PriceMonitorObject[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [hostDialogOpen, setHostDialogOpen] = useState(false)
 
   const load = useCallback(async () => {
     setError(null)
@@ -62,10 +63,16 @@ export default function PriceMonitorObjectsPage() {
                   Сравнение цен ваших объектов размещения с конкурентами рядом
                 </p>
               </div>
-              <Button onClick={() => setDialogOpen(true)} className="mt-3 shrink-0">
-                <Plus className="h-4 w-4" />
-                Добавить объект
-              </Button>
+              <div className="mt-3 shrink-0 flex items-center gap-2">
+                <Button variant="outline" onClick={() => setHostDialogOpen(true)}>
+                  <Link2 className="h-4 w-4" />
+                  Привязать аккаунт Airbnb
+                </Button>
+                <Button onClick={() => setDialogOpen(true)}>
+                  <Plus className="h-4 w-4" />
+                  Добавить объект
+                </Button>
+              </div>
             </div>
 
             {error && (
@@ -89,6 +96,15 @@ export default function PriceMonitorObjectsPage() {
                   actionLabel="Добавить объект"
                   onAction={() => setDialogOpen(true)}
                 />
+                <div className="pb-6 text-center">
+                  <button
+                    type="button"
+                    onClick={() => setHostDialogOpen(true)}
+                    className="text-sm text-violet-600 hover:underline"
+                  >
+                    или привяжите весь аккаунт Airbnb
+                  </button>
+                </div>
               </div>
             )}
 
@@ -146,6 +162,15 @@ export default function PriceMonitorObjectsPage() {
         onOpenChange={setDialogOpen}
         onCreated={() => {
           setDialogOpen(false)
+          load()
+        }}
+      />
+
+      <HostImportDialog
+        open={hostDialogOpen}
+        onOpenChange={setHostDialogOpen}
+        onImported={() => {
+          setHostDialogOpen(false)
           load()
         }}
       />
@@ -254,6 +279,97 @@ function AddObjectDialog({
           <Button onClick={handleSubmit} disabled={submitting}>
             {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
             Добавить
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function HostImportDialog({
+  open,
+  onOpenChange,
+  onImported,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onImported: () => void
+}) {
+  const [url, setUrl] = useState("")
+  const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setUrl("")
+    }
+  }, [open])
+
+  const handleSubmit = async () => {
+    if (!url.trim()) {
+      toast.error("Вставьте ссылку на объявление Airbnb")
+      return
+    }
+    setSubmitting(true)
+    try {
+      const res = await fetch("/api/modules/pricing/host-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: url.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error ?? "Не удалось импортировать объекты")
+        return
+      }
+      if (data.warning) {
+        toast.info(data.warning)
+      } else {
+        toast.success(
+          `Импортировано объектов: ${data.imported}${data.skipped ? `, пропущено уже добавленных: ${data.skipped}` : ""}`,
+        )
+      }
+      onImported()
+    } catch {
+      toast.error("Не удалось импортировать объекты")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Привязать аккаунт Airbnb</DialogTitle>
+          <DialogDescription>
+            Вставьте ссылку на любое ваше объявление — импортируем все объекты вашего аккаунта
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="host-url">Ссылка на любое ваше объявление</Label>
+            <Input
+              id="host-url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://www.airbnb.ru/rooms/..."
+              disabled={submitting}
+            />
+          </div>
+          {submitting && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Импорт может занять до минуты
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+            Отмена
+          </Button>
+          <Button onClick={handleSubmit} disabled={submitting}>
+            {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+            Импортировать
           </Button>
         </DialogFooter>
       </DialogContent>
