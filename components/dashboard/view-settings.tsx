@@ -14,6 +14,7 @@ import { useAuth } from "@/lib/auth"
 import { isOwnerEmail } from "@/lib/owner"
 import { CANDIDATE_COLUMN_TOGGLES, type CardDisplaySettings } from "./card-settings"
 import type { ViewMode } from "./kanban-board"
+import { COLUMN_WIDTHS_STORAGE_KEY, COLUMN_WIDTHS_RESET_EVENT } from "./list-view"
 
 interface ViewSettingsProps {
   settings: CardDisplaySettings
@@ -45,6 +46,13 @@ const VIEW_MODES: Array<{ value: ViewMode; label: string }> = [
 // Добавилась/убралась колонка → тумблер меняется автоматически.
 const DISPLAY_TOGGLES = CANDIDATE_COLUMN_TOGGLES
 
+// Тумблеры, у которых НЕТ колонки в режиме «Список» (list-view.tsx читает
+// settings.showScore, но не рендерит под него колонку — см. комментарий у
+// showScore в card-settings.tsx). Такому тумблеру нечего включать/выключать
+// в Списке → скрываем именно там (per-viewMode фильтр, решение Юрия 05.07).
+// В Канбане/Плитках/Воронке showScore управляет реальным бейджем — оставляем.
+const LIST_MODE_HIDDEN_KEYS: ReadonlySet<keyof CardDisplaySettings> = new Set(["showScore"])
+
 export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeChange, testTableHref, onReset, availableKeys }: ViewSettingsProps) {
   const { role, user } = useAuth()
   // Виды Воронка/Канбан/Плитки пока обкатываются — показываем только владельцу-
@@ -63,11 +71,24 @@ export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeC
     onSettingsChange(next)
   }
 
+  // Сброс ручных ширин колонок списка (ресайз мышью, Юрий 05.07). Ширины
+  // живут в localStorage внутри list-view.tsx (per-user, тот же механизм,
+  // что порядок колонок); ViewSettings — сосед ListView по дереву компонентов,
+  // не родитель/ребёнок, поэтому чистим общий ключ + шлём CustomEvent, который
+  // слушает useColumnWidths в list-view.tsx (см. комментарий там же).
+  const handleResetColumnWidths = () => {
+    try { window.localStorage.removeItem(COLUMN_WIDTHS_STORAGE_KEY) } catch { /* no-op */ }
+    window.dispatchEvent(new Event(COLUMN_WIDTHS_RESET_EVENT))
+  }
+
   // Тумблеры колонок: если задан availableKeys — показываем только актуальные
   // для этой вакансии колонки; иначе (null/undefined) — все (прежнее поведение).
-  const visibleToggles = availableKeys
-    ? DISPLAY_TOGGLES.filter(({ key }) => availableKeys.has(key))
-    : DISPLAY_TOGGLES
+  // Плюс per-viewMode фильтр: в «Списке» скрываем тумблеры без колонки там
+  // (сейчас только showScore — см. LIST_MODE_HIDDEN_KEYS), в остальных режимах
+  // список не сужаем.
+  const visibleToggles = DISPLAY_TOGGLES
+    .filter(({ key }) => (availableKeys ? availableKeys.has(key) : true))
+    .filter(({ key }) => !(viewMode === "list" && LIST_MODE_HIDDEN_KEYS.has(key)))
 
   const activeLabel = VIEW_MODES.find((m) => m.value === viewMode)?.label
 
@@ -158,6 +179,20 @@ export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeC
                 </div>
               ))}
             </div>
+            {/* Ширины колонок ресайзятся мышью только в «Списке» (list-view.tsx) —
+                пункт сброса показываем только там, чтобы не плодить мёртвый UI
+                в Канбане/Плитках/Воронке, где ресайза нет. */}
+            {viewMode === "list" && (
+              <button
+                type="button"
+                onClick={handleResetColumnWidths}
+                className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                title="Вернуть колонкам списка ширину по умолчанию (после ресайза мышью)"
+              >
+                <RotateCcw className="w-3 h-3" />
+                Сбросить ширины колонок
+              </button>
+            )}
           </div>
         </div>
       </PopoverContent>

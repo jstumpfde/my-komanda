@@ -339,7 +339,7 @@ function AuthenticatedDashboard() {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <CandidateFilters filters={filters} onFiltersChange={setFilters} candidates={columns.flatMap((c) => c.candidates)} />
-                <CardSettings settings={cardSettings} onSettingsChange={setCardSettings} />
+                <CardSettings settings={cardSettings} onSettingsChange={setCardSettings} viewMode={viewMode} />
                 <Button size="sm" className="h-9" onClick={() => setAddDialogOpen(true)}>
                   <Plus className="size-4 mr-2" />
                   Добавить
