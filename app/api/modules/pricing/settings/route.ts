@@ -13,7 +13,7 @@ const DEFAULTS = {
   currency: "RUB",
 }
 
-const ALLOWED_CURRENCIES = new Set(["RUB", "EUR", "USD"])
+const ALLOWED_CURRENCIES = new Set(["RUB", "EUR", "USD", "THB"])
 
 export async function GET() {
   try {
@@ -75,7 +75,7 @@ export async function PUT(req: NextRequest) {
       return apiError("runAtTime должен быть в формате HH:MM", 400)
     }
     if (typeof body.currency !== "string" || !ALLOWED_CURRENCIES.has(body.currency)) {
-      return apiError("currency должен быть одним из: RUB, EUR, USD", 400)
+      return apiError("currency должен быть одним из: RUB, EUR, USD, THB", 400)
     }
 
     const now = new Date()

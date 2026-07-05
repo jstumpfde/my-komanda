@@ -31,6 +31,7 @@ const CURRENCIES = [
   { value: "RUB", label: "₽ Рубль (RUB)" },
   { value: "EUR", label: "€ Евро (EUR)" },
   { value: "USD", label: "$ Доллар (USD)" },
+  { value: "THB", label: "฿ Тайский бат (THB)" },
 ]
 
 export default function PriceMonitorSettingsPage() {
