@@ -41,19 +41,23 @@ function gradeQuiz(content: unknown, answers: number[] | undefined): number | nu
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireAcademyAccess()
+    const user = await requireAcademyAccess()
     const { id: courseId } = await params
     const body = await req.json()
     const { enrollmentId, lessonId, answers, timeSpentSec } = body
 
     if (!enrollmentId || !lessonId) return apiError("enrollmentId и lessonId обязательны", 400)
 
-    // Целостность (guard-находка 05.07): enrollment и lesson обязаны
-    // принадлежать курсу из URL — иначе чужой enrollmentId смешивает
-    // знаменатели прогресса и может выдать сертификат не того курса.
+    // Целостность (guard-находки 05.07): enrollment и lesson обязаны
+    // принадлежать курсу из URL, а enrollment — самому вызывающему (иначе
+    // можно закрывать уроки/получать сертификат за чужую запись).
     const [enrollment] = await db.select()
       .from(courseEnrollments)
-      .where(and(eq(courseEnrollments.id, enrollmentId), eq(courseEnrollments.courseId, courseId)))
+      .where(and(
+        eq(courseEnrollments.id, enrollmentId),
+        eq(courseEnrollments.courseId, courseId),
+        eq(courseEnrollments.employeeId, user.id),
+      ))
 
     if (!enrollment) return apiError("Запись не найдена в этом курсе", 404)
 

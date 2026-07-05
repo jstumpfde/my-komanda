@@ -3089,7 +3089,9 @@ export function CandidateDrawer({
                               </div>
 
                               <div className="space-y-1">
-                                <Label className="text-[11px] text-muted-foreground">Решение</Label>
+                                {/* Не «Решение»: реальные решения (двигают стадию) — кнопки скоркарты
+                                    выше; это косметическая метка на записи календаря (guard-минор 05.07) */}
+                                <Label className="text-[11px] text-muted-foreground">Впечатление по итогам</Label>
                                 <Select value={decisionValue || undefined} onValueChange={(v) => setDecisionValue(v as InterviewDecisionValue)}>
                                   <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Не выбрано" /></SelectTrigger>
                                   <SelectContent>
