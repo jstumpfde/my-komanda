@@ -101,6 +101,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       name: string
       url: string | null
       distanceM: number | null
+      complexName: string | null
       isIgnored: boolean
       prices: Record<string, { total: number | null; perNight: number | null; available: boolean }>
       _minPerNight: number | null
@@ -114,6 +115,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       name: object.name,
       url: object.url,
       distanceM: null,
+      complexName: object.complexName,
       isIgnored: false,
       prices: {},
       _minPerNight: null,
@@ -131,6 +133,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
           name: competitor?.name ?? "Конкурент",
           url: competitor?.url ?? null,
           distanceM: competitor?.distanceM ?? null,
+          complexName: competitor?.complexName ?? null,
           isIgnored: competitor?.isIgnored ?? false,
           prices: {},
           _minPerNight: null,

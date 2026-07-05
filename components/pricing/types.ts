@@ -73,6 +73,7 @@ export interface ComparisonRow {
   name: string
   url: string
   distanceM: number | null
+  complexName: string | null
   isIgnored: boolean
   prices: Record<string, ComparisonPriceCell>
 }

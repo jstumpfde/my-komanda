@@ -73,7 +73,7 @@ import type {
   RunResult,
 } from "@/components/pricing/types"
 
-const DEFAULT_PERIOD_OPTIONS = [7, 14, 28, 30]
+const DEFAULT_PERIOD_OPTIONS = [5, 7, 10, 14, 25, 28, 30]
 const INTERVAL_PRESETS = [
   { label: "Каждые 6 часов", minutes: 360 },
   { label: "Каждые 12 часов", minutes: 720 },
@@ -366,6 +366,7 @@ export default function PriceMonitorObjectDetailPage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead className="min-w-[220px]">Объект</TableHead>
+                          <TableHead>ЖК</TableHead>
                           <TableHead>Дистанция</TableHead>
                           {periods.map((p) => (
                             <TableHead key={p} className="text-right min-w-[130px]">
@@ -384,6 +385,7 @@ export default function PriceMonitorObjectDetailPage() {
                                 <span className="truncate">{sortedRows.ownRow.name}</span>
                               </div>
                             </TableCell>
+                            <TableCell className="text-muted-foreground">{sortedRows.ownRow.complexName ?? "—"}</TableCell>
                             <TableCell className="text-muted-foreground">—</TableCell>
                             {periods.map((p) => (
                               <PriceCell key={p} cell={sortedRows.ownRow!.prices[String(p)]} currency={currency} />
@@ -393,7 +395,7 @@ export default function PriceMonitorObjectDetailPage() {
                         )}
                         {sortedRows.ownRow && (
                           <TableRow className="bg-primary/5 border-b-2 border-border">
-                            <TableCell colSpan={2} className="text-xs text-muted-foreground">
+                            <TableCell colSpan={3} className="text-xs text-muted-foreground">
                               Отклонение от медианы конкурентов
                             </TableCell>
                             {periods.map((p) => (
@@ -406,7 +408,7 @@ export default function PriceMonitorObjectDetailPage() {
                         )}
 
                         <TableRow className="bg-muted/30">
-                          <TableCell className="font-medium text-muted-foreground" colSpan={2}>
+                          <TableCell className="font-medium text-muted-foreground" colSpan={3}>
                             Медиана конкурентов
                           </TableCell>
                           {periods.map((p) => (
@@ -581,6 +583,7 @@ function CompetitorRow({
           )}
         </div>
       </TableCell>
+      <TableCell className="text-muted-foreground">{row.complexName ?? "—"}</TableCell>
       <TableCell className="text-muted-foreground">
         {row.distanceM != null ? `${Math.round(row.distanceM)} м` : "—"}
       </TableCell>
@@ -650,6 +653,7 @@ function ObjectSettingsSheet({
   companySettings: { radiusM: number; periods: number[]; intervalMinutes: number; runAtTime: string; currency: string } | null
   onSaved: () => void
 }) {
+  const [complexName, setComplexName] = useState("")
   const [radiusM, setRadiusM] = useState("")
   const [periods, setPeriods] = useState<number[]>([])
   const [customPeriod, setCustomPeriod] = useState("")
@@ -669,6 +673,7 @@ function ObjectSettingsSheet({
   useEffect(() => {
     if (open && object) {
       const s = object.settingsJson ?? {}
+      setComplexName(object.complexName ?? "")
       setRadiusM(s.radiusM != null ? String(s.radiusM) : "")
       setPeriods(s.periods ?? [])
       setComplexFilter(s.complexFilter ?? "")
@@ -710,7 +715,7 @@ function ObjectSettingsSheet({
       const res = await fetch(`/api/modules/pricing/objects/${objectId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ settingsJson }),
+        body: JSON.stringify({ complexName: complexName.trim() || null, settingsJson }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -737,6 +742,16 @@ function ObjectSettingsSheet({
           </SheetDescription>
         </SheetHeader>
         <SheetBody className="space-y-5">
+          <div className="space-y-1.5">
+            <Label htmlFor="set-complex-name">ЖК (жилой комплекс)</Label>
+            <Input
+              id="set-complex-name"
+              value={complexName}
+              onChange={(e) => setComplexName(e.target.value)}
+              placeholder="Название жилого комплекса"
+            />
+          </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="set-radius">Радиус поиска конкурентов (м)</Label>
             <Input

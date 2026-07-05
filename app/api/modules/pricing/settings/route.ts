@@ -7,7 +7,7 @@ import { requireCompany, requireDirector, apiError, apiSuccess } from "@/lib/api
 
 const DEFAULTS = {
   radiusM: 1000,
-  periods: [7, 14, 28, 30],
+  periods: [5, 7, 10, 14, 25, 28, 30],
   intervalMinutes: 1440,
   runAtTime: "06:00",
   currency: "RUB",

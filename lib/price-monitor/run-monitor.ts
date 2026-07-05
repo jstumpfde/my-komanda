@@ -10,11 +10,12 @@ import {
   priceMonitorSnapshots,
 } from "@/lib/db/schema"
 import { getPriceSource } from "./sources/airbnb"
+import { extractComplexName } from "./complex-name"
 
 // Платформенные дефолты — нижний уровень каскада платформа→компания→объект.
 const PLATFORM_DEFAULTS = {
   radiusM: 1000,
-  periods: [7, 14, 28, 30],
+  periods: [5, 7, 10, 14, 25, 28, 30],
   intervalMinutes: 1440,
   runAtTime: "06:00" as string | null,
   currency: "RUB",
@@ -217,6 +218,7 @@ export async function runObjectMonitor(object: PriceMonitorObject): Promise<RunR
               lat: listing.lat,
               lng: listing.lng,
               distanceM: listing.distanceM,
+              complexName: extractComplexName(listing.name),
               discovered: "auto",
               lastSeenAt: capturedAt,
             })

@@ -27,7 +27,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { LineChart, Building2, Loader2, Plus, Link2, LayoutGrid, Table2 } from "lucide-react"
+import { LineChart, Building2, Loader2, Plus, Link2, LayoutGrid, Table2, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 import { formatRelativeTime } from "@/components/pricing/format"
 import type { PriceMonitorObject } from "@/components/pricing/types"
@@ -37,7 +37,8 @@ export default function PriceMonitorObjectsPage() {
   const [error, setError] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [hostDialogOpen, setHostDialogOpen] = useState(false)
-  const [view, setView] = useState<"cards" | "table">("cards")
+  const [view, setView] = useState<"cards" | "table">("table")
+  const [backfilling, setBackfilling] = useState(false)
 
   const load = useCallback(async () => {
     setError(null)
@@ -54,6 +55,24 @@ export default function PriceMonitorObjectsPage() {
   useEffect(() => {
     load()
   }, [load])
+
+  const handleBackfillComplex = async () => {
+    setBackfilling(true)
+    try {
+      const res = await fetch("/api/modules/pricing/backfill-complex", { method: "POST" })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(data.error ?? "Не удалось заполнить ЖК")
+        return
+      }
+      toast.success(`ЖК заполнены: объектов ${data.objectsUpdated}, конкурентов ${data.competitorsUpdated}`)
+      load()
+    } catch {
+      toast.error("Не удалось заполнить ЖК")
+    } finally {
+      setBackfilling(false)
+    }
+  }
 
   return (
     <SidebarProvider defaultOpen={true}>
@@ -96,6 +115,19 @@ export default function PriceMonitorObjectsPage() {
                       <Table2 className="h-4 w-4" />
                     </Button>
                   </div>
+                )}
+                {objects !== null && objects.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleBackfillComplex}
+                    disabled={backfilling}
+                    title="Заполнить пустые ЖК эвристикой по названию объявления"
+                  >
+                    {backfilling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                    Заполнить ЖК автоматически
+                  </Button>
                 )}
                 <Button variant="outline" onClick={() => setHostDialogOpen(true)}>
                   <Link2 className="h-4 w-4" />

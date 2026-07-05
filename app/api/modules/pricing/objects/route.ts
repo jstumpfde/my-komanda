@@ -7,6 +7,7 @@ import { db } from "@/lib/db"
 import { priceMonitorCompetitors, priceMonitorObjects, priceMonitorSnapshots } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { airbnbSource } from "@/lib/price-monitor/sources/airbnb"
+import { extractComplexName } from "@/lib/price-monitor/complex-name"
 
 export async function GET() {
   try {
@@ -84,16 +85,23 @@ export async function POST(req: NextRequest) {
 
     let lat: number | null = null
     let lng: number | null = null
+    let resolvedTitle: string | null = null
     let warning: string | undefined
 
     try {
       const resolved = await airbnbSource.resolveListing(externalId)
       lat = resolved.lat
       lng = resolved.lng
+      resolvedTitle = resolved.title
     } catch (err) {
       warning = "Не удалось получить координаты объекта (сервис недоступен) — объект создан без координат, авто-поиск конкурентов будет недоступен до следующего успешного прогона."
       console.error("[pricing/objects] resolveListing failed:", err instanceof Error ? err.message : err)
     }
+
+    // ЖК: если пользователь указал вручную — используем его; иначе best-effort
+    // эвристика по заголовку листинга (resolved.title), а если и его нет — по
+    // введённому названию объекта.
+    const complexName = body.complexName?.trim() || extractComplexName(resolvedTitle ?? name)
 
     const [object] = await db
       .insert(priceMonitorObjects)
@@ -105,7 +113,7 @@ export async function POST(req: NextRequest) {
         url,
         lat,
         lng,
-        complexName: body.complexName?.trim() || null,
+        complexName: complexName || null,
       })
       .returning()
 

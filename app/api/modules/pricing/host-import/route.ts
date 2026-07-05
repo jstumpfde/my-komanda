@@ -7,6 +7,7 @@ import { db } from "@/lib/db"
 import { priceMonitorObjects } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { airbnbSource, fetchAirbnbHostListings } from "@/lib/price-monitor/sources/airbnb"
+import { extractComplexName } from "@/lib/price-monitor/complex-name"
 
 export const maxDuration = 300
 
@@ -74,6 +75,7 @@ export async function POST(req: NextRequest) {
         url: `https://www.airbnb.com/rooms/${listing.externalId}`,
         lat,
         lng,
+        complexName: extractComplexName(listing.name),
       })
       imported++
     }
