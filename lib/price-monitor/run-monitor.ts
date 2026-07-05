@@ -2,9 +2,11 @@ import { and, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import {
   priceMonitorCompetitors,
+  priceMonitorListingStats,
   priceMonitorObjects,
   priceMonitorOccupancy,
   priceMonitorSettings,
+  type NewPriceMonitorListingStats,
   type NewPriceMonitorOccupancy,
   type NewPriceMonitorSnapshot,
   type PriceMonitorObject,
@@ -13,6 +15,7 @@ import {
 } from "@/lib/db/schema"
 import { getPriceSource } from "./sources/airbnb"
 import { extractComplexName } from "./complex-name"
+import type { ListingDetails } from "./types"
 
 // Платформенные дефолты — нижний уровень каскада платформа→компания→объект.
 const PLATFORM_DEFAULTS = {
@@ -30,6 +33,9 @@ const THROTTLE_MS = 1500
 // Горизонты расчёта заполняемости (occupancy) — «загружены ли мы» на
 // ближайшие 30 и 90 дней.
 const OCCUPANCY_HORIZONS = [30, 90]
+// /details на КАЖДОГО конкурента дорого (их сотни) — тянем только по нашему
+// объекту + топ-N ближайших НЕ игнорируемых конкурентов (по distanceM возр.).
+const LISTING_STATS_TOP_N_COMPETITORS = 10
 // Заезд для среза цен по умолчанию: завтра (то, что гость видит при брони
 // «на днях»); переопределяется settings_json.leadDays объекта.
 const DEFAULT_CHECKIN_LEAD_DAYS = 1
@@ -137,6 +143,31 @@ function addDaysIso(dateIso: string, days: number): string {
   return d.toISOString().slice(0, 10)
 }
 
+// Собранные /details сайдкара → строка price_monitor_listing_stats.
+// competitorId null = наш объект.
+function toListingStatsRow(
+  objectId: string,
+  competitorId: string | null,
+  details: ListingDetails,
+  capturedAt: Date,
+): NewPriceMonitorListingStats {
+  return {
+    objectId,
+    competitorId,
+    photosCount: details.photosCount,
+    ratingOverall: details.ratingOverall?.toString() ?? null,
+    ratingCleanliness: details.ratingCleanliness?.toString() ?? null,
+    ratingLocation: details.ratingLocation?.toString() ?? null,
+    ratingValue: details.ratingValue?.toString() ?? null,
+    reviewCount: details.reviewCount,
+    isSuperHost: details.isSuperHost,
+    isGuestFavorite: details.isGuestFavorite,
+    homeTier: details.homeTier,
+    amenitiesCount: details.amenitiesCount,
+    capturedAt,
+  }
+}
+
 export interface RunResult {
   objectId: string
   periods: number[]
@@ -145,6 +176,7 @@ export interface RunResult {
   competitorsNew: number
   competitorSnapshots: number
   occupancyHorizons: number[]
+  statsCollected: number
   errors: string[]
 }
 
@@ -171,6 +203,7 @@ export async function runObjectMonitor(object: PriceMonitorObject): Promise<RunR
     competitorsNew: 0,
     competitorSnapshots: 0,
     occupancyHorizons: [],
+    statsCollected: 0,
     errors: [],
   }
 
@@ -315,6 +348,43 @@ export async function runObjectMonitor(object: PriceMonitorObject): Promise<RunR
     }
   } catch (err) {
     result.errors.push(`заполняемость (календарь): ${err instanceof Error ? err.message : err}`)
+  }
+
+  // Привлекательность (listing stats: фото/рейтинги/отзывы/tier) — дорогой
+  // вызов сайдкара на каждого конкурента, поэтому берём только наш объект +
+  // топ-N ближайших НЕ игнорируемых конкурентов (по distanceM возр., у кого
+  // расстояние вообще известно). Сбой одной карточки не валит прогон.
+  await sleep(THROTTLE_MS)
+  const statsRows: NewPriceMonitorListingStats[] = []
+  try {
+    const ownDetails = await source.getDetails(object.externalId, eff.currency)
+    statsRows.push(toListingStatsRow(object.id, null, ownDetails, capturedAt))
+    result.statsCollected++
+  } catch (err) {
+    result.errors.push(`привлекательность, наш объект: ${err instanceof Error ? err.message : err}`)
+  }
+  await sleep(THROTTLE_MS)
+
+  const topCompetitors = Array.from(byExternalId.values())
+    .filter((c) => !c.isIgnored && c.distanceM != null)
+    .sort((a, b) => (a.distanceM ?? Infinity) - (b.distanceM ?? Infinity))
+    .slice(0, LISTING_STATS_TOP_N_COMPETITORS)
+
+  for (const competitor of topCompetitors) {
+    try {
+      const details = await source.getDetails(competitor.externalId, eff.currency)
+      statsRows.push(toListingStatsRow(object.id, competitor.id, details, capturedAt))
+      result.statsCollected++
+    } catch (err) {
+      result.errors.push(
+        `привлекательность, конкурент ${competitor.name ?? competitor.externalId}: ${err instanceof Error ? err.message : err}`,
+      )
+    }
+    await sleep(THROTTLE_MS)
+  }
+
+  if (statsRows.length > 0) {
+    await db.insert(priceMonitorListingStats).values(statsRows)
   }
 
   if (snapshots.length > 0) {

@@ -11,6 +11,7 @@ import {
 } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { getEffectiveSettings } from "@/lib/price-monitor/run-monitor"
+import { computeAttractivenessIndex, loadLatestStats } from "@/lib/price-monitor/listing-stats"
 
 const MAX_CAPTURES = 30
 
@@ -86,6 +87,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
         rows: [],
         medians: {},
         deltas: {},
+        attractiveness: { rows: [], hasData: false },
       })
     }
 
@@ -224,6 +226,31 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       marketPos[key] = marketPosition(ownPerNight, activePrices)
     }
 
+    // Привлекательность — «почему конкурента показывают чаще нас». Только
+    // строки, по которым реально есть последний срез listing-stats (нет
+    // данных до первого прогона с этой фичи — тогда hasData=false).
+    const latestStats = await loadLatestStats(object.id)
+    const attractivenessInputs = Array.from(latestStats.entries()).map(([key, stat]) => ({
+      key,
+      photosCount: stat.photosCount,
+      ratingOverall: stat.ratingOverall != null ? Number(stat.ratingOverall) : null,
+      reviewCount: stat.reviewCount,
+    }))
+    const indexByKey = computeAttractivenessIndex(attractivenessInputs)
+
+    const attractivenessRows = Array.from(latestStats.entries()).map(([key, stat]) => ({
+      key,
+      name: key === "own" ? object.name : (competitorById.get(key)?.name ?? "Конкурент"),
+      photosCount: stat.photosCount,
+      ratingOverall: stat.ratingOverall != null ? Number(stat.ratingOverall) : null,
+      reviewCount: stat.reviewCount,
+      isSuperHost: stat.isSuperHost,
+      isGuestFavorite: stat.isGuestFavorite,
+      amenitiesCount: stat.amenitiesCount,
+      index: indexByKey.get(key) ?? 0,
+    }))
+    attractivenessRows.sort((a, b) => b.index - a.index)
+
     return apiSuccess({
       capturedAt,
       captures,
@@ -234,6 +261,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       deltas,
       percentiles,
       marketPos,
+      attractiveness: {
+        rows: attractivenessRows,
+        hasData: attractivenessRows.length > 0,
+      },
     })
   } catch (err) {
     if (err instanceof Response) return err

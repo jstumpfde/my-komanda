@@ -2,6 +2,7 @@ import { sidecarPost } from "../sidecar-client"
 import type {
   CalendarResponse,
   HostListing,
+  ListingDetails,
   NearbyListing,
   PriceQuote,
   PriceSource,
@@ -108,6 +109,13 @@ export const airbnbSource: PriceSource = {
   async getCalendar(externalId: string): Promise<CalendarResponse> {
     return sidecarPost<CalendarResponse>("/calendar", {
       room_id: externalId,
+    })
+  },
+
+  async getDetails(externalId: string, currency?: string): Promise<ListingDetails> {
+    return sidecarPost<ListingDetails>("/details", {
+      room_id: externalId,
+      currency: currency ?? "THB",
     })
   },
 }

@@ -72,6 +72,7 @@ import type {
   ComparisonData,
   ComparisonRow,
   RunResult,
+  AttractivenessData,
 } from "@/components/pricing/types"
 
 const DEFAULT_PERIOD_OPTIONS = [1, 3, 5, 7, 10, 14, 15, 25, 28, 30]
@@ -506,6 +507,8 @@ export default function PriceMonitorObjectDetailPage() {
                     </Table>
                   </CardContent>
                 </Card>
+
+                <AttractivenessSection attractiveness={comparison.attractiveness} />
               </>
             )}
           </div>
@@ -656,6 +659,78 @@ function MarketBandBadge({
     >
       {meta.short} · {pos.pricierThanPct}%
     </Badge>
+  )
+}
+
+function AttractivenessSection({ attractiveness }: { attractiveness?: AttractivenessData }) {
+  return (
+    <Card>
+      <CardContent className="overflow-x-auto">
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold">Привлекательность — почему показывают чаще</h2>
+        </div>
+
+        {(!attractiveness || !attractiveness.hasData) && (
+          <div className="rounded-xl border border-dashed border-border bg-card/50 p-6 text-sm text-muted-foreground">
+            Данные привлекательности появятся после следующего прогона объекта.
+          </div>
+        )}
+
+        {attractiveness?.hasData && (
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Объект</TableHead>
+                  <TableHead className="text-right">Фото</TableHead>
+                  <TableHead className="text-right">Рейтинг</TableHead>
+                  <TableHead className="text-center">Суперхост</TableHead>
+                  <TableHead className="text-center">Гость-фаворит</TableHead>
+                  <TableHead className="text-right">Удобства</TableHead>
+                  <TableHead className="text-right">Индекс</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {attractiveness.rows.map((row) => (
+                  <TableRow key={row.key} className={cn(row.key === "own" && "bg-primary/5")}>
+                    <TableCell className="font-medium overflow-hidden">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {row.key === "own" && <Badge className="shrink-0">Наш</Badge>}
+                        <span className="truncate">{row.name}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">{row.photosCount ?? "—"}</TableCell>
+                    <TableCell className="text-right">
+                      {row.ratingOverall != null ? (
+                        <>
+                          <div className="font-medium">{row.ratingOverall.toFixed(2)}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {row.reviewCount != null ? `${row.reviewCount} отзывов` : "нет отзывов"}
+                          </div>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center">{row.isSuperHost ? "✓" : "—"}</TableCell>
+                    <TableCell className="text-center">{row.isGuestFavorite ? "✓" : "—"}</TableCell>
+                    <TableCell className="text-right">{row.amenitiesCount ?? "—"}</TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant="outline" className="text-base font-semibold px-2.5 py-1">
+                        {row.index}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <p className="text-xs text-muted-foreground mt-3">
+              Индекс — эвристика: рейтинг 40% + фото 35% + отзывы 25%.
+            </p>
+          </>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 

@@ -94,6 +94,25 @@ export interface ComparisonData {
   deltas: Record<string, number | null>
   percentiles?: Record<string, { p25: number | null; p50: number | null; p75: number | null }>
   marketPos?: Record<string, { pricierThanPct: number; band: MarketBand } | null>
+  attractiveness?: AttractivenessData
+}
+
+/** Строка таблицы привлекательности — "own" (наш объект) либо id конкурента */
+export interface AttractivenessRow {
+  key: string
+  name: string
+  photosCount: number | null
+  ratingOverall: number | null
+  reviewCount: number | null
+  isSuperHost: boolean | null
+  isGuestFavorite: boolean | null
+  amenitiesCount: number | null
+  index: number
+}
+
+export interface AttractivenessData {
+  rows: AttractivenessRow[]
+  hasData: boolean
 }
 
 export interface Competitor {

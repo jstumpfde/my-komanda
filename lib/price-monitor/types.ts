@@ -68,6 +68,29 @@ export interface CalendarResponse {
   availableCount: number
 }
 
+// Характеристики листинга («привлекательность») — фото, рейтинги по осям
+// (7 штук), отзывы, суперхост, гость-фаворит, tier, удобства. Дорогой вызов
+// сайдкара — берём только по нашему объекту + топ-N ближайших конкурентов.
+export interface ListingDetails {
+  externalId: string
+  title: string | null
+  roomType: string | null
+  personCapacity: number | null
+  photosCount: number | null
+  amenitiesCount: number | null
+  isSuperHost: boolean | null
+  isGuestFavorite: boolean | null
+  homeTier: number | null
+  ratingOverall: number | null
+  ratingCleanliness: number | null
+  ratingLocation: number | null
+  ratingValue: number | null
+  ratingAccuracy: number | null
+  ratingCommunication: number | null
+  ratingCheckin: number | null
+  reviewCount: number | null
+}
+
 export interface PriceSource {
   id: PriceSourceId
   /** Достать листинг по внешнему id (координаты, тип, вместимость) */
@@ -87,4 +110,6 @@ export interface PriceSource {
   hostListings(roomExternalId: string, currency?: string): Promise<HostListing[]>
   /** Календарь доступности листинга (для расчёта заполняемости — оценка, блок≠бронь) */
   getCalendar(externalId: string): Promise<CalendarResponse>
+  /** Детали листинга для индекса привлекательности (фото/рейтинги/отзывы/tier) */
+  getDetails(externalId: string, currency?: string): Promise<ListingDetails>
 }
