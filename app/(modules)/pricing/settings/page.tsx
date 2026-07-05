@@ -243,8 +243,13 @@ export default function PriceMonitorSettingsPage() {
                         type="time"
                         value={runAtTime}
                         onChange={(e) => setRunAtTime(e.target.value)}
+                        disabled={parseInt(intervalMinutes, 10) < 1440}
                       />
-                      <p className="text-xs text-muted-foreground">МСК</p>
+                      <p className="text-xs text-muted-foreground">
+                        {parseInt(intervalMinutes, 10) < 1440
+                          ? "Не используется при интервале меньше суток"
+                          : "МСК"}
+                      </p>
                     </div>
                   </div>
 

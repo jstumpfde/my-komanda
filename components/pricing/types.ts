@@ -46,6 +46,7 @@ export interface ObjectDetail {
   settingsJson?: {
     radiusM?: number
     periods?: number[]
+    leadDays?: number
     complexFilter?: string | null
     schedule?: { intervalMinutes?: number | null; runAtTime?: string | null }
     autoDiscover?: boolean

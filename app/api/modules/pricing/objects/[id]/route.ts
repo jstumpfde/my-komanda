@@ -56,6 +56,14 @@ function validateSettingsJson(input: unknown): { ok: true; value: PriceMonitorOb
     value.radiusM = n
   }
 
+  if (raw.leadDays !== undefined) {
+    const n = raw.leadDays
+    if (typeof n !== "number" || !Number.isInteger(n) || n < 0 || n > 90) {
+      return { ok: false, error: "leadDays должен быть целым числом от 0 до 90" }
+    }
+    value.leadDays = n
+  }
+
   if (raw.periods !== undefined) {
     if (!Array.isArray(raw.periods) || raw.periods.length === 0) {
       return { ok: false, error: "periods должен быть непустым массивом чисел" }

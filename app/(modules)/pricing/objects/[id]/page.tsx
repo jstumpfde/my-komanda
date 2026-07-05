@@ -654,10 +654,17 @@ function ObjectSettingsSheet({
   const [periods, setPeriods] = useState<number[]>([])
   const [customPeriod, setCustomPeriod] = useState("")
   const [complexFilter, setComplexFilter] = useState("")
+  const [leadDays, setLeadDays] = useState("")
   const [intervalMinutes, setIntervalMinutes] = useState("")
   const [runAtTime, setRunAtTime] = useState("")
   const [autoDiscover, setAutoDiscover] = useState(true)
   const [saving, setSaving] = useState(false)
+
+  // runAtTime работает только при интервале ≥ суток (см. isDue в run-monitor)
+  const effectiveInterval = intervalMinutes.trim()
+    ? parseInt(intervalMinutes, 10)
+    : (companySettings?.intervalMinutes ?? 1440)
+  const runAtTimeApplies = !Number.isFinite(effectiveInterval) || effectiveInterval >= 1440
 
   useEffect(() => {
     if (open && object) {
@@ -665,6 +672,7 @@ function ObjectSettingsSheet({
       setRadiusM(s.radiusM != null ? String(s.radiusM) : "")
       setPeriods(s.periods ?? [])
       setComplexFilter(s.complexFilter ?? "")
+      setLeadDays(s.leadDays != null ? String(s.leadDays) : "")
       setIntervalMinutes(s.schedule?.intervalMinutes != null ? String(s.schedule.intervalMinutes) : "")
       setRunAtTime(s.schedule?.runAtTime ?? "")
       setAutoDiscover(s.autoDiscover ?? true)
@@ -691,6 +699,7 @@ function ObjectSettingsSheet({
       const settingsJson: Record<string, unknown> = {}
       if (radiusM.trim()) settingsJson.radiusM = parseInt(radiusM, 10)
       if (periods.length > 0) settingsJson.periods = periods
+      if (leadDays.trim()) settingsJson.leadDays = parseInt(leadDays, 10)
       settingsJson.complexFilter = complexFilter.trim() || null
       settingsJson.autoDiscover = autoDiscover
       const schedule: Record<string, unknown> = {}
@@ -788,6 +797,22 @@ function ObjectSettingsSheet({
             />
           </div>
 
+          <div className="space-y-1.5">
+            <Label htmlFor="set-leaddays">Заезд через (дней)</Label>
+            <Input
+              id="set-leaddays"
+              type="number"
+              min={0}
+              max={90}
+              value={leadDays}
+              onChange={(e) => setLeadDays(e.target.value)}
+              placeholder="1"
+            />
+            <p className="text-xs text-muted-foreground">
+              За сколько дней вперёд смотреть дату заезда при срезе цен (пусто = 1 день)
+            </p>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="set-interval">Интервал проверки</Label>
@@ -834,8 +859,11 @@ function ObjectSettingsSheet({
                 value={runAtTime}
                 onChange={(e) => setRunAtTime(e.target.value)}
                 placeholder={companySettings?.runAtTime}
+                disabled={!runAtTimeApplies}
               />
-              <p className="text-xs text-muted-foreground">МСК</p>
+              <p className="text-xs text-muted-foreground">
+                {runAtTimeApplies ? "МСК" : "Не используется при интервале меньше суток"}
+              </p>
             </div>
           </div>
 
