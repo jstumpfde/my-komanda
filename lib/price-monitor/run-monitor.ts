@@ -24,8 +24,9 @@ const PLATFORM_DEFAULTS = {
 
 // Пауза между запросами к сайдкару — не давим на Airbnb с одного IP.
 const THROTTLE_MS = 1500
-// Заезд для среза цен: завтра (то, что кандидат-гость видит при брони «на днях»).
-const CHECKIN_LEAD_DAYS = 1
+// Заезд для среза цен по умолчанию: завтра (то, что гость видит при брони
+// «на днях»); переопределяется settings_json.leadDays объекта.
+const DEFAULT_CHECKIN_LEAD_DAYS = 1
 
 export interface EffectiveMonitorSettings {
   radiusM: number
@@ -154,9 +155,11 @@ export async function runObjectMonitor(object: PriceMonitorObject): Promise<RunR
 
   const complexFilter = eff.complexFilter?.trim().toLowerCase() || null
 
+  const leadDays = object.settingsJson?.leadDays ?? DEFAULT_CHECKIN_LEAD_DAYS
+
   for (const nights of eff.periods) {
-    const checkin = addDays(now, CHECKIN_LEAD_DAYS)
-    const checkout = addDays(now, CHECKIN_LEAD_DAYS + nights)
+    const checkin = addDays(now, leadDays)
+    const checkout = addDays(now, leadDays + nights)
 
     // 1. Наша цена за период
     try {

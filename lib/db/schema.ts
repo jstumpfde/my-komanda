@@ -4234,6 +4234,7 @@ export type NewConsentLog = typeof consentLog.$inferInsert
 export interface PriceMonitorObjectSettings {
   radiusM?: number
   periods?: number[]                 // напр. [7, 14, 28, 30] — периоды проживания (ночей)
+  leadDays?: number                  // за сколько дней вперёд заезд при срезе цен (дефолт 1)
   complexFilter?: string             // фильтр по названию ЖК для авто-поиска конкурентов
   schedule?: {
     intervalMinutes?: number | null  // интервал между прогонами; null = только по runAtTime
