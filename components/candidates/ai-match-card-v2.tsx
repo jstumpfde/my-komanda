@@ -1,7 +1,9 @@
 "use client"
 
-// Группа 25: карточка AI Match v2 с разбивкой по критериям + A/B сравнение v1/v2.
-// Рендерится в candidate-drawer.tsx, табе "AI", над legacy v1 деталями.
+// Группа 25: карточка разбора по критериям Портрета (осевой скоринг v2) + A/B
+// сравнение v1/v2. Рендерится в candidate-drawer.tsx, табе «Портрет» (value="rubric").
+// Балл здесь подписан «Осевой балл (справочно)» — единственная пользовательская
+// оценка называется «Портрет» (resumeScore), см. [[portrait-unified-scoring-redesign]].
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -61,7 +63,7 @@ export function AiMatchCardV2({ details, scoreV1, scoreV2 }: AiMatchCardV2Props)
             {decision.label}
           </Badge>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">AI Match</span>
+            <span className="text-xs text-muted-foreground">Осевой балл (справочно)</span>
             <AiScoreBadge score={details.score} size="md" />
           </div>
         </div>

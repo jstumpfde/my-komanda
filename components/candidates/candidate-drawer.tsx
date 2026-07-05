@@ -458,14 +458,9 @@ function scoreTone(score: number) {
 function ScoresPanel({ candidate }: { candidate: ApiCandidate }) {
   const [openKey, setOpenKey] = useState<string | null>(null)
   const resumeScore = candidate.resumeScore ?? null
-  const portraitScore = candidate.aiScoreV2 ?? null
   const answersScore = candidate.demoAnswersScore ?? null
   const testScore = candidate.testScore ?? null
 
-  const v2 = candidate.aiScoreV2Details ?? null
-  const matchedMust = Array.isArray(v2?.matched_must_have) ? v2!.matched_must_have : []
-  const missedMust = Array.isArray(v2?.missed_must_have) ? v2!.missed_must_have : []
-  const dealBreakers = Array.isArray(v2?.triggered_deal_breakers) ? v2!.triggered_deal_breakers : []
   const answerDetails = Array.isArray(candidate.demoAnswersDetails) ? candidate.demoAnswersDetails : []
   const resumeSummary = typeof candidate.aiSummary === "string" ? candidate.aiSummary.trim() : ""
   // Осевой разбор резюме (spec.scoringMode="axes"): оси score→баллы + штрафы + summary.
@@ -474,15 +469,13 @@ function ScoresPanel({ candidate }: { candidate: ApiCandidate }) {
   const breakdownPenalties = Array.isArray(breakdown?.penalties) ? breakdown!.penalties.filter(p => p.triggered) : []
   const breakdownSummary = typeof breakdown?.summary === "string" ? breakdown.summary.trim() : ""
 
-  // Ни одной оценки — панель не показываем.
-  if (resumeScore == null && portraitScore == null && answersScore == null && testScore == null) {
+  // Ни одной оценки — панель не показываем. (aiScoreV2/осевой балл сюда больше не
+  // входит 05.07 — своей карточки в этом ряду у него больше нет, см. cards ниже.)
+  if (resumeScore == null && answersScore == null && testScore == null) {
     return null
   }
 
   const resumeHasDetails = resumeSummary.length > 0 || breakdownAxes.length > 0 || breakdownPenalties.length > 0 || breakdownSummary.length > 0
-  const portraitHasDetails = matchedMust.length > 0 || missedMust.length > 0 || dealBreakers.length > 0
-  // Балл есть, но сравнивать не с чем (нет matched/missed/deal-breakers) → критерии Портрета не заданы, балл не различает.
-  const portraitNoCriteria = portraitScore != null && !portraitHasDetails
   const answersHasDetails = answerDetails.length > 0
   const testStatusLabel: Record<string, string> = {
     submitted: "сдан", in_progress: "пишет", opened: "перешёл", sent: "отправлен", failed: "ошибка отправки",
@@ -535,47 +528,6 @@ function ScoresPanel({ candidate }: { candidate: ApiCandidate }) {
     </>
   )
 
-  const portraitDetailsNode = (
-    <>
-      {matchedMust.length > 0 && (
-        <div className="space-y-1">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-success flex items-center gap-1.5">
-            <CheckCircle2 className="w-3.5 h-3.5" /> Совпало (must-have)
-          </div>
-          <ul className="space-y-0.5">
-            {matchedMust.map((m, i) => (
-              <li key={i} className="flex gap-1.5"><span className="text-success">•</span><span>{m}</span></li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {missedMust.length > 0 && (
-        <div className="space-y-1">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-warning flex items-center gap-1.5">
-            <XCircle className="w-3.5 h-3.5" /> Не хватает (must-have)
-          </div>
-          <ul className="space-y-0.5">
-            {missedMust.map((m, i) => (
-              <li key={i} className="flex gap-1.5"><span className="text-warning">•</span><span>{m}</span></li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {dealBreakers.length > 0 && (
-        <div className="space-y-1">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-destructive flex items-center gap-1.5">
-            <AlertTriangle className="w-3.5 h-3.5" /> Сработали deal-breakers
-          </div>
-          <ul className="space-y-0.5">
-            {dealBreakers.map((m, i) => (
-              <li key={i} className="flex gap-1.5"><span className="text-destructive">•</span><span>{m}</span></li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </>
-  )
-
   const answersDetailsNode = (
     <ul className="space-y-2">
       {answerDetails.map((d, i) => (
@@ -595,10 +547,11 @@ function ScoresPanel({ candidate }: { candidate: ApiCandidate }) {
     score: number; hasDetails: boolean; details: React.ReactNode
   }
   const cards = ([
-    { key: "resume", title: "AI-резюме", caption: "Резюме против требований (на входе)", score: resumeScore, hasDetails: resumeHasDetails, details: resumeDetailsNode },
-    { key: "portrait", title: "AI-Портрет",
-      caption: portraitNoCriteria ? "Критерии Портрета не заданы — балл справочный" : "Совпадение с критериями Портрета",
-      score: portraitScore, hasDetails: portraitHasDetails, details: portraitDetailsNode },
+    // Пользовательская сущность оценки — ОДНА, «Портрет» (resumeScore). Отдельная
+    // карточка «AI-Портрет» (осевой балл v2, aiScoreV2) убрана из этого ряда 05.07 —
+    // консолидация Юрия: осевой балл больше не светится как вторая оценка в шапке,
+    // он остался справочно внутри таба «Портрет» (AiMatchCardV2 → «Осевой балл (справочно)»).
+    { key: "resume", title: "Портрет", caption: "Оценка по Портрету вакансии", score: resumeScore, hasDetails: resumeHasDetails, details: resumeDetailsNode },
     { key: "answers", title: "Анкета", caption: "Качество ответов в анкете демо", score: answersScore, hasDetails: answersHasDetails, details: answersDetailsNode },
     { key: "test", title: "Тест", caption: testHint ? `Тестовое задание (${testHint})` : "Результат тестового задания", score: testScore, hasDetails: false, details: null },
     // Сюда же встанет карточка «Интервью», когда появится балл интервью.
@@ -1772,7 +1725,7 @@ export function CandidateDrawer({
     }
   }
 
-  // ── Переоценить AI-Портрет (per-criteria, v2) ────────────────────────────
+  // ── Переоценить разбор по Портрету (осевой балл, per-criteria v2) ────────
   // Вызывает rescore-роут с dimension=portrait: он запускает scoreCandidateV2
   // и персистирует aiScoreV2/aiScoreV2Details/aiScoredAt.
   const handlePortraitRescore = async () => {
@@ -1798,9 +1751,9 @@ export function CandidateDrawer({
           aiScoreV2Details: fresh.aiScoreV2Details ?? prev.aiScoreV2Details,
           aiScoredAt:       fresh.aiScoredAt ?? prev.aiScoredAt,
         } : prev)
-        toast.success(`AI-Портрет переоценён: ${fresh.aiScoreV2 ?? "?"}/100`)
+        toast.success(`Осевой балл переоценён: ${fresh.aiScoreV2 ?? "?"}/100`)
       } else {
-        toast.success("AI-Портрет переоценён")
+        toast.success("Осевой балл переоценён")
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Ошибка переоценки")
@@ -2030,7 +1983,7 @@ export function CandidateDrawer({
             <TabsList className="flex flex-wrap justify-start gap-1 mx-3 mt-3 shrink-0 h-auto">
               <TabsTrigger value="contacts" className="text-[10px] px-1 py-1.5">Резюме</TabsTrigger>
               <TabsTrigger value="chat" className="text-[10px] px-1 py-1.5">Чат hh</TabsTrigger>
-              <TabsTrigger value="rubric" className="text-[10px] px-1 py-1.5">AI-Портрет</TabsTrigger>
+              <TabsTrigger value="rubric" className="text-[10px] px-1 py-1.5">Портрет</TabsTrigger>
               <TabsTrigger value="answers" className="text-[10px] px-1 py-1.5">Анкета</TabsTrigger>
               <TabsTrigger value="test" className="text-[10px] px-1 py-1.5">Тест</TabsTrigger>
               <TabsTrigger value="calls" className="text-[10px] px-1 py-1.5">Каналы</TabsTrigger>
@@ -2646,11 +2599,11 @@ export function CandidateDrawer({
 
 
 
-              {/* ── AI-Портрет ───────────────────────────────────── */}
+              {/* ── Портрет (разбор по критериям Портрета) ────────────────── */}
               <TabsContent value="rubric" className="px-6 py-4 pb-28 mt-0 space-y-4">
                 {/* Шапка с кнопкой переоценки */}
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">AI-Портрет</p>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Портрет</p>
                   <Button
                     size="sm"
                     variant="outline"

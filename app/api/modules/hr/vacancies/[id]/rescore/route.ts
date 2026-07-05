@@ -1,8 +1,8 @@
 // POST /api/modules/hr/vacancies/[id]/rescore
 // Переоценка выделенных кандидатов вакансии по выбранному параметру:
-//   resume — AI-резюме (resume_score), portrait — AI-Портрет (ai_score_v2),
-//   test — AI-тест (test_submissions.ai_score), answers — оценка ответов демо,
-//   all — все параметры (кроме answers).
+//   resume — Портрет (resume_score, пользовательская оценка), portrait — осевой
+//   балл справочно (ai_score_v2), test — AI-тест (test_submissions.ai_score),
+//   answers — оценка ответов демо, all — все параметры (кроме answers).
 // Body: { candidateIds: string[], dimension: 'resume'|'portrait'|'test'|'answers'|'all' }
 // Реальные AI-вызовы (стоят денег) → работаем ТОЛЬКО по выделенным, максимум 50 за раз.
 import { NextRequest } from "next/server"

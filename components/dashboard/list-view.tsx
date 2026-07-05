@@ -276,9 +276,8 @@ export function ListView({
   const showResponseDate = settings.showResponseDate !== false
   const showCity         = settings.showCity
   const showScore        = settings.showScore          // AI-оцен. (оценка анкеты)
-  const showResumeScore  = settings.showResumeScore !== false  // «AI резюме» (undefined = вкл)
-  const showPortraitScore = settings.showPortraitScore !== false  // «AI портрет» (undefined = вкл)
-  const showAnswersScore = settings.showAnswersScore !== false   // «AI анкета» — AI-балл ответов анкеты (undefined = вкл)
+  const showResumeScore  = settings.showResumeScore !== false  // «Портрет» — оценка резюме по Портрету вакансии (undefined = вкл)
+  const showAnswersScore = settings.showAnswersScore !== false   // «Анкета» — AI-балл ответов анкеты (undefined = вкл)
   const showTestScore    = settings.showTestScore !== false    // Тест (балл/статус; по умолчанию вкл)
   const showNextInterview = settings.showNextInterview !== false // Интервью (ближайшее; по умолчанию вкл)
   const showSalary       = settings.showSalary || settings.showSalaryFull
@@ -462,31 +461,33 @@ export function ListView({
     }
 
     // Порядок колонок по умолчанию (слева → вправо):
-    // ФИО (закреплена) → AI резюме → Демо → AI анкета → AI портрет → Тест → Интервью → …
-    // (заголовки читаемые с 05.07; было AI-резм./Демо1/AI-Порт — обрубки без
-    // расшифровки. Порядок и id колонок НЕ менялись, только подписи + title.)
+    // ФИО (закреплена) → Портрет → Демо → Анкета → Тест → Интервью → …
+    // (пользовательская сущность оценки — ОДНА, «Портрет»: колонка «AI портрет»
+    // (осевой скоринг v2, ai_score_v2) убрана 05.07 — консолидация Юрия, см.
+    // [[portrait-unified-scoring-redesign]]. Порядок и id колонок НЕ менялись,
+    // только подписи + title.)
     // Пользователь может перетаскивать колонки; сброс возвращает этот порядок.
 
     if (showResumeScore) {
-      // AI резюме — AI-скор резюме (фикс, w-8 badge)
+      // Портрет — AI-скор резюме по Портрету вакансии (фикс, w-8 badge).
       list.push({
         id: "resumeScore",
-        // 84px (стандарт «Источника») — минимум под заголовок с иконкой
-        // сортировки: ListFilter 14px + gap 6px + «AI портрет» 63px = 83px.
-        // 56px обрезал переименованные 05.07 заголовки.
-        gridWidth: "84px",
+        // 72px — минимум под заголовок с иконкой сортировки: ListFilter 14px +
+        // gap 6px + «Портрет» ~71px по факту (замер Inter 12px) → взят
+        // безопасный запас (76 обрезал бы «Портрет» без запаса).
+        gridWidth: "76px",
         header: (
           <SortHeader
-            label="AI резюме"
+            label="Портрет"
             sortKey="resumeScore"
             sort={sort}
             onToggle={handleSort}
             align="center"
-            title="AI-скор резюме по Портрету (0–100)"
+            title="Оценка резюме по Портрету вакансии (0–100)"
           />
         ),
         renderCell: (candidate) => (
-          <div className="flex items-center justify-center" title="AI-скор резюме по Портрету">
+          <div className="flex items-center justify-center" title="Оценка резюме по Портрету вакансии (0–100)">
             {candidate.resumeScore != null ? (
               <Badge
                 variant="outline"
@@ -541,7 +542,7 @@ export function ListView({
     }
 
     if (showAnswersScore) {
-      // AI анкета (было «AI-ан», нечитаемо) — AI-балл ответов на вопросы
+      // Анкета (было «AI-ан», нечитаемо) — AI-балл ответов на вопросы
       // анкеты демо (candidates.demo_answers_score). НЕ «второе демо» —
       // проверено по коду (lib/demo/score-answers.ts, lib/messaging/
       // second-demo-invite.ts): это скоринг ОТВЕТОВ анкеты первого демо,
@@ -551,19 +552,22 @@ export function ListView({
       // Отдельно от aiScore (туда пишут v1/v2-скоринг резюме — была бы гонка).
       list.push({
         id: "answersScore",
-        gridWidth: "84px", // см. комментарий у resumeScore
+        // 64px — минимум под заголовок с иконкой сортировки: ListFilter 14px +
+        // gap 6px + «Анкета» ~63px по факту (замер Inter 12px) → взят
+        // безопасный запас (68 обрезал бы «Анкета» без запаса).
+        gridWidth: "68px",
         header: (
           <SortHeader
-            label="AI анкета"
+            label="Анкета"
             sortKey="answersScore"
             sort={sort}
             onToggle={handleSort}
             align="center"
-            title="AI-балл ответов на вопросы анкеты демо (0–100)"
+            title="AI-балл ответов анкеты (0–100)"
           />
         ),
         renderCell: (candidate) => (
-          <div className="flex items-center justify-center" title="AI-балл ответов анкеты демо">
+          <div className="flex items-center justify-center" title="AI-балл ответов анкеты (0–100)">
             {candidate.demoAnswersScore != null ? (
               <Badge
                 variant="outline"
@@ -582,41 +586,14 @@ export function ListView({
       })
     }
 
-    if (showPortraitScore) {
-      // AI-Порт — оценка по Портрету (новый скоринг по критериям Портрета, ai_score_v2).
-      // Отдельно от старого AI-балла; для старых вакансий заполняется по мере пересчёта.
-      list.push({
-        id: "portraitScore",
-        gridWidth: "84px", // см. комментарий у resumeScore
-        header: (
-          <SortHeader
-            label="AI портрет"
-            sortKey="portraitScore"
-            sort={sort}
-            onToggle={handleSort}
-            align="center"
-            title="Оценка по Портрету — скоринг по критериям «Что хотим видеть» (0–100)"
-          />
-        ),
-        renderCell: (candidate) => (
-          <div className="flex items-center justify-center" title="Оценка по Портрету (скоринг по критериям «Что хотим видеть»)">
-            {candidate.aiScoreV2 != null ? (
-              <Badge
-                variant="outline"
-                className={cn(
-                  "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
-                  getScoreColor(candidate.aiScoreV2),
-                )}
-              >
-                {Math.round(candidate.aiScoreV2)}
-              </Badge>
-            ) : (
-              <span className="text-muted-foreground/40 text-xs">—</span>
-            )}
-          </div>
-        ),
-      })
-    }
+    // Колонка «AI портрет» (осевой скоринг v2, ai_score_v2) убрана 05.07 —
+    // консолидация Юрия: пользовательская сущность оценки ОДНА, «Портрет»
+    // (= resumeScore, колонка выше). Осевой балл остался справочно внутри
+    // карточки кандидата (таб «Портрет» → «Осевой балл (справочно)»), второй
+    // колонкой в списке больше не светится, чтобы не конкурировать с главным
+    // баллом. sortKey "portraitScore" и showPortraitScore НЕ удалены из типов
+    // (см. card-settings.tsx) — чтобы не ломать сохранённые настройки колонок
+    // старых пользователей; просто эта колонка больше не рендерится.
 
     if (showTestScore) {
       // Тест — лесенка: балл (бейдж) → «сдан» (отправил, балла ещё нет) →
@@ -876,7 +853,7 @@ export function ListView({
     return list
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    showVacancyColumn, showProgress, showResumeScore, showPortraitScore, showAnswersScore, showScore,
+    showVacancyColumn, showProgress, showResumeScore, showAnswersScore, showScore,
     showTestScore, showNextInterview, showSalary, showCity, showResponseDate, showSource,
     sort, onVacancyClick, onOpenProfile,
   ])

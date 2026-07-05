@@ -14,9 +14,14 @@ export interface CardDisplaySettings {
   showSalary: boolean
   showSalaryFull: boolean
   showScore: boolean          // колонка «AI-оцен.» (оценка анкеты)
-  showResumeScore?: boolean   // колонка «AI резюме» (скоринг резюме); undefined = показывать
-  showPortraitScore?: boolean // колонка «AI портрет» (оценка по Портрету, ai_score_v2); undefined = показывать
-  showAnswersScore?: boolean  // колонка «AI анкета» (AI-оценка ответов анкеты демо, demo_answers_score); undefined = показывать
+  showResumeScore?: boolean   // колонка «Портрет» (оценка резюме по Портрету, resume_score); undefined = показывать
+  // showPortraitScore — колонка «AI портрет» (осевой скоринг v2, ai_score_v2) убрана из
+  // списка 05.07 (консолидация Юрия: пользовательская сущность оценки одна — «Портрет»,
+  // см. showResumeScore выше). Поле НЕ удалено из интерфейса и тумблер из реестра ниже
+  // убран, а не помечен disabled — чтобы не оставлять недействующий переключатель
+  // (инвариант «никакого мёртвого UI»); сохранённые настройки старых пользователей не ломаем.
+  showPortraitScore?: boolean
+  showAnswersScore?: boolean  // колонка «Анкета» (AI-оценка ответов анкеты демо, demo_answers_score); undefined = показывать
   showTestScore?: boolean     // колонка «Тест» (балл/статус теста); undefined = показывать
   showNextInterview?: boolean // колонка «Интервью» (ближайшее); undefined = показывать
   showAge: boolean
@@ -36,12 +41,13 @@ export interface CardDisplaySettings {
 // Статус) сюда НЕ входят — они всегда видны. Добавил колонку с новым ключом в
 // list-view — добавь сюда строку, и тумблер появится автоматически (и наоборот).
 // Порядок строго совпадает с порядком колонок в list-view.tsx (слева→направо):
-// AI резюме → Демо → AI анкета → AI портрет → AI-оцен. → Тест → Интервью → Зарплата → …
+// Портрет → Демо → Анкета → AI-оцен. → Тест → Интервью → Зарплата → …
+// («AI портрет» / showPortraitScore сюда больше не входит — колонка убрана
+// из списка 05.07, см. комментарий у showPortraitScore выше.)
 export const CANDIDATE_COLUMN_TOGGLES: Array<{ key: keyof CardDisplaySettings; label: string }> = [
-  { key: "showResumeScore",   label: "AI резюме" },
+  { key: "showResumeScore",   label: "Портрет" },
   { key: "showProgress",      label: "Прогресс демо" },
-  { key: "showAnswersScore",  label: "AI анкета (балл ответов демо)" },
-  { key: "showPortraitScore", label: "AI портрет" },
+  { key: "showAnswersScore",  label: "Анкета (балл ответов демо)" },
   { key: "showScore",         label: "AI оценка" },
   { key: "showTestScore",     label: "Тест" },
   { key: "showNextInterview", label: "Интервью" },
@@ -114,17 +120,19 @@ export function relevantColumnKeys(v: {
 
   const keys = new Set<keyof CardDisplaySettings>(UNIVERSAL_COLUMN_KEYS)
 
-  // AI резюме — скоринг резюме (двигает воронку). Актуально при блоке ai_resume_score
-  // или legacy aiScoringEnabled/portraitScoring (Портрет тоже скорит резюме).
+  // Портрет — скоринг резюме (двигает воронку). Актуально при блоке ai_resume_score
+  // или legacy aiScoringEnabled/portraitScoring (контур Портрета тоже скорит резюме).
   if (activeBlocks.has("ai_resume_score") || v.aiScoringEnabled || v.portraitScoring) keys.add("showResumeScore")
 
   // Прогресс демо — актуально при этапе демо/анкеты.
   if (activeBlocks.has("demo") || activeBlocks.has("anketa") || v2Has("demo") || v2Has("anketa")) keys.add("showProgress")
 
-  // AI-ан (балл ответов демо) — актуально при скоринге анкеты.
+  // Анкета (балл ответов демо) — актуально при скоринге анкеты.
   if (activeBlocks.has("ai_anketa_score") || activeBlocks.has("anketa") || v2Has("anketa")) keys.add("showAnswersScore")
 
-  // AI-Портрет — только при включённом контуре Портрета.
+  // showPortraitScore — колонка убрана из CANDIDATE_COLUMN_TOGGLES 05.07, этот
+  // Set больше ни на что не влияет для неё; строка оставлена как есть (не
+  // мёртвая логика, а неиспользуемое значение — безопасно для saved-settings).
   if (v.portraitScoring) keys.add("showPortraitScore")
 
   // AI оценка (оценка анкеты) — при legacy AI-скоринге или этапе анкеты.
