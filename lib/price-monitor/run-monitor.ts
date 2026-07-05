@@ -153,6 +153,7 @@ function toListingStatsRow(
   competitorId: string | null,
   details: ListingDetails,
   capturedAt: Date,
+  searchRank: number | null = null,
 ): NewPriceMonitorListingStats {
   return {
     objectId,
@@ -167,6 +168,7 @@ function toListingStatsRow(
     isGuestFavorite: details.isGuestFavorite,
     homeTier: details.homeTier,
     amenitiesCount: details.amenitiesCount,
+    searchRank,
     capturedAt,
   }
 }
@@ -227,6 +229,12 @@ export async function runObjectMonitor(object: PriceMonitorObject): Promise<RunR
 
   const leadDays = object.settingsJson?.leadDays ?? DEFAULT_CHECKIN_LEAD_DAYS
 
+  // Позиция в поисковой выдаче (порядок результатов searchNearby = ранжирование
+  // Airbnb). Захватываем 1-based ранг из ПЕРВОГО успешного поиска (включая наш
+  // объект, если он в выдаче) — для индекса привлекательности «почему показывают».
+  const searchRankByExternalId = new Map<string, number>()
+  let searchRankCaptured = false
+
   for (const nights of eff.periods) {
     const checkin = addDays(now, leadDays)
     const checkout = addDays(now, leadDays + nights)
@@ -269,6 +277,10 @@ export async function runObjectMonitor(object: PriceMonitorObject): Promise<RunR
         checkout,
         currency: eff.currency,
       })
+      if (!searchRankCaptured && found.length > 0) {
+        found.forEach((l, i) => searchRankByExternalId.set(l.externalId, i + 1))
+        searchRankCaptured = true
+      }
       for (const listing of found) {
         if (listing.externalId === object.externalId) continue
         if (complexFilter && !(listing.name ?? "").toLowerCase().includes(complexFilter)) continue
@@ -363,7 +375,9 @@ export async function runObjectMonitor(object: PriceMonitorObject): Promise<RunR
   const statsRows: NewPriceMonitorListingStats[] = []
   try {
     const ownDetails = await source.getDetails(object.externalId, eff.currency)
-    statsRows.push(toListingStatsRow(object.id, null, ownDetails, capturedAt))
+    statsRows.push(
+      toListingStatsRow(object.id, null, ownDetails, capturedAt, searchRankByExternalId.get(object.externalId) ?? null),
+    )
     result.statsCollected++
   } catch (err) {
     result.errors.push(`привлекательность, наш объект: ${err instanceof Error ? err.message : err}`)
@@ -378,7 +392,15 @@ export async function runObjectMonitor(object: PriceMonitorObject): Promise<RunR
   for (const competitor of topCompetitors) {
     try {
       const details = await source.getDetails(competitor.externalId, eff.currency)
-      statsRows.push(toListingStatsRow(object.id, competitor.id, details, capturedAt))
+      statsRows.push(
+        toListingStatsRow(
+          object.id,
+          competitor.id,
+          details,
+          capturedAt,
+          searchRankByExternalId.get(competitor.externalId) ?? null,
+        ),
+      )
       result.statsCollected++
     } catch (err) {
       result.errors.push(

@@ -4362,6 +4362,7 @@ export const priceMonitorListingStats = pgTable("price_monitor_listing_stats", {
   isGuestFavorite:    boolean("is_guest_favorite"),
   homeTier:           integer("home_tier"),
   amenitiesCount:     integer("amenities_count"),
+  searchRank:         integer("search_rank"), // позиция в поисковой выдаче (1-based); NULL = не была в выдаче/не захвачена
   capturedAt:         timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index("price_monitor_listing_stats_object_captured_idx").on(t.objectId, t.capturedAt),

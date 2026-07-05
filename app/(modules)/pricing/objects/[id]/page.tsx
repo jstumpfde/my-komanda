@@ -701,6 +701,7 @@ function AttractivenessSection({ attractiveness }: { attractiveness?: Attractive
               <TableHeader>
                 <TableRow>
                   <TableHead>Объект</TableHead>
+                  <TableHead className="text-right">Позиция</TableHead>
                   <TableHead className="text-right">Фото</TableHead>
                   <TableHead className="text-right">Рейтинг</TableHead>
                   <TableHead className="text-center">Суперхост</TableHead>
@@ -717,6 +718,7 @@ function AttractivenessSection({ attractiveness }: { attractiveness?: Attractive
                         <span className="truncate">{row.name}</span>
                       </div>
                     </TableCell>
+                    <TableCell className="text-right">{row.searchRank != null ? `#${row.searchRank}` : "—"}</TableCell>
                     <TableCell className="text-right">{row.photosCount ?? "—"}</TableCell>
                     <TableCell className="text-right">
                       {row.ratingOverall != null ? (

@@ -247,6 +247,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       isSuperHost: stat.isSuperHost,
       isGuestFavorite: stat.isGuestFavorite,
       amenitiesCount: stat.amenitiesCount,
+      searchRank: stat.searchRank ?? null,
       index: indexByKey.get(key) ?? 0,
     }))
     attractivenessRows.sort((a, b) => b.index - a.index)

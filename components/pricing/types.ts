@@ -107,6 +107,7 @@ export interface AttractivenessRow {
   isSuperHost: boolean | null
   isGuestFavorite: boolean | null
   amenitiesCount: number | null
+  searchRank: number | null
   index: number
 }
 
