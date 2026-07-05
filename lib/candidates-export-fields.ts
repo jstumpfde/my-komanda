@@ -8,7 +8,7 @@ export const CANDIDATE_EXPORT_FIELDS: Array<{ key: string; label: string }> = [
   { key: "city",             label: "Город" },
   { key: "salary",           label: "Зарплата" },
   { key: "responseDate",     label: "Дата отклика" },
-  { key: "resumeScore",      label: "AI-резюме" },
+  { key: "resumeScore",      label: "Портрет" },
   { key: "aiScore",          label: "AI-оценка" },
   { key: "demoProgress",     label: "Прогресс демо" },
   { key: "stage",            label: "Этап воронки" },

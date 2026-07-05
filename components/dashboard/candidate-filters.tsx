@@ -453,7 +453,7 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
               «не задан», чтобы было видно — фильтр не активен. */}
           <div className="space-y-2">
             <label className="text-xs font-medium text-muted-foreground">
-              Минимальный AI-скор по резюме: {filters.scoreMinResume > 0
+              Минимальный балл по Портрету: {filters.scoreMinResume > 0
                 ? filters.scoreMinResume
                 : <span className="italic">не задан</span>}
             </label>

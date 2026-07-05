@@ -236,7 +236,7 @@ const COLUMN_DEFS: Array<{
   { key: "city",             header: "Город",                         width: 18, value: (c) => c.city ?? "" },
   { key: "salary",           header: "Зарплата",                      width: 18, value: (c) => formatSalary(c.salaryMin, c.salaryMax, c.salaryCurrency) },
   { key: "responseDate",     header: "Дата отклика",                  width: 13, value: (c) => c.createdAt ? new Date(c.createdAt).toLocaleDateString("ru-RU") : "" },
-  { key: "resumeScore",      header: "AI-резюме",                     width: 10, value: (c) => c.resumeScore ?? "" },
+  { key: "resumeScore",      header: "Портрет",                       width: 10, value: (c) => c.resumeScore ?? "" },
   { key: "aiScore",          header: "AI-оценка",                     width: 10, value: (c) => c.aiScore ?? "" },
   { key: "demoProgress",     header: "Прогресс демо",                 width: 12, value: (_c, x) => x.progress },
   { key: "stage",            header: "Этап воронки",                  width: 20, value: (c) => c.stage ? (STAGE_LABELS[c.stage] ?? c.stage) : "" },

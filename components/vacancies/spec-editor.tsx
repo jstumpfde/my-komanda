@@ -2789,7 +2789,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                 <div className="space-y-3 pt-1">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <Label className="text-xs">Мин. балл AI-резюме</Label>
+                      <Label className="text-xs">Мин. балл Портрета</Label>
                       <Input
                         type="number"
                         min={0}

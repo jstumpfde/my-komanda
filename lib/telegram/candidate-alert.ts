@@ -94,7 +94,7 @@ export async function maybeSendCandidateAlert(params: MaybeSendCandidateAlertPar
   lines.push(`Вакансия: ${vac.title}`)
 
   const scoreParts: string[] = []
-  if (resumeScore != null) scoreParts.push(`AI-резюме: ${resumeScore}`)
+  if (resumeScore != null) scoreParts.push(`Портрет: ${resumeScore}`)
   if (answersScore != null) scoreParts.push(`Ответы: ${answersScore}`)
   if (scoreParts.length > 0) lines.push(scoreParts.join(" · "))
 
