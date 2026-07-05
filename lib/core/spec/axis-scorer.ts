@@ -19,6 +19,7 @@ import type { CandidateSpec } from "@/lib/core/spec/types"
 import { normalizeMustHave, normalizeNiceToHave, normalizeDealBreakers, dealBreakerPenalty } from "@/lib/core/spec/types"
 import { AI_MODEL_FAST } from "@/lib/ai/models"
 import { resolveCityUtcOffset } from "@/lib/geo/city-timezones"
+import { formatWorkHistory } from "@/lib/hh/extract-resume-fields"
 
 const client = new Anthropic({ baseURL: getClaudeApiUrl() })
 
@@ -118,17 +119,7 @@ export function buildPenalties(spec: CandidateSpec): { text: string; magnitude: 
 }
 
 function workHistoryToText(resume: ResumeScreenInput["resume"]): string {
-  return (resume.workHistory ?? [])
-    .filter(w => (w.position && w.position.trim()) || (w.company && w.company.trim()))
-    .map(w => {
-      const head = [w.position?.trim(), w.company?.trim()].filter(Boolean).join(" — ")
-      const period = [w.start, w.end ?? "по н.в."].filter(Boolean).join("–")
-      const dur = w.months != null ? `${Math.round(w.months / 12 * 10) / 10} г.` : null
-      const meta = [w.industry?.trim(), period || null, dur].filter(Boolean).join(", ")
-      const desc = w.description?.trim() ? ` | ${w.description.trim()}` : ""
-      return `• ${head}${meta ? ` (${meta})` : ""}${desc}`
-    })
-    .join("\n")
+  return formatWorkHistory(resume.workHistory)
 }
 
 const SYSTEM_PROMPT = `Ты — строгий HR-аналитик. Оцени резюме кандидата ПООСЕВО.

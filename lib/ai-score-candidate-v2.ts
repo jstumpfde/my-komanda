@@ -19,6 +19,7 @@ import {
   vacancies,
   companies,
   demos,
+  hhResponses,
   DEFAULT_SCORING_WEIGHTS,
   type CandidateScoreV2,
   type ScoringWeights,
@@ -39,6 +40,7 @@ import {
   dealBreakerTexts,
 } from "@/lib/core/spec/types"
 import { AI_MODEL_MAIN } from "@/lib/ai/models"
+import { extractHhResumeFields, formatWorkHistory, type WorkHistoryEntry } from "@/lib/hh/extract-resume-fields"
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -86,6 +88,7 @@ function buildResumeText(args: {
   city:            string | null
   experience:      string | null
   experienceYears: number | null
+  workHistory:     WorkHistoryEntry[] | null
   skills:          string[] | null
   keySkills:       string[] | null
   industry:        string | null
@@ -102,7 +105,19 @@ function buildResumeText(args: {
   lines.push(`Имя: ${args.name}`)
   if (args.city) lines.push(`Город: ${args.city}`)
   if (args.experienceYears != null) lines.push(`Общий опыт: ${args.experienceYears} лет`)
-  if (args.experience) lines.push(`Опыт работы:\n${args.experience}`)
+  // Структурированная история занятости (должности/компании/даты/описания) —
+  // ОСНОВНОЙ сигнал для Pass 1 (extract-facts): relevant_experience/red_flags/
+  // green_flags/results_with_numbers должны разбираться по местам работы, а не
+  // по единой строке общего стажа. Раньше сюда попадал только args.experience
+  // ("15 лет") — модель не видела разбивку по работодателям (симптом с прода:
+  // «весь опыт подан единым блоком», хотя карточка кандидата (hh_responses.raw_data)
+  // эту разбивку показывает). args.experience — fallback, если workHistory пуст.
+  const workHistoryText = formatWorkHistory(args.workHistory)
+  if (workHistoryText) {
+    lines.push(`Опыт работы (по местам, от последнего к первому):\n${workHistoryText}`)
+  } else if (args.experience) {
+    lines.push(`Опыт работы:\n${args.experience}`)
+  }
   if (args.industry) lines.push(`Индустрия: ${args.industry}`)
   if (args.keySkills?.length) lines.push(`Ключевые навыки: ${args.keySkills.join(", ")}`)
   if (args.skills?.length) lines.push(`Навыки: ${args.skills.join(", ")}`)
@@ -236,11 +251,27 @@ export async function scoreCandidateV2(
     .limit(1)
   const blockMap = buildBlockMap(demoRow?.lessonsJson)
 
+  // Структурированная история занятости (должности/компании/даты/описания) —
+  // тот же источник, что видит HR на вкладке «Резюме» карточки кандидата
+  // (hh_responses.raw_data). Раньше сюда не заходили вовсе — Pass 1 получал
+  // только candidate.experience ("15 лет"), поэтому не видел разбивку по
+  // работодателям. localCandidateId может указывать на несколько hh_responses
+  // (повторные отклики) — берём самый свежий по syncedAt.
+  const [hhRow] = await db
+    .select({ rawData: hhResponses.rawData })
+    .from(hhResponses)
+    .where(eq(hhResponses.localCandidateId, candidateId))
+    .orderBy(desc(hhResponses.syncedAt))
+    .limit(1)
+  const rawResume = (hhRow?.rawData as { resume?: unknown } | null)?.resume
+  const workHistory = rawResume ? extractHhResumeFields(rawResume).workHistory ?? null : null
+
   const resumeText = buildResumeText({
     name:            candidate.name,
     city:            candidate.city,
     experience:      candidate.experience,
     experienceYears: candidate.experienceYears,
+    workHistory,
     skills:          candidate.skills,
     keySkills:       candidate.keySkills,
     industry:        candidate.industry,
