@@ -2839,6 +2839,68 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
         )
       })()}
 
+      {/* ── «Горячий кандидат стынет» — открыл демо, высокий балл, 0 блоков
+           (батч «конверсия демо» 05.07). Дефолт ВЫКЛ (legacy-инвариант). ── */}
+      {(() => {
+        const hot = spec.hotCandidateAlert ?? { enabled: false, threshold: 70, staleAfterHours: 3 }
+        return (
+          <Card>
+            <CardContent className="pt-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-semibold">Горячий кандидат стынет</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Уведомить HR (in-app + Telegram), если кандидат с высоким баллом Портрета
+                    открыл демо и не начал его проходить.
+                  </p>
+                </div>
+                <Switch checked={hot.enabled} onCheckedChange={v => patch({ hotCandidateAlert: { ...hot, enabled: v } })} />
+              </div>
+              {hot.enabled && (
+                <div className="space-y-3 pt-1">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Порог «высокого» балла Портрета</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        className="h-9"
+                        value={hot.threshold}
+                        onChange={e => {
+                          const raw = Number(e.target.value)
+                          const v = Number.isFinite(raw) ? Math.max(0, Math.min(100, Math.round(raw))) : hot.threshold
+                          patch({ hotCandidateAlert: { ...hot, threshold: v } })
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Бездействие после открытия демо, часов</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={72}
+                        className="h-9"
+                        value={hot.staleAfterHours}
+                        onChange={e => {
+                          const raw = Number(e.target.value)
+                          const v = Number.isFinite(raw) && raw > 0 ? Math.max(1, Math.min(72, Math.round(raw))) : hot.staleAfterHours
+                          patch({ hotCandidateAlert: { ...hot, staleAfterHours: v } })
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground rounded-md bg-muted/40 px-2.5 py-1.5 leading-relaxed">
+                    Условие: балл Портрета ≥ порога, демо открыто дольше {hot.staleAfterHours} ч, 0 пройденных
+                    блоков, анкета не заполнена. Алерт шлётся один раз на кандидата.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )
+      })()}
+
       {/* ── Автоответы кандидату — единый блок: стоп-слова → отказ + FAQ → авто-ответ.
            Работает независимо от режима (Портрет / Воронка v2 / AI чат-бот),
            гейт единым тумблером «Включить» (по умолчанию ВЫКЛ). ── */}
