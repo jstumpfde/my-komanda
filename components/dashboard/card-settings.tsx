@@ -164,6 +164,11 @@ export function relevantColumnKeys(v: {
 interface CardSettingsProps {
   settings: CardDisplaySettings
   onSettingsChange: (settings: CardDisplaySettings) => void
+  /** Текущий режим отображения (Список/Канбан/Плитки/Воронка). Если задан —
+   *  в «Списке» скрываем тумблеры без колонки там (showScore — см. комментарий
+   *  у showScore выше и LIST_MODE_HIDDEN_KEYS в view-settings.tsx). Если не
+   *  задан — прежнее поведение (показать все, как раньше). */
+  viewMode?: "list" | "kanban" | "tiles" | "funnel"
 }
 
 const settingsLabels: { key: keyof CardDisplaySettings; label: string }[] = [
@@ -175,10 +180,14 @@ const settingsLabels: { key: keyof CardDisplaySettings; label: string }[] = [
   { key: "showActions", label: "Кнопки действий" },
 ]
 
-export function CardSettings({ settings, onSettingsChange }: CardSettingsProps) {
+// Тумблеры без колонки в «Списке» (см. CardSettingsProps.viewMode) — общий
+// ключ с view-settings.tsx (там же LIST_MODE_HIDDEN_KEYS с тем же составом).
+const LIST_MODE_HIDDEN_KEYS: ReadonlySet<keyof CardDisplaySettings> = new Set(["showScore"])
+
+export function CardSettings({ settings, onSettingsChange, viewMode }: CardSettingsProps) {
   const handleToggle = (key: keyof CardDisplaySettings) => {
     const newSettings = { ...settings, [key]: !settings[key] }
-    
+
     // Logic: if full salary is enabled, disable short salary
     if (key === "showSalaryFull" && newSettings.showSalaryFull) {
       newSettings.showSalary = false
@@ -186,9 +195,13 @@ export function CardSettings({ settings, onSettingsChange }: CardSettingsProps) 
     if (key === "showSalary" && newSettings.showSalary) {
       newSettings.showSalaryFull = false
     }
-    
+
     onSettingsChange(newSettings)
   }
+
+  const visibleLabels = settingsLabels.filter(
+    ({ key }) => !(viewMode === "list" && LIST_MODE_HIDDEN_KEYS.has(key)),
+  )
 
   return (
     <Popover>
@@ -207,7 +220,7 @@ export function CardSettings({ settings, onSettingsChange }: CardSettingsProps) 
             </p>
           </div>
           <div className="space-y-3">
-            {settingsLabels.map(({ key, label }) => (
+            {visibleLabels.map(({ key, label }) => (
               <div key={key} className="flex items-center justify-between">
                 <Label htmlFor={key} className="text-sm font-normal cursor-pointer">
                   {label}

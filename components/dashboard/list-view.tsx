@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useRef } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   DndContext,
   closestCenter,
@@ -194,6 +194,142 @@ const STAGE_ORDER: Record<string, number> = {
 // Перетаскивание колонок — только по горизонтали (вертикальный сдвиг гасим).
 const restrictToHorizontalAxis: Modifier = ({ transform }) => ({ ...transform, y: 0 })
 
+// ─── Ресайз колонок перетаскиванием (Юрий 05.07) ───────────────────────────
+// Извлекает «оптимальную» (дефолтную) ширину колонки в px из строки gridWidth
+// ("76px" → 76, "minmax(84px, 130px)" → 84 — минимум-он-же-оптимум для колонок
+// с диапазоном). Это одновременно и дефолтная ширина, и min-граница ресайза
+// (нельзя сузить меньше — контент уже подобран впритык, см. комментарии у
+// каждой колонки выше). Колонка без числового префикса (fr-эластичные) сюда
+// не должна попадать — единственная такая, "Кандидат", ресайзу не подлежит
+// (закреплённая колонка, не входит в movableColumns/ColumnDescriptor).
+function naturalWidthPx(gridWidth: string): number {
+  const m = gridWidth.match(/(\d+)px/)
+  return m ? parseInt(m[1], 10) : 80
+}
+
+// Экспортируются — «Сбросить ширины колонок» живёт в попапе «Вид»
+// (view-settings.tsx), отдельное поддерево компонентов, не ребёнок ListView.
+// Вместо прокидывания колбэка через несколько уровней страниц (нарушило бы
+// зону задачи — 4 файла) переиспользуем localStorage-ключ как общий канал:
+// view-settings.tsx чистит ключ и шлёт CustomEvent, useColumnWidths здесь его
+// слушает и сбрасывает свой стейт. window.dispatchEvent — тот же document,
+// поэтому нативный "storage" event (кросс-вкладочный) не долетел бы сам.
+export const COLUMN_WIDTHS_STORAGE_KEY = "candidate-list-column-widths-v1"
+export const COLUMN_WIDTHS_RESET_EVENT = "candidate-list-column-widths-reset"
+
+function readStoredWidths(): Record<string, number> | null {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = window.localStorage.getItem(COLUMN_WIDTHS_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const out: Record<string, number> = {}
+      for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+        if (typeof v === "number" && Number.isFinite(v) && v > 0) out[k] = v
+      }
+      return out
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+/** Персистентные per-user ширины колонок (localStorage, тот же механизм, что
+ *  useColumnOrder — порядок колонок). Хранит только ЯВНО изменённые
+ *  пользователем колонки; остальные берут natural-ширину из дескриптора. */
+function useColumnWidths(): {
+  widths: Record<string, number>
+  setWidth: (id: string, px: number) => void
+  resetWidth: (id: string) => void
+  resetAll: () => void
+} {
+  const [widths, setWidths] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    const stored = readStoredWidths()
+    if (stored) setWidths(stored)
+    const onReset = () => setWidths({})
+    window.addEventListener(COLUMN_WIDTHS_RESET_EVENT, onReset)
+    return () => window.removeEventListener(COLUMN_WIDTHS_RESET_EVENT, onReset)
+  }, [])
+
+  const persist = useCallback((next: Record<string, number>) => {
+    setWidths(next)
+    try {
+      window.localStorage.setItem(COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(next))
+    } catch {
+      /* localStorage недоступен (private mode) — ширины живут только в стейте */
+    }
+  }, [])
+
+  const setWidth = useCallback((id: string, px: number) => {
+    setWidths((prev) => {
+      const next = { ...prev, [id]: px }
+      try { window.localStorage.setItem(COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(next)) } catch { /* no-op */ }
+      return next
+    })
+  }, [])
+
+  const resetWidth = useCallback((id: string) => {
+    setWidths((prev) => {
+      if (!(id in prev)) return prev
+      const next = { ...prev }
+      delete next[id]
+      try { window.localStorage.setItem(COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(next)) } catch { /* no-op */ }
+      return next
+    })
+  }, [])
+
+  const resetAll = useCallback(() => {
+    persist({})
+  }, [persist])
+
+  return { widths, setWidth, resetWidth, resetAll }
+}
+
+// Ручка ресайза — узкая полоса на правой границе ячейки заголовка. Отдельный
+// mousedown-обработчик (НЕ dnd-kit — тот двигает порядок колонок, это про
+// ширину). stopPropagation — чтобы drag колонок (SortableHeaderCell) не
+// перехватывал жест ресайза ручки.
+function ColumnResizeHandle({
+  onDragStart, onResize, onReset,
+}: {
+  /** Вызывается ровно один раз в момент mousedown (до первого move) —
+   *  фиксирует стартовую ширину колонки, от которой считается дельта. */
+  onDragStart: () => void
+  /** Дельта в px от точки начала драга. */
+  onResize: (deltaPx: number) => void
+  /** Двойной клик — сброс к оптимуму. */
+  onReset: () => void
+}) {
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    onDragStart()
+    const startX = e.clientX
+    const onMove = (ev: MouseEvent) => onResize(ev.clientX - startX)
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove)
+      window.removeEventListener("mouseup", onUp)
+    }
+    window.addEventListener("mousemove", onMove)
+    window.addEventListener("mouseup", onUp)
+  }
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      onMouseDown={handleMouseDown}
+      onDoubleClick={(e) => { e.preventDefault(); e.stopPropagation(); onReset() }}
+      onClick={(e) => e.stopPropagation()}
+      title="Потяните, чтобы изменить ширину колонки (двойной клик — сброс)"
+      className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-primary/40 active:bg-primary/60 z-10 touch-none"
+    />
+  )
+}
+
 function SortHeader({
   label, sortKey, sort, onToggle, align = "left", title,
 }: {
@@ -238,7 +374,18 @@ function SortHeader({
 // Перетаскиваемая ячейка заголовка движимой колонки. Drag — за всю ячейку
 // (cursor-grab), но внутри неё кнопка сортировки SortHeader продолжает работать
 // по клику (PointerSensor с distance:5 не начинает drag на простом клике).
-function SortableHeaderCell({ id, children }: { id: string; children: React.ReactNode }) {
+// Ручка ресайза (справа) — независимый mousedown, stopPropagation не даёт ему
+// уйти в dnd-kit (иначе жест ресайза запускал бы ещё и drag порядка).
+function SortableHeaderCell({
+  id, children, onResizeStart, onResizeDelta, onResizeReset,
+}: {
+  id: string
+  children: React.ReactNode
+  /** Три коллбэка заданы вместе — рисуем ручку ресайза на правой границе ячейки. */
+  onResizeStart?: () => void
+  onResizeDelta?: (deltaPx: number) => void
+  onResizeReset?: () => void
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -256,6 +403,9 @@ function SortableHeaderCell({ id, children }: { id: string; children: React.Reac
       title="Перетащите, чтобы изменить порядок колонок"
     >
       {children}
+      {onResizeStart && onResizeDelta && onResizeReset && (
+        <ColumnResizeHandle onDragStart={onResizeStart} onResize={onResizeDelta} onReset={onResizeReset} />
+      )}
     </div>
   )
 }
@@ -404,7 +554,19 @@ export function ListView({
 
   const getScoreColor = (score: number) => {
     if (score > 70) return "bg-success/10 text-success border-success/20"
-    if (score >= 40) return "bg-warning/10 text-warning border-warning/20"
+    // Warning-вариант (40-70) бледнее success/destructive в обеих темах —
+    // токен --warning сам по себе светлее (oklch lightness ~0.7 против ~0.6 у
+    // success), поэтому та же /10-/20 формула давала слабый контраст (жалоба
+    // Юрия 05.07). Плотнее фон/рамка + font-bold — БЕЗ правки токена/globals.css.
+    if (score >= 40) return "bg-warning/20 text-warning border-warning/40 font-bold"
+    return "bg-destructive/10 text-destructive border-destructive/20"
+  }
+
+  // Балл интервью (скоркарта) — шкала 1-10, НЕ 0-100 как у остальных колонок.
+  // Та же семантика цветов, что и getScoreColor (усиленный warning — см. выше).
+  const getScoreColor10 = (score: number) => {
+    if (score >= 7) return "bg-success/10 text-success border-success/20"
+    if (score >= 4) return "bg-warning/20 text-warning border-warning/40 font-bold"
     return "bg-destructive/10 text-destructive border-destructive/20"
   }
 
@@ -728,26 +890,77 @@ export function ListView({
     }
 
     if (showNextInterview) {
-      // Интервью — ближайшее (дата/время). 90px — замер (Inter): контент
-      // icon(14px)+gap(2px)+«05.07»(32.5px,13px/medium)+ml-1(4px)+«12:34»
-      // (32.5px,13px) ≈ 85px; заголовок «Интервью» 61.3px+icon14+gap6 ≈ 81px.
+      // Интервью — ближайшее (дата/время) + балл скоркарты по итогам интервью
+      // (candidate.interviewScore, 1-10 — параллельный агент добавляет поле в
+      // API 05.07). Поле МОЖЕТ отсутствовать в рантайме (undefined) до мерджа
+      // его ветки — рендерим через optional chaining на локальном
+      // тип-расширении, чтобы tsc был чист независимо от порядка мерджа.
+      // 90px — замер (Inter): контент icon(14px)+gap(2px)+«05.07»(32.5px,
+      // 13px/medium)+ml-1(4px)+«12:34»(32.5px,13px) ≈ 85px; заголовок
+      // «Интервью» 61.3px+icon14+gap6 ≈ 81px. Балл-бейдж (w-8=32px) уже —
+      // ширина колонки не растёт.
       list.push({
         id: "nextInterview",
         gridWidth: "90px",
-        header: <SortHeader label="Интервью" sortKey="nextInterview" sort={sort} onToggle={handleSort} align="center" />,
+        header: (
+          <SortHeader
+            label="Интервью"
+            sortKey="nextInterview"
+            sort={sort}
+            onToggle={handleSort}
+            align="center"
+            title="Ближайшее интервью и балл по итогам интервью (скоркарта)"
+          />
+        ),
         renderCell: (candidate) => {
           const iso = candidate.nextInterviewAt
-          if (!iso) return <div className="text-center text-muted-foreground/40 text-xs">—</div>
-          const d = new Date(iso)
-          const day = d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })
-          const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
-          return (
-            <div className="flex items-center justify-center gap-0.5 text-[13px] whitespace-nowrap" title="Ближайшее интервью">
-              <CalendarClock className="w-3.5 h-3.5 text-primary/70 shrink-0" />
-              <span className="font-medium text-foreground">{day}</span>
-              <span className="text-muted-foreground ml-1">{time}</span>
-            </div>
-          )
+          const interviewScore = (candidate as { interviewScore?: number | null }).interviewScore ?? null
+          const dateNode = iso ? (() => {
+            const d = new Date(iso)
+            const day = d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })
+            const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+            return (
+              <div className="flex items-center justify-center gap-0.5 text-[13px] whitespace-nowrap" title="Ближайшее интервью">
+                <CalendarClock className="w-3.5 h-3.5 text-primary/70 shrink-0" />
+                <span className="font-medium text-foreground">{day}</span>
+                <span className="text-muted-foreground ml-1">{time}</span>
+              </div>
+            )
+          })() : null
+          const scoreNode = interviewScore != null ? (
+            <Badge
+              variant="outline"
+              className={cn(
+                "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
+                // Шкала интервью 1-10 (НЕ 0-100, как у остальных баллов колонки) —
+                // getScoreColor10 отдельная функция с той же семантикой
+                // (success/warning/destructive), см. рядом с getScoreColor.
+                getScoreColor10(interviewScore),
+              )}
+            >
+              {interviewScore}
+            </Badge>
+          ) : null
+          if (!dateNode && !scoreNode) return <div className="text-center text-muted-foreground/40 text-xs">—</div>
+          if (dateNode && scoreNode) {
+            return (
+              <div className="flex flex-col items-center justify-center gap-0.5">
+                {dateNode}
+                <Tooltip>
+                  <TooltipTrigger asChild>{scoreNode}</TooltipTrigger>
+                  <TooltipContent side="top">Балл по итогам интервью (скоркарта)</TooltipContent>
+                </Tooltip>
+              </div>
+            )
+          }
+          if (scoreNode) {
+            return (
+              <div className="flex items-center justify-center" title="Балл по итогам интервью (скоркарта)">
+                {scoreNode}
+              </div>
+            )
+          }
+          return dateNode
         },
       })
     }
@@ -912,6 +1125,32 @@ export function ListView({
   const defaultOrder = useMemo(() => movableColumns.map((c) => c.id), [movableColumns])
   const { order, setOrder, reset, isCustom } = useColumnOrder(defaultOrder)
 
+  // ─── Ширины перетаскиваемых колонок (per-user, localStorage) ──────────────
+  const { widths: columnWidths, setWidth: setColumnWidth, resetWidth: resetColumnWidth, resetAll: resetColumnWidths } = useColumnWidths()
+  // Дельта живого драга (id → накопленный сдвиг курсора с начала жеста) —
+  // применяется поверх стартовой (сохранённой либо natural) ширины колонки.
+  const dragStartWidthRef = useRef<Record<string, number>>({})
+  const isWidthCustom = Object.keys(columnWidths).length > 0
+
+  /** Ширина колонки для рендера: сохранённая (если юзер её менял) либо
+   *  natural-дефолт из дескриптора. */
+  const widthForColumn = useCallback((col: ColumnDescriptor): number => {
+    return columnWidths[col.id] ?? naturalWidthPx(col.gridWidth)
+  }, [columnWidths])
+
+  const handleResizeStart = useCallback((col: ColumnDescriptor) => {
+    dragStartWidthRef.current[col.id] = widthForColumn(col)
+  }, [widthForColumn])
+
+  const handleResizeDelta = useCallback((col: ColumnDescriptor, deltaPx: number) => {
+    const startW = dragStartWidthRef.current[col.id] ?? widthForColumn(col)
+    const natural = naturalWidthPx(col.gridWidth)
+    // min = natural (нельзя сузить меньше оптимума — контент сломается);
+    // max = 2× natural (разумный потолок, не даём растянуть до абсурда).
+    const next = Math.round(Math.max(natural, Math.min(natural * 2, startW + deltaPx)))
+    setColumnWidth(col.id, next)
+  }, [setColumnWidth, widthForColumn])
+
   // Упорядоченные дескрипторы: проходим по сохранённому порядку, мапим в descriptor.
   // Любой id из order, которого нет среди доступных (выключен настройками) —
   // отфильтровывается; descriptor lookup по Map.
@@ -956,11 +1195,18 @@ export function ListView({
   // Кандидат — единственная эластичная колонка (fr): всё освободившееся от
   // сужения остальных колонок место достаётся ФИО. minmax(200px, 1fr) —
   // вмещает ФИО, длиннее → «…» (truncate уже был и остаётся).
+  // Ресайз (Юрий 05.07): колонка, которую юзер явно потянул, рендерится
+  // фикс-шириной в px (columnWidths[id]); остальные — как раньше, их родная
+  // gridWidth-строка (px или minmax(...) — напр. «Вакансия», «Город» тянутся
+  // в разумных пределах, пока их не зафиксировали ресайзом). ФИО (Кандидат) —
+  // единственная эластичная колонка, ресайзу не подлежит (не в orderedColumns).
   const cols: string[] = []
   if (selectionEnabled) cols.push("24px")               // ☐ — фикс (компактнее)
   cols.push("28px")                                     // ★ — фикс (w-7, ужато)
   cols.push("minmax(200px, 1fr)")                       // Кандидат — закреплён, единственный fr
-  for (const c of orderedColumns) cols.push(c.gridWidth)
+  for (const c of orderedColumns) {
+    cols.push(c.id in columnWidths ? `${columnWidths[c.id]}px` : c.gridWidth)
+  }
   if (showActions) {
     // База: 3 иконки (advance/reject/open) = 80px, +28px на «Запланировать интервью».
     // В режиме рассылки hh добавляем ещё иконку чата → +28px.
@@ -1029,18 +1275,33 @@ export function ListView({
 
   return (
     <div className="rounded-xl border border-border overflow-x-auto bg-card">
-      {/* Кнопка сброса порядка колонок — видна только когда порядок изменён */}
-      {isCustom && dndEnabled && (
-        <div className="flex justify-end px-4 pt-2">
-          <button
-            type="button"
-            onClick={reset}
-            className="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
-            title="Вернуть колонки в исходный порядок"
-          >
-            <RotateCcw className="size-3" />
-            Сбросить порядок
-          </button>
+      {/* Кнопки сброса порядка/ширины колонок — видны только когда изменены.
+          Дублируют пункт «Сбросить ширины колонок» в попапе «Вид» (view-settings.tsx) —
+          тот доступен не с каждой страницы-обёртки списка, эта кнопка — всегда рядом с таблицей. */}
+      {((isCustom && dndEnabled) || isWidthCustom) && (
+        <div className="flex justify-end gap-3 px-4 pt-2">
+          {isCustom && dndEnabled && (
+            <button
+              type="button"
+              onClick={reset}
+              className="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
+              title="Вернуть колонки в исходный порядок"
+            >
+              <RotateCcw className="size-3" />
+              Сбросить порядок
+            </button>
+          )}
+          {isWidthCustom && (
+            <button
+              type="button"
+              onClick={resetColumnWidths}
+              className="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
+              title="Вернуть колонкам оптимальную ширину"
+            >
+              <RotateCcw className="size-3" />
+              Сбросить ширины
+            </button>
+          )}
         </div>
       )}
 
@@ -1091,15 +1352,30 @@ export function ListView({
             )}
           </div>
 
-          {/* Перетаскиваемые заголовки движимых колонок */}
+          {/* Перетаскиваемые заголовки движимых колонок. Ручка ресайза —
+              независимая от dndEnabled (можно тянуть ширину даже когда
+              осталась 1 движимая колонка и порядок менять уже нечем). */}
           <SortableContext items={order} strategy={horizontalListSortingStrategy}>
             {orderedColumns.map((col) => (
               dndEnabled ? (
-                <SortableHeaderCell key={col.id} id={col.id}>
+                <SortableHeaderCell
+                  key={col.id}
+                  id={col.id}
+                  onResizeStart={() => handleResizeStart(col)}
+                  onResizeDelta={(deltaPx) => handleResizeDelta(col, deltaPx)}
+                  onResizeReset={() => resetColumnWidth(col.id)}
+                >
                   {col.header}
                 </SortableHeaderCell>
               ) : (
-                <div key={col.id} className="flex items-center">{col.header}</div>
+                <div key={col.id} className="relative flex items-center min-w-0 overflow-hidden">
+                  {col.header}
+                  <ColumnResizeHandle
+                    onDragStart={() => handleResizeStart(col)}
+                    onResize={(deltaPx) => handleResizeDelta(col, deltaPx)}
+                    onReset={() => resetColumnWidth(col.id)}
+                  />
+                </div>
               )
             ))}
           </SortableContext>
