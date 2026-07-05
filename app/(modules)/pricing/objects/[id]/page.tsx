@@ -84,6 +84,53 @@ const INTERVAL_PRESETS = [
   { label: "Раз в 2 суток", minutes: 2880 },
 ]
 
+// Клиентский пересчёт сводных строк (медиана / позиция к рынку / отклонение)
+// под ВЫБРАННУЮ группу сравнения (таб: район / мой ЖК / другой комплекс).
+// Формулы совпадают с серверными в comparison/route.ts.
+function clientMedian(values: number[]): number | null {
+  if (values.length === 0) return null
+  const s = [...values].sort((a, b) => a - b)
+  const m = Math.floor(s.length / 2)
+  return s.length % 2 === 0 ? (s[m - 1] + s[m]) / 2 : s[m]
+}
+type ClientMarketBand = "low" | "below" | "above" | "high"
+function clientMarketPosition(
+  ownPerNight: number | null,
+  competitorPrices: number[],
+): { pricierThanPct: number; band: ClientMarketBand } | null {
+  if (ownPerNight == null || competitorPrices.length === 0) return null
+  const cheaper = competitorPrices.filter((v) => v < ownPerNight).length
+  const pricierThanPct = Math.round((cheaper / competitorPrices.length) * 100)
+  const band: ClientMarketBand =
+    pricierThanPct >= 75 ? "high" : pricierThanPct >= 50 ? "above" : pricierThanPct >= 25 ? "below" : "low"
+  return { pricierThanPct, band }
+}
+function computeGroupStats(
+  competitors: ComparisonRow[],
+  ownRow: ComparisonRow | undefined,
+  periods: number[],
+): {
+  medians: Record<string, number | null>
+  deltas: Record<string, number | null>
+  marketPos: Record<string, { pricierThanPct: number; band: ClientMarketBand } | null>
+} {
+  const medians: Record<string, number | null> = {}
+  const deltas: Record<string, number | null> = {}
+  const marketPos: Record<string, { pricierThanPct: number; band: ClientMarketBand } | null> = {}
+  for (const p of periods) {
+    const key = String(p)
+    const prices = competitors
+      .map((r) => r.prices[key]?.perNight)
+      .filter((v): v is number => v != null)
+    const med = clientMedian(prices)
+    medians[key] = med
+    const own = ownRow?.prices[key]?.perNight ?? null
+    deltas[key] = med != null && med !== 0 && own != null ? Math.round(((own - med) / med) * 1000) / 10 : null
+    marketPos[key] = clientMarketPosition(own, prices)
+  }
+  return { medians, deltas, marketPos }
+}
+
 export default function PriceMonitorObjectDetailPage() {
   const params = useParams<{ id: string }>()
   const objectId = params?.id as string
@@ -290,6 +337,40 @@ export default function PriceMonitorObjectDetailPage() {
     return { ownRow, active, ignored }
   }, [comparison, periods])
 
+  // Табы сравнения (Ф3): «Район (все)» + «Мой ЖК» + по табу на каждый другой
+  // комплекс среди конкурентов. Группировка по complexName (без миграции —
+  // ЖК уже хранится у конкурентов). Выбор таба фильтрует конкурентов и
+  // пересчитывает медиану/позицию к рынку под группу.
+  const [selectedGroup, setSelectedGroup] = useState<string>("all")
+  const groups = useMemo(() => {
+    const ownComplex = sortedRows.ownRow?.complexName?.trim() || null
+    const counts = new Map<string, number>()
+    for (const r of sortedRows.active) {
+      const c = r.complexName?.trim()
+      if (c) counts.set(c, (counts.get(c) ?? 0) + 1)
+    }
+    const list: { id: string; label: string; complex: string | null; count: number }[] = [
+      { id: "all", label: "Район (все)", complex: null, count: sortedRows.active.length },
+    ]
+    if (ownComplex && counts.has(ownComplex)) {
+      list.push({ id: "mine", label: `Мой ЖК: ${ownComplex}`, complex: ownComplex, count: counts.get(ownComplex)! })
+    }
+    for (const [c, n] of Array.from(counts.entries()).sort((a, b) => b[1] - a[1])) {
+      if (c === ownComplex) continue
+      list.push({ id: `complex:${c}`, label: c, complex: c, count: n })
+    }
+    return list
+  }, [sortedRows])
+  const activeGroup = groups.find((g) => g.id === selectedGroup) ?? groups[0]
+  const groupActive = useMemo(() => {
+    if (!activeGroup || activeGroup.complex == null) return sortedRows.active
+    return sortedRows.active.filter((r) => (r.complexName?.trim() || "") === activeGroup.complex)
+  }, [sortedRows.active, activeGroup])
+  const groupStats = useMemo(
+    () => computeGroupStats(groupActive, sortedRows.ownRow, periods),
+    [groupActive, sortedRows.ownRow, periods],
+  )
+
   if (loadError) {
     return (
       <PageShell title={object?.name ?? "Объект"}>
@@ -411,8 +492,29 @@ export default function PriceMonitorObjectDetailPage() {
 
                 <Card>
                   <CardContent className="overflow-x-auto">
+                    {groups.length > 1 && (
+                      <div className="flex flex-wrap items-center gap-1.5 mb-3">
+                        {groups.map((g) => (
+                          <button
+                            key={g.id}
+                            type="button"
+                            onClick={() => setSelectedGroup(g.id)}
+                            className={cn(
+                              "px-2.5 py-1 rounded-full text-xs font-medium border transition-colors",
+                              activeGroup?.id === g.id
+                                ? "bg-primary text-primary-foreground border-transparent"
+                                : "bg-background text-muted-foreground border-border hover:bg-muted",
+                            )}
+                            title={`Сравнение внутри группы: ${g.label}`}
+                          >
+                            {g.label} · {g.count}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <p className="text-xs text-muted-foreground mb-2">
                       Ширину колонок можно менять — потяните за правый край заголовка.
+                      {activeGroup?.complex != null && " Медиана и позиция к рынку — внутри выбранной группы."}
                     </p>
                     <Table style={{ tableLayout: "fixed", width: totalWidth, minWidth: totalWidth }}>
                       <colgroup>
@@ -471,7 +573,7 @@ export default function PriceMonitorObjectDetailPage() {
                             </TableCell>
                             {periods.map((p) => (
                               <TableCell key={p} className="text-right">
-                                <DeltaBadge delta={comparison.deltas[String(p)] ?? null} />
+                                <DeltaBadge delta={groupStats.deltas[String(p)] ?? null} />
                               </TableCell>
                             ))}
                             <TableCell />
@@ -484,8 +586,8 @@ export default function PriceMonitorObjectDetailPage() {
                           </TableCell>
                           {periods.map((p) => (
                             <TableCell key={p} className="text-right font-medium">
-                              {comparison.medians[String(p)] != null
-                                ? `${Math.round(comparison.medians[String(p)]!).toLocaleString("ru-RU")} ${currency}`
+                              {groupStats.medians[String(p)] != null
+                                ? `${Math.round(groupStats.medians[String(p)]!).toLocaleString("ru-RU")} ${currency}`
                                 : "—"}
                             </TableCell>
                           ))}
@@ -499,14 +601,14 @@ export default function PriceMonitorObjectDetailPage() {
                             </TableCell>
                             {periods.map((p) => (
                               <TableCell key={p} className="text-right">
-                                <MarketBandBadge pos={comparison.marketPos?.[String(p)] ?? null} />
+                                <MarketBandBadge pos={groupStats.marketPos?.[String(p)] ?? null} />
                               </TableCell>
                             ))}
                             <TableCell />
                           </TableRow>
                         )}
 
-                        {sortedRows.active?.map((row) => (
+                        {groupActive?.map((row) => (
                           <CompetitorRow
                             key={row.competitorId}
                             row={row}
