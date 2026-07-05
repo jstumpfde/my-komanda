@@ -4219,3 +4219,108 @@ export const consentLog = pgTable("consent_log", {
 ])
 export type ConsentLog    = typeof consentLog.$inferSelect
 export type NewConsentLog = typeof consentLog.$inferInsert
+
+// ─── Мониторинг цен / price_monitor (drizzle/0256) ─────────────────────────
+// Модуль сравнения цен наших объектов размещения с конкурентами поблизости.
+// Первый источник — Airbnb (lib/price-monitor/sources/airbnb.ts), архитектура
+// адаптеров рассчитана на добавление Суточно/Авито/Островок без переделки ядра.
+// Никакого хардкода порогов/периодов/расписаний — все настройки на уровне
+// платформа → компания (price_monitor_settings) → объект (settings_json),
+// эффективные значения собираются в run-monitor.ts.
+
+// Настройки конкретного объекта — переопределяют company-level дефолты
+// (price_monitor_settings). Все поля опциональные: отсутствующее поле →
+// берём значение компании.
+export interface PriceMonitorObjectSettings {
+  radiusM?: number
+  periods?: number[]                 // напр. [7, 14, 28, 30] — периоды проживания (ночей)
+  complexFilter?: string             // фильтр по названию ЖК для авто-поиска конкурентов
+  schedule?: {
+    intervalMinutes?: number | null  // интервал между прогонами; null = только по runAtTime
+    runAtTime?: string | null        // "HH:MM" — время суток прогона; null = без привязки ко времени
+  }
+  autoDiscover?: boolean             // авто-поиск конкурентов в радиусе
+}
+
+// Наши объекты размещения, за которыми следим.
+export const priceMonitorObjects = pgTable("price_monitor_objects", {
+  id:             uuid("id").primaryKey().defaultRandom(),
+  companyId:      uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  name:           text("name").notNull(),
+  source:         text("source").notNull().default("airbnb"), // 'airbnb' | 'sutochno' | 'avito' | 'ostrovok' (в будущем)
+  externalId:     text("external_id").notNull(),
+  url:            text("url"),
+  lat:            doublePrecision("lat"),
+  lng:            doublePrecision("lng"),
+  address:        text("address"),
+  complexName:    text("complex_name"),   // ЖК
+  isActive:       boolean("is_active").notNull().default(true),
+  settingsJson:   jsonb("settings_json").$type<PriceMonitorObjectSettings>().notNull().default({}),
+  lastCheckedAt:  timestamp("last_checked_at", { withTimezone: true }),
+  createdAt:      timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("price_monitor_objects_company_idx").on(t.companyId),
+  index("price_monitor_objects_active_idx").on(t.isActive),
+])
+export type PriceMonitorObject    = typeof priceMonitorObjects.$inferSelect
+export type NewPriceMonitorObject = typeof priceMonitorObjects.$inferInsert
+
+// Конкуренты рядом с объектом — найдены автоматически (радиус+ЖК-фильтр) или
+// добавлены вручную HR/владельцем.
+export const priceMonitorCompetitors = pgTable("price_monitor_competitors", {
+  id:            uuid("id").primaryKey().defaultRandom(),
+  objectId:      uuid("object_id").notNull().references(() => priceMonitorObjects.id, { onDelete: "cascade" }),
+  source:        text("source").notNull().default("airbnb"),
+  externalId:    text("external_id").notNull(),
+  url:           text("url"),
+  name:          text("name"),
+  lat:           doublePrecision("lat"),
+  lng:           doublePrecision("lng"),
+  distanceM:     integer("distance_m"),
+  complexName:   text("complex_name"),
+  discovered:    text("discovered").notNull().default("auto"), // 'auto' | 'manual'
+  isIgnored:     boolean("is_ignored").notNull().default(false),
+  firstSeenAt:   timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt:    timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  unique("price_monitor_competitors_object_source_ext_uq").on(t.objectId, t.source, t.externalId),
+  index("price_monitor_competitors_object_idx").on(t.objectId),
+])
+export type PriceMonitorCompetitor    = typeof priceMonitorCompetitors.$inferSelect
+export type NewPriceMonitorCompetitor = typeof priceMonitorCompetitors.$inferInsert
+
+// Срезы цен — и нашего объекта (competitorId = NULL), и конкурентов, по
+// периодам проживания (7/14/28/30 ночей и т.д., настраивается).
+export const priceMonitorSnapshots = pgTable("price_monitor_snapshots", {
+  id:            uuid("id").primaryKey().defaultRandom(),
+  objectId:      uuid("object_id").notNull().references(() => priceMonitorObjects.id, { onDelete: "cascade" }),
+  competitorId:  uuid("competitor_id").references(() => priceMonitorCompetitors.id, { onDelete: "cascade" }), // NULL = наш объект
+  periodNights:  integer("period_nights").notNull(),
+  checkinDate:   date("checkin_date").notNull(),
+  checkoutDate:  date("checkout_date").notNull(),
+  priceTotal:    numeric("price_total"),
+  pricePerNight: numeric("price_per_night"),
+  currency:      text("currency").notNull().default("RUB"),
+  available:     boolean("available").notNull().default(true),
+  rawJson:       jsonb("raw_json"),
+  capturedAt:    timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("price_monitor_snapshots_object_captured_idx").on(t.objectId, t.capturedAt),
+  index("price_monitor_snapshots_competitor_captured_idx").on(t.competitorId, t.capturedAt),
+])
+export type PriceMonitorSnapshot    = typeof priceMonitorSnapshots.$inferSelect
+export type NewPriceMonitorSnapshot = typeof priceMonitorSnapshots.$inferInsert
+
+// Company-level дефолты мониторинга — эффективные настройки объекта = эти
+// значения, переопределённые непустыми полями PriceMonitorObjectSettings.
+export const priceMonitorSettings = pgTable("price_monitor_settings", {
+  companyId:       uuid("company_id").primaryKey().references(() => companies.id, { onDelete: "cascade" }),
+  radiusM:         integer("radius_m").notNull().default(1000),
+  periods:         integer("periods").array().notNull().default([7, 14, 28, 30]),
+  intervalMinutes: integer("interval_minutes").notNull().default(1440),
+  runAtTime:       text("run_at_time").notNull().default("06:00"),
+  currency:        text("currency").notNull().default("RUB"),
+  updatedAt:       timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+})
+export type PriceMonitorSettings    = typeof priceMonitorSettings.$inferSelect
+export type NewPriceMonitorSettings = typeof priceMonitorSettings.$inferInsert

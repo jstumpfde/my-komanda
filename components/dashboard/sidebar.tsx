@@ -13,7 +13,7 @@ import {
   AlertTriangle, UserMinus, Brain, Radar, Bot, Store, TrendingDown, Handshake,
   BookMarked, GraduationCap, Target, PieChart, FilePlus, Lock, Library,
   Sparkles, Plus, Coins, SlidersHorizontal, Sunrise, Activity, Inbox, Network,
-  Mail, Send,
+  Mail, Send, LineChart,
   type LucideIcon,
 } from "lucide-react"
 import {
@@ -52,7 +52,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   UserCheck2, Trophy, BarChart2, HeartHandshake, BookOpen, Award, Zap, ChevronRight,
   AlertTriangle, UserMinus, Brain, Radar, Bot, Store, TrendingDown, Handshake,
   BookMarked, GraduationCap, Target, PieChart, FilePlus, Library,
-  Sparkles, Plus, Coins, Activity, Inbox, Network, Mail, Send,
+  Sparkles, Plus, Coins, Activity, Inbox, Network, Mail, Send, LineChart,
 }
 function getIcon(name: string): LucideIcon {
   return ICON_MAP[name] ?? Settings
@@ -99,6 +99,7 @@ const MODULE_SHORT: Record<ModuleId, string> = {
   dialer:    'ЗВН',
   qc:        'ОКК',
   email_marketing: 'ЕМЛ',
+  price_monitor:   'Цены',
 }
 
 // Module accent colors for visual distinction
@@ -116,6 +117,7 @@ const MODULE_COLORS: Record<ModuleId, string> = {
   dialer:    'text-red-500',
   qc:        'text-indigo-500',
   email_marketing: 'text-rose-500',
+  price_monitor:   'text-lime-500',
 }
 
 const MODULE_BG_COLORS: Record<ModuleId, string> = {
@@ -132,6 +134,7 @@ const MODULE_BG_COLORS: Record<ModuleId, string> = {
   dialer:    'bg-red-500/10',
   qc:        'bg-indigo-500/10',
   email_marketing: 'bg-rose-500/10',
+  price_monitor:   'bg-lime-500/10',
 }
 
 const MODULE_BORDER_COLORS: Record<ModuleId, string> = {
@@ -148,6 +151,7 @@ const MODULE_BORDER_COLORS: Record<ModuleId, string> = {
   dialer:    '#ef4444',
   qc:        '#6366f1',
   email_marketing: '#f43f5e',
+  price_monitor:   '#84cc16',
 }
 
 // Group colors for style C (colored icons + badge)
@@ -357,6 +361,14 @@ export function DashboardSidebar() {
         })()
       : null
   const companyEnabledKey = companyEnabledModules ? companyEnabledModules.join(',') : ''
+  // Мониторинг цен — скрыт по умолчанию (не входит в ALL_MODULE_KEYS/базовые
+  // списки ролей), включается ТОЛЬКО аддитивно через companies.enabled_modules
+  // (сырой, ненормализованный список — иначе ALL_MODULE_KEYS.has() выше его
+  // вырежет). owner/платформ-роли/демо-витрина видят его всегда как часть
+  // fullModulesCompany.
+  const priceMonitorEnabled =
+    !isOwner && !isAdminOrManager && !fullModulesCompany &&
+    Array.isArray(companyModulesRaw) && companyModulesRaw.includes('price_monitor')
 
   // Пересчёт модулей при изменении роли (когда useSession догружает данные)
   useEffect(() => {
@@ -371,12 +383,18 @@ export function DashboardSidebar() {
     if (fullModulesCompany) {
       for (const m of (['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'logistics', 'booking', 'dialer', 'qc', 'b2b'] as ModuleId[])) add(m)
     }
+    // Мониторинг цен — скрыт по умолчанию, аддитивный тумблер per-company
+    // (см. priceMonitorEnabled выше); не входит в ALL_MODULE_KEYS/базовые списки.
+    if (priceMonitorEnabled) add('price_monitor' as ModuleId)
     // Админ-оверрайд видимых модулей (companies.enabled_modules) — ПОСЛЕДНИЙ в
     // цепочке. Непустой список → показываем РОВНО заданные модули (hr гарантирован
     // нормализацией). Это ОВЕРРАЙД роли и стейджинг/пилот-расширений: например,
     // если админ задал ['hr'], стейджинг-добавки knowledge/sales отбрасываются.
+    // price_monitor — исключение: он аддитивный сам по себе (не входит в
+    // ALL_MODULE_KEYS), поэтому явно сохраняем его, даже если он не попал в
+    // companyEnabledModules (нормализованный список).
     const finalModules = companyEnabledModules
-      ? newModules.filter((m) => companyEnabledModules.includes(m))
+      ? newModules.filter((m) => companyEnabledModules.includes(m) || (m === 'price_monitor' && priceMonitorEnabled))
       : newModules
     // Защита: если фильтр случайно опустошил список — оставляем hr (никогда пусто).
     const safeModules = finalModules.length > 0 ? finalModules : (['hr'] as ModuleId[])
@@ -384,7 +402,7 @@ export function DashboardSidebar() {
       if (prev.length === safeModules.length && prev.every((m, i) => m === safeModules[i])) return prev
       return safeModules
     })
-  }, [vis.modules, stagingFullAccess, pilotCompanyFull, fullModulesCompany, companyEnabledKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [vis.modules, stagingFullAccess, pilotCompanyFull, fullModulesCompany, companyEnabledKey, priceMonitorEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Sidebar visibility customization ──
   const { visibility: sidebarVis, setVisibility: setSidebarVis, isModuleVisible, isItemVisible, resetToDefault: resetSidebarVis } = useSidebarVisibility()

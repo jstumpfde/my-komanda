@@ -252,4 +252,15 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Настройки',  href: '/email-marketing/settings',  icon: 'Settings' },
     ],
   },
+  price_monitor: {
+    id: 'price_monitor',
+    name: 'Мониторинг цен',
+    description: 'Сравнение цен наших объектов размещения с конкурентами рядом',
+    icon: 'LineChart',
+    basePath: '/pricing',
+    menuItems: [
+      { label: 'Объекты',    href: '/pricing',          icon: 'Building2' },
+      { label: 'Настройки',  href: '/pricing/settings', icon: 'Settings' },
+    ],
+  },
 }
