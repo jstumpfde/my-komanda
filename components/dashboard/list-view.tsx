@@ -603,7 +603,11 @@ export function ListView({
                     <span className="text-muted-foreground/40 text-xs">—</span>
                   )}
                   {hasParts && (
-                    <span className="mt-0.5 text-[9px] leading-none text-muted-foreground/70 tabular-nums">
+                    // Юрий 05.07: было text-[9px] text-muted-foreground/70 —
+                    // едва читалось в обеих темах. 10px + secondary-foreground
+                    // (обычный контраст, не приглушённый /70) — заметно, но
+                    // компактно (колонка 68px не раздувается).
+                    <span className="mt-0.5 text-[10px] leading-none text-secondary-foreground font-medium tabular-nums">
                       {partsAnswered}/{partsTotal}
                     </span>
                   )}
@@ -867,13 +871,15 @@ export function ListView({
     })
 
     if (showSource) {
-      // Источник — фикс (значки "hh"/"av" короткие). Ширина чуть увеличена
-      // (72→84px), чтобы влезло полное слово «Источник» (было обрублено
-      // «Источн.», нечитаемо клиенту); таблица горизонтально скроллится, так
-      // что это безопасно для layout.
+      // Источник — фикс. 92px (05.07, было 84px): заголовок «Источник» с
+      // иконкой сортировки — 78.6px по факту (замер Inter), при 84px оставалось
+      // ~2.7px с каждой стороны — заголовок выглядел прижатым к правому краю
+      // (визуально не на одной оси с бейджем-контентом, у которого от природы
+      // много воздуха). 92px даёт заголовку тот же комфортный запас (~7px с
+      // каждой стороны), что и у других колонок.
       list.push({
         id: "source",
-        gridWidth: "84px",
+        gridWidth: "92px",
         header: (
           <SortHeader
             label="Источник"
