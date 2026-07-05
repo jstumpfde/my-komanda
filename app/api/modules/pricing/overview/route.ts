@@ -7,7 +7,7 @@ import { db } from "@/lib/db"
 import { priceMonitorObjects, priceMonitorSettings, priceMonitorSnapshots } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { assertPriceMonitorModule } from "@/lib/price-monitor/entitlement"
-import { loadLatestOccupancy } from "@/lib/price-monitor/occupancy"
+import { loadLatestOccupancy, loadMarketOccupancy } from "@/lib/price-monitor/occupancy"
 
 const DEFAULT_PERIODS = [1, 3, 5, 7, 10, 14, 15, 25, 28, 30]
 const DEFAULT_CURRENCY = "RUB"
@@ -25,6 +25,7 @@ export interface OverviewRow {
   lastCheckedAt: string | null
   prices: Record<string, OverviewPriceCell>
   occupancy: Record<string, number | null>
+  marketOccupancy: Record<string, number | null>
 }
 
 export interface OverviewData {
@@ -93,6 +94,7 @@ export async function GET() {
         }
 
         const occupancy = await loadLatestOccupancy(object.id)
+        const marketOccupancy = await loadMarketOccupancy(object.id)
 
         return {
           objectId: object.id,
@@ -102,6 +104,7 @@ export async function GET() {
           lastCheckedAt: object.lastCheckedAt ? object.lastCheckedAt.toISOString() : null,
           prices,
           occupancy,
+          marketOccupancy,
         }
       }),
     )

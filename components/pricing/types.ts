@@ -136,6 +136,7 @@ export interface OverviewRow {
   lastCheckedAt: string | null
   prices: Record<string, OverviewPriceCell>
   occupancy: Record<string, number | null>
+  marketOccupancy?: Record<string, number | null>
 }
 
 export interface OverviewData {

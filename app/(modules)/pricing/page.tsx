@@ -89,6 +89,8 @@ export default function PriceMonitorObjectsPage() {
       ...matrixPeriods.map((p) => ({ id: `p${p}`, default: 110, min: 80 })),
       { id: "occ30", default: 110, min: 80 },
       { id: "occ90", default: 110, min: 80 },
+      { id: "mocc30", default: 110, min: 80 },
+      { id: "mocc90", default: 110, min: 80 },
       { id: "checked", default: 130, min: 100 },
     ],
     [matrixPeriods],
@@ -344,6 +346,8 @@ export default function PriceMonitorObjectsPage() {
                       ))}
                       <col style={{ width: matrixCols.widths.occ30 }} />
                       <col style={{ width: matrixCols.widths.occ90 }} />
+                      <col style={{ width: matrixCols.widths.mocc30 }} />
+                      <col style={{ width: matrixCols.widths.mocc90 }} />
                       <col style={{ width: matrixCols.widths.checked }} />
                     </colgroup>
                     <TableHeader>
@@ -372,6 +376,14 @@ export default function PriceMonitorObjectsPage() {
                         <TableHead className="text-right relative" title="Заполняемость (оценка) — занятый день это бронь или ручной блок">
                           Загрузка 90д
                           <span className={RESIZER_CLASS} onMouseDown={(e) => matrixCols.onResizeStart("occ90", e)} />
+                        </TableHead>
+                        <TableHead className="text-right relative" title="Средняя заполняемость конкурентов (оценка)">
+                          Рынок 30д
+                          <span className={RESIZER_CLASS} onMouseDown={(e) => matrixCols.onResizeStart("mocc30", e)} />
+                        </TableHead>
+                        <TableHead className="text-right relative" title="Средняя заполняемость конкурентов (оценка)">
+                          Рынок 90д
+                          <span className={RESIZER_CLASS} onMouseDown={(e) => matrixCols.onResizeStart("mocc90", e)} />
                         </TableHead>
                         <TableHead className="relative">
                           Проверено
@@ -429,6 +441,12 @@ export default function PriceMonitorObjectsPage() {
                           </TableCell>
                           <TableCell className="text-right">
                             <OccupancyValue pct={row.occupancy?.["90"] ?? null} />
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {row.marketOccupancy?.["30"] != null ? `${row.marketOccupancy["30"]}%` : "—"}
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {row.marketOccupancy?.["90"] != null ? `${row.marketOccupancy["90"]}%` : "—"}
                           </TableCell>
                           <TableCell className="text-muted-foreground whitespace-nowrap">
                             {row.lastCheckedAt ? formatRelativeTime(row.lastCheckedAt) : "ещё не проверялось"}
