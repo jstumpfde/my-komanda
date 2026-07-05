@@ -94,3 +94,23 @@ export interface Competitor {
   name: string
   isIgnored: boolean
 }
+
+export interface OverviewPriceCell {
+  perNight: number | null
+  total: number | null
+}
+
+export interface OverviewRow {
+  objectId: string
+  name: string
+  complexName: string | null
+  isActive: boolean
+  lastCheckedAt: string | null
+  prices: Record<string, OverviewPriceCell>
+}
+
+export interface OverviewData {
+  periods: number[]
+  currency: string
+  rows: OverviewRow[]
+}

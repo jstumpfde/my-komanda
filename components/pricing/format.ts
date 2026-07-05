@@ -45,3 +45,8 @@ function pluralRu(n: number, one: string, few: string, many: string): string {
   if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few
   return many
 }
+
+/** Склонение «ночь/ночи/ночей» для заголовков периодов (1 ночь, 3 ночи, 5 ночей). */
+export function nightsLabel(n: number): string {
+  return pluralRu(n, "ночь", "ночи", "ночей")
+}

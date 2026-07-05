@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
@@ -27,18 +27,71 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { LineChart, Building2, Loader2, Plus, Link2, LayoutGrid, Table2, Sparkles } from "lucide-react"
+import { LineChart, Building2, Loader2, Plus, Link2, LayoutGrid, Table2, Grid3x3, Sparkles } from "lucide-react"
 import { toast } from "sonner"
-import { formatRelativeTime } from "@/components/pricing/format"
-import type { PriceMonitorObject } from "@/components/pricing/types"
+import { formatRelativeTime, nightsLabel } from "@/components/pricing/format"
+import { useResizableColumns, RESIZER_CLASS } from "@/components/pricing/use-resizable-columns"
+import type { PriceMonitorObject, OverviewData } from "@/components/pricing/types"
+
+const DEFAULT_PERIOD_OPTIONS = [1, 3, 5, 7, 10, 14, 15, 25, 28, 30]
 
 export default function PriceMonitorObjectsPage() {
   const [objects, setObjects] = useState<PriceMonitorObject[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [hostDialogOpen, setHostDialogOpen] = useState(false)
-  const [view, setView] = useState<"cards" | "table">("table")
+  const [view, setView] = useState<"cards" | "table" | "matrix">("table")
   const [backfilling, setBackfilling] = useState(false)
+
+  const [overview, setOverview] = useState<OverviewData | null>(null)
+  const [overviewError, setOverviewError] = useState<string | null>(null)
+  const [overviewLoaded, setOverviewLoaded] = useState(false)
+
+  const loadOverview = useCallback(async () => {
+    setOverviewError(null)
+    try {
+      const res = await fetch("/api/modules/pricing/overview")
+      if (!res.ok) throw new Error("Не удалось загрузить матрицу цен")
+      const data = await res.json()
+      setOverview(data)
+    } catch (e) {
+      setOverviewError(e instanceof Error ? e.message : "Не удалось загрузить матрицу цен")
+    } finally {
+      setOverviewLoaded(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (view === "matrix" && !overviewLoaded) {
+      loadOverview()
+    }
+  }, [view, overviewLoaded, loadOverview])
+
+  // Ресайз колонок табличного вида списка объектов (тянем правый край заголовка).
+  const tableColumns = useMemo(
+    () => [
+      { id: "unit", default: 320, min: 160 },
+      { id: "zk", default: 150, min: 80 },
+      { id: "competitors", default: 120, min: 80 },
+      { id: "price", default: 150, min: 100 },
+      { id: "checked", default: 160, min: 100 },
+      { id: "status", default: 110, min: 80 },
+    ],
+    [],
+  )
+  const tableCols = useResizableColumns("pm-objects-cols", tableColumns)
+
+  const matrixPeriods = overview?.periods ?? DEFAULT_PERIOD_OPTIONS
+  const matrixColumns = useMemo(
+    () => [
+      { id: "unit", default: 300, min: 160 },
+      { id: "zk", default: 150, min: 80 },
+      ...matrixPeriods.map((p) => ({ id: `p${p}`, default: 110, min: 80 })),
+      { id: "checked", default: 130, min: 100 },
+    ],
+    [matrixPeriods],
+  )
+  const matrixCols = useResizableColumns("pm-overview-cols", matrixColumns)
 
   const load = useCallback(async () => {
     setError(null)
@@ -114,6 +167,16 @@ export default function PriceMonitorObjectsPage() {
                     >
                       <Table2 className="h-4 w-4" />
                     </Button>
+                    <Button
+                      type="button"
+                      variant={view === "matrix" ? "secondary" : "ghost"}
+                      size="sm"
+                      className="h-8 px-2"
+                      onClick={() => setView("matrix")}
+                      title="Матрица цен"
+                    >
+                      <Grid3x3 className="h-4 w-4" />
+                    </Button>
                   </div>
                 )}
                 {objects !== null && objects.length > 0 && (
@@ -174,15 +237,43 @@ export default function PriceMonitorObjectsPage() {
             )}
 
             {objects !== null && objects.length > 0 && view === "table" && (
-              <div className="rounded-xl border border-border overflow-x-auto">
-                <Table>
+              <div className="rounded-xl border border-border overflow-x-auto p-3">
+                <p className="text-xs text-muted-foreground mb-2">
+                  Ширину колонок можно менять — потяните за правый край заголовка.
+                </p>
+                <Table
+                  style={{ tableLayout: "fixed", width: tableCols.totalWidth, minWidth: tableCols.totalWidth }}
+                >
+                  <colgroup>
+                    <col style={{ width: tableCols.widths.unit }} />
+                    <col style={{ width: tableCols.widths.zk }} />
+                    <col style={{ width: tableCols.widths.competitors }} />
+                    <col style={{ width: tableCols.widths.price }} />
+                    <col style={{ width: tableCols.widths.checked }} />
+                    <col style={{ width: tableCols.widths.status }} />
+                  </colgroup>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Объект</TableHead>
-                      <TableHead>ЖК</TableHead>
-                      <TableHead className="text-right">Конкурентов</TableHead>
-                      <TableHead className="text-right">Наша цена/ночь</TableHead>
-                      <TableHead>Проверено</TableHead>
+                      <TableHead className="relative">
+                        Объект
+                        <span className={RESIZER_CLASS} onMouseDown={(e) => tableCols.onResizeStart("unit", e)} />
+                      </TableHead>
+                      <TableHead className="relative">
+                        ЖК
+                        <span className={RESIZER_CLASS} onMouseDown={(e) => tableCols.onResizeStart("zk", e)} />
+                      </TableHead>
+                      <TableHead className="text-right relative">
+                        Конкурентов
+                        <span className={RESIZER_CLASS} onMouseDown={(e) => tableCols.onResizeStart("competitors", e)} />
+                      </TableHead>
+                      <TableHead className="text-right relative">
+                        Наша цена/ночь
+                        <span className={RESIZER_CLASS} onMouseDown={(e) => tableCols.onResizeStart("price", e)} />
+                      </TableHead>
+                      <TableHead className="relative">
+                        Проверено
+                        <span className={RESIZER_CLASS} onMouseDown={(e) => tableCols.onResizeStart("checked", e)} />
+                      </TableHead>
                       <TableHead className="text-right">Статус</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -195,8 +286,14 @@ export default function PriceMonitorObjectsPage() {
                           window.location.href = `/pricing/objects/${obj.id}`
                         }}
                       >
-                        <TableCell className="font-medium max-w-[280px]">{obj.name}</TableCell>
-                        <TableCell className="text-muted-foreground">{obj.complexName ?? "—"}</TableCell>
+                        <TableCell className="font-medium overflow-hidden">
+                          <span className="block truncate" title={obj.name}>{obj.name}</span>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground overflow-hidden">
+                          <span className="block truncate" title={obj.complexName ?? undefined}>
+                            {obj.complexName ?? "—"}
+                          </span>
+                        </TableCell>
                         <TableCell className="text-right">{obj.competitorsCount}</TableCell>
                         <TableCell className="text-right">
                           {obj.latestOwnPerNight != null
@@ -215,6 +312,114 @@ export default function PriceMonitorObjectsPage() {
                     ))}
                   </TableBody>
                 </Table>
+              </div>
+            )}
+
+            {objects !== null && objects.length > 0 && view === "matrix" && (
+              <div className="rounded-xl border border-border overflow-x-auto p-3">
+                <p className="text-xs text-muted-foreground mb-2">
+                  Ширину колонок можно менять — потяните за правый край заголовка.
+                </p>
+                {overviewError && (
+                  <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive mb-4">
+                    {overviewError}
+                  </div>
+                )}
+                {overview === null && !overviewError && (
+                  <div className="flex items-center justify-center py-16">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                )}
+                {overview !== null && (
+                  <Table
+                    style={{ tableLayout: "fixed", width: matrixCols.totalWidth, minWidth: matrixCols.totalWidth }}
+                  >
+                    <colgroup>
+                      <col style={{ width: matrixCols.widths.unit }} />
+                      <col style={{ width: matrixCols.widths.zk }} />
+                      {matrixPeriods.map((p) => (
+                        <col key={p} style={{ width: matrixCols.widths[`p${p}`] }} />
+                      ))}
+                      <col style={{ width: matrixCols.widths.checked }} />
+                    </colgroup>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="relative">
+                          Объект
+                          <span className={RESIZER_CLASS} onMouseDown={(e) => matrixCols.onResizeStart("unit", e)} />
+                        </TableHead>
+                        <TableHead className="relative">
+                          ЖК
+                          <span className={RESIZER_CLASS} onMouseDown={(e) => matrixCols.onResizeStart("zk", e)} />
+                        </TableHead>
+                        {matrixPeriods.map((p) => (
+                          <TableHead key={p} className="text-right relative">
+                            {p} {nightsLabel(p)}
+                            <span
+                              className={RESIZER_CLASS}
+                              onMouseDown={(e) => matrixCols.onResizeStart(`p${p}`, e)}
+                            />
+                          </TableHead>
+                        ))}
+                        <TableHead className="relative">
+                          Проверено
+                          <span className={RESIZER_CLASS} onMouseDown={(e) => matrixCols.onResizeStart("checked", e)} />
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {overview.rows.map((row) => (
+                        <TableRow
+                          key={row.objectId}
+                          className="cursor-pointer"
+                          onClick={() => {
+                            window.location.href = `/pricing/objects/${row.objectId}`
+                          }}
+                        >
+                          <TableCell className="font-medium overflow-hidden">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="truncate" title={row.name}>{row.name}</span>
+                              {!row.isActive && (
+                                <Badge variant="secondary" className="shrink-0">
+                                  Выключен
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground overflow-hidden">
+                            <span className="block truncate" title={row.complexName ?? undefined}>
+                              {row.complexName ?? "—"}
+                            </span>
+                          </TableCell>
+                          {matrixPeriods.map((p) => {
+                            const cell = row.prices[String(p)]
+                            return (
+                              <TableCell key={p} className="text-right">
+                                {cell && cell.perNight != null ? (
+                                  <>
+                                    <div className="font-medium">
+                                      {Math.round(cell.perNight).toLocaleString("ru-RU")} {overview.currency}
+                                    </div>
+                                    {cell.total != null && (
+                                      <div className="text-xs text-muted-foreground">
+                                        итого {Math.round(cell.total).toLocaleString("ru-RU")} {overview.currency}
+                                      </div>
+                                    )}
+                                  </>
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                            )
+                          })}
+                          <TableCell className="text-muted-foreground whitespace-nowrap">
+                            {row.lastCheckedAt ? formatRelativeTime(row.lastCheckedAt) : "ещё не проверялось"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
               </div>
             )}
 
