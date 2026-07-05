@@ -5,10 +5,12 @@ import {
   Phone, Mail, MapPin, Briefcase, GraduationCap, Globe2, Plane,
   DollarSign, Calendar, ExternalLink, Languages, Wrench,
   Car, Award, Link2, Clock, Send, MessageSquare,
-  Lock, Train, Globe, FileBadge,
+  Lock, Train, Globe, FileBadge, BadgeCheck, AtSign,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { extractAllContacts, type ExtractedContact } from "@/lib/hh/extract-resume-fields"
 
 // ─── Types — описывают только нужные поля сырого hh resume ────────────────────
 //
@@ -404,6 +406,76 @@ function HiddenContactRow({
   )
 }
 
+// Иконка по типу контакта — телефоны/email получают спец-иконку, остальное
+// (мессенджеры известные и будущие) — generic AtSign.
+function iconForContactType(typeId: string): React.ComponentType<{ className?: string }> {
+  switch (typeId) {
+    case "cell":
+    case "home":
+    case "work":
+      return Phone
+    case "email":
+      return Mail
+    case "telegram":
+      return Send
+    case "whatsapp":
+    case "viber":
+    case "skype":
+    case "max":
+      return MessageSquare
+    default:
+      return AtSign
+  }
+}
+
+// Один контакт из extractAllContacts() — предпочтительный получает бейдж,
+// комментарий кандидата («звоните только в Telegram») — приглушённым текстом
+// под контактом (критично для HR, чтобы не звонили «не туда»).
+function ContactEntryRow({ contact }: { contact: ExtractedContact }) {
+  const Icon = iconForContactType(contact.typeId)
+  const content = (
+    <>
+      <Icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+      <span className="break-all">{contact.display}</span>
+    </>
+  )
+
+  return (
+    <div className="space-y-0.5">
+      <div className="flex items-center gap-2 text-sm flex-wrap">
+        {contact.href ? (
+          <a
+            href={contact.href}
+            target={contact.href.startsWith("tel:") || contact.href.startsWith("mailto:") ? undefined : "_blank"}
+            rel={contact.href.startsWith("tel:") || contact.href.startsWith("mailto:") ? undefined : "noopener noreferrer"}
+            className="flex items-center gap-2 hover:text-primary transition-colors"
+          >
+            {content}
+          </a>
+        ) : (
+          <div className="flex items-center gap-2 text-muted-foreground">{content}</div>
+        )}
+        {contact.preferred && (
+          <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] font-medium px-1.5 py-0 h-4">
+            Предпочтительный
+          </Badge>
+        )}
+        {contact.verified && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <BadgeCheck className="w-3.5 h-3.5 text-primary shrink-0" aria-label="Подтверждён на hh" />
+            </TooltipTrigger>
+            <TooltipContent>Подтверждён на hh</TooltipContent>
+          </Tooltip>
+        )}
+      </div>
+      {contact.comment && (
+        <p className="text-xs text-muted-foreground/80 pl-[22px] italic break-words">{contact.comment}</p>
+      )}
+    </div>
+  )
+}
+
 function ExperienceCard({ exp }: { exp: HhExperience }) {
   // hh возвращает HTML с <li>, <p>, <br>. Разворачиваем в plain-text
   // с переносами строк, чтобы whitespace-pre-wrap отрисовал список.
@@ -522,26 +594,26 @@ export function HhResumeInfo({ rawData, fallback }: HhResumeInfoProps) {
   )
 
   // ── Контакты ───────────────────────────────────────────────────────────────
+  // extractAllContacts — общий сборщик (lib/hh/extract-resume-fields.ts), тот же
+  // что используется на бэке. Отдаёт ВЕСЬ список контактов (не только 4 типа),
+  // preferred/verified/comment и готовую ссылку для клика; предпочтительный —
+  // первым в массиве.
+  const allContacts: ExtractedContact[] = extractAllContacts(resume)
+
+  // Скрытые контакты (candidate.hidden_fields) — extractAllContacts их не видит
+  // (hh просто не присылает value), поэтому пометку «скрыт кандидатом» для
+  // телефона/email оставляем через старый helper.
   const phoneRes = getContact(resume?.contact, ["cell", "phone", "home", "work"], ["phones"], hiddenFieldsSet)
   const emailRes = getContact(resume?.contact, ["email"], ["email"], hiddenFieldsSet)
-  const telegramRes = getContact(resume?.contact, ["telegram"], ["other_contacts"], hiddenFieldsSet)
-  const whatsappRes = getContact(resume?.contact, ["whatsapp"], ["other_contacts"], hiddenFieldsSet)
-  const maxRes = getContact(resume?.contact, ["max"], ["other_contacts"], hiddenFieldsSet)
-  const skypeRes = getContact(resume?.contact, ["skype"], ["other_contacts"], hiddenFieldsSet)
-
-  const phoneValue = phoneRes && "value" in phoneRes ? phoneRes.value : null
-  const phoneHidden = phoneRes && "hidden" in phoneRes
-  const emailValue = emailRes && "value" in emailRes ? emailRes.value : null
-  const emailHidden = emailRes && "hidden" in emailRes
-  const telegramValue = telegramRes && "value" in telegramRes ? telegramRes.value : null
-  const whatsappValue = whatsappRes && "value" in whatsappRes ? whatsappRes.value : null
-  const maxValue = maxRes && "value" in maxRes ? maxRes.value : null
-  const skypeValue = skypeRes && "value" in skypeRes ? skypeRes.value : null
+  const phoneHidden = phoneRes && "hidden" in phoneRes && !allContacts.some((c) => c.typeId === "cell" || c.typeId === "home" || c.typeId === "work")
+  const emailHidden = emailRes && "hidden" in emailRes && !allContacts.some((c) => c.typeId === "email")
 
   // Fallback: phone/email из полей самого кандидата (когда hh не отдал contact[],
-  // но мы получили их из other_contacts на уровне negotiations item).
-  const phone = phoneValue ?? (phoneHidden ? null : fallback.phone)
-  const email = emailValue ?? (emailHidden ? null : fallback.email)
+  // но мы получили их из other_contacts на уровне negotiations item, либо это
+  // резюме-preview без контактов вовсе — тогда allContacts пуст).
+  const hasHhContacts = allContacts.length > 0
+  const fallbackPhone = !hasHhContacts && !phoneHidden ? fallback.phone : null
+  const fallbackEmail = !hasHhContacts && !emailHidden ? fallback.email : null
 
   // ── Локация и переезд ──────────────────────────────────────────────────────
   const city = resume?.area?.name ?? fallback.city
@@ -618,7 +690,7 @@ export function HhResumeInfo({ rawData, fallback }: HhResumeInfoProps) {
   // ── Booleans для управления секциями ───────────────────────────────────────
   const hasPersonal = !!(fullName || age || gender || desiredPosition || salary || citizenship.length > 0 || workTicket.length > 0 || resume?.alternate_url)
   const hasContacts = !!(
-    phone || email || telegramValue || whatsappValue || maxValue || skypeValue ||
+    allContacts.length > 0 || fallbackPhone || fallbackEmail ||
     phoneHidden || emailHidden || city
   )
   const hasLocation = !!(city || metro || relocationType || relocationAreas.length > 0 || businessTrip || travelTime)
@@ -689,55 +761,42 @@ export function HhResumeInfo({ rawData, fallback }: HhResumeInfoProps) {
 
       {/* ── Контакты ─────────────────────────────────────────────────────────── */}
       {hasContacts && (
-        <section className="space-y-1.5">
+        <section className="space-y-2">
           <SectionHeader>Контакты</SectionHeader>
-          {phone ? (
+
+          {/* Полный список из resume.contact[] — предпочтительный уже первым
+              (сортировка в extractAllContacts), с бейджем/verified/comment. */}
+          {allContacts.length > 0 && (
+            <div className="space-y-2">
+              {allContacts.map((c, i) => (
+                <ContactEntryRow key={`${c.typeId}-${i}`} contact={c} />
+              ))}
+            </div>
+          )}
+
+          {/* Скрытые контакты — hh прислал hidden_fields, но не значение. */}
+          {phoneHidden && <HiddenContactRow icon={Phone} label="Телефон" />}
+          {emailHidden && <HiddenContactRow icon={Mail} label="Email" />}
+
+          {/* Fallback на наши поля кандидата — только если hh вообще не отдал
+              contact[] (напр. resume-preview из /negotiations). */}
+          {fallbackPhone && (
             <a
-              href={`tel:${phone}`}
+              href={`tel:${fallbackPhone}`}
               className="flex items-center gap-2 text-sm hover:text-primary transition-colors break-all"
             >
               <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-              {phone}
+              {fallbackPhone}
             </a>
-          ) : phoneHidden ? (
-            <HiddenContactRow icon={Phone} label="Телефон" />
-          ) : null}
-
-          {email ? (
+          )}
+          {fallbackEmail && (
             <a
-              href={`mailto:${email}`}
+              href={`mailto:${fallbackEmail}`}
               className="flex items-center gap-2 text-sm hover:text-primary transition-colors break-all"
             >
               <Mail className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-              {email}
+              {fallbackEmail}
             </a>
-          ) : emailHidden ? (
-            <HiddenContactRow icon={Mail} label="Email" />
-          ) : null}
-
-          {telegramValue && (
-            <Row icon={Send}>
-              <span className="text-foreground">Telegram: </span>
-              <span className="break-all">{telegramValue}</span>
-            </Row>
-          )}
-          {whatsappValue && (
-            <Row icon={MessageSquare}>
-              <span className="text-foreground">WhatsApp: </span>
-              <span className="break-all">{whatsappValue}</span>
-            </Row>
-          )}
-          {maxValue && (
-            <Row icon={MessageSquare}>
-              <span className="text-foreground">MAX: </span>
-              <span className="break-all">{maxValue}</span>
-            </Row>
-          )}
-          {skypeValue && (
-            <Row icon={MessageSquare}>
-              <span className="text-foreground">Skype: </span>
-              <span className="break-all">{skypeValue}</span>
-            </Row>
           )}
 
           {city && <Row icon={MapPin}>{city}</Row>}

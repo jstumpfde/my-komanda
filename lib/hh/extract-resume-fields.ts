@@ -39,6 +39,136 @@ export interface ExtractedHhFields {
   experience?:         string | null   // напр. "5 лет"
 }
 
+/**
+ * Один контакт кандидата из resume.contact[] — расширенное представление
+ * (не только phone/email, как parseContacts, а ВЕСЬ список: телефоны,
+ * email, мессенджеры, любые будущие типы hh). Используется картой карточки
+ * («КОНТАКТЫ»), чтобы показывать preferred/verified/comment и ссылку клика.
+ *
+ * hh API: resume.contact[] = [{ kind, type: {id, name}, value, preferred,
+ * verified, comment, need_verification }]. У мессенджеров (telegram/whatsapp/
+ * viber/...) value может быть объектом с links: {ios, web, android}.
+ */
+export interface ExtractedContact {
+  /** hh type.id — "cell" | "home" | "work" | "email" | "telegram" | "whatsapp" | ... */
+  typeId: string
+  /** Человеко-читаемое название типа — из type.name (hh) либо наш словарь-фолбэк. */
+  typeLabel: string
+  /** Отображаемое значение — телефон/email/юзернейм/т.п. */
+  display: string
+  /** Ссылка для клика: tel:/mailto:/links.web мессенджера. null если кликать некуда. */
+  href: string | null
+  preferred: boolean
+  verified: boolean
+  /** Свободный текст кандидата к контакту (напр. «Пишите в Telegram» с hh). */
+  comment: string | null
+}
+
+type RawContactEntry = {
+  kind?: unknown
+  type?: { id?: unknown; name?: unknown } | null
+  preferred?: unknown
+  verified?: unknown
+  comment?: unknown
+  value?:
+    | string
+    | {
+        formatted?: unknown
+        email?: unknown
+        number?: unknown
+        country?: unknown
+        city?: unknown
+      }
+    | null
+  links?: { ios?: unknown; web?: unknown; android?: unknown } | null
+}
+
+// Русские подписи для известных типов hh (dictionaries#contact_type).
+// Неизвестные типы (появятся новые мессенджеры и т.п.) — фолбэк на type.name.
+const CONTACT_TYPE_LABELS: Record<string, string> = {
+  cell: "Телефон",
+  home: "Телефон (дом.)",
+  work: "Телефон (раб.)",
+  email: "Email",
+  telegram: "Telegram",
+  whatsapp: "WhatsApp",
+  viber: "Viber",
+  skype: "Skype",
+  max: "MAX",
+  vk: "VK",
+  livejournal: "LiveJournal",
+  icq: "ICQ",
+}
+
+const PHONE_TYPE_IDS = new Set(["cell", "home", "work"])
+
+/** Значение контакта → отображаемая строка (телефон formatted / email / юзернейм мессенджера). */
+function contactDisplayValue(v: RawContactEntry["value"]): string | null {
+  if (isString(v)) return v
+  if (v && typeof v === "object") {
+    const formatted = (v as { formatted?: unknown }).formatted
+    const email = (v as { email?: unknown }).email
+    const number = (v as { number?: unknown }).number
+    if (isString(formatted)) return formatted
+    if (isString(email)) return email
+    if (isString(number)) return number
+  }
+  return null
+}
+
+/** Ссылка для клика по контакту — tel:/mailto:/веб-ссылка мессенджера. */
+function contactHref(typeId: string, display: string, links: RawContactEntry["links"]): string | null {
+  if (links && typeof links === "object") {
+    const web = (links as { web?: unknown }).web
+    if (isString(web)) return web
+  }
+  if (typeId === "email") return `mailto:${display}`
+  if (PHONE_TYPE_IDS.has(typeId)) return `tel:${display.replace(/[^\d+]/g, "")}`
+  return null
+}
+
+/**
+ * Извлекает ПОЛНЫЙ список контактов из resume.contact[] — все типы (включая
+ * несколько телефонов), preferred/verified/comment/ссылку для клика.
+ * В отличие от parseContacts() (внутренний, только phone/email для колонок
+ * candidates), это для UI карточки — секция «Контакты» показывает ВСЁ, что
+ * прислал кандидат, предпочтительный способ — первым.
+ *
+ * Сортировка: preferred=true — первым, остальное — в порядке hh (обычно
+ * первым телефон, затем email, затем мессенджеры).
+ */
+export function extractAllContacts(raw: unknown): ExtractedContact[] {
+  if (!raw || typeof raw !== "object") return []
+  const contact = (raw as { contact?: unknown }).contact
+  if (!Array.isArray(contact)) return []
+
+  const out: ExtractedContact[] = []
+  for (const c of contact as RawContactEntry[]) {
+    if (!c || typeof c !== "object") continue
+    const typeId = isString(c.type?.id) ? c.type!.id! : null
+    if (!typeId) continue
+
+    const display = contactDisplayValue(c.value)
+    if (!display) continue
+
+    const typeName = isString(c.type?.name) ? c.type!.name! : null
+    const typeLabel = CONTACT_TYPE_LABELS[typeId] ?? typeName ?? typeId
+
+    out.push({
+      typeId,
+      typeLabel,
+      display,
+      href: contactHref(typeId, display, c.links),
+      preferred: c.preferred === true,
+      verified: c.verified === true,
+      comment: isString(c.comment) ? c.comment : null,
+    })
+  }
+
+  // preferred первым, стабильная сортировка (Array.prototype.sort стабильна в V8/Node)
+  return out.sort((a, b) => Number(b.preferred) - Number(a.preferred))
+}
+
 /** Одна запись истории занятости из hh experience[]. */
 export interface WorkHistoryEntry {
   position?:    string | null   // должность, напр. «Руководитель развития партнёрской сети»
