@@ -686,7 +686,6 @@ function AttractivenessSection({ attractiveness }: { attractiveness?: Attractive
                   <TableHead className="text-right">Рейтинг</TableHead>
                   <TableHead className="text-center">Суперхост</TableHead>
                   <TableHead className="text-center">Гость-фаворит</TableHead>
-                  <TableHead className="text-right">Удобства</TableHead>
                   <TableHead className="text-right">Индекс</TableHead>
                 </TableRow>
               </TableHeader>
@@ -714,7 +713,6 @@ function AttractivenessSection({ attractiveness }: { attractiveness?: Attractive
                     </TableCell>
                     <TableCell className="text-center">{row.isSuperHost ? "✓" : "—"}</TableCell>
                     <TableCell className="text-center">{row.isGuestFavorite ? "✓" : "—"}</TableCell>
-                    <TableCell className="text-right">{row.amenitiesCount ?? "—"}</TableCell>
                     <TableCell className="text-right">
                       <Badge variant="outline" className="text-base font-semibold px-2.5 py-1">
                         {row.index}
