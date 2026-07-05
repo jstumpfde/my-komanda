@@ -28,13 +28,14 @@
 import { eq, and, like, or } from "drizzle-orm"
 import Anthropic from "@anthropic-ai/sdk"
 import { db } from "@/lib/db"
-import { candidates, demos } from "@/lib/db/schema"
+import { candidates, demos, vacancies } from "@/lib/db/schema"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import {
   buildBlockResolver,
   renderAnswerValue,
 } from "@/lib/demo/resolve-questions"
 import { addVacancyTokens } from "@/lib/ai/token-usage"
+import { logAiCall } from "@/lib/ai/usage-log"
 import { AI_MODEL_MAIN } from "@/lib/ai/models"
 import { computeUnifiedAnketaScore } from "@/lib/demo/unified-score"
 
@@ -188,6 +189,14 @@ export async function scoreDemoAnswers(
   if (!candidate) throw new Error("Кандидат не найден")
   if (skipIfScored && candidate.demoAnswersScore != null) return null
 
+  // tenantId для ai_usage_log (пер-блочные AI-вызовы ниже, один вызов на блок).
+  const [vacRow] = await db
+    .select({ companyId: vacancies.companyId })
+    .from(vacancies)
+    .where(eq(vacancies.id, vacancyId))
+    .limit(1)
+  const tenantId = vacRow?.companyId ?? null
+
   // Загружаем все demos вакансии: kind='demo' и kind LIKE 'block:%'
   const demoRows = await db
     .select({ id: demos.id, title: demos.title, kind: demos.kind, lessonsJson: demos.lessonsJson })
@@ -322,6 +331,15 @@ ${questionsBlock}
     messages:   [{ role: "user", content: prompt }],
   })
   void addVacancyTokens(vacancyId, msg.usage)
+  if (tenantId) {
+    void logAiCall({
+      tenantId,
+      action:       "scoring_answers",
+      model:        AI_MODEL_MAIN,
+      inputTokens:  msg.usage?.input_tokens,
+      outputTokens: msg.usage?.output_tokens,
+    })
+  }
 
   const textBlock = msg.content.find((b) => b.type === "text")
   if (!textBlock || textBlock.type !== "text") {

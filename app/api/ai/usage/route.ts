@@ -60,6 +60,31 @@ export async function GET() {
       })
     }
 
+    // Разрез по модели (за месяц) — точная сумма расходов AI (Юрий 05.07).
+    const byModelRows = await db
+      .select({
+        model: aiUsageLog.model,
+        inputTokens: sql<number>`COALESCE(SUM(${aiUsageLog.inputTokens}), 0)::int`,
+        outputTokens: sql<number>`COALESCE(SUM(${aiUsageLog.outputTokens}), 0)::int`,
+        cost: sql<string>`COALESCE(SUM(${aiUsageLog.costUsd}::numeric), 0)::text`,
+      })
+      .from(aiUsageLog)
+      .where(
+        and(
+          eq(aiUsageLog.tenantId, user.companyId),
+          gte(aiUsageLog.createdAt, startOfMonth),
+        ),
+      )
+      .groupBy(aiUsageLog.model)
+      .orderBy(sql`COALESCE(SUM(${aiUsageLog.costUsd}::numeric), 0) DESC`) // по стоимости, убывание
+
+    const byModel = byModelRows.map((r) => ({
+      model: r.model ?? "—",
+      inputTokens: r.inputTokens,
+      outputTokens: r.outputTokens,
+      cost: Number(r.cost),
+    }))
+
     // Recent requests
     const recent = await db
       .select({
@@ -92,6 +117,7 @@ export async function GET() {
       },
       limit,
       daily,
+      byModel,
       recent,
     })
   } catch (err) {

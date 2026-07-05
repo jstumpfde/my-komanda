@@ -20,3 +20,40 @@
 //     max_tokens добавлен запас (комментарий «запас под токенизатор Sonnet 5»).
 export const AI_MODEL_MAIN = "claude-sonnet-5"
 export const AI_MODEL_FAST = "claude-haiku-4-5-20251001"
+
+// ── Прайс-таблица моделей (для пер-вызовного логирования стоимости, Юрий 05.07) ──
+// ЕДИНСТВЕННОЕ место, где хранятся цены. $/MTok (input/output).
+// claude-sonnet-5 — промо-цена до 31.08.2026, дальше $3/$15 (см. модуль-doc выше).
+// TODO(31.08.2026): поднять claude-sonnet-5 на $3/$15 (промо-период истёк).
+// AI_MODEL_FAST — старое строгое id с датой ("claude-haiku-4-5-20251001"), поэтому
+// прайс ключуется и по алиасу "claude-haiku-4-5" (совпадает с семейством).
+interface ModelPrice {
+  inputPerMTok:  number
+  outputPerMTok: number
+}
+
+const MODEL_PRICES: Record<string, ModelPrice> = {
+  "claude-sonnet-5":          { inputPerMTok: 2, outputPerMTok: 10 }, // промо до 31.08.2026
+  "claude-haiku-4-5":         { inputPerMTok: 1, outputPerMTok: 5 },
+  "claude-haiku-4-5-20251001": { inputPerMTok: 1, outputPerMTok: 5 },
+  "claude-sonnet-4-6":        { inputPerMTok: 3, outputPerMTok: 15 },
+}
+
+/**
+ * Стоимость вызова в USD по прайс-таблице выше. Модель не найдена в таблице →
+ * null (НЕ выдумываем цену для неизвестной/будущей модели).
+ */
+export function computeCostUsd(
+  model: string | null | undefined,
+  inputTokens: number | null | undefined,
+  outputTokens: number | null | undefined,
+): number | null {
+  if (!model) return null
+  const price = MODEL_PRICES[model]
+  if (!price) return null
+  const tokIn = Number(inputTokens ?? 0)
+  const tokOut = Number(outputTokens ?? 0)
+  if (!Number.isFinite(tokIn) || !Number.isFinite(tokOut)) return null
+  const cost = (tokIn / 1_000_000) * price.inputPerMTok + (tokOut / 1_000_000) * price.outputPerMTok
+  return Number.isFinite(cost) ? cost : null
+}
