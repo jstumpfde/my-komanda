@@ -9,10 +9,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const user = await requireAcademyAccess()
     const { id: courseId } = await params
-    const body = await req.json().catch(() => ({}))
-    const employeeId: string = body.employeeId || user.id || ""
+    await req.json().catch(() => ({}))
+    // Запись — только за себя (guard-находка 05.07: произвольный body.employeeId
+    // позволял записывать/проходить курс за другого; запись HR-ом за сотрудника
+    // добавим отдельной осознанной фичей с проверкой компании).
+    const employeeId: string = user.id || ""
 
-    if (!employeeId) return apiError("employeeId обязателен", 400)
+    if (!employeeId) return apiError("Не удалось определить пользователя", 400)
 
     const [course] = await db.select({ id: courses.id })
       .from(courses)

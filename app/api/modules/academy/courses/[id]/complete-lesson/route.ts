@@ -48,17 +48,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     if (!enrollmentId || !lessonId) return apiError("enrollmentId и lessonId обязательны", 400)
 
+    // Целостность (guard-находка 05.07): enrollment и lesson обязаны
+    // принадлежать курсу из URL — иначе чужой enrollmentId смешивает
+    // знаменатели прогресса и может выдать сертификат не того курса.
     const [enrollment] = await db.select()
       .from(courseEnrollments)
-      .where(eq(courseEnrollments.id, enrollmentId))
+      .where(and(eq(courseEnrollments.id, enrollmentId), eq(courseEnrollments.courseId, courseId)))
 
-    if (!enrollment) return apiError("Запись не найдена", 404)
+    if (!enrollment) return apiError("Запись не найдена в этом курсе", 404)
 
     const [lesson] = await db.select()
       .from(lessons)
-      .where(eq(lessons.id, lessonId))
+      .where(and(eq(lessons.id, lessonId), eq(lessons.courseId, courseId)))
 
-    if (!lesson) return apiError("Урок не найден", 404)
+    if (!lesson) return apiError("Урок не найден в этом курсе", 404)
 
     // Квиз-урок — считаем балл сервером по эталону из content; для остальных
     // типов уроков score = null (нечего оценивать, засчитывается по факту).
