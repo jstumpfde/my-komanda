@@ -802,6 +802,11 @@ export default function DemoPage() {
   const isAnyMediaUploading = Object.values(mediaUploading).some(Boolean)
   const [viewedBlockIds, setViewedBlockIds] = useState<Set<string>>(() => new Set())
   const [saving, setSaving] = useState(false)
+  // Сабмит ПОСЛЕДНЕГО урока может ждать AI-оценку ответов (гейт 2-й части,
+  // см. answer/route.ts) — до ~12 сек вместо обычных ~1 сек. Отдельный флаг
+  // (не обычный saving) — показываем полноэкранное «Считаем результаты…»,
+  // чтобы кандидат не решил, что страница зависла.
+  const [savingFinal, setSavingFinal] = useState(false)
   const blockStartTime = useRef(Date.now())
   const handleNextRef = useRef(false)
 
@@ -1131,8 +1136,15 @@ export default function DemoPage() {
       // «Склейка демо1 + блок 2»: сервер вернёт advanceToBlockId, если кандидат
       // ТОЛЬКО ЧТО прошёл гейт и его надо инлайн перевести на блок 2.
       let advanceToBlockId: string | null = null
+      // Последний урок — сервер может ждать AI-оценку ответов (см.
+      // AI_EVAL_AWAIT_TIMEOUT_MS в answer/route.ts) перед тем как отдать
+      // advanceToBlockId, т.е. этот конкретный POST может занять заметно
+      // дольше обычного. Показываем отдельный полноэкранный статус вместо
+      // обычного inline-спиннера кнопки.
+      const isLastLessonSubmit = currentIndex === totalLessons - 1
       if (batch.length > 0 && !isPreviewMode) {
         setSaving(true)
+        if (isLastLessonSubmit) setSavingFinal(true)
         try {
           const res = await fetch(`/api/public/demo/${token}/answer`, {
             method: "POST",
@@ -1162,6 +1174,7 @@ export default function DemoPage() {
           success = false
         } finally {
           setSaving(false)
+          setSavingFinal(false)
         }
       } else {
         // preview-mode или пустой batch — обновляем visualно, не идём в сеть
@@ -1224,6 +1237,19 @@ export default function DemoPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white">
         <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+      </div>
+    )
+  }
+
+  // Сабмит последнего урока — сервер досчитывает балл (гейт 2-й части) перед
+  // ответом, может занять несколько секунд. Отдельный экран (а не просто
+  // спиннер кнопки), чтобы кандидат понимал, что происходит, и не подумал,
+  // что страница зависла.
+  if (savingFinal) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-white px-4 text-center">
+        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+        <p className="text-base font-medium text-gray-600">Считаем результаты…</p>
       </div>
     )
   }

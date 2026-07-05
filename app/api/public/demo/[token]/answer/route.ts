@@ -11,6 +11,25 @@ import { maybeScheduleSecondDemoInvite } from "@/lib/messaging/second-demo-invit
 import { isPortraitConfigured } from "@/lib/core/spec/resume-input"
 import { getSpec } from "@/lib/core/spec/store"
 import { maybeSendCandidateAlert } from "@/lib/telegram/candidate-alert"
+import { resolveTransferMode, shouldAdvanceInline } from "@/lib/demo/anketa-pass-gate"
+
+// Бесшовный переход на блок 2 ждёт AI-оценку ответов анкеты максимум это
+// время (мс), затем едет дальше без неё (объективный балл уже посчитан
+// синхронно — гейт не заблокирован, просто ветка «AI-оценка» в OR не успела).
+// Кандидат не должен зависать на сабмите дольше нескольких секунд.
+const AI_EVAL_AWAIT_TIMEOUT_MS = 12_000
+
+async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), ms)
+  })
+  try {
+    return await Promise.race([promise, timeout])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
 
 // Fire-and-forget AI-Портрет (v2) при завершении демо.
 // Для Portrait-вакансий (критерии в Spec, а не в must_have) тоже запускаем v2.
@@ -323,32 +342,55 @@ export async function POST(
       void runDemoScoring(txResult.candidateId, txResult.vacancyId)
     }
 
-    // Балл по ответам демо — fire-and-forget. Пересчитываем при завершении демо
-    // ИЛИ когда в этом батче кандидат ответил на реальные вопросы: многие
-    // отвечают на анкету, не долистав демо до конца (__complete__), и без этого
-    // у них «AI-ан» оставался пустым. Знаменатель — все оцениваемые вопросы
-    // версии демо (неотвеченные = 0), поэтому пересчёт по мере ответов корректен.
-    // Работает независимо от A/B скоринга: оценивает task-вопросы с aiCriteria.
-    // Пишет в СВОЮ колонку candidates.demo_answers_score (не ai_score — иначе была
-    // бы гонка с runDemoScoring). Только если у вакансии есть такие вопросы.
+    // Балл по ответам демо. Пересчитываем при завершении демо ИЛИ когда в этом
+    // батче кандидат ответил на реальные вопросы: многие отвечают на анкету,
+    // не долистав демо до конца (__complete__), и без этого у них «AI-ан»
+    // оставался пустым. Знаменатель — все оцениваемые вопросы версии демо
+    // (неотвеченные = 0), поэтому пересчёт по мере ответов корректен. Работает
+    // независимо от A/B скоринга: оценивает task-вопросы с aiCriteria. Пишет в
+    // СВОЮ колонку candidates.demo_answers_score (не ai_score — иначе была бы
+    // гонка с runDemoScoring). Только если у вакансии есть такие вопросы.
     // Сигнал фронту: кандидат ТОЛЬКО ЧТО прошёл гейт и его надо инлайн перевести
     // на блок 2 («Путь менеджера») прямо на странице (без «Спасибо» + письма).
     // null — не прошёл / фича выкл / inlineContinue=false → прежний экран.
     let advanceToBlockId: string | null = null
 
     if (txResult.isComplete || txResult.hasRealAnswer) {
-      void scoreDemoAnswers({
+      // Приглашение на 2-ю часть читает demo_answers_score (ветка «AI-оценка»
+      // ИЛИ-гейта в maybeScheduleSecondDemoInvite). Раньше scoreDemoAnswers
+      // запускался fire-and-forget ПАРАЛЛЕЛЬНО с гейтом — гейт почти всегда
+      // читал ещё-не-посчитанный (null) балл, и кандидаты, проходящие ТОЛЬКО
+      // по AI-оценке (без объективного балла по выбору), никогда не получали
+      // бесшовный переход НИ письмо вживую — только отложенным массовым
+      // пересчётом (osечка, найдена 05.07). Фикс: если у вакансии включена
+      // 2-я часть (anketaPassInvite.enabled), ЖДЁМ scoreDemoAnswers (с
+      // потолком AI_EVAL_AWAIT_TIMEOUT_MS, чтобы AI не мог подвесить сабмит
+      // кандидата) ДО вызова гейта — тогда demo_answers_score актуален на
+      // момент чтения. Для вакансий без 2-й части (подавляющее большинство)
+      // поведение не меняется — оценка остаётся fire-and-forget, задержки нет.
+      const specForGateAwait = await getSpec(txResult.vacancyId).catch(() => null)
+      const secondPartEnabled = specForGateAwait?.anketaPassInvite?.enabled === true
+
+      const scorePromise = scoreDemoAnswers({
         candidateId: txResult.candidateId,
         vacancyId:   txResult.vacancyId,
         skipIfScored: false,
       }).catch((err: unknown) => {
         console.error("[demo answer] score-answers failed:", err instanceof Error ? err.message : err)
+        return null
       })
 
+      if (secondPartEnabled) {
+        await withTimeout(scorePromise, AI_EVAL_AWAIT_TIMEOUT_MS)
+      } else {
+        void scorePromise
+      }
+
       // «2-я часть демо» (Путь менеджера): если в Портрете включён
-      // anketaPassInvite и кандидат прошёл детерминированный гейт по выбору —
-      // выставляем override-блок и ставим приглашение в очередь. OFF by default,
-      // дедуп внутри. Письмо остаётся страховкой (кандидат ушёл со страницы).
+      // anketaPassInvite и кандидат прошёл детерминированный гейт по выбору
+      // ИЛИ AI-оценку ответов (см. выше) — выставляем override-блок и ставим
+      // приглашение в очередь. OFF by default, дедуп внутри. Письмо остаётся
+      // страховкой (кандидат ушёл со страницы до подсчёта/до окончания демо).
       //
       // Awaited (не fire-and-forget), потому что от результата зависит, вернём
       // ли мы фронту advanceToBlockId для ИНЛАЙН-склейки. maybeSchedule сам
@@ -382,13 +424,11 @@ export async function POST(
           }
           const spec = await getSpec(txResult.vacancyId)
           const ap = spec?.anketaPassInvite
-          // Инлайн-переход только в seamless/both. Обратная совместимость:
-          // старые спеки без transferMode → inlineContinue (false ⇒ message).
-          const transferMode: "seamless" | "message" | "both" =
-            ap?.transferMode === "seamless" || ap?.transferMode === "message" || ap?.transferMode === "both"
-              ? ap.transferMode
-              : (ap?.inlineContinue === false ? "message" : "both")
-          if (ap?.enabled === true && transferMode !== "message") {
+          // Инлайн-переход только в seamless/both (lib/demo/anketa-pass-gate.ts —
+          // единственный источник истины). Обратная совместимость: старые спеки
+          // без transferMode → inlineContinue (false ⇒ message).
+          const transferMode = resolveTransferMode(ap)
+          if (ap?.enabled === true && shouldAdvanceInline(transferMode)) {
             const [cand] = await db
               .select({ overrideContentBlockId: candidates.overrideContentBlockId })
               .from(candidates)
