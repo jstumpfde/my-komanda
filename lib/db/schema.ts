@@ -4233,7 +4233,7 @@ export type NewConsentLog = typeof consentLog.$inferInsert
 // берём значение компании.
 export interface PriceMonitorObjectSettings {
   radiusM?: number
-  periods?: number[]                 // напр. [5, 7, 10, 14, 25, 28, 30] — периоды проживания (ночей)
+  periods?: number[]                 // напр. [1, 3, 5, 7, 10, 14, 15, 25, 28, 30] — периоды проживания (ночей)
   leadDays?: number                  // за сколько дней вперёд заезд при срезе цен (дефолт 1)
   complexFilter?: string             // фильтр по названию ЖК для авто-поиска конкурентов
   schedule?: {
@@ -4317,7 +4317,7 @@ export type NewPriceMonitorSnapshot = typeof priceMonitorSnapshots.$inferInsert
 export const priceMonitorSettings = pgTable("price_monitor_settings", {
   companyId:       uuid("company_id").primaryKey().references(() => companies.id, { onDelete: "cascade" }),
   radiusM:         integer("radius_m").notNull().default(1000),
-  periods:         integer("periods").array().notNull().default([5, 7, 10, 14, 25, 28, 30]),
+  periods:         integer("periods").array().notNull().default([1, 3, 5, 7, 10, 14, 15, 25, 28, 30]),
   intervalMinutes: integer("interval_minutes").notNull().default(1440),
   runAtTime:       text("run_at_time").notNull().default("06:00"),
   currency:        text("currency").notNull().default("RUB"),

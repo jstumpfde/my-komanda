@@ -19,7 +19,7 @@ import { toast } from "sonner"
 import { Settings, Loader2, Plus, Save, X } from "lucide-react"
 import type { CompanySettings } from "@/components/pricing/types"
 
-const DEFAULT_PERIOD_OPTIONS = [5, 7, 10, 14, 25, 28, 30]
+const DEFAULT_PERIOD_OPTIONS = [1, 3, 5, 7, 10, 14, 15, 25, 28, 30]
 const INTERVAL_PRESETS = [
   { label: "Каждые 6 часов", minutes: 360 },
   { label: "Каждые 12 часов", minutes: 720 },
@@ -39,7 +39,7 @@ export default function PriceMonitorSettingsPage() {
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const [radiusM, setRadiusM] = useState("1000")
-  const [periods, setPeriods] = useState<number[]>([5, 7, 10, 14, 25, 28, 30])
+  const [periods, setPeriods] = useState<number[]>([1, 3, 5, 7, 10, 14, 15, 25, 28, 30])
   const [customPeriod, setCustomPeriod] = useState("")
   const [intervalMinutes, setIntervalMinutes] = useState("1440")
   const [runAtTime, setRunAtTime] = useState("06:00")

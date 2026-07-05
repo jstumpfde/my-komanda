@@ -3,5 +3,5 @@
 -- вблизи типичных сроков бронирования). Идемпотентно: правим DEFAULT колонки
 -- и обновляем только строки, у которых периоды ещё равны старому дефолту
 -- (компании, переопределившие периоды вручную, не трогаем).
-ALTER TABLE price_monitor_settings ALTER COLUMN periods SET DEFAULT '{5,7,10,14,25,28,30}';
-UPDATE price_monitor_settings SET periods = '{5,7,10,14,25,28,30}' WHERE periods = '{7,14,28,30}';
+ALTER TABLE price_monitor_settings ALTER COLUMN periods SET DEFAULT '{1,3,5,7,10,14,15,25,28,30}';
+UPDATE price_monitor_settings SET periods = '{1,3,5,7,10,14,15,25,28,30}' WHERE periods = '{7,14,28,30}';
