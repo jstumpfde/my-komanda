@@ -10,6 +10,7 @@ import {
   priceMonitorSnapshots,
 } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { assertPriceMonitorModule } from "@/lib/price-monitor/entitlement"
 import { getEffectiveSettings } from "@/lib/price-monitor/run-monitor"
 import { computeAttractivenessIndex, loadLatestStats } from "@/lib/price-monitor/listing-stats"
 
@@ -52,6 +53,7 @@ function marketPosition(ownPerNight: number | null, competitorPrices: number[]):
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireCompany()
+    await assertPriceMonitorModule(user.companyId)
     const { id } = await ctx.params
 
     const [object] = await db

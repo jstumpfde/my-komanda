@@ -6,6 +6,7 @@ import { and, desc, eq, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { priceMonitorObjects, priceMonitorSettings, priceMonitorSnapshots } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { assertPriceMonitorModule } from "@/lib/price-monitor/entitlement"
 import { loadLatestOccupancy } from "@/lib/price-monitor/occupancy"
 
 const DEFAULT_PERIODS = [1, 3, 5, 7, 10, 14, 15, 25, 28, 30]
@@ -35,6 +36,7 @@ export interface OverviewData {
 export async function GET() {
   try {
     const user = await requireCompany()
+    await assertPriceMonitorModule(user.companyId)
 
     const [companySettings] = await db
       .select()

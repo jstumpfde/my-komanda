@@ -6,12 +6,14 @@ import { and, count, eq, isNull, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { priceMonitorCompetitors, priceMonitorObjects, priceMonitorSnapshots } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { assertPriceMonitorModule } from "@/lib/price-monitor/entitlement"
 import { airbnbSource } from "@/lib/price-monitor/sources/airbnb"
 import { extractComplexName } from "@/lib/price-monitor/complex-name"
 
 export async function GET() {
   try {
     const user = await requireCompany()
+    await assertPriceMonitorModule(user.companyId)
 
     const objects = await db
       .select()
@@ -69,6 +71,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const user = await requireCompany()
+    await assertPriceMonitorModule(user.companyId)
     const body = (await req.json().catch(() => ({}))) as {
       name?: string
       url?: string

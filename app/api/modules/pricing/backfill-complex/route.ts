@@ -7,6 +7,7 @@ import { and, eq, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { priceMonitorCompetitors, priceMonitorObjects } from "@/lib/db/schema"
 import { requireDirector, apiError, apiSuccess } from "@/lib/api-helpers"
+import { assertPriceMonitorModule } from "@/lib/price-monitor/entitlement"
 import { extractComplexName } from "@/lib/price-monitor/complex-name"
 
 export const maxDuration = 60
@@ -14,6 +15,7 @@ export const maxDuration = 60
 export async function POST() {
   try {
     const user = await requireDirector()
+    await assertPriceMonitorModule(user.companyId)
 
     const objects = await db
       .select({ id: priceMonitorObjects.id, name: priceMonitorObjects.name })

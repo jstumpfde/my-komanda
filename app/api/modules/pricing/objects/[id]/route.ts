@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { priceMonitorObjects, priceMonitorSettings, type PriceMonitorObjectSettings } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { assertPriceMonitorModule } from "@/lib/price-monitor/entitlement"
 import { getEffectiveSettings } from "@/lib/price-monitor/run-monitor"
 import { loadLatestOccupancy } from "@/lib/price-monitor/occupancy"
 
@@ -20,6 +21,7 @@ async function loadOwnedObject(companyId: string, id: string) {
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireCompany()
+    await assertPriceMonitorModule(user.companyId)
     const { id } = await ctx.params
     const object = await loadOwnedObject(user.companyId, id)
     if (!object) return apiError("Объект не найден", 404)
@@ -119,6 +121,7 @@ function validateSettingsJson(input: unknown): { ok: true; value: PriceMonitorOb
 export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireCompany()
+    await assertPriceMonitorModule(user.companyId)
     const { id } = await ctx.params
     const object = await loadOwnedObject(user.companyId, id)
     if (!object) return apiError("Объект не найден", 404)
@@ -173,6 +176,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
 export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireCompany()
+    await assertPriceMonitorModule(user.companyId)
     const { id } = await ctx.params
     const object = await loadOwnedObject(user.companyId, id)
     if (!object) return apiError("Объект не найден", 404)

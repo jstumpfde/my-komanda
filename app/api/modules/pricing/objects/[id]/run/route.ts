@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { priceMonitorObjects } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { assertPriceMonitorModule } from "@/lib/price-monitor/entitlement"
 import { runObjectMonitor } from "@/lib/price-monitor/run-monitor"
 
 export const maxDuration = 300
@@ -13,6 +14,7 @@ const MIN_INTERVAL_MS = 5 * 60_000
 export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireCompany()
+    await assertPriceMonitorModule(user.companyId)
     const { id } = await ctx.params
 
     const [object] = await db

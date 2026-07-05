@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { priceMonitorObjects } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { assertPriceMonitorModule } from "@/lib/price-monitor/entitlement"
 import { loadLatestForward } from "@/lib/price-monitor/forward-prices"
 
 const MONTH_LABELS = [
@@ -21,6 +22,7 @@ function monthLabel(dateIso: string): string {
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireCompany()
+    await assertPriceMonitorModule(user.companyId)
     const { id } = await ctx.params
 
     const [object] = await db

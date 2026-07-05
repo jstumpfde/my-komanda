@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { priceMonitorSettings } from "@/lib/db/schema"
 import { requireCompany, requireDirector, apiError, apiSuccess } from "@/lib/api-helpers"
+import { assertPriceMonitorModule } from "@/lib/price-monitor/entitlement"
 
 const DEFAULTS = {
   radiusM: 1000,
@@ -18,6 +19,7 @@ const ALLOWED_CURRENCIES = new Set(["RUB", "EUR", "USD", "THB"])
 export async function GET() {
   try {
     const user = await requireCompany()
+    await assertPriceMonitorModule(user.companyId)
 
     const [row] = await db
       .select()
@@ -48,6 +50,7 @@ export async function GET() {
 export async function PUT(req: NextRequest) {
   try {
     const user = await requireDirector()
+    await assertPriceMonitorModule(user.companyId)
 
     const body = (await req.json().catch(() => ({}))) as {
       radiusM?: number

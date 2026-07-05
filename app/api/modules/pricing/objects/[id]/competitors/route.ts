@@ -4,11 +4,13 @@ import { and, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { priceMonitorCompetitors, priceMonitorObjects } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { assertPriceMonitorModule } from "@/lib/price-monitor/entitlement"
 import { airbnbSource } from "@/lib/price-monitor/sources/airbnb"
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireCompany()
+    await assertPriceMonitorModule(user.companyId)
     const { id } = await ctx.params
 
     const [object] = await db

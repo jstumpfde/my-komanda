@@ -6,6 +6,7 @@ import { and, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { priceMonitorCompetitors, priceMonitorObjects } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { assertPriceMonitorModule } from "@/lib/price-monitor/entitlement"
 
 async function loadOwnedCompetitor(companyId: string, objectId: string, competitorId: string) {
   const [object] = await db
@@ -29,6 +30,7 @@ export async function PATCH(
 ) {
   try {
     const user = await requireCompany()
+    await assertPriceMonitorModule(user.companyId)
     const { id, competitorId } = await ctx.params
 
     const competitor = await loadOwnedCompetitor(user.companyId, id, competitorId)
@@ -58,6 +60,7 @@ export async function DELETE(
 ) {
   try {
     const user = await requireCompany()
+    await assertPriceMonitorModule(user.companyId)
     const { id, competitorId } = await ctx.params
 
     const competitor = await loadOwnedCompetitor(user.companyId, id, competitorId)
