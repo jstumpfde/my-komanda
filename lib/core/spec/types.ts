@@ -288,6 +288,33 @@ export const TgCandidateAlertsSchema = z.object({
 })
 export type TgCandidateAlerts = z.infer<typeof TgCandidateAlertsSchema>
 
+// ─── «Горячий кандидат стынет» (батч «конверсия демо», 05.07) ────────────────
+
+/**
+ * Платформенный дефолт порога «высокого» балла Портрета (resume_score) для
+ * алерта «сильный кандидат открыл демо и не начал». Настраивается per-vacancy
+ * (см. HotCandidateAlertSchema.threshold) — это только дефолт для новых
+ * вакансий/пустого значения, а не хардкод условия триггера.
+ */
+export const PLATFORM_DEFAULT_HOT_CANDIDATE_THRESHOLD = 70
+
+/**
+ * Алерт HR (in-app + Telegram канал компании), когда кандидат с высоким
+ * баллом Портрета открыл демо и застыл (0 пройденных блоков, анкеты нет,
+ * прошло достаточно времени). Дефолт ВЫКЛ — legacy-инвариант: старые вакансии
+ * не должны внезапно начать слать алерты, пока HR не включит осознанно.
+ * Cron — app/api/cron/hot-candidate-alerts.
+ */
+export const HotCandidateAlertSchema = z.object({
+  /** Включена ли фича. По умолчанию ВЫКЛ (legacy-инвариант, включаем per-vacancy). */
+  enabled:            z.boolean().default(false),
+  /** Порог «высокого» балла resume_score (Портрет). Дефолт — платформенный. */
+  threshold:          z.number().int().min(0).max(100).default(PLATFORM_DEFAULT_HOT_CANDIDATE_THRESHOLD),
+  /** Через сколько часов бездействия после открытия демо слать алерт. */
+  staleAfterHours:    z.number().int().min(1).max(72).default(3),
+})
+export type HotCandidateAlert = z.infer<typeof HotCandidateAlertSchema>
+
 // ─── Стоп-факторы ───────────────────────────────────────────────────────────
 
 /**
@@ -706,6 +733,8 @@ export const CandidateSpecSchema = z.object({
   anketaPassInvite: AnketaPassInviteSchema.default({}),
   /** Telegram-алерты по подходящим кандидатам в канал компании. */
   tgCandidateAlerts: TgCandidateAlertsSchema.default({}),
+  /** Алерт «горячий кандидат стынет» (открыл демо, высокий балл, 0 блоков). */
+  hotCandidateAlert: HotCandidateAlertSchema.default({}),
 
   // ── (d) Профиль / текстовые описания ─────────────────────────────────────
   /**

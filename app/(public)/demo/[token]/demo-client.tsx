@@ -15,6 +15,7 @@ import { VideoEmbed } from "@/components/blocks/VideoEmbed"
 import { StoriesPlayer } from "@/components/vacancies/stories-player"
 import { PdfSlidesViewer } from "@/components/vacancies/pdf-slides-viewer"
 import { renderButtonIcon } from "@/lib/button-icons"
+import { estimateDemoDuration } from "@/lib/demo/estimate-duration"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -208,6 +209,25 @@ interface MediaAnswer {
   duration?: number
   size?: number
   mime?: string
+}
+
+// ─── Duration estimate pluralization (ru) ────────────────────────────────────
+// Русское склонение для «≈N минут · M шагов» на первом экране демо.
+
+function pluralizeRu(n: number, one: string, few: string, many: string): string {
+  const mod10 = n % 10
+  const mod100 = n % 100
+  if (mod10 === 1 && mod100 !== 11) return one
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few
+  return many
+}
+
+function pluralizeMinutes(n: number): string {
+  return pluralizeRu(n, "минута", "минуты", "минут")
+}
+
+function pluralizeSteps(n: number): string {
+  return pluralizeRu(n, "шаг", "шага", "шагов")
 }
 
 // ─── Variable replacement ────────────────────────────────────────────────────
@@ -906,6 +926,13 @@ export default function DemoPage() {
   const allBlocks = data ? flattenBlocks(data.lessons) : []
   const progress = getProgress(allBlocks, taskAnswers, mediaUploaded, mediaSkipped, viewedBlockIds)
   const progressPercent = progress.percent
+
+  // Оценка объёма демо для первого экрана («≈N минут · M шагов») — эвристика
+  // из реальных блоков (lib/demo/estimate-duration.ts), не хардкод-текст.
+  // Показываем только пока кандидат ещё не начал (шаг 1, 0 пройденных блоков) —
+  // дальше это неинформативно и просто занимает место в шапке.
+  const durationEstimate = estimateDemoDuration(allBlocks)
+  const showDurationEstimate = currentIndex === 0 && progress.completed === 0 && durationEstimate.steps > 0
 
   // ── Присутствие: гасим маяк на ФИНАЛЬНОМ экране ───────────────────────────
   // На «Спасибо» / после отправки анкеты / прощании изучать нечего — кандидат
@@ -1631,6 +1658,11 @@ export default function DemoPage() {
               Шаг {currentIndex + 1} из {totalLessons}
             </span>
           </div>
+          {showDurationEstimate && (
+            <p className="text-xs text-gray-500 mb-2">
+              ≈ {durationEstimate.minutes} {pluralizeMinutes(durationEstimate.minutes)} · {durationEstimate.steps} {pluralizeSteps(durationEstimate.steps)}
+            </p>
+          )}
           <Progress value={progressPercent} className="h-2" />
         </div>
       </div>
