@@ -4,7 +4,6 @@ import { Providers } from '@/components/providers'
 import { Toaster } from '@/components/ui/sonner'
 import { StaleDeploymentReload } from '@/components/stale-deployment-reload'
 import { CookieConsentBanner } from '@/components/cookie-consent-banner'
-import { AnalyticsGate } from '@/components/analytics-gate'
 import {
   getPlatformTitle,
   getPlatformDescription,
@@ -82,7 +81,6 @@ export default function RootLayout({
         <Toaster position="top-right" />
         <StaleDeploymentReload />
         <CookieConsentBanner />
-        <AnalyticsGate />
       </body>
     </html>
   )
