@@ -51,6 +51,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { EmptyState } from "@/components/ui/empty-state"
+import { useResizableColumns, RESIZER_CLASS } from "@/components/pricing/use-resizable-columns"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
@@ -230,6 +231,20 @@ export default function PriceMonitorObjectDetailPage() {
   const periods = comparison?.periods ?? effectiveSettings?.periods ?? DEFAULT_PERIOD_OPTIONS
   const currency = comparison?.currency || effectiveSettings?.currency || ""
 
+  // Ресайз колонок таблицы сравнения (тянем правый край заголовка). Колонка
+  // «Объект» широкая по умолчанию (~40%), периоды узкие, тянутся.
+  const columns = useMemo(
+    () => [
+      { id: "unit", default: 340, min: 160 },
+      { id: "zk", default: 150, min: 80 },
+      { id: "dist", default: 100, min: 60 },
+      ...periods.map((p) => ({ id: `p${p}`, default: 120, min: 80 })),
+      { id: "actions", default: 48, min: 44 },
+    ],
+    [periods],
+  )
+  const { widths, onResizeStart, totalWidth } = useResizableColumns("pm-comparison-cols", columns)
+
   const sortedRows = useMemo((): {
     ownRow: ComparisonRow | undefined
     active: ComparisonRow[]
@@ -362,30 +377,52 @@ export default function PriceMonitorObjectDetailPage() {
 
                 <Card>
                   <CardContent className="overflow-x-auto">
-                    <Table>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Ширину колонок можно менять — потяните за правый край заголовка.
+                    </p>
+                    <Table style={{ tableLayout: "fixed", width: totalWidth, minWidth: totalWidth }}>
+                      <colgroup>
+                        <col style={{ width: widths.unit }} />
+                        <col style={{ width: widths.zk }} />
+                        <col style={{ width: widths.dist }} />
+                        {periods.map((p) => (
+                          <col key={p} style={{ width: widths[`p${p}`] }} />
+                        ))}
+                        <col style={{ width: widths.actions }} />
+                      </colgroup>
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="min-w-[220px]">Объект</TableHead>
-                          <TableHead>ЖК</TableHead>
-                          <TableHead>Дистанция</TableHead>
+                          <TableHead className="relative">
+                            Объект
+                            <span className={RESIZER_CLASS} onMouseDown={(e) => onResizeStart("unit", e)} />
+                          </TableHead>
+                          <TableHead className="relative">
+                            ЖК
+                            <span className={RESIZER_CLASS} onMouseDown={(e) => onResizeStart("zk", e)} />
+                          </TableHead>
+                          <TableHead className="relative">
+                            Дистанция
+                            <span className={RESIZER_CLASS} onMouseDown={(e) => onResizeStart("dist", e)} />
+                          </TableHead>
                           {periods.map((p) => (
-                            <TableHead key={p} className="text-right min-w-[130px]">
+                            <TableHead key={p} className="text-right relative">
                               {p} {nightsLabel(p)}
+                              <span className={RESIZER_CLASS} onMouseDown={(e) => onResizeStart(`p${p}`, e)} />
                             </TableHead>
                           ))}
-                          <TableHead className="w-10" />
+                          <TableHead />
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {sortedRows.ownRow && (
                           <TableRow className="bg-primary/5">
-                            <TableCell className="font-medium">
-                              <div className="flex items-center gap-2">
-                                <Badge>Наш</Badge>
+                            <TableCell className="font-medium overflow-hidden">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <Badge className="shrink-0">Наш</Badge>
                                 <span className="truncate">{sortedRows.ownRow.name}</span>
                               </div>
                             </TableCell>
-                            <TableCell className="text-muted-foreground">{sortedRows.ownRow.complexName ?? "—"}</TableCell>
+                            <TableCell className="text-muted-foreground truncate">{sortedRows.ownRow.complexName ?? "—"}</TableCell>
                             <TableCell className="text-muted-foreground">—</TableCell>
                             {periods.map((p) => (
                               <PriceCell key={p} cell={sortedRows.ownRow!.prices[String(p)]} currency={currency} />
@@ -573,7 +610,7 @@ function CompetitorRow({
 }) {
   return (
     <TableRow className={cn(muted && "opacity-50")}>
-      <TableCell>
+      <TableCell className="overflow-hidden">
         <div className="flex items-center gap-2 min-w-0">
           <span className="truncate">{row.name}</span>
           {row.isIgnored && (
@@ -583,7 +620,7 @@ function CompetitorRow({
           )}
         </div>
       </TableCell>
-      <TableCell className="text-muted-foreground">{row.complexName ?? "—"}</TableCell>
+      <TableCell className="text-muted-foreground truncate">{row.complexName ?? "—"}</TableCell>
       <TableCell className="text-muted-foreground">
         {row.distanceM != null ? `${Math.round(row.distanceM)} м` : "—"}
       </TableCell>

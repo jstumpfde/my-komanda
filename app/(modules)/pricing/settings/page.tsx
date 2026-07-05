@@ -15,9 +15,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { Settings, Loader2, Plus, Save } from "lucide-react"
+import { Settings, Loader2, Plus, Save, X } from "lucide-react"
 import type { CompanySettings } from "@/components/pricing/types"
 
 const DEFAULT_PERIOD_OPTIONS = [5, 7, 10, 14, 25, 28, 30]
@@ -172,24 +171,57 @@ export default function PriceMonitorSettingsPage() {
 
                   <div className="space-y-1.5">
                     <Label>Периоды проживания (ночей)</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Активные периоды — нажмите «×», чтобы убрать. Ниже можно добавить.
+                    </p>
+
+                    {/* Активные периоды — с кнопкой удаления */}
                     <div className="flex flex-wrap gap-2">
-                      {Array.from(new Set([...DEFAULT_PERIOD_OPTIONS, ...periods])).map((n) => (
-                        <button
-                          key={n}
-                          type="button"
-                          onClick={() => togglePeriod(n)}
-                          className={cn(
-                            "px-2.5 py-1 rounded-full text-xs font-medium border transition-colors",
-                            periods.includes(n)
-                              ? "bg-primary text-primary-foreground border-transparent"
-                              : "bg-background text-muted-foreground border-border hover:bg-muted",
-                          )}
-                        >
-                          {n}
-                        </button>
-                      ))}
+                      {[...periods]
+                        .sort((a, b) => a - b)
+                        .map((n) => (
+                          <span
+                            key={n}
+                            className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full text-xs font-medium bg-primary text-primary-foreground"
+                          >
+                            {n}
+                            <button
+                              type="button"
+                              onClick={() => togglePeriod(n)}
+                              className="rounded-full hover:bg-primary-foreground/20 p-0.5"
+                              aria-label={`Убрать период ${n}`}
+                              title="Убрать"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))}
+                      {periods.length === 0 && (
+                        <span className="text-xs text-muted-foreground">Нет активных периодов</span>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2 mt-2">
+
+                    {/* Быстро добавить стандартные периоды, которых ещё нет */}
+                    {DEFAULT_PERIOD_OPTIONS.filter((n) => !periods.includes(n)).length > 0 && (
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <span className="text-xs text-muted-foreground">Добавить:</span>
+                        {DEFAULT_PERIOD_OPTIONS.filter((n) => !periods.includes(n)).map((n) => (
+                          <button
+                            key={n}
+                            type="button"
+                            onClick={() => togglePeriod(n)}
+                            className="inline-flex items-center gap-0.5 px-2.5 py-1 rounded-full text-xs border border-dashed border-border text-muted-foreground hover:bg-muted transition-colors"
+                            title={`Добавить период ${n}`}
+                          >
+                            <Plus className="h-3 w-3" />
+                            {n}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Свой период */}
+                    <div className="flex items-center gap-2 pt-1">
                       <Input
                         type="number"
                         min={1}
