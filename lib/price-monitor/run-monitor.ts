@@ -39,6 +39,9 @@ const OCCUPANCY_HORIZONS = [30, 90]
 // /details на КАЖДОГО конкурента дорого (их сотни) — тянем только по нашему
 // объекту + топ-N ближайших НЕ игнорируемых конкурентов (по distanceM возр.).
 const LISTING_STATS_TOP_N_COMPETITORS = 10
+// Рыночная заполняемость — календари скольких ближайших конкурентов тянем
+// (сравнить нашу загрузку со средней по рынку). По вызову на конкурента.
+const MARKET_OCCUPANCY_TOP_N = 6
 // Тяжёлые сборы (details конкурентов ~11 вызовов + forward-цены 6 вызовов)
 // обновляем НЕ каждый крон-тик, а раз в ~сутки — иначе частый прогон
 // (цены/период + календарь) раздувается до ~40 запросов и упирается в
@@ -386,11 +389,48 @@ export async function runObjectMonitor(object: PriceMonitorObject): Promise<RunR
     !lastHeavy || now.getTime() - lastHeavy.capturedAt.getTime() >= HEAVY_REFRESH_HOURS * 3_600_000
   result.heavyRefreshed = heavyDue
 
+  if (heavyDue) {
+
+  // Рыночная заполняемость — календари топ-N ближайших НЕ игнорируемых
+  // конкурентов, чтобы сравнить «мы загружены выше/ниже рынка». Тяжело
+  // (по вызову на конкурента), поэтому в heavyDue-проходе и с ограничением N.
+  const occCompetitors = Array.from(byExternalId.values())
+    .filter((c) => !c.isIgnored && c.distanceM != null)
+    .sort((a, b) => (a.distanceM ?? Infinity) - (b.distanceM ?? Infinity))
+    .slice(0, MARKET_OCCUPANCY_TOP_N)
+  const todayIsoOcc = now.toISOString().slice(0, 10)
+  const marketOccRows: NewPriceMonitorOccupancy[] = []
+  for (const competitor of occCompetitors) {
+    try {
+      await sleep(THROTTLE_MS)
+      const cal = await source.getCalendar(competitor.externalId)
+      for (const horizonDays of OCCUPANCY_HORIZONS) {
+        const occ = computeOccupancyForHorizon(cal.days, todayIsoOcc, horizonDays)
+        if (!occ) continue
+        marketOccRows.push({
+          objectId: object.id,
+          competitorId: competitor.id,
+          horizonDays,
+          occupiedDays: occ.occupiedDays,
+          totalDays: occ.totalDays,
+          occupancyPct: occ.occupancyPct.toString(),
+          capturedAt,
+        })
+      }
+    } catch (err) {
+      result.errors.push(
+        `рыночная заполняемость, конкурент ${competitor.name ?? competitor.externalId}: ${err instanceof Error ? err.message : err}`,
+      )
+    }
+  }
+  if (marketOccRows.length > 0) {
+    await db.insert(priceMonitorOccupancy).values(marketOccRows)
+  }
+
   // Привлекательность (listing stats: фото/рейтинги/отзывы/tier) — дорогой
   // вызов сайдкара на каждого конкурента, поэтому берём только наш объект +
   // топ-N ближайших НЕ игнорируемых конкурентов (по distanceM возр., у кого
   // расстояние вообще известно). Сбой одной карточки не валит прогон.
-  if (heavyDue) {
   await sleep(THROTTLE_MS)
   const statsRows: NewPriceMonitorListingStats[] = []
   try {

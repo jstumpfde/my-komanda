@@ -106,6 +106,7 @@ export default function PriceMonitorObjectDetailPage() {
     complexFilter: string | null
   } | null>(null)
   const [occupancy, setOccupancy] = useState<Record<string, number | null> | null>(null)
+  const [marketOccupancy, setMarketOccupancy] = useState<Record<string, number | null> | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const [comparison, setComparison] = useState<ComparisonData | null>(null)
@@ -129,6 +130,7 @@ export default function PriceMonitorObjectDetailPage() {
       setCompanySettings(data.companySettings)
       setEffectiveSettings(data.effectiveSettings)
       setOccupancy(data.occupancy ?? null)
+      setMarketOccupancy(data.marketOccupancy ?? null)
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "Не удалось загрузить объект")
     }
@@ -336,6 +338,12 @@ export default function PriceMonitorObjectDetailPage() {
                   <p className="text-sm text-muted-foreground mt-1">
                     Заполняемость (оценка): 30 дн — {occupancy?.["30"] != null ? `${occupancy["30"]}%` : "нет данных"} ·
                     {" "}90 дн — {occupancy?.["90"] != null ? `${occupancy["90"]}%` : "нет данных"}
+                    {(marketOccupancy?.["30"] != null || marketOccupancy?.["90"] != null) && (
+                      <>
+                        {" · "}рынок: 30 дн — {marketOccupancy?.["30"] != null ? `${marketOccupancy["30"]}%` : "—"} ·
+                        {" "}90 дн — {marketOccupancy?.["90"] != null ? `${marketOccupancy["90"]}%` : "—"}
+                      </>
+                    )}
                   </p>
                 )}
               </div>

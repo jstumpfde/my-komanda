@@ -7,7 +7,7 @@ import { priceMonitorObjects, priceMonitorSettings, type PriceMonitorObjectSetti
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { assertPriceMonitorModule } from "@/lib/price-monitor/entitlement"
 import { getEffectiveSettings } from "@/lib/price-monitor/run-monitor"
-import { loadLatestOccupancy } from "@/lib/price-monitor/occupancy"
+import { loadLatestOccupancy, loadMarketOccupancy } from "@/lib/price-monitor/occupancy"
 
 async function loadOwnedObject(companyId: string, id: string) {
   const [object] = await db
@@ -34,8 +34,9 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
 
     const effectiveSettings = getEffectiveSettings(object, companySettings ?? null)
     const occupancy = await loadLatestOccupancy(object.id)
+    const marketOccupancy = await loadMarketOccupancy(object.id)
 
-    return apiSuccess({ object, companySettings: companySettings ?? null, effectiveSettings, occupancy })
+    return apiSuccess({ object, companySettings: companySettings ?? null, effectiveSettings, occupancy, marketOccupancy })
   } catch (err) {
     if (err instanceof Response) return err
     return apiError("Внутренняя ошибка сервера", 500)
