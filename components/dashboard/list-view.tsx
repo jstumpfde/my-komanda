@@ -471,7 +471,10 @@ export function ListView({
       // AI резюме — AI-скор резюме (фикс, w-8 badge)
       list.push({
         id: "resumeScore",
-        gridWidth: "56px",
+        // 84px (стандарт «Источника») — минимум под заголовок с иконкой
+        // сортировки: ListFilter 14px + gap 6px + «AI портрет» 63px = 83px.
+        // 56px обрезал переименованные 05.07 заголовки.
+        gridWidth: "84px",
         header: (
           <SortHeader
             label="AI резюме"
@@ -548,7 +551,7 @@ export function ListView({
       // Отдельно от aiScore (туда пишут v1/v2-скоринг резюме — была бы гонка).
       list.push({
         id: "answersScore",
-        gridWidth: "56px",
+        gridWidth: "84px", // см. комментарий у resumeScore
         header: (
           <SortHeader
             label="AI анкета"
@@ -584,7 +587,7 @@ export function ListView({
       // Отдельно от старого AI-балла; для старых вакансий заполняется по мере пересчёта.
       list.push({
         id: "portraitScore",
-        gridWidth: "56px",
+        gridWidth: "84px", // см. комментарий у resumeScore
         header: (
           <SortHeader
             label="AI портрет"
