@@ -7,8 +7,7 @@
 // Защищён X-Cron-Secret + pg_try_advisory_lock (ключ 7470002 — по аналогии с
 // hh-import 7470001), чтобы параллельные тики не пересекались.
 import { NextRequest, NextResponse } from "next/server"
-import { sql } from "drizzle-orm"
-import { db } from "@/lib/db"
+import { pgClient } from "@/lib/db"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { findDueObjects, runObjectMonitor } from "@/lib/price-monitor/run-monitor"
@@ -22,11 +21,20 @@ async function handle(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
 
-  const lockRows = (await db.execute(
-    sql`SELECT pg_try_advisory_lock(${LOCK_KEY}) AS acquired`,
-  )) as unknown as Array<{ acquired: boolean }>
-  const acquired = lockRows?.[0]?.acquired === true
+  // Advisory lock — session-scoped, поэтому берём и отпускаем его на ОДНОМ
+  // выделенном соединении (reserve), а не через пул: иначе unlock может уйти
+  // в другую сессию и лок утечёт до конца жизни соединения.
+  const reserved = await pgClient.reserve()
+  let acquired = false
+  try {
+    const lockRows = await reserved`SELECT pg_try_advisory_lock(${LOCK_KEY}) AS acquired`
+    acquired = lockRows?.[0]?.acquired === true
+  } catch {
+    reserved.release()
+    return NextResponse.json({ ok: false, error: "Не удалось получить advisory lock" }, { status: 500 })
+  }
   if (!acquired) {
+    reserved.release()
     return NextResponse.json({ ok: false, busy: true }, { status: 409 })
   }
 
@@ -82,7 +90,13 @@ async function handle(req: NextRequest) {
       return NextResponse.json({ ok: false, error: msg }, { status: 500 })
     }
   } finally {
-    await db.execute(sql`SELECT pg_advisory_unlock(${LOCK_KEY})`).catch(() => {})
+    try {
+      await reserved`SELECT pg_advisory_unlock(${LOCK_KEY})`
+    } catch {
+      // ignore — release() всё равно вернёт соединение, лок умрёт вместе с ним
+    } finally {
+      reserved.release()
+    }
   }
 }
 
