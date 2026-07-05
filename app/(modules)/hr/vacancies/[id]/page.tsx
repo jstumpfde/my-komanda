@@ -2381,8 +2381,10 @@ export default function VacancyPage() {
 
   // Переоценить выделенных кандидатов по параметру (или всем сразу). Реальные
   // AI-вызовы → только по выделенным (selectedCandidateIds).
+  // Пользовательская сущность оценки — ОДНА, «Портрет» (dimension=resume); dimension=portrait —
+  // это осевой скоринг v2 (справочный балл внутри карточки), подписан отдельно, не «AI-Портрет».
   const RESCORE_LABELS: Record<string, string> = {
-    resume: "AI-резюме", test: "AI-тест", portrait: "AI-Портрет", all: "все параметры",
+    resume: "Портрет", test: "AI-тест", portrait: "Осевой балл (справочно)", all: "все параметры",
   }
   const rescoreSelected = async (dimension: "resume" | "test" | "portrait" | "all") => {
     if (rescoring) return
@@ -3249,10 +3251,10 @@ export default function VacancyPage() {
                           <Sparkles className="w-3.5 h-3.5 mr-2" /> Все параметры
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => rescoreSelected("resume")} disabled={!!rescoring}>
-                          <ClipboardList className="w-3.5 h-3.5 mr-2" /> AI-резюме
+                          <ClipboardList className="w-3.5 h-3.5 mr-2" /> Портрет
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => rescoreSelected("portrait")} disabled={!!rescoring}>
-                          <Target className="w-3.5 h-3.5 mr-2" /> AI-Портрет (по критериям)
+                          <Target className="w-3.5 h-3.5 mr-2" /> Осевой балл (справочно)
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => rescoreSelected("test")} disabled={!!rescoring}>
                           <Check className="w-3.5 h-3.5 mr-2" /> AI-тест

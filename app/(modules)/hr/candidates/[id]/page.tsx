@@ -594,7 +594,7 @@ export default function CandidateDetailPage() {
             <Card className="rounded-xl border border-border p-5">
               <div className="flex items-center gap-2 mb-2">
                 <Star className="w-4 h-4 text-amber-500" />
-                <h3 className="text-sm font-semibold">AI-резюме</h3>
+                <h3 className="text-sm font-semibold">Портрет</h3>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed">{candidate.aiSummary}</p>
             </Card>
