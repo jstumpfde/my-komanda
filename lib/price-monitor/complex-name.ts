@@ -133,3 +133,18 @@ export function extractComplexName(name: string | null | undefined): string | nu
 
   return null
 }
+
+// Канонический ключ ЖК для ГРУППИРОВКИ (табы сравнения): близкие названия
+// одного комплекса должны совпасть. Приводим к нижнему регистру, убираем
+// типовые слова-суффиксы (resort/apartments/…) и пунктуацию, схлопываем
+// пробелы. Напр. «Mida Grande» и «Mida Grande Resort» → "mida grande" (одна
+// группа); «Mida Resort» → "mida», «Panora» → "panora" (разные). Пустая строка
+// для null/пустого — такие в группировку не попадают.
+export function normalizeComplexKey(name: string | null | undefined): string {
+  if (!name) return ""
+  let s = name.toLowerCase().trim()
+  s = s.replace(/\b(resort|residences?|condo(?:minium)?s?|apartments?|apartment|villas?|suites?|suite|hotel|the)\b/g, " ")
+  s = s.replace(/[^\p{L}\p{N}\s]/gu, " ")
+  s = s.replace(/\s+/g, " ").trim()
+  return s
+}

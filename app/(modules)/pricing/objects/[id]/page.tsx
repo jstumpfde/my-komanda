@@ -52,6 +52,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { EmptyState } from "@/components/ui/empty-state"
 import { useResizableColumns, RESIZER_CLASS } from "@/components/pricing/use-resizable-columns"
+import { normalizeComplexKey } from "@/lib/price-monitor/complex-name"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
@@ -343,28 +344,39 @@ export default function PriceMonitorObjectDetailPage() {
   // пересчитывает медиану/позицию к рынку под группу.
   const [selectedGroup, setSelectedGroup] = useState<string>("all")
   const groups = useMemo(() => {
-    const ownComplex = sortedRows.ownRow?.complexName?.trim() || null
-    const counts = new Map<string, number>()
+    // Группируем по КАНОНИЧЕСКОМУ ключу ЖК (близкие названия одного комплекса —
+    // «Mida Grande» и «Mida Grande Resort» — в одну группу). Ярлык таба —
+    // самое частое исходное название в группе.
+    const ownKey = normalizeComplexKey(sortedRows.ownRow?.complexName)
+    const byKey = new Map<string, { count: number; labels: Map<string, number> }>()
     for (const r of sortedRows.active) {
-      const c = r.complexName?.trim()
-      if (c) counts.set(c, (counts.get(c) ?? 0) + 1)
+      const key = normalizeComplexKey(r.complexName)
+      if (!key) continue
+      const raw = r.complexName!.trim()
+      const g = byKey.get(key) ?? { count: 0, labels: new Map() }
+      g.count += 1
+      g.labels.set(raw, (g.labels.get(raw) ?? 0) + 1)
+      byKey.set(key, g)
     }
-    const list: { id: string; label: string; complex: string | null; count: number }[] = [
-      { id: "all", label: "Район (все)", complex: null, count: sortedRows.active.length },
+    const repLabel = (labels: Map<string, number>) =>
+      Array.from(labels.entries()).sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)[0]?.[0] ?? ""
+    const list: { id: string; label: string; key: string | null; count: number }[] = [
+      { id: "all", label: "Район (все)", key: null, count: sortedRows.active.length },
     ]
-    if (ownComplex && counts.has(ownComplex)) {
-      list.push({ id: "mine", label: `Мой ЖК: ${ownComplex}`, complex: ownComplex, count: counts.get(ownComplex)! })
+    if (ownKey && byKey.has(ownKey)) {
+      const g = byKey.get(ownKey)!
+      list.push({ id: "mine", label: `Мой ЖК: ${repLabel(g.labels)}`, key: ownKey, count: g.count })
     }
-    for (const [c, n] of Array.from(counts.entries()).sort((a, b) => b[1] - a[1])) {
-      if (c === ownComplex) continue
-      list.push({ id: `complex:${c}`, label: c, complex: c, count: n })
+    for (const [key, g] of Array.from(byKey.entries()).sort((a, b) => b[1].count - a[1].count)) {
+      if (key === ownKey) continue
+      list.push({ id: `complex:${key}`, label: repLabel(g.labels), key, count: g.count })
     }
     return list
   }, [sortedRows])
   const activeGroup = groups.find((g) => g.id === selectedGroup) ?? groups[0]
   const groupActive = useMemo(() => {
-    if (!activeGroup || activeGroup.complex == null) return sortedRows.active
-    return sortedRows.active.filter((r) => (r.complexName?.trim() || "") === activeGroup.complex)
+    if (!activeGroup || activeGroup.key == null) return sortedRows.active
+    return sortedRows.active.filter((r) => normalizeComplexKey(r.complexName) === activeGroup.key)
   }, [sortedRows.active, activeGroup])
   const groupStats = useMemo(
     () => computeGroupStats(groupActive, sortedRows.ownRow, periods),
@@ -514,7 +526,7 @@ export default function PriceMonitorObjectDetailPage() {
                     )}
                     <p className="text-xs text-muted-foreground mb-2">
                       Ширину колонок можно менять — потяните за правый край заголовка.
-                      {activeGroup?.complex != null && " Медиана и позиция к рынку — внутри выбранной группы."}
+                      {activeGroup?.key != null && " Медиана и позиция к рынку — внутри выбранной группы."}
                     </p>
                     <Table style={{ tableLayout: "fixed", width: totalWidth, minWidth: totalWidth }}>
                       <colgroup>

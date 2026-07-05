@@ -4,7 +4,22 @@
 
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { extractComplexName } from "./complex-name"
+import { extractComplexName, normalizeComplexKey } from "./complex-name"
+
+test("normalizeComplexKey: «Mida Grande» и «Mida Grande Resort» → один ключ", () => {
+  assert.equal(normalizeComplexKey("Mida Grande"), normalizeComplexKey("Mida Grande Resort"))
+  assert.equal(normalizeComplexKey("Mida Grande Resort"), "mida grande")
+})
+
+test("normalizeComplexKey: разные комплексы — разные ключи", () => {
+  assert.notEqual(normalizeComplexKey("Mida Grande"), normalizeComplexKey("Panora"))
+  assert.notEqual(normalizeComplexKey("Mida Grande"), normalizeComplexKey("Mida Resort"))
+})
+
+test("normalizeComplexKey: null/пусто → пустая строка", () => {
+  assert.equal(normalizeComplexKey(null), "")
+  assert.equal(normalizeComplexKey(""), "")
+})
 
 test("'Sea view Apartments by Mida Grande 4+*' → 'Mida Grande'", () => {
   assert.equal(extractComplexName("Sea view Apartments by Mida Grande 4+*"), "Mida Grande")
