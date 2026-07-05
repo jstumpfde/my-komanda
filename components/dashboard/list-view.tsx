@@ -542,19 +542,28 @@ export function ListView({
     }
 
     if (showAnswersScore) {
-      // Анкета (было «AI-ан», нечитаемо) — AI-балл ответов на вопросы
+      // Анкета (было «AI-ан», нечитаемо) — ЕДИНЫЙ AI-балл ответов на вопросы
       // анкеты демо (candidates.demo_answers_score). НЕ «второе демо» —
       // проверено по коду (lib/demo/score-answers.ts, lib/messaging/
-      // second-demo-invite.ts): это скоринг ОТВЕТОВ анкеты первого демо,
-      // а «второе демо» — отдельная downstream-фича, которая ЧИТАЕТ этот
-      // балл как гейт, но не тождественна колонке. Вычисляется после
-      // прохождения демо на основании текстовых ответов кандидата.
-      // Отдельно от aiScore (туда пишут v1/v2-скоринг резюме — была бы гонка).
+      // second-demo-invite.ts): это скоринг ОТВЕТОВ анкеты, а «второе демо» —
+      // отдельная downstream-фича, которая ЧИТАЕТ этот балл как гейт, но не
+      // тождественна колонке. Вычисляется после прохождения демо на основании
+      // текстовых ответов кандидата. Отдельно от aiScore (туда пишут
+      // v1/v2-скоринг резюме — была бы гонка).
+      //
+      // Вариант Б (решение Юрия 05.07): если сдана только часть 1 — балл =
+      // балл части 1 (как раньше). После сдачи части 2 — балл пересчитан по
+      // ОТВЕЧЕННЫМ вопросам обеих частей (lib/demo/unified-score.ts). Рядом —
+      // компактный индикатор "N/M" (сколько частей сдал кандидат из скольких
+      // сконфигурировано у вакансии), показывается ТОЛЬКО когда у вакансии
+      // есть 2-я часть (anketaPartsTotal >= 2) — иначе одночастевые вакансии
+      // не видят лишний шум.
       list.push({
         id: "answersScore",
-        // 64px — минимум под заголовок с иконкой сортировки: ListFilter 14px +
+        // 68px — минимум под заголовок с иконкой сортировки: ListFilter 14px +
         // gap 6px + «Анкета» ~63px по факту (замер Inter 12px) → взят
-        // безопасный запас (68 обрезал бы «Анкета» без запаса).
+        // безопасный запас. Индикатор "N/M" — надстрочный, в ширину не влезает
+        // отдельным элементом, поэтому вынесен в тултип (не раздувает колонку).
         gridWidth: "68px",
         header: (
           <SortHeader
@@ -563,26 +572,44 @@ export function ListView({
             sort={sort}
             onToggle={handleSort}
             align="center"
-            title="AI-балл ответов анкеты (0–100)"
+            title="Единый AI-балл ответов анкеты (0–100) по отвеченным вопросам"
           />
         ),
-        renderCell: (candidate) => (
-          <div className="flex items-center justify-center" title="AI-балл ответов анкеты (0–100)">
-            {candidate.demoAnswersScore != null ? (
-              <Badge
-                variant="outline"
-                className={cn(
-                  "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
-                  getScoreColor(candidate.demoAnswersScore),
-                )}
-              >
-                {candidate.demoAnswersScore}
-              </Badge>
-            ) : (
-              <span className="text-muted-foreground/40 text-xs">—</span>
-            )}
-          </div>
-        ),
+        renderCell: (candidate) => {
+          const partsTotal = candidate.anketaPartsTotal ?? 0
+          const partsAnswered = candidate.anketaPartsAnswered ?? 0
+          const hasParts = partsTotal >= 2
+          const tooltip = hasParts
+            ? `Сдана часть ${partsAnswered} из ${partsTotal}; балл по отвеченным вопросам`
+            : "Единый AI-балл ответов анкеты (0–100) по отвеченным вопросам"
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex flex-col items-center justify-center gap-0 leading-none">
+                  {candidate.demoAnswersScore != null ? (
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
+                        getScoreColor(candidate.demoAnswersScore),
+                      )}
+                    >
+                      {candidate.demoAnswersScore}
+                    </Badge>
+                  ) : (
+                    <span className="text-muted-foreground/40 text-xs">—</span>
+                  )}
+                  {hasParts && (
+                    <span className="mt-0.5 text-[9px] leading-none text-muted-foreground/70 tabular-nums">
+                      {partsAnswered}/{partsTotal}
+                    </span>
+                  )}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="top">{tooltip}</TooltipContent>
+            </Tooltip>
+          )
+        },
       })
     }
 

@@ -62,6 +62,10 @@ export interface ApiCandidate {
   demoAnswersDetails?: { questionText: string; awarded: number; max: number; comment: string }[] | null
   // Пер-блочные баллы анкеты (candidates.demo_block_scores): { demoId: { title, score } }.
   demoBlockScores?: Record<string, { title?: string; score: number }> | null
+  // Индикатор прогресса частей анкеты "N/M" (Вариант Б, единый балл 05.07).
+  // Возвращается только пер-вакансионным списком (app/api/modules/hr/candidates).
+  anketaPartsAnswered?: number
+  anketaPartsTotal?: number
   // Прозрачность приглашения на 2-ю часть демо (describeSecondDemoInvite). null = фича выключена.
   secondDemoInvite?: {
     invited: boolean

@@ -38,7 +38,15 @@ export interface Candidate {
   aiScoreV2?: number | null
   // AI-ан: балл по ответам демо (candidates.demo_answers_score). Отдельно от
   // aiScore — туда пишут v1/v2-скоринг резюме, была бы гонка fire-and-forget.
+  // ЕДИНЫЙ балл (Вариант Б, 05.07): пока сдана только часть 1 — совпадает с
+  // её баллом; после сдачи части 2 — пересчитан по отвеченным вопросам обеих
+  // частей (lib/demo/unified-score.ts).
   demoAnswersScore?: number | null
+  // Индикатор прогресса частей анкеты "N/M" рядом с баллом (только если у
+  // вакансии есть 2-я часть, т.е. anketaPartsTotal >= 2). anketaPartsAnswered —
+  // сколько частей кандидат СДАЛ (demo_block_scores keys count).
+  anketaPartsAnswered?: number
+  anketaPartsTotal?: number
   // Имя «под вопросом» — резолвер уйдёт в нейтральное «Здравствуйте» (фамилия/аноним/
   // редкое имя). HR стоит проверить и при желании вписать имя вручную.
   nameUncertain?: boolean

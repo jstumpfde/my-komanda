@@ -215,6 +215,8 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     resumeScore: c.resumeScore ?? null,
     aiScoreV2: c.aiScoreV2 ?? null,
     demoAnswersScore: c.demoAnswersScore ?? null,
+    anketaPartsAnswered: c.anketaPartsAnswered,
+    anketaPartsTotal: c.anketaPartsTotal,
     nameUncertain: c.nameUncertain === true,
     testScore: c.testScore ?? null,
     testStatus: c.testStatus ?? null,

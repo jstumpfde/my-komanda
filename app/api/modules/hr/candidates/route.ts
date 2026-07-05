@@ -9,6 +9,7 @@ import { deriveCandidateName } from "@/lib/candidate-name"
 import { resolveGivenNameMeta } from "@/lib/messaging/candidate-name"
 import { getLearnedNamesSet } from "@/lib/messaging/learned-given-names"
 import { hasAnsweredAllRequired } from "@/lib/demo/resolve-questions"
+import { extractTaskQuestions } from "@/lib/demo/score-answers"
 
 type SortKey =
   | "favorite"
@@ -1174,8 +1175,14 @@ export async function GET(req: NextRequest) {
       ))
       .orderBy(desc(demos.updatedAt))
     let mainDemoTaken = false
+    // Сколько демо-блоков вакансии вообще СКОРИРУЕМЫ (есть вопросы с aiCriteria) —
+    // знаменатель индикатора прогресса частей "N/M" колонки «Анкета» (единый
+    // балл, Вариант Б). НЕ влияет на сам балл — тот считается в score-answers.ts
+    // только по answered-блокам кандидата (demo_block_scores).
+    let anketaPartsTotal = 0
     for (const d of demoRowsV2) {
       allLessonsForVacancy.push(d.lessonsJson)
+      if (extractTaskQuestions(d.lessonsJson).length > 0) anketaPartsTotal++
       // totalBlocks/страничный прогресс — по первому (свежайшему) kind='demo'.
       if (d.kind === "demo" && !mainDemoTaken) {
         mainDemoTaken = true
@@ -1272,6 +1279,14 @@ export async function GET(req: NextRequest) {
         testScoringStatus: test?.scoringStatus ?? null,
         isActive,
         nextInterviewAt: nextInterviewByCandidateId.get(r.id) ?? null,
+        // Индикатор прогресса частей анкеты "N/M" (единый балл, Вариант Б):
+        // anketaPartsAnswered — сколько частей СДАЛ этот кандидат (= число
+        // ключей в demo_block_scores); anketaPartsTotal — сколько частей
+        // вообще сконфигурировано у вакансии (0/1 → индикатор скрыт в UI).
+        anketaPartsAnswered: r.demoBlockScores && typeof r.demoBlockScores === "object"
+          ? Object.keys(r.demoBlockScores as Record<string, unknown>).length
+          : 0,
+        anketaPartsTotal,
       }
     })
 

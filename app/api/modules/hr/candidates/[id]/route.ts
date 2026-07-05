@@ -5,6 +5,7 @@ import { candidates, vacancies, hhResponses, hhCandidates, demos } from "@/lib/d
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { deriveCandidateName } from "@/lib/candidate-name"
 import { describeSecondDemoInvite } from "@/lib/messaging/second-demo-invite"
+import { extractTaskQuestions } from "@/lib/demo/score-answers"
 
 // Helper: verify candidate belongs to user's company.
 // За один SQL-запрос подтягиваем кандидата + вакансию + связку hh_responses
@@ -89,6 +90,18 @@ export async function GET(
     // приглашён/нет (read-only, не пишет в БД). null = фича в Портрете выключена.
     const secondDemoInvite = await describeSecondDemoInvite(id, row.candidate.vacancyId)
 
+    // Индикатор прогресса частей анкеты "N/M" (Вариант Б, единый балл 05.07):
+    // сколько демо-блоков вакансии вообще СКОРИРУЕМЫ (есть вопросы с
+    // aiCriteria) — demoLessons уже содержит lessons_json ВСЕХ демо вакансии
+    // (тот же subquery, что и answers-tab использует), считаем без лишнего запроса.
+    const demoLessonsArr = Array.isArray(row.demoLessons)
+      ? (row.demoLessons as Array<{ lessons?: unknown }>)
+      : []
+    const anketaPartsTotal = demoLessonsArr.filter((d) => extractTaskQuestions(d?.lessons).length > 0).length
+    const anketaPartsAnswered = row.candidate.demoBlockScores && typeof row.candidate.demoBlockScores === "object"
+      ? Object.keys(row.candidate.demoBlockScores as Record<string, unknown>).length
+      : 0
+
     return apiSuccess({
       ...row.candidate,
       // Имя: fallback на anketa_answers, затем на hh_responses.candidate_name
@@ -98,6 +111,8 @@ export async function GET(
       hhRawData: row.hhRawData ?? null,
       demoLessons: row.demoLessons ?? null,
       secondDemoInvite,
+      anketaPartsTotal,
+      anketaPartsAnswered,
     })
   } catch (err) {
     if (err instanceof Response) return err

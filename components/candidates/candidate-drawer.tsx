@@ -103,6 +103,7 @@ import { AnswersTab } from "./answers-tab"
 import { TestTab } from "./test-tab"
 import { HhResumeInfo } from "./hh-resume-info"
 import { AiMatchCardV2 } from "./ai-match-card-v2"
+import { getBlockScore } from "@/lib/demo/block-scores"
 
 // ─── Contact log type ────────────────────────────────────────────────────────
 
@@ -460,6 +461,11 @@ function ScoresPanel({ candidate }: { candidate: ApiCandidate }) {
   const resumeScore = candidate.resumeScore ?? null
   const answersScore = candidate.demoAnswersScore ?? null
   const testScore = candidate.testScore ?? null
+  // Индикатор прогресса частей анкеты "N/M" (Вариант Б, единый балл 05.07):
+  // показываем ТОЛЬКО когда у вакансии есть 2-я часть (partsTotal >= 2).
+  const anketaPartsTotal = candidate.anketaPartsTotal ?? 0
+  const anketaPartsAnswered = candidate.anketaPartsAnswered ?? 0
+  const hasAnketaParts = anketaPartsTotal >= 2
 
   const answerDetails = Array.isArray(candidate.demoAnswersDetails) ? candidate.demoAnswersDetails : []
   const resumeSummary = typeof candidate.aiSummary === "string" ? candidate.aiSummary.trim() : ""
@@ -545,6 +551,8 @@ function ScoresPanel({ candidate }: { candidate: ApiCandidate }) {
   type ScoreCard = {
     key: string; title: string; caption: string
     score: number; hasDetails: boolean; details: React.ReactNode
+    /** Индикатор прогресса частей "N/M" (только карточка «Анкета», Вариант Б). */
+    partsBadge?: string; partsTooltip?: string
   }
   const cards = ([
     // Пользовательская сущность оценки — ОДНА, «Портрет» (resumeScore). Отдельная
@@ -552,7 +560,11 @@ function ScoresPanel({ candidate }: { candidate: ApiCandidate }) {
     // консолидация Юрия: осевой балл больше не светится как вторая оценка в шапке,
     // он остался справочно внутри таба «Портрет» (AiMatchCardV2 → «Осевой балл (справочно)»).
     { key: "resume", title: "Портрет", caption: "Оценка по Портрету вакансии", score: resumeScore, hasDetails: resumeHasDetails, details: resumeDetailsNode },
-    { key: "answers", title: "Анкета", caption: "Качество ответов в анкете демо", score: answersScore, hasDetails: answersHasDetails, details: answersDetailsNode },
+    {
+      key: "answers", title: "Анкета", caption: "Качество ответов в анкете демо", score: answersScore, hasDetails: answersHasDetails, details: answersDetailsNode,
+      partsBadge: hasAnketaParts ? `${anketaPartsAnswered}/${anketaPartsTotal}` : undefined,
+      partsTooltip: `Единый балл по отвеченным вопросам · часть 1: ${getBlockScore(candidate, 1) ?? "—"} · часть 2: ${getBlockScore(candidate, 2) ?? "—"}`,
+    },
     { key: "test", title: "Тест", caption: testHint ? `Тестовое задание (${testHint})` : "Результат тестового задания", score: testScore, hasDetails: false, details: null },
     // Сюда же встанет карточка «Интервью», когда появится балл интервью.
   ] as Array<Omit<ScoreCard, "score"> & { score: number | null }>)
@@ -569,7 +581,7 @@ function ScoresPanel({ candidate }: { candidate: ApiCandidate }) {
             type="button"
             disabled={!c.hasDetails}
             onClick={() => setOpenKey((k) => (k === c.key ? null : c.key))}
-            title={c.caption}
+            title={c.partsBadge ? c.partsTooltip : c.caption}
             className={cn(
               "rounded-md border border-border/60 bg-background/50 px-2.5 py-2 text-left",
               c.hasDetails && "hover:bg-accent/40 transition-colors cursor-pointer",
@@ -578,9 +590,16 @@ function ScoresPanel({ candidate }: { candidate: ApiCandidate }) {
           >
             <span className="flex items-center justify-between gap-1.5">
               <span className={cn("text-2xl font-bold tabular-nums leading-none", scoreTone(c.score))}>{c.score}</span>
-              {c.hasDetails && (open?.key === c.key
-                ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />)}
+              <span className="flex items-center gap-1 shrink-0">
+                {c.partsBadge && (
+                  <span className="rounded bg-muted px-1 py-0.5 text-[9px] font-semibold leading-none text-muted-foreground tabular-nums">
+                    {c.partsBadge}
+                  </span>
+                )}
+                {c.hasDetails && (open?.key === c.key
+                  ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                  : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />)}
+              </span>
             </span>
             <span className="mt-1 block text-xs font-medium text-foreground">{c.title}</span>
             <span className="block text-[10px] leading-snug text-muted-foreground line-clamp-2">{c.caption}</span>
