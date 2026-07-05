@@ -40,9 +40,11 @@ import {
   Building2,
   UserCircle,
   Users,
+  Loader2,
 } from "lucide-react"
 import { toast } from "sonner"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { RU_HOLIDAYS } from "@/lib/schedule/holidays"
 import { WeekView } from "@/components/calendar/week-view"
@@ -110,6 +112,13 @@ export function CalendarView({ vacancyId }: { vacancyId?: string } = {}) {
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [rooms, setRooms] = useState<Room[]>([])
   const [loading, setLoading] = useState(false)
+  // Первая загрузка (сетка ещё ни разу не получала события) — показываем
+  // skeleton-плейсхолдеры поверх пустой сетки. Все следующие загрузки
+  // (смена недели/фильтра/вида) — сетка с уже загруженными событиями
+  // остаётся видимой (stale-while-revalidate), крутится только маленький
+  // спиннер в шапке рядом с датой. Жалоба Юрия 05.07: сплошная серая
+  // плёнка на весь календарь выглядела как поломка.
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
 
   // Modal & settings state
   const [modalOpen, setModalOpen] = useState(false)
@@ -336,6 +345,7 @@ export function CalendarView({ vacancyId }: { vacancyId?: string } = {}) {
       }
     } finally {
       setLoading(false)
+      setHasLoadedOnce(true)
     }
   }, [getDateRange, filter, vacancyId])
 
@@ -442,8 +452,13 @@ export function CalendarView({ vacancyId }: { vacancyId?: string } = {}) {
           <Button variant="outline" size="icon" onClick={() => navigate(1)}>
             <ChevronRight className="h-4 w-4" />
           </Button>
-          <span className="text-sm font-medium capitalize min-w-[180px]">
+          <span className="text-sm font-medium capitalize min-w-[180px] flex items-center gap-2">
             {getTitle()}
+            {/* Фоновое обновление (смена недели/фильтра) при уже загруженных
+                данных — ненавязчивый спиннер вместо затемнения всей сетки. */}
+            {loading && hasLoadedOnce && (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label="Обновление…" />
+            )}
           </span>
         </div>
 
@@ -481,9 +496,42 @@ export function CalendarView({ vacancyId }: { vacancyId?: string } = {}) {
 
       {/* Content */}
       <div className="flex-1 overflow-hidden relative">
-        {loading && (
-          <div className="absolute inset-0 bg-white/50 z-20 flex items-center justify-center">
-            <div className="text-sm text-muted-foreground">Загрузка...</div>
+        {/* Первая загрузка — сетка (дни/часы) видна сразу, поверх нескольких
+            ячеек лежат skeleton-плейсхолдеры вместо реальных событий. Никакого
+            затемнения всего экрана: раньше сплошная серая плёнка с «Загрузка…»
+            по центру выглядела как поломка (жалоба Юрия 05.07). */}
+        {loading && !hasLoadedOnce && (
+          <div className="absolute inset-0 z-20 pointer-events-none">
+            {viewMode === "week" && (
+              <div className="grid h-full" style={{ gridTemplateColumns: `52px repeat(7, 1fr)` }}>
+                <div />
+                {Array.from({ length: 7 }).map((_, dayIdx) => (
+                  <div key={dayIdx} className="relative border-l">
+                    {dayIdx === 1 && <Skeleton className="absolute left-1 right-1 rounded" style={{ top: 80, height: 48 }} />}
+                    {dayIdx === 3 && <Skeleton className="absolute left-1 right-1 rounded" style={{ top: 160, height: 72 }} />}
+                    {dayIdx === 5 && <Skeleton className="absolute left-1 right-1 rounded" style={{ top: 220, height: 48 }} />}
+                  </div>
+                ))}
+              </div>
+            )}
+            {viewMode === "day" && (
+              <div className="grid h-full" style={{ gridTemplateColumns: `60px 1fr` }}>
+                <div />
+                <div className="relative border-l">
+                  <Skeleton className="absolute left-1 right-1 rounded" style={{ top: 80, height: 48 }} />
+                  <Skeleton className="absolute left-1 right-1 rounded" style={{ top: 220, height: 72 }} />
+                </div>
+              </div>
+            )}
+            {viewMode === "month" && (
+              <div className="grid h-full" style={{ gridTemplateColumns: `repeat(7, 1fr)`, gridTemplateRows: "repeat(5, 1fr)" }}>
+                {Array.from({ length: 35 }).map((_, i) => (
+                  <div key={i} className="border-l border-b p-1">
+                    {(i === 8 || i === 15 || i === 23) && <Skeleton className="h-4 w-full rounded" />}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
         {viewMode === "week" && (
