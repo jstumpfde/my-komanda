@@ -1139,9 +1139,13 @@ export default function DemoPage() {
       // Последний урок — сервер может ждать AI-оценку ответов (см.
       // AI_EVAL_AWAIT_TIMEOUT_MS в answer/route.ts) перед тем как отдать
       // advanceToBlockId, т.е. этот конкретный POST может занять заметно
-      // дольше обычного. Показываем отдельный полноэкранный статус вместо
-      // обычного inline-спиннера кнопки.
-      const isLastLessonSubmit = currentIndex === totalLessons - 1
+      // дольше обычного. Полноэкранный статус «Считаем результаты…» показываем
+      // ТОЛЬКО у вакансий со включённой частью 2 (passInviteScreens приходит
+      // из GET только при ap.enabled) — сервер ждёт AI лишь там; у остальных
+      // вакансий legacy-поведение байт-в-байт: обычный спиннер кнопки
+      // (guard-минор 05.07).
+      const isLastLessonSubmit =
+        currentIndex === totalLessons - 1 && data.passInviteScreens != null
       if (batch.length > 0 && !isPreviewMode) {
         setSaving(true)
         if (isLastLessonSubmit) setSavingFinal(true)
