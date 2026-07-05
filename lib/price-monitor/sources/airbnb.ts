@@ -1,5 +1,6 @@
 import { sidecarPost } from "../sidecar-client"
 import type {
+  HostListing,
   NearbyListing,
   PriceQuote,
   PriceSource,
@@ -39,6 +40,12 @@ interface SidecarResolveResponse {
   personCapacity: number | null
   title: string | null
   rating: unknown
+}
+
+interface SidecarHostListingsResponse {
+  hostId: string | null
+  count: number
+  listings: HostListing[]
 }
 
 export const airbnbSource: PriceSource = {
@@ -88,6 +95,28 @@ export const airbnbSource: PriceSource = {
       currency: opts?.currency ?? "EUR",
     })
   },
+
+  async hostListings(roomExternalId: string, currency?: string): Promise<HostListing[]> {
+    const data = await sidecarPost<SidecarHostListingsResponse>("/host-listings", {
+      room_id: roomExternalId,
+      currency: currency ?? "THB",
+    })
+    return data.listings
+  },
+}
+
+/**
+ * Полный ответ сайдкара по /host-listings (включая hostId и count) — нужен
+ * роуту привязки аккаунта для сообщений пользователю и диагностики.
+ */
+export async function fetchAirbnbHostListings(
+  roomExternalId: string,
+  currency?: string,
+): Promise<{ hostId: string | null; count: number; listings: HostListing[] }> {
+  return sidecarPost<SidecarHostListingsResponse>("/host-listings", {
+    room_id: roomExternalId,
+    currency: currency ?? "THB",
+  })
 }
 
 export const PRICE_SOURCES = {
