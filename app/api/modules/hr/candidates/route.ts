@@ -461,6 +461,9 @@ export async function GET(req: NextRequest) {
           demoAnswersScore: candidates.demoAnswersScore,
           resumeScore: candidates.resumeScore,
           rubricScore: candidates.rubricScore,
+          // Скоркарта интервью (миграция 0258): итоговый балл 1-10 для колонки
+          // списка (имя поля ФИКСИРОВАНО — рисует другой агент, см. use-candidates.ts).
+          interviewScore: candidates.interviewScore,
           salaryMin: candidates.salaryMin,
           salaryMax: candidates.salaryMax,
           salaryCurrency: candidates.salaryCurrency,

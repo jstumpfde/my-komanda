@@ -99,6 +99,10 @@ export interface Candidate {
   // Отличает «сдан, AI считает/ретраит» (pending/failed) от «сдан, ждёт
   // ручной проверки HR» (manual) при testScore==null.
   testScoringStatus?: "pending" | "done" | "failed" | "manual" | null
+  // Скоркарта интервью (миграция 0258): итоговый балл 1-10, manualOverride ??
+  // autoScore. null = интервью не оценивалось. Только тип — колонку/UI в
+  // list-view рисует другой агент (см. lib/candidates/interview-scorecard.ts).
+  interviewScore?: number | null
   // «Активен сейчас» — проходит демо/тест в последние 30 минут.
   isActive?: boolean
   /** Название вакансии — показывается в глобальном списке кандидатов (showVacancyColumn). */

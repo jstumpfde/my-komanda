@@ -93,6 +93,7 @@ import type { CandidateSpec } from "@/lib/core/spec/types"
 import type { AxisScoreResult } from "@/lib/core/spec/axis-scorer"
 import type { FunnelV2Stage } from "@/lib/funnel-v2/types"
 import type { RoleScoringFormula } from "@/lib/hiring/role-templates/types"
+import type { InterviewScorecard } from "@/lib/candidates/interview-scorecard"
 
 // ── Рантайм воронки v2 — состояние кандидата (drizzle/0226) ─────────────────
 // Хранится в candidates.funnel_v2_state_json (jsonb, nullable).
@@ -1742,6 +1743,12 @@ export const candidates = pgTable("candidates", {
   // истечении срока хранения компании. NOT NULL = персональные данные вычищены
   // (имя→«Удалён», контакты/резюме/анкеты/фото очищены), крон не трогает повторно.
   personalDataErasedAt: timestamp("personal_data_erased_at", { withTimezone: true }),
+  // drizzle/0258 — Скоркарта интервью. interview_score = manualOverride ??
+  // autoScore из interview_scorecard_json (см. lib/candidates/interview-scorecard.ts).
+  // NULL = интервью ещё не оценивалось. Критерии — из Портрета (mustHave×2 +
+  // niceToHave×1) + 3 универсальных («Коммуникация», «Мотивация», «Взял бы в команду»).
+  interviewScore:       integer("interview_score"),
+  interviewScorecardJson: jsonb("interview_scorecard_json").$type<InterviewScorecard | null>(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })

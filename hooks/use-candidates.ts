@@ -129,6 +129,11 @@ export interface ApiCandidate {
   rejectionInitiator?: string | null
   rejectionComment?: string | null
   rejectionAt?: string | null
+  // Отложенный отказ (lib/rejection/execute.ts scheduleRejection) — не NULL,
+  // пока cron pending-rejections не исполнит (или HR не отменит). Нужен
+  // скоркарте интервью для бейджа «Решение: Отказ (запланирован)».
+  pendingRejectionAt?: string | null
+  pendingRejectionReason?: string | null
   // F7: Telegram-бот для кандидатов
   telegramChatId?: string | null
   telegramUsername?: string | null
@@ -138,6 +143,11 @@ export interface ApiCandidate {
   // «2-я часть демо» (Путь менеджера): per-candidate override блока (миграция
   // 0236). Не NULL И stage='test_task_sent' → статус-ярлык «2-я часть».
   overrideContentBlockId?: string | null
+  // Скоркарта интервью (миграция 0258): итоговый балл 1-10, manualOverride ??
+  // autoScore. null = интервью не оценивалось. Колонка списка рисует другой
+  // агент — имя поля ФИКСИРОВАНО (interviewScore), не переименовывать.
+  interviewScore?: number | null
+  interviewScorecardJson?: import("@/lib/candidates/interview-scorecard").InterviewScorecard | null
 }
 
 // ─── useCandidates ────────────────────────────────────────────────────────────

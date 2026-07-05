@@ -104,6 +104,14 @@ import { TestTab } from "./test-tab"
 import { HhResumeInfo } from "./hh-resume-info"
 import { AiMatchCardV2 } from "./ai-match-card-v2"
 import { getBlockScore } from "@/lib/demo/block-scores"
+import {
+  generateCriteriaFromSpec,
+  computeAutoScore,
+  resolveInterviewScore,
+  type ScorecardCriterion,
+  type ScorecardVerdict,
+} from "@/lib/candidates/interview-scorecard"
+import type { CandidateSpec } from "@/lib/core/spec/types"
 
 // ─── Contact log type ────────────────────────────────────────────────────────
 
@@ -592,7 +600,9 @@ function ScoresPanel({ candidate }: { candidate: ApiCandidate }) {
               <span className={cn("text-2xl font-bold tabular-nums leading-none", scoreTone(c.score))}>{c.score}</span>
               <span className="flex items-center gap-1 shrink-0">
                 {c.partsBadge && (
-                  <span className="rounded bg-muted px-1 py-0.5 text-[9px] font-semibold leading-none text-muted-foreground tabular-nums">
+                  // Юрий 05.07: контраст выровнен по прецеденту списка кандидатов
+                  // (list-view.tsx) — 10px + secondary-foreground вместо приглушённого.
+                  <span className="rounded bg-muted px-1 py-0.5 text-[10px] text-secondary-foreground font-medium tabular-nums">
                     {c.partsBadge}
                   </span>
                 )}
@@ -968,6 +978,19 @@ export function CandidateDrawer({
   const [notesValue, setNotesValue] = useState("")
   const [savingOutcome, setSavingOutcome] = useState(false)
 
+  // ── Скоркарта интервью (дизайн координатора, одобрен Юрием 05.07) ─────────
+  const [scorecardCriteria, setScorecardCriteria] = useState<ScorecardCriterion[]>([])
+  const [scorecardManualOverride, setScorecardManualOverride] = useState<number | null>(null)
+  const [scorecardAutoScore, setScorecardAutoScore] = useState<number | null>(null)
+  const [scorecardLoading, setScorecardLoading] = useState(false)
+  const [scorecardSaving, setScorecardSaving] = useState(false)
+  const [scorecardOverrideDraft, setScorecardOverrideDraft] = useState("")
+  const [scorecardDecisionSaving, setScorecardDecisionSaving] = useState<InterviewDecisionValue | null>(null)
+  const [scorecardRejectReasonOpen, setScorecardRejectReasonOpen] = useState(false)
+  const [scorecardRejectReason, setScorecardRejectReason] = useState("")
+  const [scorecardRejectComment, setScorecardRejectComment] = useState("")
+  const scorecardInitializedFor = useRef<string | null>(null)
+
   const [activeTab, setActiveTab] = useState("contacts")
   // Открыть карточку на заданной вкладке (напр. клик по колонке «Тест» → результат теста).
   useEffect(() => {
@@ -1202,6 +1225,156 @@ export function CandidateDrawer({
     }
   }
 
+  // ── Скоркарта интервью: инициализация ──────────────────────────────────────
+  // Once per candidate: если interview_scorecard_json уже есть — используем его
+  // (сохранённые вердикты HR), иначе генерируем стартовый набор из Портрета
+  // вакансии (mustHave×2 + niceToHave×1) + 3 универсальных критерия.
+  useEffect(() => {
+    if (!candidate || !candidateId) return
+    if (scorecardInitializedFor.current === candidateId) return
+    scorecardInitializedFor.current = candidateId
+
+    const existing = candidate.interviewScorecardJson
+    if (existing && Array.isArray(existing.criteria) && existing.criteria.length > 0) {
+      setScorecardCriteria(existing.criteria)
+      setScorecardAutoScore(existing.autoScore ?? null)
+      setScorecardManualOverride(existing.manualOverride ?? null)
+      setScorecardOverrideDraft(existing.manualOverride != null ? String(existing.manualOverride) : "")
+      return
+    }
+
+    // Нет сохранённой скоркарты — тянем Портрет вакансии, чтобы построить критерии.
+    const vacancyId = candidate.vacancyId
+    if (!vacancyId) {
+      // Вакансия не определена — хотя бы 3 универсальных критерия.
+      setScorecardCriteria(generateCriteriaFromSpec(null))
+      return
+    }
+    setScorecardLoading(true)
+    fetch(`/api/core/spec/${vacancyId}`)
+      .then(res => res.ok ? res.json() : null)
+      .then((data: { spec?: CandidateSpec } | null) => {
+        setScorecardCriteria(generateCriteriaFromSpec(data?.spec ?? null))
+      })
+      .catch(() => {
+        setScorecardCriteria(generateCriteriaFromSpec(null))
+      })
+      .finally(() => setScorecardLoading(false))
+  }, [candidate, candidateId])
+
+  // Автосейв на каждый тап критерия — пересчитывает autoScore на клиенте
+  // (для мгновенного отклика UI) И отправляет на сервер (источник правды —
+  // сервер пересчитывает сам, см. PATCH /interview-scorecard).
+  const saveScorecard = useCallback(async (nextCriteria: ScorecardCriterion[], nextManualOverride?: number | null) => {
+    if (!candidateId) return
+    setScorecardCriteria(nextCriteria)
+    const auto = computeAutoScore(nextCriteria)
+    setScorecardAutoScore(auto)
+    setScorecardSaving(true)
+    try {
+      const body: Record<string, unknown> = { criteria: nextCriteria }
+      if (nextManualOverride !== undefined) body.manualOverride = nextManualOverride
+      const res = await fetch(`/api/modules/hr/candidates/${candidateId}/interview-scorecard`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error()
+      const data = await res.json() as { interviewScore?: number | null }
+      setCandidate((prev) => prev ? { ...prev, interviewScore: data.interviewScore ?? null } : prev)
+    } catch {
+      toast.error("Не удалось сохранить скоркарту")
+    } finally {
+      setScorecardSaving(false)
+    }
+  }, [candidateId])
+
+  const setCriterionVerdict = (key: string, verdict: ScorecardVerdict) => {
+    const next = scorecardCriteria.map((c) => c.key === key ? { ...c, verdict } : c)
+    void saveScorecard(next)
+  }
+
+  const applyManualOverride = () => {
+    const trimmed = scorecardOverrideDraft.trim()
+    if (trimmed === "") {
+      setScorecardManualOverride(null)
+      void saveScorecard(scorecardCriteria, null)
+      return
+    }
+    const n = Number.parseInt(trimmed, 10)
+    if (!Number.isFinite(n) || n < 1 || n > 10) {
+      toast.error("Балл — целое число от 1 до 10")
+      return
+    }
+    setScorecardManualOverride(n)
+    void saveScorecard(scorecardCriteria, n)
+  }
+
+  const scorecardFinalScore = resolveInterviewScore({ autoScore: scorecardAutoScore, manualOverride: scorecardManualOverride })
+
+  // ── Скоркарта: кнопки решения (Дальше/Оффер/Отказ/Резерв) ──────────────────
+  const submitScorecardDecision = async (decision: InterviewDecisionValue) => {
+    if (!candidate || scorecardDecisionSaving) return
+    if (decision === "reject") {
+      setScorecardRejectReason("")
+      setScorecardRejectComment("")
+      setScorecardRejectReasonOpen(true)
+      return
+    }
+    // advance / offer / reserve — существующий stage-переход (переиспользуем
+    // handleStageChange — тот же PUT .../stage, что и везде в карточке, со
+    // своими тостами/onStageChange; не дублируем fetch-логику).
+    const targetStage = decision === "offer" ? "offer_sent" : decision === "reserve" ? "talent_pool" : "decision"
+    setScorecardDecisionSaving(decision)
+    try {
+      await handleStageChange(targetStage)
+    } finally {
+      setScorecardDecisionSaving(null)
+    }
+  }
+
+  const submitScorecardReject = async () => {
+    if (!candidate || scorecardDecisionSaving) return
+    setScorecardDecisionSaving("reject")
+    try {
+      const res = await fetch(`/api/modules/hr/candidates/${candidate.id}/interview-decision`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          decision: "reject",
+          rejectionReasonCategory: scorecardRejectReason || null,
+          rejectionComment: scorecardRejectComment.trim() || null,
+        }),
+      })
+      if (!res.ok) throw new Error()
+      const data = await res.json() as { pendingRejectionAt?: string | null }
+      setCandidate((prev) => prev ? {
+        ...prev,
+        pendingRejectionAt: data.pendingRejectionAt ?? null,
+        pendingRejectionReason: "interview_scorecard_decision",
+        rejectionReasonCategory: scorecardRejectReason || null,
+        rejectionComment: scorecardRejectComment.trim() || null,
+      } : prev)
+      setScorecardRejectReasonOpen(false)
+      toast.success("Отказ запланирован")
+    } catch {
+      toast.error("Не удалось запланировать отказ")
+    } finally {
+      setScorecardDecisionSaving(null)
+    }
+  }
+
+  // Ярлык решения для бейджа «Решение: …» под кнопками.
+  function scorecardDecisionLabel(): string | null {
+    if (!candidate) return null
+    if (candidate.pendingRejectionAt) return "Отказ (запланирован)"
+    if (candidate.stage === "rejected") return "Отказ"
+    if (candidate.stage === "offer_sent") return "Оффер"
+    if (candidate.stage === "talent_pool") return "В резерве"
+    if (candidate.stage === "decision" || candidate.stage === "hired") return "Дальше по воронке"
+    return null
+  }
+
   useEffect(() => {
     if (open && candidateId) {
       setCandidate(null)
@@ -1225,6 +1398,13 @@ export function CandidateDrawer({
       channelStagesFetchedFor.current = null
       setInterviewEvents([])
       setEditingOutcomeEventId(null)
+      // Скоркарта интервью — сброс, инициализация случится в отдельном
+      // эффекте после загрузки candidate (нужен vacancyId для Портрета).
+      setScorecardCriteria([])
+      setScorecardManualOverride(null)
+      setScorecardAutoScore(null)
+      setScorecardOverrideDraft("")
+      scorecardInitializedFor.current = null
       fetchCandidate(candidateId)
       loadContacts(candidateId)
       loadInterviewEvents(candidateId)
@@ -2656,6 +2836,122 @@ export function CandidateDrawer({
 
               {/* ── Итоги интервью (Воронка v2 Фаза 2) ──────────────────────────── */}
               <TabsContent value="interview" className="px-6 py-4 pb-28 space-y-4 mt-0">
+                {/* ── Скоркарта интервью (дизайн координатора, одобрен Юрием 05.07) ── */}
+                <div className="rounded-lg border border-border/60 p-3 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Скоркарта интервью
+                    </h3>
+                    {scorecardFinalScore != null && (
+                      <span className={cn("text-lg font-bold tabular-nums", scoreTone(scorecardFinalScore * 10))}>
+                        {scorecardFinalScore}<span className="text-xs font-normal text-muted-foreground">/10</span>
+                      </span>
+                    )}
+                  </div>
+
+                  {scorecardLoading ? (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />Строим критерии из Портрета…
+                    </div>
+                  ) : scorecardCriteria.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-2 text-center">Критерии не заданы</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {scorecardCriteria.map((c) => (
+                        <div key={c.key} className="flex flex-wrap items-center justify-between gap-2 py-1">
+                          <span className="min-w-0 flex-1 text-sm text-foreground flex items-center gap-1.5">
+                            {c.label}
+                            {c.source === "portrait" && c.weight === 2 && (
+                              <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 shrink-0 border-primary/40 text-primary">обязат.</Badge>
+                            )}
+                          </span>
+                          <div className="flex gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => setCriterionVerdict(c.key, "confirmed")}
+                              className={cn(
+                                "px-2.5 py-1.5 rounded-md text-xs border transition-colors min-h-[32px]",
+                                c.verdict === "confirmed"
+                                  ? "bg-emerald-100 border-emerald-400 text-emerald-800 dark:bg-emerald-900/30 dark:border-emerald-600 dark:text-emerald-300"
+                                  : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30",
+                              )}
+                            >
+                              Подтвердился
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCriterionVerdict(c.key, "not_confirmed")}
+                              className={cn(
+                                "px-2.5 py-1.5 rounded-md text-xs border transition-colors min-h-[32px]",
+                                c.verdict === "not_confirmed"
+                                  ? "bg-red-100 border-red-400 text-red-800 dark:bg-red-900/30 dark:border-red-600 dark:text-red-300"
+                                  : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30",
+                              )}
+                            >
+                              Не подтвердился
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCriterionVerdict(c.key, "not_checked")}
+                              className={cn(
+                                "px-2.5 py-1.5 rounded-md text-xs border transition-colors min-h-[32px]",
+                                c.verdict === "not_checked"
+                                  ? "bg-muted border-border text-foreground"
+                                  : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30",
+                              )}
+                            >
+                              Не проверяли
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Ручное переопределение балла */}
+                  <div className="flex items-center gap-2 pt-2 border-t border-border/40">
+                    <Label htmlFor="scorecard-override" className="text-xs text-muted-foreground shrink-0">Ваш итоговый балл</Label>
+                    <Input
+                      id="scorecard-override"
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={scorecardOverrideDraft}
+                      onChange={(e) => setScorecardOverrideDraft(e.target.value)}
+                      onBlur={applyManualOverride}
+                      placeholder={scorecardAutoScore != null ? String(scorecardAutoScore) : "—"}
+                      className="h-8 w-16 text-xs"
+                    />
+                    <span className="text-[11px] text-muted-foreground">
+                      {scorecardManualOverride != null ? "переопределён вручную" : scorecardAutoScore != null ? `авто: ${scorecardAutoScore}/10` : "балла ещё нет"}
+                    </span>
+                    {scorecardSaving && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground ml-auto" />}
+                  </div>
+
+                  {/* Кнопки решения */}
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/40">
+                    {INTERVIEW_DECISION_OPTIONS.map((opt) => (
+                      <Button
+                        key={opt.id}
+                        size="sm"
+                        variant={opt.id === "reject" ? "outline" : opt.id === "offer" ? "default" : "outline"}
+                        className={cn("h-8 text-xs gap-1.5", opt.id === "reject" && "text-destructive border-destructive/40 hover:bg-destructive/10")}
+                        disabled={!!scorecardDecisionSaving}
+                        onClick={() => void submitScorecardDecision(opt.id)}
+                      >
+                        {scorecardDecisionSaving === opt.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                        {opt.id === "advance" ? "Дальше по воронке" : opt.label}
+                      </Button>
+                    ))}
+                    {scorecardDecisionLabel() && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 ml-auto">
+                        Решение: {scorecardDecisionLabel()}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
                   <Calendar className="w-3.5 h-3.5" />
                   Собеседования
@@ -3499,6 +3795,57 @@ export function CandidateDrawer({
               onClick={(e) => { e.preventDefault(); void submitReject() }}
             >
               {changingStage === "rejected" ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : null}
+              Отказать
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Скоркарта интервью — «Отказ»: НЕ мгновенный, ставит отложенный отказ
+          (scheduleRejection), исполнит cron pending-rejections. Причина —
+          та же таксономия, что и в обычном диалоге отказа выше. */}
+      <AlertDialog open={scorecardRejectReasonOpen} onOpenChange={setScorecardRejectReasonOpen}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Причина отказа</AlertDialogTitle>
+            <AlertDialogDescription>
+              {candidate?.name ? <><b>{candidate.name}</b> получит</> : "Кандидат получит"} отложенный отказ (по задержке вакансии, как обычно) — можно отменить в карточке до исполнения.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="scorecard-reject-reason">Причина</Label>
+              <Select value={scorecardRejectReason} onValueChange={setScorecardRejectReason}>
+                <SelectTrigger id="scorecard-reject-reason" className="w-full">
+                  <SelectValue placeholder="Выберите причину" />
+                </SelectTrigger>
+                <SelectContent>
+                  {REJECTION_REASONS.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="scorecard-reject-comment">Комментарий <span className="text-muted-foreground font-normal">(необязательно)</span></Label>
+              <Textarea
+                id="scorecard-reject-comment"
+                value={scorecardRejectComment}
+                onChange={(e) => setScorecardRejectComment(e.target.value)}
+                placeholder="Дополнительные детали..."
+                rows={3}
+                className="resize-none text-sm"
+              />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={!!scorecardDecisionSaving}>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!!scorecardDecisionSaving}
+              className="bg-destructive hover:bg-destructive/90"
+              onClick={(e) => { e.preventDefault(); void submitScorecardReject() }}
+            >
+              {scorecardDecisionSaving === "reject" ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : null}
               Отказать
             </AlertDialogAction>
           </AlertDialogFooter>
