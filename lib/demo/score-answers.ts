@@ -6,12 +6,21 @@
  * собирает вопросы type="task" с aiCriteria ТОЛЬКО из этой версии,
  * и вызывает AI для оценки только отвеченных вопросов.
  *
- * Формула: score = round( sum(awarded, неотвеченные=0) / sum(points, все скорируемые) × 100 )
+ * Формула ПЕР-БЛОЧНОГО балла: score = round( sum(awarded, неотвеченные=0) /
+ * sum(points, все скорируемые ЭТОГО блока) × 100 ). Пишется в demo_block_scores.
+ *
+ * Формула ЕДИНОГО балла «Анкета» (Вариант Б, решение Юрия 05.07,
+ * lib/demo/unified-score.ts): sum(awarded) / sum(max) ПО ВСЕМ answered-блокам
+ * (несданные части демо исключены из знаменателя — их блока просто нет).
+ * Пока answered-блок один (обычно часть 1) — единый балл совпадает с
+ * пер-блочным байт-в-байт (обратная совместимость с гейтами score-gate/
+ * second-demo-invite, которые читают demo_answers_score как балл части 1).
  *
  * Результат пишется в ОТДЕЛЬНЫЕ колонки (НЕ ai_score — туда пишут v1/v2-скоринг
  * резюме, была бы гонка fire-and-forget):
- *   candidates.demo_answers_score   — общий балл 0-100
- *   candidates.demo_answers_details — [{questionText, awarded, max, comment}]
+ *   candidates.demo_answers_score   — ЕДИНЫЙ балл 0-100 (все answered-части)
+ *   candidates.demo_answers_details — конкатенация breakdown всех answered-блоков
+ *   candidates.demo_block_scores    — балл + breakdown КАЖДОГО блока отдельно
  *
  * Если реальных ответов нет — возвращает null, ничего не пишет.
  */
@@ -27,6 +36,7 @@ import {
 } from "@/lib/demo/resolve-questions"
 import { addVacancyTokens } from "@/lib/ai/token-usage"
 import { AI_MODEL_MAIN } from "@/lib/ai/models"
+import { computeUnifiedAnketaScore } from "@/lib/demo/unified-score"
 
 // Cloned from ai-score-candidate-v2 — same proxy/model pattern
 const anthropic = new Anthropic({
@@ -81,7 +91,7 @@ export interface ScoreDemoAnswersArgs {
   skipIfScored?: boolean
 }
 
-interface TaskQuestion {
+export interface TaskQuestion {
   blockId: string
   questionId: string
   text: string
@@ -97,8 +107,11 @@ interface DemoVersion {
 
 /**
  * Строим TaskQuestion[] из одного lessonsJson.
+ * Экспортируется — переиспользуется API списка кандидатов для подсчёта
+ * partsTotal (сколько демо-блоков вакансии вообще скорируемы), нужного
+ * индикатору прогресса частей "N/M" в UI (components/dashboard/list-view.tsx).
  */
-function extractTaskQuestions(lessonsJson: unknown): TaskQuestion[] {
+export function extractTaskQuestions(lessonsJson: unknown): TaskQuestion[] {
   const result: TaskQuestion[] = []
   const resolver = buildBlockResolver([lessonsJson])
   for (const [blockId, block] of resolver.entries()) {
@@ -207,10 +220,15 @@ export async function scoreDemoAnswers(
   // Скорим КАЖДЫЙ демо-блок отдельно (Вариант Б, пер-блочный балл анкеты).
   const blockScores: Record<string, { title: string; score: number; breakdown: AnswerQuestionBreakdown[] }> = {}
   let mainResult: ScoreDemoAnswersResult | null = null
+  // Сколько демо-блоков вакансии вообще СКОРИРУЕМЫ (есть вопросы с aiCriteria) —
+  // знаменатель для индикатора прогресса частей "N/M" в UI (partsTotal), НЕ
+  // влияет на формулу балла (та использует только answered-блоки из blockScores).
+  let scorableBlockCount = 0
 
   for (const demo of demoRows) {
     const allScorable = extractTaskQuestions(demo.lessonsJson) // весь знаменатель этого блока
     if (allScorable.length === 0) continue
+    scorableBlockCount++
 
   // Для каждого scorable-вопроса находим реальный ответ (не view-маркер)
   interface AnsweredQuestion {
@@ -365,12 +383,30 @@ ${questionsBlock}
   // Ни одного блока с реальными ответами — ничего не пишем.
   if (!mainResult) return null
 
-  // Запись: demo_answers_score/details = основной блок; demo_block_scores = все блоки.
+  // Единый балл «Анкета» (Вариант Б, решение Юрия 05.07): пока answered-блок
+  // ровно один (обычно часть 1) — unified совпадает с mainResult байт-в-байт
+  // (то же demoId, тот же breakdown, тот же score). Как только answered-блоков
+  // становится ≥2 (часть 2 тоже сдана) — знаменатель пересчитывается ПО ВСЕМ
+  // отвеченным вопросам обеих частей (несданные части исключены — их блока
+  // просто нет в blockScores). Пишем в ТУ ЖЕ колонку demo_answers_score, чтобы
+  // все читатели (список/сортировка/экспорт/гейты) работали без изменений.
+  const blockList = demoRows
+    .filter((d) => blockScores[d.id])
+    .map((d) => ({ demoId: d.id, title: blockScores[d.id].title, score: blockScores[d.id].score, breakdown: blockScores[d.id].breakdown }))
+  const unified = computeUnifiedAnketaScore(blockList, scorableBlockCount)
+  const finalScore = unified ? unified.score : mainResult.score
+  // Единый breakdown = конкатенация breakdown'ов всех answered-блоков в порядке
+  // демо (для панели «Оценки»/rescore diagnostics — единообразно с mainResult).
+  const finalDetails = blockList.length > 1
+    ? blockList.flatMap((b) => b.breakdown)
+    : mainResult.breakdown
+
+  // Запись: demo_answers_score/details = единый балл; demo_block_scores = все блоки.
   await db.update(candidates).set({
-    demoAnswersScore:   mainResult.score,
-    demoAnswersDetails: mainResult.breakdown,
+    demoAnswersScore:   finalScore,
+    demoAnswersDetails: finalDetails,
     demoBlockScores:    blockScores,
   }).where(eq(candidates.id, candidateId))
 
-  return mainResult
+  return { score: finalScore, breakdown: finalDetails }
 }
