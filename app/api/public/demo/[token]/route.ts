@@ -10,6 +10,7 @@ import { normalizeFunnelV2 } from "@/lib/funnel-v2/types"
 import { resolveCurrentStageContent } from "@/lib/funnel-v2/resolve-content"
 import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
 import { getSpec } from "@/lib/core/spec/store"
+import { resolveTransferMode } from "@/lib/demo/anketa-pass-gate"
 
 // Достаём first/last/city из hh resume. У части записей raw_data — это сам
 // resume, у других обёрнут в { resume: ... }. Альтернативные ключи
@@ -293,11 +294,9 @@ export async function GET(
       const spec = await getSpec(vacancy.id)
       const ap = spec?.anketaPassInvite
       if (ap?.enabled === true) {
-        // Обратная совместимость: старые спеки без transferMode → inlineContinue.
-        const transferMode: "seamless" | "message" | "both" =
-          ap.transferMode === "seamless" || ap.transferMode === "message" || ap.transferMode === "both"
-            ? ap.transferMode
-            : (ap.inlineContinue === false ? "message" : "both")
+        // Обратная совместимость: старые спеки без transferMode → inlineContinue
+        // (lib/demo/anketa-pass-gate.ts — единственный источник истины).
+        const transferMode = resolveTransferMode(ap)
         passInviteScreens = {
           transferMode,
           passScreenTitle: ap.passScreenTitle ?? "",

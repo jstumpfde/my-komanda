@@ -32,14 +32,15 @@ import { generateTouchSchedule, mergeMessagesWithDefaults } from "@/lib/followup
 import { DEFAULT_TEST_NOT_OPENED } from "@/lib/followup/default-messages"
 import { computeObjectiveGateScore } from "@/lib/demo/objective-gate"
 import { adjustToWorkingWindow } from "@/lib/schedule/can-send-now"
+import {
+  DEFAULT_AI_EVAL_THRESHOLD,
+  decideAnketaPassGate,
+  resolveTransferMode,
+  shouldSendPassInviteMessage,
+} from "@/lib/demo/anketa-pass-gate"
 
 const DEFAULT_TEXT =
   "{{name}}, отлично — вы прошли анкету! Приглашаем вас на следующий этап: {{demo_link}}"
-
-// Дефолт порога AI-оценки ответов = дефолт схемы (types.ts AnketaPassInviteSchema).
-// НЕ хардкод логики: getSpec не всегда применяет дефолты схемы (инцидент 30.06),
-// поэтому для старых спеков без aiEvalThreshold подставляем это значение.
-const DEFAULT_AI_EVAL_THRESHOLD = 45
 
 async function ensureCampaign(vacancyId: string): Promise<string | null> {
   const [existing] = await db
@@ -113,10 +114,13 @@ export async function describeSecondDemoInvite(
     const aiEvalScore = typeof cand.demoAnswersScore === "number" ? cand.demoAnswersScore : null
     const aiEvalThreshold = typeof ap.aiEvalThreshold === "number" ? ap.aiEvalThreshold : DEFAULT_AI_EVAL_THRESHOLD
 
-    // ИЛИ-гейт: тот же критерий, что в maybeScheduleSecondDemoInvite.
-    const passObjective = score != null && score >= threshold
-    const passAiEval = aiEvalScore != null && aiEvalScore >= aiEvalThreshold
-    const passed = score == null && aiEvalScore == null ? null : (passObjective || passAiEval)
+    // ИЛИ-гейт: тот же критерий (единый источник истины), что в
+    // maybeScheduleSecondDemoInvite — lib/demo/anketa-pass-gate.ts.
+    const gate = decideAnketaPassGate(
+      { objectiveScore: score, aiEvalScore },
+      { passThreshold: threshold, aiEvalThreshold },
+    )
+    const passed = gate.passed ? true : (gate.reason === "not_applicable" ? null : false)
 
     return { invited, score, threshold, aiEvalScore, aiEvalThreshold, passed, blockTitle }
   } catch {
@@ -223,49 +227,48 @@ export async function maybeScheduleSecondDemoInvite(args: {
       .limit(1)
     if (!blockRow) return { scheduled: false, reason: "content_block_not_found" }
 
-    // 4. ИЛИ-гейт: пропускаем во 2-ю часть, если ЛЮБОЕ из двух:
+    // 4. ИЛИ-гейт (lib/demo/anketa-pass-gate.ts — единственный источник истины):
+    //    пропускаем во 2-ю часть, если ЛЮБОЕ из двух:
     //    (а) объективный балл по выбору >= passThreshold, ИЛИ
     //    (б) AI-оценка ответов анкеты (demo_answers_score) >= aiEvalThreshold.
     //    Так сильные по сути ответы проходят даже при низком объективном балле.
     //    - Объективный балл: null, если у вакансии нет оцениваемых вопросов-выбора
     //      или у кандидата нет ответов (тогда ветка (а) не срабатывает).
-    //    - AI-оценка: null, если ещё не посчитана (score-answers — fire-and-forget,
-    //      считается параллельно этому гейту в answer-route). Тогда ветка (б) не
-    //      срабатывает, поведение как раньше — без краша.
+    //    - AI-оценка: null, если ещё не посчитана. С 05.07 answer-route ЖДЁТ
+    //      scoreDemoAnswers (с потолком) перед вызовом этой функции, когда
+    //      anketaPassInvite.enabled — так что здесь она уже почти всегда готова
+    //      (осечка бесшовного перехода по AI-ветке гейта, фикс 05.07).
     const result = await computeObjectiveGateScore(args.candidateId, args.vacancyId)
     const objectiveScore = result ? result.score : null
     const aiEvalScore = typeof cand.demoAnswersScore === "number" ? cand.demoAnswersScore : null
     const aiEvalThreshold = typeof ap.aiEvalThreshold === "number" ? ap.aiEvalThreshold : DEFAULT_AI_EVAL_THRESHOLD
 
-    const passObjective = objectiveScore != null && objectiveScore >= ap.passThreshold
-    const passAiEval = aiEvalScore != null && aiEvalScore >= aiEvalThreshold
+    const gate = decideAnketaPassGate(
+      { objectiveScore, aiEvalScore },
+      { passThreshold: ap.passThreshold, aiEvalThreshold },
+    )
 
-    if (!passObjective && !passAiEval) {
-      // Ни один порог не взят. Если объективных вопросов вовсе нет И AI-оценки нет —
-      // гейт неприменим (как раньше), иначе — балл ниже порогов.
-      if (objectiveScore == null && aiEvalScore == null) {
+    if (!gate.passed) {
+      // Сохраняем прежние строки reason наружу (читает reapply-anketa-gate/карточка).
+      if (gate.reason === "not_applicable") {
         return { scheduled: false, reason: "no_objective_questions" }
       }
       return {
         scheduled: false,
         reason:    "below_threshold",
-        score:     objectiveScore ?? aiEvalScore ?? undefined,
+        score:     gate.score ?? undefined,
       }
     }
-    // Для логов/возврата — «сработавший» балл (приоритет объективного).
-    const gateScore = passObjective ? (objectiveScore as number) : (aiEvalScore as number)
+    const gateScore = gate.score
 
     // Режим перехода на блок 2. Обратная совместимость: старые спеки без
     // transferMode, но с inlineContinue=false → трактуем как "message".
-    const transferMode: "seamless" | "message" | "both" =
-      ap.transferMode === "seamless" || ap.transferMode === "message" || ap.transferMode === "both"
-        ? ap.transferMode
-        : (ap.inlineContinue === false ? "message" : "both")
+    const transferMode = resolveTransferMode(ap)
 
     // 5a. Бесшовный режим (seamless): письмо НЕ шлём — кандидат перейдёт на блок 2
     //     прямо на странице. Но override ВСЁ РАВНО ставим (GET отдаст блок 2,
     //     плюс дедуп-флаг). Атомарности с insert тут не нужно — insert-а нет.
-    if (transferMode === "seamless") {
+    if (!shouldSendPassInviteMessage(transferMode)) {
       await db.update(candidates)
         .set({ overrideContentBlockId: blockId, secondDemoInvitedAt: new Date() })
         .where(eq(candidates.id, args.candidateId))
@@ -277,7 +280,7 @@ export async function maybeScheduleSecondDemoInvite(args: {
         candidateId:     args.candidateId,
         vacancyId:       args.vacancyId,
         score:           gateScore,
-        gate:            passObjective ? "objective" : "ai_eval",
+        gate:            gate.via,
         objectiveScore,
         aiEvalScore,
         passThreshold:   ap.passThreshold,
@@ -364,7 +367,7 @@ export async function maybeScheduleSecondDemoInvite(args: {
       candidateId:     args.candidateId,
       vacancyId:       args.vacancyId,
       score:           gateScore,
-      gate:            passObjective ? "objective" : "ai_eval",
+      gate:            gate.via,
       objectiveScore,
       aiEvalScore,
       passThreshold:   ap.passThreshold,
