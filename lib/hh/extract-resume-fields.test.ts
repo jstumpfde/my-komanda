@@ -11,7 +11,7 @@
 // Запуск: pnpm exec tsx --test lib/hh/extract-resume-fields.test.ts
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { extractHhResumeFields, formatWorkHistory } from "./extract-resume-fields"
+import { extractHhResumeFields, formatWorkHistory, extractAllContacts } from "./extract-resume-fields"
 
 // Сырое hh-резюме с 5 местами работы (как реально приходит из /resumes/{id}).
 const rawResumeWith5Jobs = {
@@ -123,4 +123,109 @@ test("formatWorkHistory: запись без должности/компании
   ])
   assert.ok(!text.includes("пустая запись"))
   assert.ok(text.includes("Продавец — ООО Тест"))
+})
+
+// ─── extractAllContacts — задача Юрия 05.07: показать ВСЕ способы связи + предпочтительный ──
+//
+// Симптом: секция «КОНТАКТЫ» показывала только phone/email/Telegram/WhatsApp
+// без preferred/comment/verified — кандидат мог написать «звоните только в
+// Telegram, не дозвонитесь по телефону» в comment, а HR его не видел.
+
+test("extractAllContacts: предпочтительный контакт с комментарием кандидата — preferred=true, comment сохранён", () => {
+  const raw = {
+    contact: [
+      {
+        kind: "phone",
+        type: { id: "cell", name: "Мобильный телефон" },
+        preferred: false,
+        verified: false,
+        value: { formatted: "+7 (999) 123-45-67" },
+      },
+      {
+        kind: "telegram",
+        type: { id: "telegram", name: "Telegram" },
+        preferred: true,
+        verified: false,
+        comment: "Пишите, пожалуйста, в Telegram, если не дозвонитесь — @nick",
+        value: "@nick",
+        links: { web: "https://t.me/nick" },
+      },
+    ],
+  }
+  const contacts = extractAllContacts(raw)
+  assert.equal(contacts.length, 2)
+  // preferred — первым
+  assert.equal(contacts[0].typeId, "telegram")
+  assert.equal(contacts[0].preferred, true)
+  assert.equal(contacts[0].comment, "Пишите, пожалуйста, в Telegram, если не дозвонитесь — @nick")
+  assert.equal(contacts[0].href, "https://t.me/nick")
+  assert.equal(contacts[0].verified, false)
+})
+
+test("extractAllContacts: несколько телефонов (cell/home/work) — все попадают в список, каждый со своей ссылкой tel:", () => {
+  const raw = {
+    contact: [
+      { type: { id: "cell", name: "Мобильный телефон" }, preferred: false, value: { formatted: "+7 999 111-22-33" } },
+      { type: { id: "home", name: "Домашний телефон" }, preferred: false, value: { formatted: "+7 495 222-33-44" } },
+      { type: { id: "work", name: "Рабочий телефон" }, preferred: false, value: { formatted: "+7 495 333-44-55" } },
+    ],
+  }
+  const contacts = extractAllContacts(raw)
+  assert.equal(contacts.length, 3, "должны быть все 3 телефона, не только первый")
+  const ids = contacts.map((c) => c.typeId).sort()
+  assert.deepEqual(ids, ["cell", "home", "work"])
+  for (const c of contacts) {
+    assert.ok(c.href?.startsWith("tel:"), `href контакта ${c.typeId} должен начинаться с tel:`)
+  }
+})
+
+test("extractAllContacts: telegram с links.web — href берётся из ссылки мессенджера, а не mailto/tel", () => {
+  const raw = {
+    contact: [
+      {
+        type: { id: "telegram", name: "Telegram" },
+        preferred: false,
+        verified: true,
+        value: "@candidate_nick",
+        links: { web: "https://t.me/candidate_nick", ios: "tg://resolve?domain=candidate_nick" },
+      },
+    ],
+  }
+  const contacts = extractAllContacts(raw)
+  assert.equal(contacts.length, 1)
+  assert.equal(contacts[0].href, "https://t.me/candidate_nick")
+  assert.equal(contacts[0].display, "@candidate_nick")
+  assert.equal(contacts[0].verified, true)
+  assert.equal(contacts[0].typeLabel, "Telegram")
+})
+
+test("extractAllContacts: email — href строится как mailto:", () => {
+  const raw = {
+    contact: [
+      { type: { id: "email" }, preferred: false, value: { email: "test@example.com" } },
+    ],
+  }
+  const contacts = extractAllContacts(raw)
+  assert.equal(contacts.length, 1)
+  assert.equal(contacts[0].href, "mailto:test@example.com")
+  assert.equal(contacts[0].typeLabel, "Email")
+})
+
+test("extractAllContacts: неизвестный тип контакта — generic-фолбэк по type.name, href=null без links", () => {
+  const raw = {
+    contact: [
+      { type: { id: "some_new_messenger_2027", name: "НовыйМессенджер" }, preferred: false, value: "user123" },
+    ],
+  }
+  const contacts = extractAllContacts(raw)
+  assert.equal(contacts.length, 1)
+  assert.equal(contacts[0].typeLabel, "НовыйМессенджер")
+  assert.equal(contacts[0].href, null)
+})
+
+test("extractAllContacts: нет contact[] или не hh-данные — пустой массив (fallback-режим)", () => {
+  assert.deepEqual(extractAllContacts(null), [])
+  assert.deepEqual(extractAllContacts(undefined), [])
+  assert.deepEqual(extractAllContacts({}), [])
+  assert.deepEqual(extractAllContacts({ contact: "not-an-array" }), [])
 })
