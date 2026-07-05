@@ -21,6 +21,33 @@ function median(values: number[]): number | null {
   return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
 }
 
+// Перцентиль по методу линейной интерполяции (p в 0..100).
+function percentile(values: number[], p: number): number | null {
+  if (values.length === 0) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  if (sorted.length === 1) return sorted[0]
+  const rank = (p / 100) * (sorted.length - 1)
+  const lo = Math.floor(rank)
+  const hi = Math.ceil(rank)
+  if (lo === hi) return sorted[lo]
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (rank - lo)
+}
+
+// Позиция нашей цены среди конкурентов: доля конкурентов ДЕШЕВЛЕ нас (0..100) —
+// «мы дороже N% конкурентов». Полоса рынка: low/below/above/high.
+type MarketBand = "low" | "below" | "above" | "high"
+function marketPosition(ownPerNight: number | null, competitorPrices: number[]): {
+  pricierThanPct: number
+  band: MarketBand
+} | null {
+  if (ownPerNight == null || competitorPrices.length === 0) return null
+  const cheaper = competitorPrices.filter((v) => v < ownPerNight).length
+  const pricierThanPct = Math.round((cheaper / competitorPrices.length) * 100)
+  const band: MarketBand =
+    pricierThanPct >= 75 ? "high" : pricierThanPct >= 50 ? "above" : pricierThanPct >= 25 ? "below" : "low"
+  return { pricierThanPct, band }
+}
+
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireCompany()
@@ -175,6 +202,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
     const medians: Record<string, number | null> = {}
     const deltas: Record<string, number | null> = {}
+    const percentiles: Record<string, { p25: number | null; p50: number | null; p75: number | null }> = {}
+    const marketPos: Record<string, { pricierThanPct: number; band: MarketBand } | null> = {}
     for (const nights of eff.periods) {
       const key = String(nights)
       const activePrices = competitorRows
@@ -187,6 +216,12 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       deltas[key] = med != null && med !== 0 && ownPerNight != null
         ? Math.round(((ownPerNight - med) / med) * 1000) / 10
         : null
+      percentiles[key] = {
+        p25: percentile(activePrices, 25),
+        p50: med,
+        p75: percentile(activePrices, 75),
+      }
+      marketPos[key] = marketPosition(ownPerNight, activePrices)
     }
 
     return apiSuccess({
@@ -197,6 +232,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       rows,
       medians,
       deltas,
+      percentiles,
+      marketPos,
     })
   } catch (err) {
     if (err instanceof Response) return err

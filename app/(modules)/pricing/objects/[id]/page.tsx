@@ -458,6 +458,20 @@ export default function PriceMonitorObjectDetailPage() {
                           <TableCell />
                         </TableRow>
 
+                        {sortedRows.ownRow && (
+                          <TableRow className="bg-primary/5 border-b-2 border-border">
+                            <TableCell colSpan={3} className="text-xs text-muted-foreground">
+                              Наша позиция к рынку
+                            </TableCell>
+                            {periods.map((p) => (
+                              <TableCell key={p} className="text-right">
+                                <MarketBandBadge pos={comparison.marketPos?.[String(p)] ?? null} />
+                              </TableCell>
+                            ))}
+                            <TableCell />
+                          </TableRow>
+                        )}
+
                         {sortedRows.active?.map((row) => (
                           <CompetitorRow
                             key={row.competitorId}
@@ -589,6 +603,50 @@ function DeltaBadge({ delta }: { delta: number | null }) {
     >
       {rounded > 0 ? "+" : ""}
       {rounded}% к медиане
+    </Badge>
+  )
+}
+
+const MARKET_BAND_META: Record<
+  "low" | "below" | "above" | "high",
+  { short: string; full: string; cls: string }
+> = {
+  low: {
+    short: "низ",
+    full: "низ рынка (дёшево)",
+    cls: "text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 bg-emerald-500/10",
+  },
+  below: {
+    short: "ниже",
+    full: "ниже среднего",
+    cls: "text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-800 bg-teal-500/10",
+  },
+  above: {
+    short: "выше",
+    full: "выше среднего",
+    cls: "text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 bg-amber-500/10",
+  },
+  high: {
+    short: "верх",
+    full: "верх рынка (дорого)",
+    cls: "text-red-700 dark:text-red-400 border-red-200 dark:border-red-800 bg-red-500/10",
+  },
+}
+
+function MarketBandBadge({
+  pos,
+}: {
+  pos: { pricierThanPct: number; band: "low" | "below" | "above" | "high" } | null
+}) {
+  if (!pos) return <Badge variant="secondary">—</Badge>
+  const meta = MARKET_BAND_META[pos.band]
+  return (
+    <Badge
+      variant="outline"
+      className={meta.cls}
+      title={`${meta.full}: дороже ${pos.pricierThanPct}% конкурентов`}
+    >
+      {meta.short} · {pos.pricierThanPct}%
     </Badge>
   )
 }

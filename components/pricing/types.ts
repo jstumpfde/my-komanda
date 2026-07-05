@@ -78,6 +78,8 @@ export interface ComparisonRow {
   prices: Record<string, ComparisonPriceCell>
 }
 
+export type MarketBand = "low" | "below" | "above" | "high"
+
 export interface ComparisonData {
   capturedAt: string
   captures: string[]
@@ -86,6 +88,8 @@ export interface ComparisonData {
   rows: ComparisonRow[]
   medians: Record<string, number | null>
   deltas: Record<string, number | null>
+  percentiles?: Record<string, { p25: number | null; p50: number | null; p75: number | null }>
+  marketPos?: Record<string, { pricierThanPct: number; band: MarketBand } | null>
 }
 
 export interface Competitor {
