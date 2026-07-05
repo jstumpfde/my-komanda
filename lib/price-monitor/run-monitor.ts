@@ -2,10 +2,12 @@ import { and, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import {
   priceMonitorCompetitors,
+  priceMonitorForwardPrices,
   priceMonitorListingStats,
   priceMonitorObjects,
   priceMonitorOccupancy,
   priceMonitorSettings,
+  type NewPriceMonitorForwardPrice,
   type NewPriceMonitorListingStats,
   type NewPriceMonitorOccupancy,
   type NewPriceMonitorSnapshot,
@@ -15,6 +17,7 @@ import {
 } from "@/lib/db/schema"
 import { getPriceSource } from "./sources/airbnb"
 import { extractComplexName } from "./complex-name"
+import { buildForwardCheckins, FORWARD_NIGHTS, FORWARD_OFFSETS_DAYS } from "./forward-prices"
 import type { ListingDetails } from "./types"
 
 // Платформенные дефолты — нижний уровень каскада платформа→компания→объект.
@@ -177,6 +180,7 @@ export interface RunResult {
   competitorSnapshots: number
   occupancyHorizons: number[]
   statsCollected: number
+  forwardPoints: number
   errors: string[]
 }
 
@@ -204,6 +208,7 @@ export async function runObjectMonitor(object: PriceMonitorObject): Promise<RunR
     competitorSnapshots: 0,
     occupancyHorizons: [],
     statsCollected: 0,
+    forwardPoints: 0,
     errors: [],
   }
 
@@ -385,6 +390,45 @@ export async function runObjectMonitor(object: PriceMonitorObject): Promise<RunR
 
   if (statsRows.length > 0) {
     await db.insert(priceMonitorListingStats).values(statsRows)
+  }
+
+  // «Цены вперёд» — помесячный семпл гостевой цены НАШЕГО объекта на 6
+  // месяцев вперёд (сезонность). Только наш объект — конкурентов не
+  // семплируем (нагрузка). Сбой одной точки не валит остальной прогон.
+  await sleep(THROTTLE_MS)
+  const forwardRows: NewPriceMonitorForwardPrice[] = []
+  try {
+    const todayIso = now.toISOString().slice(0, 10)
+    const checkins = buildForwardCheckins(todayIso, FORWARD_OFFSETS_DAYS, FORWARD_NIGHTS)
+    for (const point of checkins) {
+      try {
+        const quote = await source.getPrice(object.externalId, point.checkinDate, point.checkoutDate, {
+          currency: eff.currency,
+        })
+        forwardRows.push({
+          objectId: object.id,
+          competitorId: null,
+          checkinDate: point.checkinDate,
+          nights: FORWARD_NIGHTS,
+          priceTotal: quote.priceTotal?.toString() ?? null,
+          pricePerNight: quote.pricePerNight?.toString() ?? null,
+          currency: eff.currency,
+          available: quote.available,
+          capturedAt,
+        })
+        result.forwardPoints++
+      } catch (err) {
+        result.errors.push(
+          `цены вперёд, заезд ${point.checkinDate}: ${err instanceof Error ? err.message : err}`,
+        )
+      }
+      await sleep(THROTTLE_MS)
+    }
+  } catch (err) {
+    result.errors.push(`цены вперёд: ${err instanceof Error ? err.message : err}`)
+  }
+  if (forwardRows.length > 0) {
+    await db.insert(priceMonitorForwardPrices).values(forwardRows)
   }
 
   if (snapshots.length > 0) {

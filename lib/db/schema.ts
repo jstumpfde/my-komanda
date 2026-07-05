@@ -4369,3 +4369,24 @@ export const priceMonitorListingStats = pgTable("price_monitor_listing_stats", {
 ])
 export type PriceMonitorListingStats    = typeof priceMonitorListingStats.$inferSelect
 export type NewPriceMonitorListingStats = typeof priceMonitorListingStats.$inferInsert
+
+// «Цены вперёд» — помесячный семпл гостевой цены на 6 месяцев вперёд (видно
+// сезонность: куда площадка двигает цену на высокий сезон, где даты закрыты).
+// competitorId сейчас всегда NULL (наш объект) — поле задел на будущее
+// сравнение сезонности с конкурентами.
+export const priceMonitorForwardPrices = pgTable("price_monitor_forward_prices", {
+  id:            uuid("id").primaryKey().defaultRandom(),
+  objectId:      uuid("object_id").notNull().references(() => priceMonitorObjects.id, { onDelete: "cascade" }),
+  competitorId:  uuid("competitor_id").references(() => priceMonitorCompetitors.id, { onDelete: "cascade" }), // NULL = наш объект
+  checkinDate:   date("checkin_date").notNull(),
+  nights:        integer("nights").notNull(),
+  priceTotal:    numeric("price_total"),
+  pricePerNight: numeric("price_per_night"),
+  currency:      text("currency").notNull().default("RUB"),
+  available:     boolean("available").notNull().default(false),
+  capturedAt:    timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("price_monitor_forward_prices_object_captured_idx").on(t.objectId, t.capturedAt.desc()),
+])
+export type PriceMonitorForwardPrice    = typeof priceMonitorForwardPrices.$inferSelect
+export type NewPriceMonitorForwardPrice = typeof priceMonitorForwardPrices.$inferInsert

@@ -142,3 +142,18 @@ export interface OverviewData {
   currency: string
   rows: OverviewRow[]
 }
+
+/** Точка «Цены вперёд» — одна помесячная дата заезда (7 ночей) */
+export interface ForwardPoint {
+  checkinDate: string
+  monthLabel: string
+  pricePerNight: number | null
+  priceTotal: number | null
+  available: boolean
+}
+
+export interface ForwardData {
+  nights: number | null
+  currency: string | null
+  points: ForwardPoint[]
+}

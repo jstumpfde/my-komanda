@@ -73,6 +73,7 @@ import type {
   ComparisonRow,
   RunResult,
   AttractivenessData,
+  ForwardData,
 } from "@/components/pricing/types"
 
 const DEFAULT_PERIOD_OPTIONS = [1, 3, 5, 7, 10, 14, 15, 25, 28, 30]
@@ -110,6 +111,8 @@ export default function PriceMonitorObjectDetailPage() {
   const [comparison, setComparison] = useState<ComparisonData | null>(null)
   const [comparisonError, setComparisonError] = useState<string | null>(null)
   const [selectedCapture, setSelectedCapture] = useState<string | undefined>(undefined)
+
+  const [forward, setForward] = useState<ForwardData | null>(null)
 
   const [running, setRunning] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -153,10 +156,23 @@ export default function PriceMonitorObjectDetailPage() {
     [objectId],
   )
 
+  const loadForward = useCallback(async () => {
+    if (!objectId) return
+    try {
+      const res = await fetch(`/api/modules/pricing/objects/${objectId}/forward`)
+      if (!res.ok) return
+      const data = await res.json()
+      setForward(data)
+    } catch {
+      // Не критично — секция просто покажет подсказку «данных ещё нет»
+    }
+  }, [objectId])
+
   useEffect(() => {
     loadObject()
     loadComparison()
-  }, [loadObject, loadComparison])
+    loadForward()
+  }, [loadObject, loadComparison, loadForward])
 
   const handleRun = async () => {
     if (!objectId) return
@@ -182,6 +198,7 @@ export default function PriceMonitorObjectDetailPage() {
       }
       loadObject()
       loadComparison()
+      loadForward()
     } catch {
       toast.error("Не удалось обновить цены")
     } finally {
@@ -509,6 +526,8 @@ export default function PriceMonitorObjectDetailPage() {
                 </Card>
 
                 <AttractivenessSection attractiveness={comparison.attractiveness} />
+
+                <ForwardPricesSection forward={forward} />
               </>
             )}
           </div>
@@ -726,6 +745,81 @@ function AttractivenessSection({ attractiveness }: { attractiveness?: Attractive
               Индекс — эвристика: рейтинг 40% + фото 35% + отзывы 25%.
             </p>
           </>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function ForwardPricesSection({ forward }: { forward: ForwardData | null }) {
+  const points = forward?.points ?? []
+  const currency = forward?.currency ?? ""
+  const maxPerNight = Math.max(
+    0,
+    ...points.map((p) => p.pricePerNight ?? 0),
+  )
+
+  return (
+    <Card>
+      <CardContent className="overflow-x-auto">
+        <div className="mb-1">
+          <h2 className="text-lg font-semibold">Цены вперёд — 7 ночей заезда</h2>
+        </div>
+        <p className="text-xs text-muted-foreground mb-4">
+          Гостевая цена за 7 ночей заезда с указанного месяца (оценка Airbnb на момент среза).
+        </p>
+
+        {points.length === 0 && (
+          <div className="rounded-xl border border-dashed border-border bg-card/50 p-6 text-sm text-muted-foreground">
+            Данные появятся после следующего прогона объекта.
+          </div>
+        )}
+
+        {points.length > 0 && (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Заезд</TableHead>
+                {points.map((p) => (
+                  <TableHead key={p.checkinDate} className="text-right capitalize">
+                    {p.monthLabel}
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow>
+                <TableCell className="text-muted-foreground">Цена / ночь</TableCell>
+                {points.map((p) => (
+                  <TableCell key={p.checkinDate} className="text-right align-bottom">
+                    <div className="flex flex-col items-end gap-1">
+                      {p.available && p.pricePerNight != null && maxPerNight > 0 && (
+                        <div
+                          className="w-6 rounded-t bg-primary/30"
+                          style={{ height: Math.max(4, Math.round((p.pricePerNight / maxPerNight) * 48)) }}
+                        />
+                      )}
+                      <div className="font-medium">
+                        {p.available && p.pricePerNight != null
+                          ? `${Math.round(p.pricePerNight).toLocaleString("ru-RU")} ${currency}`
+                          : <span className="text-muted-foreground">—</span>}
+                      </div>
+                    </div>
+                  </TableCell>
+                ))}
+              </TableRow>
+              <TableRow>
+                <TableCell className="text-muted-foreground">Итого</TableCell>
+                {points.map((p) => (
+                  <TableCell key={p.checkinDate} className="text-right">
+                    {p.available && p.priceTotal != null
+                      ? `${Math.round(p.priceTotal).toLocaleString("ru-RU")} ${currency}`
+                      : <span className="text-muted-foreground">—</span>}
+                  </TableCell>
+                ))}
+              </TableRow>
+            </TableBody>
+          </Table>
         )}
       </CardContent>
     </Card>
