@@ -86,6 +86,7 @@ export default function PriceMonitorObjectsPage() {
     () => [
       { id: "unit", default: 300, min: 160 },
       { id: "zk", default: 150, min: 80 },
+      { id: "position", default: 140, min: 100 },
       ...matrixPeriods.map((p) => ({ id: `p${p}`, default: 110, min: 80 })),
       { id: "occ30", default: 110, min: 80 },
       { id: "occ90", default: 110, min: 80 },
@@ -341,6 +342,7 @@ export default function PriceMonitorObjectsPage() {
                     <colgroup>
                       <col style={{ width: matrixCols.widths.unit }} />
                       <col style={{ width: matrixCols.widths.zk }} />
+                      <col style={{ width: matrixCols.widths.position }} />
                       {matrixPeriods.map((p) => (
                         <col key={p} style={{ width: matrixCols.widths[`p${p}`] }} />
                       ))}
@@ -359,6 +361,13 @@ export default function PriceMonitorObjectsPage() {
                         <TableHead className="relative">
                           ЖК
                           <span className={RESIZER_CLASS} onMouseDown={(e) => matrixCols.onResizeStart("zk", e)} />
+                        </TableHead>
+                        <TableHead
+                          className="relative"
+                          title={`Позиция к рынку по цене за ${overview?.positionPeriod ?? 7} ноч. (доля конкурентов дешевле нас)`}
+                        >
+                          Позиция{overview?.positionPeriod ? ` (${overview.positionPeriod} ноч.)` : ""}
+                          <span className={RESIZER_CLASS} onMouseDown={(e) => matrixCols.onResizeStart("position", e)} />
                         </TableHead>
                         {matrixPeriods.map((p) => (
                           <TableHead key={p} className="text-right relative">
@@ -414,6 +423,9 @@ export default function PriceMonitorObjectsPage() {
                             <span className="block truncate" title={row.complexName ?? undefined}>
                               {row.complexName ?? "—"}
                             </span>
+                          </TableCell>
+                          <TableCell>
+                            <MatrixPositionBadge pos={row.marketPosition ?? null} />
                           </TableCell>
                           {matrixPeriods.map((p) => {
                             const cell = row.prices[String(p)]
@@ -534,6 +546,23 @@ export default function PriceMonitorObjectsPage() {
 function OccupancyValue({ pct }: { pct: number | null }) {
   if (pct == null) return <span className="text-muted-foreground">—</span>
   return <span className="font-medium">{pct}%</span>
+}
+
+const MATRIX_BAND_META: Record<"low" | "below" | "above" | "high", { short: string; full: string; cls: string }> = {
+  low: { short: "низ", full: "низ рынка (дёшево)", cls: "text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 bg-emerald-500/10" },
+  below: { short: "ниже", full: "ниже среднего", cls: "text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-800 bg-teal-500/10" },
+  above: { short: "выше", full: "выше среднего", cls: "text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 bg-amber-500/10" },
+  high: { short: "верх", full: "верх рынка (дорого)", cls: "text-red-700 dark:text-red-400 border-red-200 dark:border-red-800 bg-red-500/10" },
+}
+
+function MatrixPositionBadge({ pos }: { pos: { pricierThanPct: number; band: "low" | "below" | "above" | "high" } | null }) {
+  if (!pos) return <span className="text-muted-foreground">—</span>
+  const meta = MATRIX_BAND_META[pos.band]
+  return (
+    <Badge variant="outline" className={meta.cls} title={`${meta.full}: дороже ${pos.pricierThanPct}% конкурентов`}>
+      {meta.short} · {pos.pricierThanPct}%
+    </Badge>
+  )
 }
 
 function AddObjectDialog({

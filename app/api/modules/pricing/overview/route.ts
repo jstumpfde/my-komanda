@@ -2,7 +2,7 @@
 // по периодам проживания (вид «Матрица» на /pricing). Для каждого объекта
 // берём его последний own-срез (competitor_id IS NULL, максимальный
 // captured_at этого объекта) и раскладываем period_nights → {perNight, total}.
-import { and, desc, eq, isNull } from "drizzle-orm"
+import { and, desc, eq, isNotNull, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { priceMonitorObjects, priceMonitorSettings, priceMonitorSnapshots } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
@@ -26,11 +26,15 @@ export interface OverviewRow {
   prices: Record<string, OverviewPriceCell>
   occupancy: Record<string, number | null>
   marketOccupancy: Record<string, number | null>
+  // Позиция к рынку на представительном периоде (для колонки матрицы).
+  marketPosition: { pricierThanPct: number; band: "low" | "below" | "above" | "high" } | null
 }
 
 export interface OverviewData {
   periods: number[]
   currency: string
+  // Период, на котором считается marketPosition строки (для заголовка колонки).
+  positionPeriod: number
   rows: OverviewRow[]
 }
 
@@ -50,6 +54,9 @@ export async function GET() {
         ? companySettings.periods
         : DEFAULT_PERIODS
     const currency = companySettings?.currency || DEFAULT_CURRENCY
+    // Представительный период для колонки «позиция к рынку»: 7 ночей, если есть,
+    // иначе середина списка.
+    const positionPeriod = periods.includes(7) ? 7 : periods[Math.floor(periods.length / 2)] ?? periods[0]
 
     const objects = await db
       .select()
@@ -96,6 +103,32 @@ export async function GET() {
         const occupancy = await loadLatestOccupancy(object.id)
         const marketOccupancy = await loadMarketOccupancy(object.id)
 
+        // Позиция к рынку на representativePeriod: наша цена/ночь vs конкуренты
+        // (тот же последний срез объекта). Доля конкурентов дешевле нас → полоса.
+        let marketPosition: OverviewRow["marketPosition"] = null
+        const ourPn = prices[String(positionPeriod)]?.perNight ?? null
+        if (latest && ourPn != null) {
+          const compSnaps = await db
+            .select({ perNight: priceMonitorSnapshots.pricePerNight })
+            .from(priceMonitorSnapshots)
+            .where(and(
+              eq(priceMonitorSnapshots.objectId, object.id),
+              isNotNull(priceMonitorSnapshots.competitorId),
+              eq(priceMonitorSnapshots.capturedAt, latest.capturedAt),
+              eq(priceMonitorSnapshots.periodNights, positionPeriod),
+            ))
+          const compPrices = compSnaps
+            .map((s) => (s.perNight != null ? Number(s.perNight) : null))
+            .filter((v): v is number => v != null)
+          if (compPrices.length > 0) {
+            const cheaper = compPrices.filter((v) => v < ourPn).length
+            const pricierThanPct = Math.round((cheaper / compPrices.length) * 100)
+            const band: "low" | "below" | "above" | "high" =
+              pricierThanPct >= 75 ? "high" : pricierThanPct >= 50 ? "above" : pricierThanPct >= 25 ? "below" : "low"
+            marketPosition = { pricierThanPct, band }
+          }
+        }
+
         return {
           objectId: object.id,
           name: object.name,
@@ -105,6 +138,7 @@ export async function GET() {
           prices,
           occupancy,
           marketOccupancy,
+          marketPosition,
         }
       }),
     )
@@ -115,7 +149,7 @@ export async function GET() {
       return a.name.localeCompare(b.name, "ru")
     })
 
-    const data: OverviewData = { periods, currency, rows }
+    const data: OverviewData = { periods, currency, positionPeriod, rows }
     return apiSuccess(data)
   } catch (err) {
     if (err instanceof Response) return err

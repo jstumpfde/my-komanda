@@ -137,11 +137,13 @@ export interface OverviewRow {
   prices: Record<string, OverviewPriceCell>
   occupancy: Record<string, number | null>
   marketOccupancy?: Record<string, number | null>
+  marketPosition?: { pricierThanPct: number; band: "low" | "below" | "above" | "high" } | null
 }
 
 export interface OverviewData {
   periods: number[]
   currency: string
+  positionPeriod?: number
   rows: OverviewRow[]
 }
 
