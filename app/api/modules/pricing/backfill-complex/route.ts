@@ -21,9 +21,13 @@ export async function POST() {
       .where(and(eq(priceMonitorObjects.companyId, user.companyId), isNull(priceMonitorObjects.complexName)))
 
     let objectsUpdated = 0
+    const stillNull: string[] = []
     for (const object of objects) {
       const complexName = extractComplexName(object.name)
-      if (!complexName) continue
+      if (!complexName) {
+        stillNull.push(object.id)
+        continue
+      }
       await db
         .update(priceMonitorObjects)
         .set({ complexName })
@@ -33,6 +37,45 @@ export async function POST() {
           isNull(priceMonitorObjects.complexName),
         ))
       objectsUpdated++
+    }
+
+    // Второй проход: у части объектов в названии нет маркера комплекса (вернулся
+    // null), но обычно все объекты компании — один-два ЖК (частый случай: хозяин
+    // привязал аккаунт с юнитами одного комплекса). Если среди уже заполненных
+    // ЖК есть явно доминирующий (≥60% названных объектов), добираем им пустые.
+    if (stillNull.length > 0) {
+      const named = await db
+        .select({ complexName: priceMonitorObjects.complexName })
+        .from(priceMonitorObjects)
+        .where(eq(priceMonitorObjects.companyId, user.companyId))
+      const counts = new Map<string, number>()
+      let namedTotal = 0
+      for (const row of named) {
+        if (!row.complexName) continue
+        namedTotal++
+        counts.set(row.complexName, (counts.get(row.complexName) ?? 0) + 1)
+      }
+      let dominant: string | null = null
+      let dominantCount = 0
+      for (const [cn, c] of counts) {
+        if (c > dominantCount) {
+          dominant = cn
+          dominantCount = c
+        }
+      }
+      if (dominant && namedTotal > 0 && dominantCount / namedTotal >= 0.6) {
+        for (const id of stillNull) {
+          await db
+            .update(priceMonitorObjects)
+            .set({ complexName: dominant })
+            .where(and(
+              eq(priceMonitorObjects.id, id),
+              eq(priceMonitorObjects.companyId, user.companyId),
+              isNull(priceMonitorObjects.complexName),
+            ))
+          objectsUpdated++
+        }
+      }
     }
 
     // Конкуренты принадлежат объектам компании — джойним через объекты компании.

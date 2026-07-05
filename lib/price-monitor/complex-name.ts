@@ -49,7 +49,34 @@ const TRAILING_NOISE = [
   /\bvilla[s]?\b/gi,
   /\bstudio[s]?\b/gi,
   /\bcondo(?:minium)?[s]?\b/gi,
+  /\bviews?\b/gi, // одиночное "view" в хвосте ("Mida Grande villas view" → "Mida Grande")
+  /\brooms?\b/gi,
+  /\bhouses?\b/gi,
+  /\bflats?\b/gi,
 ]
+
+// Слишком общие слова — если после очистки от кандидата осталось только такое
+// (напр. "Resort" из "Apartments in Resort"), это не название ЖК → null.
+const GENERIC_ONLY = new Set([
+  "resort",
+  "residence",
+  "residences",
+  "condo",
+  "condominium",
+  "apartment",
+  "apartments",
+  "villa",
+  "villas",
+  "studio",
+  "view",
+  "house",
+  "home",
+  "room",
+  "flat",
+  "place",
+  "complex",
+  "beach",
+])
 
 function stripPunctuationEdges(value: string): string {
   return value.replace(/^[\s,.\-–—:;]+/, "").replace(/[\s,.\-–—:;]+$/, "")
@@ -78,6 +105,8 @@ function cleanCandidate(raw: string): string | null {
   if (!/[a-zA-Zа-яА-ЯёЁ]/.test(candidate)) return null
   // Слишком короткое (1 символ) — не похоже на название.
   if (candidate.length < 2) return null
+  // Осталось только общее слово-тип ("Resort", "View") — не название ЖК.
+  if (GENERIC_ONLY.has(candidate.toLowerCase())) return null
 
   return candidate
 }

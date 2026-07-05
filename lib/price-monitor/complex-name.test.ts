@@ -30,3 +30,15 @@ test("'' (пусто) → null", () => {
 test("'Studio in Kata Beach Resort' → 'Kata Beach Resort'", () => {
   assert.equal(extractComplexName("Studio in Kata Beach Resort"), "Kata Beach Resort")
 })
+
+test("'Apartments by Mida Grande villas view' → 'Mida Grande' (хвост 'villas view' обрезан)", () => {
+  assert.equal(extractComplexName("Apartments by Mida Grande villas view"), "Mida Grande")
+})
+
+test("'Sea view Apartments in Resort' → null (осталось общее слово 'Resort')", () => {
+  assert.equal(extractComplexName("Sea view Apartments in Resort"), null)
+})
+
+test("'Mida Grande Resort, джакузи' → 'Mida Grande Resort' (суффикс-паттерн)", () => {
+  assert.equal(extractComplexName("Mida Grande Resort, джакузи"), "Mida Grande Resort")
+})
