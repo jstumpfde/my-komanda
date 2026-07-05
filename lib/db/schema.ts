@@ -1948,6 +1948,11 @@ export const courses = pgTable("courses", {
   isRequired:   boolean("is_required").default(false),
   requiredFor:  jsonb("required_for"),  // { roles?, departments? }
   sortOrder:    integer("sort_order").default(0),
+  // Порог сдачи итогового теста (0-100), % от суммы баллов квиз-уроков.
+  // null = проверка по баллам отключена (курс завершается по факту прохождения
+  // всех уроков, как раньше — legacy-курсы без порога не ломаются).
+  // Миграция 0257.
+  passingScorePercent: integer("passing_score_percent"),
   createdBy:    uuid("created_by").references(() => users.id),
   createdAt:    timestamp("created_at").defaultNow(),
   updatedAt:    timestamp("updated_at").defaultNow(),
@@ -1968,8 +1973,13 @@ export const courseEnrollments = pgTable("course_enrollments", {
   id:           uuid("id").primaryKey().defaultRandom(),
   courseId:     uuid("course_id").references(() => courses.id, { onDelete: "cascade" }).notNull(),
   employeeId:   text("employee_id").notNull(),
-  status:       text("status").default("enrolled"), // 'enrolled'|'in_progress'|'completed'|'dropped'
+  status:       text("status").default("enrolled"), // 'enrolled'|'in_progress'|'completed'|'dropped'|'failed'
   completionPct:integer("completion_pct").default(0),
+  // Средний % по quiz-урокам (среднее lessonCompletions.score по урокам type='quiz'
+  // этого курса), null пока ни один квиз не пройден. Используется для гейта
+  // courses.passingScorePercent — заполняется при пересчёте completionPct.
+  // Миграция 0257.
+  quizScorePercent: integer("quiz_score_percent"),
   enrolledAt:   timestamp("enrolled_at").defaultNow(),
   startedAt:    timestamp("started_at"),
   completedAt:  timestamp("completed_at"),

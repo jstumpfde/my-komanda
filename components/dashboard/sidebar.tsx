@@ -1142,6 +1142,25 @@ export function DashboardSidebar() {
               </Link>
             )
           })()}
+
+          {/* «Академия» — внутреннее обучение сотрудников Company24 (owner-only,
+              видно ТОЛЬКО владельцу-полигону, не клиентам). */}
+          {isOwner && (() => {
+            const academyActive = pathname === '/academy' || pathname.startsWith('/academy/')
+            return (
+              <Link
+                href="/academy"
+                style={academyActive ? { borderLeft: '3px solid #a78bfa' } : { borderLeft: '3px solid transparent' }}
+                className={cn(
+                  "flex items-center gap-2.5 w-full px-3 py-2.5 text-sm font-semibold transition-all duration-150 rounded-none rounded-r-lg hover:bg-sidebar-accent",
+                  academyActive ? "bg-sidebar-accent text-sidebar-foreground" : "text-sidebar-foreground/70",
+                )}
+              >
+                <GraduationCap className="size-4 shrink-0" />
+                <span className="flex-1 text-left">Академия</span>
+              </Link>
+            )
+          })()}
         </div>
 
       </SidebarContent>
