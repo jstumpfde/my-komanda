@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm"
+import { and, desc, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import {
   priceMonitorCompetitors,
@@ -39,6 +39,11 @@ const OCCUPANCY_HORIZONS = [30, 90]
 // /details на КАЖДОГО конкурента дорого (их сотни) — тянем только по нашему
 // объекту + топ-N ближайших НЕ игнорируемых конкурентов (по distanceM возр.).
 const LISTING_STATS_TOP_N_COMPETITORS = 10
+// Тяжёлые сборы (details конкурентов ~11 вызовов + forward-цены 6 вызовов)
+// обновляем НЕ каждый крон-тик, а раз в ~сутки — иначе частый прогон
+// (цены/период + календарь) раздувается до ~40 запросов и упирается в
+// maxDuration крона. Цены/заполняемость по-прежнему свежие каждый прогон.
+const HEAVY_REFRESH_HOURS = 20
 // Заезд для среза цен по умолчанию: завтра (то, что гость видит при брони
 // «на днях»); переопределяется settings_json.leadDays объекта.
 const DEFAULT_CHECKIN_LEAD_DAYS = 1
@@ -183,6 +188,7 @@ export interface RunResult {
   occupancyHorizons: number[]
   statsCollected: number
   forwardPoints: number
+  heavyRefreshed: boolean
   errors: string[]
 }
 
@@ -211,6 +217,7 @@ export async function runObjectMonitor(object: PriceMonitorObject): Promise<RunR
     occupancyHorizons: [],
     statsCollected: 0,
     forwardPoints: 0,
+    heavyRefreshed: false,
     errors: [],
   }
 
@@ -367,10 +374,23 @@ export async function runObjectMonitor(object: PriceMonitorObject): Promise<RunR
     result.errors.push(`заполняемость (календарь): ${err instanceof Error ? err.message : err}`)
   }
 
+  // Тяжёлые сборы (details + forward) — не чаще раза в HEAVY_REFRESH_HOURS.
+  // Проверяем по последнему listing_stats объекта.
+  const [lastHeavy] = await db
+    .select({ capturedAt: priceMonitorListingStats.capturedAt })
+    .from(priceMonitorListingStats)
+    .where(eq(priceMonitorListingStats.objectId, object.id))
+    .orderBy(desc(priceMonitorListingStats.capturedAt))
+    .limit(1)
+  const heavyDue =
+    !lastHeavy || now.getTime() - lastHeavy.capturedAt.getTime() >= HEAVY_REFRESH_HOURS * 3_600_000
+  result.heavyRefreshed = heavyDue
+
   // Привлекательность (listing stats: фото/рейтинги/отзывы/tier) — дорогой
   // вызов сайдкара на каждого конкурента, поэтому берём только наш объект +
   // топ-N ближайших НЕ игнорируемых конкурентов (по distanceM возр., у кого
   // расстояние вообще известно). Сбой одной карточки не валит прогон.
+  if (heavyDue) {
   await sleep(THROTTLE_MS)
   const statsRows: NewPriceMonitorListingStats[] = []
   try {
@@ -452,6 +472,7 @@ export async function runObjectMonitor(object: PriceMonitorObject): Promise<RunR
   if (forwardRows.length > 0) {
     await db.insert(priceMonitorForwardPrices).values(forwardRows)
   }
+  } // конец if (heavyDue) — блоки details + forward обновляются раз в ~сутки
 
   if (snapshots.length > 0) {
     await db.insert(priceMonitorSnapshots).values(snapshots)
