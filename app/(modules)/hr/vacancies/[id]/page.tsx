@@ -1496,6 +1496,23 @@ export default function VacancyPage() {
     loadHhStatus()
   }, [apiVacancy?.hhVacancyId, loadHhStatus])
 
+  // «Индекс вежливости» — свой расчёт (hh.ru официальный API его не отдаёт,
+  // см. комментарий в API-роуте). Доля откликов с ответом + медианное время
+  // ответа, по вакансии и по компании. Кэш на сервере 1 час — грузим один раз.
+  const [politenessIndex, setPolitenessIndex] = useState<{
+    vacancy: { totalCandidates: number; respondedCandidates: number; responseRate: number; medianResponseHours: number | null }
+    company: { totalCandidates: number; respondedCandidates: number; responseRate: number; medianResponseHours: number | null }
+  } | null>(null)
+  useEffect(() => {
+    if (!id) return
+    let cancelled = false
+    fetch(`/api/modules/hr/vacancies/${id}/politeness-index`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (!cancelled) setPolitenessIndex(data) })
+      .catch(() => { if (!cancelled) setPolitenessIndex(null) })
+    return () => { cancelled = true }
+  }, [id])
+
   // Отвязка вакансии от hh.ru
   const [hhUnlinkOpen, setHhUnlinkOpen] = useState(false)
   const [hhUnlinking, setHhUnlinking] = useState(false)
@@ -2828,6 +2845,53 @@ export default function VacancyPage() {
                     if (!since) return null
                     const days = Math.floor((Date.now() - new Date(since).getTime()) / 86400000)
                     return <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="size-3.5" />{days} дн.</span>
+                  })()}
+                  {/* «Индекс вежливости» — свой показатель (hh.ru официальный
+                      API его не отдаёт, см. app/api/.../politeness-index/route.ts).
+                      Доля откликов с ответом. По вакансии — если есть кандидаты;
+                      по компании — если он заметно отличается (иначе не дублируем). */}
+                  {politenessIndex && politenessIndex.vacancy.totalCandidates > 0 && (() => {
+                    const v = politenessIndex.vacancy
+                    const c = politenessIndex.company
+                    const colorClass = (rate: number) =>
+                      rate >= 80
+                        ? "border-green-300 bg-green-50 text-green-700 dark:border-green-900 dark:bg-green-950 dark:text-green-300"
+                        : rate >= 50
+                        ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
+                        : "border-red-300 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+                    const fmtHours = (h: number | null) => {
+                      if (h == null) return "—"
+                      if (h < 24) return `${Math.round(h)} ч`
+                      return `${Math.round(h / 24)} дн.`
+                    }
+                    const showCompany = c.totalCandidates > 0 && Math.abs(c.responseRate - v.responseRate) >= 1
+                    return (
+                      <UITooltip>
+                        <TooltipTrigger asChild>
+                          <span className={cn("inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium cursor-help", colorClass(v.responseRate))}>
+                            <MessageCircle className="size-3.5" />
+                            Вежливость {v.responseRate}%
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          <p className="font-medium mb-1">Свой индекс вежливости (не hh.ru)</p>
+                          <p className="mb-1">
+                            Доля откликов по вакансии, на которые был дан ответ
+                            (сообщение, приглашение, отказ — любое действие):{" "}
+                            <b>{v.respondedCandidates} из {v.totalCandidates}</b> = {v.responseRate}%.
+                          </p>
+                          <p className="mb-1">Медианное время первого ответа: <b>{fmtHours(v.medianResponseHours)}</b>.</p>
+                          {showCompany && (
+                            <p className="text-muted-foreground">
+                              По компании (активные вакансии): {c.responseRate}%, {fmtHours(c.medianResponseHours)}.
+                            </p>
+                          )}
+                          <p className="text-muted-foreground mt-1">
+                            hh.ru официально не отдаёт свой «индекс вежливости» через API — считаем сами по нашим данным.
+                          </p>
+                        </TooltipContent>
+                      </UITooltip>
+                    )
                   })()}
                 </div>
                 <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
