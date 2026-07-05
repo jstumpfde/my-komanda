@@ -81,6 +81,7 @@ const SIDEBAR_MODULES: { key: string; label: string }[] = [
   { key: "booking",   label: "Бронирование" },
   { key: "dialer",    label: "AI-агент" },
   { key: "qc",        label: "ОКК" },
+  { key: "price_monitor", label: "Мониторинг цен" },
 ]
 
 // Партнёр (integrator) — для селекта назначения партнёра компании.

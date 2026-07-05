@@ -1,0 +1,292 @@
+import { and, eq } from "drizzle-orm"
+import { db } from "@/lib/db"
+import {
+  priceMonitorCompetitors,
+  priceMonitorObjects,
+  priceMonitorSettings,
+  type NewPriceMonitorSnapshot,
+  type PriceMonitorObject,
+  type PriceMonitorSettings,
+  priceMonitorSnapshots,
+} from "@/lib/db/schema"
+import { getPriceSource } from "./sources/airbnb"
+
+// Платформенные дефолты — нижний уровень каскада платформа→компания→объект.
+const PLATFORM_DEFAULTS = {
+  radiusM: 1000,
+  periods: [7, 14, 28, 30],
+  intervalMinutes: 1440,
+  runAtTime: "06:00" as string | null,
+  currency: "RUB",
+  autoDiscover: true,
+  complexFilter: null as string | null,
+}
+
+// Пауза между запросами к сайдкару — не давим на Airbnb с одного IP.
+const THROTTLE_MS = 1500
+// Заезд для среза цен по умолчанию: завтра (то, что гость видит при брони
+// «на днях»); переопределяется settings_json.leadDays объекта.
+const DEFAULT_CHECKIN_LEAD_DAYS = 1
+
+export interface EffectiveMonitorSettings {
+  radiusM: number
+  periods: number[]
+  intervalMinutes: number
+  runAtTime: string | null
+  currency: string
+  autoDiscover: boolean
+  complexFilter: string | null
+}
+
+export function getEffectiveSettings(
+  object: PriceMonitorObject,
+  company: PriceMonitorSettings | null,
+): EffectiveMonitorSettings {
+  const obj = object.settingsJson ?? {}
+  return {
+    radiusM: obj.radiusM ?? company?.radiusM ?? PLATFORM_DEFAULTS.radiusM,
+    periods:
+      obj.periods && obj.periods.length > 0
+        ? obj.periods
+        : company?.periods && company.periods.length > 0
+          ? company.periods
+          : PLATFORM_DEFAULTS.periods,
+    intervalMinutes:
+      obj.schedule?.intervalMinutes ?? company?.intervalMinutes ?? PLATFORM_DEFAULTS.intervalMinutes,
+    runAtTime:
+      obj.schedule?.runAtTime !== undefined
+        ? obj.schedule.runAtTime
+        : (company?.runAtTime ?? PLATFORM_DEFAULTS.runAtTime),
+    currency: company?.currency ?? PLATFORM_DEFAULTS.currency,
+    autoDiscover: obj.autoDiscover ?? PLATFORM_DEFAULTS.autoDiscover,
+    complexFilter: obj.complexFilter ?? PLATFORM_DEFAULTS.complexFilter,
+  }
+}
+
+function mskNow(): { minutesOfDay: number; dateIso: string } {
+  const msk = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Moscow" }))
+  return {
+    minutesOfDay: msk.getHours() * 60 + msk.getMinutes(),
+    dateIso: `${msk.getFullYear()}-${String(msk.getMonth() + 1).padStart(2, "0")}-${String(msk.getDate()).padStart(2, "0")}`,
+  }
+}
+
+function parseHHMM(value: string | null): number | null {
+  if (!value) return null
+  const m = value.match(/^(\d{1,2}):(\d{2})$/)
+  if (!m) return null
+  const minutes = Number(m[1]) * 60 + Number(m[2])
+  return minutes >= 0 && minutes < 24 * 60 ? minutes : null
+}
+
+// Пора ли гнать мониторинг объекта. Правила:
+// - ни разу не гоняли → пора;
+// - интервал < суток → чисто по интервалу (runAtTime игнорируется);
+// - интервал ≥ суток и runAtTime задан → пора, когда наступило время суток
+//   (МСК) и с последнего прогона прошло ≥ 0.9 интервала (допуск на дрейф крона).
+export function isDue(object: PriceMonitorObject, eff: EffectiveMonitorSettings, now = new Date()): boolean {
+  if (!object.isActive) return false
+  if (!object.lastCheckedAt) return true
+  const sinceMs = now.getTime() - object.lastCheckedAt.getTime()
+  const intervalMs = eff.intervalMinutes * 60_000
+  const runAt = parseHHMM(eff.runAtTime)
+  if (eff.intervalMinutes < 1440 || runAt === null) {
+    return sinceMs >= intervalMs
+  }
+  const { minutesOfDay } = mskNow()
+  return minutesOfDay >= runAt && sinceMs >= intervalMs * 0.9
+}
+
+function addDays(base: Date, days: number): string {
+  const d = new Date(base)
+  d.setDate(d.getDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+export interface RunResult {
+  objectId: string
+  periods: number[]
+  ownSnapshots: number
+  competitorsSeen: number
+  competitorsNew: number
+  competitorSnapshots: number
+  errors: string[]
+}
+
+// Один прогон мониторинга объекта: цена нашего листинга по каждому периоду +
+// один поиск конкурентов в радиусе на период (поиск сразу отдаёт цены всех
+// конкурентов за диапазон — 4 периода = 4 поисковых запроса, без точечных
+// запросов по каждому конкуренту).
+export async function runObjectMonitor(object: PriceMonitorObject): Promise<RunResult> {
+  const source = getPriceSource(object.source)
+  if (!source) throw new Error(`Неизвестный источник цен: ${object.source}`)
+
+  const [company] = await db
+    .select()
+    .from(priceMonitorSettings)
+    .where(eq(priceMonitorSettings.companyId, object.companyId))
+    .limit(1)
+  const eff = getEffectiveSettings(object, company ?? null)
+
+  const result: RunResult = {
+    objectId: object.id,
+    periods: eff.periods,
+    ownSnapshots: 0,
+    competitorsSeen: 0,
+    competitorsNew: 0,
+    competitorSnapshots: 0,
+    errors: [],
+  }
+
+  const now = new Date()
+  const capturedAt = now
+  const snapshots: NewPriceMonitorSnapshot[] = []
+
+  // Известные конкуренты (для матчинга результатов поиска и ручных записей).
+  const knownCompetitors = await db
+    .select()
+    .from(priceMonitorCompetitors)
+    .where(eq(priceMonitorCompetitors.objectId, object.id))
+  const byExternalId = new Map(knownCompetitors.map((c) => [`${c.source}:${c.externalId}`, c]))
+
+  const complexFilter = eff.complexFilter?.trim().toLowerCase() || null
+
+  const leadDays = object.settingsJson?.leadDays ?? DEFAULT_CHECKIN_LEAD_DAYS
+
+  for (const nights of eff.periods) {
+    const checkin = addDays(now, leadDays)
+    const checkout = addDays(now, leadDays + nights)
+
+    // 1. Наша цена за период
+    try {
+      const quote = await source.getPrice(object.externalId, checkin, checkout, {
+        currency: eff.currency,
+      })
+      snapshots.push({
+        objectId: object.id,
+        competitorId: null,
+        periodNights: nights,
+        checkinDate: checkin,
+        checkoutDate: checkout,
+        priceTotal: quote.priceTotal?.toString() ?? null,
+        pricePerNight: quote.pricePerNight?.toString() ?? null,
+        currency: eff.currency,
+        available: quote.available,
+        capturedAt,
+      })
+      result.ownSnapshots++
+    } catch (err) {
+      result.errors.push(`период ${nights}н, наша цена: ${err instanceof Error ? err.message : err}`)
+    }
+    await sleep(THROTTLE_MS)
+
+    // 2. Конкуренты в радиусе с ценами за тот же период
+    if (!eff.autoDiscover && knownCompetitors.length === 0) continue
+    if (object.lat == null || object.lng == null) {
+      if (eff.autoDiscover) result.errors.push(`период ${nights}н: у объекта нет координат — авто-поиск пропущен`)
+      continue
+    }
+    try {
+      const found = await source.searchNearby({
+        lat: object.lat,
+        lng: object.lng,
+        radiusM: eff.radiusM,
+        checkin,
+        checkout,
+        currency: eff.currency,
+      })
+      for (const listing of found) {
+        if (listing.externalId === object.externalId) continue
+        if (complexFilter && !(listing.name ?? "").toLowerCase().includes(complexFilter)) continue
+        const key = `${source.id}:${listing.externalId}`
+        let competitor = byExternalId.get(key)
+        if (!competitor) {
+          if (!eff.autoDiscover) continue
+          const [inserted] = await db
+            .insert(priceMonitorCompetitors)
+            .values({
+              objectId: object.id,
+              source: source.id,
+              externalId: listing.externalId,
+              url: `https://www.airbnb.com/rooms/${listing.externalId}`,
+              name: listing.name,
+              lat: listing.lat,
+              lng: listing.lng,
+              distanceM: listing.distanceM,
+              discovered: "auto",
+              lastSeenAt: capturedAt,
+            })
+            .onConflictDoNothing()
+            .returning()
+          if (!inserted) continue
+          competitor = inserted
+          byExternalId.set(key, inserted)
+          result.competitorsNew++
+        } else {
+          await db
+            .update(priceMonitorCompetitors)
+            .set({ lastSeenAt: capturedAt, name: listing.name ?? competitor.name, distanceM: listing.distanceM ?? competitor.distanceM })
+            .where(eq(priceMonitorCompetitors.id, competitor.id))
+        }
+        if (competitor.isIgnored) continue
+        result.competitorsSeen++
+        snapshots.push({
+          objectId: object.id,
+          competitorId: competitor.id,
+          periodNights: nights,
+          checkinDate: checkin,
+          checkoutDate: checkout,
+          priceTotal: listing.priceTotal?.toString() ?? null,
+          pricePerNight:
+            listing.priceTotal != null ? (listing.priceTotal / nights).toFixed(2) : null,
+          currency: eff.currency,
+          available: listing.priceTotal != null,
+          capturedAt,
+        })
+        result.competitorSnapshots++
+      }
+    } catch (err) {
+      result.errors.push(`период ${nights}н, поиск конкурентов: ${err instanceof Error ? err.message : err}`)
+    }
+    await sleep(THROTTLE_MS)
+  }
+
+  if (snapshots.length > 0) {
+    await db.insert(priceMonitorSnapshots).values(snapshots)
+  }
+  await db
+    .update(priceMonitorObjects)
+    .set({ lastCheckedAt: capturedAt })
+    .where(eq(priceMonitorObjects.id, object.id))
+
+  return result
+}
+
+// Все объекты, которым пора обновиться (для крона). limit защищает от
+// упирания в rate limit Airbnb за один тик.
+export async function findDueObjects(limit = 5): Promise<PriceMonitorObject[]> {
+  const active = await db
+    .select()
+    .from(priceMonitorObjects)
+    .where(eq(priceMonitorObjects.isActive, true))
+  const settingsByCompany = new Map<string, PriceMonitorSettings | null>()
+  const due: PriceMonitorObject[] = []
+  for (const object of active) {
+    if (!settingsByCompany.has(object.companyId)) {
+      const [row] = await db
+        .select()
+        .from(priceMonitorSettings)
+        .where(eq(priceMonitorSettings.companyId, object.companyId))
+        .limit(1)
+      settingsByCompany.set(object.companyId, row ?? null)
+    }
+    const eff = getEffectiveSettings(object, settingsByCompany.get(object.companyId) ?? null)
+    if (isDue(object, eff)) due.push(object)
+    if (due.length >= limit) break
+  }
+  return due
+}

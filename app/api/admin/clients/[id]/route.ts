@@ -15,6 +15,7 @@ const SUBSCRIPTION_STATUSES = ["trial", "active", "paused", "cancelled", "expire
 const MODULE_KEYS = [
   "hr", "knowledge", "learning", "tasks", "sales", "marketing",
   "b2b", "warehouse", "logistics", "booking", "dialer", "qc",
+  "price_monitor",
 ] as const
 
 // GET /api/admin/clients/[id] — полная информация о компании
