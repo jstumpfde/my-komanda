@@ -11,6 +11,7 @@ import { AI_SAFETY_PROMPT } from "@/lib/ai-safety"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import { addVacancyTokens } from "@/lib/ai/token-usage"
 import { AI_MODEL_FAST } from "@/lib/ai/models"
+import { formatWorkHistory } from "@/lib/hh/extract-resume-fields"
 
 export interface ResumeScreenInput {
   resume: {
@@ -170,17 +171,7 @@ export async function screenResume(input: ResumeScreenInput, vacancyId?: string 
 
   // История занятости → компактный текст для промпта. Именно она даёт скореру
   // релевантность опыта (роль/отрасль/срок), а не голый experienceYears.
-  const workHistoryText = (r.workHistory ?? [])
-    .filter(w => (w.position && w.position.trim()) || (w.company && w.company.trim()))
-    .map(w => {
-      const head = [w.position?.trim(), w.company?.trim()].filter(Boolean).join(" — ")
-      const period = [w.start, w.end ?? "по н.в."].filter(Boolean).join("–")
-      const dur = w.months != null ? `${Math.round(w.months / 12 * 10) / 10} г.` : null
-      const meta = [w.industry?.trim(), period || null, dur].filter(Boolean).join(", ")
-      const desc = w.description?.trim() ? ` | ${w.description.trim()}` : ""
-      return `• ${head}${meta ? ` (${meta})` : ""}${desc}`
-    })
-    .join("\n")
+  const workHistoryText = formatWorkHistory(r.workHistory)
 
   // Кастом-критерии HR: обязательные (knockout) и весовые.
   const LEVEL_RU: Record<string, string> = { critical: "критично", important: "важно", nice: "желательно" }

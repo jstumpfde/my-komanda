@@ -75,7 +75,7 @@ export function AiMatchCardV2({ details, scoreV1, scoreV2 }: AiMatchCardV2Props)
           </h4>
           <ul className="space-y-1 text-sm">
             {details.reasoning.pros.map((p, i) => (
-              <li key={i} className="flex gap-2"><span className="text-emerald-600">•</span><span>{p}</span></li>
+              <li key={i} className="flex gap-2"><span className="text-emerald-600">•</span><span>{stripLeadingBullet(p)}</span></li>
             ))}
           </ul>
         </div>
@@ -89,7 +89,7 @@ export function AiMatchCardV2({ details, scoreV1, scoreV2 }: AiMatchCardV2Props)
           </h4>
           <ul className="space-y-1 text-sm">
             {details.reasoning.cons.map((c, i) => (
-              <li key={i} className="flex gap-2"><span className="text-amber-600">•</span><span>{c}</span></li>
+              <li key={i} className="flex gap-2"><span className="text-amber-600">•</span><span>{stripLeadingBullet(c)}</span></li>
             ))}
           </ul>
         </div>
@@ -103,7 +103,7 @@ export function AiMatchCardV2({ details, scoreV1, scoreV2 }: AiMatchCardV2Props)
           </h4>
           <ul className="space-y-1 text-sm">
             {details.reasoning.questions_for_interview.map((q, i) => (
-              <li key={i} className="flex gap-2"><span className="text-muted-foreground">•</span><span>{q}</span></li>
+              <li key={i} className="flex gap-2"><span className="text-muted-foreground">•</span><span>{stripLeadingBullet(q)}</span></li>
             ))}
           </ul>
         </div>
@@ -141,7 +141,7 @@ export function AiMatchCardV2({ details, scoreV1, scoreV2 }: AiMatchCardV2Props)
           </h4>
           <ul className="space-y-1 text-sm">
             {details.triggered_deal_breakers.map((d, i) => (
-              <li key={i} className="text-red-600 dark:text-red-400">• {d}</li>
+              <li key={i} className="text-red-600 dark:text-red-400">• {stripLeadingBullet(d)}</li>
             ))}
           </ul>
         </div>
@@ -208,13 +208,21 @@ function FactRow({ label, value, suffix = "" }: { label: string; value: string |
   )
 }
 
+// Данные из AI (red_flags/green_flags/hard_skills_mentioned и т.д.) иногда уже
+// приходят с собственным маркером в начале строки («• …», «- …», «– …») — если
+// поверх этого рендерить свой «• », получается задвоенный буллет «• •». Срезаем
+// ведущий маркер на рендере (данные в БД трогать не нужно — это косметика вывода).
+function stripLeadingBullet(text: string): string {
+  return text.replace(/^[\s]*[•\-–—*]\s*/, "")
+}
+
 function FactList({ label, items, cls }: { label: string; items: string[]; cls?: string }) {
   if (!items.length) return null
   return (
     <div>
       <p className="text-muted-foreground mb-1">{label}:</p>
       <ul className={cn("ml-3 space-y-0.5", cls)}>
-        {items.map((it, i) => <li key={i}>• {it}</li>)}
+        {items.map((it, i) => <li key={i}>• {stripLeadingBullet(it)}</li>)}
       </ul>
     </div>
   )

@@ -415,6 +415,25 @@ export function extractHhResumeFields(raw: unknown): ExtractedHhFields {
   return out
 }
 
+// Единый форматтер workHistory[] → текстовый блок для AI-промптов скоринга.
+// Раньше эта же логика была продублирована в lib/ai-screen-resume.ts и
+// lib/core/spec/axis-scorer.ts — вынесена сюда (рядом с WorkHistoryEntry),
+// оба места теперь реиспользуют её. Формат: «• Должность — Компания (отрасль,
+// период, срок) | описание», по одной строке на место работы.
+export function formatWorkHistory(workHistory: WorkHistoryEntry[] | null | undefined): string {
+  return (workHistory ?? [])
+    .filter(w => (w.position && w.position.trim()) || (w.company && w.company.trim()))
+    .map(w => {
+      const head = [w.position?.trim(), w.company?.trim()].filter(Boolean).join(" — ")
+      const period = [w.start, w.end ?? "по н.в."].filter(Boolean).join("–")
+      const dur = w.months != null ? `${Math.round(w.months / 12 * 10) / 10} г.` : null
+      const meta = [w.industry?.trim(), period || null, dur].filter(Boolean).join(", ")
+      const desc = w.description?.trim() ? ` | ${w.description.trim()}` : ""
+      return `• ${head}${meta ? ` (${meta})` : ""}${desc}`
+    })
+    .join("\n")
+}
+
 // Возвращает партиал для UPDATE/INSERT в candidates: только поля, для которых
 // у нас есть осмысленное значение. Boolean/числовые null НЕ записываем,
 // чтобы случайно не зануливать заполненные данные. Массивы пишем только если
