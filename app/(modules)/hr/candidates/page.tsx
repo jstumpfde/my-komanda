@@ -71,6 +71,8 @@ interface GlobalCandidate {
   salaryCurrency?: string | null
   photoUrl?: string | null
   demoProgressJson?: unknown
+  // Скоркарта интервью (миграция 0258) — см. lib/candidates/interview-scorecard.ts.
+  interviewScore?: number | null
 }
 
 // ─── Константы ────────────────────────────────────────────────────────────────
@@ -127,6 +129,7 @@ function toListCandidate(c: GlobalCandidate): Candidate & { vacancyTitle: string
     testScore: c.testScore ?? null,
     testStatus: c.testStatus ?? null,
     testScoringStatus: c.testScoringStatus ?? null,
+    interviewScore: c.interviewScore ?? null,
     nextInterviewAt: c.nextInterviewAt ?? null,
     isActive: c.isActive,
     demoProgressJson: c.demoProgressJson as Candidate["demoProgressJson"],
