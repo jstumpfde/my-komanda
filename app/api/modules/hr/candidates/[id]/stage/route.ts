@@ -8,6 +8,12 @@ import { sendWebhook } from "@/lib/webhooks"
 import { sendToBitrix } from "@/lib/bitrix"
 import { scheduleInterviewInvite } from "@/lib/messaging/schedule-invite"
 import { ALL_STAGE_SLUGS, LEGACY_STAGE_LABELS, type StageSlug } from "@/lib/stages"
+import { PORTRAIT_BELOW_THRESHOLD_REASON } from "@/lib/hh/entry-gate"
+
+// Причины «пред. отказа», которые ручное решение HR (перевод стадии) отменяет
+// (см. коммент ниже). anketa_gate_failed — гейт анкеты (03.07); входной гейт
+// Портрета по resume_score — тот же принцип (06.07, инцидент вакансия 6916).
+const CANCELLABLE_PENDING_REASONS: readonly string[] = ["anketa_gate_failed", PORTRAIT_BELOW_THRESHOLD_REASON]
 
 // Валидные значения stage = канонические 19 слугов (lib/stages.ts,
 // ЕДИНЫЙ ИСТОЧНИК ПРАВДЫ) + legacy-слуги второй параллельной системы
@@ -80,10 +86,11 @@ export async function PUT(
 
     const stopAutoProcessing = stage === "rejected"
 
-    // Ручное решение HR отменяет отложенный авто-отказ по гейту анкеты
-    // (reason='anketa_gate_failed'): человек сам решил, куда двигать кандидата —
-    // таймер «предварительного отказа» не должен сработать позже. v2/прочие
-    // pending-отказы не трогаем (у них своя механика).
+    // Ручное решение HR отменяет отложенный авто-отказ по входным гейтам
+    // (anketa_gate_failed / portrait_below_threshold — CANCELLABLE_PENDING_REASONS):
+    // человек сам решил, куда двигать кандидата — таймер «предварительного
+    // отказа» не должен сработать позже. v2/прочие pending-отказы не трогаем
+    // (у них своя механика).
     await db.update(candidates)
       .set({
         pendingRejectionAt:      null,
@@ -93,7 +100,7 @@ export async function PUT(
       })
       .where(and(
         eq(candidates.id, id),
-        eq(candidates.pendingRejectionReason, "anketa_gate_failed"),
+        inArray(candidates.pendingRejectionReason, CANCELLABLE_PENDING_REASONS),
       ))
 
     const [updated] = await db

@@ -20,6 +20,7 @@ import { canSendNow } from "@/lib/schedule/can-send-now"
 import { screenResume, type ResumeScreenInput } from "@/lib/ai-screen-resume"
 import { getSpec } from "@/lib/core/spec/store"
 import { buildSpecResumeInput, isSpecScoringEnabled, specHasScoringContent, isPortraitConfigured } from "@/lib/core/spec/resume-input"
+import { decideEntryGate, isEntryGateConfigured, PORTRAIT_BELOW_THRESHOLD_REASON } from "@/lib/hh/entry-gate"
 import { scoreResumeByAxes, applyTimezonePenalty, type AxisScoreResult } from "@/lib/core/spec/axis-scorer"
 import { scoreCandidateV2 } from "@/lib/ai-score-candidate-v2"
 import { trySyncRejectToHh } from "@/lib/hh/sync-stage"
@@ -359,7 +360,13 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
     let belowThreshold: {
       score: number
       threshold: number
-      action: "reject" | "keep_new" | "prequalification"
+      // "portrait_pending_reject" — входной гейт Портрета (Юрий 06.07, инцидент
+      // вакансия 6916): score ниже порога Портрета, ЗАДАННОГО через зону отказа
+      // (spec.resumeThresholds.autoRejectEnabled=true). Работает НЕЗАВИСИМО от
+      // portraitOn/legacy — safety-net поверх существующей ветки reject/keep_new.
+      // В отличие от "reject" (мгновенный hh discard при legacy autoRejectEnabled),
+      // здесь — пред. отказ через scheduleRejection (см. lib/hh/entry-gate.ts).
+      action: "reject" | "keep_new" | "prequalification" | "portrait_pending_reject"
     } | null = null
 
     try {
@@ -888,6 +895,54 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                   belowThreshold = { ...belowThreshold, action: "keep_new" }
                 }
               }
+
+              // ── ВХОДНОЙ ГЕЙТ ПОРТРЕТА (Юрий 06.07, инцидент вакансия 6916) ──
+              // Safety-net НЕЗАВИСИМО от portraitOn/legacy: если у Spec ЗАДАНА
+              // зона отказа (resumeThresholds.enabled && autoRejectEnabled &&
+              // lowerThreshold>0) и score ниже порога — НЕ слать первое сообщение
+              // со ссылкой на демо, даже если легаси-ветка выше (которая читает
+              // пороги ТОЛЬКО из aiProcessSettings/portraitOn-контура) этого не
+              // поймала. Раньше legacy-вакансия без подключённых к рантайму
+              // legacy-порогов пропускала score=0 напрямую к приглашению — сам
+              // Spec с настроенными порогами игнорировался вне контура «Портрет».
+              // Ничего не меняет, если belowThreshold уже reject/portrait_pending_reject
+              // (не понижаем строгость уже принятого решения) — только поднимает
+              // безусловный send (belowThreshold===null или keep_new/prequalification
+              // при формально пройденном легаси-гейте) до пред. отказа, когда HR
+              // явно включил красную зону в «Портрете». Пороги НЕ заданы →
+              // decideEntryGate вернёт "send" → belowThreshold не трогаем (байт-в-байт).
+              if (belowThreshold?.action !== "reject" && belowThreshold?.action !== "portrait_pending_reject") {
+                const gateDecision = decideEntryGate(result.score, specForTimezone?.resumeThresholds ?? null)
+                if (gateDecision.action === "reject") {
+                  belowThreshold = {
+                    score:     gateDecision.score,
+                    threshold: gateDecision.threshold,
+                    action:    "portrait_pending_reject",
+                  }
+                }
+                // "wait" — score не должен быть null здесь (result уже посчитан),
+                // но на случай будущих веток, где result.score мог бы быть NaN/
+                // не-число, decideEntryGate сам вернёт "send" (score==null гейта
+                // не даёт) — ничего доразбирать не нужно, belowThreshold не трогаем.
+              }
+            } else if (isEntryGateConfigured(specForTimezone?.resumeThresholds ?? null)) {
+              // AI-скоринг резюме упал (screenResume/scoreResumeByAxes вернули
+              // null — нет ключа, битый ответ, исключение) И у Spec ЗАДАНА зона
+              // отказа входного гейта. Раньше очередь в этом случае молча слала
+              // приглашение БЕЗ балла (result===null → весь блок выше не
+              // выполнялся, кандидат уходил в инвайт неоценённым). Юрий 06.07:
+              // это неприемлемо при включённой зоне отказа — можем пропустить
+              // реально слабого кандидата только из-за сбоя AI. НЕ отказываем
+              // (балла нет — не на чем основать отказ) и НЕ шлём — возвращаем
+              // отклик в очередь (status='response', как «человеческая» задержка
+              // выше и C-2 в catch) для повторной попытки на следующем тике.
+              // Пороги НЕ заданы → эта ветка не входит вовсе — легаси-поведение
+              // (слепой инвайт при сбое AI) сохранено байт-в-байт.
+              await db.update(hhResponses)
+                .set({ status: "response" })
+                .where(and(eq(hhResponses.id, resp.id), eq(hhResponses.status, "claimed")))
+              results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "entry_gate_wait_ai_retry" })
+              continue
             }
           }
         } catch (err) {
@@ -956,6 +1011,39 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             if (!pqResult.started) {
               console.warn("[PQ] prequalification start failed:", pqResult.reason)
             }
+          } else if (belowThreshold.action === "portrait_pending_reject") {
+            // Входной гейт Портрета (Юрий 06.07, инцидент вакансия 6916):
+            // НЕ мгновенный отказ — планируем пред. отказ через ЕДИНЫЙ канон
+            // scheduleRejection (тот же механизм, что стоп-факторы/anketa_gate_
+            // failed): cron pending-rejections исполнит его в рабочее время
+            // вакансии, письмо — существующий текст вакансии/компании (message
+            // не передаём — trySyncRejectToHh сам подставит generic-текст).
+            // Стадию НЕ трогаем сейчас (её сменит cron при исполнении) — только
+            // фиксируем автостоп + причину, чтобы кандидат сразу был виден HR
+            // (бейдж «Предвар. отказ», components/dashboard/list-view.tsx) и не
+            // попал в дальнейшую авто-обработку/дожимы.
+            await db.update(candidates)
+              .set({
+                autoProcessingStopped:        true,
+                autoProcessingStoppedReason:  PORTRAIT_BELOW_THRESHOLD_REASON,
+                autoProcessingStoppedAt:      nowTs,
+                stageHistory: [...history, {
+                  from:      fromStage,
+                  to:        fromStage,
+                  at:        nowIso,
+                  reason:    PORTRAIT_BELOW_THRESHOLD_REASON,
+                  score:     belowThreshold.score,
+                  threshold: belowThreshold.threshold,
+                }],
+                updatedAt: nowTs,
+              })
+              .where(eq(candidates.id, candidateId))
+
+            await scheduleRejection({
+              candidateId,
+              reason:       PORTRAIT_BELOW_THRESHOLD_REASON,
+              delayMinutes: rejectionDelayMinutes(effAiSettings),
+            })
           } else {
             // keep_new: оставляем stage="new", но ставим автостоп —
             // кандидат не попадёт в дальнейшую авто-обработку, ждёт ручного разбора.
@@ -994,8 +1082,9 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
           results.push({
             id:     resp.hhResponseId,
             name:   resp.candidateName,
-            action: belowThreshold.action === "reject"          ? "ai_rejected"
-                  : belowThreshold.action === "prequalification" ? "ai_prequalification"
+            action: belowThreshold.action === "reject"                  ? "ai_rejected"
+                  : belowThreshold.action === "prequalification"        ? "ai_prequalification"
+                  : belowThreshold.action === "portrait_pending_reject" ? "entry_gate_pending_reject"
                   : "ai_kept_new",
           })
         } catch (btErr) {

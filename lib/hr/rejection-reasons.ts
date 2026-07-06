@@ -60,6 +60,14 @@ export const AUTO_REASON_LABELS: Record<string, string> = {
   // (см. lib/followup/pause-and-escalate.ts). НЕ авто-отказ.
   decline_requirement_needs_review:   "Отказ от требования в чате — на ручной проверке",
   rejection_low_confidence_needs_review: "Похоже на отказ (низкая уверенность AI) — на ручной проверке",
+  // Входной гейт Портрета (Юрий 06.07, инцидент вакансия 6916): resume_score
+  // ниже порога зоны отказа (spec.resumeThresholds) — первое сообщение со
+  // ссылкой на демо НЕ отправлено, кандидат на пред. отказе (см. lib/hh/entry-gate.ts).
+  portrait_below_threshold:      "Портрет: балл ниже порога — пред. отказ",
+  // Гейт анкеты (часть 1 демо) не пройден (lib/demo/anketa-pass-gate.ts) —
+  // «спасибо»-экран кандидату, пред. отказ HR на ручном разборе (или таймер,
+  // если failAction=pending_rejection).
+  anketa_gate_failed:             "Анкета: гейт не пройден — пред. отказ",
 }
 
 // Нормализуем причину к ключу — часть до первого ":" (детали после двоеточия,
