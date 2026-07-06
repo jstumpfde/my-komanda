@@ -29,6 +29,8 @@ export interface ApiVacancy {
   employeeType: string | null
   hhVacancyId: string | null
   hhUrl: string | null
+  /** Дата ПЕРВОЙ публикации на hh.ru (заполняет крон hh-vacancy-sync). */
+  hhPublishedAt: string | null
   aiProcessSettings: {
     minScore?: number
     belowThresholdAction?: "reject" | "keep_new"

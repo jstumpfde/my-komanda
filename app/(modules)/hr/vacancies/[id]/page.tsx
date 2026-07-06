@@ -2841,11 +2841,18 @@ export default function VacancyPage() {
                       нет (вакансия без hh-привязки или синк не прошёл). */}
                   {(() => {
                     if (status !== "active") return null
-                    const hhPublishedAt = (apiVacancy as { hhPublishedAt?: string | null } | undefined)?.hhPublishedAt
+                    const hhPublishedAt = apiVacancy?.hhPublishedAt
                     const since = hhPublishedAt ?? apiVacancy?.createdAt
                     if (!since) return null
                     const days = Math.floor((Date.now() - new Date(since).getTime()) / 86400000)
-                    return <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="size-3.5" />{days} дн.</span>
+                    const title = hhPublishedAt
+                      ? `Опубликована на hh: ${new Date(hhPublishedAt).toLocaleDateString("ru-RU")}`
+                      : undefined
+                    return (
+                      <span title={title} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Clock className="size-3.5" />{days} дн.
+                      </span>
+                    )
                   })()}
                   {/* «Индекс вежливости» — свой показатель (hh.ru официальный
                       API его не отдаёт, см. app/api/.../politeness-index/route.ts).
@@ -2875,7 +2882,7 @@ export default function VacancyPage() {
                           </span>
                         </TooltipTrigger>
                         <TooltipContent className="max-w-xs">
-                          <p className="font-medium mb-1">Свой индекс вежливости (не hh.ru)</p>
+                          <p className="font-medium mb-1">Индекс вежливости — по данным нашей системы оценки</p>
                           <p className="mb-1">
                             Доля откликов по вакансии, на которые был дан ответ
                             (сообщение, приглашение, отказ — любое действие):{" "}
@@ -2888,7 +2895,7 @@ export default function VacancyPage() {
                             </p>
                           )}
                           <p className="text-muted-foreground mt-1">
-                            hh.ru официально не отдаёт свой «индекс вежливости» через API — считаем сами по нашим данным.
+                            Считается по данным нашей системы оценки (hh.ru не отдаёт свой показатель через API).
                           </p>
                         </TooltipContent>
                       </UITooltip>
