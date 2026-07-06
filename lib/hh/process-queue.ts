@@ -938,6 +938,29 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
               // выше и C-2 в catch) для повторной попытки на следующем тике.
               // Пороги НЕ заданы → эта ветка не входит вовсе — легаси-поведение
               // (слепой инвайт при сбое AI) сохранено байт-в-байт.
+              //
+              // ПРЕДЕЛ ОЖИДАНИЯ (guard-major 06.07): без него постоянный сбой AI
+              // (нет ключа / прокси лёг / детерминированный парс-фейл на
+              // конкретном резюме) давал вечный ретрай: кандидат навсегда
+              // занимал слот очереди LIMIT N, вытесняя новых (регрессия P0-53),
+              // жёг платный вызов каждый тик и был невидим HR. Отклик старше
+              // предела → autoProcessingStopped (существующий stuckIds-фильтр
+              // исключает из выборки) с понятной причиной — виден HR на разбор.
+              const ENTRY_GATE_AI_WAIT_MAX_MS = 4 * 60 * 60 * 1000 // 4 часа (~48 тиков)
+              const respAgeMs = Date.now() - new Date(resp.createdAt).getTime()
+              if (respAgeMs > ENTRY_GATE_AI_WAIT_MAX_MS) {
+                if (resp.localCandidateId) {
+                  await db.update(candidates).set({
+                    autoProcessingStopped:       true,
+                    autoProcessingStoppedReason: "entry_gate_ai_scoring_stuck",
+                  }).where(eq(candidates.id, resp.localCandidateId))
+                }
+                await db.update(hhResponses)
+                  .set({ status: "response" })
+                  .where(and(eq(hhResponses.id, resp.id), eq(hhResponses.status, "claimed")))
+                results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "entry_gate_ai_stuck_manual_review" })
+                continue
+              }
               await db.update(hhResponses)
                 .set({ status: "response" })
                 .where(and(eq(hhResponses.id, resp.id), eq(hhResponses.status, "claimed")))
