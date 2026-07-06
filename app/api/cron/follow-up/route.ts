@@ -17,6 +17,7 @@ import {
   type SendPriorityGroup,
 } from "@/lib/messaging/send-priority"
 import { decideDozhimMutex } from "@/lib/messaging/dozhim-mutex"
+import { decidePortraitGate } from "@/lib/followup/portrait-gate"
 
 // POST /api/cron/follow-up
 // Отправляет очередную порцию касаний из follow_up_messages кандидатам
@@ -317,7 +318,12 @@ async function processOneTouch(
   if (typeof msg.branch === "string" && msg.branch.startsWith("funnelv2:")) {
     const branchStageId = msg.branch.slice("funnelv2:".length)
     const [candV2] = await db
-      .select({ funnelV2StateJson: candidates.funnelV2StateJson, stage: candidates.stage })
+      .select({
+        funnelV2StateJson:     candidates.funnelV2StateJson,
+        stage:                 candidates.stage,
+        automationPaused:      candidates.automationPaused,
+        autoProcessingStopped: candidates.autoProcessingStopped,
+      })
       .from(candidates)
       .where(eq(candidates.id, msg.candidateId))
       .limit(1)
@@ -333,6 +339,18 @@ async function processOneTouch(
         .set({ status: "cancelled", errorMessage: "stage_terminal" })
         .where(eq(followUpMessages.id, msg.id))
       return { outcome: "cancelled", reason: "v2_stage_terminal" }
+    }
+    // Инцидент 06.07 (Ильин, вакансия 6916): v2-ветка НЕ проверяла паузу
+    // автоматизации вовсе — кандидат явно отказался от требования в чате,
+    // automationPaused/autoProcessingStopped выставились (см.
+    // lib/followup/pause-and-escalate.ts), но дожим всё равно ушёл, потому
+    // что этот блок смотрел только на stage/stageId/completedAt. Теперь
+    // отменяем pending-касание — как и для legacy-цепочки в shouldStopFollowUp.
+    if (candV2.automationPaused || candV2.autoProcessingStopped) {
+      await db.update(followUpMessages)
+        .set({ status: "cancelled", errorMessage: "automation_paused" })
+        .where(eq(followUpMessages.id, msg.id))
+      return { outcome: "cancelled", reason: "v2_automation_paused" }
     }
     const v2State = candV2.funnelV2StateJson as import("@/lib/db/schema").FunnelV2State | null | undefined
     if (v2State) {
@@ -535,7 +553,11 @@ async function processOneTouch(
 
   // Ищем привязанный hh-отклик и токен компании
   const [campaign] = await db
-    .select({ vacancyId: followUpCampaigns.vacancyId })
+    .select({
+      vacancyId:               followUpCampaigns.vacancyId,
+      minPortraitScoreEnabled: followUpCampaigns.minPortraitScoreEnabled,
+      minPortraitScore:        followUpCampaigns.minPortraitScore,
+    })
     .from(followUpCampaigns)
     .where(eq(followUpCampaigns.id, msg.campaignId))
     .limit(1)
@@ -566,6 +588,32 @@ async function processOneTouch(
   if (!vacancy) {
     await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "vacancy_missing" }).where(eq(followUpMessages.id, msg.id))
     return { outcome: "cancelled", reason: "vacancy_missing" }
+  }
+
+  // Гейт «не дожимать кандидатов с Портретом ниже N» (drizzle/0259, инцидент
+  // 06.07). Дефолт ВЫКЛ (minPortraitScoreEnabled=false) → поведение байт-в-байт
+  // как раньше. Применяется ТОЛЬКО к реальным дожимным касаниям — не трогаем
+  // одноразовые транзакционные сообщения (приглашения/подтверждения/тест-инвайты
+  // и т.п.), у них своя логика и они не являются «дожимом». funnelv2:* branch —
+  // это тоже дожим (напоминание про текущую стадию воронки v2), поэтому гейт
+  // действует и на него. Тексты касаний НЕ трогаем — это отдельный скип на
+  // уровне отправки. Чистая функция решения — lib/followup/portrait-gate.ts
+  // (юнит-тесты там же).
+  const isFunnelV2Branch = typeof msg.branch === "string" && msg.branch.startsWith("funnelv2:")
+  const isDozhimTouch = !isOneOffPostAnketa || isFunnelV2Branch
+  if (isDozhimTouch && campaign.minPortraitScoreEnabled) {
+    const [scoreRow] = await db
+      .select({ resumeScore: candidates.resumeScore })
+      .from(candidates)
+      .where(eq(candidates.id, msg.candidateId))
+      .limit(1)
+    const gateDecision = decidePortraitGate(campaign, isDozhimTouch, scoreRow?.resumeScore)
+    if (gateDecision.skip) {
+      console.info(`[cron/follow-up] ${msg.candidateId} skip_low_portrait score=${scoreRow?.resumeScore} threshold=${campaign.minPortraitScore} branch=${msg.branch}`)
+      // Не отменяем (кандидат может быть пересчитан позже) — держим pending,
+      // следующий тик перепроверит. Симметрично с outbound_paused/mutex skip.
+      return { outcome: "skipped", reason: gateDecision.reason }
+    }
   }
 
   // #61 Взаимоисключение дожимов: v2 vs legacy-кампания (см.

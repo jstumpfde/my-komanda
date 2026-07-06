@@ -4,6 +4,7 @@ import { AI_MODEL_FAST } from "@/lib/ai/models"
 
 export type CandidateIntent =
   | "rejection"
+  | "decline_requirement"
   | "wants_personal_contact"
   | "busy_later"
   | "agreement"
@@ -14,6 +15,14 @@ export type SuggestedAction =
   | "move_to_wants_contact"
   | "no_action"
   | "move_to_next_stage"
+  // Инцидент 06.07 (кандидат Ильин, вакансия 6916): кандидат явно отказался
+  // от ключевого требования вакансии («по холодным звонкам больше не
+  // работаю») — это НЕ общий отказ от вакансии и НЕ повод для авто-отказа
+  // (авто-отказ — осознанно только по стоп-факторам, см. CLAUDE.md). Но
+  // дожимы, которые хвалят несоответствие («ваш опыт нам подходит»),
+  // выглядят как будто система не читает ответы кандидата. Поэтому —
+  // только пауза дожима + эскалация HR на ручной разбор.
+  | "pause_and_escalate"
 
 export interface ClassificationResult {
   intent: CandidateIntent
@@ -30,11 +39,14 @@ function buildPrompt(message: string, vacancyTitle?: string): string {
 Ответ кандидата: "${message}"
 
 Категории:
-- rejection: явный отказ или потеря интереса ("нет", "не интересно", "не актуально", "уже не актуально", "уже не ищу", "не в поиске", "передумал", "уже нашёл работу", "нашёл другое предложение", "спасибо, нет", "отказываюсь", "не рассматриваю")
+- rejection: явный отказ или потеря интереса К ВАКАНСИИ В ЦЕЛОМ ("нет", "не интересно", "не актуально", "уже не актуально", "уже не ищу", "не в поиске", "передумал", "уже нашёл работу", "нашёл другое предложение", "спасибо, нет", "отказываюсь", "не рассматриваю")
+- decline_requirement: НЕ общий отказ от вакансии, а явный отказ от КОНКРЕТНОГО требования/условия должности — кандидат называет, что именно ему не подходит, но не говорит явного "нет" вакансии целиком ("по холодным звонкам больше не буду работать", "разъездной характер не подходит", "на такой график не соглашусь", "с такой оплатой не готов", "это не моё", если явно указано на конкретную обязанность/условие)
 - wants_personal_contact: хочет общаться лично, не через автоматизацию ("давайте созвонимся", "хочу пообщаться лично", "пришлите номер")
 - busy_later: занят, ответит позже ("сейчас не могу", "напишу позже")
 - agreement: согласен, готов идти дальше ("да, интересно", "хорошо", "готов пройти демо")
 - unclear: не определено
+
+Если сообщение можно отнести и к rejection, и к decline_requirement — предпочти decline_requirement, если кандидат называет конкретную причину/требование, и rejection, только если это общее "нет" без причины.
 
 Верни ТОЛЬКО валидный JSON без префиксов и пояснений:
 { "intent": "rejection", "confidence": 0.95, "reasoning": "..." }`
@@ -44,6 +56,9 @@ function intentToAction(intent: CandidateIntent): SuggestedAction {
   switch (intent) {
     case "rejection":
       return "move_to_rejected"
+    case "decline_requirement":
+      // НИКАКОГО авто-отказа — только пауза дожима + эскалация HR (см. тип выше).
+      return "pause_and_escalate"
     case "wants_personal_contact":
       return "move_to_wants_contact"
     case "agreement":
@@ -112,6 +127,7 @@ export async function classifyCandidateResponse(
 
   const allowed: CandidateIntent[] = [
     "rejection",
+    "decline_requirement",
     "wants_personal_contact",
     "busy_later",
     "agreement",

@@ -59,6 +59,9 @@ export async function PATCH(
       testPreset?: string
       testMessages?: string[] | null
       testMessagesOpened?: string[] | null
+      // Гейт «не дожимать кандидатов с Портретом ниже N» (drizzle/0259)
+      minPortraitScoreEnabled?: boolean
+      minPortraitScore?: number
     }
 
     const updates: Record<string, unknown> = { updatedAt: new Date() }
@@ -93,6 +96,13 @@ export async function PATCH(
     } else if (body.testMessagesOpened === null) {
       updates.testMessagesOpened = null
     }
+    // ── Гейт «не дожимать кандидатов с Портретом ниже N» ──
+    if (typeof body.minPortraitScoreEnabled === "boolean") {
+      updates.minPortraitScoreEnabled = body.minPortraitScoreEnabled
+    }
+    if (typeof body.minPortraitScore === "number" && Number.isFinite(body.minPortraitScore)) {
+      updates.minPortraitScore = Math.max(0, Math.min(100, Math.round(body.minPortraitScore)))
+    }
 
     const [existing] = await db
       .select()
@@ -118,6 +128,8 @@ export async function PATCH(
       testPreset: typeof updates.testPreset === "string" ? updates.testPreset : "off",
       testMessages: Array.isArray(updates.testMessages) ? (updates.testMessages as string[]) : null,
       testMessagesOpened: Array.isArray(updates.testMessagesOpened) ? (updates.testMessagesOpened as string[]) : null,
+      minPortraitScoreEnabled: typeof updates.minPortraitScoreEnabled === "boolean" ? updates.minPortraitScoreEnabled : false,
+      minPortraitScore: typeof updates.minPortraitScore === "number" ? updates.minPortraitScore : 30,
     }
     const [created] = await db.insert(followUpCampaigns).values(insertValues).returning()
     return apiSuccess({ campaign: created })

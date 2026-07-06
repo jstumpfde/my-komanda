@@ -28,6 +28,8 @@ interface Campaign {
   stopOnVacancyClosed: boolean
   customMessages: string[] | null
   customMessagesOpened: string[] | null
+  minPortraitScoreEnabled?: boolean
+  minPortraitScore?: number
 }
 
 interface Props {
@@ -77,6 +79,11 @@ export function VacancyFollowupSettings({ vacancyId, tabKey = "followup", onSave
   const [preset, setPreset] = useState<FollowUpPreset>("off")
   const [stopOnReply, setStopOnReply] = useState(true)
   const [stopOnVacancyClosed, setStopOnVacancyClosed] = useState(true)
+  // Гейт «не дожимать кандидатов с Портретом ниже N» (drizzle/0259, инцидент
+  // 06.07). Дефолт ВЫКЛ + порог 30 — legacy-инвариант, поведение не меняется
+  // пока HR явно не включит.
+  const [minPortraitScoreEnabled, setMinPortraitScoreEnabled] = useState(false)
+  const [minPortraitScore, setMinPortraitScore] = useState(30)
 
   // Кастомные тексты: null = «используем дефолты», array = «юзер настроил».
   // При onChange textarea state становится array; «Вернуть к стандарту»
@@ -115,6 +122,10 @@ export function VacancyFollowupSettings({ vacancyId, tabKey = "followup", onSave
           setStopOnVacancyClosed(data.campaign.stopOnVacancyClosed)
           setCustomA(data.campaign.customMessages ?? null)
           setCustomB(data.campaign.customMessagesOpened ?? null)
+          setMinPortraitScoreEnabled(data.campaign.minPortraitScoreEnabled ?? false)
+          setMinPortraitScore(
+            typeof data.campaign.minPortraitScore === "number" ? data.campaign.minPortraitScore : 30,
+          )
         }
         // Группа 35: кастомные дни из descriptionJson.
         const dj = vacancyData?.descriptionJson
@@ -138,7 +149,10 @@ export function VacancyFollowupSettings({ vacancyId, tabKey = "followup", onSave
   const handleSave = async () => {
     setSaving(true)
     try {
-      const body: Record<string, unknown> = { enabled, preset, stopOnReply, stopOnVacancyClosed }
+      const body: Record<string, unknown> = {
+        enabled, preset, stopOnReply, stopOnVacancyClosed,
+        minPortraitScoreEnabled, minPortraitScore,
+      }
       if (touchedA) body.customMessages = customA
       if (touchedB) body.customMessagesOpened = customB
       const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/followup-settings`, {
@@ -171,6 +185,10 @@ export function VacancyFollowupSettings({ vacancyId, tabKey = "followup", onSave
       if (data.campaign) {
         setCustomA(data.campaign.customMessages ?? null)
         setCustomB(data.campaign.customMessagesOpened ?? null)
+        setMinPortraitScoreEnabled(data.campaign.minPortraitScoreEnabled ?? false)
+        setMinPortraitScore(
+          typeof data.campaign.minPortraitScore === "number" ? data.campaign.minPortraitScore : 30,
+        )
       }
       onSaved?.()
     } catch (err) {
@@ -188,6 +206,7 @@ export function VacancyFollowupSettings({ vacancyId, tabKey = "followup", onSave
       enabled, preset, stopOnReply, stopOnVacancyClosed,
       customA, customB, customDays,
       touchedA, touchedB, touchedDays,
+      minPortraitScoreEnabled, minPortraitScore,
     },
     save: handleSave,
   })
@@ -201,8 +220,9 @@ export function VacancyFollowupSettings({ vacancyId, tabKey = "followup", onSave
     () => JSON.stringify({
       enabled, preset, stopOnReply, stopOnVacancyClosed,
       customA, customB, customDays,
+      minPortraitScoreEnabled, minPortraitScore,
     }),
-    [enabled, preset, stopOnReply, stopOnVacancyClosed, customA, customB, customDays],
+    [enabled, preset, stopOnReply, stopOnVacancyClosed, customA, customB, customDays, minPortraitScoreEnabled, minPortraitScore],
   )
   useEffect(() => {
     if (loading) return
@@ -215,6 +235,7 @@ export function VacancyFollowupSettings({ vacancyId, tabKey = "followup", onSave
       initialRef.current = JSON.stringify({
         enabled, preset, stopOnReply, stopOnVacancyClosed,
         customA, customB, customDays,
+        minPortraitScoreEnabled, minPortraitScore,
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -523,6 +544,44 @@ export function VacancyFollowupSettings({ vacancyId, tabKey = "followup", onSave
             </div>
             <Switch checked={stopOnVacancyClosed} onCheckedChange={setStopOnVacancyClosed} disabled={loading} />
           </label>
+
+          {/* Инцидент 06.07: дожим слал комплиментарный текст кандидату с
+              Портрет-баллом 0. Тексты касаний не трогаем (шаблоны клиента) —
+              просто скипаем касание, если Портрет ниже порога. Дефолт ВЫКЛ. */}
+          <div className="flex items-start justify-between gap-3 py-2 border-t">
+            <div className="flex-1">
+              <label className="font-medium text-sm cursor-pointer" htmlFor="min-portrait-toggle">
+                Не дожимать кандидатов с Портретом ниже
+              </label>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                Касания дожима пропускаются (не отменяются — если балл пересчитают выше порога, дожим продолжится).
+                Сами тексты касаний не меняются.
+              </div>
+              {minPortraitScoreEnabled && (
+                <div className="flex items-center gap-2 mt-2">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={minPortraitScore}
+                    onChange={(e) => {
+                      const v = Math.max(0, Math.min(100, Number(e.target.value) || 0))
+                      setMinPortraitScore(v)
+                    }}
+                    disabled={loading}
+                    className="h-8 w-20 text-sm tabular-nums"
+                  />
+                  <span className="text-xs text-muted-foreground">баллов (0–100)</span>
+                </div>
+              )}
+            </div>
+            <Switch
+              id="min-portrait-toggle"
+              checked={minPortraitScoreEnabled}
+              onCheckedChange={setMinPortraitScoreEnabled}
+              disabled={loading}
+            />
+          </div>
         </div>
 
         {/* Группа 35: явная inline-кнопка «Сохранить» с индикатором dirty.

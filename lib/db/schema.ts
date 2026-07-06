@@ -3428,6 +3428,12 @@ export const followUpCampaigns = pgTable("follow_up_campaigns", {
   testPreset:           text("test_preset").notNull().default("off"),
   testMessages:         jsonb("test_messages").$type<string[] | null>(),        // ветка «не открыл тест»
   testMessagesOpened:   jsonb("test_messages_opened").$type<string[] | null>(),  // ветка «открыл, но не заполнил»
+  // drizzle/0259 — гейт «не дожимать кандидатов с Портретом (resume_score)
+  // ниже N». Дефолт ВЫКЛ (legacy-инвариант, см. PRODUCT-STANDARDS.md §3).
+  // Тексты дожима НЕ меняем — это отдельный скип на уровне отправки одного
+  // касания (см. app/api/cron/follow-up/route.ts).
+  minPortraitScoreEnabled: boolean("min_portrait_score_enabled").notNull().default(false),
+  minPortraitScore:        integer("min_portrait_score").notNull().default(30),
   createdAt:            timestamp("created_at").defaultNow().notNull(),
   updatedAt:            timestamp("updated_at").defaultNow().notNull(),
 })
