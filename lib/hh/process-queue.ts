@@ -367,12 +367,16 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       score: number
       threshold: number
       // "portrait_pending_reject" — входной гейт Портрета (Юрий 06.07, инцидент
-      // вакансия 6916): score ниже порога Портрета, ЗАДАННОГО через зону отказа
-      // (spec.resumeThresholds.autoRejectEnabled=true). Работает НЕЗАВИСИМО от
-      // portraitOn/legacy — safety-net поверх существующей ветки reject/keep_new.
-      // В отличие от "reject" (мгновенный hh discard при legacy autoRejectEnabled),
-      // здесь — пред. отказ через scheduleRejection (см. lib/hh/entry-gate.ts).
-      action: "reject" | "keep_new" | "prequalification" | "portrait_pending_reject"
+      // вакансия 6916): score ниже порога Портрета, ЗАДАННОГО через сценарий
+      // зоны отказа (spec.resumeThresholds.rejectAction="pending_rejection").
+      // Работает НЕЗАВИСИМО от portraitOn/legacy — safety-net поверх
+      // существующей ветки reject/keep_new. В отличие от "reject" (мгновенный
+      // hh discard при legacy autoRejectEnabled), здесь — пред. отказ через
+      // scheduleRejection (см. lib/hh/entry-gate.ts).
+      // "portrait_pending_manual" — тот же гейт, но rejectAction="pending_manual"
+      // (дополнение 06.07): кандидата ТОЛЬКО помечаем на ручной разбор HR, БЕЗ
+      // таймера — scheduleRejection НЕ вызываем, письмо не планируется.
+      action: "reject" | "keep_new" | "prequalification" | "portrait_pending_reject" | "portrait_pending_manual"
     } | null = null
 
     try {
@@ -903,27 +907,35 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
               }
 
               // ── ВХОДНОЙ ГЕЙТ ПОРТРЕТА (Юрий 06.07, инцидент вакансия 6916) ──
-              // Safety-net НЕЗАВИСИМО от portraitOn/legacy: если у Spec ЗАДАНА
-              // зона отказа (resumeThresholds.enabled && autoRejectEnabled &&
-              // lowerThreshold>0) и score ниже порога — НЕ слать первое сообщение
-              // со ссылкой на демо, даже если легаси-ветка выше (которая читает
-              // пороги ТОЛЬКО из aiProcessSettings/portraitOn-контура) этого не
-              // поймала. Раньше legacy-вакансия без подключённых к рантайму
-              // legacy-порогов пропускала score=0 напрямую к приглашению — сам
-              // Spec с настроенными порогами игнорировался вне контура «Портрет».
-              // Ничего не меняет, если belowThreshold уже reject/portrait_pending_reject
+              // Safety-net НЕЗАВИСИМО от portraitOn/legacy: если у Spec ЗАДАН
+              // сценарий зоны отказа (resumeThresholds.enabled && rejectAction
+              // != "none" && lowerThreshold>0) и score ниже порога — НЕ слать
+              // первое сообщение со ссылкой на демо, даже если легаси-ветка выше
+              // (которая читает пороги ТОЛЬКО из aiProcessSettings/portraitOn-
+              // контура) этого не поймала. Раньше legacy-вакансия без
+              // подключённых к рантайму legacy-порогов пропускала score=0
+              // напрямую к приглашению — сам Spec с настроенными порогами
+              // игнорировался вне контура «Портрет».
+              // Ничего не меняет, если belowThreshold уже reject/portrait_pending_*
               // (не понижаем строгость уже принятого решения) — только поднимает
               // безусловный send (belowThreshold===null или keep_new/prequalification
-              // при формально пройденном легаси-гейте) до пред. отказа, когда HR
-              // явно включил красную зону в «Портрете». Пороги НЕ заданы →
-              // decideEntryGate вернёт "send" → belowThreshold не трогаем (байт-в-байт).
-              if (belowThreshold?.action !== "reject" && belowThreshold?.action !== "portrait_pending_reject") {
+              // при формально пройденном легаси-гейте) до пред. отказа/ручного
+              // разбора, когда HR явно выбрал сценарий ≠"none" в «Портрете».
+              // Пороги НЕ заданы → decideEntryGate вернёт "send" → belowThreshold
+              // не трогаем (байт-в-байт).
+              if (
+                belowThreshold?.action !== "reject" &&
+                belowThreshold?.action !== "portrait_pending_reject" &&
+                belowThreshold?.action !== "portrait_pending_manual"
+              ) {
                 const gateDecision = decideEntryGate(result.score, specForTimezone?.resumeThresholds ?? null)
-                if (gateDecision.action === "reject") {
+                if (gateDecision.action === "reject" || gateDecision.action === "pending_manual") {
                   belowThreshold = {
                     score:     gateDecision.score,
                     threshold: gateDecision.threshold,
-                    action:    "portrait_pending_reject",
+                    action:    gateDecision.action === "pending_manual"
+                      ? "portrait_pending_manual"
+                      : "portrait_pending_reject",
                   }
                 }
                 // "wait" — score не должен быть null здесь (result уже посчитан),
@@ -1083,6 +1095,32 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
               reason:       PORTRAIT_BELOW_THRESHOLD_REASON,
               delayMinutes: rejectionDelayMinutes(effAiSettings),
             })
+          } else if (belowThreshold.action === "portrait_pending_manual") {
+            // Входной гейт Портрета, сценарий "pending_manual" (дополнение 06.07,
+            // та же семантика, что anketaPassInvite.failAction="pending_manual"
+            // в answer/route.ts): БЕЗ таймера — pendingRejectionAt=NULL, cron
+            // pending-rejections такие не исполняет, письмо НЕ планируется и НЕ
+            // уходит само. Кандидат помечается автостопом и виден HR на разбор,
+            // как и при "pending_rejection", но решение принимает только HR.
+            await db.update(candidates)
+              .set({
+                autoProcessingStopped:        true,
+                autoProcessingStoppedReason:  PORTRAIT_BELOW_THRESHOLD_REASON,
+                autoProcessingStoppedAt:      nowTs,
+                pendingRejectionReason:       PORTRAIT_BELOW_THRESHOLD_REASON,
+                pendingRejectionSetAt:        nowTs,
+                pendingRejectionAt:           null,
+                stageHistory: [...history, {
+                  from:      fromStage,
+                  to:        fromStage,
+                  at:        nowIso,
+                  reason:    PORTRAIT_BELOW_THRESHOLD_REASON,
+                  score:     belowThreshold.score,
+                  threshold: belowThreshold.threshold,
+                }],
+                updatedAt: nowTs,
+              })
+              .where(eq(candidates.id, candidateId))
           } else {
             // keep_new: оставляем stage="new", но ставим автостоп —
             // кандидат не попадёт в дальнейшую авто-обработку, ждёт ручного разбора.
@@ -1124,6 +1162,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             action: belowThreshold.action === "reject"                  ? "ai_rejected"
                   : belowThreshold.action === "prequalification"        ? "ai_prequalification"
                   : belowThreshold.action === "portrait_pending_reject" ? "entry_gate_pending_reject"
+                  : belowThreshold.action === "portrait_pending_manual" ? "entry_gate_pending_manual"
                   : "ai_kept_new",
           })
         } catch (btErr) {

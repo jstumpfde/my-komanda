@@ -1417,6 +1417,20 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
   // Универсальный апдейтер
   const patch = (p: Partial<CandidateSpec>) => setSpec(prev => prev ? { ...prev, ...p } : prev)
 
+  // БАГФИКС 06.07 (расследование инцидента вакансии 6916): точечные хэндлеры
+  // ниже раньше строили патч через `{ ...rt, поле: значение }`, где `rt` —
+  // переменная, зафиксированная на момент РЕНДЕРА (const rt = spec.resumeThresholds
+  // ниже по файлу). Если два разных поля resumeThresholds патчатся близко по
+  // времени до того, как React успел перерендерить компонент между ними
+  // (напр. быстрый тумблер + слайдер, программные события, двойной вызов в
+  // React StrictMode) — второй патч спредил СТАРЫЙ `rt`, целиком заменяя ключ
+  // resumeThresholds и теряя то, что записал первый патч (весь объект
+  // resumeThresholds заменяется, а не глубоко мёржится). Функциональная форма
+  // читает АКТУАЛЬНОЕ spec.resumeThresholds на момент применения апдейта —
+  // безопасна при любом порядке/частоте вызовов.
+  const patchThresholds = (fn: (rt: CandidateSpec["resumeThresholds"]) => CandidateSpec["resumeThresholds"]) =>
+    setSpec(prev => prev ? { ...prev, resumeThresholds: fn(prev.resumeThresholds) } : prev)
+
   // «Идеальный профиль» — производное поле: авто-собирается из «Подходит/Не
   // подходит» и держится в синхроне (решение Юрия — обновляется само).
   useEffect(() => {
@@ -1436,6 +1450,41 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
     // CSV → массивы перед отправкой
     const payload: CandidateSpec = {
       ...spec,
+      // БАГФИКС 06.07 (вакансия 6916): rt может содержать undefined-поля, если
+      // spec пришёл из старой/партиальной записи (до бэкфилла на чтении —
+      // см. lib/core/spec/store.ts getSpec). JSON.stringify молча ВЫРЕЗАЕТ такие
+      // ключи из тела запроса → сервер видит поле «отсутствующим» и подставляет
+      // дефолт схемы (напр. rejectionDelayMinutes=60), затирая реально введённое
+      // значение другого поля того же patch(). Коэрсим явно перед отправкой —
+      // что видно в UI, то и уходит на сервер, без дыр.
+      resumeThresholds: {
+        ...spec.resumeThresholds,
+        upperThreshold:        Number(spec.resumeThresholds.upperThreshold) || 0,
+        lowerThreshold:         Number(spec.resumeThresholds.lowerThreshold) || 0,
+        // rejectAction — источник истины (три сценария); autoRejectEnabled —
+        // производное поле схемы для обратной совместимости легаси-читателей,
+        // коэрсим явно на всякий случай (схема сама пересчитает на сервере).
+        rejectAction:           spec.resumeThresholds.rejectAction === "pending_manual"
+          || spec.resumeThresholds.rejectAction === "pending_rejection"
+          ? spec.resumeThresholds.rejectAction
+          : "none",
+        autoRejectEnabled:      spec.resumeThresholds.autoRejectEnabled === true,
+        autoInviteEnabled:      spec.resumeThresholds.autoInviteEnabled === true,
+        rejectionDelayMinutes:  Number.isFinite(spec.resumeThresholds.rejectionDelayMinutes)
+          ? spec.resumeThresholds.rejectionDelayMinutes
+          : 60,
+        inviteDelaySeconds:     Number.isFinite(spec.resumeThresholds.inviteDelaySeconds)
+          ? spec.resumeThresholds.inviteDelaySeconds
+          : 180,
+        offHoursDelaySeconds:   Number.isFinite(spec.resumeThresholds.offHoursDelaySeconds)
+          ? spec.resumeThresholds.offHoursDelaySeconds
+          : 15,
+      },
+      anketaThresholds: {
+        ...spec.anketaThresholds,
+        upperThreshold: Number(spec.anketaThresholds.upperThreshold) || 0,
+        lowerThreshold: Number(spec.anketaThresholds.lowerThreshold) || 0,
+      },
       stopFactors: {
         ...spec.stopFactors,
         city: spec.stopFactors.city
@@ -2370,9 +2419,11 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
         <CardContent className="space-y-4">
           {/* 3 зоны — подписи отражают, какие действия включены */}
           <div className="grid grid-cols-3 gap-2 text-center text-xs">
-            <div className={cn("rounded-md border py-2", rt.autoRejectEnabled ? "border-red-400/40 bg-red-500/10" : "border-border bg-muted/30")}>
-              <div className={cn("font-bold", rt.autoRejectEnabled ? "text-red-600 dark:text-red-400" : "text-muted-foreground")}>&lt; {rt.lowerThreshold}</div>
-              <div className="text-muted-foreground">{rt.autoRejectEnabled ? "отказ" : "ручной разбор"}</div>
+            <div className={cn("rounded-md border py-2", rt.rejectAction !== "none" ? "border-red-400/40 bg-red-500/10" : "border-border bg-muted/30")}>
+              <div className={cn("font-bold", rt.rejectAction !== "none" ? "text-red-600 dark:text-red-400" : "text-muted-foreground")}>&lt; {rt.lowerThreshold}</div>
+              <div className="text-muted-foreground">
+                {rt.rejectAction === "pending_rejection" ? "отказ" : rt.rejectAction === "pending_manual" ? "пред. отказ (ручной)" : "ручной разбор"}
+              </div>
             </div>
             <div className="rounded-md border border-amber-400/40 bg-amber-500/10 py-2">
               <div className="font-bold text-amber-600 dark:text-amber-400">{rt.lowerThreshold}–{Math.max(rt.lowerThreshold, rt.upperThreshold - 1)}</div>
@@ -2384,19 +2435,36 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
             </div>
           </div>
 
-          {/* Авто-отказ слабых: порог + задержка + письмо отказа */}
+          {/* Авто-отказ по резюме: сценарий + порог + задержка + письмо отказа.
+              БАГФИКС/ДОПОЛНЕНИЕ 06.07 (вакансия 6916): один тумблер autoRejectEnabled
+              заменён на трёхвариантный сценарий rejectAction — та же семантика,
+              что anketaPassInvite.failAction ниже («Если не прошёл гейт»):
+                "none"              — ничего не делать (легаси-эквивалент выкл. тумблера).
+                "pending_manual"    — пометка на ручной разбор HR, БЕЗ таймера,
+                                      письмо НЕ уходит само (lib/hh/entry-gate.ts).
+                "pending_rejection" — отложенный авто-отказ через N минут (прежнее
+                                      поведение тумблера ВКЛ). */}
           <div className="rounded-lg border p-3 space-y-3">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <Label className="text-sm font-medium">Авто-отказ слабых</Label>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Балл &lt; {rt.lowerThreshold} → система сама отправляет мягкий отказ. Выкл — слабые ждут ручного разбора.</p>
-              </div>
-              <Switch
-                checked={rt.autoRejectEnabled}
-                onCheckedChange={v => patch({ resumeThresholds: { ...rt, autoRejectEnabled: v, enabled: true } })}
-              />
+            <div className="min-w-0">
+              <Label className="text-sm font-medium">Авто-отказ по резюме</Label>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Балл &lt; {rt.lowerThreshold} → что делать с кандидатом. «Ничего» — слабые ждут ручного разбора.</p>
             </div>
-            {rt.autoRejectEnabled && (<>
+            <Select
+              value={rt.rejectAction}
+              onValueChange={v => patchThresholds(rt => ({
+                ...rt,
+                rejectAction: v as "none" | "pending_manual" | "pending_rejection",
+                enabled: true,
+              }))}
+            >
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Ничего не делать</SelectItem>
+                <SelectItem value="pending_manual">Предварительный отказ — пометка на ручной разбор, письмо не уходит</SelectItem>
+                <SelectItem value="pending_rejection">Отказ — авто-отправка через N минут</SelectItem>
+              </SelectContent>
+            </Select>
+            {rt.rejectAction !== "none" && (<>
               <div className="space-y-1.5">
                 <div className="flex items-baseline justify-between">
                   <Label className="text-xs">Порог отказа (ниже балл — отказ)</Label>
@@ -2404,23 +2472,25 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                 </div>
                 <Slider
                   value={[rt.lowerThreshold]}
-                  onValueChange={([v]) => patch({ resumeThresholds: { ...rt, lowerThreshold: v } })}
+                  onValueChange={([v]) => patchThresholds(rt => ({ ...rt, lowerThreshold: v }))}
                   min={0} max={95} step={5}
                 />
               </div>
-              <div className="flex items-center gap-2">
-                <Label className="text-xs shrink-0">Задержка отказа, мин</Label>
-                <Input
-                  type="number"
-                  value={rt.rejectionDelayMinutes}
-                  onChange={e => patch({ resumeThresholds: { ...rt, rejectionDelayMinutes: Math.max(0, Number(e.target.value) || 0) } })}
-                  className="w-24 h-8 text-sm"
-                />
-                {rt.rejectionDelayMinutes >= 60 && (
-                  <span className="text-[11px] text-muted-foreground">= {Math.floor(rt.rejectionDelayMinutes / 60)} ч{rt.rejectionDelayMinutes % 60 ? ` ${rt.rejectionDelayMinutes % 60} мин` : ""}</span>
-                )}
-                <span className="text-[11px] text-muted-foreground">Отложенный отказ — мгновенный воспринимается тяжелее</span>
-              </div>
+              {rt.rejectAction === "pending_rejection" && (
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs shrink-0">Задержка отказа, мин</Label>
+                  <Input
+                    type="number"
+                    value={rt.rejectionDelayMinutes}
+                    onChange={e => patchThresholds(rt => ({ ...rt, rejectionDelayMinutes: Math.max(0, Number(e.target.value) || 0) }))}
+                    className="w-24 h-8 text-sm"
+                  />
+                  {rt.rejectionDelayMinutes >= 60 && (
+                    <span className="text-[11px] text-muted-foreground">= {Math.floor(rt.rejectionDelayMinutes / 60)} ч{rt.rejectionDelayMinutes % 60 ? ` ${rt.rejectionDelayMinutes % 60} мин` : ""}</span>
+                  )}
+                  <span className="text-[11px] text-muted-foreground">Отложенный отказ — мгновенный воспринимается тяжелее</span>
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label className="text-xs flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> Письмо отказа (мягкое)</Label>
                 <p className="text-[11px] text-muted-foreground">«{"{{имя}}"}» подставится само. Тон мягкий, без причин отказа.</p>
@@ -2443,7 +2513,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
               </div>
               <Switch
                 checked={rt.autoInviteEnabled ?? false}
-                onCheckedChange={v => patch({ resumeThresholds: { ...rt, autoInviteEnabled: v, enabled: true } })}
+                onCheckedChange={v => patchThresholds(rt => ({ ...rt, autoInviteEnabled: v, enabled: true }))}
               />
             </div>
             {(rt.autoInviteEnabled ?? false) && (<>
@@ -2454,7 +2524,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                 </div>
                 <Slider
                   value={[rt.upperThreshold]}
-                  onValueChange={([v]) => patch({ resumeThresholds: { ...rt, upperThreshold: v } })}
+                  onValueChange={([v]) => patchThresholds(rt => ({ ...rt, upperThreshold: v }))}
                   min={0} max={100} step={5}
                 />
                 {rt.upperThreshold === 0 && (
@@ -2476,7 +2546,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                 <Label className="text-xs">Задержка перед приглашением</Label>
                 <Select
                   value={String(rt.inviteDelaySeconds ?? 180)}
-                  onValueChange={v => patch({ resumeThresholds: { ...rt, inviteDelaySeconds: Number(v) } })}
+                  onValueChange={v => patchThresholds(rt => ({ ...rt, inviteDelaySeconds: Number(v) }))}
                 >
                   <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -2500,7 +2570,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                   </div>
                   <Switch
                     checked={rt.offHoursEnabled ?? true}
-                    onCheckedChange={v => patch({ resumeThresholds: { ...rt, offHoursEnabled: v } })}
+                    onCheckedChange={v => patchThresholds(rt => ({ ...rt, offHoursEnabled: v }))}
                   />
                 </div>
                 {(rt.offHoursEnabled ?? true) && (<>
@@ -2514,7 +2584,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                     <Label className="text-[11px] shrink-0">Задержка</Label>
                     <Select
                       value={String(rt.offHoursDelaySeconds ?? 15)}
-                      onValueChange={v => patch({ resumeThresholds: { ...rt, offHoursDelaySeconds: Number(v) } })}
+                      onValueChange={v => patchThresholds(rt => ({ ...rt, offHoursDelaySeconds: Number(v) }))}
                     >
                       <SelectTrigger className="h-8 w-36 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -2534,7 +2604,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                   <Label className="text-xs">Что покажем приглашённому (контент-блок)</Label>
                   <Select
                     value={rt.inviteContentBlockId ?? "__live__"}
-                    onValueChange={v => patch({ resumeThresholds: { ...rt, inviteContentBlockId: v === "__live__" ? null : v } })}
+                    onValueChange={v => patchThresholds(rt => ({ ...rt, inviteContentBlockId: v === "__live__" ? null : v }))}
                   >
                     <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -2552,7 +2622,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                 <Label className="text-xs">Стадия в hh.ru при приглашении</Label>
                 <Select
                   value={rt.inviteHhStage ?? "consider"}
-                  onValueChange={v => patch({ resumeThresholds: { ...rt, inviteHhStage: v as "phone_interview" | "consider" | "interview" | "assessment" } })}
+                  onValueChange={v => patchThresholds(rt => ({ ...rt, inviteHhStage: v as "phone_interview" | "consider" | "interview" | "assessment" }))}
                 >
                   <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -2581,8 +2651,14 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
         // Fallback, иначе ap.enabled крашит Портрет (инцидент 30.06).
         const ap = spec.anketaPassInvite ?? { enabled: false, passThreshold: 35, aiEvalThreshold: 55, contentBlockId: null, messageText: "", delaySeconds: 900, transferMode: "both" as const, inlineContinue: true, passScreenTitle: "", passScreenText: "", passScreenButtonLabel: "", failScreenTitle: "", failScreenText: "", failAction: "none" as const, failRejectDelayMinutes: 60 }
         // Действие для НЕ прошедших гейт (старые спеки без поля → "none").
-        const failAction: "none" | "pending_rejection" =
-          (ap as { failAction?: "none" | "pending_rejection" }).failAction === "pending_rejection" ? "pending_rejection" : "none"
+        // БАГФИКС 06.07: раньше распознавался только "pending_rejection" —
+        // значение "pending_manual" (реально стоит у вакансии 6916) молча
+        // схлопывалось до "none" в отображении, хотя в бэке (answer/route.ts)
+        // обрабатывалось корректно. Три сценария схемы (types.ts failAction) —
+        // все три должны доходить до UI как есть.
+        const failActionRaw = (ap as { failAction?: "none" | "pending_manual" | "pending_rejection" }).failAction
+        const failAction: "none" | "pending_manual" | "pending_rejection" =
+          failActionRaw === "pending_manual" || failActionRaw === "pending_rejection" ? failActionRaw : "none"
         const failRejectDelayMinutes =
           typeof (ap as { failRejectDelayMinutes?: number }).failRejectDelayMinutes === "number"
             ? (ap as { failRejectDelayMinutes?: number }).failRejectDelayMinutes as number
@@ -2734,12 +2810,13 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                       <Label className="text-xs">Если не прошёл гейт</Label>
                       <Select
                         value={failAction}
-                        onValueChange={v => patch({ anketaPassInvite: { ...ap, failAction: v as "none" | "pending_rejection" } })}
+                        onValueChange={v => patch({ anketaPassInvite: { ...ap, failAction: v as "none" | "pending_manual" | "pending_rejection" } })}
                       >
                         <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">Ничего не делать</SelectItem>
-                          <SelectItem value="pending_rejection">Предварительный отказ (авто-отправка через N минут)</SelectItem>
+                          <SelectItem value="pending_manual">Предварительный отказ — пометка на ручной разбор, письмо не уходит</SelectItem>
+                          <SelectItem value="pending_rejection">Отказ — авто-отправка через N минут</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
