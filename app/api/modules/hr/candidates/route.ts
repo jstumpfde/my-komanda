@@ -358,9 +358,11 @@ export async function GET(req: NextRequest) {
       const funnelStatusesParam = url.searchParams.get("funnelStatuses")
       if (funnelStatusesParam && !stageParam) {
         const stages = funnelStatusesParam.split(",").map(s => s.trim()).filter(Boolean)
-        // «Предварительный отказ» — не только стадия: у большинства это ФЛАГ
-        // pending_rejection_at при прежней стадии (гейт анкеты, Портрет-гейт).
-        // Фильтр обязан находить оба варианта (баг Юрия 06.07: чекбокс давал пусто).
+        // «Предварительный отказ» — не только стадия: это ФЛАГИ на кандидате
+        // при прежней стадии — pending_rejection_at (запланирован отказ) ИЛИ
+        // pending_rejection_reason (помечен на ручной разбор — так бейдж
+        // «Предвар. отказ» и рисуется в списке). Фильтр обязан находить все
+        // варианты (баг Юрия 06.07: чекбокс давал пусто).
         const wantsPrelim = stages.includes("preliminary_reject")
         const plain = stages.filter(s => s !== "preliminary_reject")
         const conds = []
@@ -369,7 +371,8 @@ export async function GET(req: NextRequest) {
         if (wantsPrelim) {
           conds.push(sql`(
             ${candidates.stage} = 'preliminary_reject'
-            OR (${candidates.pendingRejectionAt} IS NOT NULL
+            OR ((${candidates.pendingRejectionAt} IS NOT NULL
+                 OR ${candidates.pendingRejectionReason} IS NOT NULL)
                 AND ${candidates.stage} IS DISTINCT FROM 'rejected')
           )`)
         }
