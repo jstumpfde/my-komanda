@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { ArrowLeft, Columns3, Rows3, Loader2, Star, Check, X, ExternalLink, Ban, ChevronDown, Download, Share2, SlidersHorizontal, ChevronsUpDown, ChevronsDownUp, Sparkles } from "lucide-react"
+import { ArrowLeft, Columns3, Rows3, Loader2, Star, Check, X, ExternalLink, Ban, ChevronDown, Download, Share2, SlidersHorizontal, ChevronsUpDown, ChevronsDownUp, Sparkles, Phone, Send, MessageSquare, AtSign } from "lucide-react"
 import { CandidateDrawer } from "@/components/candidates/candidate-drawer"
 
 interface QItem { id: string; text: string; points?: number; answerType?: string; groupId?: string; groupLabel?: string }
@@ -21,12 +21,64 @@ interface Section {
   questions: QItem[]
   answers: Record<string, Record<string, Ans>>
 }
+interface PreferredContact {
+  typeId: string; typeLabel: string; display: string; href: string | null; comment: string | null
+}
 interface CandidateHead {
   id: string; name: string | null; aiScore: number | null; resumeScore: number | null
   isFavorite?: boolean; stage?: string | null
   testScore?: number | null; testPoints?: { got: number; max: number } | null
   demoPercent?: number | null
   city?: string | null; birthDate?: string | null
+  phone?: string | null; preferredContact?: PreferredContact | null
+}
+
+// Иконка по типу предпочтительного контакта (не телефон — тот уже своей иконкой).
+function iconForContactType(typeId: string) {
+  switch (typeId) {
+    case "email": return AtSign
+    case "telegram": return Send
+    case "whatsapp": case "viber": case "skype": case "max": return MessageSquare
+    default: return MessageSquare
+  }
+}
+
+// Строка контакта в шапке колонки: телефон кликабелен tel:, рядом — вторая
+// иконка предпочтительного способа связи (если это не телефон), с бейджем-точкой
+// и тултипом (тип + комментарий кандидата, если есть).
+function ContactLine({ c }: { c: CandidateHead }) {
+  const phone = c.phone?.trim()
+  const pref = c.preferredContact
+  if (!phone && !pref) return null
+  const PrefIcon = pref ? iconForContactType(pref.typeId) : null
+  return (
+    <div className="mt-1 flex items-center gap-2 text-[11px]">
+      {phone && (
+        <a
+          href={`tel:${phone.replace(/[^\d+]/g, "")}`}
+          onClick={(e) => e.stopPropagation()}
+          title="Позвонить"
+          className="flex items-center gap-1 text-muted-foreground hover:text-primary transition-colors"
+        >
+          <Phone className="size-3" />
+          <span>{phone}</span>
+        </a>
+      )}
+      {pref && PrefIcon && (
+        <a
+          href={pref.href ?? undefined}
+          target={pref.href && !pref.href.startsWith("tel:") ? "_blank" : undefined}
+          rel={pref.href && !pref.href.startsWith("tel:") ? "noopener noreferrer" : undefined}
+          onClick={(e) => e.stopPropagation()}
+          title={`Предпочтительный: ${pref.typeLabel}${pref.display ? ` — ${pref.display}` : ""}${pref.comment ? `\n${pref.comment}` : ""}`}
+          className="relative flex items-center text-muted-foreground hover:text-primary transition-colors"
+        >
+          <PrefIcon className="size-3" />
+          <span className="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-primary" />
+        </a>
+      )}
+    </div>
+  )
 }
 
 // Возраст + ДР из birth_date (pg date → "YYYY-MM-DD").
@@ -668,6 +720,7 @@ function CompareInner() {
                                     </div>
                                   )
                                 })()}
+                                <ContactLine c={c} />
                                 <ScoreLine c={c} />
                               </div>
                               {/* Иконки прижаты к низу — ряд действий ровный во всех колонках */}
