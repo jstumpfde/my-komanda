@@ -358,11 +358,23 @@ export async function GET(req: NextRequest) {
       const funnelStatusesParam = url.searchParams.get("funnelStatuses")
       if (funnelStatusesParam && !stageParam) {
         const stages = funnelStatusesParam.split(",").map(s => s.trim()).filter(Boolean)
-        if (stages.length === 1) {
-          listConds.push(eq(candidates.stage, stages[0]))
-        } else if (stages.length > 1) {
-          listConds.push(inArray(candidates.stage, stages))
+        // «Предварительный отказ» — не только стадия: у большинства это ФЛАГ
+        // pending_rejection_at при прежней стадии (гейт анкеты, Портрет-гейт).
+        // Фильтр обязан находить оба варианта (баг Юрия 06.07: чекбокс давал пусто).
+        const wantsPrelim = stages.includes("preliminary_reject")
+        const plain = stages.filter(s => s !== "preliminary_reject")
+        const conds = []
+        if (plain.length === 1) conds.push(eq(candidates.stage, plain[0]))
+        else if (plain.length > 1) conds.push(inArray(candidates.stage, plain))
+        if (wantsPrelim) {
+          conds.push(sql`(
+            ${candidates.stage} = 'preliminary_reject'
+            OR (${candidates.pendingRejectionAt} IS NOT NULL
+                AND ${candidates.stage} IS DISTINCT FROM 'rejected')
+          )`)
         }
+        if (conds.length === 1) listConds.push(conds[0])
+        else if (conds.length > 1) listConds.push(or(...conds)!)
       }
 
       // Скрыть отказы (hideRejected=true)
