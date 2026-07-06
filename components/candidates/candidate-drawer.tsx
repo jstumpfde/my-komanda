@@ -2857,21 +2857,21 @@ export function CandidateDrawer({
                   ) : scorecardCriteria.length === 0 ? (
                     <p className="text-sm text-muted-foreground py-2 text-center">Критерии не заданы</p>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       {scorecardCriteria.map((c) => (
-                        <div key={c.key} className="flex flex-wrap items-center justify-between gap-2 py-1">
-                          <span className="min-w-0 flex-1 text-sm text-foreground flex items-center gap-1.5">
-                            {c.label}
+                        <div key={c.key} className="flex items-start justify-between gap-3 py-1">
+                          <span className="min-w-0 flex-1 text-sm text-foreground flex items-start gap-1.5">
+                            <span>{c.label}</span>
                             {c.source === "portrait" && c.weight === 2 && (
-                              <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 shrink-0 border-primary/40 text-primary">обязат.</Badge>
+                              <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 shrink-0 border-primary/40 text-primary mt-0.5">обязат.</Badge>
                             )}
                           </span>
-                          <div className="flex gap-1 shrink-0">
+                          <div className="flex flex-col gap-1 shrink-0 w-32">
                             <button
                               type="button"
                               onClick={() => setCriterionVerdict(c.key, "confirmed")}
                               className={cn(
-                                "px-2.5 py-1.5 rounded-md text-xs border transition-colors min-h-[32px]",
+                                "w-full px-2.5 py-1.5 rounded-md text-xs border transition-colors min-h-[32px]",
                                 c.verdict === "confirmed"
                                   ? "bg-emerald-100 border-emerald-400 text-emerald-800 dark:bg-emerald-900/30 dark:border-emerald-600 dark:text-emerald-300"
                                   : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30",
@@ -2883,7 +2883,7 @@ export function CandidateDrawer({
                               type="button"
                               onClick={() => setCriterionVerdict(c.key, "not_confirmed")}
                               className={cn(
-                                "px-2.5 py-1.5 rounded-md text-xs border transition-colors min-h-[32px]",
+                                "w-full px-2.5 py-1.5 rounded-md text-xs border transition-colors min-h-[32px]",
                                 c.verdict === "not_confirmed"
                                   ? "bg-red-100 border-red-400 text-red-800 dark:bg-red-900/30 dark:border-red-600 dark:text-red-300"
                                   : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30",
@@ -2895,7 +2895,7 @@ export function CandidateDrawer({
                               type="button"
                               onClick={() => setCriterionVerdict(c.key, "not_checked")}
                               className={cn(
-                                "px-2.5 py-1.5 rounded-md text-xs border transition-colors min-h-[32px]",
+                                "w-full px-2.5 py-1.5 rounded-md text-xs border transition-colors min-h-[32px]",
                                 c.verdict === "not_checked"
                                   ? "bg-muted border-border text-foreground"
                                   : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30",
