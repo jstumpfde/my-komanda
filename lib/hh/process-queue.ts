@@ -377,6 +377,12 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       // (дополнение 06.07): кандидата ТОЛЬКО помечаем на ручной разбор HR, БЕЗ
       // таймера — scheduleRejection НЕ вызываем, письмо не планируется.
       action: "reject" | "keep_new" | "prequalification" | "portrait_pending_reject" | "portrait_pending_manual"
+      // Задержка отказа ИЗ SPEC (rt.rejectionDelayMinutes) для portrait_pending_reject
+      // (guard-minor 06.07): effAiSettings подтягивает задержку из Spec только при
+      // portraitOn — а safety-net-гейт срабатывает НЕЗАВИСИМО от portraitOn. Без
+      // этого поля не-Портрет вакансия с настроенным Spec получала бы legacy-задержку
+      // (дефолт 300 мин) вместо того, что HR видит в UI «Портрета».
+      delayMinutes?: number
     } | null = null
 
     try {
@@ -936,6 +942,10 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                     action:    gateDecision.action === "pending_manual"
                       ? "portrait_pending_manual"
                       : "portrait_pending_reject",
+                    // Задержка из Spec, который и принял решение (guard-minor 06.07):
+                    // effAiSettings переопределяется Spec-ом только при portraitOn,
+                    // а этот гейт работает независимо от portraitOn.
+                    delayMinutes: specForTimezone?.resumeThresholds?.rejectionDelayMinutes,
                   }
                 }
                 // "wait" — score не должен быть null здесь (result уже посчитан),
@@ -1093,7 +1103,11 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
             await scheduleRejection({
               candidateId,
               reason:       PORTRAIT_BELOW_THRESHOLD_REASON,
-              delayMinutes: rejectionDelayMinutes(effAiSettings),
+              // Приоритет — задержка из Spec, принявшего решение гейта (см.
+              // belowThreshold.delayMinutes, guard-minor 06.07); legacy-настройки —
+              // только если Spec задержку не содержит (не должно случаться:
+              // Zod-дефолт 60 бэкфиллит поле на чтении).
+              delayMinutes: belowThreshold.delayMinutes ?? rejectionDelayMinutes(effAiSettings),
             })
           } else if (belowThreshold.action === "portrait_pending_manual") {
             // Входной гейт Портрета, сценарий "pending_manual" (дополнение 06.07,
