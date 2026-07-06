@@ -7,6 +7,8 @@ import { renderTemplate } from "@/lib/template-renderer"
 import { resolveGivenNameMeta } from "@/lib/messaging/candidate-name"
 import { getLearnedNamesSet } from "@/lib/messaging/learned-given-names"
 import { canSendNow, adjustToWorkingWindow, type VacancySchedule } from "@/lib/schedule/can-send-now"
+import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
+import { getCompanyName } from "@/lib/funnel-v2/runtime-executor"
 
 // Ревизия очереди исходящих: журнал касаний с превью текста (имя уже подставлено),
 // что hh отдал как имя/фамилию, флаг «проверить», статус, «уйдёт в» и причину ожидания.
@@ -84,6 +86,9 @@ export async function GET(
     const { id } = await params
     const vac = await getVacancy(id, user.companyId)
     if (!vac) return apiError("Вакансия не найдена", 404)
+    // Реальное имя компании для превью {{company}} — fallback "Company24"
+    // только если строка компании реально не нашлась.
+    const companyName = (await getCompanyName(user.companyId)) || "Company24"
 
     const campaignRows = await db
       .select({ id: followUpCampaigns.id })
@@ -178,10 +183,10 @@ export async function GET(
       const preview = renderTemplate(m.messageText, {
         name:          meta.firstName,
         vacancy:       vac.title || "",
-        company:       "Company24",
-        demo_link:     `https://company24.pro/demo/${slug}`,
-        test_link:     `https://company24.pro/test/${slug}`,
-        schedule_link: `https://company24.pro/schedule/${slug}`,
+        company:       companyName,
+        demo_link:     `${getAppBaseUrl()}/demo/${slug}`,
+        test_link:     `${getAppBaseUrl()}/test/${slug}`,
+        schedule_link: `${getAppBaseUrl()}/schedule/${slug}`,
       })
 
       return {
