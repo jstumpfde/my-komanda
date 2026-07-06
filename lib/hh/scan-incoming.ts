@@ -489,6 +489,9 @@ export async function scanIncomingMessages(opts: {
     // дальнейшие AI-вызовы пропускаем.
     let rejected = false
     let wantsContact = false
+    // Пауза+эскалация тоже прерывает батч: иначе следующее сообщение того же
+    // прогона могло авто-отклонить кандидата ПОВЕРХ паузы (guard-major 06.07).
+    let paused = false
     // Индекс сообщения, на котором упал AI-классификатор: его и всё после
     // него НЕ помечаем прочитанными — повторим в следующий прогон. Иначе
     // сбой Anthropic (429/503) навсегда терял сообщение кандидата
@@ -497,7 +500,7 @@ export async function scanIncomingMessages(opts: {
     for (const [msgIdx, msg] of newMsgs.entries()) {
       const text = extractText(msg).trim()
       if (!text) continue
-      if (rejected || wantsContact) break
+      if (rejected || wantsContact || paused) break
 
       const preview = text.slice(0, 120).replace(/\s+/g, " ")
 
@@ -804,6 +807,7 @@ export async function scanIncomingMessages(opts: {
           confidence: cls.confidence,
         })
         result.pausedNeedsReview++
+        paused = true
         console.info(`[scan-incoming] ${candidateId} ${action.reason}_paused conf=${cls.confidence} already=${esc.alreadyPaused} notif=${esc.notificationSent} tg=${esc.telegramSent} text="${preview}"`)
       } else if (action.type === "wants_contact") {
         await applyWantsContact(candidateId)
