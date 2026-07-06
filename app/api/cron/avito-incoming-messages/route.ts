@@ -60,6 +60,7 @@ export async function POST(req: NextRequest) {
       rejectedRegex: 0,
       rejectedAi:    0,
       wantsContact:  0,
+      pausedNeedsReview: 0,
       errors:        [] as string[],
     }
 
@@ -138,6 +139,7 @@ export async function POST(req: NextRequest) {
         totalResult.rejectedRegex += r.rejectedRegex
         totalResult.rejectedAi    += r.rejectedAi
         totalResult.wantsContact  += r.wantsContact
+        totalResult.pausedNeedsReview += r.pausedNeedsReview
         totalResult.errors.push(...r.errors)
       }
     }
