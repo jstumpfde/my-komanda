@@ -45,7 +45,10 @@ test("companyNameForVars не нашли в БД → fallback 'Company24' (по�
   // Воспроизводит инициализацию companyNameForVars в process-queue.ts:
   // let companyNameForVars = "Company24"; if (companyRow?.name?.trim()) companyNameForVars = ...
   let companyNameForVars = "Company24"
-  const companyRow: { name: string | null } | undefined = undefined
+  // Через функцию, а не const-литерал undefined — иначе TS сужает тип до
+  // undefined и обращение к .name становится never (гвард 06.07).
+  const findCompanyRow = (): { name: string | null } | undefined => undefined
+  const companyRow = findCompanyRow()
   if (companyRow?.name?.trim()) companyNameForVars = companyRow.name.trim()
 
   const out = renderCandidateMessage("{{name}} / {{company}}", {
