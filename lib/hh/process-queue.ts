@@ -947,7 +947,11 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
               // предела → autoProcessingStopped (существующий stuckIds-фильтр
               // исключает из выборки) с понятной причиной — виден HR на разбор.
               const ENTRY_GATE_AI_WAIT_MAX_MS = 4 * 60 * 60 * 1000 // 4 часа (~48 тиков)
-              const respAgeMs = Date.now() - new Date(resp.createdAt).getTime()
+              // createdAt nullable в типе выборки: null → считаем отклик свежим
+              // (возраст 0), стоп не сработает — безопасный дефолт.
+              const respAgeMs = resp.createdAt
+                ? Date.now() - new Date(resp.createdAt).getTime()
+                : 0
               if (respAgeMs > ENTRY_GATE_AI_WAIT_MAX_MS) {
                 if (resp.localCandidateId) {
                   await db.update(candidates).set({
