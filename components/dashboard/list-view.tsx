@@ -33,6 +33,7 @@ import { yearsRu } from "@/lib/plural-ru"
 import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ListFilter, ArrowUp, ArrowDown, Star, CalendarClock, CalendarPlus, MessageSquare, RotateCcw } from "lucide-react"
 import { DemoProgressBar, calcDemoPercent, calcDemoFraction } from "@/components/hr/demo-progress-bar"
 import { getStageLabel, getStageColorClasses } from "@/lib/stages"
+import { PORTRAIT_BELOW_THRESHOLD_REASON } from "@/lib/hh/entry-gate"
 
 // «2-я часть демо» (Путь менеджера): кандидатам с override_content_block_id
 // отправлена вторая часть контента (анкета/демо), а НЕ тест-задание. Стадия у
@@ -1051,10 +1052,12 @@ export function ListView({
       header: <SortHeader label="Статус" sortKey="status" sort={sort} onToggle={handleSort} align="center" />,
       renderCell: (candidate) => (
         <div className="text-center">
-          {/* «Пред. отказ»: кандидат не прошёл гейт анкеты, помечен на ручной
-              разбор (pendingRejectionReason), сообщений ему НЕ уходило. Бэдж
-              перекрывает стадию, пока HR не примет решение (Юрий 03.07). */}
-          {(candidate as { pendingRejectionReason?: string | null }).pendingRejectionReason === "anketa_gate_failed" ? (
+          {/* «Пред. отказ»: кандидат не прошёл гейт (анкеты ИЛИ входной гейт
+              Портрета по resume_score, Юрий 06.07), помечен на ручной разбор/
+              таймер (pendingRejectionReason), сообщений ему НЕ уходило. Бэдж
+              перекрывает стадию, пока HR не примет решение/cron не исполнит. */}
+          {(candidate as { pendingRejectionReason?: string | null }).pendingRejectionReason === "anketa_gate_failed" ||
+           (candidate as { pendingRejectionReason?: string | null }).pendingRejectionReason === PORTRAIT_BELOW_THRESHOLD_REASON ? (
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300">
               Предвар. отказ
             </span>
