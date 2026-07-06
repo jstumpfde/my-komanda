@@ -249,7 +249,11 @@ ${buildWeightsSection(v.aiWeights)}` + AI_SAFETY_PROMPT
             outputTokens: response.usage?.output_tokens,
           })
         }
-      })()
+      })().catch((e) => {
+        // Лог стоимости не должен ни валить скоринг, ни шуметь
+        // unhandledRejection'ом при сбое БД (guard-минор 06.07).
+        console.error("[screen-resume] cost-log lookup failed:", e)
+      })
     }
     raw = content.text.trim()
   } catch (err) {
