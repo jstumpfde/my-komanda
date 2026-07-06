@@ -665,7 +665,18 @@ export function resolveVacancyStageOptions(
         : null
       out.push({ slug, label: custom ?? getStageLabel(slug, pipeline) })
     }
-    if (out.length > 0) return out
+    if (out.length > 0) {
+      // Юрий 06.07: в фильтре должны быть ВСЕ этапы воронки. Стадии v2, чьё
+      // action не смапилось на платформенный slug, выпадали (у вакансии
+      // оставалось 3 пункта из N). Добиваем остальные enabled-стадии pipeline,
+      // которых ещё нет в списке, — в их платформенном порядке.
+      for (const slug of getEnabledStages(pipeline)) {
+        if (slug === "rejected" || slug === "preliminary_reject" || seen.has(slug)) continue
+        seen.add(slug)
+        out.push({ slug, label: getStageLabel(slug, pipeline) })
+      }
+      return out
+    }
     // Если воронка есть, но ни один action не смапился — падаем на pipeline/дефолт.
   }
 
