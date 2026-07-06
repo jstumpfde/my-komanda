@@ -33,6 +33,7 @@ import { sendWebhook } from "@/lib/webhooks"
 import { resolveVacancyWebhook } from "@/lib/integrations/resolve"
 import { shouldDeferFirstMessage } from "@/lib/messaging/first-messages-chain"
 import { getEffectiveMessageDefaults } from "@/lib/messaging/effective-message-defaults"
+import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
 import { maybeSendCandidateAlert } from "@/lib/telegram/candidate-alert"
 
 // Дефолтные тексты (приглашение/автоответ) — НЕ хардкод: резолвятся по компании
@@ -177,14 +178,19 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
   // companyHiringDefaults — полные настройки компании, нужны для resolveVacancyWebhook
   // (уровень 2 → дефолт; уровень 3 = вакансия может переопределить через integrationsOverride).
   let companyHiringDefaults: CompanyHiringDefaults | null = null
+  // Имя компании для {{company}} — тот же запрос, что уже шёл за hiringDefaultsJson
+  // (кэш на весь прогон очереди, без лишних SELECT в цикле). Fallback "Company24" —
+  // только если реально не нашли строку компании (см. использование ниже).
+  let companyNameForVars = "Company24"
   {
     const [companyRow] = await db
-      .select({ hiringDefaultsJson: companies.hiringDefaultsJson })
+      .select({ hiringDefaultsJson: companies.hiringDefaultsJson, name: companies.name })
       .from(companies)
       .where(eq(companies.id, companyId))
       .limit(1)
     const hiringDefaults = (companyRow?.hiringDefaultsJson as CompanyHiringDefaults | null) ?? null
     companyHiringDefaults = hiringDefaults
+    if (companyRow?.name?.trim()) companyNameForVars = companyRow.name.trim()
     if (hiringDefaults?.stopFactorsApplyToAll === true && hiringDefaults.stopFactorsDefaults) {
       companyStopFactors = hiringDefaults.stopFactorsDefaults
       companyStopFactorsApplyToAll = true
@@ -1169,7 +1175,10 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
           const messageText = renderTemplate(stopFactorMatch.rejectionText, {
             name:    greetingName,
             vacancy: localVac.title || "",
-            company: "Company24",
+            // Реальное имя компании (companyNameForVars — кэш на прогон очереди,
+            // см. выше); "Company24" — самый последний fallback, если строка
+            // компании реально не нашлась в БД (не должно случаться в норме).
+            company: companyNameForVars,
           })
           await scheduleRejection({
             candidateId,
@@ -1374,8 +1383,8 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
           ? ((localVac.descriptionJson as { contentStep?: { mode?: string } } | null)?.contentStep?.mode ?? "demo")
           : "demo"
         const demoUrl = contentStepMode === "test" || contentStepMode === "task"
-          ? `https://company24.pro/test/${tokenForUrl}`
-          : `https://company24.pro/demo/${tokenForUrl}`
+          ? `${getAppBaseUrl()}/test/${tokenForUrl}`
+          : `${getAppBaseUrl()}/demo/${tokenForUrl}`
 
         // Для «Презентации» — встраиваем текст в сообщение, без ссылки на /demo/
         const presentationText = contentStepMode === "presentation"
@@ -1410,7 +1419,8 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
         const replaced = renderTemplate(messageText, {
           name:      candidateName,
           vacancy:   localVac.title || "",
-          company:   "Company24",
+          // Реальное имя компании — companyNameForVars (кэш на прогон очереди).
+          company:   companyNameForVars,
           demo_link: contentStepMode === "presentation" ? "" : demoUrl,
         })
 

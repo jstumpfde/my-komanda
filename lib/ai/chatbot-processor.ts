@@ -37,6 +37,7 @@ import { classifyIncomingMessage, validateAiReply } from "@/lib/ai/security-filt
 import { resolveStopWordFarewellText, readStopWordStageAction } from "@/lib/auto-responder/match-faq"
 import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
 import { renderTemplate } from "@/lib/template-renderer"
+import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
 
 export type IntentCategory =
   | "salary" | "schedule" | "location" | "requirements"
@@ -526,7 +527,7 @@ async function escalate(args: {
   })
 
   if (args.telegramChannel) {
-    const link = `https://company24.pro${href}`
+    const link = `${getAppBaseUrl()}${href}`
     const tgText =
       `🤖 <b>AI-агент эскалирует кандидата</b>\n\n` +
       `<b>Вакансия:</b> ${args.vacancyTitle}\n` +

@@ -170,7 +170,7 @@ export async function trySyncInviteToHh(candidateId: string): Promise<boolean> {
     if (!token) return false
 
     const demoToken = ctx.cand.shortId ?? ctx.cand.id
-    const demoLink  = `https://company24.pro/demo/${demoToken}`
+    const demoLink  = `${getAppBaseUrl()}/demo/${demoToken}`
 
     const { firstName } = await getCandidateFirstName(ctx.cand.id)
     const tpl = ctx.vac.aiProcessSettings.inviteMessage?.trim() || (await getEffectiveMessageDefaults(ctx.vac.companyId)).inviteMessage
@@ -288,7 +288,7 @@ export async function trySyncStageToHh(candidateId: string, newStage: string): P
 
     // invitation
     const demoToken = ctx.cand.shortId ?? ctx.cand.id
-    const demoLink  = `https://company24.pro/demo/${demoToken}`
+    const demoLink  = `${getAppBaseUrl()}/demo/${demoToken}`
     const tpl = ctx.vac.aiProcessSettings.inviteMessage?.trim() || (await getEffectiveMessageDefaults(ctx.vac.companyId)).inviteMessage
     let message = renderTemplate(tpl, {
       name:      firstName,
