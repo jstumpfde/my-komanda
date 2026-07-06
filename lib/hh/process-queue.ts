@@ -953,20 +953,26 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                 ? Date.now() - new Date(resp.createdAt).getTime()
                 : 0
               if (respAgeMs > ENTRY_GATE_AI_WAIT_MAX_MS) {
-                if (resp.localCandidateId) {
+                // ЛОКАЛЬНЫЙ candidateId, не resp.localCandidateId из снапшота:
+                // для нового кандидата, созданного в ЭТОЙ итерации, снапшот ещё
+                // NULL — стоп не срабатывал бы никогда (guard-blocker 06.07).
+                if (candidateId) {
                   await db.update(candidates).set({
                     autoProcessingStopped:       true,
                     autoProcessingStoppedReason: "entry_gate_ai_scoring_stuck",
-                  }).where(eq(candidates.id, resp.localCandidateId))
+                  }).where(eq(candidates.id, candidateId))
                 }
+                // Бэкфилл привязки в hhResponses (паттерн hh_send_failed_retry) —
+                // иначе строка с NULL localCandidateId не исключается stuckIds-
+                // фильтром и продолжает выбираться каждый тик.
                 await db.update(hhResponses)
-                  .set({ status: "response" })
+                  .set({ status: "response", ...(candidateId ? { localCandidateId: candidateId } : {}) })
                   .where(and(eq(hhResponses.id, resp.id), eq(hhResponses.status, "claimed")))
                 results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "entry_gate_ai_stuck_manual_review" })
                 continue
               }
               await db.update(hhResponses)
-                .set({ status: "response" })
+                .set({ status: "response", ...(candidateId ? { localCandidateId: candidateId } : {}) })
                 .where(and(eq(hhResponses.id, resp.id), eq(hhResponses.status, "claimed")))
               results.push({ id: resp.hhResponseId, name: resp.candidateName, action: "entry_gate_wait_ai_retry" })
               continue
