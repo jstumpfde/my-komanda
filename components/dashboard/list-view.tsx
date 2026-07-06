@@ -1039,16 +1039,15 @@ export function ListView({
       })
     }
 
-    // Статус (всегда показывается). 150px — замер (Inter): самый длинный
-    // платформенный лейбл стадии «Предварительный отказ» (127.8px, 11px/500)
-    // + px-2 паддинг бейджа (16px) ≈ 144px — раньше при 104px он вылезал за
-    // пределы ячейки (не обрезаясь — whitespace-nowrap без overflow-hidden).
-    // Кастомные лейблы HR (customLabel per-vacancy) длиннее — за пределом не
-    // обрезаем (whitespace-nowrap), это осознанный компромисс: 99% реальных
-    // подписей короче, а обрезание платформенных названий стадий недопустимо.
+    // Статус (всегда показывается). 116px — решение Юрия 06.07: самый длинный
+    // платформенный лейбл «Предварительный отказ» в КОЛОНКЕ сокращается до
+    // «Предвар. отказ» (STATUS_COLUMN_SHORT ниже; в настройках воронки/канбане
+    // остаётся полное имя), новый максимум — «Тест не пройден» ≈ 112px.
+    // Кастомные лейблы HR длиннее 116px обрезаются многоточием, полное имя —
+    // в title-тултипе (страховка, чтобы кастом не растягивал сетку).
     list.push({
       id: "status",
-      gridWidth: "150px",
+      gridWidth: "116px",
       header: <SortHeader label="Статус" sortKey="status" sort={sort} onToggle={handleSort} align="center" />,
       renderCell: (candidate) => (
         <div className="text-center">
@@ -1057,17 +1056,10 @@ export function ListView({
               перекрывает стадию, пока HR не примет решение (Юрий 03.07). */}
           {(candidate as { pendingRejectionReason?: string | null }).pendingRejectionReason === "anketa_gate_failed" ? (
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300">
-              Пред. отказ
+              Предвар. отказ
             </span>
-          ) : (
-          <span
-            className={cn(
-              "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap",
-              candidate.stage ? getStageColorClasses(candidate.stage) : "",
-            )}
-            style={candidate.stage ? undefined : { background: `linear-gradient(135deg, ${candidate.colorFrom}, ${candidate.colorTo})`, color: "#fff" }}
-          >
-            {candidate.stage
+          ) : (() => {
+            const fullLabel = candidate.stage
               ? (() => {
                   const fv2Id = (candidate.funnelV2StateJson as { stageId?: string | null } | null)?.stageId
                   if (fv2Id && funnelV2Stages) {
@@ -1076,9 +1068,23 @@ export function ListView({
                   }
                   return resolveStatusLabel(candidate, vacancyPipeline)
                 })()
-              : (candidate.columnTitle === "Демонстрация" ? "Демо" : candidate.columnTitle)}
-          </span>
-          )}
+              : (candidate.columnTitle === "Демонстрация" ? "Демо" : candidate.columnTitle)
+            // Короткая форма ТОЛЬКО для колонки (решение Юрия 06.07);
+            // канбан/настройки продолжают показывать полный лейбл стадии.
+            const shortLabel = fullLabel === "Предварительный отказ" ? "Предвар. отказ" : fullLabel
+            return (
+              <span
+                title={shortLabel !== fullLabel || (shortLabel?.length ?? 0) > 14 ? fullLabel ?? undefined : undefined}
+                className={cn(
+                  "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap max-w-full",
+                  candidate.stage ? getStageColorClasses(candidate.stage) : "",
+                )}
+                style={candidate.stage ? undefined : { background: `linear-gradient(135deg, ${candidate.colorFrom}, ${candidate.colorTo})`, color: "#fff" }}
+              >
+                <span className="truncate">{shortLabel}</span>
+              </span>
+            )
+          })()}
         </div>
       ),
     })
