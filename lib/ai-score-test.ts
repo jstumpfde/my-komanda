@@ -1,8 +1,9 @@
 // Этап 2: AI-оценка ответа кандидата на тестовое задание.
 //
-// Использует ЕДИНЫЙ Claude-клиент проекта (lib/ai/client.ts → callClaudeHaiku),
-// тот же baseURL (claude-proxy) и retry/timeout, что и AI-чат-бот. Новый
-// Anthropic-клиент здесь НЕ создаётся.
+// Использует ЕДИНЫЙ Claude-клиент проекта (lib/ai/client.ts →
+// callClaudeHaikuWithUsage — вариант с usage, нужен для пер-вызовного лога
+// стоимости в ai_usage_log), тот же baseURL (claude-proxy) и retry/timeout,
+// что и AI-чат-бот. Новый Anthropic-клиент здесь НЕ создаётся.
 //
 // Возвращает { score: 0-100, reasoning } или бросает ошибку (модель не
 // ответила / JSON битый) — caller (processTestScoring ниже) ретраит и
@@ -10,11 +11,13 @@
 
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, testSubmissions, type PostDemoSettings } from "@/lib/db/schema"
+import { candidates, testSubmissions, vacancies, type PostDemoSettings } from "@/lib/db/schema"
 import { scheduleTestAfterMessage } from "@/lib/messaging/test-after-message"
 import { resolveOptionPoints, type ObjectiveResult, type StructuredAnswer } from "@/lib/score-test-objective"
 import type { Question } from "@/lib/course-types"
-import { callClaudeHaiku } from "@/lib/ai/client"
+import { callClaudeHaikuWithUsage } from "@/lib/ai/client"
+import { logAiCall } from "@/lib/ai/usage-log"
+import { AI_MODEL_FAST } from "@/lib/ai/models"
 
 const SYSTEM_PROMPT =
   "Ты — опытный HR-эксперт. Оцени ответ кандидата на тестовое задание по шкале " +
@@ -36,6 +39,8 @@ export async function scoreTestSubmission(args: {
   taskText:   string          // текст тестового задания (instructions)
   answerText: string          // ответ кандидата
   hrPrompt?:  string          // критерии оценки от HR (testAiPrompt)
+  /** tenantId для ai_usage_log — опционален (не ломаем существующие вызовы). */
+  tenantId?:  string | null
 }): Promise<TestScoreResult> {
   const hr = args.hrPrompt && args.hrPrompt.trim().length > 0
     ? args.hrPrompt.trim()
@@ -48,7 +53,16 @@ export async function scoreTestSubmission(args: {
     `\nВерни ТОЛЬКО JSON: {"score": <0-100>, "reasoning": "<обоснование>"}.`,
   ].join("\n")
 
-  const raw = await callClaudeHaiku(prompt, SYSTEM_PROMPT, 800)
+  const { text: raw, usage } = await callClaudeHaikuWithUsage(prompt, SYSTEM_PROMPT, 800)
+  if (args.tenantId) {
+    void logAiCall({
+      tenantId:     args.tenantId,
+      action:       "scoring_test",
+      model:        AI_MODEL_FAST,
+      inputTokens:  usage.input_tokens,
+      outputTokens: usage.output_tokens,
+    })
+  }
 
   const match = raw.match(/\{[\s\S]*\}/)
   if (!match) throw new Error("Ответ AI не содержит JSON")
@@ -72,7 +86,7 @@ const DEFAULT_PASSING_SCORE = 70
 const AI_SCORE_RETRY_DELAYS_MS = [3_000, 10_000]
 
 async function scoreWithRetry(
-  args: { taskText: string; answerText: string; hrPrompt?: string },
+  args: { taskText: string; answerText: string; hrPrompt?: string; tenantId?: string | null },
 ): Promise<TestScoreResult | null> {
   let lastErr: unknown
   for (let attempt = 0; attempt <= AI_SCORE_RETRY_DELAYS_MS.length; attempt++) {
@@ -196,6 +210,18 @@ export async function processTestScoring(args: {
   const hasObjective = !!objective && objective.maxPoints > 0
   const hasFreeText = freeText.trim().length > 0
 
+  // tenantId для ai_usage_log — компания вакансии (lookup только если реально
+  // будем звать AI, чтобы не тратить запрос зря на manual-режим/пустой ответ).
+  let tenantId: string | null = null
+  if (hasFreeText) {
+    const [vac] = await db
+      .select({ companyId: vacancies.companyId })
+      .from(vacancies)
+      .where(eq(vacancies.id, vacancyId))
+      .limit(1)
+    tenantId = vac?.companyId ?? null
+  }
+
   // Итоговый балл. Приоритет: объективный % (если есть оцениваемые баллы),
   // плюс усреднение с AI при наличии свободного текста. Если нет ни того, ни
   // другого — выходим (стадия test_task_done, HR проверит руками).
@@ -206,6 +232,7 @@ export async function processTestScoring(args: {
       taskText,
       answerText: freeText,
       hrPrompt: settings.testAiPrompt,
+      tenantId,
     })
     if (result) {
       finalScore = hasObjective

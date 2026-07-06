@@ -28,11 +28,19 @@ interface UsageRecent {
   userEmail: string | null
 }
 
+interface UsageByModel {
+  model: string
+  inputTokens: number
+  outputTokens: number
+  cost: number
+}
+
 interface UsagePayload {
   today: { tokens: number; cost: number }
   month: { tokens: number; cost: number }
   limit: number
   daily: { date: string; tokens: number; cost: number }[]
+  byModel: UsageByModel[]
   recent: UsageRecent[]
 }
 
@@ -298,6 +306,34 @@ export default function TokensPage() {
                       </ResponsiveContainer>
                     </div>
                   </div>
+
+                  {data.byModel && data.byModel.length > 0 && (
+                    <div>
+                      <h2 className="text-sm font-semibold mb-3">Расход по моделям (этот месяц)</h2>
+                      <TableCard>
+                        <DataTable>
+                          <DataHead>
+                            <DataHeadCell>Модель</DataHeadCell>
+                            <DataHeadCell align="right">Токены (вход)</DataHeadCell>
+                            <DataHeadCell align="right">Токены (выход)</DataHeadCell>
+                            <DataHeadCell align="right">Стоимость $</DataHeadCell>
+                          </DataHead>
+                          <tbody>
+                            {data.byModel.map((m) => (
+                              <DataRow key={m.model}>
+                                <DataCell className="text-xs font-medium">{m.model}</DataCell>
+                                <DataCell align="right" className="text-xs tabular-nums">{formatNumber(m.inputTokens)}</DataCell>
+                                <DataCell align="right" className="text-xs tabular-nums">{formatNumber(m.outputTokens)}</DataCell>
+                                <DataCell align="right" className="text-xs tabular-nums text-muted-foreground">
+                                  {formatUsd(m.cost)}
+                                </DataCell>
+                              </DataRow>
+                            ))}
+                          </tbody>
+                        </DataTable>
+                      </TableCard>
+                    </div>
+                  )}
 
                   <div>
                     <h2 className="text-sm font-semibold mb-3">Последние запросы</h2>

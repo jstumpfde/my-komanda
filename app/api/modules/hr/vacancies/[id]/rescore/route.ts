@@ -193,6 +193,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
               taskText: (testTask?.taskText as string) ?? "",
               answerText: sub.answerText,
               hrPrompt: (testTask?.aiPrompt as string | undefined) ?? undefined,
+              tenantId: vac.companyId,
             })
             await db.update(testSubmissions)
               .set({ aiScore: ts.score, aiReasoning: ts.reasoning })

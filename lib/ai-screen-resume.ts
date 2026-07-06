@@ -6,10 +6,14 @@
 // Модель: Haiku 4.5 — дешевле и быстрее, объём контента маленький.
 // На вход: hh-резюме поля + три ключевых anketa-критерия. На выход: число
 // 0..100, verdict (match|weak|stop) и короткое summary. Стоп-фактор → score=0.
+import { eq } from "drizzle-orm"
 import Anthropic from "@anthropic-ai/sdk"
+import { db } from "@/lib/db"
+import { vacancies } from "@/lib/db/schema"
 import { AI_SAFETY_PROMPT } from "@/lib/ai-safety"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import { addVacancyTokens } from "@/lib/ai/token-usage"
+import { logAiCall } from "@/lib/ai/usage-log"
 import { AI_MODEL_FAST } from "@/lib/ai/models"
 import { formatWorkHistory } from "@/lib/hh/extract-resume-fields"
 
@@ -225,6 +229,28 @@ ${buildWeightsSection(v.aiWeights)}` + AI_SAFETY_PROMPT
     const content = response.content[0]
     if (content.type !== "text") return null
     void addVacancyTokens(vacancyId, response.usage)
+    // tenantId для ai_usage_log — компания вакансии. vacancyId опционален
+    // (не все call-сайты его передают, см. lib/hh/client.ts) — без него лог
+    // пропускаем (нет tenantId — писать некуда), но addVacancyTokens выше
+    // отрабатывает независимо.
+    if (vacancyId) {
+      void (async () => {
+        const [vac] = await db
+          .select({ companyId: vacancies.companyId })
+          .from(vacancies)
+          .where(eq(vacancies.id, vacancyId))
+          .limit(1)
+        if (vac) {
+          void logAiCall({
+            tenantId:     vac.companyId,
+            action:       "scoring_resume",
+            model:        AI_MODEL_FAST,
+            inputTokens:  response.usage?.input_tokens,
+            outputTokens: response.usage?.output_tokens,
+          })
+        }
+      })()
+    }
     raw = content.text.trim()
   } catch (err) {
     console.warn("[screen-resume] API call failed:", err instanceof Error ? err.message : err)

@@ -15,6 +15,7 @@ import { eq, and, or, like, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { aiUsageLog, companies } from "@/lib/db/schema"
 import { getPlatformSetting, setPlatformSetting } from "@/lib/platform/settings"
+import { logAiCall } from "@/lib/ai/usage-log"
 
 export const AI_MONTHLY_TOKEN_LIMIT_KEY = "ai_monthly_token_limit"
 // Прежнее хардкод-значение — теперь платформенный дефолт, если в
@@ -106,7 +107,14 @@ export async function checkAiTokenLimit(companyId: string): Promise<TokenLimitCh
   return { allowed: true, used, limit }
 }
 
-/** Fire-and-forget логирование расхода токенов — не должно ронять основной запрос. */
+/**
+ * Fire-and-forget логирование расхода токенов — не должно ронять основной запрос.
+ *
+ * Тонкая обёртка над lib/ai/usage-log.ts::logAiCall (единая точка записи в
+ * ai_usage_log + расчёт cost_usd по прайс-таблице lib/ai/models.ts) — сохранена
+ * ради обратной совместимости импортов модуля знаний/AI-курсов (4 call-сайта).
+ * Новый код (скоринг и т.п.) должен импортировать logAiCall напрямую.
+ */
 export async function logAiUsage(params: {
   tenantId: string
   userId?: string | null
@@ -115,16 +123,5 @@ export async function logAiUsage(params: {
   outputTokens?: number
   model?: string | null
 }): Promise<void> {
-  try {
-    await db.insert(aiUsageLog).values({
-      tenantId: params.tenantId,
-      userId: params.userId || null,
-      action: params.action,
-      inputTokens: params.inputTokens ?? 0,
-      outputTokens: params.outputTokens ?? 0,
-      model: params.model || null,
-    })
-  } catch (err) {
-    console.error("[token-limits] logAiUsage failed", err)
-  }
+  return logAiCall(params)
 }

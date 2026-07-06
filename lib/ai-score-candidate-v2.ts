@@ -27,6 +27,7 @@ import {
 } from "@/lib/db/schema"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import { addVacancyTokens } from "@/lib/ai/token-usage"
+import { logAiCall } from "@/lib/ai/usage-log"
 import { buildExtractFactsPrompt } from "@/lib/ai/prompts/extract-facts"
 import { buildCompareRequirementsPrompt } from "@/lib/ai/prompts/compare-requirements"
 import {
@@ -299,6 +300,13 @@ export async function scoreCandidateV2(
     messages:    [{ role: "user", content: extractPrompt }],
   })
   void addVacancyTokens(vacancyId, extractMsg.usage)
+  void logAiCall({
+    tenantId:     vacancy.companyId,
+    action:       "scoring_portrait_extract",
+    model:        AI_MODEL_MAIN,
+    inputTokens:  extractMsg.usage?.input_tokens,
+    outputTokens: extractMsg.usage?.output_tokens,
+  })
   const extractText = extractMsg.content.find(b => b.type === "text")
   if (!extractText || extractText.type !== "text") {
     throw new Error("v2 Pass 1: AI не ответил")
@@ -322,6 +330,13 @@ export async function scoreCandidateV2(
     messages:    [{ role: "user", content: comparePrompt }],
   })
   void addVacancyTokens(vacancyId, compareMsg.usage)
+  void logAiCall({
+    tenantId:     vacancy.companyId,
+    action:       "scoring_portrait_compare",
+    model:        AI_MODEL_MAIN,
+    inputTokens:  compareMsg.usage?.input_tokens,
+    outputTokens: compareMsg.usage?.output_tokens,
+  })
   const compareText = compareMsg.content.find(b => b.type === "text")
   if (!compareText || compareText.type !== "text") {
     throw new Error("v2 Pass 2: AI не ответил")
