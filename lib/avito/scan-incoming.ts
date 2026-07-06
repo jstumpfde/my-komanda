@@ -38,6 +38,8 @@ import { and, eq, inArray, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { avitoIntegrations, candidates, followUpMessages, vacancies } from "@/lib/db/schema"
 import { classifyCandidateResponse } from "@/lib/ai/classify-candidate-response"
+import { pauseFollowUpAndEscalate } from "@/lib/followup/pause-and-escalate"
+import { decideIncomingMessageAction } from "@/lib/followup/decline-signal"
 import { processChatbotMessage } from "@/lib/ai/chatbot-processor"
 import { isBlockEnabled } from "@/lib/funnel-builder/runtime"
 import { matchStopWordList, matchStopWordWith } from "@/lib/followup/stop-words"
@@ -60,8 +62,8 @@ interface VacancyAutoResponder {
 
 const FAREWELL_MESSAGE = "Спасибо за отклик. Желаем удачи!"
 
-// Минимальная уверенность AI для авто-отказа (та же что в hh/scan-incoming).
-const REJECTION_CONFIDENCE_THRESHOLD = 0.9
+// Порог уверенности AI для авто-отказа и решение по intent/confidence —
+// см. lib/followup/decline-signal.ts (общее с hh/scan-incoming.ts).
 
 // ─── Типы ─────────────────────────────────────────────────────────────────────
 
@@ -84,12 +86,15 @@ export interface AvitoInboundMessage {
 
 // Результат одного прогона обработчика.
 export interface ScanAvitoIncomingResult {
-  processed:      number  // обработано пакетов (webhook-сообщений)
-  newCandidates:  number  // создано новых кандидатов
-  rejectedRegex:  number
-  rejectedAi:     number
-  wantsContact:   number
-  errors:         string[]
+  processed:          number  // обработано пакетов (webhook-сообщений)
+  newCandidates:      number  // создано новых кандидатов
+  rejectedRegex:      number
+  rejectedAi:         number
+  wantsContact:       number
+  // Инцидент 06.07: decline_requirement + rejection низкой уверенности —
+  // дожим на паузу + эскалация HR (не авто-отказ). См. lib/hh/scan-incoming.ts.
+  pausedNeedsReview:  number
+  errors:             string[]
 }
 
 // ─── Вспомогательные ─────────────────────────────────────────────────────────
@@ -531,7 +536,11 @@ export async function processAvitoInbound(
     return
   }
 
-  if (cls.intent === "rejection" && cls.confidence >= REJECTION_CONFIDENCE_THRESHOLD) {
+  // Решение — та же чистая функция, что и в lib/hh/scan-incoming.ts (юнит-тесты
+  // в lib/followup/decline-signal.test.ts).
+  const action = decideIncomingMessageAction(cls.intent, cls.confidence)
+
+  if (action.type === "auto_reject") {
     const sent = await applyRejection({
       candidateId,
       reason:           "ai_rejection",
@@ -542,9 +551,20 @@ export async function processAvitoInbound(
     })
     result.rejectedAi++
     console.info(`[avito/scan-incoming] ${candidateId} ai_rejection conf=${cls.confidence} farewell=${sent} text="${preview}"`)
-  } else if (cls.intent === "rejection") {
-    console.info(`[avito/scan-incoming] ${candidateId} ai_rejection_low_conf_SKIPPED conf=${cls.confidence} text="${preview}"`)
-  } else if (cls.intent === "wants_personal_contact") {
+  } else if (action.type === "pause_and_escalate") {
+    // decline_requirement (см. lib/hh/scan-incoming.ts, инцидент 06.07) —
+    // отказ от конкретного требования вакансии: НЕ авто-отказ, только пауза
+    // дожима + эскалация HR. rejection низкой уверенности — та же защита.
+    const esc = await pauseFollowUpAndEscalate({
+      candidateId,
+      vacancyId:    candVac.vacancyId,
+      incomingText: text,
+      reason:       action.reason,
+      confidence:   cls.confidence,
+    })
+    result.pausedNeedsReview++
+    console.info(`[avito/scan-incoming] ${candidateId} ${action.reason}_paused conf=${cls.confidence} already=${esc.alreadyPaused} notif=${esc.notificationSent} tg=${esc.telegramSent} text="${preview}"`)
+  } else if (action.type === "wants_contact") {
     await applyWantsContact(candidateId)
     result.wantsContact++
     console.info(`[avito/scan-incoming] ${candidateId} wants_contact conf=${cls.confidence} text="${preview}"`)
@@ -561,6 +581,7 @@ export async function scanAvitoIncomingMessages(
   const result: ScanAvitoIncomingResult = {
     processed: 0, newCandidates: 0,
     rejectedRegex: 0, rejectedAi: 0, wantsContact: 0,
+    pausedNeedsReview: 0,
     errors: [],
   }
 

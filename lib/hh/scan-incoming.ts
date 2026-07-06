@@ -27,6 +27,8 @@ import { hhResponses, candidates, followUpMessages, hhCandidates, vacancies, com
 // channelSources — используется ниже для проверки что hh-канал включён на вакансии.
 import { getValidToken } from "@/lib/hh-helpers"
 import { classifyCandidateResponse } from "@/lib/ai/classify-candidate-response"
+import { pauseFollowUpAndEscalate } from "@/lib/followup/pause-and-escalate"
+import { decideIncomingMessageAction } from "@/lib/followup/decline-signal"
 import { processChatbotMessage } from "@/lib/ai/chatbot-processor"
 import { getSpec } from "@/lib/core/spec/store"
 import { executeFunnelAction } from "@/lib/ai/funnel-execute"
@@ -260,12 +262,15 @@ async function applyWantsContact(candidateId: string): Promise<void> {
 }
 
 export interface ScanIncomingResult {
-  scanned:        number
-  newMessages:    number
-  rejectedRegex:  number
-  rejectedAi:     number
-  wantsContact:   number
-  errors:         string[]
+  scanned:           number
+  newMessages:       number
+  rejectedRegex:     number
+  rejectedAi:        number
+  wantsContact:      number
+  // Инцидент 06.07: decline_requirement + rejection низкой уверенности —
+  // дожим на паузу + эскалация HR (не авто-отказ).
+  pausedNeedsReview: number
+  errors:            string[]
 }
 
 export async function scanIncomingMessages(opts: {
@@ -279,6 +284,7 @@ export async function scanIncomingMessages(opts: {
   const result: ScanIncomingResult = {
     scanned: 0, newMessages: 0,
     rejectedRegex: 0, rejectedAi: 0, wantsContact: 0,
+    pausedNeedsReview: 0,
     errors: [],
   }
 
@@ -769,12 +775,12 @@ export async function scanIncomingMessages(opts: {
         break
       }
 
-      // ТЗ-3 Ч.3: автоотказ применяется ТОЛЬКО при высокой уверенности AI
-      // (≥0.9). Иначе кандидат остаётся в текущей стадии — HR разберёт сам.
-      // Защищает от ложных срабатываний классификатора (51%-уверенный отказ).
-      const REJECTION_CONFIDENCE_THRESHOLD = 0.9
+      // ТЗ-3 Ч.3 / инцидент 06.07: решение «авто-отказ / пауза+эскалация /
+      // wants_contact / лог» — чистая функция, юнит-тесты в
+      // lib/followup/decline-signal.test.ts (без БД/AI).
+      const action = decideIncomingMessageAction(cls.intent, cls.confidence)
 
-      if (cls.intent === "rejection" && cls.confidence >= REJECTION_CONFIDENCE_THRESHOLD) {
+      if (action.type === "auto_reject") {
         const sent = await applyRejection({
           candidateId,
           reason: "ai_rejection",
@@ -785,10 +791,21 @@ export async function scanIncomingMessages(opts: {
         result.rejectedAi++
         rejected = true
         console.info(`[scan-incoming] ${candidateId} ai_rejection_applied conf=${cls.confidence} farewell=${sent} text="${preview}"`)
-      } else if (cls.intent === "rejection") {
-        // confidence < 0.9 — НЕ отказываем, только лог для HR.
-        console.info(`[scan-incoming] ${candidateId} ai_rejection_low_conf_SKIPPED conf=${cls.confidence} text="${preview}"`)
-      } else if (cls.intent === "wants_personal_contact") {
+      } else if (action.type === "pause_and_escalate") {
+        // decline_requirement: явный отказ от КОНКРЕТНОГО требования вакансии —
+        // не общий отказ, авто-отказывать НЕ должны (осознанно только по
+        // стоп-факторам). rejection низкой уверенности: раньше только лог,
+        // дожим продолжал идти как ни в чём не бывало — часть инцидента 06.07.
+        const esc = await pauseFollowUpAndEscalate({
+          candidateId,
+          vacancyId: candVac.vacancyId,
+          incomingText: text,
+          reason: action.reason,
+          confidence: cls.confidence,
+        })
+        result.pausedNeedsReview++
+        console.info(`[scan-incoming] ${candidateId} ${action.reason}_paused conf=${cls.confidence} already=${esc.alreadyPaused} notif=${esc.notificationSent} tg=${esc.telegramSent} text="${preview}"`)
+      } else if (action.type === "wants_contact") {
         await applyWantsContact(candidateId)
         result.wantsContact++
         wantsContact = true

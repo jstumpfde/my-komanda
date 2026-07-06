@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
   // ─── Маршрутизация входящих ──────────────────────────────────────────────────
   // Отвечаем 200 сразу, обработку запускаем асинхронно (fire-and-forget).
   // Авито не ждёт результата обработки — только подтверждение получения.
-  const dummyResult = { processed: 0, newCandidates: 0, rejectedRegex: 0, rejectedAi: 0, wantsContact: 0, errors: [] as string[] }
+  const dummyResult = { processed: 0, newCandidates: 0, rejectedRegex: 0, rejectedAi: 0, wantsContact: 0, pausedNeedsReview: 0, errors: [] as string[] }
   void Promise.allSettled(
     messages.map(msg =>
       processAvitoInbound(msg, dummyResult).catch(err =>
