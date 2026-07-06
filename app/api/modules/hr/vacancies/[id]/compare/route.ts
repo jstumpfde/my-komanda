@@ -5,9 +5,10 @@
 // роутом по share-токену).
 import { eq, and, inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { vacancies, candidates, compareSets } from "@/lib/db/schema"
+import { vacancies, candidates, compareSets, hhResponses } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { buildComparison } from "@/lib/compare/build-comparison"
+import { extractAllContacts } from "@/lib/hh/extract-resume-fields"
 
 const MAX_COMPARE = 50
 
@@ -46,23 +47,51 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     const result = await buildComparison(vacancyId, ids)
     if (result.candidates.length === 0) return apiError("No candidates", 404)
 
-    // Город + дата рождения — только в HR-роуте (в публичную ссылку не отдаём).
-    // Скоупим только кандидатов этой вакансии + компании (tenant-изоляция).
+    // Город + дата рождения + телефон/предпочтительный контакт — только в
+    // HR-роуте (в публичную ссылку не отдаём). Скоупим только кандидатов этой
+    // вакансии + компании (tenant-изоляция).
     const info = await db
-      .select({ id: candidates.id, city: candidates.city, birthDate: candidates.birthDate })
+      .select({
+        id: candidates.id,
+        city: candidates.city,
+        birthDate: candidates.birthDate,
+        phone: candidates.phone,
+        hhRawData: hhResponses.rawData,
+      })
       .from(candidates)
       .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
+      .leftJoin(
+        hhResponses,
+        and(eq(hhResponses.localCandidateId, candidates.id), eq(hhResponses.companyId, user.companyId)),
+      )
       .where(and(
         inArray(candidates.id, ids),
         eq(vacancies.id, vacancyId),
         eq(vacancies.companyId, user.companyId),
       ))
     const infoById = new Map(info.map((r) => [r.id, r]))
-    const candidatesWithInfo = result.candidates.map((c) => ({
-      ...c,
-      city: infoById.get(c.id)?.city ?? null,
-      birthDate: infoById.get(c.id)?.birthDate ?? null,
-    }))
+    const candidatesWithInfo = result.candidates.map((c) => {
+      const row = infoById.get(c.id)
+      // Предпочтительный способ связи из hh (extractAllContacts — общий
+      // сборщик, не дублируем парсер) — показываем только если он НЕ телефон
+      // (кнопка звонка уже есть отдельно из candidates.phone).
+      const raw = row?.hhRawData as { resume?: unknown } | null | undefined
+      const resume = raw && typeof raw === "object"
+        ? (raw.resume ?? (("contact" in raw) ? raw : undefined))
+        : undefined
+      const allContacts = resume ? extractAllContacts(resume) : []
+      const PHONE_TYPES = new Set(["cell", "home", "work"])
+      const preferred = allContacts.find((c2) => c2.preferred && !PHONE_TYPES.has(c2.typeId)) ?? null
+      return {
+        ...c,
+        city: row?.city ?? null,
+        birthDate: row?.birthDate ?? null,
+        phone: row?.phone ?? null,
+        preferredContact: preferred
+          ? { typeId: preferred.typeId, typeLabel: preferred.typeLabel, display: preferred.display, href: preferred.href, comment: preferred.comment }
+          : null,
+      }
+    })
 
     return apiSuccess({ ...result, candidates: candidatesWithInfo })
   } catch (err) {
