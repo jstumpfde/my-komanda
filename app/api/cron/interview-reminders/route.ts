@@ -6,6 +6,7 @@ import { checkCronAuth } from "@/lib/cron/auth"
 import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { sendToCompanyChannel } from "@/lib/telegram/send-to-company"
 import { sendCandidateMessage } from "@/lib/prequalification/start"
+import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
 
 // C6 + #27: напоминания об интервью (за сутки / утром в день встречи / за 2 ч / за час).
 //
@@ -33,7 +34,7 @@ import { sendCandidateMessage } from "@/lib/prequalification/start"
 // Protected by X-Cron-Secret header.
 
 const H = 60 * 60 * 1000
-const APP_ORIGIN = "https://company24.pro"
+const APP_ORIGIN = getAppBaseUrl()
 
 // Локальный час (0-23) даты в заданной TZ.
 function localHour(d: Date, tz: string): number {

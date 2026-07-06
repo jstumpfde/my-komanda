@@ -10,6 +10,7 @@ import { pickGivenName } from "@/lib/messaging/candidate-name"
 import { getLearnedNamesSet } from "@/lib/messaging/learned-given-names"
 import { logAudit, ipFromRequest } from "@/lib/audit/log"
 import { DEFAULT_TEST_INVITE_TEXT } from "@/lib/messaging/test-invite"
+import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
 
 // GET  /api/modules/hr/vacancies/[id]/export-candidates
 //   — выгружает ВСЕХ кандидатов вакансии со ВСЕМИ полями (обратная совместимость,
@@ -369,7 +370,7 @@ async function buildXlsx(
     // Ссылка на тест: /test/{shortId} если есть, иначе /test/{token}.
     // token к этому моменту гарантированно заполнен (дозаполнили выше).
     const testSlug = c.shortId ?? c.token
-    const testLink = testSlug ? `https://company24.pro/test/${testSlug}` : ""
+    const testLink = testSlug ? `${getAppBaseUrl()}/test/${testSlug}` : ""
     // Готовое сообщение: ИМЯ кандидата (не фамилия) + шаблон + ссылка.
     // hh хранит имя/фамилию раздельно, НО кандидат мог вписать их наоборот
     // (first_name=«Макаренко»). Имя определяет единый резолвер по словарю.

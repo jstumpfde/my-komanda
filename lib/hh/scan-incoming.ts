@@ -38,6 +38,7 @@ import { extractHhResumeFields } from "@/lib/hh/extract-resume-fields"
 import { matchCallIntentKeyword, renderInsistTemplate } from "@/lib/messaging/call-intent"
 import { matchStopWordList, matchStopWordWith } from "@/lib/followup/stop-words"
 import { getBaselineStopWords } from "@/lib/followup/effective-stop-words"
+import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
 import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
 import { processPrequalificationAnswer } from "@/lib/prequalification/process-answer"
 import { matchFaqReply, resolveStopWordFarewellText, readStopWordStageAction, type FaqEntry, type StopWordStageAction } from "@/lib/auto-responder/match-faq"
@@ -512,7 +513,7 @@ export async function scanIncomingMessages(opts: {
         if (faqReply) {
           const { firstName } = await getCandidateFirstName(candidateId)
           const tokenForUrl = candVac?.candShortId ?? candVac?.candToken ?? candidateId
-          const demoLink = `https://company24.pro/demo/${tokenForUrl}`
+          const demoLink = `${getAppBaseUrl()}/demo/${tokenForUrl}`
           const rendered = renderTemplate(faqReply, {
             name:      firstName,
             vacancy:   candVac?.vacancyTitle ?? "",
@@ -747,7 +748,7 @@ export async function scanIncomingMessages(opts: {
             const tpl     = customs[count] ?? DEFAULT_INSIST_DEMO_MESSAGES[count]
             const { firstName } = await getCandidateFirstName(candidateId)
             const tokenForUrl = candVac?.candShortId ?? candVac?.candToken ?? candidateId
-            const demoLink = `https://company24.pro/demo/${tokenForUrl}`
+            const demoLink = `${getAppBaseUrl()}/demo/${tokenForUrl}`
             const message = renderInsistTemplate(tpl, {
               name:     firstName,
               vacancy:  candVac?.vacancyTitle ?? "",

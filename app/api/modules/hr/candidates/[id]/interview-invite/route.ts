@@ -20,6 +20,7 @@ import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
 import { DEFAULT_SCHEDULE_INVITE_TEXT } from "@/lib/messaging/schedule-invite"
 import { fetchScheduleData } from "@/app/(public)/schedule/[token]/schedule-data"
+import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
 
 export async function GET(
   _req: NextRequest,
@@ -47,7 +48,7 @@ export async function GET(
     if (!row) return apiError("Candidate not found", 404)
 
     const tokenForUrl = row.shortId ?? row.token ?? row.candidateId
-    const scheduleLink = `https://company24.pro/schedule/${tokenForUrl}`
+    const scheduleLink = `${getAppBaseUrl()}/schedule/${tokenForUrl}`
 
     // Слоты интервью (Режим Б). Переиспользуем публичный резолвер — он берёт
     // окна из hiring_defaults.schedule и исключает занятые события календаря.

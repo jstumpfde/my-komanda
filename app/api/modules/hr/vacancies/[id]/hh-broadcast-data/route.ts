@@ -10,6 +10,7 @@ import { pickGivenName } from "@/lib/messaging/candidate-name"
 import { getLearnedNamesSet } from "@/lib/messaging/learned-given-names"
 import { DEFAULT_TEST_INVITE_TEXT } from "@/lib/messaging/test-invite"
 import { nanoid } from "nanoid"
+import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
 
 // POST /api/modules/hr/vacancies/[id]/hh-broadcast-data
 // body: { candidateIds: string[] }
@@ -150,7 +151,7 @@ export async function POST(
       const firstName = pickGivenName({ hhFirst: hh?.hhFirst, hhLast: hh?.hhLast, fullName, learned })
 
       const testSlug = c.shortId ?? c.token
-      const testLink = testSlug ? `https://company24.pro/test/${testSlug}` : ""
+      const testLink = testSlug ? `${getAppBaseUrl()}/test/${testSlug}` : ""
 
       const personalMessage = inviteTpl
         .replaceAll("{{name}}", firstName)

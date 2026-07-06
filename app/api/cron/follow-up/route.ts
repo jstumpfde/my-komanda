@@ -18,6 +18,7 @@ import {
 } from "@/lib/messaging/send-priority"
 import { decideDozhimMutex } from "@/lib/messaging/dozhim-mutex"
 import { decidePortraitGate } from "@/lib/followup/portrait-gate"
+import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
 
 // POST /api/cron/follow-up
 // Отправляет очередную порцию касаний из follow_up_messages кандидатам
@@ -728,9 +729,9 @@ async function processOneTouch(
   // реферальный редирект в /demo/[token]/page.tsx (уводит на чужого/первое демо),
   // а token его не триггерит → отдаётся override-блок «Путь менеджера».
   const demoTokenForUrl = isSecondDemoInvite ? (cand?.token ?? cand?.shortId ?? msg.candidateId) : tokenForUrl
-  const demoUrl      = `https://company24.pro/demo/${demoTokenForUrl}`
-  const testUrl      = `https://company24.pro/test/${tokenForUrl}`
-  const scheduleUrl  = `https://company24.pro/schedule/${tokenForUrl}`
+  const demoUrl      = `${getAppBaseUrl()}/demo/${demoTokenForUrl}`
+  const testUrl      = `${getAppBaseUrl()}/test/${tokenForUrl}`
+  const scheduleUrl  = `${getAppBaseUrl()}/schedule/${tokenForUrl}`
 
   // {{company}} — реальное название компании вакансии (раньше было
   // захардкожено «Company24»). {{manager}} — имя ответственного за вакансию
