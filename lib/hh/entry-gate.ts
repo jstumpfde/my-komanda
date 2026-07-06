@@ -12,32 +12,47 @@
  *
  * Это ЧИСТАЯ (без БД/IO) функция-решение — юнит-тестируется без моков.
  * Вызывающая сторона (process-queue.ts) сама решает, что делать с результатом:
- *   "reject" — НЕ слать первое сообщение, поставить пред. отказ
- *              (scheduleRejection reason="portrait_below_threshold").
- *   "send"   — вести себя как раньше (этот гейт ни на что не влияет).
- *   "wait"   — резюме ещё не оценено (score IS NULL, скоринг упал/не запускался) —
- *              не отказывать и не слать, оставить на следующий тик очереди
- *              (как ведёт себя очередь и сейчас до появления resume_score).
+ *   "reject"         — НЕ слать первое сообщение, поставить пред. отказ через
+ *                       scheduleRejection (rejectAction="pending_rejection").
+ *   "pending_manual" — НЕ слать первое сообщение, ПОМЕТИТЬ кандидата на ручной
+ *                       разбор HR БЕЗ таймера (rejectAction="pending_manual",
+ *                       та же семантика, что anketaPassInvite.failAction=
+ *                       "pending_manual" в answer/route.ts — pendingRejectionAt
+ *                       остаётся NULL, письмо не планируется и не уходит само).
+ *   "send"           — вести себя как раньше (этот гейт ни на что не влияет).
+ *   "wait"           — резюме ещё не оценено (score IS NULL, скоринг упал/не
+ *                       запускался) — не отказывать и не слать, оставить на
+ *                       следующий тик очереди (как ведёт себя очередь и сейчас
+ *                       до появления resume_score).
  *
- * Семантика «пороги ЗАДАНЫ» (Юрий): HR явно включил зону отказа — тот же
- * маркер, что красная зона в UI «Портрета» (spec-editor.tsx, rt.autoRejectEnabled).
- * enabled=false ИЛИ autoRejectEnabled=false ИЛИ lowerThreshold<=0 → пороги
- * «не заданы» → легаси-поведение байт-в-байт (гейт ничего не делает).
+ * Семантика «пороги ЗАДАНЫ» (Юрий 06.07, дополнение): HR явно выбрал сценарий
+ * зоны отказа ≠ "none" — тот же маркер, что раньше был тумблером rt.
+ * autoRejectEnabled, теперь трёхвариантный селект rt.rejectAction. enabled=false
+ * ИЛИ rejectAction="none" ИЛИ lowerThreshold<=0 → пороги «не заданы» → легаси-
+ * поведение байт-в-байт (гейт ничего не делает).
  */
 
 export const PORTRAIT_BELOW_THRESHOLD_REASON = "portrait_below_threshold"
 
+/** Три сценария входного гейта — см. lib/core/spec/types.ts ResumeThresholdsSchema.rejectAction. */
+export type EntryGateRejectAction = "none" | "pending_manual" | "pending_rejection"
+
 export interface EntryGateThresholds {
   /** Блок порогов включён (spec.resumeThresholds.enabled). */
   enabled: boolean
-  /** Зона отказа явно задана HR (spec.resumeThresholds.autoRejectEnabled). */
-  autoRejectEnabled: boolean
+  /**
+   * Сценарий зоны отказа (spec.resumeThresholds.rejectAction). Вызывающая
+   * сторона (process-queue.ts) передаёт производное поле схемы (transform
+   * в types.ts уже держит его в синхроне с legacy autoRejectEnabled).
+   */
+  rejectAction: EntryGateRejectAction
   /** Нижний порог (spec.resumeThresholds.lowerThreshold). */
   lowerThreshold: number
 }
 
 export type EntryGateDecision =
   | { action: "reject"; score: number; threshold: number }
+  | { action: "pending_manual"; score: number; threshold: number }
   | { action: "send" }
   | { action: "wait" }
 
@@ -47,7 +62,7 @@ export type EntryGateDecision =
  */
 export function isEntryGateConfigured(t: EntryGateThresholds | null | undefined): boolean {
   if (!t) return false
-  return t.enabled === true && t.autoRejectEnabled === true && t.lowerThreshold > 0
+  return t.enabled === true && t.rejectAction !== "none" && t.lowerThreshold > 0
 }
 
 /**
@@ -62,7 +77,7 @@ export function decideEntryGate(
   score: number | null | undefined,
   thresholds: EntryGateThresholds | null | undefined,
 ): EntryGateDecision {
-  // Пороги не заданы (нет Spec / блок выключен / зона отказа не включена /
+  // Пороги не заданы (нет Spec / блок выключен / сценарий "none" /
   // порог 0) → поведение прежнее, гейт не вмешивается.
   if (!isEntryGateConfigured(thresholds)) return { action: "send" }
 
@@ -72,7 +87,9 @@ export function decideEntryGate(
 
   const t = thresholds as EntryGateThresholds
   if (score < t.lowerThreshold) {
-    return { action: "reject", score, threshold: t.lowerThreshold }
+    return t.rejectAction === "pending_manual"
+      ? { action: "pending_manual", score, threshold: t.lowerThreshold }
+      : { action: "reject", score, threshold: t.lowerThreshold }
   }
   return { action: "send" }
 }

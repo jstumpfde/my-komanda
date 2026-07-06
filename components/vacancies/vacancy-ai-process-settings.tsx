@@ -82,13 +82,23 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
   }, [initialAiScoringEnabled])
 
   // Гарантируем upper > lower + MIN_GAP.
+  //
+  // Хардненинг 06.07 (расследование инцидента вакансии 6916): коррекция
+  // читала `lower`/`upper` из обычных переменных-замыканий хэндлера. Slider
+  // на один непрерывный драг шлёт onValueChange МНОГО раз подряд — если React
+  // применит несколько таких вызовов до следующего рендера, замыкание видит
+  // УСТАРЕВШЕЕ значение соседнего порога вместо только что установленного тем
+  // же драгом. Функциональная форма setState (prev => ...) всегда читает
+  // значение, актуальное на момент применения обновления, а не замыкание —
+  // убирает эту гонку независимо от того, сколько onValueChange прилетело
+  // подряд в одном тике.
   const handleUpper = (v: number) => {
     setUpper(v)
-    if (lower >= v - MIN_GAP) setLower(Math.max(0, v - MIN_GAP))
+    setLower(prevLower => (prevLower >= v - MIN_GAP ? Math.max(0, v - MIN_GAP) : prevLower))
   }
   const handleLower = (v: number) => {
     setLower(v)
-    if (upper <= v + MIN_GAP) setUpper(Math.min(100, v + MIN_GAP))
+    setUpper(prevUpper => (prevUpper <= v + MIN_GAP ? Math.min(100, v + MIN_GAP) : prevUpper))
   }
 
   const handleSave = async () => {

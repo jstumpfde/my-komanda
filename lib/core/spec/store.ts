@@ -13,7 +13,7 @@ import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancySpecs } from "@/lib/db/schema"
 import type { CandidateSpec } from "./types"
-import { normalizeMustHave, normalizeNiceToHave, normalizeDealBreakers } from "./types"
+import { CandidateSpecSchema, normalizeMustHave, normalizeNiceToHave, normalizeDealBreakers } from "./types"
 
 // Исполнитель запросов: глобальный db ИЛИ tx внутри db.transaction — чтобы
 // saveSpec можно было вызвать атомарно вместе с другими записями (ТЗ №3).
@@ -24,6 +24,20 @@ type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0]
 /**
  * Возвращает CandidateSpec из vacancy_specs или null, если записи нет.
  * null = новый контур для этой вакансии ещё не активирован → нужен buildSpecFromLegacy.
+ *
+ * БАГФИКС 06.07 (двойной инцидент, вакансия 6916): раньше JSON из БД отдавался
+ * СЫРЫМ приведением типа (`as CandidateSpec`), без прогона через Zod. Строка/
+ * партия могла быть записана ДО появления нового поля схемы (напр.
+ * rejectionDelayMinutes) — тогда объект приходил в UI с этим полем = undefined.
+ * UI спреды (`{...rt, otherField: x}`) переносили этот undefined дальше, а
+ * JSON.stringify молча ВЫРЕЗАЕТ ключи с undefined из тела PUT-запроса — на
+ * сервере Zod видел поле отсутствующим и подставлял ДЕФОЛТ схемы (rejectionDelay
+ * → 60), затирая то, что реально стояло/вводилось. Прогон через
+ * CandidateSpecSchema.safeParse() на ЧТЕНИИ бэкфиллит все отсутствующие поля
+ * дефолтами СРАЗУ (получаем законченный объект без undefined-дыр), поэтому
+ * дальнейшие patch()-спреды в UI больше не могут «потерять» поле. Невалидные
+ * записи (не должны появляться, но на всякий случай) — возвращаем как есть,
+ * чтобы не уронить рантайм скоринга.
  */
 export async function getSpec(vacancyId: string): Promise<CandidateSpec | null> {
   const [row] = await db
@@ -33,6 +47,11 @@ export async function getSpec(vacancyId: string): Promise<CandidateSpec | null> 
     .limit(1)
 
   if (!row) return null
+  const parsed = CandidateSpecSchema.safeParse(row.spec)
+  if (parsed.success) return parsed.data
+  // Не должно происходить (saveSpec всегда пишет валидированные данные), но
+  // если старая/повреждённая запись всё же не проходит схему целиком —
+  // не роняем рантайм скоринга, отдаём как было.
   return row.spec as CandidateSpec
 }
 

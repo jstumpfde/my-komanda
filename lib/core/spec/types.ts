@@ -85,7 +85,7 @@ export type MidRangeAction = z.infer<typeof MidRangeActionSchema>
  */
 
 /** Пороги ОЦЕНКИ РЕЗЮМЕ + маршрутизация. Legacy-источник: vacancies.ai_process_settings. */
-export const ResumeThresholdsSchema = z.object({
+const ResumeThresholdsObjectSchema = z.object({
   /** Включён ли блок оценки резюме. Выкл — скоринг резюме не применяется
    *  (HR может отключить, чтобы не пользоваться). По умолчанию ВКЛ. */
   enabled:           z.boolean().default(true),
@@ -98,8 +98,30 @@ export const ResumeThresholdsSchema = z.object({
   /**
    * Реальный авто-отказ при score < lower (отправляет discard через hh).
    * По умолчанию ВЫКЛ — кандидаты идут в keep_new (ручной разбор).
+   * DEPRECATED (обратная совместимость): заменён на rejectAction (три сценария).
+   * Оставлен как ПРОИЗВОДНОЕ поле — старый код, читающий его напрямую
+   * (lib/hh/entry-gate.ts::EntryGateThresholds, легаси-читатели), продолжает
+   * работать байт-в-байт. Пишется автоматически из rejectAction на выходе
+   * схемы (см. .transform() ниже) — вручную задавать не нужно.
    */
-  autoRejectEnabled: z.boolean().default(false),
+  autoRejectEnabled: z.boolean().optional(),
+  /**
+   * Сценарий действия при score < lowerThreshold (Юрий 06.07, дополнение к
+   * инциденту вакансии 6916 — три равноправных сценария вместо одного тумблера):
+   *   "none"              — ничего не делать (легаси-эквивалент autoRejectEnabled=false).
+   *   "pending_manual"    — пометить кандидата (autoProcessingStoppedReason=
+   *                         portrait_below_threshold) на РУЧНОЙ разбор HR, БЕЗ
+   *                         таймера — письмо НЕ планируется и НЕ уходит само
+   *                         (см. answer/route.ts failAction="pending_manual" —
+   *                         та же семантика: pendingRejectionAt=NULL, cron
+   *                         pending-rejections такие не трогает).
+   *   "pending_rejection" — текущее поведение: scheduleRejection с задержкой
+   *                         rejectionDelayMinutes (легаси-эквивалент
+   *                         autoRejectEnabled=true).
+   * Легаси-маппинг (обратная совместимость старых Spec без этого поля):
+   * autoRejectEnabled=false → "none", autoRejectEnabled=true → "pending_rejection".
+   */
+  rejectAction: z.enum(["none", "pending_manual", "pending_rejection"]).optional(),
   /**
    * Авто-приглашение: сильных (score >= upper) и прошедших середину система
    * сама зовёт на следующий этап. По умолчанию ВЫКЛ (решение Юрия): сильный
@@ -153,6 +175,28 @@ export const ResumeThresholdsSchema = z.object({
    * Дефолт 60 (1 ч) — решение Юрия.
    */
   rejectionDelayMinutes: z.number().int().min(0).default(60),
+})
+
+/**
+ * rejectAction ⇄ autoRejectEnabled — держим ОБА поля синхронными на выходе
+ * схемы, независимо от того, какое из двух пришло на входе (новый UI шлёт
+ * rejectAction; старые сохранённые Spec/легаси-код читают autoRejectEnabled):
+ *   - rejectAction задан явно → autoRejectEnabled ПРОИЗВОДНОЕ от него
+ *     ("pending_rejection" → true, иначе false), даже если пришло и то, и
+ *     другое (rejectAction побеждает — источник истины теперь он).
+ *   - rejectAction НЕ задан (старый Spec без поля) → бэкфилл из
+ *     autoRejectEnabled (false → "none", true → "pending_rejection") —
+ *     байт-в-байт со старым поведением.
+ *   - ни то, ни другое не задано → дефолты схемы (rejectAction="none",
+ *     autoRejectEnabled=false).
+ */
+export const ResumeThresholdsSchema = ResumeThresholdsObjectSchema.transform((rt) => {
+  const rejectAction = rt.rejectAction ?? (rt.autoRejectEnabled === true ? "pending_rejection" : "none")
+  return {
+    ...rt,
+    rejectAction,
+    autoRejectEnabled: rejectAction === "pending_rejection",
+  }
 })
 export type ResumeThresholds = z.infer<typeof ResumeThresholdsSchema>
 

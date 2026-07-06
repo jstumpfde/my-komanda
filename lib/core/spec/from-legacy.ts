@@ -204,6 +204,11 @@ export function buildSpecFromLegacy(vacancy: LegacyVacancyInput): CandidateSpec 
     upperThreshold:       Math.max(0, Math.min(100, upper)),
     lowerThreshold:       Math.max(0, Math.min(100, lower)),
     midRangeAction:       midRange,
+    // rejectAction — источник истины (Юрий 06.07, три сценария вместо тумблера).
+    // Легаси-маппинг байт-в-байт: autoRejectEnabled=false → "none", true →
+    // "pending_rejection" (тот же маппинг, что ResumeThresholdsSchema.transform
+    // в types.ts применяет при чтении старых Spec без явного rejectAction).
+    rejectAction:         autoReject ? "pending_rejection" : "none",
     autoRejectEnabled:    autoReject,
     autoInviteEnabled:    bool((ai as Record<string, unknown>).autoInviteEnabled, false),  // legacy не звал автоматически
     inviteNextStep:       "demo",
