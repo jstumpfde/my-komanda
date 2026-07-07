@@ -853,7 +853,9 @@ export default function VacancyPage() {
         demoAnswered: false,
         // «Отказ» должен реально показать отказников — excludeRejected на
         // сервере иначе вычеркнет rejected несмотря на stage-фильтр.
-        hideRejected: key === "rejected" ? false : f.hideRejected,
+        // Не наследуем hideRejected с прошлого клика (guard-minor 07.07):
+        // «отказ» → «интервью» оставлял тумблер «Показать отказы» включённым.
+        hideRejected: key === "rejected" ? false : true,
       }))
     }
     if (useListPaginated) paginated.setPage(1)
