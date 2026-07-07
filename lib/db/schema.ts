@@ -16,6 +16,7 @@ import {
   uniqueIndex,
   numeric,
 } from "drizzle-orm/pg-core"
+import { sql } from "drizzle-orm"
 
 // ─── Modules ──────────────────────────────────────────────────────────────────
 
@@ -4353,3 +4354,44 @@ export const priceMonitorSettings = pgTable("price_monitor_settings", {
 })
 export type PriceMonitorSettings    = typeof priceMonitorSettings.$inferSelect
 export type NewPriceMonitorSettings = typeof priceMonitorSettings.$inferInsert
+
+// ─── Сторож найма (drizzle/0260) ───────────────────────────────────────────
+// Платформенный крон /api/cron/hiring-watchdog периодически проверяет, что по
+// вакансиям компаний всё работает (hh-токен, импорт откликов, разбор очереди,
+// отправки, кроны, AI-скоринг). Что может — чинит сам (см. lib/hiring-watchdog/*),
+// что не может — пишет сюда алерт: CRITICAL летит в Telegram немедленно,
+// warning только в UI (баннер components/dashboard/admin-alerts-banner.tsx).
+//
+// companyId=NULL — платформенный алерт (например, «крон не бежал N минут»),
+// виден только platform_admin. company-level алерт виден директору компании.
+//
+// dedupKey — стабильный ключ инцидента (напр. "hh_token_dead:<companyId>"):
+// пока открытый алерт с таким ключом существует, повторные прогоны крона НЕ
+// создают дубли — только обновляют существующую строку при желании (сейчас —
+// просто скип, апдейт message не требуется по ТЗ). Когда проблема исчезает —
+// крон сам переводит алерт в resolved (autoResolved=true).
+export const adminAlerts = pgTable("admin_alerts", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  companyId:   uuid("company_id").references(() => companies.id, { onDelete: "cascade" }), // NULL = платформенный
+  severity:    text("severity").notNull(), // 'critical' | 'warning' | 'info'
+  source:      text("source").notNull(), // напр. 'hiring_watchdog'
+  dedupKey:    text("dedup_key").notNull(),
+  title:       text("title").notNull(),
+  message:     text("message").notNull(),
+  actionUrl:   text("action_url"), // куда вести админа (кнопка «Перейти»)
+  status:      text("status").notNull().default("open"), // 'open' | 'acked' | 'resolved'
+  createdAt:   timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  ackedAt:     timestamp("acked_at", { withTimezone: true }),
+  ackedBy:     uuid("acked_by").references(() => users.id),
+  resolvedAt:  timestamp("resolved_at", { withTimezone: true }),
+  autoResolved: boolean("auto_resolved").notNull().default(false),
+}, (t) => [
+  // Один открытый алерт на инцидент — повторные прогоны крона видят
+  // существующую строку и не плодят дубли. Partial index (только status='open')
+  // намеренно: после resolve тот же dedup_key может открыться заново позже.
+  uniqueIndex("admin_alerts_open_dedup_idx").on(t.dedupKey).where(sql`${t.status} = 'open'`),
+  index("admin_alerts_company_status_idx").on(t.companyId, t.status),
+  index("admin_alerts_created_idx").on(t.createdAt),
+])
+export type AdminAlert    = typeof adminAlerts.$inferSelect
+export type NewAdminAlert = typeof adminAlerts.$inferInsert
