@@ -22,6 +22,7 @@ import { getPlatformSetting } from "@/lib/platform/settings"
 import { sendTelegramAlert } from "@/lib/notifications/telegram"
 import { MESSAGE_GUARD_ALERTS_KEY } from "@/lib/messaging/guard-alert"
 import {
+import { escapeHtml } from "@/lib/tip/bot/telegram"
   isHoneypotTripped,
   isWithinLandingLeadRateLimit,
   LANDING_LEAD_RATE_LIMIT_MESSAGE,
@@ -116,12 +117,16 @@ async function notifyLandingLead(lead: {
   const chatId = cfg?.chatId
   if (!chatId) return
 
+  // Guard-major 07.07: поля формы — анонимный ввод, а алерт уходит с
+  // parse_mode=HTML. Без экранирования обычный «R&D» или «зарплата < 100к»
+  // в комментарии ронял отправку (Telegram 400), и уведомление о лиде
+  // тихо терялось; крафтовые теги — инъекция разметки в канал владельца.
   const parts = [
-    lead.name,
-    lead.contact,
-    INTEREST_LABEL[lead.interest] ?? lead.interest,
-    lead.company || null,
-    lead.comment || null,
+    escapeHtml(lead.name),
+    escapeHtml(lead.contact),
+    escapeHtml(INTEREST_LABEL[lead.interest] ?? lead.interest),
+    lead.company ? escapeHtml(lead.company) : null,
+    lead.comment ? escapeHtml(lead.comment) : null,
   ].filter(Boolean)
 
   const text = `🔥 <b>Заявка с лендинга</b>: ${parts.join(" · ")}`
