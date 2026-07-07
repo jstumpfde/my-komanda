@@ -7,7 +7,13 @@
  * PUT  /api/core/spec/[vacancyId]
  *   Сохраняет CandidateSpec. Валидация через CandidateSpecSchema (zod).
  *
- * СТАТУС: СПЯЩИЙ КОД. Не используется рантаймом скоринга/чат-бота.
+ * СТАТУС (уточнено 07.07 — старый комментарий "спящий код" устарел):
+ * vacancy_specs читается рантаймом AI-скоринга резюме (lib/hh/process-queue.ts
+ * → getSpec(), гейт isSpecScoringEnabled, включён по умолчанию для всех
+ * вакансий) — Spec НЕ спит. НЕ используется только чат-ботом. Жёсткий
+ * авто-отказ (matchStopFactors) по-прежнему читает исключительно
+ * vacancies.stop_factors_json напрямую (не Spec) — см. syncStopFactorsToLegacy
+ * ниже, который держит их в синхроне при сохранении здесь.
  * Авторизация: requireCompany — любой пользователь компании может читать/писать.
  * Для записи дополнительно проверяем, что вакансия принадлежит companyId.
  */
@@ -87,6 +93,51 @@ async function mirrorSpecToLegacy(
       stopFactorsJson:   mergedStopFactors,
     })
     .where(eq(vacancies.id, vacancyId))
+}
+
+/**
+ * ВСЕГДА-включённый синк СТОП-ФАКТОРОВ Портрета в боевое хранилище — НЕ за
+ * флагом SPEC_MIRROR_TO_LEGACY (unify 07.07, инцидент вакансии 2604V023).
+ *
+ * КОНТЕКСТ: до этой правки spec.stopFactors (редактор «Портрет»,
+ * components/vacancies/spec-editor.tsx) сохранялся ТОЛЬКО в vacancy_specs —
+ * отдельный карман, полностью отвязанный от vacancies.stop_factors_json
+ * (единственное, что реально читает lib/hh/process-queue.ts →
+ * matchStopFactors() для жёсткого авто-отказа кандидатов hh.ru). Полный
+ * dual-write mirrorSpecToLegacy() уже существовал, но был спрятан за
+ * SPEC_MIRROR_TO_LEGACY (по умолчанию OFF) и заодно трогал requirementsJson/
+ * aiProcessSettings — более широкий и рискованный охват, чем нужно здесь.
+ * Эта функция — узкий срез: синкает ТОЛЬКО stopFactors, всегда, аналогично
+ * syncPortraitMessagingToLegacy ниже (та же схема: критично для реального
+ * поведения кандидатов → не должно зависеть от флага).
+ *
+ * MERGE поверх текущего боевого stopFactorsJson (не перезапись) — сохраняет
+ * rejectionText и любые факторы, заданные через «Настройки вакансии»
+ * (vacancy-stop-factors-settings.tsx), которых нет в Spec-редакторе (сейчас
+ * таких нет — оба редактора покрывают один набор ключей, но merge защищает
+ * от будущего расхождения). Только ключи из specToLegacy().stopFactorsJson —
+ * т.е. только те, что boевое хранилище вообще понимает (city/format/age/
+ * experience/documents/citizenship/salaryExpectation); Spec-only поля
+ * (driverLicense/jobHopping/timezone/customFactors) остаются только в Spec —
+ * у них нет эквивалента в жёстком матчере, они уже учитываются отдельно как
+ * мягкие AI-нокауты (см. lib/core/spec/resume-input.ts).
+ */
+async function syncStopFactorsToLegacy(
+  vacancyId: string,
+  spec: Parameters<typeof specToLegacy>[0],
+): Promise<void> {
+  const patch = specToLegacy(spec).stopFactorsJson
+  if (Object.keys(patch).length === 0) return
+
+  const [cur] = await db
+    .select({ stopFactorsJson: vacancies.stopFactorsJson })
+    .from(vacancies)
+    .where(eq(vacancies.id, vacancyId))
+    .limit(1)
+  if (!cur) return
+
+  const merged: VacancyStopFactors = { ...((cur.stopFactorsJson ?? {}) as VacancyStopFactors), ...patch }
+  await db.update(vacancies).set({ stopFactorsJson: merged }).where(eq(vacancies.id, vacancyId))
 }
 
 /**
@@ -195,6 +246,25 @@ export async function GET(
       if (!specFromStore.offHoursLetter?.trim() && typeof row.firstMessageOffHoursText === "string" && row.firstMessageOffHoursText.trim()) {
         specFromStore.offHoursLetter = row.firstMessageOffHoursText
       }
+      // unify 07.07: боевое vacancies.stop_factors_json — источник истины
+      // (process-queue читает его напрямую, независимо от Spec). Существующие
+      // Spec-записи, сохранённые ДО того, как PUT начал синкать stopFactors в
+      // legacy (см. syncStopFactorsToLegacy выше), могли разойтись с боевым —
+      // показываем в Портрете реальное боевое состояние по ключам, которые
+      // boевое хранилище понимает (city/format/age/experience/documents/
+      // citizenship/salaryExpectation), не трогая Spec-only поля (driverLicense/
+      // jobHopping/timezone/customFactors — своего эквивалента в боевом нет).
+      const boevoeStops = (row.stopFactorsJson ?? {}) as VacancyStopFactors
+      specFromStore.stopFactors = {
+        ...specFromStore.stopFactors,
+        ...(boevoeStops.city              !== undefined ? { city: boevoeStops.city }                           : {}),
+        ...(boevoeStops.format            !== undefined ? { format: boevoeStops.format }                       : {}),
+        ...(boevoeStops.age               !== undefined ? { age: boevoeStops.age }                             : {}),
+        ...(boevoeStops.experience        !== undefined ? { experience: boevoeStops.experience }                : {}),
+        ...(boevoeStops.documents         !== undefined ? { documents: boevoeStops.documents }                  : {}),
+        ...(boevoeStops.citizenship       !== undefined ? { citizenship: boevoeStops.citizenship }              : {}),
+        ...(boevoeStops.salaryExpectation !== undefined ? { salaryExpectation: boevoeStops.salaryExpectation }  : {}),
+      }
       return apiSuccess<SpecApiResponse>({ spec: specFromStore, source: "spec" })
     }
 
@@ -277,6 +347,17 @@ export async function PUT(
       await syncPortraitMessagingToLegacy(vacancyId, parsed.data)
     } catch (mirrorErr) {
       console.warn("[spec] syncPortraitMessagingToLegacy failed:", mirrorErr)
+    }
+
+    // Стоп-факторы синкаем в боевое хранилище ВСЕГДА (не за флагом) — unify
+    // 07.07, см. комментарий над syncStopFactorsToLegacy выше. Это единственный
+    // способ, которым «Портрет» реально влияет на жёсткий авто-отказ hh.ru;
+    // без синка редактирование стоп-факторов в Портрете было бы такой же
+    // иллюзией, как раньше был конструктор вакансии.
+    try {
+      await syncStopFactorsToLegacy(vacancyId, parsed.data)
+    } catch (syncErr) {
+      console.warn("[spec] syncStopFactorsToLegacy failed:", syncErr)
     }
 
     // Dual-write Spec → legacy ЗА ФЛАГОМ. По умолчанию SPEC_MIRROR_TO_LEGACY
