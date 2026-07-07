@@ -149,7 +149,7 @@ export async function getVacancyStats(vacancyId: string): Promise<VacancyStats> 
         SELECT ${candidates.id} FROM ${candidates}
         WHERE ${candidates.vacancyId} = ${vacancyId}
       ))`
-    const [hhRows, lastSync] = await Promise.all([
+    const [hhRows, hhNewRow, lastSync] = await Promise.all([
       db.select({
           status: hhResponses.status,
           cnt:    sql<number>`count(*)::int`,
@@ -160,6 +160,20 @@ export async function getVacancyStats(vacancyId: string): Promise<VacancyStats> 
           responsesScope,
         ))
         .groupBy(hhResponses.status),
+      // «Новых» — ТОЛЬКО текущая публикация (guard-minor 07.07): очередь
+      // process-queue фильтрует по текущему hhVacancyId и никогда не тронет
+      // status='response' со старых публикаций — иначе застрявший там отклик
+      // вечно висел бы в счётчике «новых», которых в очереди нет.
+      // #45: 'claimed' — промежуточный статус («забран в обработку, ещё не
+      // отправлен») — считаем как «новый», чтобы счётчик уменьшался в темпе
+      // реальной отправки, а не моментально после клейма всего батча.
+      db.select({ c: sql<number>`count(*)::int` })
+        .from(hhResponses)
+        .where(and(
+          eq(hhResponses.companyId, vac.companyId),
+          eq(hhResponses.hhVacancyId, vac.hhVacancyId),
+          inArray(hhResponses.status, ["response", "claimed"]),
+        )),
       db.select({ at: sql<Date>`MAX(${hhResponses.syncedAt})` })
         .from(hhResponses)
         .where(and(
@@ -170,12 +184,8 @@ export async function getVacancyStats(vacancyId: string): Promise<VacancyStats> 
     ])
     for (const row of hhRows) {
       hhTotal += row.cnt
-      // #45: 'claimed' — промежуточный статус («забран в обработку, ещё
-      // не отправлен»). Считаем его как «новый», чтобы счётчик в шапке
-      // уменьшался в темпе реальной отправки, а не моментально после
-      // клейма всего батча.
-      if (row.status === "response" || row.status === "claimed") hhNew += row.cnt
     }
+    hhNew = hhNewRow?.[0]?.c ?? 0
     const at = lastSync?.[0]?.at
     hhLastSyncAt = at ? new Date(at).toISOString() : null
   }
