@@ -186,6 +186,10 @@ export interface CandidatesFilters {
    *  "not_filled" — открыл демо, но форму не заполнил (demo_opened_at IS NOT NULL AND survey_responses IS NULL)
    *  undefined    — без фильтра */
   anketaFilled?: "filled" | "not_filled"
+  /** #43: ответившие на вопросы анкеты (demo_answers_score IS NOT NULL) —
+   *  критерий счётчика «N анкет» в шапке вакансии. НЕ путать с anketaFilled
+   *  (тот про контактную форму survey_responses). */
+  demoAnswered?: boolean
   /** Пресет «На разбор» (воронка-v2, Фаза 1г): застрявшие после 1-й части —
    *  demo_answers_score IS NOT NULL AND second_demo_invited_at IS NULL И не в
    *  отказе (ни 'rejected', ни 'preliminary_reject'). Только видимость. */
@@ -290,6 +294,7 @@ export function useCandidates(
           params.set("search", filters.search.trim())
         }
         if (filters.anketaFilled) params.set("anketaFilled", filters.anketaFilled)
+        if (filters.demoAnswered) params.set("demoAnswered", "1")
         if (filters.reviewQueue) params.set("reviewQueue", "true")
       }
       const res = await fetch(`/api/modules/hr/candidates?${params.toString()}`)
@@ -521,6 +526,7 @@ export function usePaginatedCandidates({
         if (filters.activeNow) params.set("activeNow", "true")
         if (filters.search && filters.search.trim()) params.set("search", filters.search.trim())
         if (filters.anketaFilled) params.set("anketaFilled", filters.anketaFilled)
+        if (filters.demoAnswered) params.set("demoAnswered", "1")
         if (filters.reviewQueue) params.set("reviewQueue", "true")
         // demoProgress в paginated режиме теперь применяется на сервере через
         // SQL (см. route.ts: pre-fetch demoTotalBlocks → SQL WHERE с COUNT

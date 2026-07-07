@@ -90,7 +90,7 @@ import { FunnelTab } from "@/components/vacancies/funnel-tab"
 import { MessageQueueSection } from "@/components/vacancies/message-queue-section"
 import { InboxTab } from "@/components/vacancies/inbox-tab"
 import { OutboundPauseMenuItem } from "@/components/vacancies/outbound-pause-control"
-import { parsePipeline, resolveVacancyStageOptions, DEMO_OPENED_STAGE_SLUGS, ANKETA_FILLED_STAGE_SLUGS, type CompanyStageHhActions, type CompanyStagePalette, type FunnelV2StageLite } from "@/lib/stages"
+import { parsePipeline, resolveVacancyStageOptions, DEMO_OPENED_STAGE_SLUGS, type CompanyStageHhActions, type CompanyStagePalette, type FunnelV2StageLite } from "@/lib/stages"
 import { BrandingOverrideSwitch } from "@/components/vacancies/branding-override-switch"
 import { VacancySettingsProvider, VacancyTabPendingDot, VacancyTabFooter, useVacancySectionRegister, useSafeSubTabSwitch, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
 import { SettingsTabShell } from "@/components/vacancies/settings-tab-shell"
@@ -598,7 +598,7 @@ export default function VacancyPage() {
   // Стадия из URL (?stage=slug,slug) — для перехода из отчёта по клику на число.
   const stageFromUrl = searchParams?.get("stage")
   const initialFunnelStatuses = stageFromUrl ? stageFromUrl.split(",").filter(Boolean) : DEFAULT_FUNNEL_STATUSES.slice()
-  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: initialFunnelStatuses, hideRejected: true, hideNoSalary: false, activeNow: false, reviewQueue: false, demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
+  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: initialFunnelStatuses, hideRejected: true, hideNoSalary: false, activeNow: false, reviewQueue: false, demoAnswered: false, demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
   // #18: фасеты фильтра (города/источники) по ВСЕЙ вакансии — серверная агрегация.
   const [candidateFacets, setCandidateFacets] = useState<{ cities: { city: string; count: number }[]; sources: { source: string; count: number }[] } | null>(null)
   useEffect(() => {
@@ -653,6 +653,7 @@ export default function VacancyPage() {
     hideNoSalary: filters.hideNoSalary,
     activeNow: filters.activeNow,
     anketaFilled: filters.anketaFilled,
+    demoAnswered: filters.demoAnswered,
     reviewQueue: filters.reviewQueue,
   }), [filters]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -796,24 +797,26 @@ export default function VacancyPage() {
   })
 
   // #43 (07.07, Юрий): кликабельные счётчики шапки вакансии — клик по числу
-  // фильтрует список кандидатов по соответствующим стадиям воронки. Второй
-  // клик по тому же счётчику снимает фильтр (toggle). Ключ счётчика → набор
-  // стадий из lib/stages.ts (тот же источник, что и группы метрик в шапке) +
-  // legacy-алиасы (см. interviewCount/offerCount в loadHeaderStats выше).
+  // фильтрует список кандидатов ПО ТОМУ ЖЕ критерию, по которому счётчик
+  // считается. Второй клик по тому же счётчику снимает фильтр (toggle).
   //   - hhTotal: сброс до дефолта (funnelStatuses=[], hideRejected=true)
-  //   - demoOpened: DEMO_OPENED_STAGE_SLUGS
-  //   - anketa: ANKETA_FILLED_STAGE_SLUGS
-  //   - interview: scheduled + interview + interviewed (legacy)
-  //   - offer: offer_sent + offer (legacy)
+  //   - demoOpened: стадии DEMO_OPENED_STAGE_SLUGS (lib/stages.ts — тот же
+  //     источник, что и группа demoOpened в lib/vacancy-stats.ts)
+  //   - anketa: НЕ стадии, а demoAnswered=true — счётчик «N анкет» в шапке
+  //     это stats.demoAnswered = COUNT(demo_answers_score IS NOT NULL)
+  //     (lib/vacancy-stats.ts), балл появляется уже при первом ответе, даже
+  //     если кандидат остался на стадии demo_opened. Фильтр по стадиям
+  //     ANKETA_FILLED_STAGE_SLUGS дал бы ДРУГОЕ множество (guard-major 07.07).
+  //   - interview: scheduled + interview + interviewed (legacy) — как
+  //     interviewCount в loadHeaderStats
+  //   - offer: offer_sent + offer (legacy) — как offerCount
   //   - rejected: rejected (требует hideRejected=false, иначе excludeRejected
   //     на сервере вычеркнет rejected из результата несмотря на stage-фильтр)
   // «Новых», «демо-2» и «перешли по ссылке» — НЕ кликабельны: чистого
-  // stage-фильтра нет («новых» = hh response ещё не разобран, «демо-2» —
-  // по баллу 2-го блока, а не по стадии; «перешли по ссылке» — по клику в
-  // демо, тоже не стадия воронки).
+  // фильтра нет («новых» = hh response ещё не разобран, «демо-2» — по баллу
+  // 2-го блока; «перешли по ссылке» — по клику в демо).
   const HEADER_STAT_STAGE_MAP: Record<string, string[]> = {
     demoOpened: DEMO_OPENED_STAGE_SLUGS,
-    anketa:     ANKETA_FILLED_STAGE_SLUGS,
     interview:  ["scheduled", "interview", "interviewed"],
     offer:      ["offer_sent", "offer"],
     rejected:   ["rejected"],
@@ -821,28 +824,33 @@ export default function VacancyPage() {
   /** Активен ли счётчик key при текущих filters (для подсветки/toggle). */
   const isHeaderStatActive = useCallback((key: string): boolean => {
     if (key === "hhTotal") {
-      return (filters.funnelStatuses?.length ?? 0) === 0 && filters.hideRejected === true
+      return (filters.funnelStatuses?.length ?? 0) === 0 && filters.hideRejected === true && !filters.demoAnswered
     }
+    if (key === "anketa") return filters.demoAnswered === true
     const target = HEADER_STAT_STAGE_MAP[key]
     if (!target) return false
     const current = filters.funnelStatuses ?? []
     if (current.length !== target.length) return false
     const targetSet = new Set(target)
     return current.every((s) => targetSet.has(s))
-  }, [filters.funnelStatuses, filters.hideRejected])
-  /** Клик по счётчику шапки — применяет/снимает фильтр стадий и сбрасывает пагинацию. */
+  }, [filters.funnelStatuses, filters.hideRejected, filters.demoAnswered])
+  /** Клик по счётчику шапки — применяет/снимает фильтр и сбрасывает пагинацию. */
   const handleHeaderStatClick = useCallback((key: string) => {
     const alreadyActive = isHeaderStatActive(key)
     if (key === "hhTotal" || alreadyActive) {
       // «Откликов всего» — всегда сброс; повторный клик по активному счётчику
       // — тоже сброс (снять фильтр, вернуться к дефолту).
-      setFilters((f) => ({ ...f, funnelStatuses: [], hideRejected: true }))
+      setFilters((f) => ({ ...f, funnelStatuses: [], hideRejected: true, demoAnswered: false }))
+    } else if (key === "anketa") {
+      // «Анкет» — по критерию счётчика (есть балл ответов), не по стадиям.
+      setFilters((f) => ({ ...f, funnelStatuses: [], hideRejected: true, demoAnswered: true }))
     } else {
       const target = HEADER_STAT_STAGE_MAP[key]
       if (!target) return
       setFilters((f) => ({
         ...f,
         funnelStatuses: target.slice(),
+        demoAnswered: false,
         // «Отказ» должен реально показать отказников — excludeRejected на
         // сервере иначе вычеркнет rejected несмотря на stage-фильтр.
         hideRejected: key === "rejected" ? false : f.hideRejected,
@@ -1398,7 +1406,12 @@ export default function VacancyPage() {
   const [headerStats, setHeaderStats] = useState<{
     total: number; pending: number; freshCount: number;
     demoOpened: number; rejected: number;
-    hhTotal: number; hhNew: number; inProgress: number;
+    // Разбивка hhTotal по публикациям hh (Юрий 07.07): текущая/прошлые.
+    // hhTotal = hhTotalCurrent + hhTotalPrevious. Окно откликов прошлых
+    // публикаций (по датам откликов) — для бейджа «N дн.».
+    hhTotal: number; hhTotalCurrent: number; hhTotalPrevious: number;
+    hhPrevWindowFrom: string | null; hhPrevWindowTo: string | null;
+    hhNew: number; inProgress: number;
     anketaFilled: number; demoAnswered: number; hired: number;
     // #15: интервью (scheduled + interview + legacy interviewed) и оферы
     // (offer_sent + legacy offer) — считаются из byStage стадий кандидатов.
@@ -1417,7 +1430,8 @@ export default function VacancyPage() {
       ])
       if (!statsRes.ok) return
       const stats = await statsRes.json() as {
-        total: number; hhTotal: number; hhNew: number;
+        total: number; hhTotal: number; hhTotalCurrent?: number; hhTotalPrevious?: number;
+        hhPrevWindowFrom?: string | null; hhPrevWindowTo?: string | null; hhNew: number;
         inProgress: number; rejected: number; hired: number;
         demoOpened: number; anketaFilled: number; demoAnswered: number;
         ctaClicked: number;
@@ -1441,6 +1455,11 @@ export default function VacancyPage() {
         demoOpened:   stats.demoOpened,
         rejected:     stats.rejected,
         hhTotal:      stats.hhTotal,
+        // Fallback на «всё текущее» для старого API-ответа без разбивки.
+        hhTotalCurrent:  stats.hhTotalCurrent ?? stats.hhTotal,
+        hhTotalPrevious: stats.hhTotalPrevious ?? 0,
+        hhPrevWindowFrom: stats.hhPrevWindowFrom ?? null,
+        hhPrevWindowTo:   stats.hhPrevWindowTo ?? null,
         hhNew:        stats.hhNew,
         inProgress:   stats.inProgress,
         anketaFilled: stats.anketaFilled,
@@ -2891,16 +2910,35 @@ export default function VacancyPage() {
                       </UITooltip>
                     )
                   })()}
-                  {/* «X дн.» — сколько вакансия висит на hh: считаем от даты ПЕРВОЙ
+                  {/* «X дн.» — сколько вакансия висит на hh: считаем от даты
                       публикации (vacancies.hh_published_at, заполняет крон
                       hh-vacancy-sync). Fallback на created_at, если hh-даты ещё
-                      нет (вакансия без hh-привязки или синк не прошёл). */}
+                      нет (вакансия без hh-привязки или синк не прошёл).
+                      Перепубликация (Юрий 07.07): hh_published_at знает только
+                      ТЕКУЩУЮ публикацию. Если были прошлые (hhTotalPrevious>0),
+                      добавляем их длительность по окну откликов прошлых
+                      публикаций (дат публикации hh не отдаёт — оценка «по датам
+                      откликов», поэтому с тильдой «≈»). Иначе — как раньше. */}
                   {(() => {
                     if (status !== "active") return null
                     const hhPublishedAt = apiVacancy?.hhPublishedAt
                     const since = hhPublishedAt ?? apiVacancy?.createdAt
                     if (!since) return null
                     const days = Math.floor((Date.now() - new Date(since).getTime()) / 86400000)
+                    const prevFrom = headerStats?.hhPrevWindowFrom
+                    const prevTo   = headerStats?.hhPrevWindowTo
+                    if ((headerStats?.hhTotalPrevious ?? 0) > 0 && prevFrom && prevTo) {
+                      const fmt = (iso: string) => new Date(iso).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })
+                      // Окно включительно: 28.06–02.07 = 5 дн., минимум 1 день.
+                      const prevDays = Math.max(1, Math.floor((new Date(prevTo).getTime() - new Date(prevFrom).getTime()) / 86400000) + 1)
+                      const totalDays = prevDays + days
+                      const title = `Прошлые публикации: ≈${prevDays} дн. (${fmt(prevFrom)}–${fmt(prevTo)}, по датам откликов) · Текущая: ${days} дн.${hhPublishedAt ? ` (опубликована ${fmt(hhPublishedAt)})` : ""} · Суммарно на hh: ≈${totalDays} дн.`
+                      return (
+                        <span title={title} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Clock className="size-3.5" />≈{totalDays} дн.
+                        </span>
+                      )
+                    }
                     const title = hhPublishedAt
                       ? `Опубликована на hh: ${new Date(hhPublishedAt).toLocaleDateString("ru-RU")}`
                       : undefined
@@ -2980,7 +3018,9 @@ export default function VacancyPage() {
                       // #43: кликабельный счётчик — hover-подчёркивание + cursor-pointer,
                       // активный (совпадает с текущим filters) — подсвечен (font-medium
                       // уже на числе; добавляем подчёркивание всей надписи + цвет).
-                      const clickableLabel = (key: string, count: number, label: string) => {
+                      // countPrefix — необязательная приставка ПЕРЕД жирным числом
+                      // (разбивка «508 + 125 = » у «откликов всего», Юрий 07.07).
+                      const clickableLabel = (key: string, count: number, label: string, countPrefix?: string) => {
                         const active = isHeaderStatActive(key)
                         return (
                           <span
@@ -2990,18 +3030,29 @@ export default function VacancyPage() {
                             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleHeaderStatClick(key) } }}
                             className={`cursor-pointer underline decoration-dotted underline-offset-2 hover:decoration-solid ${active ? "text-foreground font-medium" : ""}`}
                           >
-                            <span className="font-medium text-foreground">{count}</span> {label}
+                            {countPrefix}<span className="font-medium text-foreground">{count}</span> {label}
                           </span>
                         )
                       }
                       // Всегда (для hh-вакансий): откликов всего, новых.
+                      // Если были прошлые публикации на hh (перепубликация) —
+                      // показываем разбивку «прошлые + текущая = итог» (итог
+                      // жирным, как раньше); одна публикация — как раньше,
+                      // просто «N откликов всего», без шума.
                       if (showHh) {
+                        const hhPrev = s!.hhTotalPrevious ?? 0
                         push("hhTotal",
                           <UITooltip>
                             <TooltipTrigger asChild>
-                              {clickableLabel("hhTotal", s!.hhTotal, "откликов всего")}
+                              {hhPrev > 0
+                                ? clickableLabel("hhTotal", s!.hhTotal, "откликов", `${hhPrev} + ${s!.hhTotalCurrent} = `)
+                                : clickableLabel("hhTotal", s!.hhTotal, "откликов всего")}
                             </TooltipTrigger>
-                            <TooltipContent>Всего откликов с hh.ru по всем публикациям вакансии (перепубликация на hh счётчик не обнуляет) — нажмите, чтобы сбросить фильтр</TooltipContent>
+                            <TooltipContent>
+                              {hhPrev > 0
+                                ? `Прошлые публикации на hh: ${hhPrev} · Текущая публикация: ${s!.hhTotalCurrent} · Всего: ${s!.hhTotal} — нажмите, чтобы сбросить фильтр`
+                                : "Всего откликов с hh.ru по всем публикациям вакансии (перепубликация на hh счётчик не обнуляет) — нажмите, чтобы сбросить фильтр"}
+                            </TooltipContent>
                           </UITooltip>)
                         push("hhNew",
                           <UITooltip>

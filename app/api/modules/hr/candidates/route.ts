@@ -409,6 +409,14 @@ export async function GET(req: NextRequest) {
         listConds.push(and(isNotNull(candidates.demoOpenedAt), isNull(candidates.surveyResponses)) as SQL)
       }
 
+      // #43: ответившие на вопросы анкеты — посчитан балл demo_answers_score.
+      // Ровно тот же критерий, что у счётчика «N анкет» (demoAnswered) в шапке
+      // вакансии (lib/vacancy-stats.ts). НЕ путать с anketaFilled выше — тот
+      // про контактную форму (survey_responses), это другое множество.
+      if (url.searchParams.get("demoAnswered") === "1") {
+        listConds.push(isNotNull(candidates.demoAnswersScore))
+      }
+
       // Порог AI-скора по анкете (aiScore >= scoreMinAnketa)
       const scoreMinAnketa = url.searchParams.get("scoreMinAnketa")
       if (scoreMinAnketa && Number(scoreMinAnketa) > 0) {
@@ -998,6 +1006,14 @@ export async function GET(req: NextRequest) {
       filterConds.push(isNotNull(candidates.surveyResponses))
     } else if (anketaFilledPerVac === "not_filled") {
       filterConds.push(and(isNotNull(candidates.demoOpenedAt), isNull(candidates.surveyResponses)) as SQL)
+    }
+
+    // #43: ответившие на вопросы анкеты — посчитан балл demo_answers_score.
+    // Ровно тот же критерий, что у счётчика «N анкет» (demoAnswered) в шапке
+    // вакансии (lib/vacancy-stats.ts). НЕ путать с anketaFilled выше — тот
+    // про контактную форму (survey_responses), это другое множество.
+    if (url.searchParams.get("demoAnswered") === "1") {
+      filterConds.push(isNotNull(candidates.demoAnswersScore))
     }
 
     // Поиск по имени/email/телефону (ILIKE). %/_/\ экранируем, чтобы юзер
