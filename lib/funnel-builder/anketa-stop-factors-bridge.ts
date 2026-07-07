@@ -181,16 +181,26 @@ export function fromAnketaStopFactors(
 
   const citizenship = byId.get("citizenship")
   if (citizenship) {
-    // Свободный текст конструктора не различает страны/континенты и allow/deny
-    // так же гибко, как CitizenshipFactorField — трактуем как allow-список,
-    // разбирая по запятой. Уже заданный mode/denied в боевом (если задан через
-    // «Настройки вакансии» или spec-редактор) НЕ трогаем при enabled=false
-    // (тумблер выключен → просто гасим enabled, список остаётся для истории).
-    const list = (citizenship.value ?? "").split(",").map(s => s.trim()).filter(Boolean)
+    // Guard-blocker 07.07: toAnketaStopFactors сериализует deny-режим текстом
+    // «Кроме: RU, BY» — наивный CSV-парс клал этот текст в allowed (мусор
+    // «Кроме: RU» как «страна»), а правки deny-списка из конструктора уходили
+    // в allowed и НЕ влияли на отсев (матчер в deny читает только denied).
+    // Разбираем симметрично сериализации: префикс «Кроме:» (регистронезависимо,
+    // с/без пробела) → deny-режим, список пишем в denied; без префикса —
+    // allow-режим, список в allowed. Пустой ввод — режим/списки не трогаем
+    // (только enabled), чтобы «открыл вкладку → Сохранить» ничего не менял.
+    const raw = (citizenship.value ?? "").trim()
+    const denyMatch = raw.match(/^кроме\s*:\s*/i)
+    const listPart = denyMatch ? raw.slice(denyMatch[0].length) : raw
+    const list = listPart.split(",").map(s => s.trim()).filter(Boolean)
     out.citizenship = {
       ...(out.citizenship ?? {}),
       enabled: citizenship.enabled,
-      ...(list.length > 0 ? { mode: out.citizenship?.mode ?? "allow", allowed: list } : {}),
+      ...(list.length > 0
+        ? denyMatch
+          ? { mode: "deny" as const, denied: list }
+          : { mode: "allow" as const, allowed: list }
+        : {}),
     }
   }
 
