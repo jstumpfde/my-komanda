@@ -11,18 +11,23 @@ import { requireAdminPanelAccess } from "@/lib/platform/auth"
 
 export const dynamic = "force-dynamic"
 
-// Без неоднозначных символов: без 0/O, без 1/I.
-const CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+// Формат обычных кодов (с 07.07): 3 буквы + 4 цифры слитно, например KHB2622.
+// Буквы — подмножество, визуально совпадающее с кириллицей (легко
+// продиктовать/перепечатать), цифры 2-9 (без 0/1, чтобы не путать с О/I).
+// Личные коды-пропуска (lib/tip/personal-code.ts) длиннее и с другим
+// префиксом — их сюда не относится, они не генерируются этим роутом.
+const LETTERS_ALPHABET = "ABCEHKMPTX"
+const DIGITS_ALPHABET = "23456789"
 
-function randomSegment(len: number): string {
+function randomFromAlphabet(len: number, alphabet: string): string {
   const bytes = randomBytes(len)
   let out = ""
-  for (let i = 0; i < len; i++) out += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length]
+  for (let i = 0; i < len; i++) out += alphabet[bytes[i] % alphabet.length]
   return out
 }
 
 function generateCode(): string {
-  return `TIP-${randomSegment(4)}-${randomSegment(4)}`
+  return `${randomFromAlphabet(3, LETTERS_ALPHABET)}${randomFromAlphabet(4, DIGITS_ALPHABET)}`
 }
 
 async function generateUniqueCode(): Promise<string> {

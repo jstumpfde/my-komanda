@@ -80,3 +80,24 @@ export async function getOrCreateTipUser(): Promise<TipUser> {
 
   return user
 }
+
+/**
+ * Переключает cookie tip_uid текущего браузера на владельца личного кода
+ * (см. lib/tip/service.ts::activatePromo, ветка is_personal). Личный код —
+ * фактически пароль в чужой аккаунт: активировав его, браузер "логинится" в
+ * аккаунт владельца — дальнейшие getOrCreateTipUser() в этой сессии находят
+ * его строку tip_users вместо анонимной. Тот же httpOnly-способ выставления
+ * cookie, что и в getOrCreateTipUser() — просто без создания новой строки.
+ */
+export async function switchTipUserCookie(ownerUserId: string): Promise<void> {
+  const cookieStore = await cookies()
+  cookieStore.set({
+    name: TIP_UID_COOKIE,
+    value: ownerUserId,
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: TIP_UID_MAX_AGE_SECONDS,
+  })
+}

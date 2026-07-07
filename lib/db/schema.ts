@@ -4502,6 +4502,13 @@ export type TipPromptLayer    = typeof tipPromptLayers.$inferSelect
 export type NewTipPromptLayer = typeof tipPromptLayers.$inferInsert
 
 // Промокоды на прогоны (в т.ч. бесплатные ссылки — is_free_link).
+//
+// Личные коды-пропуска (0265): is_personal=true + owner_user_id — код,
+// который "логинит" браузер в конкретный аккаунт (см. lib/tip/service.ts::
+// activatePromo, ветка is_personal, и lib/tip/session.ts::switchTipUserCookie).
+// Активация личного кода НЕ начисляет прогоны и НЕ пишет tip_promo_activations
+// (его можно вводить сколько угодно раз) — вместо этого cookie tip_uid
+// переключается на owner_user_id.
 export const tipPromoCodes = pgTable("tip_promo_codes", {
   id:                uuid("id").primaryKey().defaultRandom(),
   code:              text("code").notNull().unique(),
@@ -4512,6 +4519,8 @@ export const tipPromoCodes = pgTable("tip_promo_codes", {
   sourceLabel:       text("source_label"),
   expiresAt:         timestamp("expires_at", { withTimezone: true }),
   createdAt:         timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  isPersonal:        boolean("is_personal").notNull().default(false),
+  ownerUserId:       uuid("owner_user_id").references(() => tipUsers.id),
 })
 export type TipPromoCode    = typeof tipPromoCodes.$inferSelect
 export type NewTipPromoCode = typeof tipPromoCodes.$inferInsert

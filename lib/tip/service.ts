@@ -47,6 +47,19 @@ export class TipServiceError extends Error {
   }
 }
 
+/**
+ * Postgres unique_violation (23505) — учитывает, что drizzle-orm заворачивает
+ * driver-ошибку в DrizzleQueryError, где .code лежит на .cause, а не на самой
+ * ошибке (обнаружено при smoke-тесте личных кодов: старая проверка e.code
+ * никогда не срабатывала на текущей версии drizzle-orm/postgres, из-за чего
+ * повторная активация обычного промокода падала непойманной 500-кой вместо
+ * дружелюбного "Промокод уже использован").
+ */
+function isUniqueViolation(e: unknown): boolean {
+  const code = (e as { code?: string })?.code ?? (e as { cause?: { code?: string } })?.cause?.code
+  return code === "23505"
+}
+
 /** Недостаточно прогонов на балансе — API-роут маппит это на HTTP 402. */
 export class TipNoBalanceError extends TipServiceError {
   constructor() {
@@ -58,22 +71,38 @@ export class TipNoBalanceError extends TipServiceError {
 // ─── Промокоды / бесплатные ссылки ─────────────────────────────────────────
 
 interface ActivatePromoResult {
+  personal?: false
   balanceRuns: number
   runsGranted: number
 }
+
+/**
+ * Личный код-пропуск (0265): активация НЕ начисляет прогоны и НЕ пишет
+ * tip_promo_activations — код можно вводить сколько угодно раз. Вызывающий
+ * роут (app/api/public/tip/promo/route.ts) переключает cookie tip_uid на
+ * ownerUserId через lib/tip/session.ts::switchTipUserCookie.
+ */
+interface ActivatePersonalResult {
+  personal: true
+  ownerUserId: string
+}
+
+type ActivateCodeResult = ActivatePromoResult | ActivatePersonalResult
 
 async function activateCodeInternal(
   userId: string,
   rawCode: string,
   requireFreeLink: boolean,
-): Promise<ActivatePromoResult> {
+): Promise<ActivateCodeResult> {
   const code = (rawCode ?? "").trim()
   if (!code) {
     throw new TipServiceError("Промокод не найден")
   }
 
   return db.transaction(async (tx) => {
-    // Регистронезависимый поиск + trim — сравниваем по lower(code).
+    // Регистронезависимый поиск + trim — сравниваем по lower(code). НЕ
+    // зависит от формата кода (короткие обычные / длинные личные) — просто
+    // строковое сравнение, так и должно оставаться при смене форматов.
     const rows = await tx.select().from(tipPromoCodes)
     const promo = rows.find(
       (p) => p.code.trim().toLowerCase() === code.toLowerCase() && (!requireFreeLink || p.isFreeLink),
@@ -86,6 +115,16 @@ async function activateCodeInternal(
       throw new TipServiceError("Срок действия промокода истёк")
     }
 
+    // Личный код-пропуск: НЕ активация в обычном смысле — не пишем
+    // tip_promo_activations, не трогаем activations_count/баланс. Сигнал
+    // вызывающему коду переключить cookie на владельца.
+    if (promo.isPersonal) {
+      if (!promo.ownerUserId) {
+        throw new TipServiceError("Промокод не найден")
+      }
+      return { personal: true as const, ownerUserId: promo.ownerUserId }
+    }
+
     // Вставку активации делаем ДО инкремента счётчика — unique(promo_id,
     // user_id) ловит повторную активацию того же юзера (в т.ч. при гонке
     // двух параллельных запросов одного пользователя). Код 23505 —
@@ -93,7 +132,7 @@ async function activateCodeInternal(
     try {
       await tx.insert(tipPromoActivations).values({ promoId: promo.id, userId })
     } catch (e) {
-      if ((e as { code?: string })?.code === "23505") {
+      if (isUniqueViolation(e)) {
         throw new TipServiceError("Промокод уже использован")
       }
       throw e
@@ -123,18 +162,32 @@ async function activateCodeInternal(
       .where(eq(tipUsers.id, userId))
       .returning({ balanceRuns: tipUsers.balanceRuns })
 
-    return { balanceRuns: updatedUser?.balanceRuns ?? promo.runsGranted, runsGranted: promo.runsGranted }
+    return {
+      personal: false as const,
+      balanceRuns: updatedUser?.balanceRuns ?? promo.runsGranted,
+      runsGranted: promo.runsGranted,
+    }
   })
 }
 
-/** Активирует обычный промокод (пополняет balance_runs). Русские ошибки. */
-export async function activatePromo(userId: string, code: string): Promise<ActivatePromoResult> {
+/**
+ * Активирует обычный промокод (пополняет balance_runs) ИЛИ личный код-пропуск
+ * (переключает аккаунт — см. ActivatePersonalResult). Русские ошибки.
+ */
+export async function activatePromo(userId: string, code: string): Promise<ActivateCodeResult> {
   return activateCodeInternal(userId, code, false)
 }
 
 /** Активирует бесплатную ссылку (tip_promo_codes.is_free_link = true). */
 export async function claimFreeLink(userId: string, token: string): Promise<ActivatePromoResult> {
-  return activateCodeInternal(userId, token, true)
+  const result = await activateCodeInternal(userId, token, true)
+  // Личные коды не бывают одновременно бесплатными ссылками (разные UX-пути),
+  // но подстрахуемся типобезопасно — не отдаём наружу переключение аккаунта
+  // там, где вызывающий код (claimFreeLink) этого не ожидает.
+  if (result.personal) {
+    throw new TipServiceError("Промокод не найден")
+  }
+  return result
 }
 
 // ─── Создание прогона разбора ──────────────────────────────────────────────
@@ -194,7 +247,13 @@ export async function createRun(user: TipUser, rawInput: CreateRunInput): Promis
   // Если передан промокод — активировать ДО проверки баланса (ошибку промокода
   // возвращаем как есть, TipServiceError с русским текстом).
   if (input.promoCode?.trim()) {
-    await activatePromo(user.id, input.promoCode)
+    const promoResult = await activatePromo(user.id, input.promoCode)
+    // Личный код-пропуск переключает аккаунт, а не начисляет прогоны — этот
+    // путь (создание прогона) для него не подходит, активируется отдельным
+    // экраном входа (app/api/public/tip/promo/route.ts).
+    if (promoResult.personal) {
+      throw new TipServiceError("Это личный код-пропуск — введите его на экране входа, а не при создании разбора.")
+    }
   }
 
   // Анти-абьюз: не больше одного одновременного pending/generating прогона.

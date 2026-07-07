@@ -40,6 +40,7 @@ import {
 } from "@/lib/tip/bot/telegram"
 import { getSession, setSession, resetSession } from "@/lib/tip/bot/sessions"
 import { getOrCreateTipUserByChatId } from "@/lib/tip/bot/users"
+import { ensurePersonalCode } from "@/lib/tip/personal-code"
 
 export type BotState =
   | "idle"
@@ -93,6 +94,10 @@ export async function handleTextMessage(botToken: string, chatId: number, text: 
   }
   if (trimmed === "/balance") {
     await handleBalance(botToken, chatId)
+    return
+  }
+  if (trimmed === "/code") {
+    await handleCode(botToken, chatId)
     return
   }
   if (trimmed === "/help") {
@@ -286,6 +291,24 @@ async function handleBalance(botToken: string, chatId: number): Promise<void> {
   await sendMessage(botToken, chatId, `Ваш баланс: ${balance} разбор(ов).`)
 }
 
+/**
+ * /code — выдаёт (создавая при первом обращении, см. lib/tip/personal-code.ts)
+ * личный код-пропуск этого tg-пользователя. Введённый на сайте, он
+ * переключает браузерную cookie на этот же аккаунт (lib/tip/service.ts::
+ * activatePromo, ветка is_personal) — общий баланс и настройки видны в обоих
+ * местах.
+ */
+async function handleCode(botToken: string, chatId: number): Promise<void> {
+  const user = await getTgBoundUser(chatId)
+  const code = await ensurePersonalCode(user.id)
+  await sendMessage(
+    botToken,
+    chatId,
+    `Ваш личный код: <code>${escapeHtml(code)}</code>\n\n` +
+      "Введите этот код на сайте company24.pro/tip — и сайт будет узнавать вас и показывать общий баланс.",
+  )
+}
+
 async function handleHelp(botToken: string, chatId: number): Promise<void> {
   await sendMessage(
     botToken,
@@ -293,6 +316,7 @@ async function handleHelp(botToken: string, chatId: number): Promise<void> {
     "<b>Типология</b> — разбор личности по дате рождения.\n\n" +
       "/start — начать новый разбор\n" +
       "/balance — узнать баланс\n" +
+      "/code — личный код для входа на сайте с тем же балансом\n" +
       "/help — эта справка",
   )
 }
@@ -575,7 +599,19 @@ async function runAnalysis(botToken: string, chatId: number, draft: Draft): Prom
 async function stepReceivePromo(botToken: string, chatId: number, text: string, draft: Draft): Promise<void> {
   const user = await getTgBoundUser(chatId)
   try {
-    await activatePromo(user.id, text)
+    const result = await activatePromo(user.id, text)
+    // Личный код-пропуск (0265) переключает аккаунт на вебе (cookie tip_uid)
+    // — у бота идентификация жёстко привязана к tg_chat_id, переключать
+    // нечего. Сообщаем, что это личный код, и не начисляем прогонов.
+    if (result.personal) {
+      await sendMessage(
+        botToken,
+        chatId,
+        "Это ваш личный код — он предназначен для входа на сайте company24.pro/tip, в боте не используется. " +
+          "Введите обычный промокод либо продолжите на сайте.",
+      )
+      return
+    }
   } catch (e) {
     const msg = e instanceof TipServiceError ? e.message : "Не удалось проверить промокод."
     await sendMessage(botToken, chatId, msg)

@@ -5,7 +5,7 @@
 //   GET  /api/public/tip/me                -> { balanceRuns, prefs }
 //   POST /api/public/tip/run               -> 200 {runId,balanceRuns} | 402 {error:'no_balance'} | 400 {error}
 //   GET  /api/public/tip/run/[id]          -> { id, status, resultMd?, formula?, shareToken?, error?, context, createdAt }
-//   POST /api/public/tip/promo             -> { balanceRuns, runsGranted } | 400 {error}
+//   POST /api/public/tip/promo             -> { balanceRuns, runsGranted } | { personal: true, balanceRuns } | 400 {error}
 //
 // UX-переработка (07.07): компактный первый экран (дата → имя → строка-резюме
 // настроек → большая кнопка), все плитки скрыты за «Уточнить». Кнопка
@@ -298,6 +298,37 @@ export default function TipClient() {
         setPromoSubmitting(false)
         return
       }
+
+      // Личный код-пропуск (0265): не начисление прогонов, а переключение
+      // аккаунта — cookie tip_uid теперь указывает на владельца кода.
+      // Перечитываем /me, чтобы подтянуть его баланс и prefs, а не оставлять
+      // на экране цифры анонимного пользователя, из которого мы "вышли".
+      if (d.personal) {
+        setNeedsPromo(false)
+        setPromoCode("")
+        setPromoSubmitting(false)
+        toast.success("Это ваш личный код — аккаунт подключён")
+        setBalanceRuns(typeof d.balanceRuns === "number" ? d.balanceRuns : null)
+        try {
+          const meRes = await fetch("/api/public/tip/me")
+          if (meRes.ok) {
+            const me: { balanceRuns?: number; prefs?: Prefs } = await meRes.json()
+            if (typeof me.balanceRuns === "number") setBalanceRuns(me.balanceRuns)
+            const p = me.prefs
+            if (p) {
+              if (p.name) setName(p.name)
+              if (p.gender) setGender(p.gender)
+              if (p.birthDate) setBirthDate(p.birthDate)
+              if (p.depth) setDepth(p.depth)
+              if (p.audience) setAudience(p.audience)
+            }
+          }
+        } catch {
+          // не критично — баланс уже выставлен из ответа /promo
+        }
+        return
+      }
+
       setBalanceRuns(d.balanceRuns)
       setNeedsPromo(false)
       setPromoCode("")
