@@ -9,10 +9,12 @@
 // рекомендовано (Юрий, 26.06).
 
 import { Bot, AlertTriangle, CheckCircle2 } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import type { CandidateSpec } from "@/lib/core/spec/types"
 import { normalizeNiceToHave, normalizeDealBreakers } from "@/lib/core/spec/types"
 import { computeRealism, REALISM_TONE_CLASS } from "./spec-editor-helpers"
+import type { ConflictItem } from "./spec-editor"
 
 interface PortraitRec {
   id: string
@@ -64,17 +66,69 @@ function buildRecommendations(spec: CandidateSpec): PortraitRec[] {
   return recs
 }
 
-export function PortraitAdvisor({ spec }: { spec: CandidateSpec }) {
+interface PortraitAdvisorProps {
+  spec: CandidateSpec
+  /** Бейдж источника данных Портрета — «Собрано из текущих настроек» / «Сохранённый Spec». */
+  source?: "spec" | "legacy" | null
+  /** Результат последней проверки «Проверить на противоречия» (null — не запускали). */
+  conflicts?: ConflictItem[] | null
+  conflictsChecking?: boolean
+}
+
+export function PortraitAdvisor({ spec, source, conflicts, conflictsChecking }: PortraitAdvisorProps) {
   const realism = computeRealism(spec)
   const recs = buildRecommendations(spec)
 
   return (
-    <div className="hidden lg:block w-[340px] shrink-0 self-stretch">
-      <div className="space-y-3 border-l pl-4 h-full">
+    // На десктопе (lg+) — sticky-колонка справа рядом с формой Портрета.
+    // На узких экранах — не прячем: та же панель уходит под контент во всю
+    // ширину, чтобы бейдж источника, противоречия и рекомендации не терялись
+    // на мобиле (Юрий 07.07: подсказки Портрета справа, а не сверху; на
+    // мобиле — под контентом, не скрыты).
+    <div className="w-full lg:w-[340px] shrink-0 lg:self-start">
+      <div className="space-y-3 pt-6 border-t lg:pt-0 lg:border-t-0 lg:border-l lg:pl-4 lg:sticky lg:top-4">
         <div className="flex items-center gap-2">
           <Bot className="w-4 h-4 text-[var(--ai)]" />
           <span className="text-sm font-semibold text-[var(--ai)]">AI-ассистент · Портрет</span>
         </div>
+
+        {/* Источник данных Портрета */}
+        {source === "legacy" && (
+          <Badge variant="outline" className="border-amber-400 text-amber-700 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400 w-fit">
+            Собрано из текущих настроек — проверьте и сохраните
+          </Badge>
+        )}
+        {source === "spec" && (
+          <Badge variant="outline" className="border-primary/40 text-primary w-fit">
+            Сохранённый Spec
+          </Badge>
+        )}
+
+        {/* Результат проверки «Проверить на противоречия» */}
+        {conflictsChecking ? (
+          <div className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs text-muted-foreground">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 animate-pulse text-amber-500" />
+            <span>Проверяю противоречия…</span>
+          </div>
+        ) : conflicts !== null && conflicts !== undefined && (
+          conflicts.length === 0 ? (
+            <div className="flex items-center gap-2 rounded-lg border border-green-300 bg-green-50 dark:bg-green-950/20 px-3 py-2 text-xs text-green-800 dark:text-green-300">
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-green-600" />
+              <span>«Подходит» и «Не подходит» не противоречат</span>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-red-300 bg-red-50 dark:bg-red-950/20 px-3 py-2.5 space-y-1.5">
+              {conflicts.map((c, i) => (
+                <div key={i} className="flex items-start gap-2 text-xs text-red-800 dark:text-red-300">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-red-500 mt-0.5" />
+                  <span>
+                    Противоречие: «{c.good}» и «{c.bad}» — {c.why}; оставьте одно
+                  </span>
+                </div>
+              ))}
+            </div>
+          )
+        )}
 
         {/* Реалистичность портрета */}
         <div className={cn("rounded-md border px-3 py-2 text-xs space-y-0.5", REALISM_TONE_CLASS[realism.tone])}>
