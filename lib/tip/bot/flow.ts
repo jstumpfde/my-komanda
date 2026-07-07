@@ -32,6 +32,7 @@ import {
   sendMessage,
   editMessageText,
   answerCallbackQuery,
+  sendChatAction,
   sendLongMessage,
   mdToTelegramHtml,
   escapeHtml,
@@ -319,6 +320,7 @@ async function stepReceiveBirthDate(botToken: string, chatId: number, text: stri
   }
   draft.birthDate = text
   await setSession(chatId, "await_name", { draft })
+  await sendMessage(botToken, chatId, `Принял: ${escapeHtml(text)} ✅`)
   await sendMessage(botToken, chatId, "Введите имя, если хотите:", { keyboard: skipButton("skip:name") })
 }
 
@@ -337,6 +339,7 @@ async function stepAfterName(botToken: string, chatId: number, draft: Draft): Pr
 
 async function stepReceiveName(botToken: string, chatId: number, text: string, draft: Draft): Promise<void> {
   draft.name = text
+  await sendMessage(botToken, chatId, `Принял, ${escapeHtml(text)} 👌`)
   await stepAfterName(botToken, chatId, draft)
 }
 
@@ -387,6 +390,7 @@ async function stepReceiveSecondBirthDate(botToken: string, chatId: number, text
     return
   }
   draft.second = { ...(draft.second ?? {}), birthDate: text }
+  await sendMessage(botToken, chatId, `Принял: ${escapeHtml(text)} ✅`)
   await afterPairDecision(botToken, chatId, draft)
 }
 
@@ -458,6 +462,70 @@ async function promptConfirm(botToken: string, chatId: number, draft: Draft): Pr
   })
 }
 
+// ─── Прогресс-бар генерации ─────────────────────────────────────────────────
+//
+// Полоса из 10 ячеек (▰ заполнено / ▱ пусто), бежит слева направо по времени:
+// ~90с до полной полосы, дальше держится на 9/10 с текстом «почти готово…»
+// (реальная генерация может занимать до нескольких минут — полоса не должна
+// «врать», что вот-вот всё, если процесс всё ещё идёт). Под полосой — сменные
+// фразы по кругу, чтобы ощущалось движение, а не зависание.
+
+const PROGRESS_CELLS = 10
+const PROGRESS_FULL_MS = 90_000
+const PROGRESS_PHRASES = [
+  "Считаю формулу…",
+  "Разбираю сочетания цифр…",
+  "Собираю портрет…",
+  "Пишу рекомендации…",
+]
+
+/** Строит строку прогресс-бара для момента t (мс от начала генерации). */
+export function buildProgressBar(elapsedMs: number): string {
+  const ratio = Math.min(elapsedMs / PROGRESS_FULL_MS, 1)
+  // Пока не 100% — минимум 1 заполненная ячейка сразу после старта (видимое
+  // движение с первой секунды), максимум 9/10 до фактического завершения.
+  const filledExact = Math.round(ratio * PROGRESS_CELLS)
+  const filled = ratio >= 1 ? PROGRESS_CELLS : Math.max(1, Math.min(PROGRESS_CELLS - 1, filledExact))
+  const bar = "▰".repeat(filled) + "▱".repeat(PROGRESS_CELLS - filled)
+
+  if (ratio >= 1) return `${bar} Готово!`
+
+  const phraseIdx = Math.floor(elapsedMs / 4000) % PROGRESS_PHRASES.length
+  const suffix = filled >= PROGRESS_CELLS - 1 ? "почти готово…" : PROGRESS_PHRASES[phraseIdx]
+  return `${bar}\n${suffix}`
+}
+
+const PROGRESS_EDIT_INTERVAL_MS = 4000
+const TYPING_INTERVAL_MS = 8000
+
+/**
+ * Крутит прогресс-бар в уже отправленном сообщении (editMessageText каждые
+ * ~4с — не чаще, чтобы не упереться в лимиты Telegram на редактирование) и
+ * параллельно шлёт sendChatAction("typing") раз в ~8с. Останавливается через
+ * AbortSignal, когда основной поллинг получает финальный статус.
+ */
+async function runProgressTicker(
+  botToken: string,
+  chatId: number,
+  messageId: number,
+  signal: AbortSignal,
+): Promise<void> {
+  const startedAt = Date.now()
+  let lastTypingAt = 0
+
+  while (!signal.aborted) {
+    const elapsed = Date.now() - startedAt
+    await editMessageText(botToken, chatId, messageId, buildProgressBar(elapsed))
+
+    if (Date.now() - lastTypingAt >= TYPING_INTERVAL_MS) {
+      await sendChatAction(botToken, chatId, "typing")
+      lastTypingAt = Date.now()
+    }
+
+    await new Promise((r) => setTimeout(r, PROGRESS_EDIT_INTERVAL_MS))
+  }
+}
+
 // ─── Запуск разбора + detached-поллинг ─────────────────────────────────────
 
 async function runAnalysis(botToken: string, chatId: number, draft: Draft): Promise<void> {
@@ -476,27 +544,31 @@ async function runAnalysis(botToken: string, chatId: number, draft: Draft): Prom
   }
 
   await setSession(chatId, "generating", { draft })
-  await sendMessage(botToken, chatId, "Готовлю разбор… обычно 1–2 минуты.")
+  const progressMsg = await sendMessage(botToken, chatId, buildProgressBar(0))
 
   try {
     const result = await createRun(user, input)
-    void pollAndDeliver(botToken, chatId, result.runId, draft)
+    void pollAndDeliver(botToken, chatId, result.runId, draft, progressMsg?.message_id)
   } catch (e) {
     if (e instanceof TipNoBalanceError) {
       await setSession(chatId, "await_promo", { draft })
-      await sendMessage(botToken, chatId, "Разборы закончились. Введите промокод, чтобы продолжить:")
+      const text = "Разборы закончились. Введите промокод, чтобы продолжить:"
+      if (progressMsg) await editMessageText(botToken, chatId, progressMsg.message_id, text)
+      else await sendMessage(botToken, chatId, text)
       return
     }
     if (e instanceof TipServiceError) {
       await setSession(chatId, "await_confirm", { draft })
-      await sendMessage(botToken, chatId, `${e.message}`, {
-        keyboard: [[{ text: "Попробовать снова", callback_data: "confirm:go" }]],
-      })
+      const keyboard: TgInlineKeyboard = [[{ text: "Попробовать снова", callback_data: "confirm:go" }]]
+      if (progressMsg) await editMessageText(botToken, chatId, progressMsg.message_id, e.message, { keyboard })
+      else await sendMessage(botToken, chatId, e.message, { keyboard })
       return
     }
     // eslint-disable-next-line no-console
     console.error("[tip-bot] runAnalysis", e)
-    await sendMessage(botToken, chatId, "Внутренняя ошибка. Попробуйте ещё раз позже.")
+    const text = "Внутренняя ошибка. Попробуйте ещё раз позже."
+    if (progressMsg) await editMessageText(botToken, chatId, progressMsg.message_id, text)
+    else await sendMessage(botToken, chatId, text)
   }
 }
 
@@ -516,9 +588,28 @@ async function stepReceivePromo(botToken: string, chatId: number, text: string, 
 const POLL_INTERVAL_MS = 5000
 const POLL_MAX_MS = 10 * 60 * 1000
 
-async function pollAndDeliver(botToken: string, chatId: number, runId: string, draft: Draft): Promise<void> {
+async function pollAndDeliver(
+  botToken: string,
+  chatId: number,
+  runId: string,
+  draft: Draft,
+  progressMessageId: number | undefined,
+): Promise<void> {
   const user = await getTgBoundUser(chatId)
   const startedAt = Date.now()
+
+  // Бегущий прогресс-бар крутится в фоне (editMessageText каждые ~4с +
+  // typing-индикатор раз в ~8с), пока основной цикл ждёт финальный статус
+  // прогона. Останавливаем через AbortController, когда узнаём исход.
+  const tickerAbort = new AbortController()
+  const ticker = progressMessageId
+    ? runProgressTicker(botToken, chatId, progressMessageId, tickerAbort.signal)
+    : Promise.resolve()
+
+  const stopTicker = async () => {
+    tickerAbort.abort()
+    await ticker
+  }
 
   while (Date.now() - startedAt < POLL_MAX_MS) {
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
@@ -531,9 +622,17 @@ async function pollAndDeliver(botToken: string, chatId: number, runId: string, d
       console.error("[tip-bot] pollAndDeliver read error", e)
       continue
     }
-    if (!run) return
+    if (!run) {
+      await stopTicker()
+      return
+    }
 
     if (run.status === "done") {
+      await stopTicker()
+      if (progressMessageId) {
+        await editMessageText(botToken, chatId, progressMessageId, buildProgressBar(PROGRESS_FULL_MS))
+      }
+
       const html = mdToTelegramHtml(run.resultMd ?? "")
       const shareUrl = run.shareToken ? `${getAppBaseUrl()}/tip/r/${run.shareToken}` : undefined
       const loopKeyboard: TgInlineKeyboard = [
@@ -553,18 +652,21 @@ async function pollAndDeliver(botToken: string, chatId: number, runId: string, d
     }
 
     if (run.status === "error") {
+      await stopTicker()
+      const errorText = `Не удалось составить разбор: ${escapeHtml(run.errorText ?? "неизвестная ошибка")}. Прогон возвращён на баланс.`
+      const keyboard: TgInlineKeyboard = [[{ text: "Попробовать снова", callback_data: "retry:generate" }]]
       await setSession(chatId, "await_confirm", { draft })
-      await sendMessage(
-        botToken,
-        chatId,
-        `Не удалось составить разбор: ${escapeHtml(run.errorText ?? "неизвестная ошибка")}. Прогон возвращён на баланс.`,
-        { keyboard: [[{ text: "Попробовать снова", callback_data: "retry:generate" }]] },
-      )
+      if (progressMessageId) {
+        await editMessageText(botToken, chatId, progressMessageId, errorText, { keyboard })
+      } else {
+        await sendMessage(botToken, chatId, errorText, { keyboard })
+      }
       return
     }
     // pending|generating — продолжаем ждать.
   }
 
+  await stopTicker()
   await sendMessage(
     botToken,
     chatId,

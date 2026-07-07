@@ -2,6 +2,24 @@
 // Bot API модуля «Типология» — чистый fetch, БЕЗ сторонних SDK (тот же
 // принцип, что lib/telegram/candidate-bot.ts). Собственный токен
 // TIP_TG_BOT_TOKEN (env), отдельный от кандидатского бота.
+//
+// Исходящие fetch к api.telegram.org с прод-сервера (РФ) нестабильны —
+// sendMessage падает с «fetch failed» примерно в 30-50% случаев. Базовый URL
+// переопределяется через TIP_TG_API_BASE (на проде — стабильный прокси на
+// рижском VPS, reverse_proxy на api.telegram.org). Плюс ретраи на сетевые
+// ошибки в базовом вызове Bot API — HTTP-ошибки самого Telegram (4xx) не
+// ретраятся, так как это не сетевая проблема, а невалидный запрос/данные.
+
+const TG_API_BASE = process.env.TIP_TG_API_BASE || "https://api.telegram.org"
+
+const RETRY_DELAYS_MS = [500, 1500]
+
+/** true, если ошибка похожа на сетевую (а не на осмысленный отказ Telegram). */
+function isNetworkError(e: unknown): boolean {
+  if (e instanceof TypeError) return true
+  const msg = e instanceof Error ? e.message : String(e)
+  return /fetch failed|network|ECONNRESET|ETIMEDOUT|EAI_AGAIN|timeout|aborted/i.test(msg)
+}
 
 export interface TgInlineButton {
   text: string
@@ -23,28 +41,44 @@ interface TgApiErr {
 type TgApiResponse<T> = TgApiOk<T> | TgApiErr
 
 function apiUrl(botToken: string, method: string): string {
-  return `https://api.telegram.org/bot${botToken}/${method}`
+  return `${TG_API_BASE}/bot${botToken}/${method}`
 }
 
+/**
+ * Базовый вызов Bot API. До 3 попыток на сетевые ошибки (TypeError/fetch
+ * failed/timeout) с backoff 500мс/1500мс между попытками. HTTP-ошибки самого
+ * Telegram (data.ok === false, обычно 4xx) НЕ ретраятся — это не сетевая
+ * проблема, повтор её не исправит.
+ */
 async function callApi<T>(botToken: string, method: string, body: Record<string, unknown>): Promise<T | null> {
-  try {
-    const res = await fetch(apiUrl(botToken, method), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    })
-    const data = (await res.json()) as TgApiResponse<T>
-    if (!data.ok) {
+  const maxAttempts = RETRY_DELAYS_MS.length + 1
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(apiUrl(botToken, method), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      const data = (await res.json()) as TgApiResponse<T>
+      if (!data.ok) {
+        // eslint-disable-next-line no-console
+        console.error(`[tip-bot] ${method} failed`, "description" in data ? data.description : res.status)
+        return null
+      }
+      return data.result
+    } catch (e) {
+      const network = isNetworkError(e)
       // eslint-disable-next-line no-console
-      console.error(`[tip-bot] ${method} failed`, "description" in data ? data.description : res.status)
-      return null
+      console.error(
+        `[tip-bot] ${method} network error (попытка ${attempt}/${maxAttempts}${network ? "" : ", не похоже на сетевую"})`,
+        e instanceof Error ? e.message : e,
+      )
+      if (!network || attempt === maxAttempts) return null
+      await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt - 1]))
     }
-    return data.result
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.error(`[tip-bot] ${method} network error`, e)
-    return null
   }
+  return null
 }
 
 export interface TgSentMessage {
@@ -100,6 +134,12 @@ export async function answerCallbackQuery(
     ...(text ? { text } : {}),
     ...(showAlert ? { show_alert: true } : {}),
   })
+  return result !== null
+}
+
+/** Индикатор «печатает…» — вызывать раз в ~8с во время длительной генерации. */
+export async function sendChatAction(botToken: string, chatId: number, action = "typing"): Promise<boolean> {
+  const result = await callApi<unknown>(botToken, "sendChatAction", { chat_id: chatId, action })
   return result !== null
 }
 
