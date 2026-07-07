@@ -1,10 +1,11 @@
 // «Сторож найма» — запись находок в admin_alerts. Идемпотентно по dedup_key:
 // пока открытый алерт с тем же ключом существует, повторные прогоны крона
 // НЕ создают дубли (см. partial unique index admin_alerts_open_dedup_idx,
-// drizzle/0260_admin_alerts.sql). Явный select-then-insert вместо
-// onConflictDoNothing() — конфликт-таргет здесь partial-индекс (WHERE
-// status='open'), которым drizzle-orm не умеет явно управлять без риска
-// собрать не тот индекс; select-first проще проверить и потестировать.
+// drizzle/0260_admin_alerts.sql). Select — быстрый путь «уже есть, скип»,
+// но от гонки двух перекрывающихся прогонов защищает НЕ он, а сама вставка:
+// INSERT ... ON CONFLICT DO NOTHING + RETURNING. Проигравший гонку получает
+// пустой returning → created=false → Telegram не дублируется и крон-ран
+// не падает необработанным unique-violation.
 
 import { eq, and, inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
@@ -16,11 +17,14 @@ import { getPlatformSetting } from "@/lib/platform/settings"
 import { MESSAGE_GUARD_ALERTS_KEY } from "@/lib/messaging/guard-alert"
 
 /**
- * Заводит алерт, если открытого с таким dedup_key ещё нет. Возвращает true,
- * если завели НОВЫЙ алерт (для решения — слать ли Telegram сейчас, чтобы не
- * дублировать уведомление при каждом тике, пока проблема остаётся открытой).
+ * Заводит алерт, если открытого с таким dedup_key ещё нет. Возвращает
+ * created=true ТОЛЬКО если вставка реально произошла в этом вызове —
+ * решение «слать ли Telegram» принимается по этому флагу (см.
+ * shouldNotifyTelegram в ./classify.ts), чтобы при перекрытии двух прогонов
+ * уведомление ушло ровно один раз.
  */
 export async function upsertAlert(issue: WatchdogIssue): Promise<{ created: boolean }> {
+  // Быстрый путь: открытый алерт уже есть — не вставляем (и не шлём Telegram).
   const [existing] = await db
     .select({ id: adminAlerts.id })
     .from(adminAlerts)
@@ -28,17 +32,29 @@ export async function upsertAlert(issue: WatchdogIssue): Promise<{ created: bool
     .limit(1)
   if (existing) return { created: false }
 
-  await db.insert(adminAlerts).values({
-    companyId: issue.companyId ?? null,
-    severity:  issue.severity,
-    source:    "hiring_watchdog",
-    dedupKey:  issue.dedupKey,
-    title:     issue.title,
-    message:   issue.message,
-    actionUrl: issue.actionUrl ?? null,
-    status:    "open",
-  })
-  return { created: true }
+  // Гонка двух перекрывающихся прогонов: между select выше и insert ниже
+  // параллельный прогон мог вставить тот же dedup_key. ON CONFLICT DO NOTHING
+  // (без target — подавляет любой конфликт вставки, для этой таблицы
+  // единственный источник конфликтов и есть partial unique index
+  // admin_alerts_open_dedup_idx; drizzle не умеет надёжно указать partial
+  // индекс target-ом) + RETURNING: пустой результат = вставка не произошла,
+  // алерт уже существует → created=false, Telegram не дублируем.
+  const inserted = await db
+    .insert(adminAlerts)
+    .values({
+      companyId: issue.companyId ?? null,
+      severity:  issue.severity,
+      source:    "hiring_watchdog",
+      dedupKey:  issue.dedupKey,
+      title:     issue.title,
+      message:   issue.message,
+      actionUrl: issue.actionUrl ?? null,
+      status:    "open",
+    })
+    .onConflictDoNothing()
+    .returning({ id: adminAlerts.id })
+
+  return { created: inserted.length > 0 }
 }
 
 /**

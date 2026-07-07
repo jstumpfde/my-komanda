@@ -7,6 +7,7 @@ import { getValidToken } from "@/lib/hh-helpers"
 import { shouldStopFollowUp } from "@/lib/followup/should-stop"
 import { canSendNow } from "@/lib/schedule/can-send-now"
 import { checkCronAuth } from "@/lib/cron/auth"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { renderTemplate } from "@/lib/template-renderer"
 import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
 import {
@@ -39,14 +40,23 @@ export async function POST(req: NextRequest) {
 
   const now = new Date()
   const startedAt = Date.now()
+  // Журнал в cron_runs ВСЕГДА, даже при 0 отправок (все touches вне рабочего
+  // окна — легальный «пустой» прогон): «Сторож найма» проверяет живость этого
+  // крона по свежести последнего успешного прогона в cron_runs, а не по
+  // фактическим отправкам — иначе каждый тихий вечер/выходной выглядел бы
+  // как «крон умер» (ложный CRITICAL). .catch(() => null) — сбой журнала
+  // не должен ронять отправку (горячий прод-крон).
+  const run = await startCronRun("follow-up").catch(() => null)
   try {
     const campaign = await processCampaignTouches(now)
     const durationMs = Date.now() - startedAt
     // Одна структурированная строка для logrotate/grep'а.
     console.log(JSON.stringify({ tag: "cron/follow-up", ...campaign, durationMs, ts: now.toISOString() }))
+    if (run) await finishCronRun(run.id, "ok", { ...campaign }).catch(() => {})
     return NextResponse.json({ ok: true, campaign: { ...campaign, durationMs }, ts: now.toISOString() })
   } catch (err) {
     console.error("[cron/follow-up]", err)
+    if (run) await finishCronRun(run.id, "error", null, err instanceof Error ? err.message : String(err)).catch(() => {})
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

@@ -6,7 +6,6 @@
 import { and, eq, lt, gte, inArray, sql, desc, ne } from "drizzle-orm"
 import { db } from "@/lib/db"
 import {
-  companies,
   vacancies,
   hhVacancies,
   hhIntegrations,
@@ -42,7 +41,6 @@ const FUNNEL_V2_TICK_STALE_THRESHOLD_MINUTES = 30
 export interface WatchdogRunResult {
   issues: WatchdogIssue[]
   fixes: {
-    stuckQueueReset: number
     oldPublicationCancelled: number
   }
 }
@@ -100,34 +98,23 @@ async function checkHhImportFreshness(): Promise<WatchdogIssue[]> {
   return issue ? [issue] : []
 }
 
-// ─── Проверка 3: застрявший разбор (авто-починка: claimed>4ч → response) ───
-// Переиспользуем ТУ ЖЕ семантику, что и hh-cleanup-stuck (не дублируем его
-// orphaned-логику — это про другое: там candidate уже терминальный, здесь —
-// отклик просто завис технически и должен вернуться в очередь). Скоуп —
-// ТОЛЬКО вакансии с auto_processing_enabled=true (иначе нормально, что
-// отклики лежат необработанными долго — HR разбирает вручную).
-async function checkAndFixStuckQueue(): Promise<{ issues: WatchdogIssue[]; resetCount: number }> {
+// ─── Проверка 3: застрявший разбор (только диагностика, БЕЗ авто-починки) ──
+// Авто-сброс claimed УБРАН на ревью координатора (07.07): у hh_responses НЕТ
+// отметки времени клейма — created_at это дата ОТКЛИКА, и почти все отклики
+// старше 4ч по нему. Сброс по этому критерию ловил бы отклики, взятые
+// очередью в работу минуту назад (обработка одного кандидата с задержками
+// легально идёт минуты) → гонка со scan/process-queue и ДВОЙНАЯ отправка
+// первого сообщения кандидату. Безопасного критерия без новой колонки
+// claimed_at не существует — поэтому response+claimed старше 4ч только
+// СЧИТАЕМ и поднимаем warning (HR/админ разберётся); зависшие claimed чинит
+// error-recovery самого process-queue. Колонка claimed_at + авто-починка —
+// бэклог. Скоуп — ТОЛЬКО вакансии с auto_processing_enabled=true (иначе
+// нормально, что отклики лежат необработанными долго — HR разбирает вручную).
+// НЕ дублируем orphaned-логику hh-cleanup-stuck — это про другое (там
+// candidate уже терминальный).
+async function checkStuckQueue(): Promise<WatchdogIssue[]> {
   const cutoff = new Date(Date.now() - STUCK_QUEUE_HOURS * 60 * 60 * 1000)
 
-  // Авто-сброс claimed УБРАН на ревью координатора (07.07): у hh_responses
-  // НЕТ отметки времени клейма — created_at это дата ОТКЛИКА, и почти все
-  // отклики старше 4ч по нему. Сброс по этому критерию ловил бы отклики,
-  // взятые очередью в работу минуту назад (обработка одного кандидата с
-  // задержками легально идёт минуты) → гонка со scan/process-queue и ДВОЙНАЯ
-  // отправка первого сообщения кандидату. Безопасного критерия без новой
-  // колонки claimed_at не существует — поэтому claimed>4ч только СЧИТАЕМ и
-  // поднимаем warning (HR/админ разберётся), чинит error-recovery самого
-  // process-queue. Колонка claimed_at + возврат авто-починки — бэклог.
-  const [claimedRow] = await db
-    .select({ c: sql<number>`count(*)::int` })
-    .from(hhResponses)
-    .where(and(eq(hhResponses.status, "claimed"), lt(hhResponses.createdAt, cutoff)))
-  const resetCount = 0
-  const staleClaimed = claimedRow?.c ?? 0
-
-  // Диагностика (warning, НЕ чиним автоматически): response старше 4ч на
-  // вакансиях с включённым авто-разбором — значит cron не успевает или
-  // застопорился на чём-то другом. Группируем по вакансии.
   const stuckResponseRows = await db
     .select({
       hhVacancyId: hhResponses.hhVacancyId,
@@ -138,14 +125,13 @@ async function checkAndFixStuckQueue(): Promise<{ issues: WatchdogIssue[]; reset
     .where(and(inArray(hhResponses.status, ["response", "claimed"]), lt(hhResponses.createdAt, cutoff)))
     .groupBy(hhResponses.hhVacancyId, hhResponses.companyId)
 
-  void staleClaimed // учтён в общем warning выше (response+claimed старше 4ч)
-  if (stuckResponseRows.length === 0) return { issues: [], resetCount }
+  if (stuckResponseRows.length === 0) return []
 
   // hh_responses.hhVacancyId — hh-идентификатор публикации, не наш vacancyId.
   // Матчим на vacancies с auto_processing_enabled=true через hh_vacancy_id ИЛИ
   // hh_vacancies.hh_vacancy_id (см. тот же приоритет, что и в hh-import).
   const hhVacIds = [...new Set(stuckResponseRows.map((r) => r.hhVacancyId))]
-  if (hhVacIds.length === 0) return { issues: [], resetCount }
+  if (hhVacIds.length === 0) return []
 
   const activeVacRows = await db
     .select({ id: vacancies.id, hhVacancyId: vacancies.hhVacancyId, companyId: vacancies.companyId })
@@ -160,7 +146,7 @@ async function checkAndFixStuckQueue(): Promise<{ issues: WatchdogIssue[]; reset
     const issue = classifyStuckQueue(vac.id, vac.companyId, row.cnt)
     if (issue) issues.push(issue)
   }
-  return { issues, resetCount }
+  return issues
 }
 
 // ─── Проверка 4а: отправки — много failed за час (warning) ─────────────────
@@ -286,22 +272,21 @@ async function lastOkRun(cronName: string): Promise<Date | null> {
 async function checkCronsAlive(): Promise<WatchdogIssue[]> {
   const issues: WatchdogIssue[] = []
 
-  // follow-up: НЕ пишет в cron_runs (см. app/api/cron/follow-up/route.ts) —
-  // используем recency последней отправленной/проваленной touch-строки как
-  // прокси активности крона вместо cron_runs.
+  // follow-up: с guard-фикса 07.07 пишет в cron_runs КАЖДЫЙ прогон (даже при
+  // 0 отправок — все touches вне рабочего окна это легальный пустой прогон),
+  // поэтому живость проверяем так же, как pending-rejections/funnel-v2-tick —
+  // по свежести последнего успешного прогона. Прежний прокси по sentAt
+  // последнего sent/failed давал ложный CRITICAL каждый тихий вечер/выходной:
+  // canSendNow намеренно держит touches в pending вне окна, отправок нет,
+  // но крон при этом жив.
   const [pendingCount] = await db
     .select({ c: sql<number>`count(*)::int` })
     .from(followUpMessages)
     .where(and(eq(followUpMessages.status, "pending"), lt(followUpMessages.scheduledAt, new Date())))
   const hasFollowUpWork = (pendingCount?.c ?? 0) > 0
-  if (hasFollowUpWork) {
-    const [recent] = await db
-      .select({ at: followUpMessages.sentAt })
-      .from(followUpMessages)
-      .where(inArray(followUpMessages.status, ["sent", "failed"]))
-      .orderBy(desc(followUpMessages.sentAt))
-      .limit(1)
-    const issue = classifyCronStale("follow-up", minutesSince(recent?.at ?? null), FOLLOW_UP_STALE_THRESHOLD_MINUTES, true)
+  {
+    const last = await lastOkRun("follow-up")
+    const issue = classifyCronStale("follow-up", minutesSince(last), FOLLOW_UP_STALE_THRESHOLD_MINUTES, hasFollowUpWork)
     if (issue) issues.push(issue)
   }
 
@@ -366,8 +351,7 @@ export async function runHiringWatchdog(): Promise<WatchdogRunResult> {
   issues.push(...(await checkHhImportFreshness()))
   issues.push(...(await checkCronsAlive()))
 
-  const stuckQueue = await checkAndFixStuckQueue()
-  issues.push(...stuckQueue.issues)
+  issues.push(...(await checkStuckQueue()))
 
   const oldPub = await checkAndFixOldPublication()
   issues.push(...oldPub.issues)
@@ -383,7 +367,6 @@ export async function runHiringWatchdog(): Promise<WatchdogRunResult> {
   return {
     issues,
     fixes: {
-      stuckQueueReset: stuckQueue.resetCount,
       oldPublicationCancelled: oldPub.cancelledTotal,
     },
   }
