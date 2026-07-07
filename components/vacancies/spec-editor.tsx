@@ -26,7 +26,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
-import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
@@ -267,7 +266,7 @@ interface ActualizeSelection {
 }
 
 /** Одна конфликтующая пара из .../portrait/check-conflicts */
-interface ConflictItem {
+export interface ConflictItem {
   good: string
   bad:  string
   why:  string
@@ -1792,7 +1791,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
   const hasCriteria = goodCount > 0 || dbItems.length > 0
 
   return (
-    <div className={vacancyAnketaData ? "flex items-start gap-6" : undefined}>
+    <div className={vacancyAnketaData ? "flex flex-col lg:flex-row items-stretch lg:items-start gap-6" : undefined}>
     <div className="space-y-6 min-w-0 flex-1">
       {/* Контур оценки: «Портрет» (активен) либо предложение перенести */}
       {portraitScoring === true && (
@@ -1849,16 +1848,10 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
               </span>
             </div>
           )}
-          {source === "legacy" && (
-            <Badge variant="outline" className="border-amber-400 text-amber-700 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400">
-              Собрано из текущих настроек — проверьте и сохраните
-            </Badge>
-          )}
-          {source === "spec" && (
-            <Badge variant="outline" className="border-primary/40 text-primary">
-              Сохранённый Spec
-            </Badge>
-          )}
+          {/* Бейдж источника («Собрано из текущих настроек» / «Сохранённый Spec») и
+              результат «Проверить на противоречия» переехали в правую панель
+              советника (PortraitAdvisor) — Юрий 07.07: подсказки Портрета справа,
+              а не сверху над формой. */}
           {/* «Проверить на противоречия» — в ряд с верхними кнопками, амбер-цвет (отличается от синей/нейтральной) */}
           <Button
             type="button"
@@ -1935,28 +1928,8 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
         </Alert>
       )}
 
-      {/* ── Статус-плашка противоречий (над секциями «Подходит» и «Не подходит») ── */}
-      {conflictsResult !== null && (
-        <div className="space-y-1.5">
-          {conflictsResult.length === 0 ? (
-            <div className="flex items-center gap-2 rounded-lg border border-green-300 bg-green-50 dark:bg-green-950/20 px-3 py-2 text-sm text-green-800 dark:text-green-300">
-              <CheckCircle2 className="w-4 h-4 shrink-0 text-green-600" />
-              <span>«Подходит» и «Не подходит» не противоречат</span>
-            </div>
-          ) : (
-            <div className="rounded-lg border border-red-300 bg-red-50 dark:bg-red-950/20 px-3 py-2.5 space-y-1.5">
-              {conflictsResult.map((c, i) => (
-                <div key={i} className="flex items-start gap-2 text-sm text-red-800 dark:text-red-300">
-                  <AlertTriangle className="w-4 h-4 shrink-0 text-red-500 mt-0.5" />
-                  <span>
-                    Противоречие: «{c.good}» и «{c.bad}» — {c.why}; оставьте одно
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      {/* Статус проверки противоречий («Проверить на противоречия») переехал
+          в правую панель советника (PortraitAdvisor) — Юрий 07.07. */}
       {/* ── Заметная подсказка «критерии не заданы» ──────────────────────────
           Пусто в «Подходит»/«Не подходит» → AI ставит всем почти одинаковый
           балл (плоский, бесполезный). Показываем, только когда критериев нет,
@@ -3039,7 +3012,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
         Портрет (spec) — критерии/стоп-факторы/эталон, а не поля вакансии
         (раньше тут стоял VacancyAdvisor с vacancyData → показывал «40 навыков»
         и «стоп-факторы критично» из вакансии; Юрий 26.06: только по Портрету). */}
-    <PortraitAdvisor spec={spec} />
+    <PortraitAdvisor spec={spec} source={source} conflicts={conflictsResult} conflictsChecking={conflictsChecking} />
     </div>
   )
 }
