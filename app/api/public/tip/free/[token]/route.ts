@@ -4,15 +4,21 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getOrCreateTipUser } from "@/lib/tip/session"
 import { claimFreeLink, TipServiceError } from "@/lib/tip/service"
-import { checkTipPromoRateLimit, TIP_RATE_LIMIT_MESSAGE } from "@/lib/tip/rate-limit"
+import { checkTipPromoRateLimit, checkTipPromoIpRateLimit, TIP_RATE_LIMIT_MESSAGE } from "@/lib/tip/rate-limit"
 
 export const runtime = "nodejs"
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ token: string }> },
 ) {
   const { token } = await params
+
+  // IP-лимит ДО создания анонимного пользователя (guard-major 07.07).
+  if (!checkTipPromoIpRateLimit(req)) {
+    return NextResponse.json({ error: TIP_RATE_LIMIT_MESSAGE }, { status: 429 })
+  }
+
   const user = await getOrCreateTipUser()
 
   if (!checkTipPromoRateLimit(user.id)) {

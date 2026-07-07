@@ -6,7 +6,7 @@ import { db } from "@/lib/db"
 import { tipUsers } from "@/lib/db/schema"
 import { getOrCreateTipUser, switchTipUserCookie } from "@/lib/tip/session"
 import { activatePromo, TipServiceError } from "@/lib/tip/service"
-import { checkTipPromoRateLimit, TIP_RATE_LIMIT_MESSAGE } from "@/lib/tip/rate-limit"
+import { checkTipPromoRateLimit, checkTipPromoIpRateLimit, TIP_RATE_LIMIT_MESSAGE } from "@/lib/tip/rate-limit"
 
 export const runtime = "nodejs"
 
@@ -20,6 +20,12 @@ export async function POST(req: NextRequest) {
 
   if (!body.code?.trim()) {
     return NextResponse.json({ error: "Промокод не найден" }, { status: 400 })
+  }
+
+  // IP-лимит ДО создания анонимного пользователя: сброс cookie брутфорсу
+  // не помогает (guard-major 07.07).
+  if (!checkTipPromoIpRateLimit(req)) {
+    return NextResponse.json({ error: TIP_RATE_LIMIT_MESSAGE }, { status: 429 })
   }
 
   const user = await getOrCreateTipUser()

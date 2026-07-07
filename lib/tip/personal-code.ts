@@ -13,12 +13,13 @@ import { and, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { tipPromoCodes } from "@/lib/db/schema"
 
-// Буквы — подмножество, визуально совпадающее с кириллицей (легко
-// продиктовать/перепечатать с любой раскладки), цифры 2-9 (без 0/1, чтобы не
-// путать с О/I). Тот же алфавит, что и обычные коды — см.
-// app/api/admin/tip/promo-codes/route.ts.
-const LETTERS_ALPHABET = "ABCEHKMPTX"
-const DIGITS_ALPHABET = "23456789"
+// Личный код — фактически пароль в аккаунт (активация переключает cookie на
+// владельца), поэтому энтропия здесь ВЫШЕ, чем у обычных промокодов:
+// 12 символов 32-символьного алфавита = 60 бит (guard-major 07.07: прежний
+// формат 4+4 давал ~25 бит — брутфорсится). Код не диктуют голосом — его
+// копируют из бота (/code), поэтому длина UX не мешает.
+const CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ" // без 0/O/1/I
+const PERSONAL_CODE_RANDOM_LEN = 12
 
 function randomFromAlphabet(len: number, alphabet: string): string {
   const bytes = randomBytes(len)
@@ -28,7 +29,7 @@ function randomFromAlphabet(len: number, alphabet: string): string {
 }
 
 function generatePersonalCode(): string {
-  return `TIP${randomFromAlphabet(4, LETTERS_ALPHABET)}${randomFromAlphabet(4, DIGITS_ALPHABET)}`
+  return `TIP${randomFromAlphabet(PERSONAL_CODE_RANDOM_LEN, CODE_ALPHABET)}`
 }
 
 /**

@@ -60,7 +60,15 @@ export async function GET(req: NextRequest) {
     .orderBy(desc(tipPromoCodes.createdAt))
     .limit(500)
 
-  return NextResponse.json({ codes: rows })
+  // Личный код — пароль в аккаунт владельца. Маскируем НА СЕРВЕРЕ (guard-major
+  // 07.07: клиентская маска — косметика, полный код утекал в JSON и был виден
+  // любому админу через Network/curl). Владелец узнаёт свой код сам через
+  // /code в боте — админке полное значение не нужно.
+  const safe = rows.map((r) =>
+    r.isPersonal ? { ...r, code: `${r.code.slice(0, 3)}••••••••` } : r,
+  )
+
+  return NextResponse.json({ codes: safe })
 }
 
 export async function POST(req: NextRequest) {
