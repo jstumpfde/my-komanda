@@ -21,8 +21,8 @@ import { landingLeads } from "@/lib/db/schema"
 import { getPlatformSetting } from "@/lib/platform/settings"
 import { sendTelegramAlert } from "@/lib/notifications/telegram"
 import { MESSAGE_GUARD_ALERTS_KEY } from "@/lib/messaging/guard-alert"
-import {
 import { escapeHtml } from "@/lib/tip/bot/telegram"
+import {
   isHoneypotTripped,
   isWithinLandingLeadRateLimit,
   LANDING_LEAD_RATE_LIMIT_MESSAGE,
