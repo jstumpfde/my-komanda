@@ -1382,6 +1382,16 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
       // MERGE поверх актуального боевого состояния (не blind-overwrite) — иначе
       // факторы, заданные вне конструктора (напр. nativeLanguage через
       // «Настройки вакансии»/Портрет), терялись бы при каждом сохранении анкеты.
+      //
+      // БАГФИКС (ревью коммита 33ea7a77): раньше ошибка PUT стоп-факторов молча
+      // глоталась (.catch(() => null), результат не проверялся) — юзер видел
+      // «Анкета сохранена», хотя стоп-факторы реально НЕ применились. Это ровно
+      // та иллюзия «настройка выглядит применённой, а на деле нет», из-за
+      // которой был весь инцидент 2604V023. Теперь: успех PUT stop-factors
+      // проверяется явно (stopFactorsOk), при неуспехе — отдельный toast.error,
+      // анкета при этом всё равно считается сохранённой (два независимых
+      // ресурса, см. комментарий выше про MERGE).
+      let stopFactorsOk = true
       const stopFactorsSave = fetch(`/api/modules/hr/vacancies/${vacancyId}/stop-factors`)
         .then(r => r.ok ? r.json() : null)
         .then((d: { stopFactors?: VacancyStopFactors } | null) =>
@@ -1390,7 +1400,8 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ stopFactors: fromAnketaStopFactors(anketaStopFactors, d?.stopFactors ?? {}) }),
           }))
-        .catch(() => null)
+        .then(r => { if (!r.ok) stopFactorsOk = false })
+        .catch(() => { stopFactorsOk = false })
       const [res] = await Promise.all([
         fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
           method: "PATCH",
@@ -1405,6 +1416,9 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
       }
       dataDirtyRef.current = false
       toast.success("Анкета сохранена")
+      if (!stopFactorsOk) {
+        toast.error("Стоп-факторы не сохранились — попробуйте сохранить ещё раз или проверьте вкладку «Воронка»")
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Не удалось сохранить анкету")
     } finally {
