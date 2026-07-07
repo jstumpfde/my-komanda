@@ -94,6 +94,7 @@ import type { AxisScoreResult } from "@/lib/core/spec/axis-scorer"
 import type { FunnelV2Stage } from "@/lib/funnel-v2/types"
 import type { RoleScoringFormula } from "@/lib/hiring/role-templates/types"
 import type { InterviewScorecard } from "@/lib/candidates/interview-scorecard"
+import type { TipFormula as TipCalcFormula } from "@/lib/tip/calculation"
 
 // ── Рантайм воронки v2 — состояние кандидата (drizzle/0226) ─────────────────
 // Хранится в candidates.funnel_v2_state_json (jsonb, nullable).
@@ -4353,3 +4354,143 @@ export const priceMonitorSettings = pgTable("price_monitor_settings", {
 })
 export type PriceMonitorSettings    = typeof priceMonitorSettings.$inferSelect
 export type NewPriceMonitorSettings = typeof priceMonitorSettings.$inferInsert
+
+// ─── Типология (модуль «tip») ────────────────────────────────────────────────
+// AI-разбор личности по дате рождения. /tip + телеграм-бот (позже).
+// Пользователь модуля НЕ обязательно совпадает с users платформы — это
+// отдельная сущность (аноним по tg_chat_id, либо email для веба).
+
+export interface TipUserPrefs {
+  depth?: "short" | "detailed" | "full"
+  audience?: "self" | "send_to_person" | "hiring_analysis"
+  gender?: string
+  displayName?: string
+  lastRunAt?: string  // ISO
+}
+
+export const tipUsers = pgTable("tip_users", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  tgChatId:     bigint("tg_chat_id", { mode: "number" }).unique(),
+  email:        text("email"),
+  displayName:  text("display_name"),
+  balanceRuns:  integer("balance_runs").notNull().default(0),
+  prefsJson:    jsonb("prefs_json").$type<TipUserPrefs>(),
+  createdAt:    timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+})
+export type TipUser    = typeof tipUsers.$inferSelect
+export type NewTipUser = typeof tipUsers.$inferInsert
+
+// Входные данные разбора — собраны на UI, формула считается кодом (НЕ AI).
+// Совпадает по смыслу с TipRequestInput (lib/tip/prompt.ts), но контекст
+// хранится как список (contexts) — при нескольких выбранных пользователем
+// контекстах (раздел 7 методики) вызывающий код объединяет их в один прогон.
+export interface TipRunInput {
+  name?: string
+  birthDate: string          // ДД.ММ.ГГГГ
+  gender?: string
+  contexts: string[]         // слаги из lib/tip/contexts.ts, напр. ["entrepreneur"]
+  role?: string              // должность — для employee/manager
+  extraQuestion?: string
+  depth: "short" | "detailed" | "full"
+  audience: "self" | "send_to_person" | "hiring_analysis"
+  secondPerson?: {           // для парных контекстов (партнёрство/отношения)
+    name?: string
+    birthDate?: string
+    gender?: string
+  }
+}
+
+// Реальная форма формулы — считается в lib/tip/calculation.ts (computeFormula),
+// НЕ переизобретаем здесь: хранится как есть, включая оттенки/повторы/пропуски.
+export type TipFormula = TipCalcFormula
+
+export const tipRuns = pgTable("tip_runs", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  userId:       uuid("user_id").notNull().references(() => tipUsers.id, { onDelete: "cascade" }),
+  inputJson:    jsonb("input_json").$type<TipRunInput>().notNull(),
+  formulaJson:  jsonb("formula_json").$type<TipFormula>(),
+  status:       text("status").notNull().default("pending"), // pending|generating|done|error
+  resultMd:     text("result_md"),
+  errorText:    text("error_text"),
+  model:        text("model"),
+  tokensIn:     integer("tokens_in"),
+  tokensOut:    integer("tokens_out"),
+  costUsd:      numeric("cost_usd", { precision: 10, scale: 6 }),
+  shareToken:   text("share_token").unique(),
+  createdAt:    timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt:   timestamp("finished_at", { withTimezone: true }),
+}, (t) => [
+  index("tip_runs_user_idx").on(t.userId),
+  index("tip_runs_share_token_idx").on(t.shareToken),
+])
+export type TipRun    = typeof tipRuns.$inferSelect
+export type NewTipRun = typeof tipRuns.$inferInsert
+
+// Редактируемые слои промптов методики — НИКАКОГО зашитого в код контента.
+// layer_key: base | shades | context:<slug> | style:<audience> | depth:<depth> | age_gate
+export const tipPromptLayers = pgTable("tip_prompt_layers", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  layerKey:   text("layer_key").notNull().unique(),
+  title:      text("title").notNull(),
+  content:    text("content").notNull(),
+  isActive:   boolean("is_active").notNull().default(true),
+  updatedAt:  timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+})
+export type TipPromptLayer    = typeof tipPromptLayers.$inferSelect
+export type NewTipPromptLayer = typeof tipPromptLayers.$inferInsert
+
+// Промокоды на прогоны (в т.ч. бесплатные ссылки — is_free_link).
+export const tipPromoCodes = pgTable("tip_promo_codes", {
+  id:                uuid("id").primaryKey().defaultRandom(),
+  code:              text("code").notNull().unique(),
+  runsGranted:       integer("runs_granted").notNull(),
+  maxActivations:    integer("max_activations"),  // null = без лимита
+  activationsCount:  integer("activations_count").notNull().default(0),
+  isFreeLink:        boolean("is_free_link").notNull().default(false),
+  sourceLabel:       text("source_label"),
+  expiresAt:         timestamp("expires_at", { withTimezone: true }),
+  createdAt:         timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+})
+export type TipPromoCode    = typeof tipPromoCodes.$inferSelect
+export type NewTipPromoCode = typeof tipPromoCodes.$inferInsert
+
+export const tipPromoActivations = pgTable("tip_promo_activations", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  promoId:    uuid("promo_id").notNull().references(() => tipPromoCodes.id, { onDelete: "cascade" }),
+  userId:     uuid("user_id").notNull().references(() => tipUsers.id, { onDelete: "cascade" }),
+  createdAt:  timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  unique("tip_promo_activations_promo_user_uq").on(t.promoId, t.userId),
+  index("tip_promo_activations_promo_idx").on(t.promoId),
+])
+export type TipPromoActivation    = typeof tipPromoActivations.$inferSelect
+export type NewTipPromoActivation = typeof tipPromoActivations.$inferInsert
+
+// Заготовка оплаты — оплата отключена на старте (провайдер не подключён).
+export const tipPayments = pgTable("tip_payments", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  userId:       uuid("user_id").notNull().references(() => tipUsers.id, { onDelete: "cascade" }),
+  amountRub:    integer("amount_rub").notNull(),
+  runsGranted:  integer("runs_granted").notNull(),
+  provider:     text("provider"),
+  externalId:   text("external_id"),
+  status:       text("status").notNull().default("created"),
+  createdAt:    timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+})
+export type TipPayment    = typeof tipPayments.$inferSelect
+export type NewTipPayment = typeof tipPayments.$inferInsert
+
+// Доп. вопросы к уже готовому разбору (уточнения без нового полного прогона).
+export const tipQuestions = pgTable("tip_questions", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  runId:      uuid("run_id").notNull().references(() => tipRuns.id, { onDelete: "cascade" }),
+  question:   text("question").notNull(),
+  answerMd:   text("answer_md"),
+  status:     text("status").notNull().default("pending"),
+  tokensIn:   integer("tokens_in"),
+  tokensOut:  integer("tokens_out"),
+  costUsd:    numeric("cost_usd", { precision: 10, scale: 6 }),
+  createdAt:  timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+})
+export type TipQuestion    = typeof tipQuestions.$inferSelect
+export type NewTipQuestion = typeof tipQuestions.$inferInsert
