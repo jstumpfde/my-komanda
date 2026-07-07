@@ -6,8 +6,13 @@
  * зависимостей (DB, SDK, fs).
  *
  * НАЗНАЧЕНИЕ: dual-write Spec → legacy ЗА ФЛАГОМ SPEC_MIRROR_TO_LEGACY
- * (по умолчанию OFF — см. /api/core/spec/[vacancyId] PUT). Пока флаг выключен,
- * эта функция НЕ вызывается и боевое поведение скоринга не меняется.
+ * (по умолчанию OFF — см. /api/core/spec/[vacancyId] PUT) для requirementsJson/
+ * aiProcessSettings. ИСКЛЮЧЕНИЕ (unify 07.07, инцидент вакансии 2604V023):
+ * секция stopFactorsJson синкается В ОБХОД этого флага — ВСЕГДА, через узкую
+ * функцию syncStopFactorsToLegacy в /api/core/spec/[vacancyId]/route.ts,
+ * потому что жёсткий авто-отказ (lib/funnel-builder/stop-factors-matcher.ts)
+ * читает исключительно vacancies.stop_factors_json, и без синка правки
+ * стоп-факторов в «Портрете» были бы иллюзией (не влияли бы на реальный отсев).
  *
  * ВАЖНО: возвращаются ПАТЧИ (Partial), а НЕ целые объекты — вызывающий
  * делает MERGE поверх текущих legacy-полей, чтобы сохранить смежные настройки
@@ -29,12 +34,17 @@
  * | resumeThresholds.midRangeAction            | aiProcessSettings.midRangeAction            |
  * | resumeThresholds.autoRejectEnabled         | aiProcessSettings.autoRejectEnabled         |
  * | resumeThresholds.rejectionDelayMinutes     | aiProcessSettings.rejectionDelayMinutes     |
- * | stopFactors                                | stopFactorsJson (только заданные ключи)     |
+ * | stopFactors.{city,format,age,experience,   | stopFactorsJson (только заданные ключи)     |
+ * |   documents,citizenship,nativeLanguage,    |                                              |
+ * |   salaryExpectation}                       |                                              |
  *
  * НЕ зеркалятся обратно (нет legacy-эквивалента / источник иной):
  *   - anketaThresholds  → живут в demos.post_demo_settings (отдельная таблица)
  *   - customCriteria / portrait* / outboundSoftCriteria → descriptionJson.anketa
  *     и outbound_searches; их dual-write здесь не выполняется (этап 2).
+ *   - stopFactors.driverLicense/jobHopping/timezone/customFactors → нет
+ *     эквивалента в VacancyStopFactors/матчере; учитываются отдельно как
+ *     мягкие AI-нокауты (lib/core/spec/resume-input.ts).
  */
 
 import type { CandidateSpec } from "./types"
@@ -88,8 +98,17 @@ export function specToLegacy(spec: CandidateSpec): SpecLegacyPatches {
   // а текст приглашения кандидату обязан синкаться независимо от флага.
 
   // ── stopFactorsJson ─────────────────────────────────────────────────────────
-  // Структура Spec.stopFactors идентична VacancyStopFactors. Включаем только
-  // заданные ключи, чтобы MERGE не добавлял undefined-ветки.
+  // Структура Spec.stopFactors — суперсет VacancyStopFactors (плюс Spec-only
+  // driverLicense/jobHopping/timezone/customFactors, у которых нет эквивалента
+  // в боевом хранилище/жёстком матчере — намеренно НЕ включаем их сюда, они
+  // уже учитываются отдельно как мягкие AI-нокауты, см. resume-input.ts).
+  // Включаем только заданные ключи, чтобы MERGE не добавлял undefined-ветки.
+  //
+  // БАГФИКС unify 07.07 (вакансия 2604V023): nativeLanguage раньше не мапился
+  // сюда, хотя spec-editor.tsx его редактирует (см. NativeLanguageFactorField)
+  // и VacancyStopFactors.nativeLanguage — часть боевого матчера
+  // (stop-factors-matcher.ts::matchNativeLanguage). Без этой строки
+  // «Портрет»-правки родного языка НИКОГДА не доходили бы до реального отсева.
   const sf = spec.stopFactors
   const stopFactorsJson: Partial<VacancyStopFactors> = {}
   if (sf.city)              stopFactorsJson.city              = { ...sf.city }
@@ -98,6 +117,7 @@ export function specToLegacy(spec: CandidateSpec): SpecLegacyPatches {
   if (sf.experience)        stopFactorsJson.experience        = { ...sf.experience }
   if (sf.documents)         stopFactorsJson.documents         = { ...sf.documents }
   if (sf.citizenship)       stopFactorsJson.citizenship       = { ...sf.citizenship }
+  if (sf.nativeLanguage)    stopFactorsJson.nativeLanguage    = { ...sf.nativeLanguage }
   if (sf.salaryExpectation) stopFactorsJson.salaryExpectation = { ...sf.salaryExpectation }
 
   return { requirementsJson, aiProcessSettings, stopFactorsJson }

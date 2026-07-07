@@ -26,6 +26,12 @@ import { type ParsedVacancy } from "@/components/vacancies/anketa-wizard"
 import { VacancyAdvisor } from "@/components/vacancies/vacancy-advisor"
 import { AnketaTemplateControls } from "@/components/vacancies/anketa-template-controls"
 import { shortenCompanyDescription } from "@/lib/vacancies/shorten-company-description"
+import {
+  toAnketaStopFactors,
+  fromAnketaStopFactors,
+  type AnketaStopFactor,
+} from "@/lib/funnel-builder/anketa-stop-factors-bridge"
+import type { VacancyStopFactors } from "@/lib/db/schema"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1270,6 +1276,26 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
     toast.success("Анкета заполнена! Проверьте и дополните.")
   }, [onTitleChange])
 
+  // Стоп-факторы конструктора — ВЬЮХА боевого хранилища vacancies.stop_factors_json
+  // (инцидент 07.07, вакансия 2604V023: раньше конструктор писал в отдельный
+  // карман descriptionJson.anketa.stopFactors, который process-queue НЕ читал —
+  // HR-настройка выглядела применённой, но реально ни на что не влияла).
+  // Подтягиваем боевые данные через тот же API-роут, что и «Настройки
+  // вакансии» (VacancyStopFactorsSettings) — единый канал чтения/записи.
+  // Перекрывает stopFactors, пришедшие из descriptionJson.anketa (миграционный
+  // fallback внутри migrateAnketa/emptyAnketa) реальным боевым состоянием.
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/modules/hr/vacancies/${vacancyId}/stop-factors`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { stopFactors?: VacancyStopFactors } | null) => {
+        if (cancelled || !d) return
+        setData(prev => ({ ...prev, stopFactors: toAnketaStopFactors(d.stopFactors ?? {}) }))
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [vacancyId])
+
   // P0-27 fix: re-sync извне затирал локальные правки пользователя при любом
   // refetch (saveBranding, save вакансии и т.п. → новый descriptionJson →
   // setData затирает несохранённые поля). dataDirtyRef переехал сюда из
@@ -1341,20 +1367,58 @@ export function AnketaTab({ vacancyId, descriptionJson, aiQualityDetails, aiQual
   // ключ anketa: сервер сам мерджит с актуальным descriptionJson из БД.
   // После успешного save сбрасываем dirty-флаг, чтобы re-sync эффект мог
   // догнать локальный state из свежего refetch'а.
+  //
+  // Стоп-факторы (unify 07.07): descriptionJson.anketa.stopFactors БОЛЬШЕ НЕ
+  // пишется — единственный источник истины vacancies.stop_factors_json,
+  // сохраняется отдельным PUT на тот же роут, что использует «Настройки
+  // вакансии» (VacancyStopFactorsSettings). Ключ stopFactors вычищен из
+  // anketaPayload, чтобы старое значение в БД не вводило в заблуждение при
+  // чтении в обход migrateAnketa (напр. будущими читателями descriptionJson).
   const save = useCallback(async () => {
     setSaving(true)
     try {
-      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description_json: { anketa: data } }),
-      })
+      const { stopFactors: anketaStopFactors, ...anketaRest } = data
+      const anketaPayload = { ...anketaRest, stopFactors: [] as AnketaStopFactor[] }
+      // MERGE поверх актуального боевого состояния (не blind-overwrite) — иначе
+      // факторы, заданные вне конструктора (напр. nativeLanguage через
+      // «Настройки вакансии»/Портрет), терялись бы при каждом сохранении анкеты.
+      //
+      // БАГФИКС (ревью коммита 33ea7a77): раньше ошибка PUT стоп-факторов молча
+      // глоталась (.catch(() => null), результат не проверялся) — юзер видел
+      // «Анкета сохранена», хотя стоп-факторы реально НЕ применились. Это ровно
+      // та иллюзия «настройка выглядит применённой, а на деле нет», из-за
+      // которой был весь инцидент 2604V023. Теперь: успех PUT stop-factors
+      // проверяется явно (stopFactorsOk), при неуспехе — отдельный toast.error,
+      // анкета при этом всё равно считается сохранённой (два независимых
+      // ресурса, см. комментарий выше про MERGE).
+      let stopFactorsOk = true
+      const stopFactorsSave = fetch(`/api/modules/hr/vacancies/${vacancyId}/stop-factors`)
+        .then(r => r.ok ? r.json() : null)
+        .then((d: { stopFactors?: VacancyStopFactors } | null) =>
+          fetch(`/api/modules/hr/vacancies/${vacancyId}/stop-factors`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ stopFactors: fromAnketaStopFactors(anketaStopFactors, d?.stopFactors ?? {}) }),
+          }))
+        .then(r => { if (!r.ok) stopFactorsOk = false })
+        .catch(() => { stopFactorsOk = false })
+      const [res] = await Promise.all([
+        fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ description_json: { anketa: anketaPayload } }),
+        }),
+        stopFactorsSave,
+      ])
       if (!res.ok) {
         const body = await res.json().catch(() => null) as { error?: string } | null
         throw new Error(body?.error || "Ошибка сохранения")
       }
       dataDirtyRef.current = false
       toast.success("Анкета сохранена")
+      if (!stopFactorsOk) {
+        toast.error("Стоп-факторы не сохранились — попробуйте сохранить ещё раз или проверьте вкладку «Воронка»")
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Не удалось сохранить анкету")
     } finally {

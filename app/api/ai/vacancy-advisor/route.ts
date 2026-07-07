@@ -152,6 +152,16 @@ function staticAnalysis(body: Record<string, unknown>): AdvisorResponse {
   // 6. Stop factors. aiStopFactors кормят AI-нокауты — любой из них достаточен,
   // чтобы скрининг отсеивал. Структурные stopFactors (город/возраст/…) — отдельный
   // необязательный пред-фильтр.
+  //
+  // unify 07.07 (инцидент вакансии 2604V023): d.stopFactors приходит из
+  // body.vacancyData, которое клиент (components/vacancies/anketa-tab.tsx)
+  // теперь заполняет из БОЕВОГО vacancies.stop_factors_json (через
+  // lib/funnel-builder/anketa-stop-factors-bridge.ts::toAnketaStopFactors на
+  // загрузке анкеты) — а не из отдельного нерантаймового descriptionJson.
+  // anketa.stopFactors, как раньше. Советник теперь советует по реальным
+  // данным, не по декорации. Этот роут сам ничего из БД не читает — весь
+  // vacancyData приходит от клиента, поэтому чинить нужно было только источник
+  // на клиенте (см. anketa-tab.tsx useEffect на /stop-factors).
   const unacceptable: string[] = []  // legacy field — no longer shown on Vacancy page
   const aiStops = (d.aiStopFactors as string[]) || []
   const stopFactors = (d.stopFactors as Array<{ enabled: boolean }>) || []
