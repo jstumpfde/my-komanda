@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge"
 import { useAuth, ROLE_LABELS, ROLE_ICONS, type UserRole } from "@/lib/auth"
 import { SubscriptionBanner } from "@/components/billing/subscription-banner"
 import { ImpersonationBanner } from "@/components/partner/impersonation-banner"
+import { AdminAlertsBanner } from "@/components/dashboard/admin-alerts-banner"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 
@@ -159,6 +160,10 @@ export function DashboardHeader() {
 
       {/* Плашка impersonation: партнёр «Войти как клиент». В обычном режиме — null. */}
       <ImpersonationBanner />
+
+      {/* Сторож найма: открытые admin_alerts (hh-соединение/импорт/отправки/кроны).
+          В обычном состоянии (нет открытых алертов) ничего не рендерит. */}
+      <AdminAlertsBanner />
 
       {/* View-as banner */}
       {isViewingAs && (
