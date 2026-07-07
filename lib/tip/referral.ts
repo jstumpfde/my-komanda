@@ -22,9 +22,14 @@
 //     за окно, не по сумме прогонов).
 
 import { randomBytes } from "crypto"
-import { and, eq, gte, isNull, count } from "drizzle-orm"
+import { and, eq, gte, isNull, isNotNull, count, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { tipUsers, tipReferrals, tipSettings, tipRuns } from "@/lib/db/schema"
+
+// Антифрод (0263): не больше N welcome-начислений на один ip_hash за 30 дней —
+// защита от фарма (регистрация десятков "приглашённых" с одного устройства
+// через инкогнито/очистку cookie).
+const WELCOME_IP_CAP_PER_30D = 2
 
 const REF_CODE_LENGTH = 8
 // Без 0/O/1/I — визуально неотличимые символы, чтобы код был легко продиктовать/перепечатать.
@@ -87,7 +92,14 @@ export interface AttachReferralResult {
  *  - у newUserId ещё не должно быть referred_by (одна привязка на всю жизнь);
  *  - код должен существовать и принадлежать ДРУГОМУ пользователю (не себе);
  *  - анти-фрод: если у обоих (реферер и приглашённый) совпадает tg_chat_id
- *    (не null) — не начислять, считаем одним и тем же человеком.
+ *    (не null) — не начислять, считаем одним и тем же человеком;
+ *  - анти-фрод (0263): если у обоих совпадает ip_hash (не null) — тоже одно
+ *    и то же устройство, привязку не делаем;
+ *  - анти-фрод (0263): welcome-прогоны не начисляем, если за последние 30
+ *    дней по ip_hash приглашённого уже было ≥ WELCOME_IP_CAP_PER_30D
+ *    welcome-начислений (фарм через инкогнито/чистку cookie с одного
+ *    устройства) — реферал всё равно привязывается (referred_by
+ *    проставляется), просто без welcome-бонуса в этот раз.
  */
 export async function attachReferral(newUserId: string, refCode: string): Promise<AttachReferralResult> {
   const code = refCode.trim()
@@ -105,15 +117,37 @@ export async function attachReferral(newUserId: string, refCode: string): Promis
   if (referrer.tgChatId != null && newUser.tgChatId != null && referrer.tgChatId === newUser.tgChatId) {
     return { attached: false }
   }
+  // Анти-фрод (0263): одинаковый ip_hash (оба не null) — то же устройство.
+  if (referrer.ipHash != null && newUser.ipHash != null && referrer.ipHash === newUser.ipHash) {
+    return { attached: false }
+  }
 
   const welcomeRuns = await getSetting("referral_welcome_runs", 1)
+
+  // Анти-фрод (0263): welcome-кап по ip_hash приглашённого за 30 дней.
+  let grantWelcome = true
+  if (newUser.ipHash) {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    const [{ value: recentWelcomeCount }] = await db
+      .select({ value: count() })
+      .from(tipReferrals)
+      .innerJoin(tipUsers, eq(tipUsers.id, tipReferrals.referredUserId))
+      .where(
+        and(
+          eq(tipUsers.ipHash, newUser.ipHash),
+          isNotNull(tipReferrals.welcomeGrantedAt),
+          gte(tipReferrals.welcomeGrantedAt, thirtyDaysAgo),
+        ),
+      )
+    grantWelcome = recentWelcomeCount < WELCOME_IP_CAP_PER_30D
+  }
 
   const result = await db.transaction(async (tx) => {
     const updated = await tx
       .update(tipUsers)
       .set({
         referredBy: referrer.id,
-        balanceRuns: newUser.balanceRuns + welcomeRuns,
+        ...(grantWelcome ? { balanceRuns: newUser.balanceRuns + welcomeRuns } : {}),
       })
       .where(and(eq(tipUsers.id, newUserId), isNull(tipUsers.referredBy)))
       .returning({ balanceRuns: tipUsers.balanceRuns })
@@ -122,7 +156,12 @@ export async function attachReferral(newUserId: string, refCode: string): Promis
 
     await tx
       .insert(tipReferrals)
-      .values({ referrerUserId: referrer.id, referredUserId: newUserId, status: "pending" })
+      .values({
+        referrerUserId: referrer.id,
+        referredUserId: newUserId,
+        status: "pending",
+        welcomeGrantedAt: grantWelcome ? new Date() : null,
+      })
       .onConflictDoNothing({ target: tipReferrals.referredUserId })
 
     return updated[0].balanceRuns
@@ -143,6 +182,9 @@ export async function attachReferral(newUserId: string, refCode: string): Promis
  * referral_monthly_cap бонусов начислено (bonus_granted_at) за последние 30
  * дней — реферал всё равно помечается activated (статус честно отражает
  * происходящее), просто без начисления в этот раз.
+ *
+ * Анти-фрод (0263): бонус рефереру также не начисляется, если у реферера и
+ * приглашённого совпадает ip_hash (оба не null) — одно и то же устройство.
  */
 export async function processReferralActivation(userId: string): Promise<void> {
   const [referral] = await db
@@ -167,7 +209,11 @@ export async function processReferralActivation(userId: string): Promise<void> {
       ),
     )
 
-  const capReached = recentBonusCount >= monthlyCap
+  const [referrer] = await db.select().from(tipUsers).where(eq(tipUsers.id, referral.referrerUserId)).limit(1)
+  const [referred] = await db.select().from(tipUsers).where(eq(tipUsers.id, userId)).limit(1)
+  const sameDevice = !!(referrer?.ipHash && referred?.ipHash && referrer.ipHash === referred.ipHash)
+
+  const capReached = recentBonusCount >= monthlyCap || sameDevice
 
   await db.transaction(async (tx) => {
     await tx
@@ -178,14 +224,11 @@ export async function processReferralActivation(userId: string): Promise<void> {
       })
       .where(eq(tipReferrals.id, referral.id))
 
-    if (!capReached) {
-      const [referrer] = await tx.select().from(tipUsers).where(eq(tipUsers.id, referral.referrerUserId)).limit(1)
-      if (referrer) {
-        await tx
-          .update(tipUsers)
-          .set({ balanceRuns: referrer.balanceRuns + bonusRuns })
-          .where(eq(tipUsers.id, referrer.id))
-      }
+    if (!capReached && referrer) {
+      await tx
+        .update(tipUsers)
+        .set({ balanceRuns: sql`${tipUsers.balanceRuns} + ${bonusRuns}` })
+        .where(eq(tipUsers.id, referrer.id))
     }
   })
 }

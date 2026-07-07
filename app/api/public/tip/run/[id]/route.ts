@@ -28,7 +28,10 @@ export async function GET(
     status: run.status,
     resultMd: run.resultMd,
     formula: run.formulaJson,
-    shareToken: run.shareToken,
+    // shareToken отдаём только для завершённых прогонов — иначе клиент мог бы
+    // получить ссылку на страницу разбора до готовности результата (токен
+    // генерируется сразу при создании прогона, см. lib/tip/service.ts).
+    shareToken: run.status === "done" ? run.shareToken : null,
     error: run.errorText,
     context: context ? { slug: context.slug, title: context.title } : contextSlug,
     createdAt: run.createdAt,

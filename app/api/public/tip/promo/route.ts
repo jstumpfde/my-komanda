@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getOrCreateTipUser } from "@/lib/tip/session"
 import { activatePromo, TipServiceError } from "@/lib/tip/service"
+import { checkTipPromoRateLimit, TIP_RATE_LIMIT_MESSAGE } from "@/lib/tip/rate-limit"
 
 export const runtime = "nodejs"
 
@@ -19,6 +20,10 @@ export async function POST(req: NextRequest) {
   }
 
   const user = await getOrCreateTipUser()
+
+  if (!checkTipPromoRateLimit(user.id)) {
+    return NextResponse.json({ error: TIP_RATE_LIMIT_MESSAGE }, { status: 429 })
+  }
 
   try {
     const result = await activatePromo(user.id, body.code)

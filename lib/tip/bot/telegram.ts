@@ -222,7 +222,13 @@ export async function sendLongMessage(
 
 // ─── Markdown (методика/AI-отчёт) → Telegram HTML ──────────────────────────
 
-function escapeHtml(s: string): string {
+/**
+ * Экранирует HTML-спецсимволы перед вставкой пользовательской строки (имя,
+ * роль, ...) в сообщение с parse_mode=HTML — иначе Telegram отвергает
+ * сообщение целиком, если строка содержит '<'/'>'/'&' (см. flow.ts, где
+ * это раньше подставлялось в промптConfirm и другие места без экранирования).
+ */
+export function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 }
 

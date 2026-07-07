@@ -248,7 +248,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
   const size = SIZES[format]
 
   const formula = run.formulaJson as unknown as TipFormulaLike
-  const name = run.inputJson?.name
+  // Обрезаем имя перед рендером картинки — старые прогоны могли быть созданы
+  // до ограничения длины в lib/tip/service.ts (M8), плюс защита от
+  // разъезжающейся вёрстки карточки на длинных значениях.
+  const name = run.inputJson?.name?.slice(0, 40)
 
   // strengths — из tip_runs.highlights_json (lib/tip/highlights.ts,
   // extractTipHighlights встроен в runGeneration). Может отсутствовать для
@@ -256,16 +259,28 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
   const strengths = run.highlightsJson?.strengths?.filter(Boolean).slice(0, 3) ?? []
 
   if (kind === "strengths" && strengths.length > 0) {
+    // max-age короче, чем у formula — highlights могут дозаполниться позже
+    // (extractTipHighlights в runGeneration асинхронный), не хотим кэшировать
+    // «пустой» вариант надолго на уровне CDN/браузера.
     return new ImageResponse(
       <StrengthsCardImage strengths={strengths} name={name} size={size} />,
-      { width: size.width, height: size.height },
+      {
+        width: size.width,
+        height: size.height,
+        headers: { "Cache-Control": "public, max-age=3600, s-maxage=3600" },
+      },
     )
   }
 
   // Фолбэк на формулу — и когда явно запросили formula, и когда strengths
-  // запрошены, но highlights ещё не посчитаны.
+  // запрошены, но highlights ещё не посчитаны. Разбор done неизменен →
+  // можно кэшировать надолго.
   return new ImageResponse(
     <FormulaCardImage formula={formula} name={name} size={size} />,
-    { width: size.width, height: size.height },
+    {
+      width: size.width,
+      height: size.height,
+      headers: { "Cache-Control": "public, max-age=86400, s-maxage=86400" },
+    },
   )
 }

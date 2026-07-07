@@ -1,9 +1,11 @@
 // OG-превью расшаренного разбора «Типология» (/tip/r/[shareToken]).
 //
-// next/og ImageResponse — рендерится на сервере в PNG 1200×630 при первом
-// запросе соцсетью/мессенджером (кэшируется Next). Без внешних шрифтов
-// (системный стек через fontFamily) и без сетевых запросов картинок —
+// next/og ImageResponse — рендерится на сервере в PNG 1200×630. Без внешних
+// шрифтов (системный стек через fontFamily) и без сетевых запросов картинок —
 // только текст и CSS-градиент, укладывается в бюджет ~300ms.
+// revalidate=3600 — конвенционный файл Next.js кэширует результат на уровне
+// route-сегмента на 1 час (тяжёлый публичный image-роут без auth, дёргается
+// соцсетями/мессенджерами при каждом анфёрле ссылки).
 //
 // Если run не найден либо status != 'done' — отдаём generic-карточку без
 // персональных данных (не палим внутренние id/ошибки во внешнем превью).
@@ -12,6 +14,7 @@ import { ImageResponse } from "next/og"
 import { getRunByShareToken } from "@/lib/tip/service"
 
 export const runtime = "nodejs"
+export const revalidate = 3600
 export const alt = "Типология — персональный разбор личности"
 export const size = { width: 1200, height: 630 }
 export const contentType = "image/png"
@@ -22,7 +25,9 @@ export default async function Image({ params }: { params: Promise<{ token: strin
 
   const isDone = run?.status === "done"
   const formulaString = isDone ? run?.formulaJson?.formulaString : undefined
-  const name = isDone ? run?.inputJson?.name : undefined
+  // Обрезаем имя перед рендером — защита от разъезжающейся вёрстки на
+  // длинных значениях (в т.ч. старых прогонов до лимита длины в service.ts).
+  const name = isDone ? run?.inputJson?.name?.slice(0, 40) : undefined
 
   return new ImageResponse(
     (

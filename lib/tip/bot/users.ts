@@ -17,6 +17,9 @@ export async function getOrCreateTipUserByChatId(chatId: number): Promise<TipUse
   const [existing] = await db.select().from(tipUsers).where(eq(tipUsers.tgChatId, chatId)).limit(1)
   if (existing) return existing
 
+  // ip_hash не проставляем — Telegram Bot API не отдаёт IP пользователя,
+  // остаётся null (антифрод 0263 по ip_hash просто не сработает для ботовых
+  // пользователей, для них есть отдельная защита по tg_chat_id).
   const [created] = await db
     .insert(tipUsers)
     .values({ tgChatId: chatId })

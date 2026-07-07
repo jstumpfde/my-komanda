@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getOrCreateTipUser } from "@/lib/tip/session"
 import { claimFreeLink, TipServiceError } from "@/lib/tip/service"
+import { checkTipPromoRateLimit, TIP_RATE_LIMIT_MESSAGE } from "@/lib/tip/rate-limit"
 
 export const runtime = "nodejs"
 
@@ -13,6 +14,10 @@ export async function POST(
 ) {
   const { token } = await params
   const user = await getOrCreateTipUser()
+
+  if (!checkTipPromoRateLimit(user.id)) {
+    return NextResponse.json({ error: TIP_RATE_LIMIT_MESSAGE }, { status: 429 })
+  }
 
   try {
     const result = await claimFreeLink(user.id, token)

@@ -317,6 +317,7 @@ export default function TipClient() {
               onChange={(e) => setName(e.target.value)}
               placeholder="Как вас зовут?"
               className="h-11"
+              maxLength={80}
             />
           </div>
 
@@ -378,6 +379,7 @@ export default function TipClient() {
                 onChange={(e) => setRole(e.target.value)}
                 placeholder="Например: менеджер по продажам"
                 className="h-11"
+                maxLength={80}
               />
             </div>
           )}
@@ -404,6 +406,7 @@ export default function TipClient() {
                       onChange={(e) => setSecondName(e.target.value)}
                       placeholder="Имя"
                       className="h-11"
+                      maxLength={80}
                     />
                   </div>
                   <div className="space-y-1.5">

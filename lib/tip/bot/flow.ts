@@ -34,6 +34,7 @@ import {
   answerCallbackQuery,
   sendLongMessage,
   mdToTelegramHtml,
+  escapeHtml,
   type TgInlineKeyboard,
 } from "@/lib/tip/bot/telegram"
 import { getSession, setSession, resetSession } from "@/lib/tip/bot/sessions"
@@ -404,7 +405,7 @@ async function afterPairDecision(botToken: string, chatId: number, draft: Draft)
     await setSession(chatId, "await_confirm", { draft })
     const depthTitle = getDepth(prefs.depth)?.title ?? prefs.depth
     const audienceTitle = getAudience(prefs.audience)?.title ?? prefs.audience
-    await sendMessage(botToken, chatId, `${depthTitle} · ${audienceTitle}`, {
+    await sendMessage(botToken, chatId, `${escapeHtml(depthTitle)} · ${escapeHtml(audienceTitle)}`, {
       keyboard: [
         [
           { text: "Продолжить так", callback_data: "prefs:continue" },
@@ -437,13 +438,15 @@ async function promptConfirm(botToken: string, chatId: number, draft: Draft): Pr
   const audienceTitle = draft.audience ? getAudience(draft.audience)?.title ?? draft.audience : "—"
   const lines = [
     "<b>Проверьте данные:</b>",
-    `Дата рождения: ${draft.birthDate ?? "—"}`,
-    draft.name ? `Имя: ${draft.name}` : undefined,
-    `Контекст: ${ctx?.title ?? draft.context ?? "—"}`,
-    draft.role ? `Роль: ${draft.role}` : undefined,
-    draft.second?.birthDate ? `Второй человек: ${draft.second.name ?? "без имени"}, ${draft.second.birthDate}` : undefined,
-    `Глубина: ${depthTitle}`,
-    `Для кого: ${audienceTitle}`,
+    `Дата рождения: ${escapeHtml(draft.birthDate ?? "—")}`,
+    draft.name ? `Имя: ${escapeHtml(draft.name)}` : undefined,
+    `Контекст: ${escapeHtml(ctx?.title ?? draft.context ?? "—")}`,
+    draft.role ? `Роль: ${escapeHtml(draft.role)}` : undefined,
+    draft.second?.birthDate
+      ? `Второй человек: ${escapeHtml(draft.second.name ?? "без имени")}, ${escapeHtml(draft.second.birthDate)}`
+      : undefined,
+    `Глубина: ${escapeHtml(depthTitle)}`,
+    `Для кого: ${escapeHtml(audienceTitle)}`,
   ].filter(Boolean)
   await sendMessage(botToken, chatId, lines.join("\n"), {
     keyboard: [
@@ -554,7 +557,7 @@ async function pollAndDeliver(botToken: string, chatId: number, runId: string, d
       await sendMessage(
         botToken,
         chatId,
-        `Не удалось составить разбор: ${run.errorText ?? "неизвестная ошибка"}. Прогон возвращён на баланс.`,
+        `Не удалось составить разбор: ${escapeHtml(run.errorText ?? "неизвестная ошибка")}. Прогон возвращён на баланс.`,
         { keyboard: [[{ text: "Попробовать снова", callback_data: "retry:generate" }]] },
       )
       return

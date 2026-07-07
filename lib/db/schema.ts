@@ -4380,7 +4380,13 @@ export const tipUsers = pgTable("tip_users", {
   // Виральность (0261): реферальный код владельца + кто пригласил.
   refCode:      text("ref_code").unique(),
   referredBy:   uuid("referred_by").references((): any => tipUsers.id),
-})
+  // Антифрод (0263): хэш IP при создании (sha256(ip + NEXTAUTH_SECRET)) —
+  // ловим фарм рефералов через инкогнито/разные cookie с одного устройства.
+  // Для бот-пользователей (lib/tip/bot/users.ts) — null, IP недоступен.
+  ipHash:       text("ip_hash"),
+}, (t) => [
+  index("tip_users_ip_hash_idx").on(t.ipHash),
+])
 export type TipUser    = typeof tipUsers.$inferSelect
 export type NewTipUser = typeof tipUsers.$inferInsert
 
@@ -4568,6 +4574,9 @@ export const tipReferrals = pgTable("tip_referrals", {
   status:          text("status").notNull().default("pending"), // pending|activated
   bonusGrantedAt:  timestamp("bonus_granted_at", { withTimezone: true }),
   createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  // Антифрод (0263): когда начислены welcome-прогоны приглашённому — используется
+  // для капа «не больше 2 welcome-начислений на один ip_hash за 30 дней».
+  welcomeGrantedAt: timestamp("welcome_granted_at", { withTimezone: true }),
 })
 export type TipReferral    = typeof tipReferrals.$inferSelect
 export type NewTipReferral = typeof tipReferrals.$inferInsert

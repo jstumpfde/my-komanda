@@ -8,8 +8,8 @@
 // функция сама выставляет её на mutable cookies() (доступно в route handlers,
 // см. Next.js docs — cookies().set() работает в Server Actions и Route Handlers).
 
-import { cookies } from "next/headers"
-import { randomUUID } from "crypto"
+import { cookies, headers } from "next/headers"
+import { randomUUID, createHash } from "crypto"
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { tipUsers, type TipUser } from "@/lib/db/schema"
@@ -18,6 +18,22 @@ export const TIP_UID_COOKIE = "tip_uid"
 const TIP_UID_MAX_AGE_SECONDS = 60 * 60 * 24 * 365 // 1 год
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * Антифрод (0263): хэш IP посетителя — sha256(ip + NEXTAUTH_SECRET), НЕ сам
+ * IP (не храним ПД в открытом виде). Используется lib/tip/referral.ts, чтобы
+ * тихо не начислять рефералку при фарме через инкогнито с одного устройства.
+ * IP берём из x-forwarded-for (первый в списке = реальный клиент за nginx)
+ * либо x-real-ip. Если оба отсутствуют — null (не блокирующая деградация).
+ */
+async function computeIpHash(): Promise<string | null> {
+  const h = await headers()
+  const forwardedFor = h.get("x-forwarded-for")
+  const ip = forwardedFor ? forwardedFor.split(",")[0]!.trim() : h.get("x-real-ip")
+  if (!ip) return null
+  const salt = process.env.NEXTAUTH_SECRET ?? ""
+  return createHash("sha256").update(`${ip}${salt}`).digest("hex")
+}
 
 /**
  * Возвращает (создавая при необходимости) анонимного пользователя модуля
@@ -42,10 +58,11 @@ export async function getOrCreateTipUser(): Promise<TipUser> {
   // id генерируем сами (а не полагаемся на defaultRandom()), чтобы cookie и
   // id строки совпадали — тогда повторный визит без БД-джойна узнаёт себя.
   const newUid = existingUid && UUID_RE.test(existingUid) ? existingUid : randomUUID()
+  const ipHash = await computeIpHash()
 
   const [created] = await db
     .insert(tipUsers)
-    .values({ id: newUid })
+    .values({ id: newUid, ipHash })
     .onConflictDoNothing({ target: tipUsers.id })
     .returning()
 

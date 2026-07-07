@@ -57,14 +57,22 @@ export interface TipValidationContext {
   secondIsMinor?: boolean
 }
 
+// Контексты, разрешённые для парного разбора с участием несовершеннолетнего
+// (первого и/или второго человека) — семейный фрейм, без романтики/бизнеса.
+const MINOR_PAIR_ALLOWED_CONTEXTS = new Set(["parenting", "teenager"])
+
 /**
  * Проверяет запрос ДО сборки промпта. Бросает TipValidationError с русским
  * текстом при нарушении жёстких правил возрастного гейта:
- *  - несовершеннолетняя дата + контекст «Личные отношения» (парный или нет) —
- *    отклоняем всегда;
- *  - несовершеннолетняя дата + парный контекст «Личные отношения» со вторым
+ *  - несовершеннолетняя дата + романтический контекст (флаг romantic,
+ *    сейчас — «Личные отношения», парный или нет) — отклоняем всегда;
+ *  - несовершеннолетняя дата + парный романтический контекст со вторым
  *    человеком — тоже отклоняем, даже если второй человек совершеннолетний;
- *  - контекст с minorAllowed=false, но isMinor=true — отклоняем.
+ *  - контекст с minorAllowed=false, но isMinor=true — отклоняем;
+ *  - ЛЮБОЙ парный запрос (передан second), где первый ИЛИ второй человек
+ *    несовершеннолетний — разрешаем только семейный фрейм (parenting,
+ *    teenager), остальные парные контексты (friends, conflict, team,
+ *    business_partnership, life_partnership) отклоняем отдельным сообщением.
  */
 export function validateTipRequest(input: TipRequestInput, ctx: TipValidationContext): void {
   const context = getTipContext(input.context)
@@ -72,7 +80,7 @@ export function validateTipRequest(input: TipRequestInput, ctx: TipValidationCon
     throw new TipValidationError(`Неизвестный контекст разбора: «${input.context}».`)
   }
 
-  if (input.context === "life_partnership" && ctx.isMinor) {
+  if (context.romantic && ctx.isMinor) {
     throw new TipValidationError(
       "Разбор «Личные отношения» недоступен для несовершеннолетней даты рождения. Выберите контекст «Подросток / молодой человек» или «Родитель / семья / дети».",
     )
@@ -85,7 +93,7 @@ export function validateTipRequest(input: TipRequestInput, ctx: TipValidationCon
   }
 
   if (input.second) {
-    if (input.context === "life_partnership" && ctx.secondIsMinor) {
+    if (context.romantic && ctx.secondIsMinor) {
       throw new TipValidationError(
         "Парный разбор «Личные отношения» недоступен, если дата рождения второго человека принадлежит несовершеннолетнему.",
       )
@@ -93,6 +101,15 @@ export function validateTipRequest(input: TipRequestInput, ctx: TipValidationCon
     if (!context.pairCapable) {
       throw new TipValidationError(
         `Контекст «${context.title}» не поддерживает парный разбор (данные второго человека переданы, но не будут использованы).`,
+      )
+    }
+    // Возрастной гейт парных контекстов: если хотя бы один из пары —
+    // несовершеннолетний, разрешаем только семейный фрейм (parenting,
+    // teenager), даже если контекст сам по себе не romantic (friends,
+    // conflict, team, business_partnership).
+    if ((ctx.isMinor || ctx.secondIsMinor) && !MINOR_PAIR_ALLOWED_CONTEXTS.has(input.context)) {
+      throw new TipValidationError(
+        'Сравнение с участием несовершеннолетнего доступно только в контексте "Родитель / семья / дети".',
       )
     }
   }

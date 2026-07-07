@@ -19,6 +19,13 @@ export interface TipContext {
   pairCapable: boolean
   /** Разрешён разбор для несовершеннолетней даты рождения. */
   minorAllowed: boolean
+  /**
+   * Романтический/интимный парный контекст (сейчас — только «Личные
+   * отношения»). Используется возрастным гейтом (lib/tip/prompt.ts) вместо
+   * сравнения по строке-слагу — так что новый романтический контекст в
+   * будущем не проскочит гейт по забывчивости.
+   */
+  romantic?: boolean
 }
 
 export const TIP_CONTEXTS: TipContext[] = [
@@ -76,6 +83,7 @@ export const TIP_CONTEXTS: TipContext[] = [
     order: 6,
     pairCapable: true,
     minorAllowed: false,
+    romantic: true,
   },
   {
     slug: "friends",

@@ -6,7 +6,7 @@
 // прогоны списываются с tip_users.balance_runs.
 
 import { randomBytes } from "crypto"
-import { and, eq, inArray } from "drizzle-orm"
+import { and, eq, inArray, isNull, lt, or, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { processReferralActivation } from "@/lib/tip/referral"
 import { extractTipHighlights } from "@/lib/tip/highlights"
@@ -86,42 +86,45 @@ async function activateCodeInternal(
       throw new TipServiceError("Срок действия промокода истёк")
     }
 
-    if (promo.maxActivations !== null && promo.activationsCount >= promo.maxActivations) {
+    // Вставку активации делаем ДО инкремента счётчика — unique(promo_id,
+    // user_id) ловит повторную активацию того же юзера (в т.ч. при гонке
+    // двух параллельных запросов одного пользователя). Код 23505 —
+    // unique_violation (Postgres), остальные ошибки пробрасываем как есть.
+    try {
+      await tx.insert(tipPromoActivations).values({ promoId: promo.id, userId })
+    } catch (e) {
+      if ((e as { code?: string })?.code === "23505") {
+        throw new TipServiceError("Промокод уже использован")
+      }
+      throw e
+    }
+
+    // Атомарный check-and-increment: 0 обновлённых строк = лимит исчерпан
+    // ИЛИ гонка с параллельной активацией — в обоих случаях гарантированно
+    // не превысим max_activations, т.к. условие проверяется в самом UPDATE.
+    const [updatedPromo] = await tx
+      .update(tipPromoCodes)
+      .set({ activationsCount: sql`${tipPromoCodes.activationsCount} + 1` })
+      .where(
+        and(
+          eq(tipPromoCodes.id, promo.id),
+          or(isNull(tipPromoCodes.maxActivations), lt(tipPromoCodes.activationsCount, tipPromoCodes.maxActivations)),
+        ),
+      )
+      .returning({ runsGranted: tipPromoCodes.runsGranted })
+    if (!updatedPromo) {
       throw new TipServiceError("Лимит активаций исчерпан")
     }
 
-    const [already] = await tx
-      .select()
-      .from(tipPromoActivations)
-      .where(and(eq(tipPromoActivations.promoId, promo.id), eq(tipPromoActivations.userId, userId)))
-      .limit(1)
-    if (already) {
-      throw new TipServiceError("Промокод уже использован")
-    }
-
-    await tx.insert(tipPromoActivations).values({ promoId: promo.id, userId })
-
-    await tx
-      .update(tipPromoCodes)
-      .set({ activationsCount: promo.activationsCount + 1 })
-      .where(eq(tipPromoCodes.id, promo.id))
-
+    // Начисление баланса — тоже атомарный относительный инкремент.
     const [updatedUser] = await tx
       .update(tipUsers)
-      .set({ balanceRuns: (await currentBalance(tx, userId)) + promo.runsGranted })
+      .set({ balanceRuns: sql`${tipUsers.balanceRuns} + ${promo.runsGranted}` })
       .where(eq(tipUsers.id, userId))
       .returning({ balanceRuns: tipUsers.balanceRuns })
 
     return { balanceRuns: updatedUser?.balanceRuns ?? promo.runsGranted, runsGranted: promo.runsGranted }
   })
-}
-
-// Хелпер: текущий баланс внутри транзакции (для инкремента без гонки —
-// поле маленькое, конфликт активации уже защищён unique-констрейнтом, так
-// что гонка на same-user исключена; на всякий случай читаем свежее значение).
-async function currentBalance(tx: Tx, userId: string): Promise<number> {
-  const [row] = await tx.select({ balanceRuns: tipUsers.balanceRuns }).from(tipUsers).where(eq(tipUsers.id, userId)).limit(1)
-  return row?.balanceRuns ?? 0
 }
 
 /** Активирует обычный промокод (пополняет balance_runs). Русские ошибки. */
@@ -159,13 +162,35 @@ function generateShareToken(): string {
   return randomBytes(18).toString("base64url")
 }
 
+// Ограничения длины полей ввода — защита от переразмеренного user-input,
+// улетающего в промпт AI (стоимость токенов) и в БД/шеринг-карточки.
+const MAX_NAME_LEN = 80
+const MAX_ROLE_LEN = 80
+const MAX_QUESTION_LEN = 300
+
 /**
  * Создаёт прогон разбора: валидирует вход, проверяет баланс, списывает 1
  * прогон, сохраняет запись tip_runs (status=pending) и запускает генерацию
  * detached (не блокирует ответ клиенту). При ошибке генерации run переходит
  * в status=error и прогон возвращается пользователю на баланс.
  */
-export async function createRun(user: TipUser, input: CreateRunInput): Promise<CreateRunResult> {
+export async function createRun(user: TipUser, rawInput: CreateRunInput): Promise<CreateRunResult> {
+  // Обрезаем строковые поля ДО любой валидации/использования.
+  const input: CreateRunInput = {
+    ...rawInput,
+    name: rawInput.name?.trim().slice(0, MAX_NAME_LEN),
+    role: rawInput.role?.trim().slice(0, MAX_ROLE_LEN),
+    question: rawInput.question?.trim().slice(0, MAX_QUESTION_LEN),
+    second: rawInput.second
+      ? { ...rawInput.second, name: rawInput.second.name?.trim().slice(0, MAX_NAME_LEN) }
+      : undefined,
+  }
+
+  // Ленивый репер: чинит зависшие после рестарта PM2 прогоны ДО гварда
+  // «один активный», иначе пользователь с зависшим generating навсегда
+  // застревал бы на "Дождитесь завершения текущего разбора".
+  await reapStaleRuns(user.id)
+
   // Если передан промокод — активировать ДО проверки баланса (ошибку промокода
   // возвращаем как есть, TipServiceError с русским текстом).
   if (input.promoCode?.trim()) {
@@ -250,11 +275,17 @@ export async function createRun(user: TipUser, input: CreateRunInput): Promise<C
   const shareToken = generateShareToken()
 
   const { runId, balanceRuns } = await db.transaction(async (tx) => {
+    // Атомарное списание: 0 обновлённых строк = баланс уже исчерпан гонкой
+    // с другим параллельным запросом (снапшот user.balanceRuns выше — только
+    // fast-path проверка, истина — этот UPDATE ... WHERE balance_runs >= 1).
     const [updatedUser] = await tx
       .update(tipUsers)
-      .set({ balanceRuns: user.balanceRuns - 1 })
-      .where(eq(tipUsers.id, user.id))
+      .set({ balanceRuns: sql`${tipUsers.balanceRuns} - 1` })
+      .where(and(eq(tipUsers.id, user.id), sql`${tipUsers.balanceRuns} >= 1`))
       .returning({ balanceRuns: tipUsers.balanceRuns })
+    if (!updatedUser) {
+      throw new TipNoBalanceError()
+    }
 
     const [run] = await tx
       .insert(tipRuns)
@@ -279,7 +310,7 @@ export async function createRun(user: TipUser, input: CreateRunInput): Promise<C
     }
     await tx.update(tipUsers).set({ prefsJson: nextPrefs }).where(eq(tipUsers.id, user.id))
 
-    return { runId: run!.id, balanceRuns: updatedUser?.balanceRuns ?? user.balanceRuns - 1 }
+    return { runId: run!.id, balanceRuns: updatedUser.balanceRuns }
   })
 
   // 5) Запуск генерации detached — сервер долгоживущий (PM2), доработает
@@ -381,18 +412,62 @@ async function runGeneration(runId: string): Promise<void> {
         .set({ status: "error", errorText: message, finishedAt: new Date() })
         .where(eq(tipRuns.id, runId))
 
-      // Вернуть прогон на баланс.
-      const [u] = await tx.select({ balanceRuns: tipUsers.balanceRuns }).from(tipUsers).where(eq(tipUsers.id, run.userId)).limit(1)
-      if (u) {
-        await tx.update(tipUsers).set({ balanceRuns: u.balanceRuns + 1 }).where(eq(tipUsers.id, run.userId))
-      }
+      // Вернуть прогон на баланс — атомарный относительный инкремент.
+      await tx
+        .update(tipUsers)
+        .set({ balanceRuns: sql`${tipUsers.balanceRuns} + 1` })
+        .where(eq(tipUsers.id, run.userId))
     })
   }
+}
+
+// ─── Репер зависших прогонов ────────────────────────────────────────────────
+
+const STALE_RUN_MINUTES = 12
+
+/**
+ * Помечает прогоны в status pending/generating старше STALE_RUN_MINUTES как
+ * error и возвращает их владельцам на баланс. Вызывается лениво из createRun
+ * (до гварда «один активный») и getRunForUser (чтобы поллинг веб/бота сам
+ * чинил зависший после рестарта PM2 прогон), а также из cron-роута
+ * app/api/cron/tip-reaper без userId — на случай, если ни один из двух
+ * ленивых путей не был вызван (пользователь просто не вернулся).
+ *
+ * Идемпотентно: UPDATE ... WHERE status IN (...) AND created_at < cutoff
+ * RETURNING — при повторном вызове (в т.ч. параллельном) уже обработанные
+ * строки status='error' условию не соответствуют, поэтому баланс не
+ * начислится дважды.
+ */
+export async function reapStaleRuns(userId?: string): Promise<{ reaped: number }> {
+  const cutoff = new Date(Date.now() - STALE_RUN_MINUTES * 60 * 1000)
+  const conditions = [inArray(tipRuns.status, ["pending", "generating"]), lt(tipRuns.createdAt, cutoff)]
+  if (userId) conditions.push(eq(tipRuns.userId, userId))
+
+  const stale = await db
+    .update(tipRuns)
+    .set({
+      status: "error",
+      errorText: "Генерация прервана перезапуском сервера — прогон возвращён на баланс.",
+      finishedAt: new Date(),
+    })
+    .where(and(...conditions))
+    .returning({ id: tipRuns.id, userId: tipRuns.userId })
+
+  for (const row of stale) {
+    await db
+      .update(tipUsers)
+      .set({ balanceRuns: sql`${tipUsers.balanceRuns} + 1` })
+      .where(eq(tipUsers.id, row.userId))
+  }
+
+  return { reaped: stale.length }
 }
 
 // ─── Чтение прогонов ────────────────────────────────────────────────────────
 
 export async function getRunForUser(userId: string, runId: string): Promise<TipRun | null> {
+  await reapStaleRuns(userId)
+
   const [run] = await db
     .select()
     .from(tipRuns)
