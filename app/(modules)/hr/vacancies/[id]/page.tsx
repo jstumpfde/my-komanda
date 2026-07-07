@@ -40,7 +40,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquare, MessageSquareText, Zap, Globe, AlertTriangle, CheckCircle2, TrendingUp, Filter, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, Plus, RefreshCw, Bot, Workflow, FilePlus, UserSearch, Trash2, Target, Inbox, CalendarDays, Plug} from "lucide-react"
+import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquare, MessageSquareText, Zap, Globe, AlertTriangle, CheckCircle2, TrendingUp, Filter, FilterX, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, Plus, RefreshCw, Bot, Workflow, FilePlus, UserSearch, Trash2, Target, Inbox, CalendarDays, Plug} from "lucide-react"
 import { InterviewsView } from "@/app/(modules)/hr/interviews/page"
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-factors-settings"
@@ -3207,6 +3207,30 @@ export default function VacancyPage() {
                             {clickableLabel("rejected", s!.rejected, "отказ")}
                           </TooltipTrigger>
                           <TooltipContent>Кандидаты со статусом «Отказ» в воронке — нажмите, чтобы отфильтровать</TooltipContent>
+                        </UITooltip>)
+                      // Иконка сброса фильтра в конце полосы (Юрий 07.07):
+                      // появляется, когда фильтр списка отличается от дефолта
+                      // (кликом по счётчику или из поповера «Фильтр»).
+                      const headerFilterActive =
+                        (filters.funnelStatuses?.length ?? 0) > 0 ||
+                        filters.demoAnswered === true ||
+                        filters.secondDemoPassed === true ||
+                        filters.ctaClicked === true ||
+                        filters.hhPublication != null ||
+                        filters.hideRejected === false
+                      if (headerFilterActive) push("resetFilters",
+                        <UITooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={() => handleHeaderStatClick("hhTotal")}
+                              className="inline-flex items-center text-muted-foreground hover:text-foreground cursor-pointer"
+                              aria-label="Сброс фильтра"
+                            >
+                              <FilterX className="w-3.5 h-3.5" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>Сброс фильтра</TooltipContent>
                         </UITooltip>)
                       return nodes
                     })()}
