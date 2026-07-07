@@ -1,7 +1,10 @@
 // POST /api/public/tip/promo — активировать промокод (пополняет balance_runs).
 
 import { NextRequest, NextResponse } from "next/server"
-import { getOrCreateTipUser } from "@/lib/tip/session"
+import { eq } from "drizzle-orm"
+import { db } from "@/lib/db"
+import { tipUsers } from "@/lib/db/schema"
+import { getOrCreateTipUser, switchTipUserCookie } from "@/lib/tip/session"
 import { activatePromo, TipServiceError } from "@/lib/tip/service"
 import { checkTipPromoRateLimit, TIP_RATE_LIMIT_MESSAGE } from "@/lib/tip/rate-limit"
 
@@ -27,6 +30,21 @@ export async function POST(req: NextRequest) {
 
   try {
     const result = await activatePromo(user.id, body.code)
+
+    // Личный код-пропуск (0265): не начисление прогонов, а переключение
+    // браузерной cookie на аккаунт владельца — см. lib/tip/session.ts::
+    // switchTipUserCookie. Баланс в ответе — баланс владельца (не текущего
+    // анонимного пользователя), чтобы UI сразу показал верную цифру.
+    if (result.personal) {
+      await switchTipUserCookie(result.ownerUserId)
+      const [owner] = await db
+        .select({ balanceRuns: tipUsers.balanceRuns })
+        .from(tipUsers)
+        .where(eq(tipUsers.id, result.ownerUserId))
+        .limit(1)
+      return NextResponse.json({ personal: true, balanceRuns: owner?.balanceRuns ?? 0 }, { status: 200 })
+    }
+
     return NextResponse.json({ balanceRuns: result.balanceRuns, runsGranted: result.runsGranted }, { status: 200 })
   } catch (e) {
     if (e instanceof TipServiceError) {

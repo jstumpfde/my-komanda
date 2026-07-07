@@ -23,6 +23,16 @@ interface PromoCode {
   sourceLabel: string | null
   expiresAt: string | null
   createdAt: string
+  isPersonal: boolean
+  ownerUserId: string | null
+}
+
+// Личный код-пропуск = фактически пароль в чужой аккаунт (0265, см.
+// lib/tip/personal-code.ts, lib/tip/service.ts::activatePromo). Маскируем
+// значение и не даём копировать пачкой/поштучно из общего списка — виден
+// только бейдж «личный».
+function maskCode(code: string): string {
+  return `${code.slice(0, 3)}••••••••`
 }
 
 const RUNS_CHIPS = [1, 2, 3, 5, 10]
@@ -112,12 +122,15 @@ export function PromoCodesTab() {
 
   function copyAll() {
     if (!lastBatch || lastBatch.length === 0) return
-    const lines = lastBatch.map((c) => (c.isFreeLink ? codeToUrl(c.code) : c.code))
+    // Личные коды-пропуска (пароли в чужой аккаунт) в пачечную генерацию не
+    // попадают, но фильтруем и здесь на случай будущих изменений формы.
+    const lines = lastBatch.filter((c) => !c.isPersonal).map((c) => (c.isFreeLink ? codeToUrl(c.code) : c.code))
     navigator.clipboard.writeText(lines.join("\n"))
     toast.success("Скопировано")
   }
 
   function copyOne(c: PromoCode) {
+    if (c.isPersonal) return // личный код — пароль в чужой аккаунт, не копируем
     const text = c.isFreeLink ? codeToUrl(c.code) : c.code
     navigator.clipboard.writeText(text)
     toast.success("Скопировано")
@@ -257,21 +270,24 @@ export function PromoCodesTab() {
                     <TableRow key={c.id}>
                       <TableCell className="font-mono text-xs">
                         <div className="flex items-center gap-1.5">
-                          <span>{c.isFreeLink ? codeToUrl(c.code) : c.code}</span>
-                          {c.isFreeLink && <Badge variant="outline" className="text-[10px] text-sky-700 border-sky-300 bg-sky-50">ссылка</Badge>}
+                          <span>{c.isPersonal ? maskCode(c.code) : (c.isFreeLink ? codeToUrl(c.code) : c.code)}</span>
+                          {c.isPersonal && <Badge variant="outline" className="text-[10px] text-amber-700 border-amber-300 bg-amber-50">личный</Badge>}
+                          {!c.isPersonal && c.isFreeLink && <Badge variant="outline" className="text-[10px] text-sky-700 border-sky-300 bg-sky-50">ссылка</Badge>}
                         </div>
                       </TableCell>
-                      <TableCell>{c.runsGranted}</TableCell>
+                      <TableCell>{c.isPersonal ? "—" : c.runsGranted}</TableCell>
                       <TableCell>
-                        {c.activationsCount}{c.maxActivations != null ? ` / ${c.maxActivations}` : " / ∞"}
+                        {c.isPersonal ? "без лимита" : `${c.activationsCount}${c.maxActivations != null ? ` / ${c.maxActivations}` : " / ∞"}`}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{c.sourceLabel ?? "—"}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{fmtDate(c.expiresAt)}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{fmtDateTime(c.createdAt)}</TableCell>
                       <TableCell>
-                        <Button size="sm" variant="ghost" onClick={() => copyOne(c)}>
-                          <Copy className="w-3.5 h-3.5" />
-                        </Button>
+                        {!c.isPersonal && (
+                          <Button size="sm" variant="ghost" onClick={() => copyOne(c)}>
+                            <Copy className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
