@@ -213,13 +213,19 @@ async function main() {
     ?? null
   demo.contentBlockId = presentationBlock
 
-  // ── Стадия 3: «Путь менеджера» (2-я часть) — demo + scoreGate anketa ──
+  // ── Стадия 3: 2-я часть демо (напр. «Путь менеджера» у эталонной вакансии) —
+  // demo + scoreGate anketa. Название стадии берём из реального контент-блока
+  // вакансии (не хардкодим имя конкретной вакансии — оно у каждой своё).
   const managerPath = makeStage("demo", idSeed("manager-path"))
-  managerPath.title = "Путь менеджера"
   managerPath.color = "indigo"
-  managerPath.contentBlockId = anketaContentBlockId
-    ?? demoRows.find(d => /менеджер/i.test(d.title))?.id
+  // Эвристика поиска блока 2-й части по легаси-данным без anketaContentBlockId:
+  // ищем "менеджер" в названии (так исторически называли этот блок), иначе
+  // берём второй по порядку demo-блок.
+  const managerBlock = demoRows.find(d => /менеджер/i.test(d.title))
+    ?? demoRows.filter(d => d.kind === "demo" || d.contentType === "presentation").slice(1, 2)[0]
     ?? null
+  managerPath.title = managerBlock?.title ?? "Демо (2-я часть)"
+  managerPath.contentBlockId = anketaContentBlockId ?? managerBlock?.id ?? null
   managerPath.rule.scoreGate = scoreGate("anketa", anketaPassThreshold || 45, "preliminary_reject")
   if (anketaHhAction) managerPath.hhStatus = anketaHhAction
   managerPath.rule.advanceTo = anketaAdvanceToStage ?? "test_task_sent"
@@ -274,7 +280,7 @@ async function main() {
   console.error("Маппинг стадий:")
   console.error(`  1) Отклик → приглашение на демо  gate=resume/${respond.rule.scoreGate?.threshold} (autoEnabled=false), contentBlock=${respond.contentBlockId ?? "—"}, hh=${respond.hhStatus ?? "—"}, messages=${respond.messages?.length ?? 0}`)
   console.error(`  2) Демонстрация          contentBlock=${demo.contentBlockId ?? "—"}`)
-  console.error(`  3) Путь менеджера        gate=anketa/${managerPath.rule.scoreGate?.threshold} (autoEnabled=false), contentBlock=${managerPath.contentBlockId ?? "—"}, hh=${managerPath.hhStatus ?? "—"}, advance=${managerPath.rule.advanceTo}, messages=${managerPath.messages?.length ?? 0}`)
+  console.error(`  3) ${managerPath.title.padEnd(24)} gate=anketa/${managerPath.rule.scoreGate?.threshold} (autoEnabled=false), contentBlock=${managerPath.contentBlockId ?? "—"}, hh=${managerPath.hhStatus ?? "—"}, advance=${managerPath.rule.advanceTo}, messages=${managerPath.messages?.length ?? 0}`)
   console.error(`  4) Интервью              ${existingInterview ? "(сохранена)" : "(дефолт)"}`)
   console.error(`  5) Оффер                 ручное`)
   console.error(`  6) Нанят                 terminal`)

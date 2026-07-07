@@ -2743,7 +2743,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                     <Select value={ap.contentBlockId ?? "__none__"} onValueChange={v => patch({ anketaPassInvite: { ...ap, contentBlockId: v === "__none__" ? null : v } })}>
                       <SelectTrigger className="h-9"><SelectValue placeholder="Выберите блок" /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="__none__">— выберите блок «Путь менеджера» —</SelectItem>
+                        <SelectItem value="__none__">— выберите блок 2-й части —</SelectItem>
                         {contentBlocks.map(b => <SelectItem key={b.id} value={b.id}>{b.title}</SelectItem>)}
                       </SelectContent>
                     </Select>
@@ -2787,7 +2787,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                         <Textarea
                           value={ap.passScreenText ?? ""}
                           onChange={e => patch({ anketaPassInvite: { ...ap, passScreenText: e.target.value } })}
-                          placeholder="Вы прошли первую часть. Продолжим — впереди «Путь менеджера»."
+                          placeholder={`Вы прошли первую часть. Продолжим — впереди «${assignedBlock?.title ?? "2-я часть демо"}».`}
                           rows={3} maxLength={2000}
                         />
                       </div>
@@ -2802,7 +2802,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                         <Textarea
                           value={ap.messageText}
                           onChange={e => patch({ anketaPassInvite: { ...ap, messageText: e.target.value } })}
-                          placeholder="{{name}}, добрый день! Благодарим за ответы — вы нам подходите. Предлагаем 2-ю часть «Путь менеджера»: {{demo_link}}"
+                          placeholder={`{{name}}, добрый день! Благодарим за ответы — вы нам подходите. Предлагаем 2-ю часть «${assignedBlock?.title ?? "демо"}»: {{demo_link}}`}
                           rows={4} maxLength={2000}
                         />
                       </div>
@@ -2944,7 +2944,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                       onCheckedChange={v => patch({ tgCandidateAlerts: { ...tg, onGatePassed: Boolean(v) } })}
                       className="mt-0.5"
                     />
-                    <span className="text-xs">Когда кандидат прошёл гейт 2-й части демо («Путь менеджера»)</span>
+                    <span className="text-xs">Когда кандидат прошёл гейт 2-й части демо</span>
                   </label>
                   <p className="text-[11px] text-muted-foreground rounded-md bg-muted/40 px-2.5 py-1.5 leading-relaxed">
                     Бот и чат настраиваются в Настройках HR → Telegram; сообщения идут в канал компании.
