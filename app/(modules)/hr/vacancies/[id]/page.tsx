@@ -3187,7 +3187,7 @@ export default function VacancyPage() {
                           <TooltipTrigger asChild>
                             {clickableLabel("demo2", s!.secondDemoPassed, "демо-2")}
                           </TooltipTrigger>
-                          <TooltipContent>Прошли 2-ю часть демо («Путь менеджера»). Приглашено во 2-ю часть: {s!.secondDemoInvited} — нажмите, чтобы отфильтровать</TooltipContent>
+                          <TooltipContent>Прошли 2-ю часть демо. Приглашено во 2-ю часть: {s!.secondDemoInvited} — нажмите, чтобы отфильтровать</TooltipContent>
                         </UITooltip>)
                       // Только >0: перешли по ссылке. Кликабельно (доделка 07.07):
                       // ctaClicked=true — ровно тот же критерий, что у счётчика.

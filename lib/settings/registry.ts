@@ -139,7 +139,7 @@ export const SETTINGS_REGISTRY: SettingsRegistryEntry[] = [
   {
     key: "msg.secondDemoInvite",
     title: "Приглашение на 2-ю часть демо",
-    description: "Отправляется прошедшим анкету с баллом выше порога («Путь менеджера»).",
+    description: "Отправляется прошедшим анкету с баллом выше порога.",
     group: "Сообщения кандидатам",
     level: "vacancy",
     editPath: "/hr/vacancies/[id]?tab=settings&section=spec",

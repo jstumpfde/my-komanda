@@ -254,7 +254,7 @@ export function buildSpecFromLegacy(vacancy: LegacyVacancyInput): CandidateSpec 
     // (c) пороги (Этап 2: две пары)
     resumeThresholds,
     anketaThresholds,
-    anketaPassInvite: { enabled: false, passThreshold: 35, aiEvalThreshold: 45, contentBlockId: null, messageText: "", delaySeconds: 900, advanceToStage: null, hhAction: null, transferMode: "both", inlineContinue: true, passScreenTitle: "Вы молодец!", passScreenText: "Вы прошли первую часть. Продолжим — впереди «Путь менеджера».", passScreenButtonLabel: "Продолжить →", failScreenTitle: "", failScreenText: "", failAction: "none", failRejectDelayMinutes: 60 },
+    anketaPassInvite: { enabled: false, passThreshold: 35, aiEvalThreshold: 45, contentBlockId: null, messageText: "", delaySeconds: 900, advanceToStage: null, hhAction: null, transferMode: "both", inlineContinue: true, passScreenTitle: "Вы молодец!", passScreenText: "Вы прошли первую часть. Продолжим — впереди 2-я часть демо.", passScreenButtonLabel: "Продолжить →", failScreenTitle: "", failScreenText: "", failAction: "none", failRejectDelayMinutes: 60 },
     tgCandidateAlerts: { enabled: false, minResumeScore: null, minAnswersScore: null, onGatePassed: true, onBooked: false },
     hotCandidateAlert: { enabled: false, threshold: PLATFORM_DEFAULT_HOT_CANDIDATE_THRESHOLD, staleAfterHours: 3 },
     // (d) профиль
