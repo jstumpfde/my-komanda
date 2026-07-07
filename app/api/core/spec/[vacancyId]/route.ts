@@ -250,10 +250,18 @@ export async function GET(
       // (process-queue читает его напрямую, независимо от Spec). Существующие
       // Spec-записи, сохранённые ДО того, как PUT начал синкать stopFactors в
       // legacy (см. syncStopFactorsToLegacy выше), могли разойтись с боевым —
-      // показываем в Портрете реальное боевое состояние по ключам, которые
-      // boевое хранилище понимает (city/format/age/experience/documents/
-      // citizenship/salaryExpectation), не трогая Spec-only поля (driverLicense/
-      // jobHopping/timezone/customFactors — своего эквивалента в боевом нет).
+      // показываем в Портрете реальное боевое состояние по всем 8 ключам,
+      // которые boевое хранилище понимает (city/format/age/experience/
+      // documents/citizenship/nativeLanguage/salaryExpectation), не трогая
+      // Spec-only поля (driverLicense/jobHopping/timezone/customFactors —
+      // своего эквивалента в боевом нет).
+      //
+      // БАГФИКС (ревью): nativeLanguage изначально был пропущен в этом списке,
+      // хотя это полноправный боевой ключ, редактируемый и в spec-editor
+      // (native-language-factor-field.tsx), и в «Настройках вакансии» — без
+      // него смена родного языка через «Настройки вакансии» не отражалась бы
+      // в Портрете при следующем открытии (тот же рассинхрон, только в
+      // обратную сторону).
       const boevoeStops = (row.stopFactorsJson ?? {}) as VacancyStopFactors
       specFromStore.stopFactors = {
         ...specFromStore.stopFactors,
@@ -263,6 +271,7 @@ export async function GET(
         ...(boevoeStops.experience        !== undefined ? { experience: boevoeStops.experience }                : {}),
         ...(boevoeStops.documents         !== undefined ? { documents: boevoeStops.documents }                  : {}),
         ...(boevoeStops.citizenship       !== undefined ? { citizenship: boevoeStops.citizenship }              : {}),
+        ...(boevoeStops.nativeLanguage    !== undefined ? { nativeLanguage: boevoeStops.nativeLanguage }        : {}),
         ...(boevoeStops.salaryExpectation !== undefined ? { salaryExpectation: boevoeStops.salaryExpectation }  : {}),
       }
       return apiSuccess<SpecApiResponse>({ spec: specFromStore, source: "spec" })
