@@ -6,6 +6,11 @@
 //   POST /api/public/tip/run               -> 200 {runId,balanceRuns} | 402 {error:'no_balance'} | 400 {error}
 //   GET  /api/public/tip/run/[id]          -> { id, status, resultMd?, formula?, shareToken?, error?, context, createdAt }
 //   POST /api/public/tip/promo             -> { balanceRuns, runsGranted } | 400 {error}
+//
+// UX-переработка (07.07): компактный первый экран (дата → имя → строка-резюме
+// настроек → большая кнопка), все плитки скрыты за «Уточнить». Кнопка
+// «Получить разбор» больше не дизейблится валидацией — по клику с некорректной
+// датой показываем инлайн-ошибку и скроллим к полю, вместо молчаливого disabled.
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -25,7 +30,8 @@ import {
   type TipDepth,
   type TipAudience,
 } from "@/lib/tip/contexts"
-import { Loader2 } from "lucide-react"
+import { Loader2, ChevronDown, SlidersHorizontal } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 type Gender = "male" | "female" | "unspecified"
 
@@ -52,6 +58,18 @@ const POLL_MS = 2500
 const MAIN_TILES = getTipContextsByGroup("main")
 const MORE_TILES = getTipContextsByGroup("more")
 
+const DEPTH_SHORT_LABEL: Record<TipDepth, string> = {
+  short: "коротко",
+  detailed: "подробно",
+  full: "максимально полно",
+}
+
+const AUDIENCE_SHORT_LABEL: Record<TipAudience, string> = {
+  self: "для себя",
+  send_to_person: "можно отправить человеку",
+  hiring_analysis: "для найма",
+}
+
 export default function TipClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -69,9 +87,11 @@ export default function TipClient() {
   const [secondName, setSecondName] = useState("")
   const [secondBirthDate, setSecondBirthDate] = useState("")
 
+  // ── Раскрытие блока настроек ("Уточнить") ────────────────────────────
+  const [settingsOpen, setSettingsOpen] = useState(false)
+
   // ── Служебное состояние ───────────────────────────────────────────────
   const [balanceRuns, setBalanceRuns] = useState<number | null>(null)
-  const [prefsLoaded, setPrefsLoaded] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState("")
   const [needsPromo, setNeedsPromo] = useState(false)
@@ -81,6 +101,12 @@ export default function TipClient() {
   const [activeRunId, setActiveRunId] = useState<string | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // ── Ошибки валидации полей даты (для подсветки + скролла) ────────────
+  const [birthDateError, setBirthDateError] = useState("")
+  const [secondBirthDateError, setSecondBirthDateError] = useState("")
+  const birthDateRef = useRef<HTMLDivElement | null>(null)
+  const secondBirthDateRef = useRef<HTMLDivElement | null>(null)
+
   const selectedContext = getTipContext(contextSlug)
 
   // ── Предвыбор контекста из ?context=slug ─────────────────────────────
@@ -89,6 +115,9 @@ export default function TipClient() {
     if (fromUrl && getTipContext(fromUrl)) {
       setContextSlug(fromUrl)
       if (getTipContext(fromUrl)?.group === "more") setShowMore(true)
+      // Явный выбор контекста из ссылки — сразу открываем настройки, чтобы
+      // было видно, что применилось.
+      setSettingsOpen(true)
     }
   }, [searchParams])
 
@@ -127,9 +156,6 @@ export default function TipClient() {
         }
       })
       .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setPrefsLoaded(true)
-      })
     return () => {
       cancelled = true
     }
@@ -144,13 +170,16 @@ export default function TipClient() {
   const pairCapable = selectedContext?.pairCapable ?? false
   const roleCapable = contextSlug === "employee" || contextSlug === "manager"
 
-  const canSubmit = useMemo(() => {
-    if (!isValidBirthDate(birthDate)) return false
-    if (pairMode && pairCapable) {
-      if (!secondBirthDate || !isValidBirthDate(secondBirthDate)) return false
-    }
-    return true
-  }, [birthDate, pairMode, pairCapable, secondBirthDate])
+  // ── Строка-резюме текущих настроек ───────────────────────────────────
+  const summaryText = useMemo(() => {
+    const parts = [
+      selectedContext?.title ?? "Общий разбор",
+      DEPTH_SHORT_LABEL[depth],
+      AUDIENCE_SHORT_LABEL[audience],
+    ]
+    if (pairMode && pairCapable) parts.push("сравнение с другим человеком")
+    return parts.join(" · ")
+  }, [selectedContext, depth, audience, pairMode, pairCapable])
 
   function startPolling(runId: string) {
     if (pollRef.current) clearInterval(pollRef.current)
@@ -186,12 +215,17 @@ export default function TipClient() {
   async function submitRun() {
     setFormError("")
     setNeedsPromo(false)
+    setBirthDateError("")
+    setSecondBirthDateError("")
+
     if (!isValidBirthDate(birthDate)) {
-      setFormError("Укажите корректную дату рождения в формате ДД.ММ.ГГГГ.")
+      setBirthDateError("Укажите дату рождения в формате ДД.ММ.ГГГГ")
+      birthDateRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
       return
     }
     if (pairMode && pairCapable && (!secondBirthDate || !isValidBirthDate(secondBirthDate))) {
-      setFormError("Укажите корректную дату рождения второго человека.")
+      setSecondBirthDateError("Укажите дату рождения в формате ДД.ММ.ГГГГ")
+      secondBirthDateRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
       return
     }
 
@@ -299,12 +333,22 @@ export default function TipClient() {
         )}
       </header>
 
-      <div className="space-y-8">
-        {/* ── Данные ── */}
+      <div className="space-y-6">
+        {/* ── Компактный первый экран ── */}
         <section className="space-y-4">
-          <div className="space-y-1.5">
+          <div className="space-y-1.5" ref={birthDateRef}>
             <Label htmlFor="tip-birthdate">Дата рождения</Label>
-            <BirthDateInput id="tip-birthdate" value={birthDate} onChange={setBirthDate} autoFocus />
+            <BirthDateInput
+              id="tip-birthdate"
+              value={birthDate}
+              onChange={(v) => {
+                setBirthDate(v)
+                if (birthDateError) setBirthDateError("")
+              }}
+              autoFocus
+              invalid={!!birthDateError}
+            />
+            {birthDateError && <p className="text-sm text-red-600">{birthDateError}</p>}
           </div>
 
           <div className="space-y-1.5">
@@ -321,131 +365,180 @@ export default function TipClient() {
             />
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Пол</Label>
-            <div className="grid grid-cols-3 gap-2">
-              <Tile active={gender === "male"} onClick={() => setGender("male")}>
-                Мужчина
-              </Tile>
-              <Tile active={gender === "female"} onClick={() => setGender("female")}>
-                Женщина
-              </Tile>
-              <Tile active={gender === "unspecified"} onClick={() => setGender("unspecified")}>
-                Не указывать
-              </Tile>
-            </div>
-          </div>
+          {/* ── Строка-резюме настроек ── */}
+          <button
+            type="button"
+            onClick={() => setSettingsOpen((v) => !v)}
+            className="flex w-full items-center justify-between gap-2 rounded-xl border border-stone-200 bg-stone-50/60 px-4 py-3 text-left transition-colors hover:bg-stone-100"
+            aria-expanded={settingsOpen}
+          >
+            <span className="flex min-w-0 items-center gap-2 text-sm text-stone-600">
+              <SlidersHorizontal className="h-4 w-4 shrink-0 text-stone-400" />
+              <span className="truncate">{summaryText}</span>
+            </span>
+            <span className="flex shrink-0 items-center gap-1 text-sm font-medium text-amber-600">
+              {settingsOpen ? "Свернуть" : "Уточнить"}
+              <ChevronDown
+                className={cn("h-4 w-4 transition-transform", settingsOpen && "rotate-180")}
+              />
+            </span>
+          </button>
         </section>
 
-        {/* ── Контекст ── */}
-        <section className="space-y-3">
-          <Label>Что хотите получить?</Label>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {MAIN_TILES.map((c) => (
-              <Tile key={c.slug} active={contextSlug === c.slug} onClick={() => setContextSlug(c.slug)}>
-                <span className="text-xl">{c.emoji}</span>
-                <span className="leading-tight">{c.title}</span>
-              </Tile>
-            ))}
-          </div>
-          {!showMore && (
-            <button
-              type="button"
-              onClick={() => setShowMore(true)}
-              className="w-full rounded-xl border border-dashed border-stone-300 py-2.5 text-sm font-medium text-stone-500 hover:bg-stone-50"
-            >
-              Ещё…
-            </button>
+        {/* ── Раскрываемый блок настроек ── */}
+        <div
+          className={cn(
+            "grid transition-all duration-300 ease-in-out",
+            settingsOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
           )}
-          {showMore && (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {MORE_TILES.map((c) => (
-                <Tile key={c.slug} active={contextSlug === c.slug} onClick={() => setContextSlug(c.slug)}>
-                  <span className="text-xl">{c.emoji}</span>
-                  <span className="leading-tight">{c.title}</span>
-                </Tile>
-              ))}
-            </div>
-          )}
+        >
+          <div className="overflow-hidden">
+            <div className="space-y-8 pt-1">
+              {/* ── Пол ── */}
+              <section className="space-y-3">
+                <Label>Пол</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  <Tile active={gender === "male"} onClick={() => setGender("male")}>
+                    Мужчина
+                  </Tile>
+                  <Tile active={gender === "female"} onClick={() => setGender("female")}>
+                    Женщина
+                  </Tile>
+                  <Tile active={gender === "unspecified"} onClick={() => setGender("unspecified")}>
+                    Не указывать
+                  </Tile>
+                </div>
+              </section>
 
-          {roleCapable && (
-            <div className="space-y-1.5 pt-1">
-              <Label htmlFor="tip-role">
-                Роль/должность <span className="font-normal text-stone-400">(необязательно)</span>
-              </Label>
-              <Input
-                id="tip-role"
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                placeholder="Например: менеджер по продажам"
-                className="h-11"
-                maxLength={80}
-              />
-            </div>
-          )}
+              {/* ── Контекст ── */}
+              <section className="space-y-3">
+                <Label>Что разобрать?</Label>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {MAIN_TILES.map((c) => (
+                    <Tile key={c.slug} active={contextSlug === c.slug} onClick={() => setContextSlug(c.slug)}>
+                      <span className="text-xl">{c.emoji}</span>
+                      <span className="leading-tight">{c.title}</span>
+                    </Tile>
+                  ))}
+                </div>
+                {!showMore && (
+                  <button
+                    type="button"
+                    onClick={() => setShowMore(true)}
+                    className="w-full rounded-xl border border-dashed border-stone-300 py-2.5 text-sm font-medium text-stone-500 hover:bg-stone-50"
+                  >
+                    Ещё…
+                  </button>
+                )}
+                {showMore && (
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {MORE_TILES.map((c) => (
+                      <Tile key={c.slug} active={contextSlug === c.slug} onClick={() => setContextSlug(c.slug)}>
+                        <span className="text-xl">{c.emoji}</span>
+                        <span className="leading-tight">{c.title}</span>
+                      </Tile>
+                    ))}
+                  </div>
+                )}
 
-          {pairCapable && (
-            <div className="space-y-3 rounded-xl border border-stone-200 bg-stone-50/60 p-3">
-              <div className="grid grid-cols-2 gap-2">
-                <Tile active={!pairMode} onClick={() => setPairMode(false)}>
-                  Только про меня
-                </Tile>
-                <Tile active={pairMode} onClick={() => setPairMode(true)}>
-                  Сравнить с другим человеком
-                </Tile>
-              </div>
-              {pairMode && (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="tip-second-name">
-                      Имя человека <span className="font-normal text-stone-400">(опционально)</span>
+                {roleCapable && (
+                  <div className="space-y-1.5 pt-1">
+                    <Label htmlFor="tip-role">
+                      Роль/должность <span className="font-normal text-stone-400">(необязательно)</span>
                     </Label>
                     <Input
-                      id="tip-second-name"
-                      value={secondName}
-                      onChange={(e) => setSecondName(e.target.value)}
-                      placeholder="Имя"
+                      id="tip-role"
+                      value={role}
+                      onChange={(e) => setRole(e.target.value)}
+                      placeholder="Например: менеджер по продажам"
                       className="h-11"
                       maxLength={80}
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="tip-second-birthdate">Дата рождения человека</Label>
-                    <BirthDateInput
-                      id="tip-second-birthdate"
-                      value={secondBirthDate}
-                      onChange={setSecondBirthDate}
-                    />
+                )}
+
+                {pairCapable && (
+                  <div className="space-y-3 rounded-xl border border-stone-200 bg-stone-50/60 p-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <Tile active={!pairMode} onClick={() => setPairMode(false)}>
+                        Только про меня
+                      </Tile>
+                      <Tile active={pairMode} onClick={() => setPairMode(true)}>
+                        Сравнить с другим человеком
+                      </Tile>
+                    </div>
+                    {pairMode && (
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="tip-second-name">
+                            Имя человека <span className="font-normal text-stone-400">(опционально)</span>
+                          </Label>
+                          <Input
+                            id="tip-second-name"
+                            value={secondName}
+                            onChange={(e) => setSecondName(e.target.value)}
+                            placeholder="Имя"
+                            className="h-11"
+                            maxLength={80}
+                          />
+                        </div>
+                        <div className="space-y-1.5" ref={secondBirthDateRef}>
+                          <Label htmlFor="tip-second-birthdate">Дата рождения человека</Label>
+                          <BirthDateInput
+                            id="tip-second-birthdate"
+                            value={secondBirthDate}
+                            onChange={(v) => {
+                              setSecondBirthDate(v)
+                              if (secondBirthDateError) setSecondBirthDateError("")
+                            }}
+                            invalid={!!secondBirthDateError}
+                          />
+                          {secondBirthDateError && (
+                            <p className="text-sm text-red-600">{secondBirthDateError}</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
+                )}
+              </section>
+
+              {/* ── Глубина ── */}
+              <section className="space-y-3">
+                <Label>Глубина</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {DEPTHS.map((d) => (
+                    <Tile
+                      key={d.slug}
+                      active={depth === d.slug}
+                      onClick={() => setDepth(d.slug)}
+                      className="text-xs sm:text-sm"
+                    >
+                      {d.title}
+                    </Tile>
+                  ))}
                 </div>
-              )}
+              </section>
+
+              {/* ── Для кого текст ── */}
+              <section className="space-y-3">
+                <Label>Для кого текст?</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {AUDIENCES.map((a) => (
+                    <Tile
+                      key={a.slug}
+                      active={audience === a.slug}
+                      onClick={() => setAudience(a.slug)}
+                      className="text-xs sm:text-sm"
+                    >
+                      {a.title}
+                    </Tile>
+                  ))}
+                </div>
+              </section>
             </div>
-          )}
-        </section>
-
-        {/* ── Глубина ── */}
-        <section className="space-y-3">
-          <Label>Глубина</Label>
-          <div className="grid grid-cols-3 gap-2">
-            {DEPTHS.map((d) => (
-              <Tile key={d.slug} active={depth === d.slug} onClick={() => setDepth(d.slug)} className="text-xs sm:text-sm">
-                {d.title}
-              </Tile>
-            ))}
           </div>
-        </section>
-
-        {/* ── Для кого текст ── */}
-        <section className="space-y-3">
-          <Label>Для кого текст?</Label>
-          <div className="grid grid-cols-3 gap-2">
-            {AUDIENCES.map((a) => (
-              <Tile key={a.slug} active={audience === a.slug} onClick={() => setAudience(a.slug)} className="text-xs sm:text-sm">
-                {a.title}
-              </Tile>
-            ))}
-          </div>
-        </section>
+        </div>
 
         {/* ── Ошибки / промокод / кнопка ── */}
         {formError && (
@@ -477,7 +570,7 @@ export default function TipClient() {
 
         <Button
           onClick={submitRun}
-          disabled={!canSubmit || submitting || !prefsLoaded}
+          disabled={submitting}
           size="lg"
           className="h-14 w-full bg-amber-500 text-base font-semibold text-stone-900 hover:bg-amber-400"
         >
