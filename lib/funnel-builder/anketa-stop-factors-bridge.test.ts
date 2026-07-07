@@ -141,14 +141,56 @@ test("fromAnketaStopFactors: citizenship CSV → allowed[] mode=allow по ум�
   assert.deepEqual(boevoe.citizenship?.allowed, ["RU", "BY"])
 })
 
-test("fromAnketaStopFactors: citizenship сохраняет существующий deny-режим из current", () => {
+// ГВАРД-БЛОКЕР 07.07: deny-режим кодируется в тексте конструктора префиксом
+// «Кроме:» (citizenshipToText) — раньше этот текст наивно сплитился в allowed
+// (боевое замусоривалось ["Кроме: US","GB"], правки deny-списка не влияли на
+// отсев). Ниже — тесты корректного парса deny.
+
+test("fromAnketaStopFactors: citizenship текст «Кроме: …» → denied[], allowed не трогается", () => {
+  const factors: AnketaStopFactor[] = [
+    { id: "citizenship", label: "Гражданство", enabled: true, value: "Кроме: US, GB" },
+  ]
+  const boevoe = fromAnketaStopFactors(factors)
+  assert.equal(boevoe.citizenship?.enabled, true)
+  assert.equal(boevoe.citizenship?.mode, "deny")
+  assert.deepEqual(boevoe.citizenship?.denied, ["US", "GB"])
+  assert.equal(boevoe.citizenship?.allowed, undefined)
+})
+
+test("fromAnketaStopFactors: citizenship deny-режим из current + текст БЕЗ префикса → правка уходит в denied", () => {
   const factors: AnketaStopFactor[] = [
     { id: "citizenship", label: "Гражданство", enabled: true, value: "US, GB" },
   ]
-  const current: VacancyStopFactors = { citizenship: { enabled: false, mode: "deny", denied: [] } }
+  const current: VacancyStopFactors = { citizenship: { enabled: false, mode: "deny", denied: [], allowed: ["RU"] } }
   const boevoe = fromAnketaStopFactors(factors, current)
   assert.equal(boevoe.citizenship?.mode, "deny")
-  assert.deepEqual(boevoe.citizenship?.allowed, ["US", "GB"])
+  assert.deepEqual(boevoe.citizenship?.denied, ["US", "GB"])
+  // allowed из current не замусоривается deny-текстом
+  assert.deepEqual(boevoe.citizenship?.allowed, ["RU"])
+})
+
+test("fromAnketaStopFactors: пользователь отредактировал deny-текст (добавил страну) → правка в denied", () => {
+  const current: VacancyStopFactors = {
+    citizenship: { enabled: true, mode: "deny", denied: ["US", "GB"] },
+  }
+  // Гидрация конструктора из боевого → текст «Кроме: US, GB», HR дописал KZ
+  const factors = toAnketaStopFactors(current).map(f =>
+    f.id === "citizenship" ? { ...f, value: "Кроме: US, GB, KZ" } : f,
+  )
+  const boevoe = fromAnketaStopFactors(factors, current)
+  assert.equal(boevoe.citizenship?.mode, "deny")
+  assert.deepEqual(boevoe.citizenship?.denied, ["US", "GB", "KZ"])
+  assert.equal(boevoe.citizenship?.allowed, undefined)
+})
+
+test("fromAnketaStopFactors: deny + пустой текст → denied из current сохраняется", () => {
+  const factors: AnketaStopFactor[] = [
+    { id: "citizenship", label: "Гражданство", enabled: true, value: "" },
+  ]
+  const current: VacancyStopFactors = { citizenship: { enabled: true, mode: "deny", denied: ["US"] } }
+  const boevoe = fromAnketaStopFactors(factors, current)
+  assert.equal(boevoe.citizenship?.mode, "deny")
+  assert.deepEqual(boevoe.citizenship?.denied, ["US"])
 })
 
 test("fromAnketaStopFactors: city CSV → allowedCities[]", () => {
@@ -232,6 +274,18 @@ test("round-trip: боевое → конструктор → боевое со�
   assert.deepEqual(roundTripped.city?.allowedCities, ["Москва"])
   assert.deepEqual(roundTripped.format?.allowedFormats, ["remote"])
   assert.equal(roundTripped.salaryExpectation?.maxAmount, 100000)
+})
+
+test("round-trip: citizenship deny стабилен (гидрация + save без правок не меняет боевое)", () => {
+  const original: VacancyStopFactors = {
+    citizenship: { enabled: true, mode: "deny", denied: ["US", "GB"], rejectionText: "Увы" },
+  }
+  // Цикл вкладки «Анкета»: гидрация из боевого → save → fromAnketaStopFactors
+  const once = fromAnketaStopFactors(toAnketaStopFactors(original), original)
+  assert.deepEqual(once.citizenship, original.citizenship)
+  // И повторный цикл (каждый следующий save) — тоже стабилен
+  const twice = fromAnketaStopFactors(toAnketaStopFactors(once), once)
+  assert.deepEqual(twice.citizenship, original.citizenship)
 })
 
 // ─── countEnabledAnketaStopFactors ───────────────────────────────────────────

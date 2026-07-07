@@ -181,16 +181,35 @@ export function fromAnketaStopFactors(
 
   const citizenship = byId.get("citizenship")
   if (citizenship) {
-    // Свободный текст конструктора не различает страны/континенты и allow/deny
-    // так же гибко, как CitizenshipFactorField — трактуем как allow-список,
-    // разбирая по запятой. Уже заданный mode/denied в боевом (если задан через
-    // «Настройки вакансии» или spec-редактор) НЕ трогаем при enabled=false
-    // (тумблер выключен → просто гасим enabled, список остаётся для истории).
-    const list = (citizenship.value ?? "").split(",").map(s => s.trim()).filter(Boolean)
-    out.citizenship = {
-      ...(out.citizenship ?? {}),
-      enabled: citizenship.enabled,
-      ...(list.length > 0 ? { mode: out.citizenship?.mode ?? "allow", allowed: list } : {}),
+    // Свободный текст конструктора кодирует режим deny префиксом «Кроме:»
+    // (см. citizenshipToText). ГВАРД-БЛОКЕР 07.07: раньше этот текст наивно
+    // сплитился по запятой в allowed → на КАЖДОМ save() вкладки «Анкета»
+    // (гидрация + безусловный fromAnketaStopFactors) deny-список round-trip'ом
+    // превращался в мусор allowed=["Кроме: RU","BY"], а правки deny-списка
+    // через конструктор не влияли на отсев (матчер в deny читает только
+    // denied). Теперь: префикс «Кроме:» ИЛИ текущий боевой mode="deny" →
+    // список пишем в denied (allowed не трогаем — сохраняется для истории,
+    // как denied сохраняется в allow-режиме). Переключение режима allow/deny
+    // из конструктора невозможно (упрощённый UI) — только через «Настройки
+    // вакансии»/Портрет (CitizenshipFactorField).
+    const raw = (citizenship.value ?? "").trim()
+    const denyByPrefix = /^кроме\s*:/i.test(raw)
+    const isDeny = denyByPrefix || out.citizenship?.mode === "deny"
+    const listText = denyByPrefix ? raw.replace(/^кроме\s*:/i, "") : raw
+    const list = listText.split(",").map(s => s.trim()).filter(Boolean)
+    if (isDeny) {
+      out.citizenship = {
+        ...(out.citizenship ?? {}),
+        enabled: citizenship.enabled,
+        mode: "deny",
+        ...(list.length > 0 ? { denied: list } : {}),
+      }
+    } else {
+      out.citizenship = {
+        ...(out.citizenship ?? {}),
+        enabled: citizenship.enabled,
+        ...(list.length > 0 ? { mode: "allow", allowed: list } : {}),
+      }
     }
   }
 
