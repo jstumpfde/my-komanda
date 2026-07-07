@@ -58,6 +58,10 @@ export interface FilterState {
   activeNow: boolean
   /** Фильтр по анкете: "filled" = заполнили форму; "not_filled" = открыли демо, но не заполнили. */
   anketaFilled?: "filled" | "not_filled"
+  /** #43: ответившие на вопросы анкеты — посчитан балл demo_answers_score.
+   *  Критерий счётчика «N анкет» в шапке вакансии (клик по счётчику).
+   *  НЕ путать с anketaFilled — тот про контактную форму (survey_responses). */
+  demoAnswered?: boolean
   /** Пресет «На разбор» (воронка-v2, Фаза 1г): прошли 1-ю часть, но застряли —
    *  есть балл ответов демо, не приглашены на 2-ю часть, не в отказе. Только
    *  видимость для ручной проверки перед авто-отказом. */
@@ -123,6 +127,7 @@ const DEFAULT_FILTERS: FilterState = {
   hideNoSalary: false,
   activeNow: false,
   reviewQueue: false,
+  demoAnswered: false,
   demoProgress: [],
   dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [],
   skills: [], industries: [],
@@ -293,6 +298,7 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
     !filters.hideRejected ? 1 : 0,
     (filters.demoProgress?.length ?? 0) > 0 ? 1 : 0,
     filters.anketaFilled ? 1 : 0,
+    filters.demoAnswered ? 1 : 0,
     filters.dateRange || filters.dateFrom || filters.dateTo ? 1 : 0,
     (filters.ageMin ?? 18) > 18 || (filters.ageMax ?? 65) < 65 ? 1 : 0,
     (filters.education?.length ?? 0) > 0 ? 1 : 0,

@@ -90,7 +90,7 @@ import { FunnelTab } from "@/components/vacancies/funnel-tab"
 import { MessageQueueSection } from "@/components/vacancies/message-queue-section"
 import { InboxTab } from "@/components/vacancies/inbox-tab"
 import { OutboundPauseMenuItem } from "@/components/vacancies/outbound-pause-control"
-import { parsePipeline, resolveVacancyStageOptions, DEMO_OPENED_STAGE_SLUGS, ANKETA_FILLED_STAGE_SLUGS, type CompanyStageHhActions, type CompanyStagePalette, type FunnelV2StageLite } from "@/lib/stages"
+import { parsePipeline, resolveVacancyStageOptions, DEMO_OPENED_STAGE_SLUGS, type CompanyStageHhActions, type CompanyStagePalette, type FunnelV2StageLite } from "@/lib/stages"
 import { BrandingOverrideSwitch } from "@/components/vacancies/branding-override-switch"
 import { VacancySettingsProvider, VacancyTabPendingDot, VacancyTabFooter, useVacancySectionRegister, useSafeSubTabSwitch, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
 import { SettingsTabShell } from "@/components/vacancies/settings-tab-shell"
@@ -598,7 +598,7 @@ export default function VacancyPage() {
   // Стадия из URL (?stage=slug,slug) — для перехода из отчёта по клику на число.
   const stageFromUrl = searchParams?.get("stage")
   const initialFunnelStatuses = stageFromUrl ? stageFromUrl.split(",").filter(Boolean) : DEFAULT_FUNNEL_STATUSES.slice()
-  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: initialFunnelStatuses, hideRejected: true, hideNoSalary: false, activeNow: false, reviewQueue: false, demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
+  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: initialFunnelStatuses, hideRejected: true, hideNoSalary: false, activeNow: false, reviewQueue: false, demoAnswered: false, demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
   // #18: фасеты фильтра (города/источники) по ВСЕЙ вакансии — серверная агрегация.
   const [candidateFacets, setCandidateFacets] = useState<{ cities: { city: string; count: number }[]; sources: { source: string; count: number }[] } | null>(null)
   useEffect(() => {
@@ -653,6 +653,7 @@ export default function VacancyPage() {
     hideNoSalary: filters.hideNoSalary,
     activeNow: filters.activeNow,
     anketaFilled: filters.anketaFilled,
+    demoAnswered: filters.demoAnswered,
     reviewQueue: filters.reviewQueue,
   }), [filters]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -796,24 +797,26 @@ export default function VacancyPage() {
   })
 
   // #43 (07.07, Юрий): кликабельные счётчики шапки вакансии — клик по числу
-  // фильтрует список кандидатов по соответствующим стадиям воронки. Второй
-  // клик по тому же счётчику снимает фильтр (toggle). Ключ счётчика → набор
-  // стадий из lib/stages.ts (тот же источник, что и группы метрик в шапке) +
-  // legacy-алиасы (см. interviewCount/offerCount в loadHeaderStats выше).
+  // фильтрует список кандидатов ПО ТОМУ ЖЕ критерию, по которому счётчик
+  // считается. Второй клик по тому же счётчику снимает фильтр (toggle).
   //   - hhTotal: сброс до дефолта (funnelStatuses=[], hideRejected=true)
-  //   - demoOpened: DEMO_OPENED_STAGE_SLUGS
-  //   - anketa: ANKETA_FILLED_STAGE_SLUGS
-  //   - interview: scheduled + interview + interviewed (legacy)
-  //   - offer: offer_sent + offer (legacy)
+  //   - demoOpened: стадии DEMO_OPENED_STAGE_SLUGS (lib/stages.ts — тот же
+  //     источник, что и группа demoOpened в lib/vacancy-stats.ts)
+  //   - anketa: НЕ стадии, а demoAnswered=true — счётчик «N анкет» в шапке
+  //     это stats.demoAnswered = COUNT(demo_answers_score IS NOT NULL)
+  //     (lib/vacancy-stats.ts), балл появляется уже при первом ответе, даже
+  //     если кандидат остался на стадии demo_opened. Фильтр по стадиям
+  //     ANKETA_FILLED_STAGE_SLUGS дал бы ДРУГОЕ множество (guard-major 07.07).
+  //   - interview: scheduled + interview + interviewed (legacy) — как
+  //     interviewCount в loadHeaderStats
+  //   - offer: offer_sent + offer (legacy) — как offerCount
   //   - rejected: rejected (требует hideRejected=false, иначе excludeRejected
   //     на сервере вычеркнет rejected из результата несмотря на stage-фильтр)
   // «Новых», «демо-2» и «перешли по ссылке» — НЕ кликабельны: чистого
-  // stage-фильтра нет («новых» = hh response ещё не разобран, «демо-2» —
-  // по баллу 2-го блока, а не по стадии; «перешли по ссылке» — по клику в
-  // демо, тоже не стадия воронки).
+  // фильтра нет («новых» = hh response ещё не разобран, «демо-2» — по баллу
+  // 2-го блока; «перешли по ссылке» — по клику в демо).
   const HEADER_STAT_STAGE_MAP: Record<string, string[]> = {
     demoOpened: DEMO_OPENED_STAGE_SLUGS,
-    anketa:     ANKETA_FILLED_STAGE_SLUGS,
     interview:  ["scheduled", "interview", "interviewed"],
     offer:      ["offer_sent", "offer"],
     rejected:   ["rejected"],
@@ -821,28 +824,33 @@ export default function VacancyPage() {
   /** Активен ли счётчик key при текущих filters (для подсветки/toggle). */
   const isHeaderStatActive = useCallback((key: string): boolean => {
     if (key === "hhTotal") {
-      return (filters.funnelStatuses?.length ?? 0) === 0 && filters.hideRejected === true
+      return (filters.funnelStatuses?.length ?? 0) === 0 && filters.hideRejected === true && !filters.demoAnswered
     }
+    if (key === "anketa") return filters.demoAnswered === true
     const target = HEADER_STAT_STAGE_MAP[key]
     if (!target) return false
     const current = filters.funnelStatuses ?? []
     if (current.length !== target.length) return false
     const targetSet = new Set(target)
     return current.every((s) => targetSet.has(s))
-  }, [filters.funnelStatuses, filters.hideRejected])
-  /** Клик по счётчику шапки — применяет/снимает фильтр стадий и сбрасывает пагинацию. */
+  }, [filters.funnelStatuses, filters.hideRejected, filters.demoAnswered])
+  /** Клик по счётчику шапки — применяет/снимает фильтр и сбрасывает пагинацию. */
   const handleHeaderStatClick = useCallback((key: string) => {
     const alreadyActive = isHeaderStatActive(key)
     if (key === "hhTotal" || alreadyActive) {
       // «Откликов всего» — всегда сброс; повторный клик по активному счётчику
       // — тоже сброс (снять фильтр, вернуться к дефолту).
-      setFilters((f) => ({ ...f, funnelStatuses: [], hideRejected: true }))
+      setFilters((f) => ({ ...f, funnelStatuses: [], hideRejected: true, demoAnswered: false }))
+    } else if (key === "anketa") {
+      // «Анкет» — по критерию счётчика (есть балл ответов), не по стадиям.
+      setFilters((f) => ({ ...f, funnelStatuses: [], hideRejected: true, demoAnswered: true }))
     } else {
       const target = HEADER_STAT_STAGE_MAP[key]
       if (!target) return
       setFilters((f) => ({
         ...f,
         funnelStatuses: target.slice(),
+        demoAnswered: false,
         // «Отказ» должен реально показать отказников — excludeRejected на
         // сервере иначе вычеркнет rejected несмотря на stage-фильтр.
         hideRejected: key === "rejected" ? false : f.hideRejected,
