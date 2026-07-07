@@ -4640,3 +4640,26 @@ export const tipSettings = pgTable("tip_settings", {
 })
 export type TipSetting    = typeof tipSettings.$inferSelect
 export type NewTipSetting = typeof tipSettings.$inferInsert
+
+// ─── Заявки с публичного лендинга (0266) ───────────────────────────────────
+// Лендинг не предлагает self-service регистрацию — реальное предложение:
+// заказать демонстрацию платформы или консультацию. Форма #request на
+// /landing пишет сюда, POST /api/public/landing-lead шлёт Telegram-алерт
+// владельцу платформы (message_guard_alerts, тот же helper, что у стража).
+export const landingLeads = pgTable("landing_leads", {
+  id:        uuid("id").primaryKey().defaultRandom(),
+  name:      text("name").notNull(),
+  contact:   text("contact").notNull(), // телефон/telegram/email — как ввёл сам
+  company:   text("company"),
+  interest:  text("interest").notNull().default("demo"), // 'demo' | 'consultation'
+  comment:   text("comment"),
+  source:    text("source"), // utm/referrer, опционально
+  ipHash:    text("ip_hash"), // sha256(ip + NEXTAUTH_SECRET), антиспам — не сам IP
+  status:    text("status").notNull().default("new"), // 'new' | 'contacted' | 'closed'
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("landing_leads_created_idx").on(t.createdAt),
+  index("landing_leads_status_idx").on(t.status),
+])
+export type LandingLead    = typeof landingLeads.$inferSelect
+export type NewLandingLead = typeof landingLeads.$inferInsert

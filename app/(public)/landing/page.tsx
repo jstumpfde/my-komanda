@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, type FormEvent } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -19,7 +19,7 @@ import {
   Home, Hotel, Dumbbell, Scale, TrendingUp as TrendingUpIcon, Factory,
   ChevronDown, ChevronUp, Sparkles, Shield, Eye, HeartPulse, Mic,
   RefreshCw, AlertTriangle, Calculator, ClipboardList, LayoutDashboard,
-  FileBarChart, Lightbulb,
+  FileBarChart, Lightbulb, Loader2,
 } from "lucide-react"
 
 // ─── Scroll reveal hook ──────────────────────────────────────────────────────
@@ -786,6 +786,142 @@ const CUSTOM_STYLES = `
 }
 `
 
+// ─── Форма заявки (демо / консультация) ─────────────────────────────────────
+// Юрий 07.07: self-service регистрации нет — реальное предложение заказать
+// демонстрацию платформы или консультацию. Пишет в POST /api/public/landing-lead
+// (валидация + honeypot + rate-limit на сервере, см. lib/landing/lead-guard.ts).
+
+type LeadFormStatus = "idle" | "submitting" | "success" | "error"
+
+function LeadRequestForm({ interest, onInterestChange }: {
+  interest: "demo" | "consultation"
+  onInterestChange: (v: "demo" | "consultation") => void
+}) {
+  const [name, setName] = useState("")
+  const [contact, setContact] = useState("")
+  const [company, setCompany] = useState("")
+  const [comment, setComment] = useState("")
+  const [website, setWebsite] = useState("") // honeypot — скрыто от людей
+  const [status, setStatus] = useState<LeadFormStatus>("idle")
+  const [errorMessage, setErrorMessage] = useState("")
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (status === "submitting") return
+    setStatus("submitting")
+    setErrorMessage("")
+    try {
+      const res = await fetch("/api/public/landing-lead", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name, contact, company, interest, comment, website,
+          source: typeof document !== "undefined" ? document.referrer || "landing" : "landing",
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setErrorMessage(data?.error || "Не удалось отправить заявку — попробуйте ещё раз")
+        setStatus("error")
+        return
+      }
+      setStatus("success")
+    } catch {
+      setErrorMessage("Не удалось отправить заявку — проверьте соединение и попробуйте ещё раз")
+      setStatus("error")
+    }
+  }
+
+  if (status === "success") {
+    return (
+      <div className="max-w-xl mx-auto text-center bg-gray-900 border border-gray-800 rounded-2xl p-10">
+        <div className="w-14 h-14 rounded-full bg-emerald-500/15 flex items-center justify-center mx-auto mb-5">
+          <Check className="w-7 h-7 text-emerald-400" />
+        </div>
+        <h3 className="text-xl font-semibold text-white mb-2">Заявка получена</h3>
+        <p className="text-gray-400">Свяжемся в ближайшее время</p>
+      </div>
+    )
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="relative max-w-xl mx-auto bg-gray-900 border border-gray-800 rounded-2xl p-8 space-y-5">
+      {/* Honeypot: скрыто от людей (off-screen, не display:none — часть ботов
+          игнорирует невидимые через CSS-класс поля), боты его заполняют. */}
+      <div className="absolute -left-[9999px] w-px h-px overflow-hidden" aria-hidden="true">
+        <label htmlFor="landing-website">Website</label>
+        <input
+          id="landing-website" name="website" type="text" tabIndex={-1} autoComplete="off"
+          value={website} onChange={(e) => setWebsite(e.target.value)}
+        />
+      </div>
+
+      <div>
+        <label htmlFor="landing-name" className="block text-sm font-medium text-gray-300 mb-1.5">Имя *</label>
+        <input
+          id="landing-name" required value={name} onChange={(e) => setName(e.target.value)}
+          className="w-full rounded-xl bg-gray-800 border border-gray-700 px-4 py-2.5 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          placeholder="Как к вам обращаться"
+        />
+      </div>
+
+      <div>
+        <label htmlFor="landing-contact" className="block text-sm font-medium text-gray-300 mb-1.5">Телефон или Telegram *</label>
+        <input
+          id="landing-contact" required value={contact} onChange={(e) => setContact(e.target.value)}
+          className="w-full rounded-xl bg-gray-800 border border-gray-700 px-4 py-2.5 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          placeholder="+7 999 000-00-00 или @username"
+        />
+      </div>
+
+      <div>
+        <label htmlFor="landing-company" className="block text-sm font-medium text-gray-300 mb-1.5">Компания</label>
+        <input
+          id="landing-company" value={company} onChange={(e) => setCompany(e.target.value)}
+          className="w-full rounded-xl bg-gray-800 border border-gray-700 px-4 py-2.5 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          placeholder="Название компании"
+        />
+      </div>
+
+      <div>
+        <label htmlFor="landing-interest" className="block text-sm font-medium text-gray-300 mb-1.5">Что интересует</label>
+        <select
+          id="landing-interest" value={interest} onChange={(e) => onInterestChange(e.target.value as "demo" | "consultation")}
+          className="w-full rounded-xl bg-gray-800 border border-gray-700 px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+        >
+          <option value="demo">Демонстрация платформы</option>
+          <option value="consultation">Консультация</option>
+        </select>
+      </div>
+
+      <div>
+        <label htmlFor="landing-comment" className="block text-sm font-medium text-gray-300 mb-1.5">Комментарий</label>
+        <textarea
+          id="landing-comment" value={comment} onChange={(e) => setComment(e.target.value)} rows={3}
+          className="w-full rounded-xl bg-gray-800 border border-gray-700 px-4 py-2.5 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+          placeholder="Что важно рассказать заранее — необязательно"
+        />
+      </div>
+
+      {status === "error" && (
+        <p className="text-sm text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-2.5">{errorMessage}</p>
+      )}
+
+      <Button
+        type="submit"
+        disabled={status === "submitting"}
+        className="w-full py-4 h-auto text-base font-semibold rounded-xl bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 text-white shadow-lg shadow-indigo-500/30 disabled:opacity-70"
+      >
+        {status === "submitting" ? (
+          <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Отправляем...</>
+        ) : (
+          "Отправить заявку"
+        )}
+      </Button>
+    </form>
+  )
+}
+
 // ─── Landing Page ────────────────────────────────────────────────────────────
 
 export default function LandingPage() {
@@ -810,12 +946,23 @@ export default function LandingPage() {
   const moduleGridReveal = useReveal()
   const agentsNewReveal = useReveal()
   const industriesReveal = useReveal()
+  // Заявка на демо/консультацию (07.07, Юрий): self-service регистрации нет,
+  // реальное предложение — заказать демонстрацию платформы или консультацию.
+  // requestedInterest прокидывается в форму #request, чтобы кнопка "Получить
+  // консультацию" предзаполняла селектор, а не всегда открывала "Демонстрация".
+  const [requestedInterest, setRequestedInterest] = useState<"demo" | "consultation">("demo")
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
     window.addEventListener("scroll", onScroll, { passive: true })
     return () => window.removeEventListener("scroll", onScroll)
   }, [])
+
+  const scrollToRequestForm = (interest: "demo" | "consultation" = "demo") => {
+    setRequestedInterest(interest)
+    setMobileMenuOpen(false)
+    document.getElementById("request")?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }
 
   const currentModule = MODULES.find((m) => m.id === activeModule) ?? MODULES[0]
 
@@ -861,8 +1008,8 @@ export default function LandingPage() {
             <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white" asChild>
               <Link href="/login">Войти</Link>
             </Button>
-<Button size="sm" className="bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 shadow-lg shadow-indigo-500/20 text-white" asChild>
-              <Link href="/register">Попробовать бесплатно</Link>
+            <Button size="sm" className="bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 shadow-lg shadow-indigo-500/20 text-white" onClick={() => scrollToRequestForm("demo")}>
+              Заказать демо
             </Button>
           </div>
 
@@ -882,8 +1029,8 @@ export default function LandingPage() {
               <Button variant="outline" size="sm" className="flex-1" asChild>
                 <Link href="/login">Войти</Link>
               </Button>
-              <Button size="sm" className="flex-1 bg-gradient-to-r from-indigo-500 to-violet-500 text-white" asChild>
-                <Link href="/register">Демо</Link>
+              <Button size="sm" className="flex-1 bg-gradient-to-r from-indigo-500 to-violet-500 text-white" onClick={() => scrollToRequestForm("demo")}>
+                Заказать демо
               </Button>
             </div>
           </div>
@@ -933,20 +1080,20 @@ export default function LandingPage() {
               </p>
 
               <div className="flex flex-wrap gap-4 mb-8">
-                <Button size="lg" aria-label="Запросить бесплатное демо Company24" className="bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 h-14 px-10 text-base shadow-xl shadow-indigo-500/30 transition-all hover:shadow-2xl hover:shadow-indigo-500/40 hover:scale-[1.02] text-white rounded-2xl" asChild>
-                  <Link href="/register">Попробовать бесплатно <ArrowRight className="w-5 h-5 ml-2" /></Link>
+                <Button size="lg" aria-label="Заказать демонстрацию платформы Company24" className="bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 h-14 px-10 text-base shadow-xl shadow-indigo-500/30 transition-all hover:shadow-2xl hover:shadow-indigo-500/40 hover:scale-[1.02] text-white rounded-2xl" onClick={() => scrollToRequestForm("demo")}>
+                  Заказать демонстрацию <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
                 {/* bg-transparent обязателен: variant="outline" на светлой
                     глобальной теме даёт белую подложку, и серый текст на ней
-                    нечитаем (фидбэк Юрия 07.07). Кнопка ведёт на витрину
-                    продуктов — раньше была вовсе без обвязки. */}
-                <Button variant="outline" size="lg" className="h-14 px-10 text-base rounded-2xl bg-transparent border-gray-600 text-gray-200 hover:bg-gray-800 hover:border-indigo-500 hover:text-indigo-300 transition-all" asChild>
-                  <Link href="/products"><Play className="w-4 h-4 mr-2" /> Смотреть демо</Link>
+                    нечитаем (фидбэк Юрия 07.07). Скроллит к той же форме
+                    заявки, но предзаполняет "Консультация" (07.07). */}
+                <Button variant="outline" size="lg" className="h-14 px-10 text-base rounded-2xl bg-transparent border-gray-600 text-gray-200 hover:bg-gray-800 hover:border-indigo-500 hover:text-indigo-300 transition-all" onClick={() => scrollToRequestForm("consultation")}>
+                  <Play className="w-4 h-4 mr-2" /> Получить консультацию
                 </Button>
               </div>
 
               <p className="text-sm text-gray-500">
-                Покажем платформу и подберём модули под ваш бизнес
+                30 минут онлайн: покажем платформу на ваших задачах и подберём модули
               </p>
             </div>
 
@@ -1760,13 +1907,9 @@ export default function LandingPage() {
                       !hasModules && "opacity-50 cursor-not-allowed"
                     )}
                     disabled={!hasModules}
-                    asChild={hasModules}
+                    onClick={() => hasModules && scrollToRequestForm("demo")}
                   >
-                    {hasModules ? (
-                      <Link href="/register">Оставить заявку</Link>
-                    ) : (
-                      <span>Оставить заявку</span>
-                    )}
+                    Заказать демонстрацию
                   </Button>
                 </div>
               </div>
@@ -1792,9 +1935,22 @@ export default function LandingPage() {
             <span className="bg-gradient-to-r from-indigo-500 to-violet-500 bg-clip-text text-transparent">Company24.pro</span>
           </h2>
           <p className="text-xl text-gray-400 mb-10">Оставьте заявку — покажем платформу и подберём модули под ваш бизнес</p>
-          <Button size="lg" className="bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 h-14 px-12 text-lg shadow-xl shadow-indigo-500/20 transition-all hover:shadow-2xl hover:scale-[1.02] text-white rounded-2xl" asChild>
-            <Link href="/register">Оставить заявку <ArrowRight className="w-5 h-5 ml-2" /></Link>
+          <Button size="lg" className="bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 h-14 px-12 text-lg shadow-xl shadow-indigo-500/20 transition-all hover:shadow-2xl hover:scale-[1.02] text-white rounded-2xl" onClick={() => scrollToRequestForm("demo")}>
+            Заказать демонстрацию <ArrowRight className="w-5 h-5 ml-2" />
           </Button>
+        </div>
+      </section>
+
+      {/* ── ЗАЯВКА (демо / консультация) ── */}
+      <section id="request" className="py-24 md:py-28 bg-gray-950 border-t border-gray-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-100">Посмотрите платформу в деле</h2>
+            <p className="text-lg text-gray-400 max-w-xl mx-auto">
+              30 минут онлайн: покажем платформу на ваших задачах и подберём модули под ваш бизнес
+            </p>
+          </div>
+          <LeadRequestForm interest={requestedInterest} onInterestChange={setRequestedInterest} />
         </div>
       </section>
 
