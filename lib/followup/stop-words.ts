@@ -22,8 +22,9 @@ export const STOP_WORDS = [
 // «нет» и «спасибо» УБРАНЫ из дефолта (Юрий 07.07): матчинг этого списка —
 // ПОДСТРОЧНЫЙ (см. matchStopWordList ниже), и «работаю в интерНЕТе» /
 // «СПАСИБО, очень интересно!» давали ложный авто-отказ вежливым кандидатам.
-// Явные отказные формы («нет, спасибо», «спасибо, не надо») покрываются
-// оставшимися фразами; с прод-данных оба слова вычищены 07.07 (33 вакансии).
+// Явную форму «нет спасибо» держим отдельной фразой — matchStopWordList
+// нормализует пунктуацию, поэтому она ловит и «Нет, спасибо» с запятой.
+// С прод-данных оба одиночных слова вычищены 07.07 (33 вакансии).
 export const DEFAULT_STOP_WORDS_V2 = [
   "неактуально", "не подходит", "неинтересно",
   "не интересно", "не интересует", "не актуально", "не актуальна",
@@ -61,11 +62,16 @@ export function matchStopWord(text: string): boolean {
 // Возвращает первое попавшееся слово (для логирования) или null.
 export function matchStopWordList(text: string, list: string[]): string | null {
   if (!list || list.length === 0) return null
-  const lowered = text.toLowerCase()
+  // Нормализация пунктуации (как в matchStopWordWith): «Нет, спасибо» → «нет спасибо».
+  // Иначе подстрочный матч фразы с пробелом («нет спасибо») не ловил запятую,
+  // а «Нет, спасибо» — самая частая короткая форма отказа в переписке (гвард 07.07).
+  const norm = (t: string) =>
+    t.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim()
+  const normText = norm(text)
   for (const raw of list) {
-    const w = raw.trim().toLowerCase()
+    const w = norm(raw)
     if (!w) continue
-    if (lowered.includes(w)) return raw
+    if (normText.includes(w)) return raw
   }
   return null
 }

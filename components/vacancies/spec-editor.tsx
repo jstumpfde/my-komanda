@@ -1365,7 +1365,7 @@ interface SpecEditorProps {
 export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onNavigateNext, vacancyAnketaData }: SpecEditorProps) {
   // #2: контент-блоки вакансии — для выбора, на какой блок отправлять приглашённого.
   // v1: только презентационные (демо) блоки → ссылка /demo/, без правок движка.
-  const { blocks: contentBlocks } = useContentBlocks(vacancyId)
+  const { blocks: contentBlocks, loading: contentBlocksLoading } = useContentBlocks(vacancyId)
   const inviteBlockChoices = contentBlocks.filter(b => b.contentType === "presentation")
   const [adopting, setAdopting] = useState(false)
   async function adoptPortrait() {
@@ -2694,7 +2694,9 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
         const isMisconfigured = ap.enabled && !assignedBlock
         // Прячем карточку только когда выключено И контента для неё нет вовсе —
         // иначе HR не сможет ни включить, ни узнать, что рассинхрон есть.
-        if (!ap.enabled && !hasAnyContentBlock) return null
+        // Не прячем, пока контент-блоки ещё грузятся (иначе карточка мигает у
+        // вакансий с реально существующим контентом — гвард 07.07).
+        if (!ap.enabled && !hasAnyContentBlock && !contentBlocksLoading) return null
         const cardTitle = assignedBlock?.title
           ? `После анкеты → 2-я часть «${assignedBlock.title}»`
           : "После анкеты → 2-я часть демо"
