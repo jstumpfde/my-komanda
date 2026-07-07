@@ -4377,6 +4377,9 @@ export const tipUsers = pgTable("tip_users", {
   balanceRuns:  integer("balance_runs").notNull().default(0),
   prefsJson:    jsonb("prefs_json").$type<TipUserPrefs>(),
   createdAt:    timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  // Виральность (0261): реферальный код владельца + кто пригласил.
+  refCode:      text("ref_code").unique(),
+  referredBy:   uuid("referred_by").references((): any => tipUsers.id),
 })
 export type TipUser    = typeof tipUsers.$inferSelect
 export type NewTipUser = typeof tipUsers.$inferInsert
@@ -4405,6 +4408,13 @@ export interface TipRunInput {
 // НЕ переизобретаем здесь: хранится как есть, включая оттенки/повторы/пропуски.
 export type TipFormula = TipCalcFormula
 
+// Виральность (0261): короткие цитаты/сильные стороны разбора — для OG-превью
+// и «зацепок» в расшаренной странице. Заполняет AI-слой генерации (не эта зона).
+export interface TipRunHighlights {
+  quotes: string[]
+  strengths: string[]
+}
+
 export const tipRuns = pgTable("tip_runs", {
   id:           uuid("id").primaryKey().defaultRandom(),
   userId:       uuid("user_id").notNull().references(() => tipUsers.id, { onDelete: "cascade" }),
@@ -4420,6 +4430,9 @@ export const tipRuns = pgTable("tip_runs", {
   shareToken:   text("share_token").unique(),
   createdAt:    timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   finishedAt:   timestamp("finished_at", { withTimezone: true }),
+  // Виральность (0261): цитаты для OG + денорм-счётчик просмотров шаринга.
+  highlightsJson: jsonb("highlights_json").$type<TipRunHighlights>(),
+  viewsCount:     integer("views_count").notNull().default(0),
 }, (t) => [
   index("tip_runs_user_idx").on(t.userId),
   index("tip_runs_share_token_idx").on(t.shareToken),
@@ -4495,3 +4508,75 @@ export const tipQuestions = pgTable("tip_questions", {
 })
 export type TipQuestion    = typeof tipQuestions.$inferSelect
 export type NewTipQuestion = typeof tipQuestions.$inferInsert
+
+// Состояние мастера диалога Telegram-бота «Типология» (lib/tip/bot/**,
+// миграция 0262). Отдельно от tipUsers — эфемерный черновик текущего шага
+// (дата/имя/пол/контекст/...), НЕ профиль пользователя. data_json также
+// хранит lastUpdateId для dedupe повторных Telegram-апдейтов.
+export interface TipTgSessionData {
+  lastUpdateId?: number
+  draft?: {
+    name?: string
+    gender?: string
+    birthDate?: string
+    context?: string
+    role?: string
+    depth?: string
+    audience?: string
+    question?: string
+    pairMode?: boolean
+    second?: { name?: string; birthDate?: string }
+    promptedContextGroup?: "main" | "more"
+  }
+  shortMessagesCount?: number
+}
+
+export const tipTgSessions = pgTable("tip_tg_sessions", {
+  chatId:     bigint("chat_id", { mode: "number" }).primaryKey(),
+  state:      text("state").notNull().default("idle"),
+  dataJson:   jsonb("data_json").$type<TipTgSessionData>(),
+  updatedAt:  timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+})
+export type TipTgSession    = typeof tipTgSessions.$inferSelect
+export type NewTipTgSession = typeof tipTgSessions.$inferInsert
+
+// ─── Типология: виральность (аналитика чтения + рефералка, 0261) ──────────
+// Просмотры расшаренного разбора (кто/сколько смотрел), реферальные цепочки
+// приглашений и платформенные настройки модуля (пороги уведомлений, размеры
+// бонусов) — редактируемые, НЕ зашитые в код (tip_settings.value_json).
+
+export const tipShareViews = pgTable("tip_share_views", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  runId:           uuid("run_id").notNull().references(() => tipRuns.id, { onDelete: "cascade" }),
+  viewerUid:       uuid("viewer_uid").notNull(),
+  source:          text("source"), // 'tg' | 'wa' | 'direct' | ...
+  secondsVisible:  integer("seconds_visible").notNull().default(0),
+  maxScrollPct:    integer("max_scroll_pct").notNull().default(0),
+  firstAt:         timestamp("first_at", { withTimezone: true }).notNull().defaultNow(),
+  lastAt:          timestamp("last_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  unique("tip_share_views_run_viewer_uq").on(t.runId, t.viewerUid),
+  index("tip_share_views_run_idx").on(t.runId),
+])
+export type TipShareView    = typeof tipShareViews.$inferSelect
+export type NewTipShareView = typeof tipShareViews.$inferInsert
+
+export const tipReferrals = pgTable("tip_referrals", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  referrerUserId:  uuid("referrer_user_id").notNull().references(() => tipUsers.id, { onDelete: "cascade" }),
+  referredUserId:  uuid("referred_user_id").notNull().unique().references(() => tipUsers.id, { onDelete: "cascade" }),
+  status:          text("status").notNull().default("pending"), // pending|activated
+  bonusGrantedAt:  timestamp("bonus_granted_at", { withTimezone: true }),
+  createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+})
+export type TipReferral    = typeof tipReferrals.$inferSelect
+export type NewTipReferral = typeof tipReferrals.$inferInsert
+
+// key: referral_welcome_runs | referral_bonus_runs | referral_monthly_cap |
+// view_notify_thresholds (jsonb-массив чисел, напр. [1,5,10,25,50,100]).
+export const tipSettings = pgTable("tip_settings", {
+  key:        text("key").primaryKey(),
+  valueJson:  jsonb("value_json").notNull(),
+})
+export type TipSetting    = typeof tipSettings.$inferSelect
+export type NewTipSetting = typeof tipSettings.$inferInsert
