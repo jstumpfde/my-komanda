@@ -14,6 +14,7 @@ export type TipLayerKey =
   | `style:${string}`
   | `depth:${string}`
   | "age_gate"
+  | "example_report"
 
 export type TipLayers = Map<string, string>
 
@@ -177,6 +178,9 @@ export function buildTipPrompt(params: BuildTipPromptParams): TipPrompt {
   if (isMinor) {
     systemParts.push(layers.get("age_gate"))
   }
+  // Эталонный пример отчёта (стиль/тон/структура) — последним, чтобы модель
+  // видела и правила, и образец их применения.
+  systemParts.push(layers.get("example_report"))
   const system = joinLayers(systemParts)
 
   const userLines: string[] = []

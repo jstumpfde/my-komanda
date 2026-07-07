@@ -27,5 +27,7 @@ export async function GET(
     context: context ? { slug: context.slug, title: context.title } : contextSlug,
     name: run.inputJson?.name,
     createdAt: run.createdAt,
+    highlights: run.highlightsJson ?? null,
+    birthDate: run.inputJson?.birthDate,
   })
 }

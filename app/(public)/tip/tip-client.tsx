@@ -92,6 +92,23 @@ export default function TipClient() {
     }
   }, [searchParams])
 
+  // ── Реферальная ссылка ?ref=CODE: привязка один раз за сессию ────────
+  useEffect(() => {
+    const ref = searchParams.get("ref")
+    if (!ref || sessionStorage.getItem("tip_ref_claimed")) return
+    sessionStorage.setItem("tip_ref_claimed", "1")
+    fetch("/api/public/tip/ref", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: ref }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { balanceRuns?: number } | null) => {
+        if (typeof d?.balanceRuns === "number") setBalanceRuns(d.balanceRuns)
+      })
+      .catch(() => {})
+  }, [searchParams])
+
   // ── Загрузка баланса + prefs (предзаполнение при повторном визите) ───
   useEffect(() => {
     let cancelled = false
@@ -144,6 +161,15 @@ export default function TipClient() {
         const data: RunResponse = await res.json()
         if (data.status === "done" && data.shareToken) {
           if (pollRef.current) clearInterval(pollRef.current)
+          // Метка «это мой прогон» для владельца — result-client.tsx показывает
+          // блок статистики просмотров только если в sessionStorage есть эта
+          // пара (см. components/tip/*, задача "приукрасить отчёт").
+          try {
+            sessionStorage.setItem("tip_last_run_share", data.shareToken)
+            sessionStorage.setItem("tip_last_run_id", runId)
+          } catch {
+            // sessionStorage недоступен (приватный режим и т.п.) — не критично.
+          }
           router.push(`/tip/r/${data.shareToken}`)
         } else if (data.status === "error") {
           if (pollRef.current) clearInterval(pollRef.current)
