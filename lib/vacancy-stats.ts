@@ -137,6 +137,18 @@ export async function getVacancyStats(vacancyId: string): Promise<VacancyStats> 
   let hhNew   = 0
   let hhLastSyncAt: string | null = null
   if (vac.hhVacancyId) {
+    // Скоуп откликов — ВСЕ hh-публикации вакансии (Юрий 07.07, вакансия
+    // 6916db01: перепубликация на hh меняет hhVacancyId, и шапка показывала
+    // «123 отклика» при 508 со старой публикации — «демо» получалось больше
+    // «откликов»). Считаем: отклики ТЕКУЩЕЙ публикации (включая ещё не
+    // разобранные, у них нет local_candidate_id) ПЛЮС отклики любых прошлых
+    // публикаций, чьи кандидаты привязаны к этой вакансии. Даты откликов при
+    // этом честные — created_at живёт в самой строке отклика.
+    const responsesScope = sql`(${hhResponses.hhVacancyId} = ${vac.hhVacancyId}
+      OR ${hhResponses.localCandidateId} IN (
+        SELECT ${candidates.id} FROM ${candidates}
+        WHERE ${candidates.vacancyId} = ${vacancyId}
+      ))`
     const [hhRows, lastSync] = await Promise.all([
       db.select({
           status: hhResponses.status,
@@ -145,14 +157,14 @@ export async function getVacancyStats(vacancyId: string): Promise<VacancyStats> 
         .from(hhResponses)
         .where(and(
           eq(hhResponses.companyId, vac.companyId),
-          eq(hhResponses.hhVacancyId, vac.hhVacancyId),
+          responsesScope,
         ))
         .groupBy(hhResponses.status),
       db.select({ at: sql<Date>`MAX(${hhResponses.syncedAt})` })
         .from(hhResponses)
         .where(and(
           eq(hhResponses.companyId, vac.companyId),
-          eq(hhResponses.hhVacancyId, vac.hhVacancyId),
+          responsesScope,
         ))
         .limit(1),
     ])
