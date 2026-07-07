@@ -95,7 +95,7 @@ export function classifyStuckQueue(
     dedupKey: stuckQueueDedupKey(vacancyId),
     companyId,
     title:    "Застрявший разбор откликов",
-    message:  `${stuckCount} отклик(ов) в очереди разбора старше 4 часов. Автоматически возвращены в очередь для повторной обработки.`,
+    message:  `${stuckCount} отклик(ов) в очереди разбора старше 4 часов. Watchdog не чинит это автоматически (нет отметки времени клейма) — требуется ручная проверка.`,
     actionUrl: `/hr/vacancies/${vacancyId}`,
   }
 }
@@ -185,4 +185,15 @@ export function classifyAiScoringStuck(
 export function minutesSince(date: Date | null, now: Date = new Date()): number | null {
   if (!date) return null
   return Math.floor((now.getTime() - date.getTime()) / 60_000)
+}
+
+// ─── Решение о Telegram-нотификации ─────────────────────────────────────────
+// Шлём ТОЛЬКО если алерт реально СОЗДАН в этом прогоне (created=true) И он
+// critical. created=false означает «открытый алерт с тем же dedup_key уже
+// существует» — в т.ч. когда наша вставка проиграла гонку параллельному
+// прогону (insert ON CONFLICT DO NOTHING вернул 0 строк): нотификацию уже
+// отправил/отправит победитель, дублировать нельзя. Warning/info в Telegram
+// не идут вовсе (только UI), чтобы не заспамить.
+export function shouldNotifyTelegram(severity: WatchdogSeverity, created: boolean): boolean {
+  return created && severity === "critical"
 }

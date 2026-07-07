@@ -2,8 +2,9 @@
 //
 // «Сторож найма» (Юрий 07.07): периодически проверяет, что по вакансиям
 // компаний всё работает (hh-соединение, импорт откликов, разбор очереди,
-// отправки, кроны, AI-скоринг). Что может — чинит сам (застрявшие claimed →
-// response, отмена недоставляемых дожимов на старую публикацию hh), что не
+// отправки, кроны, AI-скоринг). Что может — чинит сам (единственная
+// авто-починка: отмена недоставляемых дожимов на старую публикацию hh;
+// авто-сброс claimed убран на ревью — нет claimed_at, см. checks.ts), что не
 // может — пишет алерт в admin_alerts: CRITICAL летит в Telegram немедленно,
 // warning только в UI-баннере (components/dashboard/admin-alerts-banner.tsx).
 //
@@ -23,6 +24,7 @@ import { checkCronAuth } from "@/lib/cron/auth"
 import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { runHiringWatchdog, WATCHDOG_DEDUP_PREFIXES } from "@/lib/hiring-watchdog/checks"
 import { upsertAlert, autoResolveStale, notifyIfCritical } from "@/lib/hiring-watchdog/alert-store"
+import { shouldNotifyTelegram } from "@/lib/hiring-watchdog/classify"
 
 const CRON_NAME = "hiring-watchdog"
 const MIN_COOLDOWN_MS = 10 * 60_000 // 10 минут
@@ -60,12 +62,14 @@ async function handle(req: NextRequest) {
     let criticalNotified = 0
     for (const issue of result.issues) {
       const { created: isNew } = await upsertAlert(issue)
-      if (isNew) {
-        created++
+      if (isNew) created++
+      else skippedExisting++
+      // Telegram — ТОЛЬКО если алерт реально создан этим прогоном (isNew):
+      // при гонке с параллельным прогоном insert вернул 0 строк → нотификацию
+      // шлёт победитель, здесь не дублируем. Чистое решение — shouldNotifyTelegram.
+      if (shouldNotifyTelegram(issue.severity, isNew)) {
         await notifyIfCritical(issue)
-        if (issue.severity === "critical") criticalNotified++
-      } else {
-        skippedExisting++
+        criticalNotified++
       }
     }
 
