@@ -371,7 +371,7 @@ export function defaultFunnelV2Stages(seed = "default"): FunnelV2Stage[] {
 
   // 3) Путь менеджера (2-я часть) — анкета/предквалификация, gate по анкете
   const managerPath = withScoreGate(makeStage("prequalification", s("manager-path")), "anketa")
-  managerPath.title = "Путь менеджера (2-я часть)"
+  managerPath.title = "Демо (2-я часть)"
   managerPath.messages = [
     "{{name}}, отлично — вы прошли первую часть! Предлагаем следующий шаг: {{demo_link}}",
   ]
