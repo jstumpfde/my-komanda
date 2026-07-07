@@ -190,6 +190,15 @@ export interface CandidatesFilters {
    *  критерий счётчика «N анкет» в шапке вакансии. НЕ путать с anketaFilled
    *  (тот про контактную форму survey_responses). */
   demoAnswered?: boolean
+  /** #43 (доделка): прошли 2-ю часть демо — ≥2 ключей в demo_block_scores —
+   *  критерий счётчика «N демо-2» в шапке вакансии. */
+  secondDemoPassed?: boolean
+  /** #43 (доделка): кликнули по кнопке-ссылке в демо (demo_progress_json.
+   *  ctaClicks непустой) — критерий счётчика «N перешли по ссылке». */
+  ctaClicked?: boolean
+  /** #43 (доделка): разбивка «прошлые + текущая» откликов с hh —
+   *  "current"/"previous" публикация вакансии на hh.ru. */
+  hhPublication?: "current" | "previous"
   /** Пресет «На разбор» (воронка-v2, Фаза 1г): застрявшие после 1-й части —
    *  demo_answers_score IS NOT NULL AND second_demo_invited_at IS NULL И не в
    *  отказе (ни 'rejected', ни 'preliminary_reject'). Только видимость. */
@@ -295,6 +304,9 @@ export function useCandidates(
         }
         if (filters.anketaFilled) params.set("anketaFilled", filters.anketaFilled)
         if (filters.demoAnswered) params.set("demoAnswered", "1")
+        if (filters.secondDemoPassed) params.set("secondDemoPassed", "1")
+        if (filters.ctaClicked) params.set("ctaClicked", "1")
+        if (filters.hhPublication) params.set("hhPublication", filters.hhPublication)
         if (filters.reviewQueue) params.set("reviewQueue", "true")
       }
       const res = await fetch(`/api/modules/hr/candidates?${params.toString()}`)
@@ -527,6 +539,9 @@ export function usePaginatedCandidates({
         if (filters.search && filters.search.trim()) params.set("search", filters.search.trim())
         if (filters.anketaFilled) params.set("anketaFilled", filters.anketaFilled)
         if (filters.demoAnswered) params.set("demoAnswered", "1")
+        if (filters.secondDemoPassed) params.set("secondDemoPassed", "1")
+        if (filters.ctaClicked) params.set("ctaClicked", "1")
+        if (filters.hhPublication) params.set("hhPublication", filters.hhPublication)
         if (filters.reviewQueue) params.set("reviewQueue", "true")
         // demoProgress в paginated режиме теперь применяется на сервере через
         // SQL (см. route.ts: pre-fetch demoTotalBlocks → SQL WHERE с COUNT

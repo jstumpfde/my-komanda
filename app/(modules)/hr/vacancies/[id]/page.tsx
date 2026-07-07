@@ -654,6 +654,9 @@ export default function VacancyPage() {
     activeNow: filters.activeNow,
     anketaFilled: filters.anketaFilled,
     demoAnswered: filters.demoAnswered,
+    secondDemoPassed: filters.secondDemoPassed,
+    ctaClicked: filters.ctaClicked,
+    hhPublication: filters.hhPublication,
     reviewQueue: filters.reviewQueue,
   }), [filters]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -800,6 +803,9 @@ export default function VacancyPage() {
   // фильтрует список кандидатов ПО ТОМУ ЖЕ критерию, по которому счётчик
   // считается. Второй клик по тому же счётчику снимает фильтр (toggle).
   //   - hhTotal: сброс до дефолта (funnelStatuses=[], hideRejected=true)
+  //   - hhTotalCurrent/hhTotalPrevious (доделка 07.07, разбивка «508+126=634»):
+  //     hhPublication="current"/"previous" — см. критерий в route.ts
+  //     (candidates.id IN hh_responses.local_candidate_id по hh_vacancy_id)
   //   - demoOpened: стадии DEMO_OPENED_STAGE_SLUGS (lib/stages.ts — тот же
   //     источник, что и группа demoOpened в lib/vacancy-stats.ts)
   //   - anketa: НЕ стадии, а demoAnswered=true — счётчик «N анкет» в шапке
@@ -807,50 +813,81 @@ export default function VacancyPage() {
   //     (lib/vacancy-stats.ts), балл появляется уже при первом ответе, даже
   //     если кандидат остался на стадии demo_opened. Фильтр по стадиям
   //     ANKETA_FILLED_STAGE_SLUGS дал бы ДРУГОЕ множество (guard-major 07.07).
+  //   - demo2 (доделка 07.07): secondDemoPassed=true — ≥2 ключей в
+  //     demo_block_scores, тот же критерий, что у stats.secondDemoPassed.
+  //   - cta (доделка 07.07): ctaClicked=true — demo_progress_json.ctaClicks
+  //     непустой, тот же критерий, что у stats.ctaClicked.
   //   - interview: scheduled + interview + interviewed (legacy) — как
   //     interviewCount в loadHeaderStats
   //   - offer: offer_sent + offer (legacy) — как offerCount
+  //   - hired (доделка 07.07): hired + started_work — как hiredCount
   //   - rejected: rejected (требует hideRejected=false, иначе excludeRejected
   //     на сервере вычеркнет rejected из результата несмотря на stage-фильтр)
-  // «Новых», «демо-2» и «перешли по ссылке» — НЕ кликабельны: чистого
-  // фильтра нет («новых» = hh response ещё не разобран, «демо-2» — по баллу
-  // 2-го блока; «перешли по ссылке» — по клику в демо).
+  // «Новых» — НЕ фильтр списка: это неразобранные hh-отклики (кандидатов
+  // ещё нет в списке); клик открывает поповер «Настройки разбора» вместо
+  // фильтрации (см. hhNewPopoverOpen ниже).
   const HEADER_STAT_STAGE_MAP: Record<string, string[]> = {
     demoOpened: DEMO_OPENED_STAGE_SLUGS,
     interview:  ["scheduled", "interview", "interviewed"],
     offer:      ["offer_sent", "offer"],
+    hired:      ["hired", "started_work"],
     rejected:   ["rejected"],
+  }
+  // Спец-флаги (НЕ стадии воронки) — каждый счётчик активирует ровно один
+  // из них, все остальные при этом гасятся (детерминированность, guard 07.07).
+  const HEADER_STAT_SPECIAL_FLAG: Record<string, "demoAnswered" | "secondDemoPassed" | "ctaClicked"> = {
+    anketa: "demoAnswered",
+    demo2:  "secondDemoPassed",
+    cta:    "ctaClicked",
   }
   /** Активен ли счётчик key при текущих filters (для подсветки/toggle). */
   const isHeaderStatActive = useCallback((key: string): boolean => {
     if (key === "hhTotal") {
-      return (filters.funnelStatuses?.length ?? 0) === 0 && filters.hideRejected === true && !filters.demoAnswered
+      return (filters.funnelStatuses?.length ?? 0) === 0 && filters.hideRejected === true
+        && !filters.demoAnswered && !filters.secondDemoPassed && !filters.ctaClicked && !filters.hhPublication
     }
-    if (key === "anketa") return filters.demoAnswered === true
+    if (key === "hhTotalCurrent")  return filters.hhPublication === "current"
+    if (key === "hhTotalPrevious") return filters.hhPublication === "previous"
+    const specialFlag = HEADER_STAT_SPECIAL_FLAG[key]
+    if (specialFlag) return filters[specialFlag] === true
     const target = HEADER_STAT_STAGE_MAP[key]
     if (!target) return false
     const current = filters.funnelStatuses ?? []
     if (current.length !== target.length) return false
     const targetSet = new Set(target)
     return current.every((s) => targetSet.has(s))
-  }, [filters.funnelStatuses, filters.hideRejected, filters.demoAnswered])
+  }, [filters.funnelStatuses, filters.hideRejected, filters.demoAnswered, filters.secondDemoPassed, filters.ctaClicked, filters.hhPublication])
   /** Клик по счётчику шапки — применяет/снимает фильтр и сбрасывает пагинацию. */
   const handleHeaderStatClick = useCallback((key: string) => {
     const alreadyActive = isHeaderStatActive(key)
+    // Базовый сброс спец-флагов — применяется к КАЖДОМУ клику (детерминированность:
+    // ровно один активный фильтр-набор за раз, guard-major 07.07).
+    const resetSpecial = {
+      demoAnswered: false, secondDemoPassed: false, ctaClicked: false,
+      hhPublication: undefined as "current" | "previous" | undefined,
+    }
     if (key === "hhTotal" || alreadyActive) {
       // «Откликов всего» — всегда сброс; повторный клик по активному счётчику
       // — тоже сброс (снять фильтр, вернуться к дефолту).
-      setFilters((f) => ({ ...f, funnelStatuses: [], hideRejected: true, demoAnswered: false }))
-    } else if (key === "anketa") {
-      // «Анкет» — по критерию счётчика (есть балл ответов), не по стадиям.
-      setFilters((f) => ({ ...f, funnelStatuses: [], hideRejected: true, demoAnswered: true }))
+      setFilters((f) => ({ ...f, funnelStatuses: [], hideRejected: true, ...resetSpecial }))
+    } else if (key === "hhTotalCurrent" || key === "hhTotalPrevious") {
+      setFilters((f) => ({
+        ...f, funnelStatuses: [], hideRejected: true, ...resetSpecial,
+        hhPublication: key === "hhTotalCurrent" ? "current" : "previous",
+      }))
+    } else if (HEADER_STAT_SPECIAL_FLAG[key]) {
+      // «Анкет»/«демо-2»/«перешли по ссылке» — по критерию счётчика, не по стадиям.
+      setFilters((f) => ({
+        ...f, funnelStatuses: [], hideRejected: true, ...resetSpecial,
+        [HEADER_STAT_SPECIAL_FLAG[key]]: true,
+      }))
     } else {
       const target = HEADER_STAT_STAGE_MAP[key]
       if (!target) return
       setFilters((f) => ({
         ...f,
         funnelStatuses: target.slice(),
-        demoAnswered: false,
+        ...resetSpecial,
         // «Отказ» должен реально показать отказников — excludeRejected на
         // сервере иначе вычеркнет rejected несмотря на stage-фильтр.
         // Не наследуем hideRejected с прошлого клика (guard-minor 07.07):
@@ -1381,6 +1418,10 @@ export default function VacancyPage() {
 
   // HH.ru integration state
   const [hhConnected, setHhConnected] = useState<boolean | null>(null)
+  // #43 (доделка 07.07): клик по «N новых» в шапке открывает поповер «Настройки
+  // разбора hh-откликов» (HhAutoProcess) — «новых» не фильтр списка (это
+  // неразобранные hh-отклики, кандидатов ещё нет), честное действие — разбор.
+  const [hhNewPopoverOpen, setHhNewPopoverOpen] = useState(false)
   // Под каким hh-аккаунтом (employer) подключена компания — чтобы было честно видно
   // ЧЕЙ это аккаунт (а не просто «Подключено»). Критично для партнёров/клиентов.
   const [hhEmployerName, setHhEmployerName] = useState<string | null>(null)
@@ -3032,36 +3073,71 @@ export default function VacancyPage() {
                             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleHeaderStatClick(key) } }}
                             className={`cursor-pointer underline decoration-dotted underline-offset-2 hover:decoration-solid ${active ? "text-foreground font-medium" : ""}`}
                           >
-                            {countPrefix}<span className="font-medium text-foreground">{count}</span> {label}
+                            {countPrefix}<span className="font-medium text-foreground">{count}</span>{label ? ` ${label}` : ""}
                           </span>
                         )
                       }
                       // Всегда (для hh-вакансий): откликов всего, новых.
                       // Если были прошлые публикации на hh (перепубликация) —
-                      // показываем разбивку «прошлые + текущая = итог» (итог
-                      // жирным, как раньше); одна публикация — как раньше,
-                      // просто «N откликов всего», без шума.
+                      // показываем разбивку «прошлые + текущая = итог» с ТРЕМЯ
+                      // отдельными клик-зонами (доделка 07.07, Юрий): «508»
+                      // (прошлые) и «126» (текущая) фильтруют по hhPublication,
+                      // «= 634 откликов» (итог) — как раньше, сброс фильтров.
+                      // Одна публикация — просто «N откликов всего», без разбивки.
                       if (showHh) {
                         const hhPrev = s!.hhTotalPrevious ?? 0
                         push("hhTotal",
-                          <UITooltip>
-                            <TooltipTrigger asChild>
-                              {hhPrev > 0
-                                ? clickableLabel("hhTotal", s!.hhTotal, "откликов", `${hhPrev} + ${s!.hhTotalCurrent} = `)
-                                : clickableLabel("hhTotal", s!.hhTotal, "откликов всего")}
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              {hhPrev > 0
-                                ? `Прошлые публикации на hh: ${hhPrev} · Текущая публикация: ${s!.hhTotalCurrent} · Всего: ${s!.hhTotal} — нажмите, чтобы сбросить фильтр`
-                                : "Всего откликов с hh.ru по всем публикациям вакансии (перепубликация на hh счётчик не обнуляет) — нажмите, чтобы сбросить фильтр"}
-                            </TooltipContent>
-                          </UITooltip>)
+                          hhPrev > 0
+                            ? <span className="inline-flex items-center gap-1">
+                                <UITooltip>
+                                  <TooltipTrigger asChild>
+                                    {clickableLabel("hhTotalPrevious", hhPrev, "")}
+                                  </TooltipTrigger>
+                                  <TooltipContent>Кандидаты с прошлых публикаций на hh — нажмите, чтобы отфильтровать</TooltipContent>
+                                </UITooltip>
+                                <span aria-hidden="true">+</span>
+                                <UITooltip>
+                                  <TooltipTrigger asChild>
+                                    {clickableLabel("hhTotalCurrent", s!.hhTotalCurrent, "")}
+                                  </TooltipTrigger>
+                                  <TooltipContent>Кандидаты с текущей публикации на hh — нажмите, чтобы отфильтровать</TooltipContent>
+                                </UITooltip>
+                                <span aria-hidden="true">=</span>
+                                <UITooltip>
+                                  <TooltipTrigger asChild>
+                                    {clickableLabel("hhTotal", s!.hhTotal, "откликов")}
+                                  </TooltipTrigger>
+                                  <TooltipContent>Всего: {s!.hhTotal} — нажмите, чтобы сбросить фильтр</TooltipContent>
+                                </UITooltip>
+                              </span>
+                            : <UITooltip>
+                                <TooltipTrigger asChild>
+                                  {clickableLabel("hhTotal", s!.hhTotal, "откликов всего")}
+                                </TooltipTrigger>
+                                <TooltipContent>Всего откликов с hh.ru по всем публикациям вакансии (перепубликация на hh счётчик не обнуляет) — нажмите, чтобы сбросить фильтр</TooltipContent>
+                              </UITooltip>)
                         push("hhNew",
                           <UITooltip>
                             <TooltipTrigger asChild>
-                              <span className="cursor-help"><span className="font-medium text-foreground">{s!.hhNew}</span> новых</span>
+                              {s!.hhNew > 0 ? (
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={() => setHhNewPopoverOpen(true)}
+                                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setHhNewPopoverOpen(true) } }}
+                                  className="cursor-pointer underline decoration-dotted underline-offset-2 hover:decoration-solid"
+                                >
+                                  <span className="font-medium text-foreground">{s!.hhNew}</span> новых
+                                </span>
+                              ) : (
+                                <span><span className="font-medium text-foreground">{s!.hhNew}</span> новых</span>
+                              )}
                             </TooltipTrigger>
-                            <TooltipContent>Новые отклики, ещё не разобраны</TooltipContent>
+                            <TooltipContent>
+                              {s!.hhNew > 0
+                                ? "Неразобранные отклики с hh — нажмите, чтобы открыть разбор"
+                                : "Новые отклики, ещё не разобраны"}
+                            </TooltipContent>
                           </UITooltip>)
                       }
                       // Всегда: открыли демо.
@@ -3084,23 +3160,23 @@ export default function VacancyPage() {
                       // прошли второй этап (есть балл 2-го блока); в тултипе —
                       // сколько приглашено. Показываем и при 0 прошедших, если
                       // приглашения уже идут (воронка работает, этап не пустой).
-                      // НЕ кликабельно: считается по баллу 2-го блока, а не по
-                      // стадии воронки — чистого stage-фильтра нет.
+                      // Кликабельно (доделка 07.07): secondDemoPassed=true —
+                      // ровно тот же критерий, что у счётчика (≥2 ключей demo_block_scores).
                       if ((s?.secondDemoPassed ?? 0) > 0 || (s?.secondDemoInvited ?? 0) > 0) push("demo2",
                         <UITooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-help"><span className="font-medium text-foreground">{s!.secondDemoPassed}</span> демо-2</span>
+                            {clickableLabel("demo2", s!.secondDemoPassed, "демо-2")}
                           </TooltipTrigger>
-                          <TooltipContent>Прошли 2-ю часть демо («Путь менеджера»). Приглашено во 2-ю часть: {s!.secondDemoInvited}</TooltipContent>
+                          <TooltipContent>Прошли 2-ю часть демо («Путь менеджера»). Приглашено во 2-ю часть: {s!.secondDemoInvited} — нажмите, чтобы отфильтровать</TooltipContent>
                         </UITooltip>)
-                      // Только >0: перешли по ссылке (оставлено из прежней логики).
-                      // НЕ кликабельно: считается по клику в демо, не по стадии воронки.
+                      // Только >0: перешли по ссылке. Кликабельно (доделка 07.07):
+                      // ctaClicked=true — ровно тот же критерий, что у счётчика.
                       if ((s?.ctaClicked ?? 0) > 0) push("cta",
                         <UITooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-help"><span className="font-medium text-foreground">{s!.ctaClicked}</span> перешли по ссылке</span>
+                            {clickableLabel("cta", s!.ctaClicked, "перешли по ссылке")}
                           </TooltipTrigger>
-                          <TooltipContent>Кандидаты, кликнувшие по кнопке-ссылке в демо (Telegram-канал / сайт)</TooltipContent>
+                          <TooltipContent>Кандидаты, кликнувшие по кнопке-ссылке в демо (Telegram-канал / сайт) — нажмите, чтобы отфильтровать</TooltipContent>
                         </UITooltip>)
                       // Только >0: интервью, оферы, нанято.
                       if ((s?.interview ?? 0) > 0) push("interview",
@@ -3120,9 +3196,9 @@ export default function VacancyPage() {
                       if ((s?.hired ?? 0) > 0) push("hired",
                         <UITooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-help"><span className="font-medium text-foreground">{s!.hired}</span> нанято</span>
+                            {clickableLabel("hired", s!.hired, "нанято")}
                           </TooltipTrigger>
-                          <TooltipContent>Кандидаты, нанятые по этой вакансии</TooltipContent>
+                          <TooltipContent>Кандидаты, нанятые по этой вакансии — нажмите, чтобы отфильтровать</TooltipContent>
                         </UITooltip>)
                       // Только >0: отказ.
                       if ((s?.rejected ?? 0) > 0) push("rejected",
@@ -3407,6 +3483,8 @@ export default function VacancyPage() {
                         onSync={syncHhResponses}
                         lastSyncLabel={hhSyncMeta ? `синх. ${relativeHhSyncTime(hhSyncMeta.syncedAt)} назад` : undefined}
                         onProcessed={() => { refetchCandidates(); }}
+                        open={hhNewPopoverOpen}
+                        onOpenChange={setHhNewPopoverOpen}
                       />
                     )}
                     {/* Воронка-v2 (Фаза 1г): пресет «На разбор» переехал в дропдаун
