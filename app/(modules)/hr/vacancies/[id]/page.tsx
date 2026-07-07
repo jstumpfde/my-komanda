@@ -90,7 +90,7 @@ import { FunnelTab } from "@/components/vacancies/funnel-tab"
 import { MessageQueueSection } from "@/components/vacancies/message-queue-section"
 import { InboxTab } from "@/components/vacancies/inbox-tab"
 import { OutboundPauseMenuItem } from "@/components/vacancies/outbound-pause-control"
-import { parsePipeline, resolveVacancyStageOptions, type CompanyStageHhActions, type CompanyStagePalette, type FunnelV2StageLite } from "@/lib/stages"
+import { parsePipeline, resolveVacancyStageOptions, DEMO_OPENED_STAGE_SLUGS, ANKETA_FILLED_STAGE_SLUGS, type CompanyStageHhActions, type CompanyStagePalette, type FunnelV2StageLite } from "@/lib/stages"
 import { BrandingOverrideSwitch } from "@/components/vacancies/branding-override-switch"
 import { VacancySettingsProvider, VacancyTabPendingDot, VacancyTabFooter, useVacancySectionRegister, useSafeSubTabSwitch, type VacancyTabKey } from "@/components/vacancies/vacancy-settings-context"
 import { SettingsTabShell } from "@/components/vacancies/settings-tab-shell"
@@ -794,6 +794,62 @@ export default function VacancyPage() {
     filters: candidatesFilters,
     stageFilter: stageFilterFromFunnel,
   })
+
+  // #43 (07.07, Юрий): кликабельные счётчики шапки вакансии — клик по числу
+  // фильтрует список кандидатов по соответствующим стадиям воронки. Второй
+  // клик по тому же счётчику снимает фильтр (toggle). Ключ счётчика → набор
+  // стадий из lib/stages.ts (тот же источник, что и группы метрик в шапке) +
+  // legacy-алиасы (см. interviewCount/offerCount в loadHeaderStats выше).
+  //   - hhTotal: сброс до дефолта (funnelStatuses=[], hideRejected=true)
+  //   - demoOpened: DEMO_OPENED_STAGE_SLUGS
+  //   - anketa: ANKETA_FILLED_STAGE_SLUGS
+  //   - interview: scheduled + interview + interviewed (legacy)
+  //   - offer: offer_sent + offer (legacy)
+  //   - rejected: rejected (требует hideRejected=false, иначе excludeRejected
+  //     на сервере вычеркнет rejected из результата несмотря на stage-фильтр)
+  // «Новых», «демо-2» и «перешли по ссылке» — НЕ кликабельны: чистого
+  // stage-фильтра нет («новых» = hh response ещё не разобран, «демо-2» —
+  // по баллу 2-го блока, а не по стадии; «перешли по ссылке» — по клику в
+  // демо, тоже не стадия воронки).
+  const HEADER_STAT_STAGE_MAP: Record<string, string[]> = {
+    demoOpened: DEMO_OPENED_STAGE_SLUGS,
+    anketa:     ANKETA_FILLED_STAGE_SLUGS,
+    interview:  ["scheduled", "interview", "interviewed"],
+    offer:      ["offer_sent", "offer"],
+    rejected:   ["rejected"],
+  }
+  /** Активен ли счётчик key при текущих filters (для подсветки/toggle). */
+  const isHeaderStatActive = useCallback((key: string): boolean => {
+    if (key === "hhTotal") {
+      return (filters.funnelStatuses?.length ?? 0) === 0 && filters.hideRejected === true
+    }
+    const target = HEADER_STAT_STAGE_MAP[key]
+    if (!target) return false
+    const current = filters.funnelStatuses ?? []
+    if (current.length !== target.length) return false
+    const targetSet = new Set(target)
+    return current.every((s) => targetSet.has(s))
+  }, [filters.funnelStatuses, filters.hideRejected])
+  /** Клик по счётчику шапки — применяет/снимает фильтр стадий и сбрасывает пагинацию. */
+  const handleHeaderStatClick = useCallback((key: string) => {
+    const alreadyActive = isHeaderStatActive(key)
+    if (key === "hhTotal" || alreadyActive) {
+      // «Откликов всего» — всегда сброс; повторный клик по активному счётчику
+      // — тоже сброс (снять фильтр, вернуться к дефолту).
+      setFilters((f) => ({ ...f, funnelStatuses: [], hideRejected: true }))
+    } else {
+      const target = HEADER_STAT_STAGE_MAP[key]
+      if (!target) return
+      setFilters((f) => ({
+        ...f,
+        funnelStatuses: target.slice(),
+        // «Отказ» должен реально показать отказников — excludeRejected на
+        // сервере иначе вычеркнет rejected несмотря на stage-фильтр.
+        hideRejected: key === "rejected" ? false : f.hideRejected,
+      }))
+    }
+    if (useListPaginated) paginated.setPage(1)
+  }, [isHeaderStatActive, useListPaginated, paginated])
 
   const handleToggleFavorite = useCallback(async (candidateId: string, isFavorite: boolean) => {
     // В режиме list-paginated видимые кандидаты приходят из paginated.candidates
@@ -2921,51 +2977,71 @@ export default function VacancyPage() {
                         if (nodes.length > 0) nodes.push(<span key={`sep-${key}`} aria-hidden="true">·</span>)
                         nodes.push(<span key={key} className="inline-flex items-center">{node}</span>)
                       }
+                      // #43: кликабельный счётчик — hover-подчёркивание + cursor-pointer,
+                      // активный (совпадает с текущим filters) — подсвечен (font-medium
+                      // уже на числе; добавляем подчёркивание всей надписи + цвет).
+                      const clickableLabel = (key: string, count: number, label: string) => {
+                        const active = isHeaderStatActive(key)
+                        return (
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => handleHeaderStatClick(key)}
+                            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleHeaderStatClick(key) } }}
+                            className={`cursor-pointer underline decoration-dotted underline-offset-2 hover:decoration-solid ${active ? "text-foreground font-medium" : ""}`}
+                          >
+                            <span className="font-medium text-foreground">{count}</span> {label}
+                          </span>
+                        )
+                      }
                       // Всегда (для hh-вакансий): откликов всего, новых.
                       if (showHh) {
                         push("hhTotal",
                           <UITooltip>
                             <TooltipTrigger asChild>
-                              <span className="cursor-help"><span className="font-medium text-foreground">{s!.hhTotal}</span> откликов всего</span>
+                              {clickableLabel("hhTotal", s!.hhTotal, "откликов всего")}
                             </TooltipTrigger>
-                            <TooltipContent>Всего откликов с hh.ru по всем публикациям вакансии (перепубликация на hh счётчик не обнуляет)</TooltipContent>
+                            <TooltipContent>Всего откликов с hh.ru по всем публикациям вакансии (перепубликация на hh счётчик не обнуляет) — нажмите, чтобы сбросить фильтр</TooltipContent>
                           </UITooltip>)
                         push("hhNew",
                           <UITooltip>
                             <TooltipTrigger asChild>
                               <span className="cursor-help"><span className="font-medium text-foreground">{s!.hhNew}</span> новых</span>
                             </TooltipTrigger>
-                            <TooltipContent>Новые отклики, ещё не разобраны (status = response)</TooltipContent>
+                            <TooltipContent>Новые отклики, ещё не разобраны</TooltipContent>
                           </UITooltip>)
                       }
                       // Всегда: открыли демо.
                       push("demoOpened",
                         <UITooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-help"><span className="font-medium text-foreground">{s?.demoOpened ?? 0}</span> демо</span>
+                            {clickableLabel("demoOpened", s?.demoOpened ?? 0, "демо")}
                           </TooltipTrigger>
-                          <TooltipContent>Кандидаты, открывшие демо («demo_opened» и далее)</TooltipContent>
+                          <TooltipContent>Кандидаты, открывшие демо и прошедшие дальше — нажмите, чтобы отфильтровать</TooltipContent>
                         </UITooltip>)
                       // Только >0: анкет (demoAnswered).
                       if ((s?.demoAnswered ?? 0) > 0) push("anketa",
                         <UITooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-help"><span className="font-medium text-foreground">{s!.demoAnswered}</span> анкет</span>
+                            {clickableLabel("anketa", s!.demoAnswered, "анкет")}
                           </TooltipTrigger>
-                          <TooltipContent>Кандидаты, ответившие на вопросы анкеты (посчитан балл «AI-ан» по ответам)</TooltipContent>
+                          <TooltipContent>Кандидаты, ответившие на вопросы анкеты — нажмите, чтобы отфильтровать</TooltipContent>
                         </UITooltip>)
                       // Только >0: «2-я часть» демо (Путь менеджера) — сколько
                       // прошли второй этап (есть балл 2-го блока); в тултипе —
                       // сколько приглашено. Показываем и при 0 прошедших, если
                       // приглашения уже идут (воронка работает, этап не пустой).
+                      // НЕ кликабельно: считается по баллу 2-го блока, а не по
+                      // стадии воронки — чистого stage-фильтра нет.
                       if ((s?.secondDemoPassed ?? 0) > 0 || (s?.secondDemoInvited ?? 0) > 0) push("demo2",
                         <UITooltip>
                           <TooltipTrigger asChild>
                             <span className="cursor-help"><span className="font-medium text-foreground">{s!.secondDemoPassed}</span> демо-2</span>
                           </TooltipTrigger>
-                          <TooltipContent>Прошли 2-ю часть демо («Путь менеджера») — есть балл по второму блоку. Приглашено во 2-ю часть: {s!.secondDemoInvited}</TooltipContent>
+                          <TooltipContent>Прошли 2-ю часть демо («Путь менеджера»). Приглашено во 2-ю часть: {s!.secondDemoInvited}</TooltipContent>
                         </UITooltip>)
                       // Только >0: перешли по ссылке (оставлено из прежней логики).
+                      // НЕ кликабельно: считается по клику в демо, не по стадии воронки.
                       if ((s?.ctaClicked ?? 0) > 0) push("cta",
                         <UITooltip>
                           <TooltipTrigger asChild>
@@ -2977,16 +3053,16 @@ export default function VacancyPage() {
                       if ((s?.interview ?? 0) > 0) push("interview",
                         <UITooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-help"><span className="font-medium text-foreground">{s!.interview}</span> интервью</span>
+                            {clickableLabel("interview", s!.interview, "интервью")}
                           </TooltipTrigger>
-                          <TooltipContent>Кандидаты на стадии интервью (назначено + прошло)</TooltipContent>
+                          <TooltipContent>Кандидаты на стадии интервью — назначено или уже прошло — нажмите, чтобы отфильтровать</TooltipContent>
                         </UITooltip>)
                       if ((s?.offer ?? 0) > 0) push("offer",
                         <UITooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-help"><span className="font-medium text-foreground">{s!.offer}</span> оферов</span>
+                            {clickableLabel("offer", s!.offer, "оферов")}
                           </TooltipTrigger>
-                          <TooltipContent>Кандидаты, которым отправлен оффер</TooltipContent>
+                          <TooltipContent>Кандидаты, которым отправлен оффер — нажмите, чтобы отфильтровать</TooltipContent>
                         </UITooltip>)
                       if ((s?.hired ?? 0) > 0) push("hired",
                         <UITooltip>
@@ -2999,9 +3075,9 @@ export default function VacancyPage() {
                       if ((s?.rejected ?? 0) > 0) push("rejected",
                         <UITooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-help"><span className="font-medium text-foreground">{s!.rejected}</span> отказ</span>
+                            {clickableLabel("rejected", s!.rejected, "отказ")}
                           </TooltipTrigger>
-                          <TooltipContent>Кандидаты со статусом «Отказ» в воронке</TooltipContent>
+                          <TooltipContent>Кандидаты со статусом «Отказ» в воронке — нажмите, чтобы отфильтровать</TooltipContent>
                         </UITooltip>)
                       return nodes
                     })()}
