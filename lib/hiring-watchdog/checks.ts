@@ -109,15 +109,21 @@ async function checkHhImportFreshness(): Promise<WatchdogIssue[]> {
 async function checkAndFixStuckQueue(): Promise<{ issues: WatchdogIssue[]; resetCount: number }> {
   const cutoff = new Date(Date.now() - STUCK_QUEUE_HOURS * 60 * 60 * 1000)
 
-  // Авто-починка: claimed старше 4ч возвращаем в response (безопасно —
-  // это ровно то, что делает нормальный error-recovery путь process-queue.ts
-  // при исключении между claim и invited).
-  const resetRows = await db
-    .update(hhResponses)
-    .set({ status: "response" })
+  // Авто-сброс claimed УБРАН на ревью координатора (07.07): у hh_responses
+  // НЕТ отметки времени клейма — created_at это дата ОТКЛИКА, и почти все
+  // отклики старше 4ч по нему. Сброс по этому критерию ловил бы отклики,
+  // взятые очередью в работу минуту назад (обработка одного кандидата с
+  // задержками легально идёт минуты) → гонка со scan/process-queue и ДВОЙНАЯ
+  // отправка первого сообщения кандидату. Безопасного критерия без новой
+  // колонки claimed_at не существует — поэтому claimed>4ч только СЧИТАЕМ и
+  // поднимаем warning (HR/админ разберётся), чинит error-recovery самого
+  // process-queue. Колонка claimed_at + возврат авто-починки — бэклог.
+  const [claimedRow] = await db
+    .select({ c: sql<number>`count(*)::int` })
+    .from(hhResponses)
     .where(and(eq(hhResponses.status, "claimed"), lt(hhResponses.createdAt, cutoff)))
-    .returning({ id: hhResponses.id, companyId: hhResponses.companyId, hhVacancyId: hhResponses.hhVacancyId })
-  const resetCount = resetRows.length
+  const resetCount = 0
+  const staleClaimed = claimedRow?.c ?? 0
 
   // Диагностика (warning, НЕ чиним автоматически): response старше 4ч на
   // вакансиях с включённым авто-разбором — значит cron не успевает или
@@ -129,9 +135,10 @@ async function checkAndFixStuckQueue(): Promise<{ issues: WatchdogIssue[]; reset
       cnt:         sql<number>`count(*)::int`,
     })
     .from(hhResponses)
-    .where(and(eq(hhResponses.status, "response"), lt(hhResponses.createdAt, cutoff)))
+    .where(and(inArray(hhResponses.status, ["response", "claimed"]), lt(hhResponses.createdAt, cutoff)))
     .groupBy(hhResponses.hhVacancyId, hhResponses.companyId)
 
+  void staleClaimed // учтён в общем warning выше (response+claimed старше 4ч)
   if (stuckResponseRows.length === 0) return { issues: [], resetCount }
 
   // hh_responses.hhVacancyId — hh-идентификатор публикации, не наш vacancyId.
