@@ -1406,7 +1406,10 @@ export default function VacancyPage() {
   const [headerStats, setHeaderStats] = useState<{
     total: number; pending: number; freshCount: number;
     demoOpened: number; rejected: number;
-    hhTotal: number; hhNew: number; inProgress: number;
+    // Разбивка hhTotal по публикациям hh (Юрий 07.07): текущая/прошлые.
+    // hhTotal = hhTotalCurrent + hhTotalPrevious.
+    hhTotal: number; hhTotalCurrent: number; hhTotalPrevious: number;
+    hhNew: number; inProgress: number;
     anketaFilled: number; demoAnswered: number; hired: number;
     // #15: интервью (scheduled + interview + legacy interviewed) и оферы
     // (offer_sent + legacy offer) — считаются из byStage стадий кандидатов.
@@ -1425,7 +1428,7 @@ export default function VacancyPage() {
       ])
       if (!statsRes.ok) return
       const stats = await statsRes.json() as {
-        total: number; hhTotal: number; hhNew: number;
+        total: number; hhTotal: number; hhTotalCurrent?: number; hhTotalPrevious?: number; hhNew: number;
         inProgress: number; rejected: number; hired: number;
         demoOpened: number; anketaFilled: number; demoAnswered: number;
         ctaClicked: number;
@@ -1449,6 +1452,9 @@ export default function VacancyPage() {
         demoOpened:   stats.demoOpened,
         rejected:     stats.rejected,
         hhTotal:      stats.hhTotal,
+        // Fallback на «всё текущее» для старого API-ответа без разбивки.
+        hhTotalCurrent:  stats.hhTotalCurrent ?? stats.hhTotal,
+        hhTotalPrevious: stats.hhTotalPrevious ?? 0,
         hhNew:        stats.hhNew,
         inProgress:   stats.inProgress,
         anketaFilled: stats.anketaFilled,
@@ -2988,7 +2994,9 @@ export default function VacancyPage() {
                       // #43: кликабельный счётчик — hover-подчёркивание + cursor-pointer,
                       // активный (совпадает с текущим filters) — подсвечен (font-medium
                       // уже на числе; добавляем подчёркивание всей надписи + цвет).
-                      const clickableLabel = (key: string, count: number, label: string) => {
+                      // countPrefix — необязательная приставка ПЕРЕД жирным числом
+                      // (разбивка «508 + 125 = » у «откликов всего», Юрий 07.07).
+                      const clickableLabel = (key: string, count: number, label: string, countPrefix?: string) => {
                         const active = isHeaderStatActive(key)
                         return (
                           <span
@@ -2998,18 +3006,29 @@ export default function VacancyPage() {
                             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleHeaderStatClick(key) } }}
                             className={`cursor-pointer underline decoration-dotted underline-offset-2 hover:decoration-solid ${active ? "text-foreground font-medium" : ""}`}
                           >
-                            <span className="font-medium text-foreground">{count}</span> {label}
+                            {countPrefix}<span className="font-medium text-foreground">{count}</span> {label}
                           </span>
                         )
                       }
                       // Всегда (для hh-вакансий): откликов всего, новых.
+                      // Если были прошлые публикации на hh (перепубликация) —
+                      // показываем разбивку «прошлые + текущая = итог» (итог
+                      // жирным, как раньше); одна публикация — как раньше,
+                      // просто «N откликов всего», без шума.
                       if (showHh) {
+                        const hhPrev = s!.hhTotalPrevious ?? 0
                         push("hhTotal",
                           <UITooltip>
                             <TooltipTrigger asChild>
-                              {clickableLabel("hhTotal", s!.hhTotal, "откликов всего")}
+                              {hhPrev > 0
+                                ? clickableLabel("hhTotal", s!.hhTotal, "откликов", `${hhPrev} + ${s!.hhTotalCurrent} = `)
+                                : clickableLabel("hhTotal", s!.hhTotal, "откликов всего")}
                             </TooltipTrigger>
-                            <TooltipContent>Всего откликов с hh.ru по всем публикациям вакансии (перепубликация на hh счётчик не обнуляет) — нажмите, чтобы сбросить фильтр</TooltipContent>
+                            <TooltipContent>
+                              {hhPrev > 0
+                                ? `Прошлые публикации на hh: ${hhPrev} · Текущая публикация: ${s!.hhTotalCurrent} · Всего: ${s!.hhTotal} — нажмите, чтобы сбросить фильтр`
+                                : "Всего откликов с hh.ru по всем публикациям вакансии (перепубликация на hh счётчик не обнуляет) — нажмите, чтобы сбросить фильтр"}
+                            </TooltipContent>
                           </UITooltip>)
                         push("hhNew",
                           <UITooltip>

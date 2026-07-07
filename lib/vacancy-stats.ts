@@ -18,6 +18,13 @@ import {
 export interface VacancyStats {
   // hh.ru блок — синхронизированы с hh-кабинетом.
   hhTotal:        number
+  // Разбивка hhTotal по публикациям (Юрий 07.07): перепубликация на hh меняет
+  // hhVacancyId, hhTotal суммирует все публикации — а в шапке хочется видеть
+  // и раздельно. hhTotalCurrent — отклики ТЕКУЩЕЙ публикации (hh_vacancy_id =
+  // vacancies.hh_vacancy_id), hhTotalPrevious — прошлых (через привязку
+  // кандидатов к вакансии). Инвариант: hhTotal = hhTotalCurrent + hhTotalPrevious.
+  hhTotalCurrent:  number
+  hhTotalPrevious: number
   hhNew:          number
   hhLastSyncAt:   string | null
   // Наши данные после разбора.
@@ -134,6 +141,7 @@ export async function getVacancyStats(vacancyId: string): Promise<VacancyStats> 
 
   // hh.ru данные — из hh_responses (кеш, обновляется через /api/cron/hh-import).
   let hhTotal = 0
+  let hhTotalCurrent = 0
   let hhNew   = 0
   let hhLastSyncAt: string | null = null
   if (vac.hhVacancyId) {
@@ -149,17 +157,21 @@ export async function getVacancyStats(vacancyId: string): Promise<VacancyStats> 
         SELECT ${candidates.id} FROM ${candidates}
         WHERE ${candidates.vacancyId} = ${vacancyId}
       ))`
+    // Разбивка «текущая/прошлые публикации» — тем же одним groupBy-запросом:
+    // группируем по (status, isCurrent) вместо отдельного count на публикацию.
+    const isCurrentExpr = sql`(${hhResponses.hhVacancyId} = ${vac.hhVacancyId})`
     const [hhRows, lastSync] = await Promise.all([
       db.select({
-          status: hhResponses.status,
-          cnt:    sql<number>`count(*)::int`,
+          status:    hhResponses.status,
+          isCurrent: sql<boolean>`${isCurrentExpr}`,
+          cnt:       sql<number>`count(*)::int`,
         })
         .from(hhResponses)
         .where(and(
           eq(hhResponses.companyId, vac.companyId),
           responsesScope,
         ))
-        .groupBy(hhResponses.status),
+        .groupBy(hhResponses.status, isCurrentExpr),
       db.select({ at: sql<Date>`MAX(${hhResponses.syncedAt})` })
         .from(hhResponses)
         .where(and(
@@ -170,6 +182,7 @@ export async function getVacancyStats(vacancyId: string): Promise<VacancyStats> 
     ])
     for (const row of hhRows) {
       hhTotal += row.cnt
+      if (row.isCurrent) hhTotalCurrent += row.cnt
       // #45: 'claimed' — промежуточный статус («забран в обработку, ещё
       // не отправлен»). Считаем его как «новый», чтобы счётчик в шапке
       // уменьшался в темпе реальной отправки, а не моментально после
@@ -179,9 +192,10 @@ export async function getVacancyStats(vacancyId: string): Promise<VacancyStats> 
     const at = lastSync?.[0]?.at
     hhLastSyncAt = at ? new Date(at).toISOString() : null
   }
+  const hhTotalPrevious = hhTotal - hhTotalCurrent
 
   return {
-    hhTotal, hhNew, hhLastSyncAt,
+    hhTotal, hhTotalCurrent, hhTotalPrevious, hhNew, hhLastSyncAt,
     total, inProgress, rejected, hired, demoOpened, anketaFilled, demoAnswered,
     ctaClicked,
     secondDemoInvited, secondDemoPassed,
@@ -301,7 +315,7 @@ function emptyStats(): VacancyStats {
   const byStage: Record<string, number> = {}
   for (const s of ALL_STAGE_SLUGS) byStage[s] = 0
   return {
-    hhTotal: 0, hhNew: 0, hhLastSyncAt: null,
+    hhTotal: 0, hhTotalCurrent: 0, hhTotalPrevious: 0, hhNew: 0, hhLastSyncAt: null,
     total: 0, inProgress: 0, rejected: 0, hired: 0,
     demoOpened: 0, anketaFilled: 0, demoAnswered: 0, ctaClicked: 0,
     secondDemoInvited: 0, secondDemoPassed: 0,
