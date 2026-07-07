@@ -166,24 +166,28 @@ export async function getVacancyStats(vacancyId: string): Promise<VacancyStats> 
         WHERE ${candidates.vacancyId} = ${vacancyId}
       ))`
     // Разбивка «текущая/прошлые публикации» — тем же одним groupBy-запросом:
-    // группируем по (status, isCurrent) вместо отдельного count на публикацию.
-    // min/max created_at — для окна прошлых публикаций (бейдж «N дн.»):
-    // агрегируем внутри групп, потом сводим по группам isCurrent=false.
-    const isCurrentExpr = sql`(${hhResponses.hhVacancyId} = ${vac.hhVacancyId})`
+    // группируем по (status, hh_vacancy_id), «текущая/прошлая» решаем в коде
+    // сравнением с vac.hhVacancyId. ВАЖНО (hotfix 07.07, прод-инцидент):
+    // группировать по выражению `(hh_vacancy_id = $x)` нельзя — drizzle биндит
+    // отдельные параметры в SELECT и GROUP BY ($1 и $5), Postgres не признаёт
+    // их одним выражением → «must appear in the GROUP BY clause», роут падал
+    // 500 на всех hh-привязанных вакансиях, шапка оставалась пустой.
+    // Публикаций у вакансии единицы — групп больше не станет.
+    // min/max created_at — для окна прошлых публикаций (бейдж «N дн.»).
     const [hhRows, lastSync] = await Promise.all([
       db.select({
-          status:    hhResponses.status,
-          isCurrent: sql<boolean>`${isCurrentExpr}`,
-          cnt:       sql<number>`count(*)::int`,
-          minAt:     sql<Date | null>`min(${hhResponses.createdAt})`,
-          maxAt:     sql<Date | null>`max(${hhResponses.createdAt})`,
+          status:      hhResponses.status,
+          hhVacancyId: hhResponses.hhVacancyId,
+          cnt:         sql<number>`count(*)::int`,
+          minAt:       sql<Date | null>`min(${hhResponses.createdAt})`,
+          maxAt:       sql<Date | null>`max(${hhResponses.createdAt})`,
         })
         .from(hhResponses)
         .where(and(
           eq(hhResponses.companyId, vac.companyId),
           responsesScope,
         ))
-        .groupBy(hhResponses.status, isCurrentExpr),
+        .groupBy(hhResponses.status, hhResponses.hhVacancyId),
       db.select({ at: sql<Date>`MAX(${hhResponses.syncedAt})` })
         .from(hhResponses)
         .where(and(
@@ -194,7 +198,7 @@ export async function getVacancyStats(vacancyId: string): Promise<VacancyStats> 
     ])
     for (const row of hhRows) {
       hhTotal += row.cnt
-      if (row.isCurrent) {
+      if (row.hhVacancyId === vac.hhVacancyId) {
         hhTotalCurrent += row.cnt
         // «Новых» — ТОЛЬКО текущая публикация (guard-minor 07.07): очередь
         // process-queue фильтрует по текущему hhVacancyId и никогда не тронет
