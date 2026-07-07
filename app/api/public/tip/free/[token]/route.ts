@@ -1,0 +1,28 @@
+// POST /api/public/tip/free/[token] — активировать бесплатную ссылку
+// (tip_promo_codes.is_free_link = true, token = code).
+
+import { NextRequest, NextResponse } from "next/server"
+import { getOrCreateTipUser } from "@/lib/tip/session"
+import { claimFreeLink, TipServiceError } from "@/lib/tip/service"
+
+export const runtime = "nodejs"
+
+export async function POST(
+  _req: NextRequest,
+  { params }: { params: Promise<{ token: string }> },
+) {
+  const { token } = await params
+  const user = await getOrCreateTipUser()
+
+  try {
+    const result = await claimFreeLink(user.id, token)
+    return NextResponse.json({ balanceRuns: result.balanceRuns }, { status: 200 })
+  } catch (e) {
+    if (e instanceof TipServiceError) {
+      return NextResponse.json({ error: e.message }, { status: 400 })
+    }
+    // eslint-disable-next-line no-console
+    console.error("[tip] POST /api/public/tip/free/[token]", e)
+    return NextResponse.json({ error: "Внутренняя ошибка сервера" }, { status: 500 })
+  }
+}
