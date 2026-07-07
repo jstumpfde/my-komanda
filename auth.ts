@@ -84,6 +84,12 @@ declare module "next-auth" {
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   secret: process.env.NEXTAUTH_SECRET,
+  // За nginx-прокси (инцидент 02.07 «Location: localhost:3000», кодовый фикс):
+  // без trustHost NextAuth v5 игнорирует заголовки прокси и строит redirect-URL
+  // от адреса апстрима (localhost:3000) — nginx-заплатка правит только заголовок
+  // Location, но не URL в JSON-ответах signIn, поэтому Safari после логина
+  // уходил «в никуда». Канонический origin задаёт NEXTAUTH_URL из env.
+  trustHost: true,
   session: { strategy: "jwt" },
   pages: {
     signIn: "/login",
