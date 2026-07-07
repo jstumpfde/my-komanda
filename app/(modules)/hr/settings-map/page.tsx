@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState, useCallback } from "react"
+import { useSession } from "next-auth/react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -31,7 +32,7 @@ interface SettingsMapRow {
   valueHint?: string
 }
 
-interface VacancyOption { id: string; title: string }
+interface VacancyOption { id: string; title: string; shortCode?: string | null }
 
 interface SettingsMapResponse {
   rows: SettingsMapRow[]
@@ -75,6 +76,10 @@ function resolveEditPath(editPath: string | null, vacancyId: string): string | n
 }
 
 export default function SettingsMapPage() {
+  // Внутренний код вакансии (short_code) в дропдауне — только платформенным
+  // (session.user.isPlatformAdmin переживает impersonation, см. auth.ts).
+  const { data: session } = useSession()
+  const isPlatformAdmin = session?.user?.isPlatformAdmin === true
   const [search, setSearch] = useState("")
   const [levelFilter, setLevelFilter] = useState<"all" | Level>("all")
   const [onlyChanged, setOnlyChanged] = useState(false)
@@ -190,7 +195,12 @@ export default function SettingsMapPage() {
                   <SelectContent>
                     <SelectItem value="none">Вакансия не выбрана</SelectItem>
                     {(data?.vacancyOptions ?? []).map((o) => (
-                      <SelectItem key={o.id} value={o.id}>{o.title}</SelectItem>
+                      <SelectItem key={o.id} value={o.id}>
+                        {o.title}
+                        {isPlatformAdmin && o.shortCode && (
+                          <span className="ml-2 font-mono text-xs text-muted-foreground/70">{o.shortCode}</span>
+                        )}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

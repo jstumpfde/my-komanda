@@ -2930,6 +2930,26 @@ export default function VacancyPage() {
                     </DropdownMenu>
                   )}
                   <VacancyStatusBadge status={status} />
+                  {/* Внутренний код вакансии (short_code, "2606V004") — только
+                      платформенным сотрудникам (координатор оперирует именно
+                      им); клиентам не нужен, поэтому скрыт. По клику — в буфер. */}
+                  {isPlatformAdmin && apiVacancy?.shortCode && (
+                    <UITooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded-md border border-dashed px-1.5 py-0.5 font-mono text-xs text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors"
+                          onClick={() => {
+                            navigator.clipboard.writeText(apiVacancy.shortCode as string)
+                            toast.success("Код скопирован")
+                          }}
+                        >
+                          {apiVacancy.shortCode}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>Внутренний код вакансии</TooltipContent>
+                    </UITooltip>
+                  )}
                   {/* hh-статус-бейдж: 🟢 hh ✓ / 🟠 ⚠ / 🔴 ⚠. Показываем только
                       если hh привязан (level !== 'none'). Данные — лёгкий БД-роут
                       hh-status (архив + недавние failed-отправки), не hh API. */}
