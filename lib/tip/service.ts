@@ -417,11 +417,20 @@ async function runGeneration(runId: string): Promise<void> {
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
 
+    // Guard-major 07.07 (симметрично success-пути): если репер УЖЕ пометил
+    // прогон error и вернул его на баланс, поздний throw не должен возвращать
+    // ЕЩЁ раз — иначе двойной возврат. UPDATE условный + RETURNING: пусто →
+    // инкремент баланса пропускаем.
     await db.transaction(async (tx) => {
-      await tx
+      const marked = await tx
         .update(tipRuns)
         .set({ status: "error", errorText: message, finishedAt: new Date() })
-        .where(eq(tipRuns.id, runId))
+        .where(and(eq(tipRuns.id, runId), eq(tipRuns.status, "generating")))
+        .returning({ id: tipRuns.id })
+      if (marked.length === 0) {
+        console.warn("[tip] run", runId, "уже зареаплен — повторный возврат на баланс пропущен")
+        return
+      }
 
       // Вернуть прогон на баланс — атомарный относительный инкремент.
       await tx
@@ -434,7 +443,11 @@ async function runGeneration(runId: string): Promise<void> {
 
 // ─── Репер зависших прогонов ────────────────────────────────────────────────
 
-const STALE_RUN_MINUTES = 12
+// Guard-major 07.07: 20 мин — с запасом над worst-case легитимной генерации
+// depth=full (360с × 3 попытки + backoff ≈ 18-19 мин, lib/tip/generate.ts).
+// При 12 мин репер срубал ещё ЖИВУЮ полную генерацию: пользователю ложная
+// ошибка + возврат, а готовый отчёт отбрасывался гвардом success-пути.
+const STALE_RUN_MINUTES = 20
 
 /**
  * Помечает прогоны в status pending/generating старше STALE_RUN_MINUTES как
