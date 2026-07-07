@@ -351,11 +351,17 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
         <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
           <div className="flex items-center justify-between mb-1">
             <h3 className="font-semibold text-sm">Поиск кандидатов</h3>
-            {hasActiveFilters && (
-              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={handleReset}>
-                Сбросить
-              </Button>
-            )}
+            {/* Кнопка постоянная (Юрий 07.07: условная «исчезала» и выглядела
+                как пропавшая) — при пустых фильтрах просто неактивна. */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-xs"
+              onClick={handleReset}
+              disabled={!hasActiveFilters}
+            >
+              Сбросить
+            </Button>
           </div>
 
           {/* Search */}
