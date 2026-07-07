@@ -112,3 +112,55 @@ export function resolveAllTouchWindowModes(
   }
   return out
 }
+
+// ── Очерёдность ПО ТИПУ СООБЩЕНИЯ (07.07, скрин Юрия) ──────────────────────
+//
+// Помимо очерёдности групп кандидатов (#37а, lib/messaging/send-priority.ts),
+// внутри одной группы касания можно упорядочить по ТИПУ сообщения: сверху —
+// уходит первым при конкуренции за отправку. Иерархия сортировки (см. cron
+// follow-up): 1) группа кандидата (finalists/passed_first/...) — главный ключ
+// («раз навсегда», решение Юрия 30.06), 2) порядок категорий сообщений —
+// дополнительный ключ ВНУТРИ группы, 3) scheduledAt.
+//
+// Company-level, hiring_defaults_json.messageCategoryOrder — тот же уровень
+// хранения, что и messageWindows/sendPriorityOrder этого экрана. Код-константа
+// DEFAULT_MESSAGE_CATEGORY_ORDER — только дефолт, переопределяемый директором.
+
+// Порядок категорий по умолчанию (сверху = уходит первым).
+export const DEFAULT_MESSAGE_CATEGORY_ORDER: TouchCategory[] = [
+  "invite",
+  "confirmation",
+  "thank_you",
+  "welcome",
+  "dozhim",
+]
+
+// Валидируем и нормализуем сохранённый порядок категорий: только известные
+// категории, без дублей, недостающие добавляем в хвост в дефолтном порядке.
+// Fail-safe → всегда полный набор из 5 категорий (симметрично
+// normalizeSendPriorityOrder в lib/messaging/send-priority.ts).
+export function normalizeMessageCategoryOrder(raw: unknown): TouchCategory[] {
+  const known = new Set<string>(DEFAULT_MESSAGE_CATEGORY_ORDER)
+  const out: TouchCategory[] = []
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (typeof item === "string" && known.has(item) && !out.includes(item as TouchCategory)) {
+        out.push(item as TouchCategory)
+      }
+    }
+  }
+  for (const cat of DEFAULT_MESSAGE_CATEGORY_ORDER) {
+    if (!out.includes(cat)) out.push(cat)
+  }
+  return out
+}
+
+// Индекс приоритета категории в заданном порядке (меньше = раньше уходит).
+// Неизвестная категория (не должна встречаться после normalize) — в конец.
+export function categoryPriorityRank(
+  category: TouchCategory,
+  order: TouchCategory[],
+): number {
+  const idx = order.indexOf(category)
+  return idx === -1 ? order.length : idx
+}

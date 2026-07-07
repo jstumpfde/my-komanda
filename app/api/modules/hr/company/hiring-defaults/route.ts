@@ -38,8 +38,8 @@ const NESTED_KEYS: (keyof CompanyHiringDefaults)[] = [
   "feedbackSurveys",
   "dashboardCards",
   // #36: messageWindows — per-category режим окна; deep-merge, чтобы патч одной
-  // категории не затирал остальные. (sendPriorityOrder — массив, НЕ здесь: он
-  // заменяется целиком.)
+  // категории не затирал остальные. (sendPriorityOrder / messageCategoryOrder —
+  // массивы, НЕ здесь: заменяются целиком.)
   "messageWindows",
 ];
 
@@ -141,9 +141,10 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Только директор компании может настраивать колонки" }, { status: 403 });
   }
 
-  // #36/#37: настройки очереди (окно по типу касания + порядок приоритета)
-  // применяются ко ВСЕМ вакансиям компании — меняет только директор.
-  if (("messageWindows" in patch || "sendPriorityOrder" in patch) &&
+  // #36/#37: настройки очереди (окно по типу касания + порядок приоритета
+  // групп + порядок категорий сообщений) применяются ко ВСЕМ вакансиям
+  // компании — меняет только директор.
+  if (("messageWindows" in patch || "sendPriorityOrder" in patch || "messageCategoryOrder" in patch) &&
       !["director", "client", "platform_admin", "admin"].includes(ctx.role)) {
     return NextResponse.json({ error: "Только директор компании может менять настройки очереди" }, { status: 403 });
   }

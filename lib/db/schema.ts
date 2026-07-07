@@ -371,6 +371,11 @@ export interface CompanyHiringDefaults {
   // первым). Отсутствие/пустой массив → DEFAULT_SEND_PRIORITY_ORDER.
   // Значения — SendPriorityGroup из lib/messaging/send-priority.ts.
   sendPriorityOrder?: string[]
+  // Очерёдность ПО ТИПУ СООБЩЕНИЯ (07.07): порядок категорий касания внутри
+  // группы приоритета кандидата (сверху = уходит первым). Отсутствие/пустой
+  // массив → DEFAULT_MESSAGE_CATEGORY_ORDER. Значения — TouchCategory из
+  // lib/messaging/touch-window.ts. Резолвер там же (normalizeMessageCategoryOrder).
+  messageCategoryOrder?: string[]
   // База знаний: лимит AI-токенов/мес, переопределяющий платформенный дефолт
   // (platform_settings.ai_monthly_token_limit, см. lib/knowledge/token-limits.ts).
   // undefined/null → используется платформенный дефолт. 0 — зарезервировано
