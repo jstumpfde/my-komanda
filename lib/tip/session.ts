@@ -23,13 +23,16 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * Антифрод (0263): хэш IP посетителя — sha256(ip + NEXTAUTH_SECRET), НЕ сам
  * IP (не храним ПД в открытом виде). Используется lib/tip/referral.ts, чтобы
  * тихо не начислять рефералку при фарме через инкогнито с одного устройства.
- * IP берём из x-forwarded-for (первый в списке = реальный клиент за nginx)
- * либо x-real-ip. Если оба отсутствуют — null (не блокирующая деградация).
+ * IP: приоритет x-real-ip (его ставит наш nginx из $remote_addr — клиент
+ * подделать не может), фолбэк — ПОСЛЕДНИЙ сегмент x-forwarded-for (nginx
+ * дополняет цепочку через $proxy_add_x_forwarded_for; первый сегмент
+ * контролирует клиент — guard-major 07.07). Оба отсутствуют — null
+ * (не блокирующая деградация).
  */
 async function computeIpHash(): Promise<string | null> {
   const h = await headers()
   const forwardedFor = h.get("x-forwarded-for")
-  const ip = forwardedFor ? forwardedFor.split(",")[0]!.trim() : h.get("x-real-ip")
+  const ip = h.get("x-real-ip")?.trim() || (forwardedFor ? forwardedFor.split(",").at(-1)?.trim() : null)
   if (!ip) return null
   const salt = process.env.NEXTAUTH_SECRET ?? ""
   return createHash("sha256").update(`${ip}${salt}`).digest("hex")

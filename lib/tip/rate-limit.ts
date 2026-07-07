@@ -38,9 +38,15 @@ export function checkTipPromoRateLimit(tipUid: string): boolean {
  * иначе каждый безкуковый запрос брутфорсера ещё и создаёт строку tip_users.
  */
 export function checkTipPromoIpRateLimit(req: NextRequest): boolean {
+  // ВАЖНО: x-real-ip ставит наш nginx ($remote_addr) — клиент его подделать
+  // не может. x-forwarded-for nginx ДОПОЛНЯЕТ ($proxy_add_x_forwarded_for):
+  // достоверный IP — ПОСЛЕДНИЙ сегмент, первый контролирует клиент
+  // (guard-major 07.07: первый сегмент позволял обойти лимит случайным
+  // заголовком на каждый запрос).
+  const xff = req.headers.get("x-forwarded-for")
   const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    req.headers.get("x-real-ip") ||
+    req.headers.get("x-real-ip")?.trim() ||
+    (xff ? xff.split(",").at(-1)?.trim() : undefined) ||
     "unknown"
   const key = createHash("sha256")
     .update(ip + (process.env.NEXTAUTH_SECRET ?? ""))
