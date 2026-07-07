@@ -37,7 +37,8 @@ function fmtDateTime(s: string): string {
 }
 
 function codeToUrl(code: string): string {
-  return `https://company24.pro/tip/free/${code}`
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://company24.pro"
+  return `${origin}/tip/free/${code}`
 }
 
 export function PromoCodesTab() {

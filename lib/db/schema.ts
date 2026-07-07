@@ -4364,7 +4364,8 @@ export interface TipUserPrefs {
   depth?: "short" | "detailed" | "full"
   audience?: "self" | "send_to_person" | "hiring_analysis"
   gender?: string
-  displayName?: string
+  name?: string
+  birthDate?: string  // ДД.ММ.ГГГГ — для предзаполнения формы
   lastRunAt?: string  // ISO
 }
 

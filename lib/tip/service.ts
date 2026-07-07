@@ -271,7 +271,8 @@ export async function createRun(user: TipUser, input: CreateRunInput): Promise<C
       depth: input.depth as TipUserPrefs["depth"],
       audience: input.audience as TipUserPrefs["audience"],
       gender: input.gender,
-      displayName: input.name,
+      name: input.name,
+      birthDate: input.birthDate,
       lastRunAt: new Date().toISOString(),
     }
     await tx.update(tipUsers).set({ prefsJson: nextPrefs }).where(eq(tipUsers.id, user.id))
