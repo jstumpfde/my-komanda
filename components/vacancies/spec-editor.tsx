@@ -2680,12 +2680,30 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
             : ((ap as { inlineContinue?: boolean }).inlineContinue === false ? "message" : "both")
         const showSeamless = transferMode === "seamless" || transferMode === "both"
         const showMessage  = transferMode === "message"  || transferMode === "both"
+
+        // Критерий «2-я часть контента реально существует» — тот же, что
+        // проверяет отправка приглашения (lib/messaging/second-demo-invite.ts:220-228):
+        // demos-строка этой вакансии с id === anketaPassInvite.contentBlockId.
+        // contentBlocks (useContentBlocks выше) — клиентское зеркало таблицы demos
+        // этой вакансии, тот же список, что наполняет Select ниже.
+        const hasAnyContentBlock = contentBlocks.length > 0
+        const assignedBlock = ap.contentBlockId ? contentBlocks.find(b => b.id === ap.contentBlockId) : undefined
+        // Рассинхрон: тумблер включён, а назначенного блока нет (не выбран или
+        // был удалён после включения) — приглашение реально слать некуда
+        // (see "no_content_block"/"content_block_not_found" в second-demo-invite.ts).
+        const isMisconfigured = ap.enabled && !assignedBlock
+        // Прячем карточку только когда выключено И контента для неё нет вовсе —
+        // иначе HR не сможет ни включить, ни узнать, что рассинхрон есть.
+        if (!ap.enabled && !hasAnyContentBlock) return null
+        const cardTitle = assignedBlock?.title
+          ? `После анкеты → 2-я часть «${assignedBlock.title}»`
+          : "После анкеты → 2-я часть демо"
         return (
-          <Card>
+          <Card className={isMisconfigured ? "border-amber-300" : undefined}>
             <CardContent className="pt-5 space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-base font-semibold">После анкеты → 2-я часть «Путь менеджера»</h3>
+                  <h3 className="text-base font-semibold">{cardTitle}</h3>
                   <p className="text-xs text-muted-foreground">
                     Приглашаем во 2-ю часть, если объективный балл по выбору ≥ порога <b>ИЛИ</b> AI-оценка
                     ответов анкеты ≥ своего порога (достаточно любого из двух — сильные по сути ответы
@@ -2695,6 +2713,19 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                 </div>
                 <Switch checked={ap.enabled} onCheckedChange={v => patch({ anketaPassInvite: { ...ap, enabled: v } })} />
               </div>
+              {isMisconfigured && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 px-3 py-3 flex items-start gap-2.5 text-sm">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-amber-900 dark:text-amber-300">
+                      Включено приглашение во 2-ю часть, но контент не найден
+                    </div>
+                    <div className="text-amber-800 dark:text-amber-400/90 text-xs mt-0.5">
+                      Добавьте контент-блок 2-й части (см. вкладку «Контент») и выберите его ниже, или выключите приглашение.
+                    </div>
+                  </div>
+                </div>
+              )}
               {ap.enabled && (
                 <div className="space-y-3 pt-1">
                   <div className="space-y-1.5">
