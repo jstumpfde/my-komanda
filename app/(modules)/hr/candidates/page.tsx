@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react"
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -214,6 +215,10 @@ export default function CandidatesPage() {
   const { role } = useAuth()
   // Кто может удалять кандидатов (как в карточке вакансии).
   const canDeleteCandidates = (["platform_admin", "platform_manager", "director"] as string[]).includes(role)
+  // Внутренний код вакансии (short_code) в дропдауне «Все вакансии» — только
+  // платформенным (session.user.isPlatformAdmin переживает impersonation).
+  const { data: session } = useSession()
+  const isPlatformAdmin = session?.user?.isPlatformAdmin === true
   // Тик для принудительного рефетча списка после массового действия.
   const [reloadTick, setReloadTick] = useState(0)
   const [bulkBusy, setBulkBusy] = useState(false)
@@ -230,7 +235,7 @@ export default function CandidatesPage() {
 
   // Фильтр по вакансии (главный для кросс-вакансионной работы). "all" = все.
   const [vacancyFilter, setVacancyFilter] = useState("all")
-  const [allVacancyTitles, setAllVacancyTitles] = useState<string[]>([])
+  const [allVacancyTitles, setAllVacancyTitles] = useState<{ title: string; shortCode: string | null }[]>([])
 
   // Поп-овер фильтров (CandidateFilters)
   const [filters, setFilters] = useState<FilterState>({
@@ -378,16 +383,23 @@ export default function CandidatesPage() {
           : Array.isArray(data?.data?.vacancies) ? data.data.vacancies
           : Array.isArray(data?.items) ? data.items
           : Array.isArray(data?.data) ? data.data : []
-        const titles = [...new Set(
-          (list as { title?: string }[]).map(v => v?.title).filter((t): t is string => !!t)
-        )].sort((a, b) => a.localeCompare(b, "ru"))
+        const seen = new Map<string, string | null>()
+        for (const v of list as { title?: string; shortCode?: string | null }[]) {
+          if (v?.title && !seen.has(v.title)) seen.set(v.title, v.shortCode ?? null)
+        }
+        const titles = [...seen.entries()]
+          .map(([title, shortCode]) => ({ title, shortCode }))
+          .sort((a, b) => a.title.localeCompare(b.title, "ru"))
         setAllVacancyTitles(titles)
       })
       .catch(() => {})
   }, [])
 
   const vacancyOptions = useMemo(
-    () => [{ value: "all", label: "Все вакансии" }, ...allVacancyTitles.map(t => ({ value: t, label: t }))],
+    () => [
+      { value: "all", label: "Все вакансии", shortCode: null as string | null },
+      ...allVacancyTitles.map(v => ({ value: v.title, label: v.title, shortCode: v.shortCode })),
+    ],
     [allVacancyTitles],
   )
 
@@ -704,7 +716,12 @@ export default function CandidatesPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {vacancyOptions.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                      {isPlatformAdmin && o.shortCode && (
+                        <span className="ml-2 font-mono text-xs text-muted-foreground/70">{o.shortCode}</span>
+                      )}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>

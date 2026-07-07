@@ -312,7 +312,7 @@ export async function GET(req: NextRequest) {
 
     // ── Список вакансий компании для дропдауна ──
     const vacancyOptionRows = await db
-      .select({ id: vacancies.id, title: vacancies.title })
+      .select({ id: vacancies.id, title: vacancies.title, shortCode: vacancies.shortCode })
       .from(vacancies)
       .where(and(eq(vacancies.companyId, companyId), isNull(vacancies.deletedAt)))
       .orderBy(vacancies.title)

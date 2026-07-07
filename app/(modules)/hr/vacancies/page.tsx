@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -226,9 +227,9 @@ function RowActions({ v, handlers }: { v: ApiVacancy; handlers: RowActionHandler
 
 // ─── List view ───────────────────────────────────────────────────────────────
 
-function VacancyListItem({ v, selected, onToggle, team, actions, trashRetentionDays }: {
+function VacancyListItem({ v, selected, onToggle, team, actions, trashRetentionDays, isPlatformAdmin }: {
   v: ApiVacancy; selected: boolean; onToggle: () => void; team: TeamMember[]
-  actions: RowActionHandlers; trashRetentionDays: number
+  actions: RowActionHandlers; trashRetentionDays: number; isPlatformAdmin?: boolean
 }) {
   const salary = formatSalary(v.salaryMin, v.salaryMax)
   return (
@@ -239,7 +240,13 @@ function VacancyListItem({ v, selected, onToggle, team, actions, trashRetentionD
           <Briefcase className="size-5" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-foreground truncate group-hover:text-primary transition-colors">{v.title}</p>
+          <p className="font-medium text-foreground truncate group-hover:text-primary transition-colors">
+            {v.title}
+            {/* Внутренний код (short_code) — только платформенным, координатор оперирует им */}
+            {isPlatformAdmin && v.shortCode && (
+              <span className="ml-2 font-mono text-xs font-normal text-muted-foreground/70" title="Внутренний код вакансии">{v.shortCode}</span>
+            )}
+          </p>
           <div className="flex items-center gap-3 mt-0.5 text-sm text-muted-foreground flex-wrap">
             {v.city && <span className="flex items-center gap-1"><MapPin className="size-3.5" />{v.city}</span>}
             {salary && <span className="flex items-center gap-1"><Banknote className="size-3.5" />{salary}</span>}
@@ -257,9 +264,9 @@ function VacancyListItem({ v, selected, onToggle, team, actions, trashRetentionD
 
 // ─── Tiles view ──────────────────────────────────────────────────────────────
 
-function VacancyTile({ v, selected, onToggle, team, actions, trashRetentionDays }: {
+function VacancyTile({ v, selected, onToggle, team, actions, trashRetentionDays, isPlatformAdmin }: {
   v: ApiVacancy; selected: boolean; onToggle: () => void; team: TeamMember[]
-  actions: RowActionHandlers; trashRetentionDays: number
+  actions: RowActionHandlers; trashRetentionDays: number; isPlatformAdmin?: boolean
 }) {
   const salary = formatSalary(v.salaryMin, v.salaryMax)
   return (
@@ -277,7 +284,12 @@ function VacancyTile({ v, selected, onToggle, team, actions, trashRetentionDays 
         </div>
       </div>
       <Link href={`/hr/vacancies/${v.id}`} className="flex-1">
-        <p className="font-medium text-foreground truncate group-hover:text-primary transition-colors mb-1">{v.title}</p>
+        <p className="font-medium text-foreground truncate group-hover:text-primary transition-colors mb-1">
+          {v.title}
+          {isPlatformAdmin && v.shortCode && (
+            <span className="ml-2 font-mono text-xs font-normal text-muted-foreground/70" title="Внутренний код вакансии">{v.shortCode}</span>
+          )}
+        </p>
         <div className="space-y-1 text-sm text-muted-foreground mb-3">
           {v.city && <span className="flex items-center gap-1"><MapPin className="size-3.5" />{v.city}</span>}
           {salary && <span className="flex items-center gap-1"><Banknote className="size-3.5" />{salary}</span>}
@@ -302,6 +314,10 @@ function VacancyTile({ v, selected, onToggle, team, actions, trashRetentionDays 
 export function VacanciesView({ embedded = false }: { embedded?: boolean }) {
   const router = useRouter()
   const { role } = useAuth()
+  // Внутренний код вакансии (short_code) — виден только платформенным
+  // (session.user.isPlatformAdmin переживает impersonation, см. auth.ts).
+  const { data: session } = useSession()
+  const isPlatformAdmin = session?.user?.isPlatformAdmin === true
   // Таб «Активные» (active+paused) / «Архив» (закрытые). Скоуп уходит на
   // сервер — список и счётчики считаются по БД, не по загруженной странице.
   const [scope, setScope] = useState<"active" | "archive" | "trash">("active")
@@ -817,14 +833,14 @@ export function VacanciesView({ embedded = false }: { embedded?: boolean }) {
             {/* List */}
             {!loading && filtered.length > 0 && view === "list" && (
               <div className="space-y-2">
-                {filtered.map((v) => <VacancyListItem key={v.id} v={v} selected={selected.has(v.id)} onToggle={() => toggleOne(v.id)} team={teamMembers} actions={actions} trashRetentionDays={trashRetentionDays} />)}
+                {filtered.map((v) => <VacancyListItem key={v.id} v={v} selected={selected.has(v.id)} onToggle={() => toggleOne(v.id)} team={teamMembers} actions={actions} trashRetentionDays={trashRetentionDays} isPlatformAdmin={isPlatformAdmin} />)}
               </div>
             )}
 
             {/* Tiles */}
             {!loading && filtered.length > 0 && view === "tiles" && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {filtered.map((v) => <VacancyTile key={v.id} v={v} selected={selected.has(v.id)} onToggle={() => toggleOne(v.id)} team={teamMembers} actions={actions} trashRetentionDays={trashRetentionDays} />)}
+                {filtered.map((v) => <VacancyTile key={v.id} v={v} selected={selected.has(v.id)} onToggle={() => toggleOne(v.id)} team={teamMembers} actions={actions} trashRetentionDays={trashRetentionDays} isPlatformAdmin={isPlatformAdmin} />)}
               </div>
             )}
 
@@ -853,7 +869,14 @@ export function VacanciesView({ embedded = false }: { embedded?: boolean }) {
                         <td className="pl-5 pr-2 py-3.5 w-10" style={{ verticalAlign: "middle" }} onClick={(e) => e.stopPropagation()}>
                           <Checkbox checked={selected.has(v.id)} onCheckedChange={() => toggleOne(v.id)} style={{ display: "block", width: "1rem", height: "1rem", minHeight: "1rem", maxHeight: "1rem" }} />
                         </td>
-                        <td className="px-3 py-3.5 font-medium text-sm text-foreground" style={{ width: "100%", maxWidth: 0 }}><div className="truncate">{v.title}</div></td>
+                        <td className="px-3 py-3.5 font-medium text-sm text-foreground" style={{ width: "100%", maxWidth: 0 }}>
+                          <div className="truncate">
+                            {v.title}
+                            {isPlatformAdmin && v.shortCode && (
+                              <span className="ml-2 font-mono text-xs font-normal text-muted-foreground/70" title="Внутренний код вакансии">{v.shortCode}</span>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-3 py-3.5 text-sm text-muted-foreground whitespace-nowrap">{v.city ?? "—"}</td>
                         <td className="px-3 py-3.5"><StatusBadge status={v.status} /></td>
                         <td className="px-3 py-3.5 text-sm text-muted-foreground whitespace-nowrap">
