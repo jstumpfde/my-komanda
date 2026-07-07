@@ -29,16 +29,27 @@ function maxTokensForDepth(depth: string): number {
   return MAX_TOKENS_BY_DEPTH[depth as TipDepth] ?? MAX_TOKENS_BY_DEPTH.detailed
 }
 
-const REQUEST_TIMEOUT_MS = 60_000
+// Таймаут зависит от глубины: длинные разборы (6–12k токенов вывода) через
+// прокси легально идут по несколько минут — 60с хватало только short
+// (инцидент 07.07: detailed стабильно падал в tip_ai_timeout_60s).
+const TIMEOUT_BY_DEPTH_MS: Record<TipDepth, number> = {
+  short: 120_000,
+  detailed: 240_000,
+  full: 360_000,
+}
 
-async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
+function timeoutForDepth(depth: string): number {
+  return TIMEOUT_BY_DEPTH_MS[depth as TipDepth] ?? TIMEOUT_BY_DEPTH_MS.detailed
+}
+
+async function withRetry<T>(fn: () => Promise<T>, timeoutMs: number, attempts = 3): Promise<T> {
   let last: unknown
   for (let i = 0; i < attempts; i++) {
     try {
       return await Promise.race([
         fn(),
         new Promise<never>((_, rej) =>
-          setTimeout(() => rej(new Error("tip_ai_timeout_60s")), REQUEST_TIMEOUT_MS),
+          setTimeout(() => rej(new Error(`tip_ai_timeout_${Math.round(timeoutMs / 1000)}s`)), timeoutMs),
         ),
       ])
     } catch (e) {
@@ -89,5 +100,5 @@ export async function generateTipReport(params: GenerateTipReportParams): Promis
     const costUsd = computeCostUsd(model, tokensIn, tokensOut)
 
     return { markdown, tokensIn, tokensOut, costUsd, model }
-  })
+  }, timeoutForDepth(params.depth))
 }

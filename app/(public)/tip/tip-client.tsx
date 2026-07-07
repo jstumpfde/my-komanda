@@ -81,7 +81,9 @@ export default function TipClient() {
   const [contextSlug, setContextSlug] = useState<string>("personal_map")
   const [showMore, setShowMore] = useState(false)
   const [role, setRole] = useState("")
-  const [depth, setDepth] = useState<TipDepth>("short")
+  // Дефолт «подробно» (решение 07.07): первое впечатление важнее экономии
+  // токенов — короткий разбор проигрывает по конкретике.
+  const [depth, setDepth] = useState<TipDepth>("detailed")
   const [audience, setAudience] = useState<TipAudience>("self")
   const [pairMode, setPairMode] = useState(false)
   const [secondName, setSecondName] = useState("")
