@@ -2,8 +2,10 @@
 
 // «Настройки очереди» (#36 + #37). Company-level настройки рассылки, показываемые
 // в табе «Сообщения» вакансии (применяются ко ВСЕМ вакансиям компании):
-//   #36 — окно отправки по типу касания (круглосуточно / по окну).
-//   #37а — порядок приоритета исходящих (drag-reorder + стрелки).
+//   #36 — окно отправки по типу касания (круглосуточно / по окну) + очерёдность
+//        ПО ТИПУ СООБЩЕНИЯ (drag-reorder + стрелки, 07.07) — доп. ключ сортировки
+//        внутри группы приоритета кандидата (#37а).
+//   #37а — порядок приоритета исходящих ПО ГРУППЕ КАНДИДАТА (drag-reorder + стрелки).
 //   #37б — темп между отправками (секунды) — через существующий send-delay API.
 //
 // НЕ хардкод: все значения приходят/уходят в hiring_defaults_json / companies.
@@ -21,8 +23,10 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 
 import {
-  TOUCH_CATEGORY_ORDER,
   TOUCH_CATEGORY_LABELS,
+  DEFAULT_TOUCH_WINDOWS,
+  DEFAULT_MESSAGE_CATEGORY_ORDER,
+  normalizeMessageCategoryOrder,
   resolveAllTouchWindowModes,
   type TouchCategory,
   type TouchWindowMode,
@@ -45,6 +49,9 @@ export function QueueSettingsSection() {
   const [windows, setWindows] = useState<Record<TouchCategory, TouchWindowMode>>(
     resolveAllTouchWindowModes(null),
   )
+  // Очерёдность ПО ТИПУ СООБЩЕНИЯ (07.07) — порядок строк внутри блока «Когда
+  // отправлять». Сохраняется вместе с windows (единая кнопка «Сохранить»).
+  const [categoryOrder, setCategoryOrder] = useState<TouchCategory[]>(DEFAULT_MESSAGE_CATEGORY_ORDER)
   // #37а порядок приоритета
   const [order, setOrder] = useState<SendPriorityGroup[]>(DEFAULT_SEND_PRIORITY_ORDER)
   // #37б темп отправки
@@ -57,6 +64,8 @@ export function QueueSettingsSection() {
 
   // drag state для порядка приоритета
   const [dragGroup, setDragGroup] = useState<SendPriorityGroup | null>(null)
+  // drag state для порядка категорий сообщений
+  const [dragCategory, setDragCategory] = useState<TouchCategory | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -66,21 +75,23 @@ export function QueueSettingsSection() {
       const defaults = (hd?.hiringDefaults ?? {}) as {
         messageWindows?: MessageWindowsConfig
         sendPriorityOrder?: unknown
+        messageCategoryOrder?: unknown
       }
       setWindows(resolveAllTouchWindowModes(defaults.messageWindows ?? null))
+      setCategoryOrder(normalizeMessageCategoryOrder(defaults.messageCategoryOrder))
       setOrder(normalizeSendPriorityOrder(defaults.sendPriorityOrder))
       if (typeof sd?.sendDelaySeconds === "number") setDelay(sd.sendDelaySeconds)
     }).finally(() => setLoaded(true))
   }, [])
 
-  // ── #36 сохранить окна ────────────────────────────────────────────────
+  // ── #36 сохранить окна + порядок категорий ──────────────────────────────
   async function saveWindows() {
     setSavingWindows(true)
     try {
       const res = await fetch("/api/modules/hr/company/hiring-defaults", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messageWindows: windows }),
+        body: JSON.stringify({ messageWindows: windows, messageCategoryOrder: categoryOrder }),
       })
       if (!res.ok) {
         const d = await res.json().catch(() => null) as { error?: string } | null
@@ -92,6 +103,28 @@ export function QueueSettingsSection() {
     } finally {
       setSavingWindows(false)
     }
+  }
+
+  // ── reorder helpers (порядок категорий сообщений) ───────────────────────
+  function moveCategory(from: number, to: number) {
+    if (to < 0 || to >= categoryOrder.length || from === to) return
+    setCategoryOrder((prev) => {
+      const next = [...prev]
+      const [item] = next.splice(from, 1)
+      next.splice(to, 0, item)
+      return next
+    })
+  }
+  function dropCategoryOn(target: TouchCategory) {
+    if (!dragCategory || dragCategory === target) return
+    const from = categoryOrder.indexOf(dragCategory)
+    const to = categoryOrder.indexOf(target)
+    moveCategory(from, to)
+    setDragCategory(null)
+  }
+  function resetWindowsAndOrder() {
+    setWindows({ ...DEFAULT_TOUCH_WINDOWS })
+    setCategoryOrder(DEFAULT_MESSAGE_CATEGORY_ORDER)
   }
 
   // ── #37а сохранить порядок ────────────────────────────────────────────
@@ -171,35 +204,61 @@ export function QueueSettingsSection() {
           <CardDescription>
             «Круглосуточно» — сообщение уходит в любое время. «По окну» — только
             в рабочие часы вакансии (расписание). Транзакционные (приглашения,
-            подтверждения) обычно круглосуточно; дожимы — по окну.
+            подтверждения) обычно круглосуточно; дожимы — по окну. Перетащите
+            строки, чтобы задать очерёдность — сверху уходит первым при
+            конкуренции за отправку.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {TOUCH_CATEGORY_ORDER.map((cat) => (
-            <div key={cat} className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <Label htmlFor={`win-${cat}`} className="text-sm cursor-pointer">
-                  {TOUCH_CATEGORY_LABELS[cat]}
-                </Label>
-                <p className="text-[11px] text-muted-foreground">
-                  {windows[cat] === "always" ? "Круглосуточно" : "Только в рабочие часы вакансии"}
-                </p>
+          <div className="space-y-2">
+            {categoryOrder.map((cat, idx) => (
+              <div
+                key={cat}
+                draggable={loaded}
+                onDragStart={() => setDragCategory(cat)}
+                onDragOver={(e) => { if (dragCategory) e.preventDefault() }}
+                onDrop={() => dropCategoryOn(cat)}
+                className="flex items-center justify-between gap-3 rounded-md border bg-card px-2.5 py-2"
+              >
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab shrink-0" />
+                  <span className="text-xs text-muted-foreground w-4 shrink-0">{idx + 1}.</span>
+                  <div className="min-w-0">
+                    <Label htmlFor={`win-${cat}`} className="text-sm cursor-pointer">
+                      {TOUCH_CATEGORY_LABELS[cat]}
+                    </Label>
+                    <p className="text-[11px] text-muted-foreground">
+                      {windows[cat] === "always" ? "Круглосуточно" : "Только в рабочие часы вакансии"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-col shrink-0">
+                  <Button variant="ghost" size="icon" className="h-5 w-5" disabled={idx === 0} onClick={() => moveCategory(idx, idx - 1)}>
+                    <ArrowUp className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-5 w-5" disabled={idx === categoryOrder.length - 1} onClick={() => moveCategory(idx, idx + 1)}>
+                    <ArrowDown className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[11px] text-muted-foreground">По окну</span>
+                  <Switch
+                    id={`win-${cat}`}
+                    checked={windows[cat] === "always"}
+                    disabled={!loaded}
+                    onCheckedChange={(v) =>
+                      setWindows((prev) => ({ ...prev, [cat]: v ? "always" : "window" }))
+                    }
+                  />
+                  <span className="text-[11px] text-muted-foreground">Круглосуточно</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-[11px] text-muted-foreground">По окну</span>
-                <Switch
-                  id={`win-${cat}`}
-                  checked={windows[cat] === "always"}
-                  disabled={!loaded}
-                  onCheckedChange={(v) =>
-                    setWindows((prev) => ({ ...prev, [cat]: v ? "always" : "window" }))
-                  }
-                />
-                <span className="text-[11px] text-muted-foreground">Круглосуточно</span>
-              </div>
-            </div>
-          ))}
-          <div className="flex justify-end pt-1">
+            ))}
+          </div>
+          <div className="flex justify-between items-center pt-1">
+            <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" disabled={!loaded} onClick={resetWindowsAndOrder}>
+              Сбросить по умолчанию
+            </Button>
             <Button size="sm" onClick={saveWindows} disabled={savingWindows || !loaded} className="gap-1.5 h-8 text-xs">
               {savingWindows ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
               Сохранить

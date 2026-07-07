@@ -9,7 +9,14 @@ import { canSendNow } from "@/lib/schedule/can-send-now"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { renderTemplate } from "@/lib/template-renderer"
 import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
-import { resolveTouchWindowMode, type MessageWindowsConfig } from "@/lib/messaging/touch-window"
+import {
+  resolveTouchWindowMode,
+  branchToTouchCategory,
+  normalizeMessageCategoryOrder,
+  categoryPriorityRank,
+  type MessageWindowsConfig,
+  type TouchCategory,
+} from "@/lib/messaging/touch-window"
 import {
   classifySendPriority,
   normalizeSendPriorityOrder,
@@ -134,11 +141,13 @@ async function resolveCompanyMessageWindows(companyId: string): Promise<MessageW
   return cfg
 }
 
-// #37а Пересортировка окна pending по приоритету групп кандидатов.
-// Батч-подгружаем стадию + demoOpened кандидатов и company-level порядок
-// приоритета (через campaign → vacancy → company). Стабильная сортировка:
-// primary = ранг группы в порядке КОМПАНИИ этого сообщения, secondary =
-// scheduledAt. Компании с разным порядком не конфликтуют (токен hh per-company).
+// #37а Пересортировка окна pending по приоритету групп кандидатов, и внутри
+// группы — по порядку категорий сообщений (07.07, скрин Юрия). Батч-подгружаем
+// стадию + demoOpened кандидатов и company-level порядки (через campaign →
+// vacancy → company). Иерархия сортировки — «раз навсегда» решение Юрия
+// 30.06: группа кандидата (finalists/passed_first/...) ГЛАВНЕЕ, порядок
+// категорий сообщений — ДОПОЛНИТЕЛЬНЫЙ ключ ВНУТРИ группы, затем scheduledAt.
+// Компании с разным порядком не конфликтуют (токен hh per-company).
 async function orderPendingByPriority(
   rows: (typeof followUpMessages.$inferSelect)[],
 ): Promise<(typeof followUpMessages.$inferSelect)[]> {
@@ -154,7 +163,7 @@ async function orderPendingByPriority(
     : []
   const candMap = new Map(candRows.map((c) => [c.id, c]))
 
-  // campaign → vacancy → company (для company-level порядка приоритета).
+  // campaign → vacancy → company (для company-level порядков приоритета).
   const campIds = [...new Set(rows.map((r) => r.campaignId))]
   const campRows = campIds.length
     ? await db
@@ -165,24 +174,36 @@ async function orderPendingByPriority(
     : []
   const campToCompany = new Map(campRows.map((c) => [c.id, c.companyId]))
 
-  // Порядок приоритета per-company (кэш на этот run).
+  // Порядок приоритета групп + порядок категорий сообщений per-company (кэш на этот run).
   const orderCache = new Map<string, SendPriorityGroup[]>()
-  async function companyOrder(companyId: string | undefined): Promise<SendPriorityGroup[]> {
-    if (!companyId) return normalizeSendPriorityOrder(undefined)
-    const hit = orderCache.get(companyId)
-    if (hit) return hit
+  const categoryOrderCache = new Map<string, TouchCategory[]>()
+  async function companyOrders(
+    companyId: string | undefined,
+  ): Promise<{ groupOrder: SendPriorityGroup[]; categoryOrder: TouchCategory[] }> {
+    if (!companyId) {
+      return {
+        groupOrder: normalizeSendPriorityOrder(undefined),
+        categoryOrder: normalizeMessageCategoryOrder(undefined),
+      }
+    }
+    const hitGroup = orderCache.get(companyId)
+    const hitCategory = categoryOrderCache.get(companyId)
+    if (hitGroup && hitCategory) return { groupOrder: hitGroup, categoryOrder: hitCategory }
     const [row] = await db
       .select({ hd: companies.hiringDefaultsJson })
       .from(companies)
       .where(eq(companies.id, companyId))
       .limit(1)
-    const hd = row?.hd as { sendPriorityOrder?: unknown } | null | undefined
-    const order = normalizeSendPriorityOrder(hd?.sendPriorityOrder)
-    orderCache.set(companyId, order)
-    return order
+    const hd = row?.hd as { sendPriorityOrder?: unknown; messageCategoryOrder?: unknown } | null | undefined
+    const groupOrder = normalizeSendPriorityOrder(hd?.sendPriorityOrder)
+    const categoryOrder = normalizeMessageCategoryOrder(hd?.messageCategoryOrder)
+    orderCache.set(companyId, groupOrder)
+    categoryOrderCache.set(companyId, categoryOrder)
+    return { groupOrder, categoryOrder }
   }
 
-  // Считаем ранг каждой строки.
+  // Считаем ранг каждой строки: группа кандидата (главный ключ), затем
+  // категория сообщения внутри группы (дополнительный ключ).
   const ranked = await Promise.all(rows.map(async (r, idx) => {
     const cand = candMap.get(r.candidateId)
     const group = classifySendPriority({
@@ -191,12 +212,20 @@ async function orderPendingByPriority(
       demoOpened: cand?.demoOpenedAt != null,
     })
     const companyId = campToCompany.get(r.campaignId)
-    const order = await companyOrder(companyId)
-    return { r, idx, rank: priorityRank(group, order), scheduledAt: r.scheduledAt }
+    const { groupOrder, categoryOrder } = await companyOrders(companyId)
+    const category = branchToTouchCategory(r.branch)
+    return {
+      r,
+      idx,
+      rank: priorityRank(group, groupOrder),
+      categoryRank: categoryPriorityRank(category, categoryOrder),
+      scheduledAt: r.scheduledAt,
+    }
   }))
 
   ranked.sort((a, b) => {
     if (a.rank !== b.rank) return a.rank - b.rank
+    if (a.categoryRank !== b.categoryRank) return a.categoryRank - b.categoryRank
     const at = a.scheduledAt?.getTime() ?? 0
     const bt = b.scheduledAt?.getTime() ?? 0
     if (at !== bt) return at - bt
@@ -229,7 +258,11 @@ async function processCampaignTouches(now: Date) {
   // групп кандидатов (нанят/оффер/интервью → прошли этап → новые → дожим-открыл
   // → дожим-не-открыл). Порядок групп — company-level (hiring_defaults_json.
   // sendPriorityOrder), дефолт DEFAULT_SEND_PRIORITY_ORDER. Внутри группы —
-  // по scheduledAt (кто дольше ждёт). Так дожим-хвост не блокирует критичное.
+  // по порядку категорий сообщений (company-level messageCategoryOrder,
+  // дефолт DEFAULT_MESSAGE_CATEGORY_ORDER, «Когда отправлять — по типу
+  // сообщения» на экране очереди), затем по scheduledAt (кто дольше ждёт).
+  // Так дожим-хвост не блокирует критичное, а внутри группы порядок типов
+  // сообщений управляемый (07.07).
   const pending = await orderPendingByPriority(pendingRaw)
 
   let touchSent = 0
