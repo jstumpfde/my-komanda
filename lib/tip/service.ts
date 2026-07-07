@@ -374,7 +374,13 @@ async function runGeneration(runId: string): Promise<void> {
 
     const result = await generateTipReport({ prompt, depth: input.depth })
 
-    await db
+    // Guard-major 07.07: UPDATE условный по status='generating' — если репер
+    // зависших прогонов уже пометил run ошибкой и ВЕРНУЛ прогон на баланс
+    // (worst-case ретраев full: до ~18 мин > STALE_RUN_MINUTES=12), поздний
+    // ответ AI НЕ должен молча перезаписывать error→done: иначе пользователь
+    // получает и разбор, и возврат (двойное начисление). Проигранная гонка —
+    // результат отбрасываем, возврат остаётся (честно для пользователя).
+    const updated = await db
       .update(tipRuns)
       .set({
         status: "done",
@@ -385,7 +391,12 @@ async function runGeneration(runId: string): Promise<void> {
         model: result.model,
         finishedAt: new Date(),
       })
-      .where(eq(tipRuns.id, runId))
+      .where(and(eq(tipRuns.id, runId), eq(tipRuns.status, "generating")))
+      .returning({ id: tipRuns.id })
+    if (updated.length === 0) {
+      console.warn("[tip] run", runId, "уже зареаплен (late AI response) — результат отброшен, возврат сохранён")
+      return
+    }
 
     // Реферальный бонус пригласившему (идемпотентно, no-op без pending-реферала).
     void processReferralActivation(run.userId).catch((e) => {
