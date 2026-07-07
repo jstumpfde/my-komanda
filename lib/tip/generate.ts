@@ -18,11 +18,12 @@ function client(): Anthropic {
   return _client
 }
 
-// max_tokens по глубине разбора (Юрий: short ~2500, detailed ~6000, full ~12000).
+// max_tokens по глубине разбора. Подняты 07.07: с правилами конкретики
+// detailed упирался ровно в 6000 и обрезался посреди «Карты развития».
 const MAX_TOKENS_BY_DEPTH: Record<TipDepth, number> = {
-  short: 2500,
-  detailed: 6000,
-  full: 12000,
+  short: 3500,
+  detailed: 10000,
+  full: 16000,
 }
 
 function maxTokensForDepth(depth: string): number {
@@ -34,12 +35,25 @@ function maxTokensForDepth(depth: string): number {
 // (инцидент 07.07: detailed стабильно падал в tip_ai_timeout_60s).
 const TIMEOUT_BY_DEPTH_MS: Record<TipDepth, number> = {
   short: 120_000,
-  detailed: 240_000,
-  full: 360_000,
+  detailed: 300_000,
+  full: 480_000,
 }
 
 function timeoutForDepth(depth: string): number {
   return TIMEOUT_BY_DEPTH_MS[depth as TipDepth] ?? TIMEOUT_BY_DEPTH_MS.detailed
+}
+
+// Меньше попыток для длинных глубин: worst-case (таймаут × попытки) должен
+// оставаться НИЖЕ реапера зависших прогонов (service.ts STALE_RUN_MINUTES=20),
+// иначе реапер вернёт прогон на баланс, а живой результат будет отброшен.
+const ATTEMPTS_BY_DEPTH: Record<TipDepth, number> = {
+  short: 3,
+  detailed: 2,
+  full: 2,
+}
+
+function attemptsForDepth(depth: string): number {
+  return ATTEMPTS_BY_DEPTH[depth as TipDepth] ?? 2
 }
 
 async function withRetry<T>(fn: () => Promise<T>, timeoutMs: number, attempts = 3): Promise<T> {
@@ -100,5 +114,5 @@ export async function generateTipReport(params: GenerateTipReportParams): Promis
     const costUsd = computeCostUsd(model, tokensIn, tokensOut)
 
     return { markdown, tokensIn, tokensOut, costUsd, model }
-  }, timeoutForDepth(params.depth))
+  }, timeoutForDepth(params.depth), attemptsForDepth(params.depth))
 }

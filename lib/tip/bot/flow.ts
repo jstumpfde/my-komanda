@@ -622,7 +622,9 @@ async function stepReceivePromo(botToken: string, chatId: number, text: string, 
 }
 
 const POLL_INTERVAL_MS = 5000
-const POLL_MAX_MS = 10 * 60 * 1000
+// 21 мин — чуть больше реапера (STALE_RUN_MINUTES=20): длинный «полный
+// документ» легально идёт до ~16 мин, бот не должен сдаваться раньше сервера.
+const POLL_MAX_MS = 21 * 60 * 1000
 
 async function pollAndDeliver(
   botToken: string,

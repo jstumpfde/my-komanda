@@ -482,7 +482,10 @@ async function runGeneration(runId: string): Promise<void> {
 
 // ─── Репер зависших прогонов ────────────────────────────────────────────────
 
-const STALE_RUN_MINUTES = 12
+// 20 мин: больше worst-case легальной генерации (full 480с × 2 попытки +
+// backoff ≈ 16.5 мин) — иначе реапер убивал живые длинные прогоны, а поздний
+// done отбрасывался условным UPDATE (гонка, guard-фикс 8640e887).
+const STALE_RUN_MINUTES = 20
 
 /**
  * Помечает прогоны в status pending/generating старше STALE_RUN_MINUTES как
