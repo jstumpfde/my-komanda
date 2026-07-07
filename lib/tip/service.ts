@@ -8,6 +8,8 @@
 import { randomBytes } from "crypto"
 import { and, eq, inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
+import { processReferralActivation } from "@/lib/tip/referral"
+import { extractTipHighlights } from "@/lib/tip/highlights"
 import {
   tipUsers,
   tipRuns,
@@ -353,6 +355,23 @@ async function runGeneration(runId: string): Promise<void> {
         finishedAt: new Date(),
       })
       .where(eq(tipRuns.id, runId))
+
+    // Реферальный бонус пригласившему (идемпотентно, no-op без pending-реферала).
+    void processReferralActivation(run.userId).catch((e) => {
+      console.error("[tip] processReferralActivation", run.userId, e)
+    })
+
+    // Цитаты-выносы и сильные стороны для красивого отчёта и шеринг-карточек
+    // (дешёвый Haiku-вызов; ошибка не критична — отчёт живёт и без выносов).
+    void extractTipHighlights(result.markdown)
+      .then((h) =>
+        h && (h.quotes.length || h.strengths.length)
+          ? db.update(tipRuns).set({ highlightsJson: h }).where(eq(tipRuns.id, runId))
+          : undefined,
+      )
+      .catch((e) => {
+        console.error("[tip] extractTipHighlights", runId, e)
+      })
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
 

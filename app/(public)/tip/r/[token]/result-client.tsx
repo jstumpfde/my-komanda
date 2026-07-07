@@ -2,18 +2,26 @@
 
 // Публичная страница результата разбора «Типология» — доступна по shareToken
 // без логина. Контракт: GET /api/public/tip/shared/[token] ->
-//   { resultMd, formula, context, name?, createdAt }
+//   { resultMd, formula, context, name?, createdAt, highlights? }
 // formula форма (lib/tip/calculation.ts, TipFormula):
 //   { day, month, year, fullDate — каждая {value, sourceDigits, intermediate},
 //     formulaString, digitCounts, missingDigits, repeatedDigits }
+// highlights (опционально, tip_runs.highlights_json — заполняется отдельным
+// AI-вызовом lib/tip/highlights.ts, встраивается координатором в
+// runGeneration): { quotes: string[], strengths: string[] }.
 
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { toast } from "sonner"
-import { Loader2, Share2, RefreshCw, Users } from "lucide-react"
+import { RefreshCw, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { renderTipMarkdown } from "@/components/tip/markdown"
+import { renderTipMarkdownWithToc } from "@/components/tip/markdown"
 import { getTipContext } from "@/lib/tip/contexts"
+import { FormulaCard } from "@/components/tip/formula-card"
+import { EnergyChart } from "@/components/tip/energy-chart"
+import { TableOfContents } from "@/components/tip/table-of-contents"
+import { ShareButtons } from "@/components/tip/share-buttons"
+import { OwnerStatsBanner } from "@/components/tip/owner-stats-banner"
+import { useViewHeartbeat } from "@/components/tip/use-view-heartbeat"
 
 interface FormulaPosition {
   value: number
@@ -32,20 +40,20 @@ interface TipFormula {
   repeatedDigits: number[]
 }
 
+interface TipHighlights {
+  quotes?: string[]
+  strengths?: string[]
+}
+
 interface SharedResult {
   resultMd: string
   formula: TipFormula
   context: string
   name?: string
+  birthDate?: string
   createdAt: string
+  highlights?: TipHighlights
 }
-
-const POSITION_META: { key: keyof Pick<TipFormula, "day" | "month" | "year" | "fullDate">; label: string; hint: string }[] = [
-  { key: "day", label: "День", hint: "Базовая природа" },
-  { key: "month", label: "Месяц", hint: "Эмоции и контакт" },
-  { key: "year", label: "Год", hint: "Социальная реализация" },
-  { key: "fullDate", label: "Полная дата", hint: "Жизненная задача" },
-]
 
 export default function TipResultClient() {
   const params = useParams<{ token: string }>()
@@ -54,6 +62,8 @@ export default function TipResultClient() {
   const [data, setData] = useState<SharedResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+
+  useViewHeartbeat(token)
 
   useEffect(() => {
     if (!token) return
@@ -80,33 +90,10 @@ export default function TipResultClient() {
     }
   }, [token])
 
-  async function handleShare() {
-    const url = typeof window !== "undefined" ? window.location.href : ""
-    const shareData = {
-      title: "Мой разбор — Типология",
-      text: "Посмотрите мой персональный разбор личности",
-      url,
-    }
-    try {
-      if (typeof navigator !== "undefined" && navigator.share) {
-        await navigator.share(shareData)
-        return
-      }
-    } catch {
-      // пользователь отменил шеринг или API недоступно — фолбэк на копирование
-    }
-    try {
-      await navigator.clipboard.writeText(url)
-      toast.success("Ссылка скопирована")
-    } catch {
-      toast.error("Не удалось скопировать ссылку")
-    }
-  }
-
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-stone-300" />
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-stone-200 border-t-amber-500" />
       </div>
     )
   }
@@ -121,7 +108,9 @@ export default function TipResultClient() {
   }
 
   const contextInfo = getTipContext(data.context)
-  const html = renderTipMarkdown(data.resultMd)
+  const quotes = data.highlights?.quotes ?? []
+  const strengths = data.highlights?.strengths ?? []
+  const { html, toc } = renderTipMarkdownWithToc(data.resultMd, quotes)
 
   return (
     <div className="mx-auto min-h-screen max-w-2xl px-4 pb-20 pt-8 sm:pt-12">
@@ -136,41 +125,52 @@ export default function TipResultClient() {
         </h1>
       </header>
 
-      {/* ── Формула ── */}
-      <section className="mb-8 rounded-2xl border border-stone-200 bg-stone-50/70 p-5 sm:p-6">
-        <p className="mb-4 text-center font-mono text-3xl font-bold tracking-wider text-stone-900 sm:text-4xl">
-          {data.formula.formulaString}
-        </p>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {POSITION_META.map(({ key, label, hint }) => {
-            const pos = data.formula[key]
-            return (
-              <div key={key} className="rounded-xl border border-stone-200 bg-white p-3 text-center">
-                <p className="text-2xl font-bold text-amber-600">{pos.value}</p>
-                <p className="mt-1 text-xs font-semibold text-stone-700">{label}</p>
-                <p className="text-[11px] text-stone-400">{hint}</p>
-                {pos.sourceDigits.length > 0 && (
-                  <p className="mt-2 text-[11px] text-stone-400">
-                    {pos.sourceDigits.join(" + ")}
-                    {pos.intermediate.length > 0 && ` = ${pos.intermediate.join(" = ")}`}
-                  </p>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </section>
+      {token && <OwnerStatsBanner shareToken={token} />}
+
+      {/* ── Карта личности (формула гербом + редкость) ── */}
+      <FormulaCard formula={data.formula} name={data.name} birthDate={data.birthDate} />
+
+      {/* ── Инфографика энергий ── */}
+      <EnergyChart
+        digitCounts={data.formula.digitCounts}
+        missingDigits={data.formula.missingDigits}
+        repeatedDigits={data.formula.repeatedDigits}
+      />
+
+      {/* ── Сильные стороны (если посчитаны) ── */}
+      {strengths.length > 0 && (
+        <section className="mb-8 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-5 sm:p-6">
+          <h3 className="mb-3 text-base font-semibold text-stone-900">Сильные стороны</h3>
+          <ul className="space-y-2">
+            {strengths.map((s, idx) => (
+              <li key={idx} className="flex items-start gap-2.5">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-[11px] font-bold text-white">
+                  {idx + 1}
+                </span>
+                <span className="text-sm leading-relaxed text-stone-800">{s}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* ── Оглавление ── */}
+      <TableOfContents entries={toc} />
 
       {/* ── Разбор ── */}
-      {/* Разметка уже приходит со своими Tailwind-классами из renderTipMarkdown
+      {/* Разметка уже приходит со своими Tailwind-классами из renderTipMarkdownWithToc
           (не полагаемся на каскад .prose — там собственные явные стили). */}
       <article className="max-w-none" dangerouslySetInnerHTML={{ __html: html }} />
 
-      {/* ── Действия ── */}
-      <div className="mt-10 flex flex-col gap-3 sm:flex-row">
-        <Button onClick={handleShare} variant="outline" className="flex-1 gap-2">
-          <Share2 className="h-4 w-4" /> Поделиться
-        </Button>
+      {/* ── Шеринг ── */}
+      {token && (
+        <div className="mt-10">
+          <ShareButtons token={token} hasStrengths={strengths.length > 0} />
+        </div>
+      )}
+
+      {/* ── Петля возврата ── */}
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row">
         <Button
           onClick={() => router.push("/tip?from=r")}
           variant="outline"
