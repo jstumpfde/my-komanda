@@ -181,26 +181,35 @@ export function fromAnketaStopFactors(
 
   const citizenship = byId.get("citizenship")
   if (citizenship) {
-    // Guard-blocker 07.07: toAnketaStopFactors сериализует deny-режим текстом
-    // «Кроме: RU, BY» — наивный CSV-парс клал этот текст в allowed (мусор
-    // «Кроме: RU» как «страна»), а правки deny-списка из конструктора уходили
-    // в allowed и НЕ влияли на отсев (матчер в deny читает только denied).
-    // Разбираем симметрично сериализации: префикс «Кроме:» (регистронезависимо,
-    // с/без пробела) → deny-режим, список пишем в denied; без префикса —
-    // allow-режим, список в allowed. Пустой ввод — режим/списки не трогаем
-    // (только enabled), чтобы «открыл вкладку → Сохранить» ничего не менял.
+    // Свободный текст конструктора кодирует режим deny префиксом «Кроме:»
+    // (см. citizenshipToText). ГВАРД-БЛОКЕР 07.07: раньше этот текст наивно
+    // сплитился по запятой в allowed → на КАЖДОМ save() вкладки «Анкета»
+    // (гидрация + безусловный fromAnketaStopFactors) deny-список round-trip'ом
+    // превращался в мусор allowed=["Кроме: RU","BY"], а правки deny-списка
+    // через конструктор не влияли на отсев (матчер в deny читает только
+    // denied). Теперь: префикс «Кроме:» ИЛИ текущий боевой mode="deny" →
+    // список пишем в denied (allowed не трогаем — сохраняется для истории,
+    // как denied сохраняется в allow-режиме). Переключение режима allow/deny
+    // из конструктора невозможно (упрощённый UI) — только через «Настройки
+    // вакансии»/Портрет (CitizenshipFactorField).
     const raw = (citizenship.value ?? "").trim()
-    const denyMatch = raw.match(/^кроме\s*:\s*/i)
-    const listPart = denyMatch ? raw.slice(denyMatch[0].length) : raw
-    const list = listPart.split(",").map(s => s.trim()).filter(Boolean)
-    out.citizenship = {
-      ...(out.citizenship ?? {}),
-      enabled: citizenship.enabled,
-      ...(list.length > 0
-        ? denyMatch
-          ? { mode: "deny" as const, denied: list }
-          : { mode: "allow" as const, allowed: list }
-        : {}),
+    const denyByPrefix = /^кроме\s*:/i.test(raw)
+    const isDeny = denyByPrefix || out.citizenship?.mode === "deny"
+    const listText = denyByPrefix ? raw.replace(/^кроме\s*:/i, "") : raw
+    const list = listText.split(",").map(s => s.trim()).filter(Boolean)
+    if (isDeny) {
+      out.citizenship = {
+        ...(out.citizenship ?? {}),
+        enabled: citizenship.enabled,
+        mode: "deny",
+        ...(list.length > 0 ? { denied: list } : {}),
+      }
+    } else {
+      out.citizenship = {
+        ...(out.citizenship ?? {}),
+        enabled: citizenship.enabled,
+        ...(list.length > 0 ? { mode: "allow", allowed: list } : {}),
+      }
     }
   }
 
