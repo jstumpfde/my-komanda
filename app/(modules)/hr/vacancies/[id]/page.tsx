@@ -2928,7 +2928,7 @@ export default function VacancyPage() {
                             <TooltipTrigger asChild>
                               <span className="cursor-help"><span className="font-medium text-foreground">{s!.hhTotal}</span> откликов всего</span>
                             </TooltipTrigger>
-                            <TooltipContent>Всего откликов с hh.ru, синхронизировано с hh-кабинетом</TooltipContent>
+                            <TooltipContent>Всего откликов с hh.ru по всем публикациям вакансии (перепубликация на hh счётчик не обнуляет)</TooltipContent>
                           </UITooltip>)
                         push("hhNew",
                           <UITooltip>
