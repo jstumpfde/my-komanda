@@ -79,6 +79,8 @@ export async function POST(req: Request) {
       status:     "draft",
       slug,
       category:   alert.department,
+      // Новые вакансии — на контуре «Портрет» (эталонный дефолт, 07.07).
+      portraitScoring: true,
     }).returning()
 
     await db.update(predictiveHiringAlerts)

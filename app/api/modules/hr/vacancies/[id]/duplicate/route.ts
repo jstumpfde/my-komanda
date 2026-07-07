@@ -4,6 +4,7 @@ import { nanoid } from "nanoid"
 import { db } from "@/lib/db"
 import { vacancies, demos, followUpCampaigns } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import { getSpec, saveSpec } from "@/lib/core/spec/store"
 
 async function generateDuplicateSlug(originalSlug: string | null | undefined): Promise<string> {
   // Draft vacancies start as «Новая вакансия» → slug «novaya-vakansiya-…». Don't propagate.
@@ -106,10 +107,26 @@ export async function POST(
         scheduleWorkingDays: original.scheduleWorkingDays,
         scheduleExcludedHolidayIds: original.scheduleExcludedHolidayIds,
         scheduleCustomHolidays: original.scheduleCustomHolidays,
+        // Контур «Портрет» (флаг + режим скоринга живут в vacancy_specs,
+        // но сам флаг активации — на вакансии): копируем как есть, иначе
+        // дубль эталонной вакансии тихо теряет portrait_scoring=true.
+        portraitScoring: original.portraitScoring,
         status: "draft" as const,
         slug,
       })
       .returning()
+
+    // Копируем Spec «Портрет» (vacancy_specs) 1-в-1 — иначе дубль эталонной
+    // вакансии (оси/веса/scoringMode="axes"/пороги) откатывается к
+    // legacy-мосту (buildSpecFromLegacy → holistic), теряя настроенный скоринг.
+    try {
+      const originalSpec = await getSpec(original.id)
+      if (originalSpec) {
+        await saveSpec(duplicate.id, originalSpec, user.id)
+      }
+    } catch (err) {
+      console.warn("[POST /vacancies/:id/duplicate] spec copy failed:", err)
+    }
 
     // Копируем связанные demos (lessons_json + post_demo_settings).
     const originalDemos = await db

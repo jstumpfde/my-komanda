@@ -56,6 +56,8 @@ export async function POST(
           salaryMin: hhVac.salaryFrom,
           salaryMax: hhVac.salaryTo,
           city: hhVac.areaName,
+          // Новые вакансии — на контуре «Портрет» (эталонный дефолт, 07.07).
+          portraitScoring: true,
         })
         .returning({ id: vacancies.id })
       localVacancyId = newVac.id

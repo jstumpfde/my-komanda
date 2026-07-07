@@ -236,12 +236,27 @@ function csvToList(s: string): string[] {
   return s.split(",").map(x => x.trim()).filter(x => x.length > 0)
 }
 
-/** Ответ POST /api/modules/hr/vacancies/[id]/requirements/suggest. */
-interface SuggestionResult {
+/** Ответ POST /api/modules/hr/vacancies/[id]/requirements/suggest (сырое API-поле). */
+interface RawSuggestionResult {
   must_have:     string[]
-  nice_to_have:  string[]
+  nice_to_have:  { text: string; weight: number }[]
   deal_breakers: string[]
   ideal_profile: string
+}
+
+/**
+ * Редактируемое состояние диалога подтверждения — nice_to_have здесь ПРОСТЫЕ
+ * строки (диалог использует общий ListEditor, как must_have/deal_breakers).
+ * Веса из API держим рядом в niceToHaveWeights (по тексту пункта) и применяем
+ * в applySuggestion(); если HR отредактировал/добавил текст в диалоге — для
+ * такого пункта веса нет, он попадёт в «свободный» пул buildAxes() (равная доля).
+ */
+interface SuggestionResult {
+  must_have:          string[]
+  nice_to_have:       string[]
+  niceToHaveWeights:  Record<string, number>
+  deal_breakers:      string[]
+  ideal_profile:      string
 }
 
 /** Ответ POST .../requirements/synonyms */
@@ -1567,12 +1582,20 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
         const err = await res.json().catch(() => null) as { error?: string } | null
         throw new Error(err?.error || "suggest failed")
       }
-      const json = await res.json() as { suggestion?: SuggestionResult }
+      const json = await res.json() as { suggestion?: RawSuggestionResult }
       if (!json.suggestion) {
         toast.error("AI вернул пустой ответ")
         return
       }
-      setEditedSuggestion(json.suggestion)
+      const niceToHaveWeights: Record<string, number> = {}
+      for (const item of json.suggestion.nice_to_have) niceToHaveWeights[item.text] = item.weight
+      setEditedSuggestion({
+        must_have:     json.suggestion.must_have,
+        nice_to_have:  json.suggestion.nice_to_have.map(item => item.text),
+        niceToHaveWeights,
+        deal_breakers: json.suggestion.deal_breakers,
+        ideal_profile: json.suggestion.ideal_profile,
+      })
       setSuggestionOpen(true)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Ошибка предложения")
@@ -1584,12 +1607,21 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
   const applySuggestion = () => {
     if (!editedSuggestion || !spec) return
     // Контур «Портрет»: 🟢 «Подходит» не отсеивает → mustHave всегда пуст.
-    // 3-5 ключевых критериев-«соли», ВСЕ равнозначные (средний вес) — кто хочет,
-    // усилит/ослабит вручную (Юрий 26.06).
+    // Эталонный дефолт (07.07): осевой скоринг — каждый пункт несёт вес оси
+    // из AI-предложения (niceToHaveWeights, по тексту пункта). Пункты, которые
+    // HR добавил/отредактировал в диалоге (текст не совпал с предложенным) —
+    // без явного веса, buildAxes() поделит остаток бюджета поровну между ними.
     const niceToHave = [
       ...editedSuggestion.must_have,
       ...editedSuggestion.nice_to_have,
-    ].slice(0, 5).map(text => ({ text, importance: "important" as NiceImportance }))
+    ].slice(0, 5).map(text => {
+      const weight = editedSuggestion.niceToHaveWeights[text]
+      return {
+        text,
+        importance: "important" as NiceImportance,
+        ...(typeof weight === "number" ? { weight } : {}),
+      }
+    })
     const dealBreakers = editedSuggestion.deal_breakers.slice(0, 10).map(text => ({ text, hard: false }))
     patch({
       idealProfile: editedSuggestion.ideal_profile.slice(0, 500),
@@ -1599,6 +1631,8 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
       // мягкими (hard:false = минус к баллу, не отказ). Жёсткий отсев HR включает сам,
       // осознанно — иначе «опыт B2B» зарубит того, кто написал «продавал CRM».
       dealBreakers,
+      // Эталонный дефолт: сгенерированный набор сразу в осевом режиме (Юрий 07.07).
+      scoringMode: "axes",
     })
     setSuggestionOpen(false)
     toast.success("Портрет заполнен из вакансии — проверьте и сохраните")
