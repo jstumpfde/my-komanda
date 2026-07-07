@@ -86,6 +86,9 @@ const PUBLIC_PREFIXES = [
   "/marketing-consent", // согласие на рекламную рассылку (152-ФЗ/38-ФЗ) — публичный юр.документ
   "/status",
   "/team",
+  "/tip",                // модуль «Типология» — анонимный доступ по cookie tip_uid,
+                         // без логина платформы (см. lib/tip/session.ts). API-роуты
+                         // /api/public/tip/* уже покрыты префиксом "/api/public/" ниже.
   // Webhook кандидатского TG-бота: запросы приходят от серверов Telegram (без
   // сессии), роут сам проверяет обязательный X-Telegram-Bot-Api-Secret-Token.
   "/api/telegram/candidate-bot/webhook",
