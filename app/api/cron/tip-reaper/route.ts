@@ -1,6 +1,6 @@
 // GET/POST /api/cron/tip-reaper
 // Защищён X-Cron-Secret. Подчищает зависшие прогоны модуля «Типология»
-// (status pending/generating старше 12 минут — обычно причина: рестарт PM2
+// (status pending/generating старше STALE_RUN_MINUTES (см. lib/tip/service.ts) — обычно причина: рестарт PM2
 // прервал detached-генерацию в lib/tip/service.ts::runGeneration). Такие
 // прогоны без этого репера навсегда блокируют юзера гвардом «один активный
 // прогон» и висят на балансе.
