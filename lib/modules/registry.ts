@@ -22,6 +22,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Календарь',        href: '/hr/calendar',          icon: 'Calendar' },
       { label: 'Telegram-постинг', href: '/hr/telegram-posting',  icon: 'Send' },
       { label: 'Настройки HR',     href: '/hr/hiring-settings',   icon: 'Settings' },
+      { label: 'Карта настроек',   href: '/hr/settings-map',      icon: 'Map' },
       // Адаптация
       { label: 'Ввод информации',         href: '/hr/onboarding',              icon: 'GraduationCap' },
       // Персонал
