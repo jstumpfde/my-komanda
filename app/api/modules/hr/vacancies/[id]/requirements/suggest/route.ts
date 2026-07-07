@@ -11,6 +11,11 @@ import { vacancies, companies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import { buildSuggestRequirementsPrompt } from "@/lib/ai/prompts/suggest-requirements"
+import {
+  cleanArray,
+  cleanWeightedArray,
+  type WeightedNiceToHave,
+} from "@/lib/ai/prompts/suggest-requirements-parse"
 import { addVacancyTokens } from "@/lib/ai/token-usage"
 import { AI_MODEL_MAIN } from "@/lib/ai/models"
 import { checkAiRateLimit } from "@/lib/ai-safety"
@@ -23,7 +28,7 @@ const anthropic = new Anthropic({
 
 interface SuggestionResult {
   must_have:      string[]
-  nice_to_have:   string[]
+  nice_to_have:   WeightedNiceToHave[]
   deal_breakers:  string[]
   ideal_profile:  string
 }
@@ -41,19 +46,6 @@ function descriptionToText(descJson: unknown, fallback: string | null): string {
     }
   }
   return parts.join("\n")
-}
-
-function cleanArray(input: unknown, maxItems: number, maxLen = 200): string[] {
-  if (!Array.isArray(input)) return []
-  const out: string[] = []
-  for (const item of input) {
-    if (typeof item !== "string") continue
-    const t = item.trim()
-    if (!t || t.length > maxLen) continue
-    out.push(t)
-    if (out.length >= maxItems) break
-  }
-  return out
 }
 
 export async function POST(
@@ -114,17 +106,25 @@ export async function POST(
       return apiError("AI не вернул ответ", 500)
     }
 
-    let parsed: SuggestionResult
+    // Сырой ответ AI: nice_to_have может прийти как [{text,weight}] (ожидаемо)
+    // ИЛИ как string[] (легаси-формат/AI недослушал схему) — cleanWeightedArray
+    // принимает оба, поэтому здесь типизируем широко.
+    let parsed: {
+      must_have?:     unknown
+      nice_to_have?:  unknown
+      deal_breakers?: unknown
+      ideal_profile?: unknown
+    }
     try {
       const match = textBlock.text.match(/\{[\s\S]*\}/)
-      parsed = JSON.parse(match ? match[0] : textBlock.text) as SuggestionResult
+      parsed = JSON.parse(match ? match[0] : textBlock.text) as typeof parsed
     } catch {
       return apiError("AI вернул невалидный JSON", 500)
     }
 
     const suggestion: SuggestionResult = {
       must_have:     cleanArray(parsed.must_have, 5),
-      nice_to_have:  cleanArray(parsed.nice_to_have, 5),
+      nice_to_have:  cleanWeightedArray(parsed.nice_to_have, 5),
       deal_breakers: cleanArray(parsed.deal_breakers, 3),
       ideal_profile: typeof parsed.ideal_profile === "string"
         ? parsed.ideal_profile.trim().slice(0, 500)
