@@ -417,6 +417,19 @@ export async function GET(req: NextRequest) {
         listConds.push(isNotNull(candidates.demoAnswersScore))
       }
 
+      // #43 (доделка 07.07): прошли 2-ю часть демо — ровно тот же критерий,
+      // что у счётчика «N демо-2» в шапке (lib/vacancy-stats.ts): ≥2 ключей
+      // в demo_block_scores.
+      if (url.searchParams.get("secondDemoPassed") === "1") {
+        listConds.push(sql`(SELECT count(*) FROM jsonb_object_keys(COALESCE(${candidates.demoBlockScores}, '{}'::jsonb))) >= 2`)
+      }
+
+      // #43 (доделка 07.07): кликнули по кнопке-ссылке в демо — ровно тот же
+      // критерий, что у счётчика «N перешли по ссылке» в шапке.
+      if (url.searchParams.get("ctaClicked") === "1") {
+        listConds.push(sql`jsonb_array_length(COALESCE(${candidates.demoProgressJson} -> 'ctaClicks', '[]'::jsonb)) > 0`)
+      }
+
       // Порог AI-скора по анкете (aiScore >= scoreMinAnketa)
       const scoreMinAnketa = url.searchParams.get("scoreMinAnketa")
       if (scoreMinAnketa && Number(scoreMinAnketa) > 0) {
@@ -744,7 +757,7 @@ export async function GET(req: NextRequest) {
 
     // Verify ownership
     const [vac] = await db
-      .select({ id: vacancies.id })
+      .select({ id: vacancies.id, hhVacancyId: vacancies.hhVacancyId })
       .from(vacancies)
       .where(and(eq(vacancies.id, vacancyId), eq(vacancies.companyId, user.companyId)))
       .limit(1)
@@ -1014,6 +1027,40 @@ export async function GET(req: NextRequest) {
     // про контактную форму (survey_responses), это другое множество.
     if (url.searchParams.get("demoAnswered") === "1") {
       filterConds.push(isNotNull(candidates.demoAnswersScore))
+    }
+
+    // #43 (доделка 07.07): прошли 2-ю часть демо — ровно тот же критерий,
+    // что у счётчика «N демо-2» в шапке (lib/vacancy-stats.ts): ≥2 ключей
+    // в demo_block_scores.
+    if (url.searchParams.get("secondDemoPassed") === "1") {
+      filterConds.push(sql`(SELECT count(*) FROM jsonb_object_keys(COALESCE(${candidates.demoBlockScores}, '{}'::jsonb))) >= 2`)
+    }
+
+    // #43 (доделка 07.07): кликнули по кнопке-ссылке в демо — ровно тот же
+    // критерий, что у счётчика «N перешли по ссылке» в шапке.
+    if (url.searchParams.get("ctaClicked") === "1") {
+      filterConds.push(sql`jsonb_array_length(COALESCE(${candidates.demoProgressJson} -> 'ctaClicks', '[]'::jsonb)) > 0`)
+    }
+
+    // #43 (доделка 07.07, разбивка «508 + 126 = 634 откликов»): клик по
+    // «прошлые»/«текущая» части счётчика «N откликов всего». Кандидат
+    // принадлежит публикации через hh_responses.local_candidate_id —
+    // current: hh_vacancy_id = ТЕКУЩИЙ vacancies.hh_vacancy_id;
+    // previous: hh_vacancy_id <> текущий (любая прошлая перепубликация).
+    // Кандидаты без hh-отклика (referral/сайт) не попадают ни в один —
+    // честно, у них нет hh-публикации вовсе.
+    const hhPublicationParam = url.searchParams.get("hhPublication")
+    if ((hhPublicationParam === "current" || hhPublicationParam === "previous") && vac.hhVacancyId) {
+      const hhVacancyIdOp = hhPublicationParam === "current" ? sql`=` : sql`<>`
+      filterConds.push(sql`${candidates.id} IN (
+        SELECT ${hhResponses.localCandidateId} FROM ${hhResponses}
+        WHERE ${hhResponses.companyId} = ${user.companyId}
+          AND ${hhResponses.localCandidateId} IS NOT NULL
+          AND ${hhResponses.hhVacancyId} ${hhVacancyIdOp} ${vac.hhVacancyId}
+      )`)
+    } else if (hhPublicationParam === "current" || hhPublicationParam === "previous") {
+      // Вакансия не привязана к hh — публикаций нет ни у кого, честный пустой результат.
+      filterConds.push(sql`false`)
     }
 
     // Поиск по имени/email/телефону (ILIKE). %/_/\ экранируем, чтобы юзер

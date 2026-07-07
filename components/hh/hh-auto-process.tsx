@@ -41,6 +41,11 @@ interface HhAutoProcessProps {
   lastSyncLabel?: string
   /** "inline" — компактная кнопка с поповером (по умолчанию), "card" — большая карточка. */
   variant?: "inline" | "card"
+  /** #43 (доделка 07.07): управление поповером «Настройки разбора» снаружи —
+   *  клик по «N новых» в шапке вакансии открывает тот же поповер. Если не
+   *  задан — компонент управляет open сам (внутренний state, как раньше). */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 type SpeedPreset = "safe" | "standard"
@@ -60,10 +65,17 @@ export function HhAutoProcess({
   syncing = false,
   lastSyncLabel,
   variant = "inline",
+  open: controlledOpen,
+  onOpenChange: setControlledOpen,
 }: HhAutoProcessProps) {
   const [running, setRunning] = useState(false)
   const [stopping, setStopping] = useState(false)
-  const [open, setOpen] = useState(false)
+  // Controlled/uncontrolled: если снаружи передан open — используем его и
+  // зовём onOpenChange; иначе — собственный state (как раньше, обратная
+  // совместимость с местами использования без open/onOpenChange).
+  const [internalOpen, setInternalOpen] = useState(false)
+  const open = controlledOpen ?? internalOpen
+  const setOpen = setControlledOpen ?? setInternalOpen
 
   const [limit, setLimit] = useState<number | "all">(5)
   const [speed, setSpeed] = useState<SpeedPreset>("safe")

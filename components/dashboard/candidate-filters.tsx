@@ -62,6 +62,17 @@ export interface FilterState {
    *  Критерий счётчика «N анкет» в шапке вакансии (клик по счётчику).
    *  НЕ путать с anketaFilled — тот про контактную форму (survey_responses). */
   demoAnswered?: boolean
+  /** #43 (доделка): прошли 2-ю часть демо — есть балл 2-го блока в
+   *  demo_block_scores (≥2 ключей). Критерий счётчика «N демо-2» в шапке. */
+  secondDemoPassed?: boolean
+  /** #43 (доделка): кликнули по кнопке-ссылке в демо — demo_progress_json.
+   *  ctaClicks непустой. Критерий счётчика «N перешли по ссылке» в шапке. */
+  ctaClicked?: boolean
+  /** #43 (доделка): разбивка «прошлые + текущая = итог» откликов с hh —
+   *  клик по «прошлые» / «текущая» части счётчика «N откликов всего».
+   *  "current" — кандидат пришёл с ТЕКУЩЕЙ hh-публикации вакансии,
+   *  "previous" — с любой ПРОШЛОЙ публикации (перепубликация на hh). */
+  hhPublication?: "current" | "previous"
   /** Пресет «На разбор» (воронка-v2, Фаза 1г): прошли 1-ю часть, но застряли —
    *  есть балл ответов демо, не приглашены на 2-ю часть, не в отказе. Только
    *  видимость для ручной проверки перед авто-отказом. */
@@ -128,6 +139,9 @@ const DEFAULT_FILTERS: FilterState = {
   activeNow: false,
   reviewQueue: false,
   demoAnswered: false,
+  secondDemoPassed: false,
+  ctaClicked: false,
+  hhPublication: undefined,
   demoProgress: [],
   dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [],
   skills: [], industries: [],
@@ -299,6 +313,9 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
     (filters.demoProgress?.length ?? 0) > 0 ? 1 : 0,
     filters.anketaFilled ? 1 : 0,
     filters.demoAnswered ? 1 : 0,
+    filters.secondDemoPassed ? 1 : 0,
+    filters.ctaClicked ? 1 : 0,
+    filters.hhPublication ? 1 : 0,
     filters.dateRange || filters.dateFrom || filters.dateTo ? 1 : 0,
     (filters.ageMin ?? 18) > 18 || (filters.ageMax ?? 65) < 65 ? 1 : 0,
     (filters.education?.length ?? 0) > 0 ? 1 : 0,
