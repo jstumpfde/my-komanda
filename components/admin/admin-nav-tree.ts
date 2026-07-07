@@ -10,7 +10,7 @@
 import {
   LayoutDashboard, Building2, Package, Library, ShieldAlert, Shield, Handshake,
   Inbox, Bot, BookOpen, Activity, Wrench, Palette, Sparkles, UserPlus, Ticket,
-  GitCommitHorizontal, Briefcase, MessageSquare, Repeat, ScrollText,
+  GitCommitHorizontal, Briefcase, MessageSquare, Repeat, ScrollText, Star,
   type LucideIcon,
 } from "lucide-react"
 
@@ -43,6 +43,7 @@ export const ADMIN_NAV_TREE: AdminNavCategory[] = [
   { title: "Роли и доступ",    icon: Shield,          items: [{ label: "Роли и доступ",    href: "/admin/roles",                icon: Shield }] },
   { title: "Присутствие",      icon: Activity,        items: [{ label: "Присутствие",      href: "/admin/platform/presence",    icon: Activity }] },
   { title: "Брендинг и SEO",   icon: Palette,         items: [{ label: "Брендинг и SEO",   href: "/admin/platform/branding",    icon: Palette }] },
+  { title: "Типология",       icon: Star,            items: [{ label: "Типология",        href: "/admin/tip",                  icon: Star }] },
   {
     title: "Платформа",
     icon: ShieldAlert,
