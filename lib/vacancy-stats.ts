@@ -25,6 +25,12 @@ export interface VacancyStats {
   // кандидатов к вакансии). Инвариант: hhTotal = hhTotalCurrent + hhTotalPrevious.
   hhTotalCurrent:  number
   hhTotalPrevious: number
+  // Окно откликов ПРОШЛЫХ публикаций (min..max created_at по hh_responses с
+  // другим hh_vacancy_id, привязанным к кандидатам вакансии). Дат публикации
+  // прошлых размещений hh нам не отдаёт — это честное приближение «по датам
+  // откликов» для бейджа «N дн.» в шапке. null — прошлых публикаций нет.
+  hhPrevWindowFrom: string | null
+  hhPrevWindowTo:   string | null
   hhNew:          number
   hhLastSyncAt:   string | null
   // Наши данные после разбора.
@@ -144,6 +150,8 @@ export async function getVacancyStats(vacancyId: string): Promise<VacancyStats> 
   let hhTotalCurrent = 0
   let hhNew   = 0
   let hhLastSyncAt: string | null = null
+  let hhPrevMin: number | null = null
+  let hhPrevMax: number | null = null
   if (vac.hhVacancyId) {
     // Скоуп откликов — ВСЕ hh-публикации вакансии (Юрий 07.07, вакансия
     // 6916db01: перепубликация на hh меняет hhVacancyId, и шапка показывала
@@ -159,12 +167,16 @@ export async function getVacancyStats(vacancyId: string): Promise<VacancyStats> 
       ))`
     // Разбивка «текущая/прошлые публикации» — тем же одним groupBy-запросом:
     // группируем по (status, isCurrent) вместо отдельного count на публикацию.
+    // min/max created_at — для окна прошлых публикаций (бейдж «N дн.»):
+    // агрегируем внутри групп, потом сводим по группам isCurrent=false.
     const isCurrentExpr = sql`(${hhResponses.hhVacancyId} = ${vac.hhVacancyId})`
     const [hhRows, lastSync] = await Promise.all([
       db.select({
           status:    hhResponses.status,
           isCurrent: sql<boolean>`${isCurrentExpr}`,
           cnt:       sql<number>`count(*)::int`,
+          minAt:     sql<Date | null>`min(${hhResponses.createdAt})`,
+          maxAt:     sql<Date | null>`max(${hhResponses.createdAt})`,
         })
         .from(hhResponses)
         .where(and(
@@ -182,7 +194,15 @@ export async function getVacancyStats(vacancyId: string): Promise<VacancyStats> 
     ])
     for (const row of hhRows) {
       hhTotal += row.cnt
-      if (row.isCurrent) hhTotalCurrent += row.cnt
+      if (row.isCurrent) {
+        hhTotalCurrent += row.cnt
+      } else {
+        // Окно прошлых публикаций: min по минимумам / max по максимумам групп.
+        const mn = row.minAt ? new Date(row.minAt).getTime() : null
+        const mx = row.maxAt ? new Date(row.maxAt).getTime() : null
+        if (mn !== null && (hhPrevMin === null || mn < hhPrevMin)) hhPrevMin = mn
+        if (mx !== null && (hhPrevMax === null || mx > hhPrevMax)) hhPrevMax = mx
+      }
       // #45: 'claimed' — промежуточный статус («забран в обработку, ещё
       // не отправлен»). Считаем его как «новый», чтобы счётчик в шапке
       // уменьшался в темпе реальной отправки, а не моментально после
@@ -196,6 +216,8 @@ export async function getVacancyStats(vacancyId: string): Promise<VacancyStats> 
 
   return {
     hhTotal, hhTotalCurrent, hhTotalPrevious, hhNew, hhLastSyncAt,
+    hhPrevWindowFrom: hhPrevMin !== null ? new Date(hhPrevMin).toISOString() : null,
+    hhPrevWindowTo:   hhPrevMax !== null ? new Date(hhPrevMax).toISOString() : null,
     total, inProgress, rejected, hired, demoOpened, anketaFilled, demoAnswered,
     ctaClicked,
     secondDemoInvited, secondDemoPassed,
@@ -315,7 +337,9 @@ function emptyStats(): VacancyStats {
   const byStage: Record<string, number> = {}
   for (const s of ALL_STAGE_SLUGS) byStage[s] = 0
   return {
-    hhTotal: 0, hhTotalCurrent: 0, hhTotalPrevious: 0, hhNew: 0, hhLastSyncAt: null,
+    hhTotal: 0, hhTotalCurrent: 0, hhTotalPrevious: 0,
+    hhPrevWindowFrom: null, hhPrevWindowTo: null,
+    hhNew: 0, hhLastSyncAt: null,
     total: 0, inProgress: 0, rejected: 0, hired: 0,
     demoOpened: 0, anketaFilled: 0, demoAnswered: 0, ctaClicked: 0,
     secondDemoInvited: 0, secondDemoPassed: 0,

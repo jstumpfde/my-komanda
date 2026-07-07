@@ -1407,8 +1407,10 @@ export default function VacancyPage() {
     total: number; pending: number; freshCount: number;
     demoOpened: number; rejected: number;
     // Разбивка hhTotal по публикациям hh (Юрий 07.07): текущая/прошлые.
-    // hhTotal = hhTotalCurrent + hhTotalPrevious.
+    // hhTotal = hhTotalCurrent + hhTotalPrevious. Окно откликов прошлых
+    // публикаций (по датам откликов) — для бейджа «N дн.».
     hhTotal: number; hhTotalCurrent: number; hhTotalPrevious: number;
+    hhPrevWindowFrom: string | null; hhPrevWindowTo: string | null;
     hhNew: number; inProgress: number;
     anketaFilled: number; demoAnswered: number; hired: number;
     // #15: интервью (scheduled + interview + legacy interviewed) и оферы
@@ -1428,7 +1430,8 @@ export default function VacancyPage() {
       ])
       if (!statsRes.ok) return
       const stats = await statsRes.json() as {
-        total: number; hhTotal: number; hhTotalCurrent?: number; hhTotalPrevious?: number; hhNew: number;
+        total: number; hhTotal: number; hhTotalCurrent?: number; hhTotalPrevious?: number;
+        hhPrevWindowFrom?: string | null; hhPrevWindowTo?: string | null; hhNew: number;
         inProgress: number; rejected: number; hired: number;
         demoOpened: number; anketaFilled: number; demoAnswered: number;
         ctaClicked: number;
@@ -1455,6 +1458,8 @@ export default function VacancyPage() {
         // Fallback на «всё текущее» для старого API-ответа без разбивки.
         hhTotalCurrent:  stats.hhTotalCurrent ?? stats.hhTotal,
         hhTotalPrevious: stats.hhTotalPrevious ?? 0,
+        hhPrevWindowFrom: stats.hhPrevWindowFrom ?? null,
+        hhPrevWindowTo:   stats.hhPrevWindowTo ?? null,
         hhNew:        stats.hhNew,
         inProgress:   stats.inProgress,
         anketaFilled: stats.anketaFilled,
@@ -2905,16 +2910,35 @@ export default function VacancyPage() {
                       </UITooltip>
                     )
                   })()}
-                  {/* «X дн.» — сколько вакансия висит на hh: считаем от даты ПЕРВОЙ
+                  {/* «X дн.» — сколько вакансия висит на hh: считаем от даты
                       публикации (vacancies.hh_published_at, заполняет крон
                       hh-vacancy-sync). Fallback на created_at, если hh-даты ещё
-                      нет (вакансия без hh-привязки или синк не прошёл). */}
+                      нет (вакансия без hh-привязки или синк не прошёл).
+                      Перепубликация (Юрий 07.07): hh_published_at знает только
+                      ТЕКУЩУЮ публикацию. Если были прошлые (hhTotalPrevious>0),
+                      добавляем их длительность по окну откликов прошлых
+                      публикаций (дат публикации hh не отдаёт — оценка «по датам
+                      откликов», поэтому с тильдой «≈»). Иначе — как раньше. */}
                   {(() => {
                     if (status !== "active") return null
                     const hhPublishedAt = apiVacancy?.hhPublishedAt
                     const since = hhPublishedAt ?? apiVacancy?.createdAt
                     if (!since) return null
                     const days = Math.floor((Date.now() - new Date(since).getTime()) / 86400000)
+                    const prevFrom = headerStats?.hhPrevWindowFrom
+                    const prevTo   = headerStats?.hhPrevWindowTo
+                    if ((headerStats?.hhTotalPrevious ?? 0) > 0 && prevFrom && prevTo) {
+                      const fmt = (iso: string) => new Date(iso).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })
+                      // Окно включительно: 28.06–02.07 = 5 дн., минимум 1 день.
+                      const prevDays = Math.max(1, Math.floor((new Date(prevTo).getTime() - new Date(prevFrom).getTime()) / 86400000) + 1)
+                      const totalDays = prevDays + days
+                      const title = `Прошлые публикации: ≈${prevDays} дн. (${fmt(prevFrom)}–${fmt(prevTo)}, по датам откликов) · Текущая: ${days} дн.${hhPublishedAt ? ` (опубликована ${fmt(hhPublishedAt)})` : ""} · Суммарно на hh: ≈${totalDays} дн.`
+                      return (
+                        <span title={title} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Clock className="size-3.5" />≈{totalDays} дн.
+                        </span>
+                      )
+                    }
                     const title = hhPublishedAt
                       ? `Опубликована на hh: ${new Date(hhPublishedAt).toLocaleDateString("ru-RU")}`
                       : undefined
