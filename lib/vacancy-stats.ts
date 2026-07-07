@@ -110,7 +110,10 @@ export async function getVacancyStats(vacancyId: string): Promise<VacancyStats> 
 
   const inProgress   = sumByGroup(IN_PROGRESS_STAGE_SLUGS)
   const rejected     = byStage["rejected"] ?? 0
-  const hired        = byStage["hired"] ?? 0
+  // «Нанято» = hired + started_work (guard-major 07.07): кандидат, вышедший
+  // на работу, не должен исчезать из счётчика «нанято»; клик-фильтр шапки
+  // (HEADER_STAT_STAGE_MAP.hired) использует те же две стадии — 1:1.
+  const hired        = (byStage["hired"] ?? 0) + (byStage["started_work"] ?? 0)
   const demoOpened   = sumByGroup(DEMO_OPENED_STAGE_SLUGS)
   const anketaFilled = sumByGroup(ANKETA_FILLED_STAGE_SLUGS)
 
@@ -323,7 +326,8 @@ export async function getVacancyStatsBulk(
       group.reduce((a, s) => a + (stats.byStage[s] ?? 0), 0)
     stats.inProgress   = sumByGroup(IN_PROGRESS_STAGE_SLUGS)
     stats.rejected     = stats.byStage["rejected"] ?? 0
-    stats.hired        = stats.byStage["hired"] ?? 0
+    // «Нанято» = hired + started_work — синхронно с getVacancyStats (см. выше).
+    stats.hired        = (stats.byStage["hired"] ?? 0) + (stats.byStage["started_work"] ?? 0)
     stats.demoOpened   = sumByGroup(DEMO_OPENED_STAGE_SLUGS)
     stats.anketaFilled = sumByGroup(ANKETA_FILLED_STAGE_SLUGS)
     stats.demoAnswered = demoAnsweredByVacancy.get(id) ?? 0
