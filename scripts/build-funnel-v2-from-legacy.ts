@@ -224,8 +224,13 @@ async function main() {
   const managerBlock = demoRows.find(d => /менеджер/i.test(d.title))
     ?? demoRows.filter(d => d.kind === "demo" || d.contentType === "presentation").slice(1, 2)[0]
     ?? null
-  managerPath.title = managerBlock?.title ?? "Демо (2-я часть)"
+  // Название — из блока, на который РЕАЛЬНО указывает итоговый contentBlockId
+  // (guard-minor 08.07: title и contentBlockId не должны расходиться).
   managerPath.contentBlockId = anketaContentBlockId ?? managerBlock?.id ?? null
+  const linkedBlock = managerPath.contentBlockId
+    ? (demoRows.find(d => d.id === managerPath.contentBlockId) ?? managerBlock)
+    : managerBlock
+  managerPath.title = linkedBlock?.title ?? "Демо (2-я часть)"
   managerPath.rule.scoreGate = scoreGate("anketa", anketaPassThreshold || 45, "preliminary_reject")
   if (anketaHhAction) managerPath.hhStatus = anketaHhAction
   managerPath.rule.advanceTo = anketaAdvanceToStage ?? "test_task_sent"

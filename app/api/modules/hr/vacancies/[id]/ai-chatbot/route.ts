@@ -55,19 +55,24 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     // дёрнул этот роут (полная панель или тумблер в конструкторе воронки).
     if (updates.aiChatbotEnabled === true) {
       const promptFromBody = typeof updates.aiChatbotPrompt === "string" ? updates.aiChatbotPrompt : undefined
-      const hasPromptInBody = typeof promptFromBody === "string" && promptFromBody.trim().length > 0
-      if (!hasPromptInBody) {
+      // Если prompt пришёл в body (даже пустой строкой) — это и есть финальное
+      // записываемое значение, проверяем ЕГО. К снапшоту в БД откатываемся,
+      // только когда ключа prompt в body нет вовсе (UPDATE не тронет колонку).
+      const promptOk = promptFromBody !== undefined
+        ? promptFromBody.trim().length > 0
+        : await (async () => {
         const [existing] = await db
           .select({ prompt: vacancies.aiChatbotPrompt })
           .from(vacancies)
           .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
           .limit(1)
-        if (!existing || !existing.prompt || !existing.prompt.trim()) {
-          return NextResponse.json(
-            { error: "Сначала сгенерируйте промпт чат-бота — без него бот не будет отвечать кандидатам" },
-            { status: 400 },
-          )
-        }
+        return !!(existing && existing.prompt && existing.prompt.trim())
+      })()
+      if (!promptOk) {
+        return NextResponse.json(
+          { error: "Сначала сгенерируйте промпт чат-бота — без него бот не будет отвечать кандидатам" },
+          { status: 400 },
+        )
       }
     }
 
