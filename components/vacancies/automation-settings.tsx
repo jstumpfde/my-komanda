@@ -474,8 +474,10 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          // Точечный payload — сервер root-мёржит (mergeDescriptionJson); НЕ шлём
+          // весь снапшот currentJson, иначе устаревшее эхо затирало бы соседние
+          // секции (contentStep и т.п.). Баг Юрия 08.07.
           description_json: {
-            ...currentJson,
             automation: automationData,
             // FAQ хранится на корне descriptionJson, а не внутри automation
             // (по плану Сессии 7 п.10).
