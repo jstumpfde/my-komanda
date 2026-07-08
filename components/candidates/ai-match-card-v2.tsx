@@ -46,13 +46,48 @@ function scoreColor(score: number): string {
   return "text-red-600 dark:text-red-400"
 }
 
-export function AiMatchCardV2({ details, scoreV1, scoreV2 }: AiMatchCardV2Props) {
+// Данные приходят из сохранённого AI-JSON (lib/ai-score-candidate-v2.ts) —
+// формат эволюционировал (напр. reasoning.questions_for_interview добавлено
+// позже), а старые персистированные записи не бэкфилятся. Без нормализации
+// обращение к отсутствующему полю (.length/.map на undefined) роняло рендер
+// таба целиком (инцидент 08.07, кандидат «Аргинбаев Карим» — запись от 05.07
+// без questions_for_interview). Норм-функция подставляет безопасные дефолты
+// для каждого поля, которое ниже читается без опциональной цепочки.
+function normalizeDetails(details: CandidateScoreV2): CandidateScoreV2 {
+  return {
+    ...details,
+    reasoning: {
+      pros: details.reasoning?.pros ?? [],
+      cons: details.reasoning?.cons ?? [],
+      questions_for_interview: details.reasoning?.questions_for_interview ?? [],
+    },
+    criteria_scores: details.criteria_scores ?? ({} as CandidateScoreV2["criteria_scores"]),
+    matched_must_have: details.matched_must_have ?? [],
+    missed_must_have: details.missed_must_have ?? [],
+    matched_nice_to_have: details.matched_nice_to_have ?? [],
+    triggered_deal_breakers: details.triggered_deal_breakers ?? [],
+    extracted_facts: {
+      ...details.extracted_facts,
+      hard_skills_mentioned: details.extracted_facts?.hard_skills_mentioned ?? [],
+      results_with_numbers:  details.extracted_facts?.results_with_numbers ?? [],
+      red_flags:             details.extracted_facts?.red_flags ?? [],
+      green_flags:           details.extracted_facts?.green_flags ?? [],
+      managerial_experience: details.extracted_facts?.managerial_experience ?? { has: false, team_size: null },
+    },
+  }
+}
+
+export function AiMatchCardV2({ details: rawDetails, scoreV1, scoreV2 }: AiMatchCardV2Props) {
   const [expanded, setExpanded]   = useState(true)
   const [showCriteria, setShowCriteria] = useState(true)
 
-  if (!details) return null
+  if (!rawDetails) return null
+  const details = normalizeDetails(rawDetails)
 
-  const decision = DECISION_LABELS[details.decision]
+  const decision = DECISION_LABELS[details.decision] ?? {
+    label: String(details.decision ?? "—"),
+    cls:   "bg-muted text-muted-foreground border-border",
+  }
 
   return (
     <div className="rounded-lg border border-border/60 bg-card overflow-hidden">
