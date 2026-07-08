@@ -43,7 +43,6 @@ import { Input } from "@/components/ui/input"
 import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquare, MessageSquareText, Zap, Globe, AlertTriangle, CheckCircle2, TrendingUp, Filter, FilterX, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, Plus, RefreshCw, Bot, Workflow, FilePlus, UserSearch, Trash2, Target, Inbox, CalendarDays, Plug} from "lucide-react"
 import { InterviewsView } from "@/app/(modules)/hr/interviews/page"
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
-import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-factors-settings"
 import { ApplyRoleTemplateDialog } from "@/components/vacancies/apply-role-template-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
@@ -4781,14 +4780,11 @@ export default function VacancyPage() {
                     initial={apiVacancy?.aiProcessSettings ?? null}
                     onSaved={() => refetchVacancy()}
                   />
-                  {/* #61: per-vacancy стоп-факторы. Логика применения в
-                      process-queue пока не подключена — это отдельная
-                      задача. Сейчас компонент только хранит конфиг. */}
-                  <VacancyStopFactorsSettings
-                    vacancyId={id}
-                    initial={(apiVacancy as { stopFactorsJson?: import("@/lib/db/schema").VacancyStopFactors } | undefined)?.stopFactorsJson ?? null}
-                    onSaved={() => refetchVacancy()}
-                  />
+                  {/* Стоп-факторы (Юрий 08.07): дубль-редактор убран — теперь
+                      единственное место редактирования — вкладка «Портрет»
+                      (spec-editor.tsx). Она пишет напрямую в то же боевое
+                      vacancies.stop_factors_json, синк работает независимо
+                      от контура оценки (portrait_scoring). */}
                   {/* P0-22: editable стоп-слова, единый источник для дожима и hh-чата. */}
                   <VacancyStopWordsSettings
                     vacancyId={id}

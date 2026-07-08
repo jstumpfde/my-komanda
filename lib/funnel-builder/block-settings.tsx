@@ -29,7 +29,6 @@ import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup
 import { VacancyPrequalificationSettings } from "@/components/vacancies/vacancy-prequalification-settings"
 import { VacancyRequirementsSettings } from "@/components/vacancies/vacancy-requirements-settings"
 import { VacancyScheduleSettings } from "@/components/vacancies/vacancy-schedule-settings"
-import { VacancyStopFactorsSettings } from "@/components/vacancies/vacancy-stop-factors-settings"
 import { VacancyStopWordsSettings } from "@/components/vacancies/vacancy-stop-words-settings"
 import type { Question } from "@/lib/course-types"
 import type {
@@ -161,17 +160,13 @@ function PrequalificationSettingsWrapped({ vacancyId, onSaved }: BlockSettingsPr
   )
 }
 
-function StopFactorsSettingsWrapped({ vacancyId, onSaved }: BlockSettingsProps) {
-  const { data, loaded } = useVacancyData(vacancyId)
-  if (!loaded) return <LoadingSpinner />
-  if (data?.portraitScoring) return <PortraitRedirectNotice what="Стоп-факторы по резюме" />
-  return (
-    <VacancyStopFactorsSettings
-      vacancyId={vacancyId}
-      initial={data?.stopFactorsJson ?? null}
-      onSaved={onSaved}
-    />
-  )
+// Юрий 08.07: дубль-редактор убран безусловно (не только при
+// portraitScoring===true) — «Портрет» синкает stopFactorsJson в боевое
+// vacancies.stop_factors_json ВСЕГДА, независимо от контура оценки
+// (см. lib/core/spec/to-legacy.ts), поэтому редактор здесь больше не нужен
+// ни для одной вакансии, старого контура в том числе.
+function StopFactorsSettingsWrapped(_props: BlockSettingsProps) {
+  return <PortraitRedirectNotice what="Стоп-факторы по резюме" />
 }
 
 function StopWordsSettingsWrapped({ vacancyId, onSaved }: BlockSettingsProps) {
