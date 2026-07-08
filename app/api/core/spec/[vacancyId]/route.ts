@@ -273,6 +273,7 @@ export async function GET(
         ...(boevoeStops.citizenship       !== undefined ? { citizenship: boevoeStops.citizenship }              : {}),
         ...(boevoeStops.nativeLanguage    !== undefined ? { nativeLanguage: boevoeStops.nativeLanguage }        : {}),
         ...(boevoeStops.salaryExpectation !== undefined ? { salaryExpectation: boevoeStops.salaryExpectation }  : {}),
+        ...(boevoeStops.rejectionText     !== undefined ? { rejectionText: boevoeStops.rejectionText }          : {}),
       }
       return apiSuccess<SpecApiResponse>({ spec: specFromStore, source: "spec" })
     }
