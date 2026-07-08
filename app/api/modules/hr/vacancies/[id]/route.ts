@@ -61,6 +61,9 @@ export async function PUT(
       salary_max?: number
       status?: string
       description_json?: unknown
+      // Осознанное копирование ВСЕХ секций (в т.ч. защищённых funnelV2/finalScreens/…)
+      // — ставится ТОЛЬКО при «применить шаблон вакансии» (handleApplyTemplate).
+      copy_managed_keys?: boolean
       experience?: string
       schedule?: string
       description?: string
@@ -110,7 +113,7 @@ export async function PUT(
       // копия descriptionJson устаревает после автосейва конструктора «Воронка 2»
       // → wholesale-перезапись затирала свежую воронку (баг Юрия 08.07).
       // См. lib/vacancies/description-json-merge.ts + тест.
-      updates.descriptionJson = mergeDescriptionJson(existing.descriptionJson, body.description_json)
+      updates.descriptionJson = mergeDescriptionJson(existing.descriptionJson, body.description_json, { includeManagedKeys: body.copy_managed_keys === true })
       // Расписание (schedule_*) теперь редактируется отдельно — через
       // /api/modules/hr/vacancies/[id]/schedule-settings (см. компонент
       // vacancy-schedule-settings.tsx). Зеркаление workingHours удалено.

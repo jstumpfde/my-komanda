@@ -547,7 +547,13 @@ export default function VacancyPage() {
       const src = template.data ?? template
 
       const body: Record<string, unknown> = {}
-      if (src.descriptionJson) body.description_json = src.descriptionJson
+      if (src.descriptionJson) {
+        body.description_json = src.descriptionJson
+        // Применение шаблона ОСОЗНАННО копирует все секции, включая защищённые
+        // (funnelV2/finalScreens/…) — иначе mergeDescriptionJson их отбросит и
+        // воронка/экраны шаблона не скопируются. Обычные сейвы флаг НЕ ставят.
+        body.copy_managed_keys = true
+      }
       if (src.city) body.city = src.city
       if (src.format) body.format = src.format
       if (src.employment) body.employment = src.employment

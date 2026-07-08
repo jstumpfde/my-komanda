@@ -40,12 +40,21 @@ export const INDEPENDENTLY_MANAGED_KEYS = [
 export function mergeDescriptionJson(
   current: unknown,
   incoming: unknown,
+  opts?: {
+    // true — НЕ отбрасывать защищённые ключи (единственный легитимный кейс:
+    // «применить шаблон вакансии», где мы ОСОЗНАННО копируем ВСЕ секции шаблона,
+    // включая funnelV2/finalScreens/… Обычные сейвы вкладок этот флаг НЕ ставят,
+    // иначе устаревшее эхо снова затирало бы независимые секции).
+    includeManagedKeys?: boolean
+  },
 ): Record<string, unknown> {
   const currentObj = current && typeof current === "object" ? { ...(current as Record<string, unknown>) } : {}
   const incomingObj = incoming && typeof incoming === "object" ? { ...(incoming as Record<string, unknown>) } : {}
-  for (const key of INDEPENDENTLY_MANAGED_KEYS) {
-    // Выкидываем из входящего — значение останется из currentObj (БД).
-    delete incomingObj[key]
+  if (!opts?.includeManagedKeys) {
+    for (const key of INDEPENDENTLY_MANAGED_KEYS) {
+      // Выкидываем из входящего — значение останется из currentObj (БД).
+      delete incomingObj[key]
+    }
   }
   return { ...currentObj, ...incomingObj }
 }
