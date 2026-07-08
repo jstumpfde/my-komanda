@@ -81,6 +81,8 @@ import { FinalScreensSettings, type FinalScreensConfig } from "@/components/vaca
 import { RecoveryMessageSettings } from "@/components/vacancies/recovery-message-settings"
 import { ScheduleInviteSettings } from "@/components/vacancies/schedule-invite-settings"
 import { FirstMessagesChainEditor } from "@/components/vacancies/first-messages-chain-editor"
+import { FirstContactSettings } from "@/components/vacancies/first-contact-settings"
+import { RejectionTextsSummary } from "@/components/vacancies/rejection-texts-summary"
 import { FunnelBuilder } from "@/components/vacancies/funnel-builder"
 import { FunnelV2Builder } from "@/components/vacancies/funnel-v2-builder"
 import { FunnelV3Editor } from "@/components/vacancies/funnel-v3-editor"
@@ -1224,15 +1226,19 @@ export default function VacancyPage() {
   const rawUrlSection = rawUrlTab === "automation" ? "ai" : (searchParams?.get("section") ?? null)
   // Миграция старых section-значений на новые 6 табов.
   // general → page (стартовая вкладка с брендингом), automation → ai.
-  const SETTINGS_SECTION_IDS = ["page", "sources", "messages", "funnel", "funnel-builder", "funnel-v2", "funnel-v3", "spec", "followup", "aichatbot", "ai", "integrations"] as const
+  const SETTINGS_SECTION_IDS = ["page", "sources", "communications", "funnel", "funnel-builder", "funnel-v2", "funnel-v3", "spec", "aichatbot", "ai", "integrations"] as const
   type SettingsSectionId = typeof SETTINGS_SECTION_IDS[number]
-  // Скрытые legacy-секции: при прямой ссылке (?section=funnel|followup|aichatbot)
-  // перенаправляем на funnel-builder. «messages» ВЕРНУЛИ отдельным табом (Юрий не мог
-  // найти первичные сообщения — таб был убран, а редактор остался недостижим).
-  const LEGACY_SECTIONS_REDIRECT_TO_FUNNEL_BUILDER = ["funnel", "followup", "aichatbot"] as const
+  // Скрытые legacy-секции: при прямой ссылке (?section=funnel|aichatbot)
+  // перенаправляем на funnel-builder.
+  const LEGACY_SECTIONS_REDIRECT_TO_FUNNEL_BUILDER = ["funnel", "aichatbot"] as const
+  // «Сообщения» и «Дожим» объединены в один таб «Коммуникации» (08.07,
+  // консолидация) — старые deep-link'и (?section=messages / ?section=followup)
+  // ведут туда же, ничего не теряя.
+  const LEGACY_SECTIONS_REDIRECT_TO_COMMUNICATIONS = ["messages", "followup"] as const
   const initialSettingsSection: SettingsSectionId =
     rawUrlSection === "general" ? "page" :
     rawUrlSection === "automation" ? "ai" :
+    rawUrlSection && (LEGACY_SECTIONS_REDIRECT_TO_COMMUNICATIONS as readonly string[]).includes(rawUrlSection) ? "communications" :
     rawUrlSection && (LEGACY_SECTIONS_REDIRECT_TO_FUNNEL_BUILDER as readonly string[]).includes(rawUrlSection) ? "funnel-builder" :
     rawUrlSection && (SETTINGS_SECTION_IDS as readonly string[]).includes(rawUrlSection)
       ? (rawUrlSection as SettingsSectionId)
@@ -1280,8 +1286,7 @@ export default function VacancyPage() {
       { kind: "section", value: "settings", section: "spec",           label: "Портрет" },
       { kind: "tab",     value: "content",  section: null,             label: "Контент" },
       { kind: "section", value: "settings", section: "funnel-builder", label: "Воронка" },
-      { kind: "section", value: "settings", section: "messages",       label: "Сообщения" },
-      { kind: "section", value: "settings", section: "followup",       label: "Дожим" },
+      { kind: "section", value: "settings", section: "communications", label: "Коммуникации" },
       { kind: "section", value: "settings", section: "funnel-v2",      label: "Воронка v2" },
       { kind: "section", value: "settings", section: "funnel-v3",      label: "Воронка 3" },
       { kind: "section", value: "settings", section: "sources",        label: "Источники" },
@@ -3709,8 +3714,7 @@ export default function VacancyPage() {
                   { kind: "section", value: "settings", label: "Портрет",          icon: Target,        section: "spec"           },
                   { kind: "tab",     value: "content" , label: "Контент",          icon: BookOpen,      section: null             },
                   { kind: "section", value: "settings", label: "Воронка",          icon: Workflow,      section: "funnel-builder" },
-                  { kind: "section", value: "settings", label: "Сообщения",        icon: MessageSquare, section: "messages"       },
-                  { kind: "section", value: "settings", label: "Дожим",            icon: RefreshCw,     section: "followup"       },
+                  { kind: "section", value: "settings", label: "Коммуникации",     icon: MessageSquare, section: "communications" },
                   { kind: "section", value: "settings", label: "Воронка v2",       icon: Workflow,      section: "funnel-v2"      },
                   { kind: "section", value: "settings", label: "Воронка 3",        icon: Workflow,      section: "funnel-v3"      },
                   { kind: "section", value: "settings", label: "Источники",        icon: Link2,         section: "sources"        },
@@ -4212,15 +4216,17 @@ export default function VacancyPage() {
                   {/* #18: Воронка перед Сообщениями — HR сначала проектирует
                       стадии и AI-фильтр, потом уже настраивает тексты. */}
                   {([
-                    { value: "page"           as const, label: "Брендинг",   icon: Globe },
-                    { value: "funnel-builder" as const, label: "Воронка",     icon: Workflow },
+                    { value: "page"           as const, label: "Брендинг",     icon: Globe },
+                    { value: "funnel-builder" as const, label: "Воронка",       icon: Workflow },
                     // R4 Candidate Spec (новый контур): единый экран «Портрет».
-                    { value: "spec"           as const, label: "Портрет",     icon: Target },
-                    { value: "sources"        as const, label: "Источники",   icon: Link2 },
-                    { value: "ai"             as const, label: "Расписание",  icon: Clock },
-                    { value: "integrations"   as const, label: "Интеграции",  icon: Settings },
+                    { value: "spec"           as const, label: "Портрет",       icon: Target },
+                    // «Сообщения» + «Дожим» объединены в «Коммуникации» (08.07).
+                    { value: "communications" as const, label: "Коммуникации",  icon: MessageSquare },
+                    { value: "sources"        as const, label: "Источники",     icon: Link2 },
+                    { value: "ai"             as const, label: "Расписание",    icon: Clock },
+                    { value: "integrations"   as const, label: "Интеграции",    icon: Settings },
                     // Скрыты (контент доступен по прямой ?section=, настройки — внутри блоков «Воронки»):
-                    // funnel (старые стадии), messages, followup, aichatbot — покрыты блоками Конструктора.
+                    // funnel (старые стадии), aichatbot — покрыты блоками Конструктора.
                   ] satisfies { value: VacancyTabKey; label: string; icon: typeof Globe }[])
                   .filter(s => isPlatformAdmin || s.value !== "funnel-builder")
                   .map((s) => (
@@ -4649,8 +4655,7 @@ export default function VacancyPage() {
                     </div>
                   </div>
 
-                  {/* Telegram-постинг */}
-                  <TelegramPosting vacancyId={id} />
+                  {/* Telegram-постинг переехал в «Коммуникации» → блок 6 «Публикация» (08.07). */}
 
                   {/* Источники и UTM-ссылки */}
                   <UtmLinksSection vacancyId={id} vacancySlug={id} />
@@ -4687,7 +4692,8 @@ export default function VacancyPage() {
                 )}
 
                 {/* ───────── ТАБ «Сообщения» ───────── */}
-                {settingsSection === "messages" && (
+                {/* ───────── ТАБ «Коммуникации» (08.07: объединяет бывшие «Сообщения» + «Дожим») ───────── */}
+                {settingsSection === "communications" && (
                 <SettingsTabShell width="lg" className="space-y-6">
                   {(apiVacancy as { funnelBuilderEnabled?: boolean } | undefined)?.funnelBuilderEnabled && (
                     <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
@@ -4712,13 +4718,16 @@ export default function VacancyPage() {
                       </div>
                     </div>
                   )}
-                  {/* #21: серия первых сообщений. Рендерится первой — это
-                      замена старого блока «Первое сообщение» (он останется
-                      в AutomationSettings как fallback для backward compat,
-                      его текстовый шаблон используется как chain[0] если
-                      chain пустой). Цепочка пишет также в
-                      ai_process_settings.inviteMessage, поэтому
-                      процесс отправки msg1 продолжает работать. */}
+
+                  {/* 1 · Первый контакт */}
+                  <div>
+                    <h3 className="text-base font-semibold text-foreground mb-1">1 · Первый контакт</h3>
+                    <p className="text-sm text-muted-foreground">Приглашение на демо и напоминания, если кандидат не ответил.</p>
+                  </div>
+                  <FirstContactSettings vacancyId={id} onSaved={() => refetchVacancy()} />
+                  {/* #21: напоминания 2 и 3 серии первых сообщений (Сообщение 1
+                      и off-hours редактируются выше, в FirstContactSettings —
+                      единое хранилище с Портретом). */}
                   <FirstMessagesChainEditor
                     vacancyId={id}
                     initial={(apiVacancy as { firstMessagesChain?: Array<{ enabled: boolean; delaySeconds: number; text: string }> } | undefined)?.firstMessagesChain ?? []}
@@ -4735,6 +4744,37 @@ export default function VacancyPage() {
                     initialOffHoursText={(apiVacancy as { firstMessageOffHoursText?: string | null } | undefined)?.firstMessageOffHoursText ?? ""}
                     onSaved={() => refetchVacancy()}
                   />
+
+                  {/* 2 · Дожимы */}
+                  <div className="pt-2">
+                    <h3 className="text-base font-semibold text-foreground mb-1">2 · Дожимы</h3>
+                    <p className="text-sm text-muted-foreground">AI-фильтр откликов и цепочка касаний кандидатов, которые не открыли или не дошли до конца демо. Пер-стадийные дожимы Воронки v2 настраиваются в конструкторе «Воронка v2», не здесь.</p>
+                  </div>
+                  {/* Пояснение разделения ответственности при включённом движке
+                      Воронки v2: пер-стадийные дожимы живут в конструкторе, эта
+                      секция — легаси-путь. Предупреждаем о двойных касаниях, т.к.
+                      на уровне отправки (cron/follow-up) обе цепочки не исключают
+                      друг друга (разбор 02.07). */}
+                  {(apiVacancy as { funnelV2RuntimeEnabled?: boolean } | undefined)?.funnelV2RuntimeEnabled && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <div className="text-xs text-amber-900 dark:text-amber-200">
+                        <strong>Движок Воронки v2 включён.</strong> Дожимы кандидатов теперь
+                        настраиваются по стадиям — в конструкторе «Воронка v2» (у каждой стадии
+                        свои ветки «не открыл» / «открыл, не досмотрел»). Настройки на этой
+                        вкладке — легаси-путь. Чтобы кандидаты не получали двойные касания, не
+                        держите обе цепочки включёнными одновременно.
+                      </div>
+                    </div>
+                  )}
+                  <VacancyFollowupSettings vacancyId={id} tabKey="communications" />
+                  <VacancyTestFollowupSettings vacancyId={id} />
+
+                  {/* 3 · Диалог */}
+                  <div className="pt-2">
+                    <h3 className="text-base font-semibold text-foreground mb-1">3 · Диалог</h3>
+                    <p className="text-sm text-muted-foreground">Реакция на «хочу созвониться», справочник FAQ и аварийное повторное сообщение.</p>
+                  </div>
                   <AutomationSettings
                     vacancyId={id}
                     descriptionJson={apiVacancy?.descriptionJson}
@@ -4746,7 +4786,7 @@ export default function VacancyPage() {
                     // когда серия первых сообщений активна.
                     firstMessagesChain={(apiVacancy as { firstMessagesChain?: Array<{ enabled: boolean; delaySeconds: number; text: string }> } | undefined)?.firstMessagesChain ?? []}
                     sections={["callIntent", "templates"] satisfies AutomationSectionId[]}
-                    tabKey="messages"
+                    tabKey="communications"
                   />
                   {/* #46: «Аварийное повторное сообщение» — opt-in под спойлером. */}
                   <RecoveryMessageSettings
@@ -4755,12 +4795,39 @@ export default function VacancyPage() {
                     initialText={(apiVacancy as { recoveryMessageText?: string } | undefined)?.recoveryMessageText ?? ""}
                     onSaved={() => refetchVacancy()}
                   />
-                  {/* Настраиваемый текст приглашения на интервью (ссылка /schedule/[token]). */}
+
+                  {/* 4 · Интервью */}
+                  <div className="pt-2">
+                    <h3 className="text-base font-semibold text-foreground mb-1">4 · Интервью</h3>
+                    <p className="text-sm text-muted-foreground">Текст приглашения записаться на интервью (ссылка /schedule/[token]).</p>
+                  </div>
                   <ScheduleInviteSettings
                     vacancyId={id}
                     initialText={(apiVacancy as { scheduleInviteText?: string } | undefined)?.scheduleInviteText ?? ""}
                     onSaved={() => refetchVacancy()}
                   />
+
+                  {/* 5 · Отказы */}
+                  <div className="pt-2">
+                    <h3 className="text-base font-semibold text-foreground mb-1">5 · Отказы</h3>
+                  </div>
+                  <RejectionTextsSummary
+                    vacancyId={id}
+                    portraitScoring={(apiVacancy as { portraitScoring?: boolean } | undefined)?.portraitScoring}
+                    onNavigateToSpec={() => {
+                      setSettingsSection("spec")
+                      const sp = new URLSearchParams(window.location.search)
+                      sp.set("tab", "settings"); sp.set("section", "spec")
+                      router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+                      window.scrollTo({ top: 0, behavior: "smooth" })
+                    }}
+                  />
+
+                  {/* 6 · Публикация */}
+                  <div className="pt-2">
+                    <h3 className="text-base font-semibold text-foreground mb-1">6 · Публикация</h3>
+                  </div>
+                  <TelegramPosting vacancyId={id} />
                 </SettingsTabShell>
                 )}
 
@@ -4844,78 +4911,49 @@ export default function VacancyPage() {
 
                 {/* ───────── ТАБ «Кого ищем» (R4 Candidate Spec, новый контур) ───────── */}
                 {settingsSection === "spec" && (
-                  // Портрет — полноширинный (двухколоночный: Портрет + AI-ассистент),
-                  // как таб «Вакансия»/«Контент». НЕ оборачиваем в max-w-3xl — иначе
-                  // панель ассистента зажимается (решение Юрия 02.07). Нижняя панель
-                  // для spec — тоже на всю ширину (VacancyTabFooter className ниже).
+                  <>
+                  {/* Портрет — полноширинный (двухколоночный: Портрет + AI-ассистент),
+                      как таб «Вакансия»/«Контент». НЕ оборачиваем в max-w-3xl — иначе
+                      панель ассистента зажимается (решение Юрия 02.07). Нижняя панель
+                      для spec — тоже на всю ширину (VacancyTabFooter className ниже). */}
                   <SpecEditor
                     vacancyId={id}
                     portraitScoring={(apiVacancy as { portraitScoring?: boolean } | undefined)?.portraitScoring}
                     onAdopted={refetchVacancy}
                     onNavigateNext={() => { setV2SettingsSub("content"); setActiveTab("content"); window.scrollTo({ top: 0, behavior: "smooth" }) }}
+                    onNavigateToCommunications={() => {
+                      setSettingsSection("communications")
+                      const sp = new URLSearchParams(window.location.search)
+                      sp.set("tab", "settings"); sp.set("section", "communications")
+                      router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+                      window.scrollTo({ top: 0, behavior: "smooth" })
+                    }}
                     vacancyAnketaData={(apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.anketa as Record<string, unknown> | undefined}
                   />
-                )}
-
-                {/* ───────── ТАБ «Дожим» ───────── */}
-                {settingsSection === "followup" && (
-                <SettingsTabShell width="full" className="space-y-6">
-                  {(apiVacancy as { funnelBuilderEnabled?: boolean } | undefined)?.funnelBuilderEnabled && (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
-                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-                      <div className="text-xs text-amber-900 dark:text-amber-200">
-                        Конструктор воронки активен. Изменения здесь синхронизируются с конструктором.
-                      </div>
+                  {/* AI-обработка откликов (Юрий 08.07): требования v2 + AI-фильтр
+                      резюме переехали сюда из бывшего таба «Дожим» — оба про
+                      скоринг, логично рядом с Портретом. VacancyAiProcessSettings
+                      сама скрывает textarea отказа, когда включён режим Портрета
+                      (см. компонент). */}
+                  <SettingsTabShell width="full" className="space-y-6">
+                    <div>
+                      <h3 className="text-lg font-semibold text-foreground mb-1">AI-обработка откликов</h3>
+                      <p className="text-sm text-muted-foreground">Структурированные требования (v2) и AI-фильтр резюме (legacy-контур, вне Портрета).</p>
                     </div>
-                  )}
-                  {/* Пояснение разделения ответственности при включённом движке
-                      Воронки v2: пер-стадийные дожимы живут в конструкторе, эта
-                      вкладка — легаси-путь. Предупреждаем о двойных касаниях, т.к.
-                      на уровне отправки (cron/follow-up) обе цепочки не исключают
-                      друг друга (разбор 02.07). */}
-                  {(apiVacancy as { funnelV2RuntimeEnabled?: boolean } | undefined)?.funnelV2RuntimeEnabled && (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
-                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-                      <div className="text-xs text-amber-900 dark:text-amber-200">
-                        <strong>Движок Воронки v2 включён.</strong> Дожимы кандидатов теперь
-                        настраиваются по стадиям — в конструкторе «Воронка v2» (у каждой стадии
-                        свои ветки «не открыл» / «открыл, не досмотрел»). Настройки на этой
-                        вкладке — легаси-путь. Чтобы кандидаты не получали двойные касания, не
-                        держите обе цепочки включёнными одновременно.
-                      </div>
-                    </div>
-                  )}
-                  <div>
-                    <h3 className="text-lg font-semibold text-foreground mb-1">Настройки дожима</h3>
-                    <p className="text-sm text-muted-foreground">AI-фильтр откликов и цепочка касаний кандидатов, которые не открыли или не дошли до конца демо. Пер-стадийные дожимы Воронки v2 настраиваются в конструкторе «Воронка v2», не здесь.</p>
-                  </div>
-                  {/* #62: предупреждение когда AI-агент включён. */}
-                  {(apiVacancy as { aiChatbotEnabled?: boolean } | undefined)?.aiChatbotEnabled && (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
-                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-                      <div className="text-xs text-amber-900 dark:text-amber-200">
-                        <strong>AI чат-бот включён.</strong> Когда обработка заработает,
-                        цепочка дожима будет отключена для этой вакансии — общение
-                        ведёт агент. Сейчас цепочка продолжает работать.
-                      </div>
-                    </div>
-                  )}
-                  {/* Группа 25: структурированные требования + двухпроходный
-                      AI-скоринг v2. При must_have ≥ 1 — параллельно с v1 для A/B. */}
-                  <VacancyRequirementsSettings
-                    vacancyId={id}
-                    initial={(apiVacancy as { requirementsJson?: import("@/lib/db/schema").VacancyRequirements } | undefined)?.requirementsJson ?? null}
-                    onSaved={() => refetchVacancy()}
-                  />
-                  <VacancyAiProcessSettings
-                    vacancyId={id}
-                    initial={apiVacancy?.aiProcessSettings ?? null}
-                    initialAiScoringEnabled={apiVacancy?.aiScoringEnabled ?? true}
-                    onSaved={() => refetchVacancy()}
-                  />
-                  <VacancyFollowupSettings vacancyId={id} />
-                  <VacancyTestFollowupSettings vacancyId={id} />
-                </SettingsTabShell>
+                    <VacancyRequirementsSettings
+                      vacancyId={id}
+                      initial={(apiVacancy as { requirementsJson?: import("@/lib/db/schema").VacancyRequirements } | undefined)?.requirementsJson ?? null}
+                      onSaved={() => refetchVacancy()}
+                    />
+                    <VacancyAiProcessSettings
+                      vacancyId={id}
+                      initial={apiVacancy?.aiProcessSettings ?? null}
+                      initialAiScoringEnabled={apiVacancy?.aiScoringEnabled ?? true}
+                      portraitScoring={(apiVacancy as { portraitScoring?: boolean } | undefined)?.portraitScoring}
+                      onSaved={() => refetchVacancy()}
+                    />
+                  </SettingsTabShell>
+                  </>
                 )}
 
                 {/* ───────── ТАБ «AI чат-бот» (легаси, недостижим напрямую — редиректится на funnel-builder) ───────── */}
