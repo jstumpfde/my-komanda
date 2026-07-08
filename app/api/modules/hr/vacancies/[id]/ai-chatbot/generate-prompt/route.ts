@@ -11,6 +11,8 @@ import { db } from "@/lib/db"
 import { vacancies, companies } from "@/lib/db/schema"
 import { requireCompany } from "@/lib/api-helpers"
 import { callClaudeSonnet } from "@/lib/ai/client"
+import { getSpec } from "@/lib/core/spec/store"
+import { mustHaveTexts, niceToHaveTexts, dealBreakerTexts } from "@/lib/core/spec/types"
 
 interface Triggers {
   salary?: boolean; schedule?: boolean; location?: boolean; requirements?: boolean
@@ -71,6 +73,23 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     if (anketa) {
       const r = anketa.responsibilities; if (typeof r === "string" && r.trim()) facts.push(`Обязанности: ${r.trim().slice(0, 500)}`)
       const q = anketa.requirements;     if (typeof q === "string" && q.trim()) facts.push(`Требования: ${q.trim().slice(0, 500)}`)
+    }
+
+    // Портрет «Кого ищем» (lib/core/spec) — если заполнен, даём боту те же
+    // факты, что использует AI-скоринг резюме, чтобы бот не придумывал
+    // требования от себя и не противоречил тому, по чему реально отбираем.
+    try {
+      const spec = await getSpec(id)
+      if (spec) {
+        const must = mustHaveTexts(spec.mustHave).slice(0, 10)
+        const nice = niceToHaveTexts(spec.niceToHave).slice(0, 10)
+        const deal = dealBreakerTexts(spec.dealBreakers).slice(0, 10)
+        if (must.length) facts.push(`Обязательные требования (Портрет): ${must.join("; ").slice(0, 800)}`)
+        if (nice.length) facts.push(`Желательные плюсы (Портрет): ${nice.join("; ").slice(0, 800)}`)
+        if (deal.length) facts.push(`Стоп-факторы, при которых кандидату откажут (Портрет): ${deal.join("; ").slice(0, 800)}`)
+      }
+    } catch {
+      // Портрет не заполнен/недоступен — не критично, генератор работает и без него.
     }
 
     const meta = `Ты — генератор промптов для AI-агента, общающегося с кандидатами на вакансию.

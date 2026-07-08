@@ -730,15 +730,31 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait, onOpenChatbot }: { 
   // Сквозной слой «AI чат-бот»: отвечает кандидатам на ВСЕХ стадиях (не стадия).
   // Когда включён — ведёт переписку сам, дожимы на это время приостанавливаются.
   const [chatbotEnabled, setChatbotEnabled] = useState(false)
+  const [chatbotHasPrompt, setChatbotHasPrompt] = useState(false)
+  const [chatbotCompanyKilled, setChatbotCompanyKilled] = useState(false)
   const [chatbotBusy, setChatbotBusy] = useState(false)
   useEffect(() => {
     let cancelled = false
     fetch(`/api/modules/hr/vacancies/${vacancyId}/ai-chatbot`).then(r => r.ok ? r.json() : null)
-      .then((d: { enabled?: boolean } | null) => { if (!cancelled) setChatbotEnabled(d?.enabled === true) })
+      .then((d: { enabled?: boolean; prompt?: string; companyKilled?: boolean } | null) => {
+        if (cancelled) return
+        setChatbotEnabled(d?.enabled === true)
+        setChatbotHasPrompt(typeof d?.prompt === "string" && d.prompt.trim().length > 0)
+        setChatbotCompanyKilled(d?.companyKilled === true)
+      })
       .catch(() => {})
     return () => { cancelled = true }
   }, [vacancyId])
   const toggleChatbot = useCallback(async (val: boolean) => {
+    // Без промпта бот молча ничего не делает (см. lib/hh/scan-incoming.ts —
+    // гейт требует aiChatbotPrompt непустым). Не даём включить тумблер и
+    // создать иллюзию «бот работает», когда он на самом деле не отвечает —
+    // ведём в полные настройки, где промпт генерируется.
+    if (val && !chatbotHasPrompt) {
+      toast.error("Сначала сгенерируйте промпт — откройте «Настроить»")
+      onOpenChatbot?.()
+      return
+    }
     setChatbotBusy(true)
     const prev = chatbotEnabled
     setChatbotEnabled(val) // оптимистично
@@ -746,13 +762,14 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait, onOpenChatbot }: { 
       const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/ai-chatbot`, {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: val }),
       })
-      if (!res.ok) throw new Error()
+      const data = await res.json().catch(() => ({})) as { error?: string }
+      if (!res.ok) throw new Error(data.error || "toggle failed")
       toast.success(val ? "AI чат-бот включён" : "AI чат-бот выключен")
-    } catch {
+    } catch (e) {
       setChatbotEnabled(prev)
-      toast.error("Не удалось переключить чат-бот")
+      toast.error(e instanceof Error && e.message !== "toggle failed" ? e.message : "Не удалось переключить чат-бот")
     } finally { setChatbotBusy(false) }
-  }, [vacancyId, chatbotEnabled])
+  }, [vacancyId, chatbotEnabled, chatbotHasPrompt, onOpenChatbot])
 
   // Список контент-блоков (для «подключить демо/тест»)
   useEffect(() => {
@@ -892,11 +909,27 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait, onOpenChatbot }: { 
             {chatbotEnabled
               ? <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-700 dark:text-violet-400">включён</span>
               : <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-muted text-muted-foreground">выключен</span>}
+            {!chatbotHasPrompt && (
+              <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400">нет промпта</span>
+            )}
+            {chatbotCompanyKilled && (
+              <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-red-500/15 text-red-700 dark:text-red-400">заблокирован компанией</span>
+            )}
             {onOpenChatbot && <button onClick={onOpenChatbot} className="ml-auto text-xs text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1">Настроить <ExternalLink className="w-3 h-3" /></button>}
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
             Отвечает кандидатам на всех стадиях воронки — это слой поверх стадий, а не отдельный шаг. Когда включён, ведёт переписку сам; дожимы на это время приостанавливаются. Промпт, фильтры и песочница — в «Настроить».
           </p>
+          {!chatbotHasPrompt && (
+            <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-1">
+              Бот не будет отвечать, пока не задан промпт — сначала откройте «Настроить» и сгенерируйте его.
+            </p>
+          )}
+          {chatbotCompanyKilled && (
+            <p className="text-[11px] text-red-700 dark:text-red-400 mt-1">
+              Аварийный рубильник компании перекрывает эту вакансию — бот не отвечает, даже если тут включено.
+            </p>
+          )}
         </div>
       </div>
 

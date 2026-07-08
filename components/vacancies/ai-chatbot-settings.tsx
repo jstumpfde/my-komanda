@@ -159,7 +159,7 @@ interface AbuseHistoryItem {
 interface Metrics { total: number; sent: number; escalated: number; rejected: number }
 interface QuotaUsage { today: number; limit: number; pct: number }
 
-export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
+export function AiChatbotSettings({ vacancyId, onSaved }: { vacancyId: string; onSaved?: () => void }) {
   const [enabled, setEnabled] = useState(false)
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
   const [prompt, setPrompt] = useState("")
@@ -179,6 +179,10 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
   const [abuseHistory, setAbuseHistory] = useState<AbuseHistoryItem[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [undoingId, setUndoingId] = useState<string | null>(null)
+  // Группа 22 kill switch: аварийный рубильник компании перекрывает тумблер
+  // этой вакансии. Показываем HR, чтобы «включено, но не отвечает» не было
+  // сюрпризом — см. lib/ai/chatbot-processor.ts (company_kill_switch).
+  const [companyKilled, setCompanyKilled] = useState(false)
 
   const triggersAny = Object.values(settings.triggers).some(Boolean)
   const canEnable = prompt.trim().length > 0
@@ -191,6 +195,7 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
       .then(d => {
         if (off || !d) return
         if (typeof d.enabled === "boolean") setEnabled(d.enabled)
+        if (typeof d.companyKilled === "boolean") setCompanyKilled(d.companyKilled)
         if (d.settings && typeof d.settings === "object") {
           setSettings(s => ({
             ...s,
@@ -275,14 +280,21 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify(body),
       })
-      if (!res.ok) throw new Error("save failed")
+      const data = await res.json().catch(() => ({})) as { error?: string }
+      if (!res.ok) {
+        // Откатываем оптимистичное включение тумблера, если сервер отклонил
+        // (например, нет промпта) — иначе тумблер зависает «включённым».
+        if (body.enabled) setEnabled(false)
+        throw new Error(data.error || "save failed")
+      }
       toast.success("Сохранено")
-    } catch {
-      toast.error("Не удалось сохранить")
+      onSaved?.()
+    } catch (e) {
+      toast.error(e instanceof Error && e.message !== "save failed" ? e.message : "Не удалось сохранить")
     } finally {
       setSaving(false)
     }
-  }, [vacancyId, enabled, settings, prompt])
+  }, [vacancyId, enabled, settings, prompt, onSaved])
 
   const generatePrompt = async () => {
     if (!triggersAny) { toast.error("Выберите хотя бы один тип вопросов"); return }
@@ -362,9 +374,13 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
               <CardDescription className="mt-1">
                 Бот отвечает на типовые вопросы кандидатов в hh-чате. Если не уверен — эскалирует HR'у в Telegram.
               </CardDescription>
-              {!canEnable && (
-                <p className="text-[11px] text-amber-700 mt-1">Сначала сгенерируйте промпт ниже.</p>
-              )}
+              {/* Индикатор готовности: показываем HR ровно то, чего не хватает,
+                  чтобы бот реально начал отвечать (см. гейт в lib/hh/scan-incoming.ts). */}
+              {!canEnable ? (
+                <p className="text-[11px] text-amber-700 mt-1">Не готов: нет промпта — сначала сгенерируйте его ниже.</p>
+              ) : enabled && !companyKilled ? (
+                <p className="text-[11px] text-emerald-700 mt-1">Готов отвечать кандидатам.</p>
+              ) : null}
             </div>
             <div className="flex flex-col items-end gap-2">
               <Switch
@@ -386,6 +402,22 @@ export function AiChatbotSettings({ vacancyId }: { vacancyId: string }) {
           </div>
         </CardHeader>
       </Card>
+
+      {/* Аварийный рубильник компании (Группа 22) перекрывает эту вакансию —
+          не дублируем управление здесь, только предупреждаем и ведём в
+          настройки компании, где он выключается. */}
+      {companyKilled && (
+        <Alert className="border-red-300 bg-red-50/60 dark:bg-red-950/20">
+          <Shield className="h-4 w-4 text-red-600" />
+          <AlertDescription className="text-[12px] leading-relaxed text-red-900 dark:text-red-200">
+            <strong>AI чат-бот заблокирован аварийным рубильником всей компании.</strong> Даже
+            если тут включено — бот не будет отвечать кандидатам. Разблокировать:{" "}
+            <a href="/hr/hiring-settings?tab=service" className="underline font-medium">
+              Настройки найма → Служебное
+            </a>.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Группа 33: Sandbox диалог */}
       <Dialog open={sandboxOpen} onOpenChange={setSandboxOpen}>
