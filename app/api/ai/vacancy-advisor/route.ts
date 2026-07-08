@@ -162,18 +162,10 @@ function staticAnalysis(body: Record<string, unknown>): AdvisorResponse {
   // данным, не по декорации. Этот роут сам ничего из БД не читает — весь
   // vacancyData приходит от клиента, поэтому чинить нужно было только источник
   // на клиенте (см. anketa-tab.tsx useEffect на /stop-factors).
-  const unacceptable: string[] = []  // legacy field — no longer shown on Vacancy page
-  const aiStops = (d.aiStopFactors as string[]) || []
-  const stopFactors = (d.stopFactors as Array<{ enabled: boolean }>) || []
-  const enabledStops = stopFactors.filter(f => f.enabled).length
-  if (unacceptable.length === 0 && aiStops.length === 0 && enabledStops === 0) {
-    // Стоп-факторы — НЕ критично, а рекомендовано: без них на этом этапе
-    // пропускаем всех (Юрий, 26.06). Поэтому warning, не error.
-    sections.push({ id: "stopFactors", status: "warning", title: "Стоп-факторы", message: "Стоп-факторы не заданы — это не критично, но с ними AI-скрининг сразу отсеет явно неподходящих кандидатов", priority: 5 })
-  } else {
-    sections.push({ id: "stopFactors", status: "ok", title: "Стоп-факторы", message: `${unacceptable.length + aiStops.length + enabledStops} стоп-факторов`, priority: 10 })
-    filled++
-  }
+  // Стоп-факторы БОЛЬШЕ НЕ оцениваются советником вакансии (Юрий 08.07):
+  // они живут в Портрете («кого ищем»), а не в объявлении вакансии — и у
+  // Портрета свой советник (PortraitAdvisor). Советник вакансии — только про
+  // заполнение самого объявления (обязанности/требования/условия/навыки).
 
   // 7. Conditions
   const conditions = (d.conditions as string[]) || []
