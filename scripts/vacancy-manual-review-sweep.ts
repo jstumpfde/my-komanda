@@ -69,10 +69,34 @@ async function main() {
   }
 
   const spec = await getSpec(vacancyId)
-  const upper = spec?.resumeThresholds?.upperThreshold ?? 75
-  console.log(`[sweep] Вакансия "${vac.title}" (${vac.id}) — порог upperThreshold=${upper}${SEND ? " — РЕЖИМ SEND" : " — dry-run"}`)
+  const rt = spec?.resumeThresholds
+  // Реальная семантика гейта (см. lib/hh/process-queue.ts:855-890): score < lower
+  // → отказ/ручной разбор; lower ≤ score — если midRangeAction="direct_demo"
+  // (или upperThreshold фактически недостижим, напр. 100), ведёт себя как
+  // "приглашаем" (autoInviteEnabled здесь ни при чём — это отдельный тумблер,
+  // который лишь решает, слать ли автоматически; сам факт "подходит" по баллу
+  // определяется прохождением lower-порога при midRangeAction=direct_demo).
+  // Используем upperThreshold как cutoff, ТОЛЬКО если midRangeAction="keep_new"
+  // (тогда середина — это тоже "не пропускаем" зона); иначе — lowerThreshold.
+  const cutoff = rt?.midRangeAction === "keep_new"
+    ? (rt?.upperThreshold ?? 75)
+    : (rt?.lowerThreshold ?? 40)
+  console.log(`[sweep] Вакансия "${vac.title}" (${vac.id}) — resumeThresholds=${JSON.stringify(rt)} → cutoff=${cutoff}${SEND ? " — РЕЖИМ SEND" : " — dry-run"}`)
 
   // ── Часть 1: stage='new' → решение advance/hold ────────────────────────
+  // ТОЛЬКО source='hh' — референс-заявки (source='referral') не имеют резюме
+  // вообще (см. находку 08.07: 34 из 34 в stage=new оказались референс-
+  // заглушками "Новый кандидат" без raw_data), их оценка по Портрету
+  // бессмысленна и НЕ должна вести к preliminary_reject — это другая,
+  // отдельная проблема (реферальная форма не дособирает данные).
+  const referralStuck = await db
+    .select({ id: candidates.id })
+    .from(candidates)
+    .where(and(eq(candidates.vacancyId, vacancyId), eq(candidates.stage, "new"), eq(candidates.source, "referral"), isNull(candidates.deletedAt)))
+  if (referralStuck.length > 0) {
+    console.log(`\n[sweep] ПРОПУЩЕНО (source=referral, нет резюме — отдельная проблема, не отказ): ${referralStuck.length}`)
+  }
+
   const fresh = await db
     .select({
       id: candidates.id,
@@ -81,13 +105,13 @@ async function main() {
       resumeScore: candidates.resumeScore,
     })
     .from(candidates)
-    .where(and(eq(candidates.vacancyId, vacancyId), eq(candidates.stage, "new"), isNull(candidates.deletedAt)))
+    .where(and(eq(candidates.vacancyId, vacancyId), eq(candidates.stage, "new"), eq(candidates.source, "hh"), isNull(candidates.deletedAt)))
 
   type Decision = { id: string; label: string; score: number | null; action: "advance" | "hold" | "skip-unscored" }
   const decisions: Decision[] = fresh.map(c => {
     const label = `#${c.shortId ?? c.id.slice(0, 8)} ${c.name ?? ""}`.trim()
     if (c.resumeScore == null) return { id: c.id, label, score: null, action: "skip-unscored" }
-    return { id: c.id, label, score: c.resumeScore, action: c.resumeScore >= upper ? "advance" : "hold" }
+    return { id: c.id, label, score: c.resumeScore, action: c.resumeScore >= cutoff ? "advance" : "hold" }
   })
 
   console.log(`\n[sweep] stage=new: ${fresh.length} кандидатов`)
