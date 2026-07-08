@@ -26,6 +26,8 @@
 //                              (kind = 'demo' | 'test'; требует vacancyId).
 //   "code"                  — не хранится в БД, значение зашито в код
 //                              (используется вместе с hardcoded:true).
+import { DEFAULT_REJECT_LETTER } from "@/lib/core/spec/types"
+
 export type SettingsResolveKind =
   | "companyHiringDefaults"
   | "effectiveMessage"
@@ -70,7 +72,7 @@ export const SETTINGS_REGISTRY: SettingsRegistryEntry[] = [
     description: "Уходит кандидату при авто-приглашении в рабочее время вакансии.",
     group: "Сообщения кандидатам",
     level: "vacancy",
-    editPath: "/hr/vacancies/[id]?tab=settings&section=messages",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=communications",
     resolve: { kind: "effectiveMessage", path: "inviteMessage" },
   },
   {
@@ -79,17 +81,35 @@ export const SETTINGS_REGISTRY: SettingsRegistryEntry[] = [
     description: "Автоответ, если кандидат откликнулся вне рабочих часов вакансии.",
     group: "Сообщения кандидатам",
     level: "vacancy",
-    editPath: "/hr/vacancies/[id]?tab=settings&section=messages",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=communications",
     resolve: { kind: "effectiveMessage", path: "offHoursMessage" },
   },
   {
     key: "msg.reject",
     title: "Текст отказа",
-    description: "Нейтральный текст, уходит кандидату при отказе.",
+    description: "Нейтральный текст, уходит кандидату при отказе (ручном или авто по низкому баллу — legacy AI-фильтр).",
     group: "Сообщения кандидатам",
     level: "vacancy",
-    editPath: "/hr/vacancies/[id]?tab=settings&section=messages",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=spec",
     resolve: { kind: "effectiveMessage", path: "rejectMessage" },
+  },
+  {
+    key: "spec.rejectLetter",
+    title: "Письмо отказа (Портрет, по баллу резюме)",
+    description: "Уходит кандидату при авто-отказе по баллу резюме, когда вакансия оценивается из Портрета (vacancies.portrait_scoring).",
+    group: "Сообщения кандидатам",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=spec",
+    resolve: { kind: "spec", path: "rejectLetter", default: DEFAULT_REJECT_LETTER },
+  },
+  {
+    key: "stopfactors.rejectionText",
+    title: "Единый текст отказа — стоп-факторы",
+    description: "Уходит кандидату при срабатывании любого стоп-фактора вакансии. Один текст на весь блок (ТК РФ — нейтральная формулировка).",
+    group: "Сообщения кандидатам",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=spec",
+    resolve: { kind: "vacancy", path: "stopFactorsJson.rejectionText", default: "" },
   },
   {
     key: "msg.firstMessageDelay",
@@ -97,7 +117,7 @@ export const SETTINGS_REGISTRY: SettingsRegistryEntry[] = [
     description: "«Человеческая» пауза перед первым сообщением, секунды.",
     group: "Сообщения кандидатам",
     level: "vacancy",
-    editPath: "/hr/vacancies/[id]?tab=settings&section=messages",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=communications",
     resolve: { kind: "effectiveMessage", path: "firstMessageDelaySeconds" },
   },
   {
@@ -115,7 +135,7 @@ export const SETTINGS_REGISTRY: SettingsRegistryEntry[] = [
     description: "Автосообщение сразу после отправки кандидатом финальной анкеты.",
     group: "Сообщения кандидатам",
     level: "vacancy",
-    editPath: "/hr/vacancies/[id]?tab=settings&section=messages",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=communications",
     resolve: { kind: "vacancy", path: "descriptionJson.automation.anketaConfirmation.messageText", default: "" },
   },
   {
@@ -124,7 +144,7 @@ export const SETTINGS_REGISTRY: SettingsRegistryEntry[] = [
     description: "Текст со ссылкой /schedule/[token] при переходе кандидата на стадию интервью.",
     group: "Сообщения кандидатам",
     level: "vacancy",
-    editPath: "/hr/vacancies/[id]?tab=settings&section=messages",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=communications",
     resolve: { kind: "vacancy", path: "scheduleInviteText", default: "" },
   },
   {
@@ -151,7 +171,7 @@ export const SETTINGS_REGISTRY: SettingsRegistryEntry[] = [
     description: "Пресет/кастомные тексты дожима для не открывших демо.",
     group: "Сообщения кандидатам",
     level: "vacancy",
-    editPath: "/hr/vacancies/[id]?tab=settings&section=followup",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=communications",
     resolve: { kind: "vacancy", path: "followUpCampaign.customMessages", default: null },
   },
   {
@@ -160,7 +180,7 @@ export const SETTINGS_REGISTRY: SettingsRegistryEntry[] = [
     description: "Пресет/кастомные тексты дожима для открывших демо, но не дошедших до конца.",
     group: "Сообщения кандидатам",
     level: "vacancy",
-    editPath: "/hr/vacancies/[id]?tab=settings&section=followup",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=communications",
     resolve: { kind: "vacancy", path: "followUpCampaign.customMessagesOpened", default: null },
   },
 
@@ -300,7 +320,7 @@ export const SETTINGS_REGISTRY: SettingsRegistryEntry[] = [
     description: "Не дожимать кандидатов с баллом Портрета ниже минимума.",
     group: "Пороги и гейты",
     level: "vacancy",
-    editPath: "/hr/vacancies/[id]?tab=settings&section=followup",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=communications",
     resolve: { kind: "vacancy", path: "followUpCampaign.minPortraitScoreEnabled", default: false },
   },
   {
@@ -308,7 +328,7 @@ export const SETTINGS_REGISTRY: SettingsRegistryEntry[] = [
     title: "Гейт дожима по Портрету — минимальный балл",
     group: "Пороги и гейты",
     level: "vacancy",
-    editPath: "/hr/vacancies/[id]?tab=settings&section=followup",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=communications",
     resolve: { kind: "vacancy", path: "followUpCampaign.minPortraitScore", default: 30 },
   },
 

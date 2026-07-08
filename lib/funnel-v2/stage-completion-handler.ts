@@ -133,6 +133,29 @@ async function loadStageLessons(contentBlockId: string): Promise<unknown> {
 // ────────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Итог применения StageRule — нужен вызывающему коду (напр. синхронный ответ
+ * кандидату на demo/apply), чтобы понять исход без опроса БД.
+ *   - advanced  — кандидат продвинут на следующую стадию (гейт/autoAdvance пройден).
+ *   - rejected  — не прошёл порог/гейт, запланирован (или уже применён) отказ.
+ *   - held      — ждёт решения HR (ни autoReject, ни autoAdvance / выключенный хвост).
+ *   - completed — воронка пройдена целиком (последняя стадия).
+ */
+export type StageCompletionOutcome =
+  | { type: "advanced" }
+  | { type: "rejected" }
+  | { type: "held" }
+  | { type: "completed" }
+
+/** Смэппить AdvanceOutcome (advance-stage.ts) в StageCompletionOutcome. */
+function mapAdvanceOutcome(outcome: Awaited<ReturnType<typeof advanceToNextStage>>): StageCompletionOutcome {
+  switch (outcome.type) {
+    case "advanced":  return { type: "advanced" }
+    case "completed": return { type: "completed" }
+    case "held":      return { type: "held" }
+  }
+}
+
+/**
  * Применить правило стадии после её завершения:
  *   - Записать scoreForStage + completedAt в funnelV2StateJson.
  *   - Применить StageRule: autoReject / autoAdvance / пометить completedAt.
@@ -146,7 +169,7 @@ async function applyStageRule(args: {
   objectivePercent?: number | null  // % правильных ответов (объективные вопросы)
   aiPercent?:        number | null  // % AI-балла (AI-вопросы)
   scores?:          CandidateScores // баллы кандидата для авто-гейта по баллу (Фаза 1в)
-}): Promise<void> {
+}): Promise<StageCompletionOutcome> {
   const { candidate, vacancy, stage, scorePercent, totalScore } = args
   const objectivePercent = args.objectivePercent ?? null
   const aiPercent        = args.aiPercent ?? null
@@ -189,12 +212,13 @@ async function applyStageRule(args: {
     if (gate !== null) {
       if (gate.pass) {
         // Прошёл порог по баллу → двигаем дальше (авто-приглашение).
-        await advanceToNextStage(updatedCandidate, vacancy, { advanceTo: stage.rule.advanceTo, scoreForStage: totalScore })
+        const advanceOutcome = await advanceToNextStage(updatedCandidate, vacancy, { advanceTo: stage.rule.advanceTo, scoreForStage: totalScore })
+        return mapAdvanceOutcome(advanceOutcome)
       }
       // gate.pass===false → эффект (preliminary_reject/reject/reserve/manual)
       // уже применён внутри evaluateScoreGate. В любом исходе гейт — терминальный:
       // легаси-логику ниже НЕ выполняем (иначе двойное решение).
-      return
+      return { type: "rejected" }
     }
     // gate===null (балл ещё не посчитан) → падаем в легаси-путь ниже.
   }
@@ -254,12 +278,12 @@ async function applyStageRule(args: {
       failedBy:     aiFail && objFail ? "both" : aiFail ? "ai" : "objective",
       delayMinutes: rule.rejectDelayMinutes,
     }))
-    return
+    return { type: "rejected" }
   }
 
   // Шаг 3: autoAdvance — если балл достаточный (или нет ограничения)
   if (rule.autoAdvance) {
-    await advanceToNextStage(updatedCandidate, vacancy, {
+    const advanceOutcome = await advanceToNextStage(updatedCandidate, vacancy, {
       advanceTo:    rule.advanceTo,
       scoreForStage: totalScore,
     })
@@ -271,7 +295,7 @@ async function applyStageRule(args: {
       scorePercent,
       advanceTo:   rule.advanceTo ?? "next",
     }))
-    return
+    return mapAdvanceOutcome(advanceOutcome)
   }
 
   // Шаг 4: ни autoReject, ни autoAdvance — стадия помечена completedAt, ждём HR.
@@ -282,6 +306,7 @@ async function applyStageRule(args: {
     scorePercent,
     note:        "autoReject=false, autoAdvance=false — ждём решения HR",
   }))
+  return { type: "held" }
 }
 
 // ────────────────────────────────────────────────────────────────────────────────
@@ -301,22 +326,22 @@ async function applyStageRule(args: {
 export async function onAnketaCompleted(
   candidateId: string,
   answersArg: StructuredAnswer[] = [],
-): Promise<void> {
+): Promise<StageCompletionOutcome | null> {
   const loaded = await loadForCompletion(candidateId)
   if (!loaded) {
     console.warn("[funnel-v2/completion] onAnketaCompleted — кандидат/вакансия не найдены", { candidateId })
-    return
+    return null
   }
   const { candidate, vacancy, scores } = loaded
 
   // Гейт: только v2-кандидаты с активным флагом
-  if (!vacancy.funnelV2RuntimeEnabled || !candidate.funnelV2StateJson) return
+  if (!vacancy.funnelV2RuntimeEnabled || !candidate.funnelV2StateJson) return null
 
   const stageId = candidate.funnelV2StateJson.stageId
   const stage = vacancy.funnelV2.stages.find((s) => s.id === stageId)
   if (!stage) {
     console.warn("[funnel-v2/completion] onAnketaCompleted — стадия не найдена в конфиге", { candidateId, stageId })
-    return
+    return null
   }
 
   // Подсчёт балла: если у стадии есть contentBlockId — читаем lessonsJson
@@ -333,7 +358,7 @@ export async function onAnketaCompleted(
     aiPercent        = score.aiPercent ?? null
   }
 
-  await applyStageRule({ candidate, vacancy, stage, scorePercent, totalScore, objectivePercent, aiPercent, scores })
+  return await applyStageRule({ candidate, vacancy, stage, scorePercent, totalScore, objectivePercent, aiPercent, scores })
 }
 
 /**
@@ -358,22 +383,22 @@ export async function onTestSubmitted(
   candidateId: string,
   answersArg: StructuredAnswer[] = [],
   objectiveScore?: number,
-): Promise<void> {
+): Promise<StageCompletionOutcome | null> {
   const loaded = await loadForCompletion(candidateId)
   if (!loaded) {
     console.warn("[funnel-v2/completion] onTestSubmitted — кандидат/вакансия не найдены", { candidateId })
-    return
+    return null
   }
   const { candidate, vacancy, scores } = loaded
 
   // Гейт: только v2-кандидаты с активным флагом
-  if (!vacancy.funnelV2RuntimeEnabled || !candidate.funnelV2StateJson) return
+  if (!vacancy.funnelV2RuntimeEnabled || !candidate.funnelV2StateJson) return null
 
   const stageId = candidate.funnelV2StateJson.stageId
   const stage = vacancy.funnelV2.stages.find((s) => s.id === stageId)
   if (!stage) {
     console.warn("[funnel-v2/completion] onTestSubmitted — стадия не найдена в конфиге", { candidateId, stageId })
-    return
+    return null
   }
 
   let scorePercent = 100
@@ -428,5 +453,5 @@ export async function onTestSubmitted(
   // scorePercent теста (колонки test_score нет — она производная).
   const scoresWithTest: CandidateScores = { ...scores, testScore: scorePercent }
 
-  await applyStageRule({ candidate, vacancy, stage, scorePercent, totalScore, objectivePercent, aiPercent, scores: scoresWithTest })
+  return await applyStageRule({ candidate, vacancy, stage, scorePercent, totalScore, objectivePercent, aiPercent, scores: scoresWithTest })
 }

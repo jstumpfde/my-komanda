@@ -67,6 +67,19 @@ import { useContentBlocks } from "@/hooks/use-content-blocks"
 import { DEFAULT_INVITE_MESSAGE, DEFAULT_OFF_HOURS_MESSAGE } from "@/lib/hh/default-messages"
 import { AutoResponderSettings } from "./auto-responder-settings"
 
+// «180» → «через 3 мин», «3600» → «через 1 ч», «15» → «через 15 сек».
+// Используется в компактной сводке блока «Авто-приглашение» (08.07:
+// редактирование текстов/задержек переехало в «Коммуникации», здесь только
+// просмотр — см. onNavigateToCommunications).
+function formatDelayLabel(seconds: number): string {
+  if (seconds < 60) return `через ${seconds} сек`
+  const min = Math.round(seconds / 60)
+  if (min < 60) return `через ${min} мин`
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  return m === 0 ? `через ${h} ч` : `через ${h} ч ${m} мин`
+}
+
 // ─── Константы ───────────────────────────────────────────────────────────────
 
 // 🟢 «Подходит» — важность на пункте. ТРИ уровня (согласованный дизайн): 🟢 только
@@ -1390,12 +1403,18 @@ interface SpecEditorProps {
   onAdopted?: () => void
   /** «Далее → Контент» — переход на следующий этап. */
   onNavigateNext?: () => void
+  /**
+   * Переход в секцию «Коммуникации» (08.07: тексты приглашения/нерабочего
+   * времени редактируются там, здесь — только сводка). Если не передан —
+   * кнопка «Редактировать в Коммуникациях» не рендерится.
+   */
+  onNavigateToCommunications?: () => void
   /** Данные анкеты вакансии для AI-советчика зоны «Портрет».
    *  Если не передан — панель советчика не показывается. */
   vacancyAnketaData?: Record<string, unknown>
 }
 
-export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onNavigateNext, vacancyAnketaData }: SpecEditorProps) {
+export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onNavigateNext, onNavigateToCommunications, vacancyAnketaData }: SpecEditorProps) {
   // #2: контент-блоки вакансии — для выбора, на какой блок отправлять приглашённого.
   // v1: только презентационные (демо) блоки → ссылка /demo/, без правок движка.
   const { blocks: contentBlocks, loading: contentBlocksLoading } = useContentBlocks(vacancyId)
@@ -2585,72 +2604,34 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                   <p className="text-[11px] text-emerald-600 dark:text-emerald-400">Порог 0 — приглашаем всех (любой балл ≥ 0).</p>
                 )}
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> Текст приглашения</Label>
-                <p className="text-[11px] text-muted-foreground">«{"{{name}}"}», «{"{{vacancy}}"}», «{"{{demo_link}}"}» подставятся сами. Это то же сообщение, что в табе «Сообщения» → цепочка (шаг 1) — правьте где удобно.</p>
-                <Textarea
-                  value={spec.inviteLetter || DEFAULT_INVITE_MESSAGE}
-                  onChange={e => patch({ inviteLetter: e.target.value.slice(0, 2000) })}
-                  rows={4}
-                  maxLength={2000}
-                />
-              </div>
-              {/* #1 Задержка перед приглашением (синк с цепочкой первых сообщений) */}
-              <div className="space-y-1.5">
-                <Label className="text-xs">Задержка перед приглашением</Label>
-                <Select
-                  value={String(rt.inviteDelaySeconds ?? 180)}
-                  onValueChange={v => patchThresholds(rt => ({ ...rt, inviteDelaySeconds: Number(v) }))}
-                >
-                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="15">15 секунд</SelectItem>
-                    <SelectItem value="30">30 секунд</SelectItem>
-                    <SelectItem value="60">1 минута</SelectItem>
-                    <SelectItem value="180">3 минуты</SelectItem>
-                    <SelectItem value="900">15 минут</SelectItem>
-                    <SelectItem value="1800">30 минут</SelectItem>
-                    <SelectItem value="3600">1 час</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-[11px] text-muted-foreground">«Человеческая» пауза перед автоматическим приглашением. То же поле, что «Задержка перед отправкой» в табе «Сообщения».</p>
-              </div>
-              {/* #2 Нерабочее время */}
-              <div className="rounded-md border p-2.5 space-y-2.5">
+              {/* 08.07: текст приглашения, задержка и нерабочее время — единое
+                  хранилище с секцией «Коммуникации» (components/vacancies/
+                  first-contact-settings.tsx), редактируются там. Здесь —
+                  компактная read-only сводка (значения ОСТАЮТСЯ в state
+                  спеки — round-trip'ятся в PUT целиком, просто не
+                  редактируются из этой формы). */}
+              <div className="rounded-md border p-3 space-y-2 bg-muted/20">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <Label className="text-xs font-medium">Сообщение в нерабочее время</Label>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">Отклик вне рабочих часов — шлём приглашение с контент-блоком и переводим в выбранную стадию hh.ru, но другим текстом и задержкой.</p>
-                  </div>
-                  <Switch
-                    checked={rt.offHoursEnabled ?? true}
-                    onCheckedChange={v => patchThresholds(rt => ({ ...rt, offHoursEnabled: v }))}
-                  />
-                </div>
-                {(rt.offHoursEnabled ?? true) && (<>
-                  <Textarea
-                    value={spec.offHoursLetter || DEFAULT_OFF_HOURS_MESSAGE}
-                    onChange={e => patch({ offHoursLetter: e.target.value.slice(0, 2000) })}
-                    rows={3}
-                    maxLength={2000}
-                  />
-                  <div className="flex items-center gap-2">
-                    <Label className="text-[11px] shrink-0">Задержка</Label>
-                    <Select
-                      value={String(rt.offHoursDelaySeconds ?? 15)}
-                      onValueChange={v => patchThresholds(rt => ({ ...rt, offHoursDelaySeconds: Number(v) }))}
+                  <Label className="text-xs flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> Текст приглашения и нерабочее время</Label>
+                  {onNavigateToCommunications && (
+                    <Button
+                      type="button" variant="ghost" size="sm"
+                      className="h-6 px-2 text-[11px] shrink-0"
+                      onClick={onNavigateToCommunications}
                     >
-                      <SelectTrigger className="h-8 w-36 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="0">Сразу</SelectItem>
-                        <SelectItem value="15">15 секунд</SelectItem>
-                        <SelectItem value="30">30 секунд</SelectItem>
-                        <SelectItem value="60">1 минута</SelectItem>
-                        <SelectItem value="180">3 минуты</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </>)}
+                      Редактировать в Коммуникациях
+                    </Button>
+                  )}
+                </div>
+                <p className="text-[11px] text-muted-foreground line-clamp-2">
+                  {(spec.inviteLetter || DEFAULT_INVITE_MESSAGE).slice(0, 120)}
+                  {(spec.inviteLetter || DEFAULT_INVITE_MESSAGE).length > 120 ? "…" : ""}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Задержка приглашения: <b>{formatDelayLabel(rt.inviteDelaySeconds ?? 180)}</b>
+                  {" · "}Нерабочее время: <b>{(rt.offHoursEnabled ?? true) ? "вкл" : "выкл"}</b>
+                  {(rt.offHoursEnabled ?? true) ? `, ${formatDelayLabel(rt.offHoursDelaySeconds ?? 15)}` : ""}
+                </p>
               </div>
               {/* Контент-блок: что реально увидит приглашённый */}
               {inviteBlockChoices.length > 0 && (
