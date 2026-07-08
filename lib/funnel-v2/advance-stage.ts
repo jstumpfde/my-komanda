@@ -179,6 +179,15 @@ function mapActionToLegacyStage(action: string): string | null {
 }
 
 /**
+ * Итог продвижения кандидата — нужен вызывающему коду (напр. синхронный ответ
+ * кандидату на demo/apply), чтобы понять, что произошло, без опроса БД.
+ */
+export type AdvanceOutcome =
+  | { type: "advanced"; stage: FunnelV2Stage }
+  | { type: "completed" }
+  | { type: "held"; reason: string }
+
+/**
  * Продвинуть кандидата на следующую стадию воронки v2.
  *
  * Действия:
@@ -197,7 +206,7 @@ export async function advanceToNextStage(
   candidate: CandidateForExecutor,
   vacancy: VacancyForExecutor,
   options: AdvanceOptions = {},
-): Promise<void> {
+): Promise<AdvanceOutcome> {
   const stages = vacancy.funnelV2.stages
   const currentState = candidate.funnelV2StateJson
 
@@ -263,7 +272,7 @@ export async function advanceToNextStage(
       reason:      target.reason,
       note:        "продвижение невозможно (выключенный хвост / самопереход / стадия не найдена) — оставлен на ручной разбор (НЕ hired)",
     }))
-    return
+    return { type: "held", reason: target.reason }
   }
 
   // Шаг 2б: завершение воронки — текущая стадия ПОСЛЕДНЯЯ в массиве
@@ -293,7 +302,7 @@ export async function advanceToNextStage(
       prevStageId,
       reason:      "no_next_stage",
     }))
-    return
+    return { type: "completed" }
   }
 
   const nextId = target.stageId
@@ -305,7 +314,7 @@ export async function advanceToNextStage(
       candidateId: candidate.id,
       nextId,
     })
-    return
+    return { type: "held", reason: "stage_not_found" }
   }
 
   // Шаг 4: записываем новый FunnelV2State
@@ -354,6 +363,8 @@ export async function advanceToNextStage(
   // Шаг 6: вызвать executeStageEntry для новой стадии
   const { executeStageEntry } = await import("@/lib/funnel-v2/runtime-executor")
   await executeStageEntry(updatedCandidate, vacancy, nextStage)
+
+  return { type: "advanced", stage: nextStage }
 }
 
 /**

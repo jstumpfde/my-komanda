@@ -12,6 +12,33 @@ import { normalizePhone, normalizeEmail } from "@/lib/candidates/normalize-conta
 import { scheduleAnketaAutoReply } from "@/lib/messaging/anketa-auto-reply"
 // Воронка v2: хук завершения анкеты (только при funnelV2RuntimeEnabled=true)
 import { onAnketaCompleted } from "@/lib/funnel-v2/stage-completion-handler"
+import { getSpec } from "@/lib/core/spec/store"
+
+// Кандидат ждёт решение по гейту v2 (advanced/rejected/held) синхронно, чтобы
+// сразу показать «Отлично, первый этап пройден» вместо стандартного
+// «Спасибо» — но не дольше этого времени (AI-скоринг может тормозить).
+// Таймаут → безопасный дефолт: outcome=null → обычный thank-you текст.
+const V2_ANKETA_OUTCOME_TIMEOUT_MS = 2_500
+
+async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), ms)
+  })
+  try {
+    return await Promise.race([promise, timeout])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
+/** Текст «Отлично, первый этап пройден» — из Портрета (anketaPassInvite), с дефолтом. */
+async function buildV2PassScreen(vacancyId: string): Promise<{ title: string; text: string }> {
+  const spec = await getSpec(vacancyId)
+  const title = spec?.anketaPassInvite?.passScreenTitle?.trim() || "Отлично!"
+  const text  = spec?.anketaPassInvite?.passScreenText?.trim()  || "Первый этап пройден — переходим ко второй части."
+  return { title, text }
+}
 
 type AnketaPayload = {
   telegram?: string
@@ -153,26 +180,34 @@ export async function POST(
       // F2/F3: легаси-автоответ (scheduleAnketaAutoReply, branch=anketa_auto_reply)
       // и v2-хук — ВЗАИМОИСКЛЮЧАЮЩИЕ. При активном движке v2 отвечает он; иначе —
       // легаси. Раньше легаси вызывался безусловно → при v2 был двойной авто-ответ.
-      // Fire-and-forget: ошибка здесь не блокирует ответ кандидату.
-      void (async () => {
-        try {
-          const [vac] = await db
-            .select({ funnelV2RuntimeEnabled: vacancies.funnelV2RuntimeEnabled, funnelV2StateJson: candidates.funnelV2StateJson })
-            .from(vacancies)
-            .innerJoin(candidates, eq(candidates.vacancyId, vacancies.id))
-            .where(eq(candidates.id, existing.id))
-            .limit(1)
-          if (vac?.funnelV2RuntimeEnabled && vac?.funnelV2StateJson) {
-            await onAnketaCompleted(existing.id)
-          } else {
-            void scheduleAnketaAutoReply({ candidateId: existing.id, vacancyId: existing.vacancyId })
+      // v2: onAnketaCompleted ждём СИНХРОННО (с таймаутом) — нужно знать исход
+      // (прошёл/не прошёл гейт) до ответа кандидату, чтобы сразу показать
+      // правильный экран (см. v2PassScreen ниже). Легаси остаётся fire-and-forget.
+      let v2PassScreen: { title: string; text: string } | null = null
+      try {
+        const [vac] = await db
+          .select({ funnelV2RuntimeEnabled: vacancies.funnelV2RuntimeEnabled, funnelV2StateJson: candidates.funnelV2StateJson })
+          .from(vacancies)
+          .innerJoin(candidates, eq(candidates.vacancyId, vacancies.id))
+          .where(eq(candidates.id, existing.id))
+          .limit(1)
+        if (vac?.funnelV2RuntimeEnabled && vac?.funnelV2StateJson) {
+          const outcome = await withTimeout(onAnketaCompleted(existing.id), V2_ANKETA_OUTCOME_TIMEOUT_MS)
+          if (outcome && (outcome.type === "advanced" || outcome.type === "completed")) {
+            v2PassScreen = await buildV2PassScreen(existing.vacancyId)
           }
-        } catch (err) {
-          console.error("[demo/apply] анкета авто-ответ (v2/легаси) упал:", err instanceof Error ? err.message : err)
+        } else {
+          void scheduleAnketaAutoReply({ candidateId: existing.id, vacancyId: existing.vacancyId })
         }
-      })()
+      } catch (err) {
+        console.error("[demo/apply] анкета авто-ответ (v2/легаси) упал:", err instanceof Error ? err.message : err)
+      }
 
-      return NextResponse.json({ success: true, id: existing.id })
+      return NextResponse.json(
+        v2PassScreen
+          ? { success: true, id: existing.id, v2PassScreen }
+          : { success: true, id: existing.id }
+      )
     }
 
     // Fallback: нет кандидата с таким токеном — создаём нового.
@@ -245,26 +280,33 @@ export async function POST(
       await db.update(candidates).set(updates).where(eq(candidates.id, dup.id))
 
       // F2/F3 (dedup-ветка): легаси и v2 — ВЗАИМОИСКЛЮЧАЮЩИЕ (см. основную ветку).
-      // При активном v2 — только v2; иначе легаси (с прежним условием по стадии).
-      void (async () => {
-        try {
-          const [vac] = await db
-            .select({ funnelV2RuntimeEnabled: vacancies.funnelV2RuntimeEnabled, funnelV2StateJson: candidates.funnelV2StateJson })
-            .from(vacancies)
-            .innerJoin(candidates, eq(candidates.vacancyId, vacancies.id))
-            .where(eq(candidates.id, dup.id))
-            .limit(1)
-          if (vac?.funnelV2RuntimeEnabled && vac?.funnelV2StateJson) {
-            await onAnketaCompleted(dup.id)
-          } else if (!FINAL_STAGES.has(currentStage) && ANKETA_ELIGIBLE.has(currentStage)) {
-            void scheduleAnketaAutoReply({ candidateId: dup.id, vacancyId: demo.vacancyId })
+      // При активном v2 — только v2 (ждём исход синхронно, с таймаутом); иначе
+      // легаси (с прежним условием по стадии, fire-and-forget).
+      let dupV2PassScreen: { title: string; text: string } | null = null
+      try {
+        const [vac] = await db
+          .select({ funnelV2RuntimeEnabled: vacancies.funnelV2RuntimeEnabled, funnelV2StateJson: candidates.funnelV2StateJson })
+          .from(vacancies)
+          .innerJoin(candidates, eq(candidates.vacancyId, vacancies.id))
+          .where(eq(candidates.id, dup.id))
+          .limit(1)
+        if (vac?.funnelV2RuntimeEnabled && vac?.funnelV2StateJson) {
+          const outcome = await withTimeout(onAnketaCompleted(dup.id), V2_ANKETA_OUTCOME_TIMEOUT_MS)
+          if (outcome && (outcome.type === "advanced" || outcome.type === "completed")) {
+            dupV2PassScreen = await buildV2PassScreen(demo.vacancyId)
           }
-        } catch (err) {
-          console.error("[demo/apply] анкета авто-ответ dedup (v2/легаси) упал:", err instanceof Error ? err.message : err)
+        } else if (!FINAL_STAGES.has(currentStage) && ANKETA_ELIGIBLE.has(currentStage)) {
+          void scheduleAnketaAutoReply({ candidateId: dup.id, vacancyId: demo.vacancyId })
         }
-      })()
+      } catch (err) {
+        console.error("[demo/apply] анкета авто-ответ dedup (v2/легаси) упал:", err instanceof Error ? err.message : err)
+      }
 
-      return NextResponse.json({ success: true, id: dup.id, deduplicated: true })
+      return NextResponse.json(
+        dupV2PassScreen
+          ? { success: true, id: dup.id, deduplicated: true, v2PassScreen: dupV2PassScreen }
+          : { success: true, id: dup.id, deduplicated: true }
+      )
     }
 
     const candidate = await db.transaction(async (tx) => {

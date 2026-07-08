@@ -823,6 +823,11 @@ export default function DemoPage() {
   // Form state (must be declared before any conditional returns — React rules of hooks)
   const [formSubmitted, setFormSubmitted] = useState(false)
   const [formSubmitting, setFormSubmitting] = useState(false)
+  // Воронка v2: если сервер синхронно определил, что кандидат прошёл гейт
+  // (advanced/completed) — apply/route.ts вернёт v2PassScreen. Показываем
+  // короткий экран-поздравление вместо обычного «Спасибо» и затем
+  // перезагружаем страницу токена — GET сам подтянет новую стадию/блок 2.
+  const [v2PassScreen, setV2PassScreen] = useState<{ title: string; text: string } | null>(null)
   const [showFarewell, setShowFarewell] = useState(false)
   // #16: промежуточный экран после видео-уроков ДО анкеты. Default true —
   // показываем экран, кандидат нажимает кнопку → setAnketaIntroDismissed(true)
@@ -856,6 +861,17 @@ export default function DemoPage() {
       }
     } catch { /* sessionStorage недоступен — плашку не показываем, не критично */ }
   }, [token])
+
+  // v2PassScreen: показать поздравление ~1.5-2 сек, затем перезагрузить
+  // страницу токена — GET подтянет новую стадию (часть 2) по актуальному
+  // funnelV2StateJson (advanceToNextStage уже отработал на сервере до ответа).
+  useEffect(() => {
+    if (!v2PassScreen) return
+    const timer = setTimeout(() => {
+      window.location.reload()
+    }, 1800)
+    return () => clearTimeout(timer)
+  }, [v2PassScreen])
 
   // Fetch demo data
   useEffect(() => {
@@ -1304,7 +1320,7 @@ export default function DemoPage() {
       return
     }
     try {
-      await fetch(`/api/public/demo/${token}/apply`, {
+      const res = await fetch(`/api/public/demo/${token}/apply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1328,7 +1344,16 @@ export default function DemoPage() {
       // Анкета отправлена + сразу же отрендерится экран «Спасибо» — отмечаем
       // оба виртуальных маркера прогресса, чтобы фракция в HR показывала N+2.
       void postVirtualMarkers(["__anketa__", "__thanks__"])
-      setFormSubmitted(true)
+      let v2Screen: { title: string; text: string } | null = null
+      try {
+        const resBody = await res.json() as { v2PassScreen?: { title: string; text: string } }
+        if (resBody?.v2PassScreen) v2Screen = resBody.v2PassScreen
+      } catch { /* тело не JSON/пустое — не критично, ведём себя как раньше */ }
+      if (v2Screen) {
+        setV2PassScreen(v2Screen)
+      } else {
+        setFormSubmitted(true)
+      }
     } catch {
       setFormSubmitted(true)
     } finally {
@@ -1405,6 +1430,34 @@ export default function DemoPage() {
             )}
             <h1 className="text-3xl font-bold text-gray-900">До скорой встречи! 👋</h1>
             <p className="text-gray-600">Эту вкладку можно закрыть.</p>
+          </div>
+        </div>
+      )
+    }
+
+    // v2PassScreen — кандидат прошёл гейт части 1 (стадия автопродвинута
+    // сервером синхронно на demo/apply) → короткое поздравление, затем
+    // полная перезагрузка страницы токена: GET сам подтянет контент-блок
+    // новой стадии (часть 2) по актуальному funnelV2StateJson.stageId.
+    if (v2PassScreen) {
+      return (
+        <div className="flex min-h-screen items-center justify-center px-4" style={{ backgroundColor: bgColor }}>
+          <div className="text-center max-w-md space-y-4">
+            {data.companyLogo && (
+              <img
+                src={data.companyLogo}
+                alt={data.companyName}
+                className="mx-auto h-16 w-auto object-contain mb-2"
+              />
+            )}
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-100">
+              <CheckCircle2 className="h-8 w-8 text-green-600" />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900">{v2PassScreen.title}</h1>
+            {v2PassScreen.text && (
+              <p className="text-gray-600 whitespace-pre-line">{v2PassScreen.text}</p>
+            )}
+            <Loader2 className="mx-auto h-5 w-5 animate-spin text-gray-400" />
           </div>
         </div>
       )
