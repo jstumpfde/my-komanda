@@ -119,6 +119,8 @@ export function specToLegacy(spec: CandidateSpec): SpecLegacyPatches {
   if (sf.citizenship)       stopFactorsJson.citizenship       = { ...sf.citizenship }
   if (sf.nativeLanguage)    stopFactorsJson.nativeLanguage    = { ...sf.nativeLanguage }
   if (sf.salaryExpectation) stopFactorsJson.salaryExpectation = { ...sf.salaryExpectation }
+  // Единый текст отказа блока → боевое (matcher читает vacancies.stop_factors_json).
+  if (sf.rejectionText !== undefined) stopFactorsJson.rejectionText = sf.rejectionText
 
   return { requirementsJson, aiProcessSettings, stopFactorsJson }
 }

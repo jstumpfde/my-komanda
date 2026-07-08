@@ -131,3 +131,52 @@ test("factor.enabled=false → фактор не действует даже с 
   )
   assert.equal(m, null)
 })
+
+// ─── Единый текст отказа на весь блок (Юрий 08.07) ──────────────────────────
+
+test("blockText приоритетнее пер-факторного (legacy) текста", () => {
+  const m = matchStopFactors(
+    candidate("US"),
+    {
+      rejectionText: "Единый блочный текст",
+      citizenship: { enabled: true, mode: "allow", allowed: ["RU"], rejectionText: "Пер-факторный legacy текст" },
+    } as VacancyStopFactors,
+  )
+  assert.ok(m)
+  assert.equal(m?.rejectionText, "Единый блочный текст")
+})
+
+test("пустой blockText → используется пер-факторный (legacy) текст", () => {
+  const m = matchStopFactors(
+    candidate("US"),
+    {
+      citizenship: { enabled: true, mode: "allow", allowed: ["RU"], rejectionText: "Пер-факторный legacy текст" },
+    } as VacancyStopFactors,
+  )
+  assert.ok(m)
+  assert.equal(m?.rejectionText, "Пер-факторный legacy текст")
+})
+
+test("оба текста пусты → возвращается нейтральный defaultRejection", () => {
+  const m = matchStopFactors(
+    candidate("US"),
+    {
+      citizenship: { enabled: true, mode: "allow", allowed: ["RU"] },
+    } as VacancyStopFactors,
+  )
+  assert.ok(m)
+  assert.match(m!.rejectionText, /{{name}}/)
+})
+
+test("матч по возрасту с blockText → возвращается blockText", () => {
+  const m = matchStopFactors(
+    { age: 60 },
+    {
+      rejectionText: "Единый блочный текст для возраста",
+      age: { enabled: true, maxAge: 45 },
+    } as VacancyStopFactors,
+  )
+  assert.ok(m)
+  assert.equal(m?.factor, "age")
+  assert.equal(m?.rejectionText, "Единый блочный текст для возраста")
+})

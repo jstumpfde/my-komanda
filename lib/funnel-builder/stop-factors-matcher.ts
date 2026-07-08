@@ -40,7 +40,7 @@ export interface StopFactorMatch {
 // не раскрывают причину отсева. HR может задать кастомный rejectionText через
 // UI — он тоже должен быть нейтральным.
 function defaultRejection(_factor: StopFactorMatch["factor"]): string {
-  return "К сожалению, по итогам рассмотрения мы продолжим работу с другими кандидатами. Благодарим за интерес к вакансии и желаем удачи в поиске!"
+  return "{{name}}, спасибо за интерес к вакансии {{vacancy}}. Мы внимательно рассмотрели вашу заявку и продолжим работу с другими кандидатами. Благодарим и желаем успехов в поиске!"
 }
 
 function matchCity(
@@ -228,13 +228,21 @@ export function matchStopFactors(
 ): StopFactorMatch | null {
   if (!factors || Object.keys(factors).length === 0) return null
 
-  if (factors.city)              { const m = matchCity(candidate, factors.city);                 if (m) return m }
-  if (factors.age)               { const m = matchAge(candidate, factors.age);                   if (m) return m }
-  if (factors.experience)        { const m = matchExperience(candidate, factors.experience);     if (m) return m }
-  if (factors.format)            { const m = matchFormat(candidate, factors.format);             if (m) return m }
-  if (factors.citizenship)       { const m = matchCitizenship(candidate, factors.citizenship);   if (m) return m }
-  if (factors.nativeLanguage)    { const m = matchNativeLanguage(candidate, factors.nativeLanguage); if (m) return m }
-  if (factors.salaryExpectation) { const m = matchSalary(candidate, factors.salaryExpectation);  if (m) return m }
+  // Единый текст отказа на весь блок (Юрий 08.07) приоритетнее пер-факторного
+  // legacy-текста. Пусто → падаем на пер-факторный → на defaultRejection.
+  const blockText = factors.rejectionText?.trim()
+  const withBlock = (m: StopFactorMatch | null): StopFactorMatch | null => {
+    if (m && blockText) m.rejectionText = blockText
+    return m
+  }
+
+  if (factors.city)              { const m = withBlock(matchCity(candidate, factors.city));                 if (m) return m }
+  if (factors.age)               { const m = withBlock(matchAge(candidate, factors.age));                   if (m) return m }
+  if (factors.experience)        { const m = withBlock(matchExperience(candidate, factors.experience));     if (m) return m }
+  if (factors.format)            { const m = withBlock(matchFormat(candidate, factors.format));             if (m) return m }
+  if (factors.citizenship)       { const m = withBlock(matchCitizenship(candidate, factors.citizenship));   if (m) return m }
+  if (factors.nativeLanguage)    { const m = withBlock(matchNativeLanguage(candidate, factors.nativeLanguage)); if (m) return m }
+  if (factors.salaryExpectation) { const m = withBlock(matchSalary(candidate, factors.salaryExpectation));  if (m) return m }
 
   // documents — пока hh не отдаёт надёжно (мед. книжка / водительские права
   // в свободном тексте). Реализуется позже, когда добавим UI-анкету с явным
