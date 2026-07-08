@@ -103,6 +103,13 @@ function sanitize(input: unknown): VacancyStopFactors {
       rejectionText: trimText(src.salaryExpectation.rejectionText),
     }
   }
+  // Единый текст отказа на весь блок (Юрий 08.07). sanitize пересобирает объект
+  // с нуля → без явного копирования это поле терялось, и рутинное сохранение
+  // вкладки «Анкета» (GET текущих → PUT) стирало настроенный в «Портрете» текст
+  // (класс «настройки слетают»). Сохраняем только когда пришло — не затираем
+  // пустой строкой, если ключ отсутствует.
+  const top = input as Record<string, unknown>
+  if (typeof top.rejectionText === "string") out.rejectionText = trimText(top.rejectionText)
   return out
 }
 

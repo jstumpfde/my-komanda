@@ -123,7 +123,7 @@ export function specToLegacy(spec: CandidateSpec): SpecLegacyPatches {
   if (sf.format)            stopFactorsJson.format            = stripRej({ ...sf.format })
   if (sf.age)               stopFactorsJson.age               = stripRej({ ...sf.age })
   if (sf.experience)        stopFactorsJson.experience        = stripRej({ ...sf.experience })
-  if (sf.documents)         stopFactorsJson.documents         = { ...sf.documents }
+  if (sf.documents)         stopFactorsJson.documents         = stripRej({ ...sf.documents })
   if (sf.citizenship)       stopFactorsJson.citizenship       = stripRej({ ...sf.citizenship })
   if (sf.nativeLanguage)    stopFactorsJson.nativeLanguage    = stripRej({ ...sf.nativeLanguage })
   if (sf.salaryExpectation) stopFactorsJson.salaryExpectation = stripRej({ ...sf.salaryExpectation })
