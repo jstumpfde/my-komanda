@@ -10,24 +10,24 @@ import Link from "next/link"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Check, Loader2, ExternalLink, Sparkles } from "lucide-react"
-import { PRIVACY_POLICY_VERSION } from "@/lib/legal/operator-requisites"
+import { PRIVACY_POLICY_VERSION, MARKETING_CONSENT_VERSION } from "@/lib/legal/operator-requisites"
 
 type LeadStatus = "idle" | "submitting" | "success" | "error"
 
-// Тот же паттерн, что и app/(auth)/register/page.tsx — best-effort запись в
-// журнал 152-ФЗ (см. /admin/platform/consent-log). Не блокирует отправку
-// заявки при сбое.
-function logConsent(contact: string) {
-  fetch("/api/consent", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      consentType: "privacy_policy",
-      action: "accepted",
-      documentVersion: PRIVACY_POLICY_VERSION,
-      visitorId: contact,
-    }),
-  }).catch(() => {})
+// Тот же паттерн (и те же 3 чекбокса), что и app/(auth)/register/page.tsx —
+// best-effort запись в журнал 152-ФЗ (см. /admin/platform/consent-log).
+// Не блокирует отправку заявки при сбое. Оферта — только UI-гейт кнопки
+// (как и в register/page.tsx): consentLog поддерживает лишь privacy_policy/
+// marketing/cookie, отдельного consentType под оферту в системе нет.
+function logConsents(contact: string, marketing: boolean) {
+  const fire = (consentType: string, documentVersion: string) =>
+    fetch("/api/consent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ consentType, action: "accepted", documentVersion, visitorId: contact }),
+    }).catch(() => {})
+  void fire("privacy_policy", PRIVACY_POLICY_VERSION)
+  if (marketing) void fire("marketing", MARKETING_CONSENT_VERSION)
 }
 
 const CASES = [
@@ -50,14 +50,16 @@ function LeadForm() {
   const [comment, setComment] = useState("")
   const [website, setWebsite] = useState("") // honeypot
   const [consent, setConsent] = useState(false)
+  const [marketingConsent, setMarketingConsent] = useState(false)
+  const [oferta, setOferta] = useState(false)
   const [status, setStatus] = useState<LeadStatus>("idle")
   const [errorMessage, setErrorMessage] = useState("")
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (status === "submitting") return
-    if (!consent) {
-      setErrorMessage("Нужно согласие на обработку персональных данных")
+    if (!consent || !oferta) {
+      setErrorMessage("Нужно согласие на обработку персональных данных и принятие оферты")
       setStatus("error")
       return
     }
@@ -78,7 +80,7 @@ function LeadForm() {
         setStatus("error")
         return
       }
-      logConsent(contact)
+      logConsents(contact, marketingConsent)
       setStatus("success")
     } catch {
       setErrorMessage("Не удалось отправить заявку — проверьте соединение и попробуйте ещё раз")
@@ -134,20 +136,41 @@ function LeadForm() {
           placeholder="Сайт, лендинг, интернет-магазин — коротко о задаче" />
       </div>
 
-      <label className="flex items-start gap-2.5 text-xs text-gray-400 cursor-pointer select-none">
-        <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)}
-          className="mt-0.5 h-4 w-4 rounded border-gray-600 bg-gray-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-gray-900" />
-        <span>
-          Согласен(на) на обработку персональных данных в соответствии с{" "}
-          <Link href="/privacy" target="_blank" className="underline hover:text-gray-200">Политикой конфиденциальности</Link>.
-        </span>
-      </label>
+      <div className="space-y-2">
+        <label className="flex items-start gap-2.5 text-xs text-gray-400 cursor-pointer select-none">
+          <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-gray-600 bg-gray-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-gray-900" />
+          <span>
+            Даю согласие на обработку персональных данных в соответствии с{" "}
+            <Link href="/privacy" target="_blank" className="underline hover:text-gray-200">Политикой обработки персональных данных</Link>.
+          </span>
+        </label>
+
+        <label className="flex items-start gap-2.5 text-xs text-gray-400 cursor-pointer select-none">
+          <input type="checkbox" checked={marketingConsent} onChange={(e) => setMarketingConsent(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-gray-600 bg-gray-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-gray-900" />
+          <span>
+            Даю{" "}
+            <Link href="/marketing-consent" target="_blank" className="underline hover:text-gray-200">согласие на получение информационной и рекламной рассылки</Link>
+            {" "}(необязательно).
+          </span>
+        </label>
+
+        <label className="flex items-start gap-2.5 text-xs text-gray-400 cursor-pointer select-none">
+          <input type="checkbox" checked={oferta} onChange={(e) => setOferta(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-gray-600 bg-gray-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-gray-900" />
+          <span>
+            Принимаю условия{" "}
+            <Link href="/terms" target="_blank" className="underline hover:text-gray-200">Оферты</Link>.
+          </span>
+        </label>
+      </div>
 
       {status === "error" && (
         <p className="text-sm text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-2.5">{errorMessage}</p>
       )}
 
-      <Button type="submit" disabled={status === "submitting"}
+      <Button type="submit" disabled={status === "submitting" || !consent || !oferta}
         className="w-full py-4 h-auto text-base font-semibold rounded-xl bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 text-white shadow-lg shadow-indigo-500/30 disabled:opacity-70">
         {status === "submitting" ? (
           <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Отправляем...</>
