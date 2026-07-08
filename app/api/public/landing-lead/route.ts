@@ -33,11 +33,17 @@ const LeadSchema = z.object({
   name: z.string().trim().min(2, "Укажите имя").max(100),
   contact: z.string().trim().min(5, "Укажите телефон, telegram или email").max(200),
   company: z.string().trim().max(200).optional().nullable(),
-  interest: z.enum(["demo", "consultation"]).default("demo"),
+  interest: z.enum(["demo", "consultation", "website"]).default("demo"),
   comment: z.string().trim().max(1000).optional().nullable(),
   source: z.string().trim().max(300).optional().nullable(),
   website: z.string().optional(), // honeypot
-})
+  // 152-ФЗ: страница /portfolio показывает чекбокс согласия и шлёт true;
+  // /landing пока без чекбокса — не ломаем её, consent там просто отсутствует.
+  consent: z.boolean().optional(),
+}).refine(
+  (v) => v.interest !== "website" || v.consent === true,
+  { message: "Нужно согласие на обработку персональных данных", path: ["consent"] },
+)
 
 function computeIpHash(req: NextRequest): string | null {
   const forwardedFor = req.headers.get("x-forwarded-for")
@@ -50,6 +56,7 @@ function computeIpHash(req: NextRequest): string | null {
 const INTEREST_LABEL: Record<string, string> = {
   demo: "Демонстрация",
   consultation: "Консультация",
+  website: "Заказ сайта",
 }
 
 export async function POST(req: NextRequest) {
@@ -69,7 +76,7 @@ export async function POST(req: NextRequest) {
       const firstIssue = parsed.error.issues[0]?.message ?? "Проверьте поля формы"
       return NextResponse.json({ error: firstIssue }, { status: 400 })
     }
-    const { name, contact, company, interest, comment, source } = parsed.data
+    const { name, contact, company, interest, comment, source, consent } = parsed.data
 
     const ipHash = computeIpHash(req)
     if (ipHash) {
@@ -91,6 +98,7 @@ export async function POST(req: NextRequest) {
       comment: comment || null,
       source: source || null,
       ipHash,
+      consentAt: consent ? new Date() : null,
     }).returning({ id: landingLeads.id })
 
     // Fire-and-forget: Telegram-алерт владельцу платформы. Не блокирует ответ
