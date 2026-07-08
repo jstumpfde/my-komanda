@@ -394,7 +394,10 @@ export default function VacancyPage() {
         hhDescription: parsed.hhDescription ?? existingAnketa.hhDescription ?? "",
       }
       const body: Record<string, unknown> = {
-        description_json: { ...existing, anketa: newAnketa },
+        // Точечный payload (только anketa) — сервер root-мёржит с БД, поэтому НЕ
+        // шлём весь ...existing: устаревший снапшот затирал бы независимые секции
+        // (funnelV2/finalScreens/…). Баг Юрия 08.07.
+        description_json: { anketa: newAnketa },
       }
       if (parsed.positionTitle && typeof parsed.positionTitle === "string") {
         body.title = parsed.positionTitle
@@ -510,7 +513,7 @@ export default function VacancyPage() {
       const existingAnketa = (existing.anketa as Record<string, unknown>) || {}
       await fetch(`/api/modules/hr/vacancies/${id}`, {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description_json: { ...existing, anketa: { ...existingAnketa, brandCompanyId: newBrand.id } } }),
+        body: JSON.stringify({ description_json: { anketa: { ...existingAnketa, brandCompanyId: newBrand.id } } }),
       })
       await refetchVacancy()
       toast.success(`Компания «${newBrand.name}» добавлена и выбрана`)
@@ -1099,7 +1102,7 @@ export default function VacancyPage() {
       const existingAnketa = (existing.anketa as Record<string, unknown>) || {}
       const body = {
         title: trimmed,
-        description_json: { ...existing, anketa: { ...existingAnketa, vacancyTitle: trimmed } },
+        description_json: { anketa: { ...existingAnketa, vacancyTitle: trimmed } },
       }
       const res = await fetch(`/api/modules/hr/vacancies/${id}`, {
         method: "PUT",
@@ -2017,7 +2020,7 @@ export default function VacancyPage() {
       await fetch(`/api/modules/hr/vacancies/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description_json: { ...existing, customColumns } }),
+        body: JSON.stringify({ description_json: { customColumns } }),
       })
     } catch { /* silent */ }
   }
@@ -2044,7 +2047,7 @@ export default function VacancyPage() {
       await fetch(`/api/modules/hr/vacancies/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description_json: { ...existing, hiddenColumns } }),
+        body: JSON.stringify({ description_json: { hiddenColumns } }),
       })
     } catch { /* silent */ }
   }
@@ -2641,10 +2644,10 @@ export default function VacancyPage() {
       setAutoSetupStep("Настраиваю воронку...")
       const salary = apiVacancy?.salaryMax || apiVacancy?.salaryMin || 0
       const preset = salary < 100000 ? "fast" : salary >= 500000 ? "deep" : "standard"
-      const existing = (apiVacancy?.descriptionJson as Record<string, unknown>) || {}
       await fetch(`/api/modules/hr/vacancies/${id}`, {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description_json: { ...existing, pipeline: { preset, stages: [] } } }),
+        // Точечный payload — сервер root-мёржит (см. mergeDescriptionJson).
+        body: JSON.stringify({ description_json: { pipeline: { preset, stages: [] } } }),
       }).catch(() => {})
 
       setAutoSetupStep("Готово!")

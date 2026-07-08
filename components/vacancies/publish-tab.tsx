@@ -423,11 +423,10 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
     .filter(b => htmlHasContent(b.html))
 
   // Тело запроса на сохранение: блоки + кнопка (в общий description_json).
+  // Точечный payload — сервер root-мёржит (mergeDescriptionJson); не шлём весь
+  // снапшот, иначе устаревшие независимые секции затирались бы (баг «слетает»).
   const buildSaveBody = (clean: LandingBlock[], btn: LandingButton) => {
-    const currentJson = descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null
-      ? (descriptionJson as Record<string, unknown>)
-      : {}
-    return { description_json: { ...currentJson, landingBlocks: clean, landingBenefits: [], landingButton: btn } }
+    return { description_json: { landingBlocks: clean, landingBenefits: [], landingButton: btn } }
   }
 
   const handleSaveBlocks = async () => {
@@ -455,12 +454,11 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
     if (!vacancyId) return
     const clean = blockList.map(b => ({ html: sanitizeBlockHtml(b.html || "") })).filter(b => htmlHasContent(b.html))
     try {
-      const currentJson = descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null
-        ? (descriptionJson as Record<string, unknown>) : {}
       const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description_json: { ...currentJson, landingBlocks: clean, landingBenefits: [], landingButton: btnCfg } }),
+        // Точечный payload — сервер root-мёржит (mergeDescriptionJson).
+        body: JSON.stringify({ description_json: { landingBlocks: clean, landingBenefits: [], landingButton: btnCfg } }),
       })
       if (!res.ok) throw new Error()
       setAutoSaved(true)

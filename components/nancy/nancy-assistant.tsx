@@ -774,7 +774,9 @@ export function NancyAssistant() {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                description_json: { ...existingDesc, anketa: anketaPatch },
+                // Точечный payload — сервер root-мёржит (mergeDescriptionJson);
+                // не шлём весь снапшот, чтобы не затереть независимые секции.
+                description_json: { anketa: anketaPatch },
               }),
             })
             if (!putRes.ok) {
@@ -828,12 +830,12 @@ export function NancyAssistant() {
             // Шаг 4: базовая воронка (preset по зарплате)
             const salary = vacData?.salaryMax || vacData?.salaryMin || 0
             const preset = salary < 100000 ? "fast" : salary >= 500000 ? "deep" : "standard"
-            const existingDesc2 = ((vacData?.descriptionJson ?? {}) as Record<string, unknown>)
             await fetch(`/api/modules/hr/vacancies/${vid}`, {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                description_json: { ...existingDesc2, pipeline: { preset, stages: [] } },
+                // Точечный payload — сервер root-мёржит (mergeDescriptionJson).
+                description_json: { pipeline: { preset, stages: [] } },
               }),
             }).catch(() => {})
 

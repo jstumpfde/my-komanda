@@ -261,16 +261,13 @@ export function MiniFormBuilder({ vacancyId, descriptionJson, onSaved }: MiniFor
   const saveFields = useCallback(async () => {
     setSaving(true)
     try {
-      const currentJson =
-        descriptionJson && typeof descriptionJson === "object" && descriptionJson !== null
-          ? (descriptionJson as Record<string, unknown>)
-          : {}
-
       const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          description_json: { ...currentJson, miniFormFields: fields },
+          // Точечный payload — сервер root-мёржит (mergeDescriptionJson);
+          // не шлём весь снапшот, чтобы не затереть независимые секции.
+          description_json: { miniFormFields: fields },
         }),
       })
 
