@@ -1145,6 +1145,8 @@ export interface VacancyStopFactors {
   citizenship?:        VacancyStopFactorCitizenship
   nativeLanguage?:     VacancyStopFactorNativeLanguage
   salaryExpectation?:  VacancyStopFactorSalary
+  /** Единый текст отказа на ВЕСЬ блок стоп-факторов (Юрий 08.07). Пусто → нейтральный дефолт в matcher. Плейсхолдеры {{name}}/{{vacancy}}/{{company}}. */
+  rejectionText?:      string
 }
 
 // ─── Группа 25: структурированные требования вакансии ──────────────────────

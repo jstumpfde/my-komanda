@@ -111,14 +111,24 @@ export function specToLegacy(spec: CandidateSpec): SpecLegacyPatches {
   // «Портрет»-правки родного языка НИКОГДА не доходили бы до реального отсева.
   const sf = spec.stopFactors
   const stopFactorsJson: Partial<VacancyStopFactors> = {}
-  if (sf.city)              stopFactorsJson.city              = { ...sf.city }
-  if (sf.format)            stopFactorsJson.format            = { ...sf.format }
-  if (sf.age)               stopFactorsJson.age               = { ...sf.age }
-  if (sf.experience)        stopFactorsJson.experience        = { ...sf.experience }
-  if (sf.documents)         stopFactorsJson.documents         = { ...sf.documents }
-  if (sf.citizenship)       stopFactorsJson.citizenship       = { ...sf.citizenship }
-  if (sf.nativeLanguage)    stopFactorsJson.nativeLanguage    = { ...sf.nativeLanguage }
-  if (sf.salaryExpectation) stopFactorsJson.salaryExpectation = { ...sf.salaryExpectation }
+  // ВАЖНО (ТК РФ, Юрий 08.07): пер-факторный rejectionText упразднён — текст отказа
+  // теперь ОДИН на блок (stopFactorsJson.rejectionText). Вычищаем legacy-поле из
+  // каждого фактора при любом сохранении, чтобы потенциально незаконный текст
+  // («принимаем только граждан РФ» и т.п.) физически не оседал в боевом.
+  const stripRej = <T extends { rejectionText?: string }>(f: T): Omit<T, "rejectionText"> => {
+    const { rejectionText: _drop, ...rest } = f
+    return rest
+  }
+  if (sf.city)              stopFactorsJson.city              = stripRej({ ...sf.city })
+  if (sf.format)            stopFactorsJson.format            = stripRej({ ...sf.format })
+  if (sf.age)               stopFactorsJson.age               = stripRej({ ...sf.age })
+  if (sf.experience)        stopFactorsJson.experience        = stripRej({ ...sf.experience })
+  if (sf.documents)         stopFactorsJson.documents         = stripRej({ ...sf.documents })
+  if (sf.citizenship)       stopFactorsJson.citizenship       = stripRej({ ...sf.citizenship })
+  if (sf.nativeLanguage)    stopFactorsJson.nativeLanguage    = stripRej({ ...sf.nativeLanguage })
+  if (sf.salaryExpectation) stopFactorsJson.salaryExpectation = stripRej({ ...sf.salaryExpectation })
+  // Единый текст отказа блока → боевое (matcher читает vacancies.stop_factors_json).
+  if (sf.rejectionText !== undefined) stopFactorsJson.rejectionText = sf.rejectionText
 
   return { requirementsJson, aiProcessSettings, stopFactorsJson }
 }

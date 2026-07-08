@@ -190,6 +190,9 @@ export function buildSpecFromLegacy(vacancy: LegacyVacancyInput): CandidateSpec 
   if (stops.documents)         stopFactors.documents         = { ...stops.documents }
   if (stops.citizenship)       stopFactors.citizenship       = { ...stops.citizenship }
   if (stops.salaryExpectation) stopFactors.salaryExpectation = { ...stops.salaryExpectation }
+  // Единый текст отказа блока (Юрий 08.07) — пробрасываем боевое→Spec, иначе
+  // «Портрет» покажет пустое поле, а matcher продолжит слать реальный текст.
+  if (stops.rejectionText !== undefined) stopFactors.rejectionText = stops.rejectionText
 
   // ── (c) Пороги и маршрутизация (Этап 2: две пары) ─────────────────────────
   // Пороги резюме — из aiProcessSettings (legacy v1: minScore → lower).
