@@ -37,6 +37,7 @@ import {
 import { VacancyFollowupSettings } from "@/components/vacancies/vacancy-followup-settings"
 import { CitizenshipFactorField, citizenshipSummary } from "@/components/vacancies/citizenship-factor-field"
 import { NativeLanguageFactorField, nativeLanguageSummary } from "@/components/vacancies/native-language-factor-field"
+import { PlaceholderBadges } from "@/components/ui/placeholder-badges"
 import { toast } from "sonner"
 import {
   Target, Plus, Minus, X, Loader2, ShieldAlert, FileText, Gauge,
@@ -542,6 +543,38 @@ function FactorSummary({ pass, cut, idle }: { pass?: string | null; cut?: string
       {pass && <span className="text-success">{pass} </span>}
       {cut && <span className="text-destructive">{cut}</span>}
     </p>
+  )
+}
+
+// Текст отказа под точным требованием (перенесено из VacancyStopFactorsSettings,
+// Юрий 08.07 — стоп-факторы теперь редактируются только в «Портрете»).
+const FACTOR_REJECTION_PLACEHOLDERS = ["name", "vacancy", "company"]
+
+function FactorRejectionText({
+  refEl, value, onChange,
+}: {
+  refEl:    React.RefObject<HTMLTextAreaElement | null>
+  value:    string
+  onChange: (v: string) => void
+}) {
+  return (
+    <div className="space-y-1.5 mt-2">
+      <Label className="text-[11px] text-muted-foreground">Текст отказа</Label>
+      <textarea
+        ref={refEl}
+        value={value}
+        onChange={e => onChange(e.target.value.slice(0, 2000))}
+        placeholder="{{name}}, спасибо за интерес к {{vacancy}}. Сейчас мы рассматриваем кандидатов только..."
+        rows={3}
+        className="w-full border rounded-lg p-2 text-sm resize-y bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+      />
+      <PlaceholderBadges
+        textareaRef={refEl}
+        placeholders={FACTOR_REJECTION_PLACEHOLDERS}
+        value={value}
+        onValueChange={onChange}
+      />
+    </div>
   )
 }
 
@@ -1411,6 +1444,17 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
   // CSV-состояния не требует.
   const [cityCsv, setCityCsv]               = useState("")
 
+  // Refs для PlaceholderBadges под текстами отказов точных требований
+  // (перенесено из VacancyStopFactorsSettings — Юрий 08.07: стоп-факторы
+  // редактируются ТОЛЬКО здесь, включая текст отказа на каждый фактор).
+  const refFactorCity   = useRef<HTMLTextAreaElement | null>(null)
+  const refFactorFormat = useRef<HTMLTextAreaElement | null>(null)
+  const refFactorAge    = useRef<HTMLTextAreaElement | null>(null)
+  const refFactorExp    = useRef<HTMLTextAreaElement | null>(null)
+  const refFactorCit    = useRef<HTMLTextAreaElement | null>(null)
+  const refFactorLang   = useRef<HTMLTextAreaElement | null>(null)
+  const refFactorSalary = useRef<HTMLTextAreaElement | null>(null)
+
   useEffect(() => {
     let cancelled = false
     fetch(`/api/core/spec/${vacancyId}`, { cache: "no-store" })
@@ -2102,6 +2146,11 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                     cut="Авто-отказ кандидатам из других городов."
                   />
                 : <FactorSummary idle="Города не указаны — фактор не действует." />}
+              <FactorRejectionText
+                refEl={refFactorCity}
+                value={sf.city?.rejectionText ?? ""}
+                onChange={v => setSf({ ...sf, city: { ...(sf.city ?? { enabled: true }), rejectionText: v } })}
+              />
             </div>
           </FactorRow>
 
@@ -2145,6 +2194,11 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                   </p>
                 )
               })()}
+              <FactorRejectionText
+                refEl={refFactorFormat}
+                value={sf.format?.rejectionText ?? ""}
+                onChange={v => setSf({ ...sf, format: { ...(sf.format ?? { enabled: true }), rejectionText: v } })}
+              />
             </div>
           </FactorRow>
 
@@ -2177,6 +2231,11 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
               const parts = [min != null ? `младше ${min}` : null, max != null ? `старше ${max}` : null].filter(Boolean)
               return <FactorSummary pass={`Пропускаем: ${min ?? "…"}–${max ?? "…"} лет.`} cut={`Авто-отказ: ${parts.join(" и ")}.`} />
             })()}
+            <FactorRejectionText
+              refEl={refFactorAge}
+              value={sf.age?.rejectionText ?? ""}
+              onChange={v => setSf({ ...sf, age: { ...(sf.age ?? { enabled: true }), rejectionText: v } })}
+            />
           </FactorRow>
 
           <FactorRow
@@ -2195,6 +2254,11 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
             {sf.experience?.minYears != null
               ? <FactorSummary pass={`Пропускаем: опыт от ${sf.experience.minYears} лет.`} cut={`Авто-отказ: опыт меньше ${sf.experience.minYears} лет.`} />
               : <FactorSummary idle="Порог не задан — фактор не действует." />}
+            <FactorRejectionText
+              refEl={refFactorExp}
+              value={sf.experience?.rejectionText ?? ""}
+              onChange={v => setSf({ ...sf, experience: { ...(sf.experience ?? { enabled: true }), rejectionText: v } })}
+            />
           </FactorRow>
 
           <FactorRow
@@ -2213,6 +2277,11 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                 ? <FactorSummary idle={s.idle} />
                 : <FactorSummary pass={s.pass} cut={s.cut} />
             })()}
+            <FactorRejectionText
+              refEl={refFactorCit}
+              value={sf.citizenship?.rejectionText ?? ""}
+              onChange={v => setSf({ ...sf, citizenship: { ...(sf.citizenship ?? { enabled: true }), rejectionText: v } })}
+            />
           </FactorRow>
 
           <FactorRow
@@ -2231,6 +2300,11 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                 ? <FactorSummary idle={s.idle} />
                 : <FactorSummary pass={s.pass} cut={s.cut} />
             })()}
+            <FactorRejectionText
+              refEl={refFactorLang}
+              value={sf.nativeLanguage?.rejectionText ?? ""}
+              onChange={v => setSf({ ...sf, nativeLanguage: { ...(sf.nativeLanguage ?? { enabled: true }), rejectionText: v } })}
+            />
           </FactorRow>
 
           <FactorRow
@@ -2290,6 +2364,11 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
             {sf.salaryExpectation?.maxAmount != null
               ? <FactorSummary pass={`Пропускаем: ожидания до ${sf.salaryExpectation.maxAmount.toLocaleString("ru-RU")} ₽.`} cut="Авто-отказ тем, кто хочет больше." />
               : <FactorSummary idle="Потолок не задан — фактор не действует." />}
+            <FactorRejectionText
+              refEl={refFactorSalary}
+              value={sf.salaryExpectation?.rejectionText ?? ""}
+              onChange={v => setSf({ ...sf, salaryExpectation: { ...(sf.salaryExpectation ?? { enabled: true }), rejectionText: v } })}
+            />
           </FactorRow>
 
           <FactorRow
@@ -2363,7 +2442,8 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
             </div>
 
             <p className="text-[11px] text-muted-foreground">
-              Тексты отказов для этих условий — в блоке «Стоп-факторы по резюме» Конструктора воронки.
+              Тексты отказов для каждого точного требования — прямо под его настройками
+              выше (появляются, когда фактор включён).
             </p>
           </div>
         </CardContent>
