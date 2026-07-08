@@ -9,6 +9,7 @@
 
 import { promises as fs } from "fs"
 import path from "path"
+import { injectTracking, stripTracking } from "@/lib/platform/client-pages-tracking"
 
 const ROOT = process.env.CLIENT_PAGES_DIR || "/var/www/client-pages"
 const BASE_URL = (process.env.CLIENT_PAGES_BASE_URL || "https://newsite.company24.pro").replace(/\/+$/, "")
@@ -86,20 +87,24 @@ export async function pageExists(slug: string): Promise<boolean> {
   }
 }
 
-// Возвращает HTML или null, если страницы нет.
+// Возвращает HTML или null, если страницы нет. Встроенный блок аналитики
+// вырезаем — в редакторе показываем «чистый» HTML, каким его вставил админ.
 export async function readPage(slug: string): Promise<string | null> {
   try {
-    return await fs.readFile(path.join(pageDir(slug), "index.html"), "utf8")
+    const raw = await fs.readFile(path.join(pageDir(slug), "index.html"), "utf8")
+    return stripTracking(raw)
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return null
     throw err
   }
 }
 
+// При записи встраиваем инлайн-аналитику (идемпотентно) — чтобы видеть
+// просмотры/скролл/время по отправленной клиенту ссылке.
 export async function writePage(slug: string, html: string): Promise<void> {
   const dir = pageDir(slug)
   await fs.mkdir(dir, { recursive: true })
-  await fs.writeFile(path.join(dir, "index.html"), html, "utf8")
+  await fs.writeFile(path.join(dir, "index.html"), injectTracking(html, slug), "utf8")
 }
 
 export async function deletePage(slug: string): Promise<void> {

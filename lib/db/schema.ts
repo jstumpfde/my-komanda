@@ -1145,6 +1145,8 @@ export interface VacancyStopFactors {
   citizenship?:        VacancyStopFactorCitizenship
   nativeLanguage?:     VacancyStopFactorNativeLanguage
   salaryExpectation?:  VacancyStopFactorSalary
+  /** Единый текст отказа на ВЕСЬ блок стоп-факторов (Юрий 08.07). Пусто → нейтральный дефолт в matcher. Плейсхолдеры {{name}}/{{vacancy}}/{{company}}. */
+  rejectionText?:      string
 }
 
 // ─── Группа 25: структурированные требования вакансии ──────────────────────
@@ -4663,3 +4665,31 @@ export const landingLeads = pgTable("landing_leads", {
 ])
 export type LandingLead    = typeof landingLeads.$inferSelect
 export type NewLandingLead = typeof landingLeads.$inferInsert
+
+// ─── Витрина клиентских страниц: аналитика просмотров (0267) ──────────────
+// Просмотры страниц newsite.company24.pro/<slug> по отправленной клиенту
+// ссылке. Накопительный upsert по визиту (slug+path+visitor_id): время и
+// глубина прокрутки копятся по тикам инлайн-трекера (client-pages-tracking.ts).
+export const clientPageViews = pgTable("client_page_views", {
+  id:             uuid("id").primaryKey().defaultRandom(),
+  slug:           text("slug").notNull(),
+  path:           text("path").notNull(),
+  visitorId:      text("visitor_id").notNull(),
+  recipient:      text("recipient"),
+  source:         text("source"),
+  referrer:       text("referrer"),
+  userAgent:      text("user_agent"),
+  screen:         text("screen"),
+  ipHash:         text("ip_hash"),
+  secondsVisible: integer("seconds_visible").notNull().default(0),
+  maxScrollPct:   integer("max_scroll_pct").notNull().default(0),
+  firstAt:        timestamp("first_at", { withTimezone: true }).notNull().defaultNow(),
+  lastAt:         timestamp("last_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  unique("client_page_views_uq").on(t.slug, t.path, t.visitorId),
+  index("client_page_views_slug_idx").on(t.slug),
+  index("client_page_views_slug_visitor_idx").on(t.slug, t.visitorId),
+  index("client_page_views_last_idx").on(t.lastAt),
+])
+export type ClientPageView    = typeof clientPageViews.$inferSelect
+export type NewClientPageView = typeof clientPageViews.$inferInsert

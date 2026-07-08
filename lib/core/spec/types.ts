@@ -483,6 +483,8 @@ export const StopFactorsSchema = z.object({
     label:   z.string().min(1).max(1000),
     enabled: z.boolean().default(true),
   })).max(15).optional(),
+  /** Единый текст отказа на весь блок стоп-факторов (Юрий 08.07). */
+  rejectionText:      z.string().max(2000).optional(),
 })
 export type StopFactors = z.infer<typeof StopFactorsSchema>
 
