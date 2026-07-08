@@ -13,8 +13,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
-  ExternalLink, Copy, Pencil, Trash2, Plus, Save, X, Globe, RefreshCw,
+  ExternalLink, Copy, Pencil, Trash2, Plus, Save, X, Globe, RefreshCw, BarChart3,
 } from "lucide-react"
+import { ClientPageStatsPanel } from "./client-page-stats"
 
 interface ClientPage {
   slug: string
@@ -60,6 +61,7 @@ export function ClientPagesClient() {
   const [pages, setPages] = useState<ClientPage[]>([])
   const [loading, setLoading] = useState(true)
   const [editor, setEditor] = useState<Editor>({ mode: "closed" })
+  const [statsFor, setStatsFor] = useState<ClientPage | null>(null)
 
   // поля редактора
   const [slug, setSlug] = useState("")
@@ -233,6 +235,14 @@ export function ClientPagesClient() {
         </Card>
       )}
 
+      {statsFor && (
+        <ClientPageStatsPanel
+          slug={statsFor.slug}
+          url={statsFor.url}
+          onClose={() => setStatsFor(null)}
+        />
+      )}
+
       <div className="space-y-2">
         {loading && pages.length === 0 && (
           <p className="text-sm text-muted-foreground">Загрузка…</p>
@@ -260,6 +270,14 @@ export function ClientPagesClient() {
               <p className="text-xs text-muted-foreground mt-0.5">Обновлено {fmtDate(p.updatedAt)}</p>
             </div>
             <div className="flex items-center gap-1 shrink-0">
+              <Button
+                variant={statsFor?.slug === p.slug ? "secondary" : "ghost"}
+                size="icon"
+                title="Статистика"
+                onClick={() => setStatsFor(statsFor?.slug === p.slug ? null : p)}
+              >
+                <BarChart3 className="h-4 w-4" />
+              </Button>
               <Button variant="ghost" size="icon" title="Открыть" asChild>
                 <a href={p.url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4" /></a>
               </Button>
