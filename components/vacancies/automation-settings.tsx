@@ -13,7 +13,7 @@ import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
-  MessageSquare, Zap, Phone, Brain, Send, Check, Save,
+  MessageSquare, Zap, Phone, Brain, Check, Save,
   ClipboardList, Loader2, Plus, X,
 } from "lucide-react"
 import { useVacancySectionRegister, type VacancyTabKey } from "./vacancy-settings-context"
@@ -27,11 +27,6 @@ type ResponseReaction = "slot-and-demo" | "slot-only" | "insist-demo"
 // Замена: lib/stages.ts (Ф2) + components/vacancies/funnel-tab.tsx (Ф3) + scenario-tab.tsx (Ф7).
 
 // ─── Данные по-умолчанию ─────────────────────────────────────
-
-const DEFAULT_FIRST_MESSAGE = `{{name}}, привет! Видели ваш отклик на {{vacancy}} — выглядит интересно 👋
-Чтобы не тратить ваше время на формальное интервью, сделали короткий обзор должности на 15 мин — там реальные цифры дохода и как устроена работа.
-Если после просмотра захотите пообщаться — сразу договоримся на звонок 🙂
-{{demo_link}}`
 
 const DEFAULT_CALL_INTENT_KEYWORDS = ["созвон", "позвоните", "номер", "телефон", "голос"]
 const DEFAULT_INSIST_DEMO_MESSAGES: [string, string, string] = [
@@ -109,15 +104,10 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
   const showSection = (id: AutomationSectionId): boolean => !sections || sections.includes(id)
   // P0-50: при подключённом sticky-bar глобальную кнопку прячем.
   const showLocalGlobalSave = showGlobalSave && !tabKey
-  // #60: серия активна, если есть хотя бы шаг 0, он включён, и текст не
-  // пустой. Тогда старый блок «Минимальная задержка» дублирует chain[0]
-  // и должен скрываться, чтобы HR не путался.
-  const chainActive = Boolean(
-    firstMessagesChain
-      && firstMessagesChain.length > 0
-      && firstMessagesChain[0]?.enabled
-      && (firstMessagesChain[0]?.text ?? "").trim().length > 0
-  )
+  // firstMessagesChain оставлен в пропсах ради обратной совместимости сигнатуры
+  // (вызывающие компоненты продолжают его передавать) — карточка «Первое
+  // сообщение», которая его использовала (chainActive), удалена 08.07.
+  void firstMessagesChain
 
   // Parse automation settings from descriptionJson
   const initialAutomation = (() => {
@@ -138,47 +128,12 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
     if (typeof initialAutomation.delayMinutes === "number") return initialAutomation.delayMinutes * 60
     return 180
   })()
-  const [firstMessageDelay, setFirstMessageDelay] = useState(String(initialDelaySeconds))
-  // Шаблон сообщения хранится в vacancies.ai_process_settings.inviteMessage —
-  // его читает hh process-queue при отправке приглашения на демо.
-  const initialInviteMessage = aiProcessSettings?.inviteMessage || DEFAULT_FIRST_MESSAGE
-  const [firstMessageText, setFirstMessageText] = useState(initialInviteMessage)
-  const [savedInviteMessage, setSavedInviteMessage] = useState(initialInviteMessage)
-  const [savingInvite, setSavingInvite] = useState(false)
-  const inviteDirty = firstMessageText !== savedInviteMessage
-
-  useEffect(() => {
-    const next = aiProcessSettings?.inviteMessage
-    if (typeof next === "string" && next.length > 0 && next !== savedInviteMessage) {
-      setSavedInviteMessage(next)
-      setFirstMessageText(next)
-    }
-  }, [aiProcessSettings, savedInviteMessage])
-
-  const saveInviteMessage = useCallback(async () => {
-    setSavingInvite(true)
-    try {
-      const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}/ai-settings`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inviteMessage: firstMessageText }),
-      })
-      if (!res.ok) {
-        // P0-43 fix: парсим тело ответа, чтобы показать конкретный текст
-        // (валидация demo_link и пр.). Бросаем дальше — это сигнал для
-        // sticky-bar register'а НЕ сбрасывать baseline и НЕ вызывать
-        // следующий saveSettings (а то «Сохранено» затрёт ошибку).
-        const body = await res.json().catch(() => null) as { error?: string } | null
-        const msg = body?.error || "Не удалось сохранить"
-        toast.error(msg)
-        throw new Error(msg)
-      }
-      setSavedInviteMessage(firstMessageText)
-      toast.success("Сохранено")
-    } finally {
-      setSavingInvite(false)
-    }
-  }, [vacancyId, firstMessageText])
+  // #21/08.07: firstMessageDelay больше НЕ редактируется в этом компоненте
+  // (карточка «Первое сообщение» удалена — недостижима ни с одного вызывающего
+  // места, см. AutomationSectionId ниже). Значение остаётся в state и
+  // round-trip'ится в saveSettings()/automationData как было — его читает
+  // fallback-путь для chain[0], если серия первых сообщений пустая.
+  const [firstMessageDelay] = useState(String(initialDelaySeconds))
 
   // 1b. Рабочие часы — переехали в отдельный компонент VacancyScheduleSettings.
   // Здесь старые поля больше не редактируются, но описание_json мы при сохранении
@@ -504,28 +459,13 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
   // регистрируется (loaded остаётся false).
   const effectiveTab: VacancyTabKey = tabKey ?? "messages"
 
-  // 1. «Первое сообщение» — invite шаблон + задержка.
-  //    invite шлётся в ai-settings, остальное — в descriptionJson через saveSettings.
-  //    #19: anketaConfirmation удалён — отслеживать его в watchedValues
-  //    больше не нужно (поле остаётся в БД as-is).
-  useVacancySectionRegister({
-    sectionKey: `automation-${vacancyId}-${effectiveTab}-invite`,
-    tabKey: effectiveTab,
-    loaded: loadedReady && (sections?.includes("firstMessage") ?? true),
-    watchedValues: {
-      firstMessageText, firstMessageDelay,
-    },
-    save: async () => {
-      // P0-43 fix: invite сначала. Если валидация упала (400) — throw
-      // прокидывается в sticky-bar, секция остаётся dirty, saveSettings
-      // НЕ вызывается (иначе success-toast «Настройки сохранены» затрёт
-      // ошибку и пользователь решит, что всё ОК).
-      await saveInviteMessage()
-      await saveSettings()
-    },
-  })
+  // 1. «Первое сообщение» — карточка удалена (недостижима ни с одного
+  //    вызывающего места, см. AutomationSectionId/showSection ниже), поэтому
+  //    и её sticky-save регистрация убрана. Текст приглашения теперь
+  //    редактируется только в секции «Коммуникации» → FirstContactSettings
+  //    (PATCH /api/core/spec/[vacancyId]/messaging), задержка — там же.
 
-  // 2. callIntent + templates (FAQ) — обе секции таба «Сообщения» через saveSettings.
+  // 2. callIntent + templates (FAQ) — обе секции таба «Коммуникации» через saveSettings.
   useVacancySectionRegister({
     sectionKey: `automation-${vacancyId}-${effectiveTab}-callintent`,
     tabKey: effectiveTab,
@@ -552,78 +492,12 @@ export function AutomationSettings({ vacancyId, descriptionJson, aiProcessSettin
 
   return (
     <div className="space-y-6">
-      {/* ═══ 1. Первое сообщение ═══════════════════════════════ */}
-      {showSection("firstMessage") && (
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Send className="w-4 h-4" />
-            Первое сообщение
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          {/* Минимальная задержка перед первым сообщением.
-              Реальная задержка может быть больше: всё зависит от очереди cron'а
-              разбора hh-откликов (см. lib/hh/process-queue.ts).
-              #60: когда серия первых сообщений включена — этот блок дублирует
-              chain[0].delaySeconds. Показываем плашку-подсказку, сам Select
-              скрываем, чтобы HR не редактировал «мёртвое» поле. */}
-          {chainActive ? (
-            <div className="rounded-lg border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
-              Минимальная задержка перед первым сообщением управляется в блоке
-              «Серия первых сообщений» выше — задержка берётся из Сообщения 1.
-              Этот старый параметр больше не используется.
-            </div>
-          ) : (
-            <div className="flex items-start justify-between gap-3">
-              <div className="space-y-0.5 flex-1">
-                <Label className="text-sm font-medium">Минимальная задержка перед первым сообщением</Label>
-                <p className="text-xs text-muted-foreground">
-                  Чтобы первое сообщение не выглядело как автоматика. Реальная задержка может быть больше из-за обработки очереди.
-                </p>
-              </div>
-              <Select value={firstMessageDelay} onValueChange={setFirstMessageDelay}>
-                <SelectTrigger className="w-[140px] h-9 shrink-0">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="15">15 секунд</SelectItem>
-                  <SelectItem value="30">30 секунд</SelectItem>
-                  <SelectItem value="60">1 минута</SelectItem>
-                  <SelectItem value="180">3 минуты</SelectItem>
-                  <SelectItem value="900">15 минут</SelectItem>
-                  <SelectItem value="1800">30 минут</SelectItem>
-                  <SelectItem value="3600">1 час</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Рабочие часы и нерабочие дни редактируются в отдельной секции
-              «Расписание» под цепочкой дожима — см. VacancyScheduleSettings. */}
-
-          {/* #21: блок «Шаблон сообщения» переехал в FirstMessagesChainEditor.
-              Один textarea заменён на серию из 3 шагов с тумблерами и
-              задержками. См. components/vacancies/first-messages-chain-editor.tsx.
-              Эта Card теперь содержит только глобальную задержку (используется
-              как fallback для chain[0] если массив пустой).
-          */}
-
-          {/* #19: блок «Подтверждение после анкеты» УДАЛЁН отсюда. Его
-              функция дублирует «Автоответ после заполнения анкеты» в табе
-              «Воронка» (PostDemoSettings → anketaAutoReply). Старое поле
-              automation.anketaConfirmation в descriptionJson сохраняется
-              в БД как есть для уже запланированных follow_up_messages с
-              branch='anketa_confirmation' (cron их корректно достреливает),
-              но новые анкеты планируют только anketaAutoReply. */}
-
-          {/* #46: блок «Текст для повторной отправки» удалён из этой
-              карточки. Переехал в отдельный компонент RecoveryMessageSettings
-              под спойлером в табе «Сообщения» — opt-in, по умолчанию ВЫКЛ,
-              чтобы автоматика не дёргала кандидатов дубликатами. */}
-        </CardContent>
-      </Card>
-      )}
+      {/* ═══ 1. Первое сообщение — карточка удалена 08.07 (недостижима, см.
+             комментарии у firstMessageDelay/useVacancySectionRegister выше).
+             Текст и задержка приглашения — components/vacancies/
+             first-contact-settings.tsx в секции «Коммуникации». Рабочие часы —
+             VacancyScheduleSettings. Подтверждение после анкеты — PostDemoSettings
+             (anketaAutoReply). Текст повторной отправки — RecoveryMessageSettings. ═══ */}
 
       {/* ═══ 2. Если кандидат хочет созвониться ═════════════════ */}
       {showSection("callIntent") && (
