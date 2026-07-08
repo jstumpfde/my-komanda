@@ -4653,11 +4653,12 @@ export const landingLeads = pgTable("landing_leads", {
   name:      text("name").notNull(),
   contact:   text("contact").notNull(), // телефон/telegram/email — как ввёл сам
   company:   text("company"),
-  interest:  text("interest").notNull().default("demo"), // 'demo' | 'consultation'
+  interest:  text("interest").notNull().default("demo"), // 'demo' | 'consultation' | 'website'
   comment:   text("comment"),
   source:    text("source"), // utm/referrer, опционально
   ipHash:    text("ip_hash"), // sha256(ip + NEXTAUTH_SECRET), антиспам — не сам IP
   status:    text("status").notNull().default("new"), // 'new' | 'contacted' | 'closed'
+  consentAt: timestamp("consent_at", { withTimezone: true }), // 152-ФЗ: когда дал согласие на обработку ПД (0268)
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index("landing_leads_created_idx").on(t.createdAt),

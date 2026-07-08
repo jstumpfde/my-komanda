@@ -60,6 +60,7 @@ export const ADMIN_NAV_TREE: AdminNavCategory[] = [
       { label: "Сроки / health", href: "/admin/platform/deadlines", icon: Activity },
       { label: "Cron-запуски",  href: "/admin/platform/cron",       icon: Wrench },
       { label: "Согласия (152-ФЗ)", href: "/admin/platform/consent-log", icon: ScrollText },
+      { label: "Заявки", href: "/admin/platform/leads", icon: Inbox },
     ],
   },
 ]

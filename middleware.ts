@@ -82,6 +82,7 @@ const PUBLIC_PREFIXES = [
   "/changelog",
   "/privacy",
   "/terms",
+  "/portfolio",          // публичное портфолио веб-разработки Company24.pro + форма заявки
   "/products",           // витрина продуктов (/products) и лендинги (/products/<slug>[/<child>])
   "/marketing-consent", // согласие на рекламную рассылку (152-ФЗ/38-ФЗ) — публичный юр.документ
   "/status",
