@@ -17,6 +17,13 @@ interface Props {
   vacancyId: string
   initial?: Settings | null
   initialAiScoringEnabled?: boolean
+  /**
+   * vacancies.portrait_scoring — вакансия оценивается из «Портрета» (новый
+   * контур). Когда true, действует spec.rejectLetter (Портрет), а не
+   * aiProcessSettings.rejectMessage ниже — показываем hint вместо textarea,
+   * значение не теряем (08.07, консолидация «Коммуникаций»).
+   */
+  portraitScoring?: boolean
   onSaved?: (settings: Settings, aiScoringEnabled: boolean) => void
 }
 
@@ -31,7 +38,7 @@ const MIN_GAP = 5   // min зазор между upper и lower
 
 type MidRangeAction = "prequalification" | "direct_demo" | "keep_new"
 
-export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringEnabled, onSaved }: Props) {
+export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringEnabled, portraitScoring, onSaved }: Props) {
   // Master-toggle переключает aiScoringEnabled. Default OFF (Сессия 6).
   const [aiScoringEnabled, setAiScoringEnabled] = useState<boolean>(initialAiScoringEnabled ?? false)
 
@@ -133,7 +140,11 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
 
   useVacancySectionRegister({
     sectionKey: `ai-process:${vacancyId}`,
-    tabKey: "followup",
+    // 08.07: компонент теперь рендерится в секции «Портрет» (spec), под
+    // SpecEditor — раньше жил в бывшем табе «Дожим» (followup, теперь
+    // объединён в «Коммуникации»). tabKey определяет, какой sticky-dot
+    // подсвечивается при несохранённых изменениях.
+    tabKey: "spec",
     loaded,
     watchedValues: { aiScoringEnabled, upper, lower, midRangeAction, rejectMessage, rejectionDelay, autoRejectEnabled },
     save: handleSave,
@@ -270,23 +281,34 @@ export function VacancyAiProcessSettings({ vacancyId, initial, initialAiScoringE
           </div>
         </div>
 
-        {/* Текст мягкого отказа (для тех кто <lower). */}
-        <div>
-          <Label className="text-xs font-medium mb-1.5 block">Текст мягкого отказа (для тех кто &lt;{lower})</Label>
-          <Textarea
-            value={rejectMessage}
-            onChange={e => setRejectMessage(e.target.value)}
-            rows={4}
-            placeholder={DEFAULT_REJECT}
-            className="text-sm resize-y"
-            disabled={disabled}
-          />
-          <p className="text-[11px] text-muted-foreground mt-1.5">
-            Поддерживает плейсхолдеры:{" "}
-            <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{name}}"}</code> — имя кандидата,{" "}
-            <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{vacancy}}"}</code> — название вакансии.
-          </p>
-        </div>
+        {/* Текст мягкого отказа (для тех кто <lower). Когда вакансия оценивается
+            из Портрета — действует spec.rejectLetter (см. секцию «Портрет»
+            выше на этой же странице), это поле — только legacy-fallback.
+            Значение НЕ теряем при переключении режима — просто не показываем
+            редактор, чтобы не путать HR двумя одновременно видимыми текстами. */}
+        {portraitScoring ? (
+          <div className="rounded-md border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
+            Включён режим «Портрет» — действует письмо отказа из Портрета выше.
+            Этот текст используется только в legacy-режиме.
+          </div>
+        ) : (
+          <div>
+            <Label className="text-xs font-medium mb-1.5 block">Текст мягкого отказа (для тех кто &lt;{lower})</Label>
+            <Textarea
+              value={rejectMessage}
+              onChange={e => setRejectMessage(e.target.value)}
+              rows={4}
+              placeholder={DEFAULT_REJECT}
+              className="text-sm resize-y"
+              disabled={disabled}
+            />
+            <p className="text-[11px] text-muted-foreground mt-1.5">
+              Поддерживает плейсхолдеры:{" "}
+              <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{name}}"}</code> — имя кандидата,{" "}
+              <code className="text-[10px] bg-muted px-1 py-0.5 rounded">{"{{vacancy}}"}</code> — название вакансии.
+            </p>
+          </div>
+        )}
 
         {/* Задержка отказа — единая для ВСЕХ причин (стоп-факторы, низкий балл,
             «не интересно» в чате). 0 = мгновенно. */}
