@@ -14,6 +14,7 @@ import {
 import { cn } from "@/lib/utils"
 import { formatPrice, formatDate, ROLE_LABELS } from "@/components/admin/clients/shared"
 import { enterCompanyAsAdmin } from "@/app/(admin)/admin/admin-impersonation-actions"
+import { shortLegalName, shortLegalAddress } from "@/lib/format/short-legal-info"
 import { toast } from "sonner"
 
 // Строка списка — то, что есть мгновенно (без доп. запроса), для шапки.
@@ -261,13 +262,13 @@ export function CompanySheet({
             <div>
               <div className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wide">Реквизиты</div>
               <dl className="divide-y divide-border/60">
-                <Field label="Полное наименование">{detail?.fullName}</Field>
+                <Field label="Полное наименование">{shortLegalName(detail?.fullName)}</Field>
                 <Field label="ИНН">{detail?.inn ?? client.inn}</Field>
                 <Field label="КПП">{detail?.kpp}</Field>
                 <Field label="ОГРН">{detail?.ogrn}</Field>
                 <Field label="Директор">{detail?.director}</Field>
                 <Field label="Город">{detail?.city}</Field>
-                <Field label="Юр. адрес">{detail?.legalAddress}</Field>
+                <Field label="Юр. адрес">{shortLegalAddress(detail?.legalAddress)}</Field>
                 <Field label="Факт. адрес">{detail?.officeAddress}</Field>
                 <Field label="Почт. адрес">{detail?.postalAddress}</Field>
                 <Field label="Индекс">{detail?.postalCode}</Field>
