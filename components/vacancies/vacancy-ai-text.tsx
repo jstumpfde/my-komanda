@@ -91,12 +91,12 @@ export function VacancyAiText({ vacancyId, descriptionJson }: VacancyAiTextProps
   const saveVariants = useCallback(async () => {
     setSaving(true)
     try {
-      const existing = (descriptionJson as Record<string, unknown>) || {}
       const res = await fetch(`/api/modules/hr/vacancies/${vacancyId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          description_json: { ...existing, generatedText: variants },
+          // Точечный payload — сервер root-мёржит (mergeDescriptionJson).
+          description_json: { generatedText: variants },
         }),
       })
       if (!res.ok) throw new Error("Ошибка сохранения")

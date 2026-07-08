@@ -5,6 +5,7 @@ import { vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { logActivity } from "@/lib/activity-log"
 import { isClosedVacancy } from "@/lib/vacancies/lifecycle"
+import { mergeDescriptionJson } from "@/lib/vacancies/description-json-merge"
 
 export async function GET(
   _req: NextRequest,
@@ -39,9 +40,9 @@ export async function PUT(
     const user = await requireCompany()
     const { id } = await params
 
-    // Verify ownership
+    // Verify ownership + забираем текущий descriptionJson для merge (ниже).
     const [existing] = await db
-      .select({ id: vacancies.id })
+      .select({ id: vacancies.id, descriptionJson: vacancies.descriptionJson })
       .from(vacancies)
       .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
       .limit(1)
@@ -60,6 +61,9 @@ export async function PUT(
       salary_max?: number
       status?: string
       description_json?: unknown
+      // Осознанное копирование ВСЕХ секций (в т.ч. защищённых funnelV2/finalScreens/…)
+      // — ставится ТОЛЬКО при «применить шаблон вакансии» (handleApplyTemplate).
+      copy_managed_keys?: boolean
       experience?: string
       schedule?: string
       description?: string
@@ -105,7 +109,11 @@ export async function PUT(
       updates.closedAt = isClosedVacancy(body.status) ? new Date() : null
     }
     if (body.description_json !== undefined) {
-      updates.descriptionJson = body.description_json
+      // Root-merge с защитой независимо сохраняемых ключей (funnelV2). Клиентская
+      // копия descriptionJson устаревает после автосейва конструктора «Воронка 2»
+      // → wholesale-перезапись затирала свежую воронку (баг Юрия 08.07).
+      // См. lib/vacancies/description-json-merge.ts + тест.
+      updates.descriptionJson = mergeDescriptionJson(existing.descriptionJson, body.description_json, { includeManagedKeys: body.copy_managed_keys === true })
       // Расписание (schedule_*) теперь редактируется отдельно — через
       // /api/modules/hr/vacancies/[id]/schedule-settings (см. компонент
       // vacancy-schedule-settings.tsx). Зеркаление workingHours удалено.
@@ -220,11 +228,8 @@ export async function PATCH(
 
       if (!existing) return apiError("Vacancy not found", 404)
 
-      const currentJson = (existing.descriptionJson && typeof existing.descriptionJson === "object" && existing.descriptionJson !== null)
-        ? existing.descriptionJson as Record<string, unknown>
-        : {}
-
-      const nextJson = { ...currentJson, ...body.description_json }
+      // Root-merge с защитой funnelV2 (см. lib/vacancies/description-json-merge.ts).
+      const nextJson = mergeDescriptionJson(existing.descriptionJson, body.description_json)
 
       const [updated] = await db
         .update(vacancies)
