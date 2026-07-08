@@ -146,15 +146,19 @@ test("blockText приоритетнее пер-факторного (legacy) т
   assert.equal(m?.rejectionText, "Единый блочный текст")
 })
 
-test("пустой blockText → используется пер-факторный (legacy) текст", () => {
+test("ЮР (ТК РФ): пер-факторный legacy текст НЕ используется — при пустом blockText нейтральный дефолт", () => {
+  // Гарантия Юрия 08.07: старый пер-факторный текст (мог раскрывать причину:
+  // «принимаем только граждан РФ») больше НИКОГДА не уходит кандидату. Пусто →
+  // нейтральный дефолт, а не legacy.
   const m = matchStopFactors(
     candidate("US"),
     {
-      citizenship: { enabled: true, mode: "allow", allowed: ["RU"], rejectionText: "Пер-факторный legacy текст" },
+      citizenship: { enabled: true, mode: "allow", allowed: ["RU"], rejectionText: "принимаем только граждан РФ" },
     } as VacancyStopFactors,
   )
   assert.ok(m)
-  assert.equal(m?.rejectionText, "Пер-факторный legacy текст")
+  assert.notEqual(m?.rejectionText, "принимаем только граждан РФ")
+  assert.match(m!.rejectionText, /{{name}}/) // нейтральный дефолт с плейсхолдером
 })
 
 test("оба текста пусты → возвращается нейтральный defaultRejection", () => {

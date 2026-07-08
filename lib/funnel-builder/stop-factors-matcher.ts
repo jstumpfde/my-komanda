@@ -228,11 +228,14 @@ export function matchStopFactors(
 ): StopFactorMatch | null {
   if (!factors || Object.keys(factors).length === 0) return null
 
-  // Единый текст отказа на весь блок (Юрий 08.07) приоритетнее пер-факторного
-  // legacy-текста. Пусто → падаем на пер-факторный → на defaultRejection.
+  // Единый текст отказа на весь блок (Юрий 08.07). ВАЖНО (юр., ТК РФ): пер-факторный
+  // legacy-текст НЕ используем — он мог раскрывать причину (возраст/гражданство), а
+  // редактора для него больше нет. Всегда: блочный текст → нейтральный дефолт.
+  // (legacy factor.rejectionText физически подчищается миграцией + to-legacy его
+  // больше не пишет.)
   const blockText = factors.rejectionText?.trim()
   const withBlock = (m: StopFactorMatch | null): StopFactorMatch | null => {
-    if (m && blockText) m.rejectionText = blockText
+    if (m) m.rejectionText = blockText || defaultRejection(m.factor)
     return m
   }
 
