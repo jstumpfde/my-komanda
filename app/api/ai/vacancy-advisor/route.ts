@@ -84,7 +84,7 @@ function staticAnalysis(body: Record<string, unknown>): AdvisorResponse {
 
   const sections: SectionAnalysis[] = []
   let filled = 0
-  const total = 8
+  const total = 7  // 7 секций (стоп-факторы вынесены в Портрет, Юрий 08.07)
 
   // 1. Title
   const title = (d.vacancyTitle as string) || ""
@@ -390,26 +390,12 @@ ${AI_SAFETY_PROMPT}`,
       parsed.sections = fallback.sections
     }
 
-    // Пост-обработка: aiStopFactors кормят AI-нокауты (lib/scoring/vacancy-spec).
-    // Если они заполнены — AI-скрининг отсеивает по этим пунктам, поэтому
-    // НЕ показываем КРИТИЧНО «Стоп-факторы пустое». Структурные стоп-факторы
-    // (город/возраст/опыт) — отдельный необязательный пред-фильтр, не повод для ошибки.
-    {
-      const unFilled = false  // unacceptableSkills legacy — не отображается на вкладке Вакансия
-      const aiFilled = Array.isArray(vacancyData.aiStopFactors) && (vacancyData.aiStopFactors as unknown[]).length > 0
-      if (Array.isArray(parsed.sections)) {
-        for (const s of parsed.sections) {
-          if (!s || !(s.id === "stopFactors" || /стоп-фактор/i.test(s.title || ""))) continue
-          if ((unFilled || aiFilled) && s.status === "error") {
-            s.status = "ok"
-            s.message = "Заполнено («Неприемлемо»)"
-          } else if (s.status === "error") {
-            // Стоп-факторы НИКОГДА не критично — необязательный пред-фильтр, а не
-            // блокер (Юрий, 26.06). Пустые → максимум рекомендация (warning).
-            s.status = "warning"
-          }
-        }
-      }
+    // Стоп-факторы вынесены в Портрет (Юрий 08.07) — если AI всё же вернул
+    // такую секцию, выкидываем её из результата советника вакансии.
+    if (Array.isArray(parsed.sections)) {
+      parsed.sections = parsed.sections.filter(
+        (s: { id?: string; title?: string }) => !(s?.id === "stopFactors" || /стоп-фактор/i.test(s?.title || "")),
+      )
     }
 
     // B5/#31: ложное «Критично: О компании отсутствует». Описание берётся либо
@@ -561,7 +547,7 @@ function buildPrompt(d: Record<string, unknown>, body: Record<string, unknown>, 
   "scoreLabel": "Слабо" | "Средне" | "Хорошо" | "Отлично",
   "sections": [
     {
-      "id": "salary" | "title" | "responsibilities" | "requirements" | "skills" | "stopFactors" | "conditions" | "company",
+      "id": "salary" | "title" | "responsibilities" | "requirements" | "skills" | "conditions" | "company",
       "status": "ok" | "warning" | "error",
       "title": "Название секции",
       "message": "Конкретная рекомендация.",
@@ -586,13 +572,11 @@ function buildPrompt(d: Record<string, unknown>, body: Record<string, unknown>, 
 }
 
 Правила:
-- Всегда анализируй все 8 секций: title, salary, responsibilities, requirements, skills, stopFactors, conditions, company
+- Всегда анализируй все 7 секций: title, salary, responsibilities, requirements, skills, conditions, company
 - Для зарплаты: используй справочник зарплат для конкретных рекомендаций
-- Для стоп-факторов: если пусто — обязательно error, т.к. без них AI-скрининг не работает
 - contextTip — только если focusedField указан, иначе null
 - suggestions.titles — 2-3 варианта названия, которые дают больше откликов на hh.ru. Если название содержит аббревиатуру — предложить полную расшифровку. Если нет формата работы — предложить добавить. Если нет ниши — предложить добавить.
 - suggestions.skills — 5-8 навыков, релевантных для должности, которых нет в поле «Навыки» (для hh)
-- suggestions.stopFactors — 2-4 стоп-фактора, критичных для этой должности
 - suggestions.duties — шаблон обязанностей (только если поле пустое или менее 3 пунктов)
 - suggestions.requirements — шаблон требований (только если поле пустое или менее 3 пунктов)
 - Рекомендации должны быть конкретными и практичными
