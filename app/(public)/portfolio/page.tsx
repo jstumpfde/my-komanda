@@ -10,8 +10,25 @@ import Link from "next/link"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Check, Loader2, ExternalLink, Sparkles } from "lucide-react"
+import { PRIVACY_POLICY_VERSION } from "@/lib/legal/operator-requisites"
 
 type LeadStatus = "idle" | "submitting" | "success" | "error"
+
+// Тот же паттерн, что и app/(auth)/register/page.tsx — best-effort запись в
+// журнал 152-ФЗ (см. /admin/platform/consent-log). Не блокирует отправку
+// заявки при сбое.
+function logConsent(contact: string) {
+  fetch("/api/consent", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      consentType: "privacy_policy",
+      action: "accepted",
+      documentVersion: PRIVACY_POLICY_VERSION,
+      visitorId: contact,
+    }),
+  }).catch(() => {})
+}
 
 const CASES = [
   {
@@ -61,6 +78,7 @@ function LeadForm() {
         setStatus("error")
         return
       }
+      logConsent(contact)
       setStatus("success")
     } catch {
       setErrorMessage("Не удалось отправить заявку — проверьте соединение и попробуйте ещё раз")
