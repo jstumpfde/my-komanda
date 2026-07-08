@@ -8,6 +8,7 @@ import { checkPublicTokenRateLimit } from "@/lib/public/rate-limit-public"
 import { scoreCandidateV2 } from "@/lib/ai-score-candidate-v2"
 import { scoreDemoAnswers } from "@/lib/demo/score-answers"
 import { maybeScheduleSecondDemoInvite } from "@/lib/messaging/second-demo-invite"
+import { computeObjectiveGateScore } from "@/lib/demo/objective-gate"
 import { isPortraitConfigured } from "@/lib/core/spec/resume-input"
 import { getSpec } from "@/lib/core/spec/store"
 import { maybeSendCandidateAlert } from "@/lib/telegram/candidate-alert"
@@ -381,7 +382,23 @@ export async function POST(
       })
 
       if (secondPartEnabled) {
-        await withTimeout(scorePromise, AI_EVAL_AWAIT_TIMEOUT_MS)
+        // Юрий 08.07: если детерминированный балл по вопросам-выбору УЖЕ
+        // проходит порог сам по себе — AI ждать незачем (кандидаты не
+        // дожидались 12-секундного зависания и уходили раньше, чем гейт
+        // успевал сработать). computeObjectiveGateScore — чистый DB-read +
+        // код, без AI, дешёвый. AI-скоринг всё равно продолжается в фоне
+        // (для отчётности/HR-карточки), просто не блокирует ответ кандидату.
+        const passThreshold = specForGateAwait?.anketaPassInvite?.passThreshold
+        let objectiveAlreadyPasses = false
+        if (typeof passThreshold === "number") {
+          const objResult = await computeObjectiveGateScore(txResult.candidateId, txResult.vacancyId).catch(() => null)
+          if (objResult && objResult.score >= passThreshold) objectiveAlreadyPasses = true
+        }
+        if (!objectiveAlreadyPasses) {
+          await withTimeout(scorePromise, AI_EVAL_AWAIT_TIMEOUT_MS)
+        } else {
+          void scorePromise
+        }
       } else {
         void scorePromise
       }
