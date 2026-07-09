@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Clock, Bell, Plug, Save, Loader2 } from "lucide-react"
+import { Clock, Bell, Plug, Save, Loader2, Send } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
@@ -141,12 +141,49 @@ export function InterviewSection({
 
   // ── Флаг platform admin (для блока интеграций) ──
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
+  // ── Напоминания об интервью в Telegram (@Ren_HR_bot) — личный chat_id ТЕКУЩЕГО
+  // залогиненного пользователя (Юрий 09.07: показать рядом с расписанием записи,
+  // а не только в личном Профиле — здесь его находят те, кто настраивает вакансию).
+  const [managerChatId, setManagerChatId] = useState<string | null>(null)
   useEffect(() => {
     fetch("/api/auth/me")
       .then(r => (r.ok ? r.json() : null))
-      .then(d => setIsPlatformAdmin(!!(d?.data ?? d)?.isPlatformAdmin))
+      .then(d => {
+        const u = d?.data ?? d
+        setIsPlatformAdmin(!!u?.isPlatformAdmin)
+        setManagerChatId(u?.managerReminderChatId ?? null)
+      })
       .catch(() => {})
   }, [])
+  const [reminderLinkCode, setReminderLinkCode] = useState<{ code: string; botUsername: string } | null>(null)
+  const [generatingReminderCode, setGeneratingReminderCode] = useState(false)
+  const [unlinkingReminder, setUnlinkingReminder] = useState(false)
+  const handleGenerateReminderCode = async () => {
+    setGeneratingReminderCode(true)
+    try {
+      const res = await fetch("/api/telegram/manager-bot/link-code", { method: "POST" })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) { toast.error(json.error ?? "Не удалось получить код"); return }
+      const data = json.data ?? json
+      setReminderLinkCode({ code: data.code, botUsername: data.botUsername })
+    } catch { toast.error("Ошибка сети") }
+    finally { setGeneratingReminderCode(false) }
+  }
+  const handleUnlinkReminderBot = async () => {
+    setUnlinkingReminder(true)
+    try {
+      const res = await fetch("/api/auth/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ managerReminderChatId: null }),
+      })
+      if (!res.ok) { toast.error("Не удалось отключить"); return }
+      setManagerChatId(null)
+      setReminderLinkCode(null)
+      toast.success("Бот напоминаний отключён")
+    } catch { toast.error("Ошибка сети") }
+    finally { setUnlinkingReminder(false) }
+  }
 
   // ── Состояния сохранения ──
   const [saving, setSaving] = useState(false)
@@ -820,6 +857,45 @@ export function InterviewSection({
               })}
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Напоминания об интервью в Telegram — личная привязка текущего пользователя
+          к платформенному боту @Ren_HR_bot (та же каденция, что у кандидата: за
+          сутки/утром/за час/за 15 минут). Юрий 09.07: рядом с расписанием записи. */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Send className="size-4 text-muted-foreground" />Напоминания об интервью в Telegram
+          </CardTitle>
+          <CardDescription>Если вы назначаете интервью кандидатам — бот пришлёт напоминание вам лично, так же как получает кандидат</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {managerChatId ? (
+            <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2">
+              <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">Подключено</Badge>
+              <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={handleUnlinkReminderBot} disabled={unlinkingReminder}>
+                {unlinkingReminder ? <Loader2 className="size-3.5 animate-spin" /> : "Отключить"}
+              </Button>
+            </div>
+          ) : reminderLinkCode ? (
+            <div className="rounded-lg border bg-muted/30 px-3 py-3 space-y-2">
+              <p className="text-sm">
+                Откройте{" "}
+                <a href={`https://t.me/${reminderLinkCode.botUsername}`} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">
+                  @{reminderLinkCode.botUsername}
+                </a>{" "}
+                и отправьте боту команду:
+              </p>
+              <code className="block text-sm font-mono bg-background rounded px-2 py-1.5 border">/start {reminderLinkCode.code}</code>
+              <p className="text-xs text-muted-foreground">Код действует 15 минут и одноразовый. Привязка личная — на аккаунт, под которым вы сейчас вошли.</p>
+            </div>
+          ) : (
+            <Button variant="outline" size="sm" className="gap-2" onClick={handleGenerateReminderCode} disabled={generatingReminderCode}>
+              {generatingReminderCode ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+              Подключить Telegram
+            </Button>
+          )}
         </CardContent>
       </Card>
 
