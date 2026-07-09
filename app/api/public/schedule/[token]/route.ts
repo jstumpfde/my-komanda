@@ -667,3 +667,65 @@ export async function POST(
     return apiError("Ошибка сервера", 500)
   }
 }
+
+// DELETE /api/public/schedule/[token] — кандидат отменяет свою запись
+// (Юрий 09.07: рядом с «Перенести на другое время» нужна отдельная «Отменить»,
+// без выбора нового слота). Отменяет ближайшие confirmed interview-события
+// кандидата — та же идемпотентная логика, что уже используется при переносе
+// (POST выше, шаг «Перенос: если у кандидата уже есть будущий interview-event»).
+// Стадию candidates.stage НЕ трогаем — она нигде не пишется в stage_history
+// при простановке 'scheduled', надёжно восстановить «предыдущую» стадию
+// неоткуда; источник истины об отмене — calendar_events.status.
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ token: string }> },
+) {
+  try {
+    if (!checkPublicTokenRateLimit(req, "schedule-delete")) {
+      return apiError("Слишком много запросов, попробуйте позже", 429)
+    }
+
+    const { token } = await params
+    const [candidate] = await db
+      .select({ id: candidates.id, name: candidates.name, vacancyId: candidates.vacancyId })
+      .from(candidates)
+      .where(isShortId(token) ? eq(candidates.shortId, token) : eq(candidates.token, token))
+      .limit(1)
+    if (!candidate) return apiError("Кандидат не найден", 404)
+
+    const [vac] = await db
+      .select({ companyId: vacancies.companyId, vacancyTitle: vacancies.title })
+      .from(vacancies)
+      .where(eq(vacancies.id, candidate.vacancyId))
+      .limit(1)
+    if (!vac) return apiError("Вакансия не найдена", 404)
+
+    const now = new Date()
+    const cancelled = await db
+      .update(calendarEvents)
+      .set({ status: "cancelled", interviewStatus: "Отменено" })
+      .where(and(
+        eq(calendarEvents.companyId,   vac.companyId),
+        eq(calendarEvents.candidateId, candidate.id),
+        eq(calendarEvents.type,        "interview"),
+        eq(calendarEvents.status,      "confirmed"),
+        gt(calendarEvents.startAt,     now),
+      ))
+      .returning({ id: calendarEvents.id })
+
+    if (cancelled.length === 0) return apiError("Активная запись не найдена", 404)
+
+    void sendToCompanyChannel(
+      vac.companyId,
+      `❌ <b>Кандидат отменил запись на интервью</b>\n` +
+      `👤 Кандидат: ${candidate.name ?? "—"}\n` +
+      `💼 Вакансия: ${vac.vacancyTitle}`,
+    ).catch(() => {})
+
+    return apiSuccess({ cancelled: true })
+  } catch (err) {
+    if (err instanceof Response) return err
+    console.error("[schedule DELETE]", err)
+    return apiError("Ошибка сервера", 500)
+  }
+}

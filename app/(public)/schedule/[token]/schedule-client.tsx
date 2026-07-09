@@ -97,6 +97,7 @@ export function ScheduleClientPage({ token, initialData, initialError }: Props) 
   const [confirmed, setConfirmed]   = useState(false)
   const [booking, setBooking]       = useState<BookingResponse | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
 
   // ─── Error / no-data state ─────────────────────────────────────────────────
 
@@ -154,6 +155,27 @@ export function ScheduleClientPage({ token, initialData, initialError }: Props) 
     setConfirmed(false)
     setBooking(null)
     setSelectedSlot(null)
+  }
+
+  const handleCancel = async () => {
+    if (!confirm("Отменить запись на интервью?")) return
+    setCancelling(true)
+    try {
+      const res = await fetch(`/api/public/schedule/${token}`, { method: "DELETE" })
+      if (res.ok) {
+        toast.success("Запись отменена")
+        setConfirmed(false)
+        setBooking(null)
+        setSelectedSlot(null)
+      } else {
+        const json = await res.json().catch(() => null)
+        toast.error(json?.error || "Не удалось отменить запись")
+      }
+    } catch {
+      toast.error("Ошибка соединения")
+    } finally {
+      setCancelling(false)
+    }
   }
 
   // ─── Экран подтверждения ───────────────────────────────────────────────────
@@ -255,38 +277,47 @@ export function ScheduleClientPage({ token, initialData, initialError }: Props) 
             <div className="flex items-center gap-2.5 p-3 mt-3 rounded-lg bg-amber-50 border border-amber-200">
               <Clock className="w-4 h-4 text-amber-600 shrink-0" />
               <p className="text-xs text-amber-700 text-left">
-                Мы пришлём напоминания: за сутки, утром в день встречи и за час до неё
+                Мы пришлём напоминания
               </p>
             </div>
 
             <div className="mt-5 space-y-2">
               <p className="text-xs font-medium text-slate-600 text-center sm:text-left">Добавить в календарь:</p>
               <div className="flex flex-col sm:flex-row gap-2">
-                <a href={googleUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
+                <a href={googleUrl} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0">
                   <Button variant="outline" size="sm" className="w-full">
-                    <ExternalLink className="w-3.5 h-3.5 mr-1.5" /> Google Calendar
+                    <ExternalLink className="w-3.5 h-3.5 mr-1.5 shrink-0" /> <span className="truncate">Google Calendar</span>
                   </Button>
                 </a>
-                <a href={yandexUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
+                <a href={yandexUrl} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0">
                   <Button variant="outline" size="sm" className="w-full">
-                    <ExternalLink className="w-3.5 h-3.5 mr-1.5" /> Яндекс Календарь
+                    <ExternalLink className="w-3.5 h-3.5 mr-1.5 shrink-0" /> <span className="truncate">Яндекс Календарь</span>
                   </Button>
                 </a>
                 <Button
-                  variant="outline" size="sm" className="flex-1"
+                  variant="outline" size="sm" className="flex-1 min-w-0"
                   onClick={() => downloadIcs({ title: eventTitle, startAt: booking.startAt, endAt: booking.endAt, description })}
                 >
-                  <Download className="w-3.5 h-3.5 mr-1.5" /> .ics
+                  <Download className="w-3.5 h-3.5 mr-1.5 shrink-0" /> <span className="truncate">.ics</span>
                 </Button>
               </div>
             </div>
 
-            <button
-              className="w-full text-center text-sm text-slate-500 underline underline-offset-4 hover:text-slate-800 mt-5"
-              onClick={handleReschedule}
-            >
-              Перенести на другое время
-            </button>
+            <div className="flex items-center justify-center gap-4 mt-5">
+              <button
+                className="text-center text-sm text-slate-500 underline underline-offset-4 hover:text-slate-800"
+                onClick={handleReschedule}
+              >
+                Перенести на другое время
+              </button>
+              <button
+                className="text-center text-sm text-red-500 underline underline-offset-4 hover:text-red-700 disabled:opacity-50"
+                onClick={handleCancel}
+                disabled={cancelling}
+              >
+                {cancelling ? "Отменяем…" : "Отменить"}
+              </button>
+            </div>
           </div>
 
           <p className="text-center text-xs text-slate-400 mt-6">Powered by Company24</p>
