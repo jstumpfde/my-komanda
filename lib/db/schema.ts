@@ -4694,3 +4694,32 @@ export const clientPageViews = pgTable("client_page_views", {
 ])
 export type ClientPageView    = typeof clientPageViews.$inferSelect
 export type NewClientPageView = typeof clientPageViews.$inferInsert
+
+// ─── Big Life: архив обложек (0269) ────────────────────────────────────────
+// Управляет данными статической страницы "Big Life Covers.dc.html" на
+// biglife.company24.pro — сайт-витрина (poddomain-root, чистый nginx-статик,
+// НЕ часть Next.js). Публикация из /admin/platform/big-life-covers пишет
+// строки этой таблицы в HTML-файл напрямую на диск сервера (см.
+// lib/big-life/render-covers-page.ts + lib/big-life/paths.ts), т.к. и
+// my-komanda, и статика Big Life живут на одной машине.
+export const bigLifeCovers = pgTable("big_life_covers", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  title:      text("title").notNull(),        // напр. "BIG life март-апрель 2026"
+  heading:    text("heading").notNull(),       // подпись на карточке — обычно имя героя
+  period:     text("period"),                  // напр. "Март-апрель 2026" (может быть null)
+  year:       text("year").notNull(),
+  imagePath:  text("image_path"),              // относительный путь от корня biglife (assets/covers-archive/...)
+  price:      integer("price"),                // ₽, null = цена не указана
+  salePrice:  integer("sale_price"),           // ₽ со скидкой, null = скидки нет
+  stockQty:   integer("stock_qty"),            // null = не отслеживаем остаток
+  soldOut:    boolean("sold_out").notNull().default(false), // ручной оверрайд "нет в наличии"
+  isActive:   boolean("is_active").notNull().default(true), // false = скрыт с публичной страницы
+  sortOrder:  integer("sort_order").notNull().default(0),
+  createdAt:  timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:  timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("big_life_covers_year_idx").on(t.year),
+  index("big_life_covers_sort_idx").on(t.sortOrder),
+])
+export type BigLifeCover    = typeof bigLifeCovers.$inferSelect
+export type NewBigLifeCover = typeof bigLifeCovers.$inferInsert
