@@ -56,6 +56,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       enabledModules:   companies.enabledModules,
       salesManagerId:   companies.salesManagerId,
       accountManagerId: companies.accountManagerId,
+      calendarDefaultUserId: companies.calendarDefaultUserId,
       deletedAt:        companies.deletedAt,
       createdAt:        companies.createdAt,
       updatedAt:        companies.updatedAt,
@@ -93,6 +94,32 @@ export async function GET(_req: NextRequest, { params }: Params) {
     ))
     .limit(1)
 
+  // Кандидаты на «ответственного за календарь» (calendarDefaultUserId):
+  // свои пользователи компании + пользователи управляющего партнёра (для
+  // партнёрских клиентов без своих users — Юрий 09.07, Revoluterra).
+  const ownUsers = await db
+    .select({ id: users.id, email: users.email, name: users.name })
+    .from(users)
+    .where(eq(users.companyId, id))
+  let partnerUsers: typeof ownUsers = []
+  if (partner?.partnerIntegratorId) {
+    const [partnerRow] = await db
+      .select({ companyId: integrators.companyId })
+      .from(integrators)
+      .where(eq(integrators.id, partner.partnerIntegratorId))
+      .limit(1)
+    if (partnerRow) {
+      partnerUsers = await db
+        .select({ id: users.id, email: users.email, name: users.name })
+        .from(users)
+        .where(eq(users.companyId, partnerRow.companyId))
+    }
+  }
+  const calendarUserCandidates = [
+    ...ownUsers.map(u => ({ ...u, source: "own" as const })),
+    ...partnerUsers.map(u => ({ ...u, source: "partner" as const })),
+  ]
+
   return apiSuccess({
     ...company,
     userCount: Number(userCount),
@@ -102,6 +129,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     partnerName: partner?.partnerName ?? null,
     partnerIntegratorId: partner?.partnerIntegratorId ?? null,
     linkStatus: partner ? "active" : null,
+    calendarUserCandidates,
   })
 }
 
@@ -135,6 +163,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       }
       if (updateData[key] === undefined) delete updateData[key]
     }
+  }
+
+  // Ответственный за создание событий календаря (интервью-запись) —
+  // явный выбор, uuid или null (сброс на автофолбэк). "none" из UI = null.
+  if ("calendarDefaultUserId" in body) {
+    const v = body.calendarDefaultUserId
+    updateData.calendarDefaultUserId = (v == null || v === "" || v === "none") ? null : v
   }
 
   // Валидация статуса подписки по enum.
@@ -206,6 +241,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     subscriptionStatus: updated.subscriptionStatus,
     currentPlanId: updated.currentPlanId,
     enabledModules: updated.enabledModules,
+    calendarDefaultUserId: updated.calendarDefaultUserId,
   })
 }
 

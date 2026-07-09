@@ -449,6 +449,7 @@ export async function POST(
         vacancyId:            vacancies.id,
         companyId:            vacancies.companyId,
         hiringDefaults:       companies.hiringDefaultsJson,
+        calendarDefaultUserId: companies.calendarDefaultUserId,
         // #3.4 Fallback адреса из профиля компании
         companyOfficeAddress: companies.officeAddress,
         // #26.4: настраиваемые тексты экрана "Вы записаны" (descriptionJson.interviewBookedScreen)
@@ -461,18 +462,34 @@ export async function POST(
 
     if (!row) return apiError("Вакансия не найдена", 404)
 
-    // Получаем первого директора/пользователя компании для createdBy.
-    // Партнёрские клиенты (Юрий 09.07, Revoluterra): компания ведётся
-    // ТОЛЬКО через имперсонацию управляющего партнёра — своих users нет
-    // вообще. Фолбэк: первый пользователь партнёра из integrator_clients.
-    let [companyUser] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(and(
-        eq(users.companyId, row.companyId),
-        isNull(users.deletedAt),
-      ))
-      .limit(1)
+    // Получаем пользователя для createdBy. Приоритет:
+    //   1. Явный выбор администратора (companies.calendarDefaultUserId,
+    //      /admin/clients → «Ответственный за календарь» — Юрий 09.07).
+    //   2. Первый живой пользователь самой компании.
+    //   3. Партнёрские клиенты (Revoluterra): компания ведётся ТОЛЬКО через
+    //      имперсонацию управляющего партнёра, своих users нет вообще —
+    //      фолбэк на первого пользователя партнёра из integrator_clients.
+    let companyUser: { id: string } | undefined
+    if (row.calendarDefaultUserId) {
+      const [explicit] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(users.id, row.calendarDefaultUserId), isNull(users.deletedAt)))
+        .limit(1)
+      companyUser = explicit
+    }
+
+    if (!companyUser) {
+      const [ownUser] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(and(
+          eq(users.companyId, row.companyId),
+          isNull(users.deletedAt),
+        ))
+        .limit(1)
+      companyUser = ownUser
+    }
 
     if (!companyUser) {
       const [partnerUser] = await db

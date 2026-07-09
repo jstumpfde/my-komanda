@@ -53,6 +53,8 @@ interface CompanyDetail {
   billingEmail: string | null
   subscriptionStatus: string | null
   trialEndsAt: string | null
+  calendarDefaultUserId: string | null
+  calendarUserCandidates: { id: string; email: string; name: string | null; source: "own" | "partner" }[]
 }
 
 interface CompanyUser {
@@ -174,6 +176,22 @@ export function CompanySheet({
     } finally { setBusy(null) }
   }
 
+  async function saveCalendarDefaultUser(userId: string) {
+    setBusy("block")
+    try {
+      const res = await fetch(`/api/admin/clients/${client!.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ calendarDefaultUserId: userId === "none" ? null : userId }),
+      })
+      if (res.ok) {
+        toast.success("Ответственный за календарь обновлён")
+        loadDetail(client!.id)
+      } else {
+        toast.error("Не удалось сохранить")
+      }
+    } finally { setBusy(null) }
+  }
+
   async function trash() {
     if (!confirm(`Переместить «${title}» в корзину?`)) return
     setBusy("trash")
@@ -278,6 +296,35 @@ export function CompanySheet({
                 )}
               </dl>
             </div>
+
+            {/* Ответственный за календарь (создание событий интервью-записи) —
+                нужен явно, когда у компании нет своих users (партнёрские
+                клиенты, ведутся только имперсонацией, Юрий 09.07). Без этого
+                (или без автофолбэка на партнёра) публичная запись кандидата
+                на интервью падает с ошибкой «Компания не настроена». */}
+            {(detail?.calendarUserCandidates?.length ?? 0) > 0 && (
+              <div>
+                <div className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wide">
+                  Ответственный за календарь
+                </div>
+                <select
+                  className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm"
+                  value={detail?.calendarDefaultUserId ?? "none"}
+                  onChange={(e) => saveCalendarDefaultUser(e.target.value)}
+                  disabled={busy !== null}
+                >
+                  <option value="none">— авто (первый свой, иначе первый партнёрский) —</option>
+                  {detail?.calendarUserCandidates.map(u => (
+                    <option key={u.id} value={u.id}>
+                      {(u.name ?? u.email)}{u.source === "partner" ? " (партнёр)" : ""}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  На кого записываются события календаря интервью (createdBy). Нужен явный выбор, если у компании нет своих пользователей.
+                </p>
+              </div>
+            )}
 
             {/* Контакты (кликабельные — звонок/письмо/сайт) */}
             {(detail?.phone || detail?.email || detail?.billingEmail || detail?.website || client.directorEmail) && (
