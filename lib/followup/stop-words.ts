@@ -56,10 +56,16 @@ export function matchStopWord(text: string): boolean {
 
 // P0-22: editable список из vacancies.stop_words_json. Юрий явно попросил
 // case-insensitive substring match (а не word-boundary как в matchStopWord
-// выше). Внимание: substring чувствителен к false positives — «интернет»
-// содержит «нет», «внеплановый» содержит «не». Список редактируется HR'ом,
+// выше). Внимание: substring чувствителен к false positives — «внеплановый»
+// содержит «не», «отказников» содержит «отказ». Список редактируется HR'ом,
 // и от него ожидается, что он будет вписывать только осмысленные стоп-фразы.
 // Возвращает первое попавшееся слово (для логирования) или null.
+//
+// Левая граница ОБЯЗАТЕЛЬНА (начало строки или пробел перед фразой), правая —
+// открыта (substring, ловит окончания слова: «отказ» → «отказываюсь»). Без
+// левой границы «мне интересно» (кандидат ЗАИНТЕРЕСОВАН!) ложно матчился на
+// «не интересно», потому что «мне» оканчивается на «не» — инцидент 09.07,
+// найден на живых кандидатах, помеченных под авто-отказ за «да мне интересно».
 export function matchStopWordList(text: string, list: string[]): string | null {
   if (!list || list.length === 0) return null
   // Нормализация пунктуации (как в matchStopWordWith): «Нет, спасибо» → «нет спасибо».
@@ -71,7 +77,9 @@ export function matchStopWordList(text: string, list: string[]): string | null {
   for (const raw of list) {
     const w = norm(raw)
     if (!w) continue
-    if (normText.includes(w)) return raw
+    const escaped = w.replace(/\s+/g, "\\s+")
+    const re = new RegExp(`(^|\\s)${escaped}`, "u")
+    if (re.test(normText)) return raw
   }
   return null
 }
