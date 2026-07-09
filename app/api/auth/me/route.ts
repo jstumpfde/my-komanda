@@ -22,6 +22,7 @@ export async function GET() {
         companyId: users.companyId,
         avatarUrl: users.avatarUrl,
         customSchedule: users.customSchedule,
+        managerReminderChatId: users.managerReminderChatId,
         createdAt: users.createdAt,
       })
       .from(users)
@@ -55,6 +56,7 @@ export async function PATCH(req: NextRequest) {
       currentPassword?: unknown
       newPassword?: unknown
       customSchedule?: unknown
+      managerReminderChatId?: unknown
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -67,6 +69,16 @@ export async function PATCH(req: NextRequest) {
         return apiError("'customSchedule' должен быть объектом", 400)
       }
       updates.customSchedule = cs
+    }
+
+    // ── managerReminderChatId (отвязка бота напоминаний) ────
+    // Привязка идёт ТОЛЬКО через /start <код> в самом боте (webhook) — здесь
+    // разрешён исключительно сброс на null (кнопка «Отключить» в Профиле).
+    if (body.managerReminderChatId !== undefined) {
+      if (body.managerReminderChatId !== null) {
+        return apiError("managerReminderChatId можно только сбросить (null)", 400)
+      }
+      updates.managerReminderChatId = null
     }
 
     // ── companyId ──────────────────────────────────────────
