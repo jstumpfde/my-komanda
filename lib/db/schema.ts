@@ -596,6 +596,12 @@ export const companies = pgTable("companies", {
   // в manager_commission_rates). Авто-назначение: «кто завёл» → менеджер продаж.
   salesManagerId:     uuid("sales_manager_id").references((): any => users.id, { onDelete: "set null" }),
   accountManagerId:   uuid("account_manager_id").references((): any => users.id, { onDelete: "set null" }),
+  // Явный ответственный за создание событий календаря (интервью-запись),
+  // когда у компании нет собственных users (партнёрские клиенты, ведутся
+  // только имперсонацией — Юрий 09.07, Revoluterra). Может указывать на
+  // пользователя партнёра. NULL → автофолбэк (первый user компании, затем
+  // первый user управляющего партнёра, см. /api/public/schedule/[token]).
+  calendarDefaultUserId: uuid("calendar_default_user_id").references((): any => users.id, { onDelete: "set null" }),
   // Архив компаний (drizzle/0220): NULL — активна; не-NULL — в архиве (скрыта из
   // активного списка, но НЕ в корзине). Из архива можно восстановить или отправить
   // в корзину (deleted_at). Таб «Архив» в /admin/clients.
