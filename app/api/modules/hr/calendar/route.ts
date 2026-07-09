@@ -62,6 +62,7 @@ export async function GET(req: NextRequest) {
         candAiScore: candidates.aiScore,
         candResumeScore: candidates.resumeScore,
         candScore: candidates.score,
+        candAnswersScore: candidates.demoAnswersScore,
         candPhone: candidates.phone,
         candStage: candidates.stage,
         candAnketa: candidates.anketaAnswers,

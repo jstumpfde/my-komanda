@@ -257,14 +257,24 @@ export async function POST(
         (b) => b.status === "completed" && b.blockId !== "__complete__"
       ).length
 
-      const isComplete = incoming.some((b) => b.blockId === "__complete__")
+      // Явный маркер ИЛИ подстраховка: кандидат вернулся по ссылке на уже
+      // полностью отвеченное демо (все блоки status=completed из прошлых
+      // визитов) — клиент может не дойти до финального экрана, который
+      // одним POST'ом шлёт "__complete__" (нечего листать дальше — нет
+      // триггера). Без этого completedAt зависает в null навсегда, и дожим
+      // бесконечно шлёт «продолжите с того же места» уже завершившим (баг
+      // 09.07, Рахимов Назар и ещё 5 кандидатов в этом же состоянии).
+      const totalBlocksKnown = totalBlocksFromClient ?? (typeof prevProgress.totalBlocks === "number" ? prevProgress.totalBlocks : 0)
+      const isComplete =
+        incoming.some((b) => b.blockId === "__complete__") ||
+        (totalBlocksKnown > 0 && completedCount >= totalBlocksKnown)
 
       const progress = {
         ...prevProgress,
         schemaVersion: 2,
         blocks: updatedBlocks,
         currentBlock: completedCount,
-        totalBlocks: totalBlocksFromClient ?? prevProgress.totalBlocks ?? 0,
+        totalBlocks: totalBlocksKnown,
         currentLesson: currentLesson ?? prevProgress.currentLesson ?? 0,
         hasVideoVizitka,
         hasAudioAnswer,

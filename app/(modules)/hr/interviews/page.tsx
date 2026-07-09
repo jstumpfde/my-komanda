@@ -68,7 +68,7 @@ interface Interview {
   candidateId: string | null
   // Контекст кандидата (из JOIN в /calendar) — для наполнения карточки.
   aiScore: number | null; resumeScore: number | null; phone: string | null; stage: string | null
-  anketaFilled: boolean; tested: boolean; testScore: number | null
+  anketaFilled: boolean; tested: boolean; testScore: number | null; answersScore: number | null
   // Виртуальная карточка «Интервью проведено (по стадии)» — кандидат уже на
   // стадии final_decision/decision/hired, но события календаря нет (интервью
   // прошло вне системы или бронирование не создавалось). См. п.2 задачи 04.07.
@@ -92,7 +92,7 @@ interface CalEvent {
   vacancyId: string | null; candidateId: string | null; interviewer: string | null; interviewType: string | null; interviewFormat: string | null
   interviewStatus: string | null
   candAiScore?: number | null; candResumeScore?: number | null; candScore?: number | null; candPhone?: string | null; candStage?: string | null
-  candAnketaFilled?: boolean; candTested?: boolean; candTestScore?: number | null
+  candAnketaFilled?: boolean; candTested?: boolean; candTestScore?: number | null; candAnswersScore?: number | null
 }
 function timeStr(dt: Date): string {
   return `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`
@@ -129,6 +129,7 @@ function mapEventToInterview(ev: CalEvent, vacMap: Map<string, string>): Intervi
     anketaFilled: ev.candAnketaFilled ?? false,
     tested: ev.candTested ?? false,
     testScore: ev.candTestScore ?? null,
+    answersScore: ev.candAnswersScore ?? null,
   }
 }
 
@@ -517,7 +518,7 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
         candidate: c.name, vacancy: vacOptions.find(v => v.id === vacancyId)?.title ?? "—",
         interviewer: "—", type: "HR" as InterviewType, format: "Онлайн" as InterviewFormat, status: "Пройдено" as InterviewStatus,
         candidateId: c.id, aiScore: null, resumeScore: null, phone: null, stage: c.stage,
-        anketaFilled: false, tested: false, testScore: null, byStageOnly: true,
+        anketaFilled: false, tested: false, testScore: null, answersScore: null, byStageOnly: true,
       }))
     return [...interviews, ...virtuals]
   }, [interviews, passedByStageCandidates, vacOptions, vacancyId])
@@ -710,48 +711,6 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                 </div>
               )}
 
-              {/* ═══ «Ждут назначения времени» (п.1 задачи 04.07) ═══
-                  Только в embedded (таб вакансии) и только в виде «Список». */}
-              {view === "list" && vacancyId && waitingCandidates.length > 0 && (
-                <Card className="mb-5 border-amber-300/60 dark:border-amber-800/60 bg-amber-50/40 dark:bg-amber-950/10">
-                  <CardContent className="p-4 space-y-2.5">
-                    <div className="flex items-center gap-2">
-                      <CalendarClock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                      <span className="text-sm font-semibold text-foreground">Ждут назначения времени</span>
-                      <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-amber-300 text-amber-700 dark:text-amber-400">{waitingCandidates.length}</Badge>
-                    </div>
-                    <div className="space-y-1.5">
-                      {waitingCandidates.map(c => (
-                        <div key={c.id} className="flex items-center gap-2 flex-wrap rounded-lg border bg-card px-3 py-2">
-                          <span className="font-medium text-sm truncate flex-1 min-w-[120px] cursor-pointer hover:text-primary" onClick={() => openCandidate(c.id)}>{c.name}</span>
-                          {c.stage && <Badge variant="secondary" className="text-[10px] font-normal">{getStageLabel(c.stage)}</Badge>}
-                          {c.phone && <a href={`tel:${c.phone}`} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"><Phone className="w-3 h-3" />{c.phone}</a>}
-                          <div className="flex items-center gap-1.5 ml-auto">
-                            {c.token && (
-                              <Button
-                                variant="outline" size="sm" className="h-7 text-xs gap-1"
-                                onClick={() => {
-                                  const url = `${window.location.origin}/schedule/${c.token}`
-                                  navigator.clipboard.writeText(url).then(
-                                    () => toast.success("Ссылка самозаписи скопирована"),
-                                    () => toast.error("Не удалось скопировать ссылку"),
-                                  )
-                                }}
-                              >
-                                <Link2 className="w-3 h-3" /> Скопировать ссылку
-                              </Button>
-                            )}
-                            <Button size="sm" className="h-7 text-xs gap-1" onClick={() => openCreate({ candidateId: c.id, name: c.name })}>
-                              <Plus className="w-3 h-3" /> Запланировать
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
               {/* ═══ LIST ════════════════════════════════════════ */}
               {view === "list" && (
                 <div className="space-y-3">
@@ -797,12 +756,14 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                           {/* Метрики кандидата */}
                           <div className="hidden md:flex items-center gap-5 px-5 border-l">
                             <div className="flex flex-col items-center min-w-[52px]">
-                              <span className="text-[9px] uppercase tracking-wide text-muted-foreground inline-flex items-center gap-0.5"><Sparkles className="w-2.5 h-2.5" />Резюме</span>
-                              <span className={cn("text-base font-bold leading-tight", scoreColor(iv.aiScore))}>{iv.aiScore != null ? iv.aiScore : "—"}</span>
+                              <span className="text-[9px] uppercase tracking-wide text-muted-foreground inline-flex items-center gap-0.5"><Sparkles className="w-2.5 h-2.5" />Портрет</span>
+                              <span className={cn("text-base font-bold leading-tight", scoreColor(iv.resumeScore))}>{iv.resumeScore != null ? iv.resumeScore : "—"}</span>
                             </div>
                             <div className="flex flex-col items-center min-w-[52px]">
                               <span className="text-[9px] uppercase tracking-wide text-muted-foreground inline-flex items-center gap-0.5"><FileText className="w-2.5 h-2.5" />Анкета</span>
-                              {iv.anketaFilled ? <Check className="w-5 h-5 text-emerald-600 dark:text-emerald-400" /> : <Minus className="w-5 h-5 text-muted-foreground/40" />}
+                              {iv.answersScore != null
+                                ? <span className={cn("text-base font-bold leading-tight", scoreColor(iv.answersScore))}>{iv.answersScore}</span>
+                                : iv.anketaFilled ? <Check className="w-5 h-5 text-emerald-600 dark:text-emerald-400" /> : <Minus className="w-5 h-5 text-muted-foreground/40" />}
                             </div>
                             <div className="flex flex-col items-center min-w-[52px]">
                               <span className="text-[9px] uppercase tracking-wide text-muted-foreground inline-flex items-center gap-0.5"><ClipboardCheck className="w-2.5 h-2.5" />Тест</span>
@@ -831,6 +792,49 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                     </Card>
                   ))}
                 </div>
+              )}
+
+              {/* ═══ «Ждут назначения времени» (п.1 задачи 04.07) ═══
+                  Только в embedded (таб вакансии) и только в виде «Список». Юрий 09.07:
+                  ниже назначенных интервью — сначала то, что уже запланировано. */}
+              {view === "list" && vacancyId && waitingCandidates.length > 0 && (
+                <Card className="mt-5 border-amber-300/60 dark:border-amber-800/60 bg-amber-50/40 dark:bg-amber-950/10">
+                  <CardContent className="p-4 space-y-2.5">
+                    <div className="flex items-center gap-2">
+                      <CalendarClock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                      <span className="text-sm font-semibold text-foreground">Ждут назначения времени</span>
+                      <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-amber-300 text-amber-700 dark:text-amber-400">{waitingCandidates.length}</Badge>
+                    </div>
+                    <div className="space-y-1.5">
+                      {waitingCandidates.map(c => (
+                        <div key={c.id} className="flex items-center gap-2 flex-wrap rounded-lg border bg-card px-3 py-2">
+                          <span className="font-medium text-sm truncate flex-1 min-w-[120px] cursor-pointer hover:text-primary" onClick={() => openCandidate(c.id)}>{c.name}</span>
+                          {c.stage && <Badge variant="secondary" className="text-[10px] font-normal">{getStageLabel(c.stage)}</Badge>}
+                          {c.phone && <a href={`tel:${c.phone}`} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"><Phone className="w-3 h-3" />{c.phone}</a>}
+                          <div className="flex items-center gap-1.5 ml-auto">
+                            {c.token && (
+                              <Button
+                                variant="outline" size="sm" className="h-7 text-xs gap-1"
+                                onClick={() => {
+                                  const url = `${window.location.origin}/schedule/${c.token}`
+                                  navigator.clipboard.writeText(url).then(
+                                    () => toast.success("Ссылка самозаписи скопирована"),
+                                    () => toast.error("Не удалось скопировать ссылку"),
+                                  )
+                                }}
+                              >
+                                <Link2 className="w-3 h-3" /> Скопировать ссылку
+                              </Button>
+                            )}
+                            <Button size="sm" className="h-7 text-xs gap-1" onClick={() => openCreate({ candidateId: c.id, name: c.name })}>
+                              <Plus className="w-3 h-3" /> Запланировать
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
               )}
 
               {/* ═══ CALENDAR ════════════════════════════════════ */}
