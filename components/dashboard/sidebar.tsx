@@ -13,7 +13,7 @@ import {
   AlertTriangle, UserMinus, Brain, Radar, Bot, Store, TrendingDown, Handshake,
   BookMarked, GraduationCap, Target, PieChart, FilePlus, Lock, Library,
   Sparkles, Plus, Coins, SlidersHorizontal, Sunrise, Activity, Inbox, Network,
-  Mail, Send, LineChart, Map,
+  Mail, Send, LineChart, Map, Image,
   type LucideIcon,
 } from "lucide-react"
 import {
@@ -52,7 +52,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   UserCheck2, Trophy, BarChart2, HeartHandshake, BookOpen, Award, Zap, ChevronRight,
   AlertTriangle, UserMinus, Brain, Radar, Bot, Store, TrendingDown, Handshake,
   BookMarked, GraduationCap, Target, PieChart, FilePlus, Library,
-  Sparkles, Plus, Coins, Activity, Inbox, Network, Mail, Send, LineChart, Map,
+  Sparkles, Plus, Coins, Activity, Inbox, Network, Mail, Send, LineChart, Map, Image,
 }
 function getIcon(name: string): LucideIcon {
   return ICON_MAP[name] ?? Settings
@@ -1158,6 +1158,26 @@ export function DashboardSidebar() {
               >
                 <GraduationCap className="size-4 shrink-0" />
                 <span className="flex-1 text-left">Академия</span>
+              </Link>
+            )
+          })()}
+
+          {/* «Обложки Big Life» — виден только тенанту Big Life (реальный
+              director-аккаунт заведён под этой конкретной компанией, см.
+              lib/big-life/auth.ts BIGLIFE_COMPANY_ID). */}
+          {user?.companyId === "a39c8844-2e7a-4adb-bb29-8645b2fbc9ff" && (() => {
+            const coversActive = pathname === '/big-life/covers'
+            return (
+              <Link
+                href="/big-life/covers"
+                style={coversActive ? { borderLeft: '3px solid #a78bfa' } : { borderLeft: '3px solid transparent' }}
+                className={cn(
+                  "flex items-center gap-2.5 w-full px-3 py-2.5 text-sm font-semibold transition-all duration-150 rounded-none rounded-r-lg hover:bg-sidebar-accent",
+                  coversActive ? "bg-sidebar-accent text-sidebar-foreground" : "text-sidebar-foreground/70",
+                )}
+              >
+                <Image className="size-4 shrink-0" />
+                <span className="flex-1 text-left">Обложки</span>
               </Link>
             )
           })()}

@@ -35,4 +35,5 @@ export const ADMIN_MENU: PlatformMenuItem[] = [
   { name: 'Роли и доступ',  href: '/admin/roles',        icon: 'ShieldCheck' },
   { name: 'Интеграторы',    href: '/admin/integrators',  icon: 'Handshake' },
   { name: 'Платформа',      href: '/admin/platform',     icon: 'ShieldAlert' },
+  { name: 'Big Life: обложки', href: '/big-life/covers', icon: 'Image' },
 ]
