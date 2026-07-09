@@ -174,9 +174,11 @@ function formatDayFull(dd: Date) { return dd.toLocaleDateString("ru-RU", { weekd
 
 function filterByCondition(interviews: Interview[], condition: StageCondition): Interview[] {
   const now = new Date(); now.setHours(0, 0, 0, 0)
-  const eod = new Date(now); eod.setHours(23, 59, 59, 999)
   switch (condition) {
-    case "date_after": return interviews.filter(iv => iv.date > eod)
+    // «Предстоящие» = сегодняшние (ещё идущие/будущие) + все следующие дни.
+    // Юрий 09.07: было "> конец сегодня" — сегодняшние интервью не попадали
+    // в «Предстоящие» вообще, только в «Сегодня» — теперь считаются в обеих.
+    case "date_after": return interviews.filter(iv => iv.date >= now)
     case "date_today": return interviews.filter(iv => isSameDay(iv.date, new Date()))
     case "date_before": return interviews.filter(iv => iv.date < now)
     case "status_confirmed": return interviews.filter(iv => iv.status === "Подтверждено")
