@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { writeFile, mkdir } from "fs/promises"
 import path from "path"
 import crypto from "crypto"
-import { requirePlatformOperator } from "@/lib/platform/auth"
+import { requireBigLifeAccess } from "@/lib/big-life/auth"
 import { bigLifeCoversAssetsDir } from "@/lib/big-life/paths"
 
 export const dynamic = "force-dynamic"
@@ -20,7 +20,7 @@ const ALLOWED: Record<string, string> = {
 
 export async function POST(req: NextRequest) {
   try {
-    await requirePlatformOperator()
+    await requireBigLifeAccess()
   } catch (e) {
     if (e instanceof Response) return e
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

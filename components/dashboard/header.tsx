@@ -1,7 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { Bell, Moon, Sun, Coffee, LogOut, PanelLeftClose, PanelLeft, ChevronDown, ArrowLeft, Building2, User as UserIcon, Loader2, Shield } from "lucide-react"
+import { Bell, Moon, Sun, Coffee, LogOut, PanelLeftClose, PanelLeft, ChevronDown, ArrowLeft, Building2, User as UserIcon, Loader2, Shield, Image as ImageIcon } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useEffect, useRef, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
@@ -239,6 +239,20 @@ export function DashboardHeader() {
               </Link>
             )}
 
+            {/* Big Life covers shortcut — тот же паттерн, что и /admin/platform
+                выше: владелец платформы обычно role="director" СВОЕЙ личной
+                компании, companyId-гейт в сайдбаре его не ловит, поэтому нужна
+                отдельная isPlatformAdmin-точка входа (predeploy-guard 09.07). */}
+            {isPlatformAdmin && (
+              <Link
+                href="/big-life/covers"
+                title="Обложки Big Life"
+                className="relative inline-flex items-center justify-center h-9 w-9 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors"
+              >
+                <ImageIcon className="h-5 w-5" />
+              </Link>
+            )}
+
             {/* Notifications */}
             <Popover>
               <PopoverTrigger asChild>
@@ -348,6 +362,14 @@ export function DashboardHeader() {
                         <Shield className="w-4 h-4 mr-2" />
                         Настройки платформы
                         <span className="ml-auto w-2 h-2 rounded-full bg-orange-500" />
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  {isPlatformAdmin && (
+                    <DropdownMenuItem className="text-sm cursor-pointer" asChild>
+                      <Link href="/big-life/covers">
+                        <ImageIcon className="w-4 h-4 mr-2" />
+                        Обложки Big Life
                       </Link>
                     </DropdownMenuItem>
                   )}

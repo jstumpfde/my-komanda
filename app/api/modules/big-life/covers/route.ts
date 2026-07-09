@@ -1,32 +1,39 @@
 // Обложки Big Life (архив biglife.company24.pro/Big Life Covers.dc.html) —
-// GET список для админки, POST — создать новую карточку.
+// GET список для админки, POST — создать новую карточку. Big Life — обычный
+// тенант (см. lib/big-life/auth.ts), все записи скопированы под companyId.
 import { NextRequest, NextResponse } from "next/server"
-import { asc, count as sqlCount } from "drizzle-orm"
+import { asc, eq, count as sqlCount } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { bigLifeCovers } from "@/lib/db/schema"
-import { requirePlatformOperator } from "@/lib/platform/auth"
+import { requireBigLifeAccess } from "@/lib/big-life/auth"
 
 export const dynamic = "force-dynamic"
 
 export async function GET() {
+  let user
   try {
-    await requirePlatformOperator()
+    user = await requireBigLifeAccess()
   } catch (e) {
     if (e instanceof Response) return e
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
   try {
-    const rows = await db.select().from(bigLifeCovers).orderBy(asc(bigLifeCovers.sortOrder))
+    const rows = await db
+      .select()
+      .from(bigLifeCovers)
+      .where(eq(bigLifeCovers.companyId, user.companyId))
+      .orderBy(asc(bigLifeCovers.sortOrder))
     return NextResponse.json({ covers: rows })
   } catch (err) {
-    console.error("[platform/big-life/covers GET]", err)
+    console.error("[modules/big-life/covers GET]", err)
     return NextResponse.json({ error: "internal" }, { status: 500 })
   }
 }
 
 export async function POST(req: NextRequest) {
+  let user
   try {
-    await requirePlatformOperator()
+    user = await requireBigLifeAccess()
   } catch (e) {
     if (e instanceof Response) return e
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -39,11 +46,15 @@ export async function POST(req: NextRequest) {
     if (!title || !heading || !year) {
       return NextResponse.json({ error: "title, heading, year обязательны" }, { status: 400 })
     }
-    const [{ count: countRaw }] = await db.select({ count: sqlCount() }).from(bigLifeCovers)
+    const [{ count: countRaw }] = await db
+      .select({ count: sqlCount() })
+      .from(bigLifeCovers)
+      .where(eq(bigLifeCovers.companyId, user.companyId))
     const nextOrder = Number(countRaw)
     const [row] = await db
       .insert(bigLifeCovers)
       .values({
+        companyId: user.companyId,
         title,
         heading,
         year,
@@ -59,7 +70,7 @@ export async function POST(req: NextRequest) {
       .returning()
     return NextResponse.json({ cover: row })
   } catch (err) {
-    console.error("[platform/big-life/covers POST]", err)
+    console.error("[modules/big-life/covers POST]", err)
     return NextResponse.json({ error: "internal" }, { status: 500 })
   }
 }
