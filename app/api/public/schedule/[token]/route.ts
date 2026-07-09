@@ -5,7 +5,7 @@
 import { NextRequest } from "next/server"
 import { eq, and, gte, lte, gt, lt, ne, sql, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, vacancies, companies, calendarEvents, users } from "@/lib/db/schema"
+import { candidates, vacancies, companies, calendarEvents, users, integrators, integratorClients } from "@/lib/db/schema"
 import { apiError, apiSuccess } from "@/lib/api-helpers"
 import { isShortId } from "@/lib/short-id"
 import { checkPublicTokenRateLimit } from "@/lib/public/rate-limit-public"
@@ -461,8 +461,11 @@ export async function POST(
 
     if (!row) return apiError("Вакансия не найдена", 404)
 
-    // Получаем первого директора/пользователя компании для createdBy
-    const [companyUser] = await db
+    // Получаем первого директора/пользователя компании для createdBy.
+    // Партнёрские клиенты (Юрий 09.07, Revoluterra): компания ведётся
+    // ТОЛЬКО через имперсонацию управляющего партнёра — своих users нет
+    // вообще. Фолбэк: первый пользователь партнёра из integrator_clients.
+    let [companyUser] = await db
       .select({ id: users.id })
       .from(users)
       .where(and(
@@ -470,6 +473,17 @@ export async function POST(
         isNull(users.deletedAt),
       ))
       .limit(1)
+
+    if (!companyUser) {
+      const [partnerUser] = await db
+        .select({ id: users.id })
+        .from(integratorClients)
+        .innerJoin(integrators, eq(integrators.id, integratorClients.integratorId))
+        .innerJoin(users, and(eq(users.companyId, integrators.companyId), isNull(users.deletedAt)))
+        .where(eq(integratorClients.clientCompanyId, row.companyId))
+        .limit(1)
+      companyUser = partnerUser
+    }
 
     if (!companyUser) return apiError("Компания не настроена", 404)
 
