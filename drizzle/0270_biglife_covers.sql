@@ -20,7 +20,7 @@ CREATE INDEX IF NOT EXISTS big_life_covers_year_idx ON big_life_covers(year);
 CREATE INDEX IF NOT EXISTS big_life_covers_sort_idx ON big_life_covers(sort_order);
 
 INSERT INTO big_life_covers (title, heading, period, year, image_path, price, sale_price, stock_qty, sold_out, is_active, sort_order) VALUES
-('BIG LIFE лето 2026 | Стас Михайлов', 'Стас Михайлов', 'BIG LIFE лето 2026', '2026', 'assets/covers-archive/00-big-life-2026.png', 1900, 1500, NULL, false, true, 0),
+('BIG LIFE лето 2026 | Стас Михайлов', 'Стас Михайлов', 'BIG LIFE лето 2026', '2026', 'assets/covers-archive/00-big-life-2026.png', NULL, NULL, NULL, false, true, 0),
 ('BIG life март-апрель 2026', 'BIG life март-апрель 2026', NULL, '2026', 'assets/covers-archive/01-big-life-2026.png', NULL, NULL, NULL, false, true, 1),
 ('BIG life февраль-март 2026', 'BIG life февраль-март 2026', NULL, '2026', 'assets/covers-archive/02-big-life-2026.png', NULL, NULL, NULL, false, true, 2),
 ('BIG life январь-февраль 2026', 'BIG life январь-февраль 2026', NULL, '2026', 'assets/covers-archive/03-big-life-2026.png', NULL, NULL, NULL, false, true, 3),
