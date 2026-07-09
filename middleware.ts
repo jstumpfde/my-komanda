@@ -92,6 +92,13 @@ const PUBLIC_PREFIXES = [
   // Webhook кандидатского TG-бота: запросы приходят от серверов Telegram (без
   // сессии), роут сам проверяет обязательный X-Telegram-Bot-Api-Secret-Token.
   "/api/telegram/candidate-bot/webhook",
+  // Webhook бота напоминаний менеджеру (@Ren_HR_bot, 09.07) — тот же принцип:
+  // запрос от Telegram без сессии, роут сам проверяет MANAGER_REMINDER_BOT_WEBHOOK_SECRET.
+  "/api/telegram/manager-bot/webhook",
+  // Выдача одноразового кода привязки — вызывается ИЗ платформы залогиненным
+  // пользователем (не Telegram), но живёт в middleware-исключении по тому же
+  // префиксу неймспейса; требует requireAuth() внутри самого роута.
+  "/api/telegram/manager-bot/link-code",
   // Webhook Авито: приходит от серверов Авито (без сессии), роут сам проверяет
   // AVITO_WEBHOOK_SECRET. Без этого Авито-серверы получали бы 302 на /login.
   "/api/webhooks/avito",
