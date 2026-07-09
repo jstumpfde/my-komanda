@@ -233,6 +233,8 @@ export interface CompanyHiringDefaults {
     // #27: доп. пороги напоминаний (по умолчанию ВКЛ, как остальные).
     remindMorning?:    boolean
     remind1h?:         boolean
+    // Юрий 09.07: 4-й порог — «за 15 минут» (по умолчанию ВКЛ).
+    remind15m?:        boolean
     timezone?:         string
     interviewMethods?: string[]
     officeAddress?:    string
@@ -2471,6 +2473,8 @@ export const calendarEvents = pgTable("calendar_events", {
   // #27: доп. напоминания — «утром в день встречи» и «за час до». NULL = не слали.
   remindMorningSentAt: timestamp("remind_morning_sent_at", { withTimezone: true }),
   remind1hSentAt:      timestamp("remind_1h_sent_at", { withTimezone: true }),
+  // Юрий 09.07: 4-й порог кандидату/HR-каналу — «за 15 минут» (миграция 0271).
+  remind15mSentAt:     timestamp("remind_15m_sent_at", { withTimezone: true }),
   // Напоминания МЕНЕДЖЕРУ (создателю события) в Telegram-бот @Ren_HR_bot —
   // отдельная дорожка от напоминаний кандидату/HR-каналу выше (миграция 0270),
   // своя идемпотентность, включает доп. порог «за 15 минут».

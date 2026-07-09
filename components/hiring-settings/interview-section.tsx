@@ -137,7 +137,10 @@ export function InterviewSection({
 
   // ── Напоминания ──
   const [remind24h, setRemind24h] = useState<boolean>(schedule.remind24h ?? true)
-  const [remind2h, setRemind2h] = useState<boolean>(schedule.remind2h ?? true)
+  const [remind2h, setRemind2h] = useState<boolean>(schedule.remind2h ?? true) // легаси, тумблер больше не показывается
+  const [remindMorning, setRemindMorning] = useState<boolean>(schedule.remindMorning ?? true)
+  const [remind1h, setRemind1h] = useState<boolean>(schedule.remind1h ?? true)
+  const [remind15m, setRemind15m] = useState<boolean>(schedule.remind15m ?? true)
 
   // ── Флаг platform admin (для блока интеграций) ──
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
@@ -333,7 +336,10 @@ export function InterviewSection({
           },
           // напоминания
           remind24h,
-          remind2h,
+          remind2h, // легаси, не редактируется в UI, значение сохраняется как есть
+          remindMorning,
+          remind1h,
+          remind15m,
           // способ интервью по умолчанию
           defaultInterviewMethod: defaultMethod,
         },
@@ -899,28 +905,40 @@ export function InterviewSection({
         </CardContent>
       </Card>
 
-      {/* Блок 4: Напоминания */}
+      {/* Блок 4: Напоминания — 4 настраиваемых порога (Юрий 09.07) */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
             <Bell className="size-4 text-muted-foreground" />Напоминания
           </CardTitle>
-          <CardDescription>Автоматические уведомления об интервью</CardDescription>
+          <CardDescription>Автоматические уведомления об интервью — кандидату, HR-каналу и менеджеру (если подключил Telegram выше)</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex items-center justify-between py-2">
             <div>
               <p className="text-sm font-medium">За 24 часа до интервью</p>
-              <p className="text-xs text-muted-foreground">Email и push-уведомление кандидату и HR</p>
+              <p className="text-xs text-muted-foreground">Только если интервью назначено больше чем за 36 часов — иначе рубежа «ровно сутки» ещё не было</p>
             </div>
             <Switch checked={remind24h} onCheckedChange={setRemind24h} />
           </div>
           <div className="flex items-center justify-between py-2">
             <div>
-              <p className="text-sm font-medium">За 2 часа до интервью</p>
-              <p className="text-xs text-muted-foreground">Push-уведомление кандидату</p>
+              <p className="text-sm font-medium">Утром в день интервью</p>
+              <p className="text-xs text-muted-foreground">В 9:00 по часовому поясу вакансии, если встреча ещё впереди</p>
             </div>
-            <Switch checked={remind2h} onCheckedChange={setRemind2h} />
+            <Switch checked={remindMorning} onCheckedChange={setRemindMorning} />
+          </div>
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <p className="text-sm font-medium">За 1 час до интервью</p>
+            </div>
+            <Switch checked={remind1h} onCheckedChange={setRemind1h} />
+          </div>
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <p className="text-sm font-medium">За 15 минут до интервью</p>
+            </div>
+            <Switch checked={remind15m} onCheckedChange={setRemind15m} />
           </div>
         </CardContent>
       </Card>
