@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { eq, and, gt, lte, isNull, ne, or } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { calendarEvents, candidates, companies, notifications, type CompanyHiringDefaults } from "@/lib/db/schema"
+import { calendarEvents, candidates, companies, notifications, users, type CompanyHiringDefaults } from "@/lib/db/schema"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { sendToCompanyChannel } from "@/lib/telegram/send-to-company"
+import { sendManagerBotMessage } from "@/lib/telegram/manager-bot"
 import { sendCandidateMessage } from "@/lib/prequalification/start"
 import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
 
@@ -16,19 +17,28 @@ import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
 //   2) Кандидату (если calendar_event.candidate_id заполнен): сообщение в hh-чат через
 //      sendCandidateMessage. Это OUTWARD — активировано явным решением (привязка кандидата).
 //      В сообщении кандидату — ссылка на перезапись (/schedule/[token]).
+//   3) Менеджеру-создателю события (calendar_event.created_by), ЕСЛИ он привязал
+//      личный Telegram к платформенному боту @Ren_HR_bot (users.manager_reminder_chat_id,
+//      см. lib/telegram/manager-bot.ts) — та же каденция + доп. порог «за 15 минут»
+//      (Юрий 09.07). Отдельная дорожка меток remind_manager_*, не пересекается с (1)/(2).
 //
-// Пороги (kind):
+// Пороги (kind) — кандидат/HR-канал:
 //   • 24h      — за сутки (окно 2ч..24ч);
 //   • morning  — утром в день встречи (тот же локальный день, локальный час ≥ 7, встреча ещё впереди);
 //   • 2h       — за 2 часа (окно 1ч..2ч, backward-compat);
 //   • 1h       — за час (окно ≤ ~75 мин).
+// Пороги менеджера (managerKind) — 24h / morning / 1h / 15m (окно ≤20 мин, только
+// для manager — нужен cron ЧАЩЕ часа, иначе окно проскакивает).
 //
-// Идемпотентность: на событии метки remind_24h/2h/morning/1h_sent_at — повторно не шлём.
+// Идемпотентность: на событии метки remind_24h/2h/morning/1h_sent_at (кандидат/канал) и
+// remind_manager_24h/morning/1h/15m_sent_at (менеджер) — повторно не шлём.
 // Тумблеры companies.hiringDefaultsJson.schedule.remind24h / remindMorning / remind2h /
-// remind1h (по умолчанию ВКЛ) могут отключить каждый тип.
+// remind1h (по умолчанию ВКЛ) управляют ТОЛЬКО кандидат/канал-напоминаниями; менеджерские
+// шлются всегда, если бот привязан (нет отдельного тумблера — привязка бота = согласие).
 //
-// Расписание (crontab, раз в час — НЕ добавлено автоматически, активирует Юрий):
-//   0 * * * * curl -s -X POST -H "X-Cron-Secret: $CRON_SECRET" \
+// Расписание (crontab — раз в 5 минут, ужесточено 09.07 ради порога «за 15 минут»
+// у менеджера; при часовом интервале это окно почти всегда проскакивает):
+//   */5 * * * * curl -s -X POST -H "X-Cron-Secret: $CRON_SECRET" \
 //     https://company24.pro/api/cron/interview-reminders >> /var/log/interview-reminders.log 2>&1
 //
 // Protected by X-Cron-Secret header.
@@ -64,15 +74,18 @@ function fmt(d: Date, tz: string): string {
 }
 
 type ReminderKind = "24h" | "morning" | "2h" | "1h"
+type ManagerReminderKind = "24h" | "morning" | "1h" | "15m"
 
-async function run(): Promise<{ scanned: number; sent24h: number; sentMorning: number; sent2h: number; sent1h: number; skipped: number }> {
+async function run(): Promise<{ scanned: number; sent24h: number; sentMorning: number; sent2h: number; sent1h: number; skipped: number; sentManager: number }> {
   const now = new Date()
   const in24h = new Date(now.getTime() + 24 * H)
   const in2h  = new Date(now.getTime() + 2 * H)
   const in1h15 = new Date(now.getTime() + 75 * 60 * 1000) // окно «за час» с запасом на часовой cron
+  const in15m  = new Date(now.getTime() + 20 * 60 * 1000) // окно «за 15 минут» — cron раз в 5 мин
 
   // Кандидаты на напоминание: будущие незавершённые интервью, которым ещё
-  // не слали хотя бы одно из напоминаний и которые уже попали в окно (≤24ч).
+  // не слали хотя бы одно из напоминаний (кандидату/каналу ИЛИ менеджеру)
+  // и которые уже попали в окно (≤24ч).
   const rows = await db
     .select({
       id:                  calendarEvents.id,
@@ -84,6 +97,10 @@ async function run(): Promise<{ scanned: number; sent24h: number; sentMorning: n
       remind2hSentAt:      calendarEvents.remind2hSentAt,
       remindMorningSentAt: calendarEvents.remindMorningSentAt,
       remind1hSentAt:      calendarEvents.remind1hSentAt,
+      remindManager24hSentAt:     calendarEvents.remindManager24hSentAt,
+      remindManagerMorningSentAt: calendarEvents.remindManagerMorningSentAt,
+      remindManager1hSentAt:      calendarEvents.remindManager1hSentAt,
+      remindManager15mSentAt:     calendarEvents.remindManager15mSentAt,
       interviewFormat:     calendarEvents.interviewFormat,
       location:            calendarEvents.location,
       meetingUrl:          calendarEvents.meetingUrl,
@@ -91,10 +108,12 @@ async function run(): Promise<{ scanned: number; sent24h: number; sentMorning: n
       candidateId:         calendarEvents.candidateId,
       candShortId:         candidates.shortId,
       candToken:           candidates.token,
+      managerChatId:       users.managerReminderChatId,
     })
     .from(calendarEvents)
     .innerJoin(companies, eq(calendarEvents.companyId, companies.id))
     .leftJoin(candidates, eq(calendarEvents.candidateId, candidates.id))
+    .leftJoin(users, eq(calendarEvents.createdBy, users.id))
     .where(
       and(
         eq(calendarEvents.type, "interview"),
@@ -106,11 +125,15 @@ async function run(): Promise<{ scanned: number; sent24h: number; sentMorning: n
           isNull(calendarEvents.remind2hSentAt),
           isNull(calendarEvents.remindMorningSentAt),
           isNull(calendarEvents.remind1hSentAt),
+          isNull(calendarEvents.remindManager24hSentAt),
+          isNull(calendarEvents.remindManagerMorningSentAt),
+          isNull(calendarEvents.remindManager1hSentAt),
+          isNull(calendarEvents.remindManager15mSentAt),
         ),
       ),
     )
 
-  let sent24h = 0, sentMorning = 0, sent2h = 0, sent1h = 0, skipped = 0
+  let sent24h = 0, sentMorning = 0, sent2h = 0, sent1h = 0, skipped = 0, sentManager = 0
 
   for (const ev of rows) {
     const sched   = (ev.hiringDefaults as CompanyHiringDefaults | null)?.schedule ?? {}
@@ -131,13 +154,55 @@ async function run(): Promise<{ scanned: number; sent24h: number; sentMorning: n
     else if (sameLocalDay && isMorningNow && !ev.remindMorningSentAt) kind = "morning"
     else if (!ev.remind24hSentAt) kind = "24h"
 
-    if (!kind) { skipped++; continue }
+    // Отдельная дорожка для менеджера (24h/morning/1h/15m) — своя идемпотентность,
+    // не зависит от того, что уже отправлено кандидату/каналу выше.
+    const within15m = startAt <= in15m
+    let managerKind: ManagerReminderKind | null = null
+    if (ev.managerChatId) {
+      if (within15m && !ev.remindManager15mSentAt) managerKind = "15m"
+      else if (within1h && !ev.remindManager1hSentAt) managerKind = "1h"
+      else if (sameLocalDay && isMorningNow && !ev.remindManagerMorningSentAt) managerKind = "morning"
+      else if (!ev.remindManager24hSentAt) managerKind = "24h"
+    }
+
+    if (!kind && !managerKind) { skipped++; continue }
 
     const markField =
-      kind === "1h"      ? { remind1hSentAt: now }
+      !kind ? {}
+      : kind === "1h"      ? { remind1hSentAt: now }
       : kind === "2h"    ? { remind2hSentAt: now }
       : kind === "morning" ? { remindMorningSentAt: now }
       : { remind24hSentAt: now }
+
+    const managerMarkField =
+      !managerKind ? {}
+      : managerKind === "15m"     ? { remindManager15mSentAt: now }
+      : managerKind === "1h"      ? { remindManager1hSentAt: now }
+      : managerKind === "morning" ? { remindManagerMorningSentAt: now }
+      : { remindManager24hSentAt: now }
+
+    // 0) Напоминание менеджеру — не зависит от тумблеров companies.hiringDefaultsJson
+    // (те гейтят только кандидата/канал); привязка бота = согласие получать все 4 порога.
+    if (managerKind) {
+      const managerLead =
+        managerKind === "24h"     ? "через 24 часа"
+        : managerKind === "morning" ? "сегодня"
+        : managerKind === "1h"    ? "через час"
+        : "через 15 минут"
+      const managerLocation = ev.interviewFormat === "Офис" && ev.location
+        ? `\n📍 ${ev.location}`
+        : ev.interviewFormat === "Онлайн" && ev.meetingUrl
+          ? `\n🔗 ${ev.meetingUrl}`
+          : ""
+      await sendManagerBotMessage(
+        ev.managerChatId!,
+        `⏰ <b>Интервью ${managerLead}</b>\n«${ev.title}» — ${when}${managerLocation}`,
+      ).catch(() => {})
+      await db.update(calendarEvents).set(managerMarkField).where(eq(calendarEvents.id, ev.id))
+      sentManager++
+    }
+
+    if (!kind) { skipped++; continue }
 
     const toggleOn =
       kind === "24h"     ? (sched.remind24h !== false)
@@ -214,7 +279,7 @@ async function run(): Promise<{ scanned: number; sent24h: number; sentMorning: n
     else sent1h++
   }
 
-  return { scanned: rows.length, sent24h, sentMorning, sent2h, sent1h, skipped }
+  return { scanned: rows.length, sent24h, sentMorning, sent2h, sent1h, skipped, sentManager }
 }
 
 async function handle(req: NextRequest) {

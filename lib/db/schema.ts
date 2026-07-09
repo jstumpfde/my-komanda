@@ -653,6 +653,11 @@ export const users = pgTable("users", {
   permissions: jsonb("permissions").default("{}"), // { manage_company, manage_team, manage_billing, ... }
   customSchedule: jsonb("custom_schedule").$type<UserCustomSchedule>(),  // график сотрудника (Профиль)
   telegramChatId: text("telegram_chat_id"),
+  // Личный chat_id в ПЛАТФОРМЕННОМ боте напоминаний об интервью (@Ren_HR_bot,
+  // миграция 0270) — отдельный от telegramChatId (тот привязан к КОМПАНЕЙСКОМУ
+  // боту базы знаний, другой bot token). Привязка — /start <код> через
+  // app/api/telegram/manager-bot/webhook, код выдаёт /api/telegram/manager-bot/link-code.
+  managerReminderChatId: text("manager_reminder_chat_id"),
   isActive: boolean("is_active").default(true),
   // Корзина пользователей (миграция 0152): soft-delete для очистки списка
   // (демо-наблюдатели, осиротевшие). NULL = активный.
@@ -2466,6 +2471,13 @@ export const calendarEvents = pgTable("calendar_events", {
   // #27: доп. напоминания — «утром в день встречи» и «за час до». NULL = не слали.
   remindMorningSentAt: timestamp("remind_morning_sent_at", { withTimezone: true }),
   remind1hSentAt:      timestamp("remind_1h_sent_at", { withTimezone: true }),
+  // Напоминания МЕНЕДЖЕРУ (создателю события) в Telegram-бот @Ren_HR_bot —
+  // отдельная дорожка от напоминаний кандидату/HR-каналу выше (миграция 0270),
+  // своя идемпотентность, включает доп. порог «за 15 минут».
+  remindManager24hSentAt:     timestamp("remind_manager_24h_sent_at", { withTimezone: true }),
+  remindManagerMorningSentAt: timestamp("remind_manager_morning_sent_at", { withTimezone: true }),
+  remindManager1hSentAt:      timestamp("remind_manager_1h_sent_at", { withTimezone: true }),
+  remindManager15mSentAt:     timestamp("remind_manager_15m_sent_at", { withTimezone: true }),
   // Интервью-модуль: структура для событий type='interview' (всё nullable).
   candidateId:      uuid("candidate_id").references(() => candidates.id, { onDelete: "set null" }),
   vacancyId:        uuid("vacancy_id").references(() => vacancies.id, { onDelete: "set null" }),
@@ -3387,6 +3399,10 @@ export const telegramLinkCodes = pgTable("telegram_link_codes", {
   code:      text("code").notNull().unique(),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  // Какой бот привязывается: 'knowledge_base' (компанейский бот БЗ,
+  // users.telegramChatId) | 'manager_reminders' (платформенный бот
+  // напоминаний об интервью, users.managerReminderChatId). Миграция 0270.
+  purpose: text("purpose").notNull().default("knowledge_base"),
 })
 
 // drizzle/0249 — WebAuthn/passkey: беспарольный вход по ключу устройства
