@@ -124,6 +124,19 @@ function utcToLocalDateTime(utcDate: Date, tz: string): { ymd: string; hhmm: str
   return { ymd, hhmm }
 }
 
+// Обратное преобразование: локальные YMD + HH:MM в указанной TZ → UTC Date.
+// Проба + коррекция офсета (тот же приём, что makeDateInTz в can-send-now.ts) —
+// корректно учитывает DST/произвольные IANA-зоны без сторонних пакетов.
+function localToUtc(ymd: string, hhmm: string, tz: string): Date {
+  const [year, month, day] = ymd.split("-").map(Number)
+  const [hour, minute] = hhmm.split(":").map(Number)
+  const probe = new Date(Date.UTC(year, month - 1, day, hour, minute))
+  const p = getLocalParts(probe, tz)
+  const localAsUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute)
+  const offsetMin = Math.round((probe.getTime() - localAsUtc) / 60_000)
+  return new Date(probe.getTime() + offsetMin * 60_000)
+}
+
 // ─── Основная функция ─────────────────────────────────────────────────────────
 
 export async function fetchScheduleData(
@@ -276,10 +289,14 @@ export async function fetchScheduleData(
     // 6. Генерируем слоты на horizonDays КАЛЕНДАРНЫХ дней вперёд в TZ компании
     // (кандидат видит запись максимум на столько дней — настройка вакансии).
     const days: SlotDay[] = []
-    // Начинаем с «завтра» в TZ компании
-    const checkDate = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+    // Начинаем с СЕГОДНЯ в TZ компании (Юрий 09.07: раньше всегда пропускали
+    // сегодняшний день целиком — "сейчас 11:37, а 12:00/14:00 не предлагали",
+    // даже если рабочее время ещё не кончилось). Для i===0 (сегодня) прошедшие
+    // часы отфильтровываются ниже. +1 итерация — чтобы не урезать настроенный
+    // horizonDays («дней вперёд», который раньше отсчитывался от завтра).
+    const checkDate = new Date(now)
 
-    for (let i = 0; i < horizonDays; i++) {
+    for (let i = 0; i < horizonDays + 1; i++) {
       const jsDay = localDayOfWeek(checkDate, timezone)
       const windows = daySchedule[JS_TO_DAY_ID[jsDay]] ?? []
       if (windows.length > 0) {
@@ -288,7 +305,11 @@ export async function fetchScheduleData(
 
         if (dayBooked < maxPerDay) {
           const rawSlots = generateSlotsForWindows(windows, step, defaultDuration)
-          const freeSlots = rawSlots.filter(t => !bookedSlotSet.has(`${ymd}T${t}`))
+          let freeSlots = rawSlots.filter(t => !bookedSlotSet.has(`${ymd}T${t}`))
+          if (i === 0) {
+            // Сегодня — не предлагаем уже прошедшие часы.
+            freeSlots = freeSlots.filter(t => localToUtc(ymd, t, timezone) > now)
+          }
           const remaining = maxPerDay - dayBooked
           const available = freeSlots.slice(0, remaining)
 
