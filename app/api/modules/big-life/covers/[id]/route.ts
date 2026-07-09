@@ -1,10 +1,11 @@
 // PATCH — обновить карточку обложки (цена/скидка/остаток/наличие/порядок/…).
-// DELETE — удалить карточку из архива.
+// DELETE — удалить карточку из архива. Все операции скопированы по companyId,
+// чтобы id одной компании нельзя было подобрать/задеть с сессией другой.
 import { NextRequest, NextResponse } from "next/server"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { bigLifeCovers } from "@/lib/db/schema"
-import { requirePlatformOperator } from "@/lib/platform/auth"
+import { requireBigLifeAccess } from "@/lib/big-life/auth"
 
 export const dynamic = "force-dynamic"
 
@@ -23,8 +24,9 @@ type Patch = Partial<{
 }>
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  let user
   try {
-    await requirePlatformOperator()
+    user = await requireBigLifeAccess()
   } catch (e) {
     if (e instanceof Response) return e
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -52,30 +54,34 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     const [row] = await db
       .update(bigLifeCovers)
       .set({ ...patch, updatedAt: new Date() })
-      .where(eq(bigLifeCovers.id, id))
+      .where(and(eq(bigLifeCovers.id, id), eq(bigLifeCovers.companyId, user.companyId)))
       .returning()
     if (!row) return NextResponse.json({ error: "not found" }, { status: 404 })
     return NextResponse.json({ cover: row })
   } catch (err) {
-    console.error("[platform/big-life/covers/:id PATCH]", err)
+    console.error("[modules/big-life/covers/:id PATCH]", err)
     return NextResponse.json({ error: "internal" }, { status: 500 })
   }
 }
 
 export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  let user
   try {
-    await requirePlatformOperator()
+    user = await requireBigLifeAccess()
   } catch (e) {
     if (e instanceof Response) return e
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
   const { id } = await ctx.params
   try {
-    const [row] = await db.delete(bigLifeCovers).where(eq(bigLifeCovers.id, id)).returning({ id: bigLifeCovers.id })
+    const [row] = await db
+      .delete(bigLifeCovers)
+      .where(and(eq(bigLifeCovers.id, id), eq(bigLifeCovers.companyId, user.companyId)))
+      .returning({ id: bigLifeCovers.id })
     if (!row) return NextResponse.json({ error: "not found" }, { status: 404 })
     return NextResponse.json({ ok: true })
   } catch (err) {
-    console.error("[platform/big-life/covers/:id DELETE]", err)
+    console.error("[modules/big-life/covers/:id DELETE]", err)
     return NextResponse.json({ error: "internal" }, { status: 500 })
   }
 }

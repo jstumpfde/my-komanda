@@ -4701,15 +4701,19 @@ export const clientPageViews = pgTable("client_page_views", {
 export type ClientPageView    = typeof clientPageViews.$inferSelect
 export type NewClientPageView = typeof clientPageViews.$inferInsert
 
-// ─── Big Life: архив обложек (0269) ────────────────────────────────────────
+// ─── Big Life: архив обложек (0270, компанийский, 0271) ────────────────────
 // Управляет данными статической страницы "Big Life Covers.dc.html" на
 // biglife.company24.pro — сайт-витрина (poddomain-root, чистый nginx-статик,
-// НЕ часть Next.js). Публикация из /admin/platform/big-life-covers пишет
-// строки этой таблицы в HTML-файл напрямую на диск сервера (см.
-// lib/big-life/render-covers-page.ts + lib/big-life/paths.ts), т.к. и
-// my-komanda, и статика Big Life живут на одной машине.
+// НЕ часть Next.js). Публикация из /big-life/covers пишет строки этой таблицы
+// в HTML-файл напрямую на диск сервера (см. lib/big-life/render-covers-page.ts
+// + lib/big-life/paths.ts), т.к. и my-komanda, и статика Big Life живут на
+// одной машине. companyId — Big Life заведён как полноценный тенант (0271):
+// доступ через обычный requireCompany()/requireDirector() + проверку
+// companyId === BIGLIFE_COMPANY_ID (см. lib/big-life/auth.ts), а не через
+// requirePlatformOperator() как было изначально.
 export const bigLifeCovers = pgTable("big_life_covers", {
   id:         uuid("id").primaryKey().defaultRandom(),
+  companyId:  uuid("company_id").notNull().references(() => companies.id),
   title:      text("title").notNull(),        // напр. "BIG life март-апрель 2026"
   heading:    text("heading").notNull(),       // подпись на карточке — обычно имя героя
   period:     text("period"),                  // напр. "Март-апрель 2026" (может быть null)
@@ -4726,6 +4730,7 @@ export const bigLifeCovers = pgTable("big_life_covers", {
 }, (t) => [
   index("big_life_covers_year_idx").on(t.year),
   index("big_life_covers_sort_idx").on(t.sortOrder),
+  index("big_life_covers_company_idx").on(t.companyId),
 ])
 export type BigLifeCover    = typeof bigLifeCovers.$inferSelect
 export type NewBigLifeCover = typeof bigLifeCovers.$inferInsert
