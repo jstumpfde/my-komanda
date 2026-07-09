@@ -37,6 +37,12 @@ export interface User {
   //   null/undefined  — grandfather (модули по роли, текущее поведение);
   //   непустой массив — компания видит ИМЕННО эти ключи модулей.
   enabledModules?: string[] | null
+  // Владелец платформы по email из PLATFORM_ADMIN_EMAILS (auth.ts session
+  // callback) — НЕ то же самое, что role==='platform_admin'/'admin': реальный
+  // владелец обычно имеет role='director' своей ЛИЧНОЙ компании (legacy).
+  // Гейтить owner-only UI нужно этим полем, а не ролью (инцидент 03.07 — та же
+  // путаница на app/api/admin/clients/[id]/modules/route.ts).
+  isPlatformAdmin?: boolean
 }
 
 interface AuthContextValue {
@@ -97,6 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         companyId: session.user.companyId ?? null,
         avatar: session.user.avatarUrl ?? undefined,
         enabledModules: session.user.enabledModules ?? null,
+        isPlatformAdmin: session.user.isPlatformAdmin ?? false,
       }
     : FALLBACK_USER
 

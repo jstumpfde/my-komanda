@@ -1162,10 +1162,13 @@ export function DashboardSidebar() {
             )
           })()}
 
-          {/* «Обложки Big Life» — виден только тенанту Big Life (реальный
-              director-аккаунт заведён под этой конкретной компанией, см.
-              lib/big-life/auth.ts BIGLIFE_COMPANY_ID). */}
-          {user?.companyId === "a39c8844-2e7a-4adb-bb29-8645b2fbc9ff" && (() => {
+          {/* «Обложки Big Life» — виден тенанту Big Life (реальный director-
+              аккаунт заведён под этой конкретной компанией, см.
+              lib/big-life/auth.ts BIGLIFE_COMPANY_ID) ИЛИ владельцу платформы
+              по email-whitelist (isPlatformAdmin) — companyId у него обычно
+              указывает на ЛИЧНУЮ компанию, не Big Life, поэтому одного
+              сравнения companyId недостаточно (predeploy-guard 09.07). */}
+          {(user?.companyId === "a39c8844-2e7a-4adb-bb29-8645b2fbc9ff" || user?.isPlatformAdmin) && (() => {
             const coversActive = pathname === '/big-life/covers'
             return (
               <Link
