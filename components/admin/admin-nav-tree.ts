@@ -11,6 +11,7 @@ import {
   LayoutDashboard, Building2, Package, Library, ShieldAlert, Shield, Handshake,
   Inbox, Bot, BookOpen, Activity, Wrench, Palette, Sparkles, UserPlus, Ticket,
   GitCommitHorizontal, Briefcase, MessageSquare, Repeat, ScrollText, Star, Globe,
+  Image as ImageIcon,
   type LucideIcon,
 } from "lucide-react"
 
@@ -61,6 +62,7 @@ export const ADMIN_NAV_TREE: AdminNavCategory[] = [
       { label: "Cron-запуски",  href: "/admin/platform/cron",       icon: Wrench },
       { label: "Согласия (152-ФЗ)", href: "/admin/platform/consent-log", icon: ScrollText },
       { label: "Заявки", href: "/admin/platform/leads", icon: Inbox },
+      { label: "Big Life: обложки", href: "/admin/platform/big-life-covers", icon: ImageIcon },
     ],
   },
 ]
