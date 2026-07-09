@@ -50,7 +50,6 @@ function cardHtml(c: BigLifeCover): string {
 export function renderCoversPage(rows: BigLifeCover[]): string {
   const covers = rows.filter(c => c.isActive).sort((a, b) => a.sortOrder - b.sortOrder)
   const cardsHtml = covers.map(cardHtml).join("\n")
-  const total = covers.length
   const firstYear = covers.length ? covers[covers.length - 1].year : ""
 
   return `<!DOCTYPE html>
@@ -177,7 +176,7 @@ export function renderCoversPage(rows: BigLifeCover[]): string {
     <div class="r-sec" style="max-width:1280px; margin:0 auto; padding:64px 32px 12px;">
       <div style="font-size:12px; letter-spacing:0.24em; text-transform:uppercase; color:#B01A18; font-weight:600; margin-bottom:14px;">Архив номеров</div>
       <h1 style="font-family:'Bodoni Moda',serif; font-weight:700; font-size:54px; letter-spacing:-0.01em; margin:0 0 16px; color:#14161F;">Обложки</h1>
-      <p style="font-size:17px; line-height:1.6; color:#6E6C76; max-width:62ch; margin:0;">Все обложки BIG Life с ${esc(firstYear)} года — герои номеров, сезоны и специальные выпуски. Всего ${total} обложек.</p>
+      <p style="font-size:17px; line-height:1.6; color:#6E6C76; margin:0;">Все обложки BIG Life с ${esc(firstYear)} года — герои номеров, сезоны и специальные выпуски.</p>
     </div>
   </section>
 
