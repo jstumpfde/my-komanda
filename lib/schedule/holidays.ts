@@ -26,3 +26,41 @@ export type HolidayId = typeof RU_HOLIDAYS[number]["id"]
 // Используется как defaultValue для column schedule_excluded_holiday_ids
 // и для нового UI «отметить все».
 export const DEFAULT_EXCLUDED_HOLIDAY_IDS: HolidayId[] = RU_HOLIDAYS.map((h) => h.id)
+
+// ─── Нерабочий ли день ────────────────────────────────────────────────────────
+// Единая проверка «этот день — праздник/нерабочий период» с той же
+// семантикой, что и блок праздников в can-send-now.ts: пустой excluded-набор
+// = все праздники РФ нерабочие; кастомные периоды — включительно по датам.
+// Используется генератором слотов записи на интервью (аудит 11.07: кандидат
+// мог записаться на 1 января — слоты праздники не учитывали вовсе).
+export function isNonWorkingDay(opts: {
+  /** месяц 1-12 и день в TZ компании */
+  month: number
+  day: number
+  /** дата "YYYY-MM-DD" в TZ компании — для кастомных периодов */
+  isoDate: string
+  /** страна вакансии (vacancies.schedule_country); не-RU — списки lib/holidays */
+  country?: string | null
+  excludedHolidayIds?: string[] | null
+  customHolidays?: { from: string; to: string; label?: string }[] | null
+  /** инъекция для не-RU списков (schedule-data передаёт getHolidaysForCountry) */
+  countryHolidayDates?: string[] | null
+}): boolean {
+  const country = opts.country || "RU"
+  if (country !== "RU") {
+    // Не-RU: сравнение по "DD.MM" (формат lib/holidays), паритет can-send-now.
+    const ddmm = `${String(opts.day).padStart(2, "0")}.${String(opts.month).padStart(2, "0")}`
+    if ((opts.countryHolidayDates ?? []).includes(ddmm)) return true
+  } else {
+    const excluded: string[] =
+      opts.excludedHolidayIds && opts.excludedHolidayIds.length > 0
+        ? opts.excludedHolidayIds
+        : DEFAULT_EXCLUDED_HOLIDAY_IDS
+    const std = RU_HOLIDAYS.find((h) => h.month === opts.month && h.day === opts.day)
+    if (std && excluded.includes(std.id)) return true
+  }
+  for (const c of opts.customHolidays ?? []) {
+    if (c.from && c.to && c.from <= opts.isoDate && opts.isoDate <= c.to) return true
+  }
+  return false
+}

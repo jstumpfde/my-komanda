@@ -14,6 +14,8 @@ import type { SchedulePageData, MethodConfig, SlotDay } from "@/lib/schedule-int
 import { sendToCompanyChannel } from "@/lib/telegram/send-to-company"
 import { createNotification } from "@/lib/notifications"
 import { resolveDaySchedule, resolveVacancyDaySchedule, generateSlotsForWindows, JS_TO_DAY_ID } from "@/lib/schedule/day-windows"
+import { isNonWorkingDay } from "@/lib/schedule/holidays"
+import { getHolidaysForCountry } from "@/lib/holidays"
 import { normalizeFunnelV2, type InterviewMode } from "@/lib/funnel-v2/types"
 
 export type { SchedulePageData, MethodConfig, SlotDay }
@@ -226,6 +228,10 @@ export async function GET(
         companyOfficeAddress: companies.officeAddress,
         // #21: per-вакансия окна записи (descriptionJson.interviewDaySchedule)
         vacancyDescriptionJson: vacancies.descriptionJson,
+        // Аудит 11.07: праздники/нерабочие периоды вакансии — в сетку не попадают
+        schedExcludedHolidayIds: vacancies.scheduleExcludedHolidayIds,
+        schedCustomHolidays:     vacancies.scheduleCustomHolidays,
+        schedCountry:            vacancies.scheduleCountry,
       })
       .from(vacancies)
       .innerJoin(companies, eq(vacancies.companyId, companies.id))
@@ -348,11 +354,25 @@ export async function GET(
     // «Завтра» в TZ компании: начинаем с now + 24h и определяем локальный день.
     const checkDate = new Date(now.getTime() + 24 * 60 * 60 * 1000)
 
+    // Праздники/нерабочие периоды вакансии (семантика can-send-now) —
+    // такие дни в сетку не попадают (аудит 11.07).
+    const countryHolidayDates = (row.schedCountry && row.schedCountry !== "RU")
+      ? getHolidaysForCountry(row.schedCountry as Parameters<typeof getHolidaysForCountry>[0]).map((h) => h.date)
+      : null
+
     for (let i = 0; i < horizonDays; i++) {
       const jsDay = localDayOfWeek(checkDate, timezone)
       const windows = daySchedule[JS_TO_DAY_ID[jsDay]] ?? []
       if (windows.length > 0) {
         const ymd = localDateToYMD(checkDate, timezone)
+        const [, hMm, hDd] = ymd.split("-").map(Number)
+        if (isNonWorkingDay({
+          month: hMm, day: hDd, isoDate: ymd,
+          country: row.schedCountry,
+          excludedHolidayIds: row.schedExcludedHolidayIds,
+          customHolidays: row.schedCustomHolidays,
+          countryHolidayDates,
+        })) { checkDate.setTime(checkDate.getTime() + 24 * 60 * 60 * 1000); continue }
         const dayBooked = bookedCountByDay[ymd] ?? 0
 
         if (dayBooked < maxPerDay) {
@@ -480,6 +500,10 @@ export async function POST(
         companyOfficeAddress: companies.officeAddress,
         // #26.4: настраиваемые тексты экрана "Вы записаны" (descriptionJson.interviewBookedScreen)
         vacancyDescriptionJson: vacancies.descriptionJson,
+        // Аудит 11.07: для валидации брони против сетки/праздников
+        schedExcludedHolidayIds: vacancies.scheduleExcludedHolidayIds,
+        schedCustomHolidays:     vacancies.scheduleCustomHolidays,
+        schedCountry:            vacancies.scheduleCountry,
       })
       .from(vacancies)
       .innerJoin(companies, eq(vacancies.companyId, companies.id))
@@ -545,6 +569,45 @@ export async function POST(
     // body.date + body.time — локальное время в TZ компании; конвертируем в UTC.
     const startAt = localDateTimeToUtc(body.date, body.time, timezone)
     const endAt   = new Date(startAt.getTime() + duration * 60_000)
+
+    // 4.5 Аудит 11.07: бронируется только слот из реальной сетки вакансии.
+    // Раньше POST принимал произвольный date/time по regex — устаревшая
+    // страница или ручной запрос могли занять прошлое, ночь, праздник или
+    // дату за горизонтом записи.
+    const daySchedule = resolveVacancyDaySchedule(
+      (row.vacancyDescriptionJson as { interviewDaySchedule?: unknown } | null)?.interviewDaySchedule,
+      sched,
+    )
+    const slotStep = sched.slotStep ?? DEFAULT_STEP
+    // День недели календарной даты (полдень UTC — не зависит от TZ сервера).
+    const jsDayReq = new Date(`${body.date}T12:00:00Z`).getUTCDay()
+    const reqWindows = daySchedule[JS_TO_DAY_ID[jsDayReq]] ?? []
+    const validTimes = reqWindows.length > 0 ? generateSlotsForWindows(reqWindows, slotStep, duration) : []
+    if (!validTimes.includes(body.time)) {
+      return apiError("Это время недоступно для записи — обновите страницу и выберите слот из списка", 400)
+    }
+    const [, reqMonth, reqDay] = body.date.split("-").map(Number)
+    const reqCountryHolidays = (row.schedCountry && row.schedCountry !== "RU")
+      ? getHolidaysForCountry(row.schedCountry as Parameters<typeof getHolidaysForCountry>[0]).map((h) => h.date)
+      : null
+    if (isNonWorkingDay({
+      month: reqMonth, day: reqDay, isoDate: body.date,
+      country: row.schedCountry,
+      excludedHolidayIds: row.schedExcludedHolidayIds,
+      customHolidays: row.schedCustomHolidays,
+      countryHolidayDates: reqCountryHolidays,
+    })) {
+      return apiError("В этот день запись недоступна — выберите другую дату", 400)
+    }
+    if (startAt.getTime() <= Date.now()) {
+      return apiError("Это время уже прошло — обновите страницу и выберите актуальный слот", 400)
+    }
+    const djHorizonPost = (row.vacancyDescriptionJson as { interviewMaxBookingDays?: unknown } | null)?.interviewMaxBookingDays
+    const rawHorizonPost = Number(djHorizonPost ?? (sched as { maxBookingDays?: unknown }).maxBookingDays ?? 14)
+    const horizonDaysPost = Number.isFinite(rawHorizonPost) && rawHorizonPost >= 1 ? Math.min(30, Math.floor(rawHorizonPost)) : 14
+    if (startAt.getTime() > Date.now() + (horizonDaysPost + 2) * 24 * 60 * 60 * 1000) {
+      return apiError("Дата за пределами доступного окна записи", 400)
+    }
 
     // 5. Идемпотентность по этому же слоту (candidate + startAt).
     const [existingSlot] = await db
@@ -624,6 +687,26 @@ export async function POST(
         ))
         .limit(1)
       if (slotTaken) return { taken: true as const, eventId: null }
+
+      // Аудит 11.07: лимит записей в день (maxPerDay) — устаревшая страница
+      // могла предлагать слоты, когда день уже заполнился. Свои события
+      // кандидата не считаем (его перенос ниже освобождает старый слот).
+      const maxPerDayRawB = Number(sched.maxPerDay ?? DEFAULT_MAX)
+      const maxPerDayB = Number.isFinite(maxPerDayRawB) && maxPerDayRawB >= 0 ? maxPerDayRawB : DEFAULT_MAX
+      const dayStartUtc = localDateTimeToUtc(body.date!, "00:00", timezone)
+      const dayEndUtc   = new Date(dayStartUtc.getTime() + 24 * 60 * 60 * 1000)
+      const [dayCount] = await tx
+        .select({ cnt: sql<number>`count(*)::int` })
+        .from(calendarEvents)
+        .where(and(
+          eq(calendarEvents.companyId,   row.companyId),
+          eq(calendarEvents.type,        "interview"),
+          eq(calendarEvents.status,      "confirmed"),
+          ne(calendarEvents.candidateId, candidate.id),
+          gte(calendarEvents.startAt,    dayStartUtc),
+          lt(calendarEvents.startAt,     dayEndUtc),
+        ))
+      if ((dayCount?.cnt ?? 0) >= maxPerDayB) return { taken: true as const, eventId: null }
 
       // #3.3 Перенос: если у кандидата уже есть будущий interview-event — отменяем его.
       // Идемпотентно: не трогаем прошедшие события и только что созданный (выше проверено).

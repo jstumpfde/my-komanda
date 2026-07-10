@@ -8,6 +8,8 @@ import { isShortId } from "@/lib/short-id"
 import type { CompanyHiringDefaults } from "@/lib/db/schema"
 import type { SchedulePageData, MethodConfig, SlotDay } from "@/lib/schedule-interview-types"
 import { resolveDaySchedule, resolveVacancyDaySchedule, generateSlotsForWindows, JS_TO_DAY_ID } from "@/lib/schedule/day-windows"
+import { isNonWorkingDay } from "@/lib/schedule/holidays"
+import { getHolidaysForCountry } from "@/lib/holidays"
 import { normalizeFunnelV2, type InterviewMode } from "@/lib/funnel-v2/types"
 
 export type { SchedulePageData, MethodConfig, SlotDay }
@@ -172,6 +174,11 @@ export async function fetchScheduleData(
         companyOfficeAddress: companies.officeAddress,
         // #21: per-вакансия окна записи (descriptionJson.interviewDaySchedule)
         vacancyDescriptionJson: vacancies.descriptionJson,
+        // Аудит 11.07: нерабочие дни вакансии — слоты записи не должны
+        // предлагать праздники (раньше кандидат мог записаться на 1 января).
+        schedExcludedHolidayIds: vacancies.scheduleExcludedHolidayIds,
+        schedCustomHolidays:     vacancies.scheduleCustomHolidays,
+        schedCountry:            vacancies.scheduleCountry,
       })
       .from(vacancies)
       .innerJoin(companies, eq(vacancies.companyId, companies.id))
@@ -296,11 +303,25 @@ export async function fetchScheduleData(
     // horizonDays («дней вперёд», который раньше отсчитывался от завтра).
     const checkDate = new Date(now)
 
+    // Праздники/нерабочие периоды вакансии (та же семантика, что и гейт
+    // отправки сообщений can-send-now): такие дни в сетку не попадают.
+    const countryHolidayDates = (row.schedCountry && row.schedCountry !== "RU")
+      ? getHolidaysForCountry(row.schedCountry as Parameters<typeof getHolidaysForCountry>[0]).map((h) => h.date)
+      : null
+
     for (let i = 0; i < horizonDays + 1; i++) {
       const jsDay = localDayOfWeek(checkDate, timezone)
       const windows = daySchedule[JS_TO_DAY_ID[jsDay]] ?? []
       if (windows.length > 0) {
         const ymd = localDateToYMD(checkDate, timezone)
+        const [, mm, dd] = ymd.split("-").map(Number)
+        if (isNonWorkingDay({
+          month: mm, day: dd, isoDate: ymd,
+          country: row.schedCountry,
+          excludedHolidayIds: row.schedExcludedHolidayIds,
+          customHolidays: row.schedCustomHolidays,
+          countryHolidayDates,
+        })) { checkDate.setTime(checkDate.getTime() + 24 * 60 * 60 * 1000); continue }
         const dayBooked = bookedCountByDay[ymd] ?? 0
 
         if (dayBooked < maxPerDay) {
