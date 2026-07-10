@@ -2652,17 +2652,21 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                   <p className="text-[11px] text-muted-foreground">По умолчанию — блок, помеченный «боевым» в табе «Контент». Можно отправить на конкретный демо-блок из нескольких.</p>
                 </div>
               )}
-              {/* #4 hh-стадия: одиночные метки, дефолт «Первичный контакт» */}
+              {/* #4 hh-стадия. Подписи СТРОГО по hh API (отложенный фикс 29.06,
+                  переимплементирован 11.07): phone_interview = «Первичный
+                  контакт», consider = «Подумать». Раньше были перепутаны —
+                  приглашённые уезжали на hh в «Подумать» (снижало индекс
+                  вежливости работодателя). Дефолт — phone_interview. */}
               <div className="space-y-1.5">
                 <Label className="text-xs">Стадия в hh.ru при приглашении</Label>
                 <Select
-                  value={rt.inviteHhStage ?? "consider"}
+                  value={rt.inviteHhStage ?? "phone_interview"}
                   onValueChange={v => patchThresholds(rt => ({ ...rt, inviteHhStage: v as "phone_interview" | "consider" | "interview" | "assessment" }))}
                 >
                   <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="consider">Первичный контакт</SelectItem>
-                    <SelectItem value="phone_interview">Телефонное интервью</SelectItem>
+                    <SelectItem value="phone_interview">Первичный контакт</SelectItem>
+                    <SelectItem value="consider">Подумать</SelectItem>
                     <SelectItem value="interview">Собеседование</SelectItem>
                     <SelectItem value="assessment">Тестовое задание</SelectItem>
                   </SelectContent>
@@ -2671,7 +2675,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
               </div>
               {/* #3 Итог: куда реально переводится кандидат */}
               <p className="text-[11px] text-muted-foreground rounded-md bg-muted/40 px-2.5 py-1.5 leading-relaxed">
-                Итог: приглашённый получит ссылку на <b>{rt.inviteContentBlockId ? (inviteBlockChoices.find(b => b.id === rt.inviteContentBlockId)?.title ?? "выбранный блок") : "боевой демо-блок"}</b> и перейдёт в воронке hh.ru в стадию <b>{({ consider: "Первичный контакт", phone_interview: "Телефонное интервью", interview: "Собеседование", assessment: "Тестовое задание" } as Record<string, string>)[rt.inviteHhStage ?? "consider"]}</b>.
+                Итог: приглашённый получит ссылку на <b>{rt.inviteContentBlockId ? (inviteBlockChoices.find(b => b.id === rt.inviteContentBlockId)?.title ?? "выбранный блок") : "боевой демо-блок"}</b> и перейдёт в воронке hh.ru в стадию <b>{({ consider: "Подумать", phone_interview: "Первичный контакт", interview: "Собеседование", assessment: "Тестовое задание" } as Record<string, string>)[rt.inviteHhStage ?? "phone_interview"]}</b>.
               </p>
             </>)}
           </div>

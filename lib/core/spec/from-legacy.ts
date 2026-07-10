@@ -215,7 +215,7 @@ export function buildSpecFromLegacy(vacancy: LegacyVacancyInput): CandidateSpec 
     autoRejectEnabled:    autoReject,
     autoInviteEnabled:    bool((ai as Record<string, unknown>).autoInviteEnabled, false),  // legacy не звал автоматически
     inviteNextStep:       "demo",
-    inviteHhStage:        "consider",   // дефолт «Первичный контакт» (решение Юрия 28.06)
+    inviteHhStage:        "phone_interview",   // «Первичный контакт» на hh (фикс 29.06/11.07: consider = «Подумать», подписи были перепутаны)
     inviteContentBlockId: null,
     inviteDelaySeconds:   180,          // реальное значение подтянет GET-бэкфилл из цепочки
     offHoursEnabled:      true,
