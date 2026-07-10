@@ -1,8 +1,12 @@
 import { NextRequest } from "next/server"
 import { db } from "@/lib/db"
-import { calendarEvents, calendarEventParticipants } from "@/lib/db/schema"
+import { calendarEvents, calendarEventParticipants, candidates, vacancies, users } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { eq, and } from "drizzle-orm"
+import { sendCandidateMessage } from "@/lib/prequalification/start"
+import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
+import { renderTemplate } from "@/lib/template-renderer"
+import { DEFAULT_MEETING_LINK_MESSAGE } from "@/lib/hh/default-messages"
 
 export async function GET(
   _req: NextRequest,
@@ -115,6 +119,72 @@ export async function PATCH(
       .set(updateData)
       .where(eq(calendarEvents.id, id))
       .returning()
+
+    // Юрий 10.07: менеджер вставил/сменил ссылку на встречу (Zoom и т.п.) —
+    // отправляем кандидату сообщение со ссылкой, просьбой подтвердить получение
+    // и контактами HR (Профиль → «Контакты для кандидатов»), если заполнены.
+    // Триггерится только на НЕПУСТОЕ реальное изменение и явный опт-ин с фронта
+    // (notifyMeetingLink) — чтобы не слать письмо на каждый несвязанный PATCH.
+    const finalCandidateId = (updated?.candidateId ?? existing.candidateId) as string | null
+    const finalType = (updated?.type ?? existing.type) as string
+    const newMeetingUrl = typeof updateData.meetingUrl === "string" ? updateData.meetingUrl.trim() : ""
+    const meetingUrlChanged = newMeetingUrl !== "" && newMeetingUrl !== (existing.meetingUrl ?? "").trim()
+    if (
+      body.notifyMeetingLink === true &&
+      finalType === "interview" &&
+      finalCandidateId &&
+      meetingUrlChanged
+    ) {
+      try {
+        const [cand] = await db
+          .select({
+            shortId: candidates.shortId,
+            vacancyTitle: vacancies.title,
+          })
+          .from(candidates)
+          .innerJoin(vacancies, eq(vacancies.id, candidates.vacancyId))
+          .where(eq(candidates.id, finalCandidateId))
+          .limit(1)
+        const [manager] = await db
+          .select({
+            contactTelegram: users.contactTelegram,
+            contactMax: users.contactMax,
+            contactPhone: users.contactPhone,
+          })
+          .from(users)
+          .where(eq(users.id, existing.createdBy))
+          .limit(1)
+        const { firstName } = await getCandidateFirstName(finalCandidateId)
+
+        const contactLines = [
+          manager?.contactTelegram ? `Telegram: ${manager.contactTelegram}` : null,
+          manager?.contactMax ? `Max: ${manager.contactMax}` : null,
+          manager?.contactPhone ? `Телефон: ${manager.contactPhone}` : null,
+        ].filter(Boolean) as string[]
+        const contacts = contactLines.length
+          ? `\n\nЕсли что-то не так — на связи:\n${contactLines.join("\n")}`
+          : ""
+
+        const template = (updated?.vacancyId
+          ? (await db
+              .select({ settings: vacancies.aiProcessSettings })
+              .from(vacancies)
+              .where(eq(vacancies.id, updated.vacancyId as string))
+              .limit(1)
+            ).at(0)?.settings as { meetingLinkMessage?: string } | null
+          : null)?.meetingLinkMessage?.trim() || DEFAULT_MEETING_LINK_MESSAGE
+
+        const rendered = renderTemplate(template, {
+          name: firstName,
+          vacancy: cand?.vacancyTitle ?? "",
+          meeting_link: newMeetingUrl,
+          contacts,
+        })
+        await sendCandidateMessage(finalCandidateId, rendered)
+      } catch (notifyErr) {
+        console.error("[calendar PATCH] meeting link notify failed:", notifyErr)
+      }
+    }
 
     // C4: обновляем участников (если переданы — заменяем полностью)
     if (body.participants !== undefined && Array.isArray(body.participants)) {

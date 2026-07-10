@@ -66,6 +66,12 @@ const ALIASES: Record<string, string> = {
   // ─── запасной канал загрузки видео (Telegram-бот) ───
   "ссылка_на_бота":            "tg_upload_link",
   "tg_upload_link":            "tg_upload_link",
+  // ─── ссылка на встречу (Zoom и т.п.) + контакты HR ───
+  "ссылка_на_встречу":         "meeting_link",
+  "meeting_link":              "meeting_link",
+  "контакты":                  "contacts",
+  "контакты_hr":               "contacts",
+  "contacts":                  "contacts",
 }
 
 // Регулярка единым проходом ловит:

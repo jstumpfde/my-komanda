@@ -23,6 +23,9 @@ export async function GET() {
         avatarUrl: users.avatarUrl,
         customSchedule: users.customSchedule,
         managerReminderChatId: users.managerReminderChatId,
+        contactTelegram: users.contactTelegram,
+        contactMax: users.contactMax,
+        contactPhone: users.contactPhone,
         createdAt: users.createdAt,
       })
       .from(users)
@@ -57,6 +60,9 @@ export async function PATCH(req: NextRequest) {
       newPassword?: unknown
       customSchedule?: unknown
       managerReminderChatId?: unknown
+      contactTelegram?: unknown
+      contactMax?: unknown
+      contactPhone?: unknown
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -79,6 +85,20 @@ export async function PATCH(req: NextRequest) {
         return apiError("managerReminderChatId можно только сбросить (null)", 400)
       }
       updates.managerReminderChatId = null
+    }
+
+    // ── Контакты для оперативной связи с кандидатом (Юрий 10.07) ──
+    if (body.contactTelegram !== undefined) {
+      const v = typeof body.contactTelegram === "string" ? body.contactTelegram.trim() : ""
+      updates.contactTelegram = v.slice(0, 200) || null
+    }
+    if (body.contactMax !== undefined) {
+      const v = typeof body.contactMax === "string" ? body.contactMax.trim() : ""
+      updates.contactMax = v.slice(0, 200) || null
+    }
+    if (body.contactPhone !== undefined) {
+      const v = typeof body.contactPhone === "string" ? body.contactPhone.trim() : ""
+      updates.contactPhone = v.slice(0, 50) || null
     }
 
     // ── companyId ──────────────────────────────────────────
