@@ -660,6 +660,12 @@ export const users = pgTable("users", {
   // боту базы знаний, другой bot token). Привязка — /start <код> через
   // app/api/telegram/manager-bot/webhook, код выдаёт /api/telegram/manager-bot/link-code.
   managerReminderChatId: text("manager_reminder_chat_id"),
+  // Юрий 10.07: личные контакты для оперативной связи с кандидатом — видимо
+  // редактируемые поля (не вшитый текст), подставляются в сообщение со
+  // ссылкой на встречу ("подтвердите получение" + контакты HR).
+  contactTelegram: text("contact_telegram"),
+  contactMax:      text("contact_max"),
+  contactPhone:    text("contact_phone"),
   isActive: boolean("is_active").default(true),
   // Корзина пользователей (миграция 0152): soft-delete для очистки списка
   // (демо-наблюдатели, осиротевшие). NULL = активный.
@@ -1290,6 +1296,19 @@ export interface VacancyAiProcessSettings {
   inviteMessage?:    string
   reInviteMessage?:  string
   rejectMessage?:    string
+  // Юрий 10.07: текст, который уходит кандидату, когда менеджер отменяет
+  // назначенное интервью (не отказ — приглашение перезаписаться на новое время).
+  interviewCancelledMessage?: string
+  // Юрий 10.07: текст при вставке/смене ссылки на встречу (Zoom и т.п.) —
+  // {{name}}/{{vacancy}}/{{meeting_link}}/{{contacts}}.
+  meetingLinkMessage?: string
+  // Юрий 10.07: пилот «агента коммуникаций» — AI переписывает УЖЕ
+  // отрендеренный текст дожима под контекст кандидата, оставаясь в рамках
+  // заготовки HR (lib/comms-agent/adapt-followup-message.ts). ВЫКЛ по
+  // умолчанию у всех вакансий — не включать без отдельного решения Юрия,
+  // пилот только на дожимах, НЕ на отказах (см. memory
+  // legal-rejection-texts-neutral-keep-autoreject).
+  dozhimAgentEnabled?: boolean
 
   // ── Funnel Builder soft-флаги (зеркалятся из funnel_config_json,
   //    см. funnel-config/route.ts). undefined/отсутствует = включено
@@ -1715,6 +1734,10 @@ export const candidates = pgTable("candidates", {
   rejectionInitiator:      text("rejection_initiator"),
   rejectionComment:        text("rejection_comment"),
   rejectionAt:             timestamp("rejection_at", { withTimezone: true }),
+  // Аудит 10.07: дата события НАЙМА (миграция 0274) — по ней отчёт считает
+  // «Нанято за период» (раньше даты найма не было вовсе, отчёт считал по
+  // дате отклика). Пишется в ручном stage-роуте и funnel-v2.
+  hiredAt:                 timestamp("hired_at", { withTimezone: true }),
   // v5: AI-классификатор ответов в hh-чате может выставить паузу автоматизации
   // (например, при rejection или wants_personal_contact).
   automationPaused: boolean("automation_paused").notNull().default(false),
@@ -3768,6 +3791,23 @@ export const YANDEX_DIRECT_AGENT_DEFAULTS: YandexDirectAgentSettings = {
   analysisPeriodDays: 14,
   pausedByAgentEnabled: true,
 }
+
+// Личные видео-интеграции менеджера (Юрий 10.07: «каждый менеджер имеет свой
+// Зум»). Один ряд на пару (userId, provider) — НЕ на компанию, в отличие от
+// hh/Яндекс.Директ: у каждого сотрудника своя учётка Zoom/Телемоста, встречу
+// создаёт от своего имени тот, кто назначен интервьюером в calendar_events.
+export const userVideoIntegrations = pgTable("user_video_integrations", {
+  id:                   uuid("id").primaryKey().defaultRandom(),
+  userId:               uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  provider:             text("provider").notNull(), // zoom | yandex_telemost
+  externalAccountEmail: text("external_account_email"),
+  accessToken:          text("access_token").notNull(),
+  refreshToken:         text("refresh_token"),
+  tokenExpiresAt:       timestamp("token_expires_at", { withTimezone: true }),
+  isActive:             boolean("is_active").notNull().default(true),
+  createdAt:            timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt:            timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (t) => [unique().on(t.userId, t.provider)])
 
 export const yandexDirectIntegrations = pgTable("yandex_direct_integrations", {
   id:               uuid("id").primaryKey().defaultRandom(),

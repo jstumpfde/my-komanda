@@ -424,6 +424,7 @@ export async function POST(
       // атомарно выставляет candidates.overrideContentBlockId при прохождении;
       // дедуп внутри (already_invited) → повторный сабмит не задвоит письмо, но
       // блок 2 всё равно резолвим ниже для инлайн-показа.
+      let passedNow = false
       try {
         const inviteResult = await maybeScheduleSecondDemoInvite({
           candidateId: txResult.candidateId,
@@ -433,7 +434,7 @@ export async function POST(
         // override уже стоял (already_invited/already_scheduled — прошёл ранее,
         // повторный сабмит). Читаем актуальный override кандидата как источник
         // истины и уважаем режим перехода transferMode из Портрета.
-        const passedNow = inviteResult.scheduled ||
+        passedNow = inviteResult.scheduled ||
           inviteResult.reason === "already_invited" ||
           inviteResult.reason === "already_scheduled"
         if (passedNow) {
@@ -526,6 +527,48 @@ export async function POST(
         }
       } catch (err) {
         console.error("[demo answer] second-demo-invite failed:", err instanceof Error ? err.message : err)
+      }
+
+      // Догоняющий повтор гейта (10.07, инцидент: Фролова/Nurbek застряли на
+      // demo_opened с проходным AI-баллом, а Mirzayevv/Амелин получили
+      // ошибочный pending-отказ) — если гейт СЕЙЧАС не прошёл, но AI-ветка ещё
+      // считается в фоне (scorePromise пережил AI_EVAL_AWAIT_TIMEOUT_MS), после
+      // её реального завершения перечитываем гейт ЕЩЁ РАЗ по уже записанному
+      // demo_answers_score. maybeScheduleSecondDemoInvite идемпотентен (дедуп
+      // внутри), поэтому повторный вызов безопасен. Если теперь пройден —
+      // снимаем ошибочно поставленный pending-отказ (тот же приём, что и в
+      // scripts/reapply-second-demo-gate.ts).
+      if (secondPartEnabled && !passedNow) {
+        void scorePromise.then(async () => {
+          try {
+            const retryResult = await maybeScheduleSecondDemoInvite({
+              candidateId: txResult.candidateId,
+              vacancyId:   txResult.vacancyId,
+            })
+            if (retryResult.scheduled) {
+              const [cand] = await db
+                .select({ pendingRejectionReason: candidates.pendingRejectionReason })
+                .from(candidates)
+                .where(eq(candidates.id, txResult.candidateId))
+                .limit(1)
+              if (cand?.pendingRejectionReason === "anketa_gate_failed") {
+                const { cancelScheduledRejection } = await import("@/lib/rejection/execute")
+                await cancelScheduledRejection(txResult.candidateId).catch(() => {})
+              }
+              // Тот же алерт HR, что и при прохождении гейта с первой попытки
+              // (иначе именно эти «спасённые» кандидаты молча теряли уведомление).
+              void maybeSendCandidateAlert({
+                candidateId: txResult.candidateId,
+                vacancyId:   txResult.vacancyId,
+                trigger:     "gate_passed",
+              }).catch((err: unknown) => {
+                console.warn("[candidate-alert] gate_passed (retry) failed:", err)
+              })
+            }
+          } catch (err) {
+            console.error("[demo answer] second-demo-invite retry failed:", err instanceof Error ? err.message : err)
+          }
+        })
       }
     }
 

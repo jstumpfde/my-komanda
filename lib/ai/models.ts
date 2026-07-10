@@ -37,6 +37,15 @@ const MODEL_PRICES: Record<string, ModelPrice> = {
   "claude-haiku-4-5":         { inputPerMTok: 1, outputPerMTok: 5 },
   "claude-haiku-4-5-20251001": { inputPerMTok: 1, outputPerMTok: 5 },
   "claude-sonnet-4-6":        { inputPerMTok: 3, outputPerMTok: 15 },
+  // Ревизия 10.07.2026 (выход Fable 5): Opus/Fable добавлены в прайс, чтобы
+  // computeCostUsd не вернул null при точечном использовании. ПОЛИТИКА: в
+  // конвейере платформы (кандидатский путь, скоринг, дожимы) их НЕ юзать.
+  // Opus 4.8 — только редкие сложные разовые задачи. Fable 5 ($10/$50,
+  // thinking всегда включён → ответы минутами, требует 30-дн retention,
+  // может вернуть stop_reason=refusal) — НЕ для прод-фич, только
+  // координация разработки (Claude Code).
+  "claude-opus-4-8":          { inputPerMTok: 5, outputPerMTok: 25 },
+  "claude-fable-5":           { inputPerMTok: 10, outputPerMTok: 50 },
 }
 
 /**
