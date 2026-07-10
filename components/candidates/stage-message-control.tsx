@@ -49,6 +49,10 @@ interface StageMessageControlProps {
   /** Если true — компонент компактный (без заголовка секции) */
   compact?:              boolean
   className?:            string
+  /** Сообщает родителю о состоянии предпросмотра (грузится / есть ли шаблон),
+   *  чтобы кнопка сабмита не срабатывала до загрузки и тосты не врали
+   *  о фактической отправке (guard 11.07). */
+  onPreviewState?:       (s: { loading: boolean; hasMessage: boolean }) => void
 }
 
 export function StageMessageControl({
@@ -60,16 +64,21 @@ export function StageMessageControl({
   onMessageTextChange,
   compact,
   className,
+  onPreviewState,
 }: StageMessageControlProps) {
   const [preview, setPreview]       = useState<StageMessagePreview | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   // Флаг: был ли текст переопределён вручную HR'ом (тогда не перезаписываем при смене стадии)
   const dirtyRef = useRef(false)
   const prevStageRef = useRef<string | null>(null)
+  // Актуальный колбэк без попадания в deps эффекта
+  const onPreviewStateRef = useRef(onPreviewState)
+  onPreviewStateRef.current = onPreviewState
 
   useEffect(() => {
     if (!stage || !vacancyId) {
       setPreview(null)
+      onPreviewStateRef.current?.({ loading: false, hasMessage: false })
       return
     }
 
@@ -81,11 +90,13 @@ export function StageMessageControl({
 
     let cancelled = false
     setPreviewLoading(true)
+    onPreviewStateRef.current?.({ loading: true, hasMessage: false })
     fetch(`/api/modules/hr/candidates/stage-message-preview?stage=${encodeURIComponent(stage)}&vacancyId=${encodeURIComponent(vacancyId)}`)
       .then((r) => r.ok ? r.json() : Promise.reject())
       .then((data: StageMessagePreview) => {
         if (cancelled) return
         setPreview(data)
+        onPreviewStateRef.current?.({ loading: false, hasMessage: Boolean(data.hasMessage) })
         // Заполняем поле текстом из шаблона только если HR не редактировал
         if (!dirtyRef.current && data.hasMessage && data.text) {
           onMessageTextChange(data.text)
@@ -95,7 +106,9 @@ export function StageMessageControl({
         }
       })
       .catch(() => {
-        if (!cancelled) setPreview(null)
+        if (cancelled) return
+        setPreview(null)
+        onPreviewStateRef.current?.({ loading: false, hasMessage: false })
       })
       .finally(() => { if (!cancelled) setPreviewLoading(false) })
 

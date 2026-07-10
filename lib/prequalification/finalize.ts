@@ -44,11 +44,14 @@ export async function finalizePrequalification(args: FinalizeArgs): Promise<Fina
     const [cand] = await db
       .select({
         id:               candidates.id,
+        name:             candidates.name,
         stage:            candidates.stage,
         stageHistory:     candidates.stageHistory,
         vacancyId:        candidates.vacancyId,
         prequalStatus:    candidates.prequalificationStatus,
         aiSettings:       vacancies.aiProcessSettings,
+        companyId:        vacancies.companyId,
+        vacancyTitle:     vacancies.title,
       })
       .from(candidates)
       .innerJoin(vacancies, eq(vacancies.id, candidates.vacancyId))
@@ -125,22 +128,14 @@ export async function finalizePrequalification(args: FinalizeArgs): Promise<Fina
       const skipDemo = mode === "prequal_only"
       const toStage = skipDemo ? "anketa_filled" : fromStage
 
-      // Аудит 10.07 — ПОРЯДОК: приглашение с demo-ссылкой уходит ДО коммита
-      // статуса 'passed'. Раньше статус коммитился первым, и при сбое отправки
-      // (протухший hh-токен/сеть) кандидат оставался «прошёл», ссылка не
-      // уходила, повторный finalize отвечал «already_passed» — потерян
-      // навсегда. Теперь при сбое статус не выставляется → следующий вызов
-      // finalize (крон предквалификации) повторит попытку. Редкий обратный
-      // случай (отправка ок, коммит упал → второе приглашение при ретрае)
-      // безобиднее молчаливой потери кандидата.
-      if (!skipDemo) {
-        const sent = await trySyncInviteToHh(args.candidateId)
-        if (!sent) {
-          console.warn("[prequalification] invite send failed — finalize отложен для ретрая", { candidateId: args.candidateId })
-          return { finalized: false, reason: "invite_send_failed" }
-        }
-      }
-
+      // Аудит 10.07 (ревизия по predeploy-guard 11.07) — ПОРЯДОК: вердикт
+      // коммитится ПЕРВЫМ, отправка приглашения — после, best-effort.
+      // Обратный порядок (отправка до коммита, finalized:false при сбое)
+      // ломал ответившего кандидата: он застревал в pending, и fallback-крон
+      // по таймауту перезаписывал его вердиктом no_answer, хотя все ответы
+      // получены. Вердикт — факт, он фиксируется всегда; сбой отправки
+      // (протухший hh-токен/сеть) не должен его отменять — вместо этого HR
+      // получает уведомление и отправляет ссылку вручную.
       await db.update(candidates).set({
         prequalificationStatus:      verdict,
         prequalificationCompletedAt: now,
@@ -156,6 +151,26 @@ export async function finalizePrequalification(args: FinalizeArgs): Promise<Fina
           eq(hhResponses.localCandidateId, args.candidateId),
           eq(hhResponses.status, "response"),
         ))
+
+      if (!skipDemo) {
+        const sent = await trySyncInviteToHh(args.candidateId)
+        if (!sent) {
+          console.warn("[prequalification] invite send failed after finalize", { candidateId: args.candidateId })
+          try {
+            const { createNotification } = await import("@/lib/notifications")
+            await createNotification({
+              tenantId:   cand.companyId,
+              type:       "hh_invite_send_failed",
+              title:      `⚠️ Приглашение не ушло: ${cand.name ?? "кандидат"}`,
+              body:       `${cand.vacancyTitle ?? ""} · предквалификация пройдена (${verdict}), но приглашение с демо-ссылкой не отправилось в hh. Отправьте кандидату ссылку вручную.`,
+              severity:   "warning",
+              href:       `/hr/candidates/${args.candidateId}`,
+              sourceType: "candidate",
+              sourceId:   args.candidateId,
+            })
+          } catch { /* уведомление не должно ломать finalize */ }
+        }
+      }
     }
 
     console.log("[prequalification]", JSON.stringify({

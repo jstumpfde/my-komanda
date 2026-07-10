@@ -16,7 +16,7 @@ async function main() {
     const r = await buildReport(companyId, { period })
     const t = r.vacancyTable ?? []
     const sum = (k: "hired" | "rejected" | "selfRejected" | "demo" | "test" | "total") =>
-      t.reduce((s: number, row: Record<string, number>) => s + Number(row[k] ?? 0), 0)
+      t.reduce((s, row) => s + Number((row as Record<string, unknown>)[k] ?? 0), 0)
     console.log(`\n=== period=${period} ===`)
     console.log(`total=${sum("total")} hired=${sum("hired")} rejected=${sum("rejected")} selfRej=${sum("selfRejected")} demo=${sum("demo")} test=${sum("test")}`)
   }

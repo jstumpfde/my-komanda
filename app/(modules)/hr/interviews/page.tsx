@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { CalendarView } from "@/components/calendar/calendar-view"
 import { getStageLabel } from "@/lib/stages"
+import { REJECTION_REASONS } from "@/lib/hr/rejection-reasons"
 import { StageMessageControl } from "@/components/candidates/stage-message-control"
 
 // ─── Типы ────────────────────────────────────────────────────
@@ -322,13 +323,19 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
   const [cancelRejectReason, setCancelRejectReason] = useState("")
   const [cancelSubmitting, setCancelSubmitting] = useState(false)
   const [cancelSavingTemplate, setCancelSavingTemplate] = useState(false)
+  // Состояние предпросмотра шаблона (guard 11.07): пока превью грузится —
+  // сабмит заблокирован, а тост об отправке строится по факту, не по чекбоксу.
+  const [cancelPreview, setCancelPreview] = useState<{ loading: boolean; hasMessage: boolean }>({ loading: false, hasMessage: false })
 
   const openCancelDialog = (iv: Interview) => {
     setCancelDialogIv(iv)
     setCancelTab("reschedule")
-    setCancelSendMessage(true)
+    // Без вакансии шаблон не загрузится и отправка невозможна — тумблер
+    // честно выключен, в диалоге показывается пояснение.
+    setCancelSendMessage(Boolean(iv.vacancyId))
     setCancelMessageText("")
     setCancelRejectReason("")
+    setCancelPreview({ loading: Boolean(iv.vacancyId), hasMessage: false })
   }
 
   const saveMessageTemplate = async () => {
@@ -351,16 +358,28 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
     setCancelSubmitting(true)
     try {
       if (cancelTab === "reschedule") {
-        if (cancelSendMessage && cancelMessageText.trim()) {
+        // Guard 11.07: тост — по фактическому исходу, не по чекбоксу.
+        const willSend = cancelSendMessage && cancelPreview.hasMessage && cancelMessageText.trim().length > 0
+        if (willSend) {
           const res = await fetch(`/api/modules/hr/calendar/${cancelDialogIv.id}/cancel-and-notify`, {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ message: cancelMessageText }),
           })
           if (!res.ok) throw new Error()
+          const json = await res.json().catch(() => null) as { messageSent?: boolean } | null
+          if (json?.messageSent) {
+            toast.success("Интервью отменено — кандидату отправлено сообщение")
+          } else {
+            toast.warning("Интервью отменено, но сообщение не доставлено — предупредите кандидата вручную")
+          }
         } else {
           updateInterview(cancelDialogIv.id, { status: "Отменено" }, "Интервью отменено")
+          if (cancelSendMessage) {
+            toast.warning("Интервью отменено без сообщения (текст пуст) — предупредите кандидата вручную")
+          } else {
+            toast.success("Интервью отменено")
+          }
         }
-        toast.success("Интервью отменено" + (cancelSendMessage ? " — кандидату отправлено сообщение" : ""))
       } else {
         if (!cancelDialogIv.candidateId) { toast.error("Кандидат не привязан к записи"); return }
         const res = await fetch(`/api/modules/hr/candidates/${cancelDialogIv.candidateId}/stage`, {
@@ -368,14 +387,15 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
           body: JSON.stringify({
             stage: "rejected",
             sendMessage: cancelSendMessage,
-            messageOverride: cancelSendMessage ? cancelMessageText : undefined,
+            messageOverride: cancelSendMessage && cancelMessageText.trim() ? cancelMessageText : undefined,
             rejectionReasonCategory: cancelRejectReason || null,
             rejectionInitiator: "company",
           }),
         })
         if (!res.ok) throw new Error()
         updateInterview(cancelDialogIv.id, { status: "Отменено" }, "Кандидату отказано")
-        toast.success("Кандидату отказано" + (cancelSendMessage ? " — сообщение отправлено" : ""))
+        // Отказ уходит через движок отказов (задержка вакансии) — «будет», не «уже».
+        toast.success("Кандидату отказано" + (cancelSendMessage ? " — сообщение будет отправлено" : ""))
       }
       setCancelDialogIv(null)
       await loadInterviews()
@@ -1420,6 +1440,20 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                 ? "Запись отменяется, кандидат сможет сам выбрать новое время по своей ссылке."
                 : "Кандидат переводится на стадию «Отказ»."}
             </p>
+            {cancelTab === "reject" && (
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Причина отказа (для отчёта)</Label>
+                <Select value={cancelRejectReason || "none"} onValueChange={v => setCancelRejectReason(v === "none" ? "" : v)}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Не указана" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Не указана</SelectItem>
+                    {REJECTION_REASONS.map(r => (
+                      <SelectItem key={r.id} value={r.id}>{r.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <StageMessageControl
               stage={cancelTab === "reschedule" ? "interview_cancelled" : "rejected"}
               vacancyId={cancelDialogIv?.vacancyId ?? null}
@@ -1427,7 +1461,13 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
               onSendMessageChange={setCancelSendMessage}
               messageText={cancelMessageText}
               onMessageTextChange={setCancelMessageText}
+              onPreviewState={setCancelPreview}
             />
+            {!cancelDialogIv?.vacancyId && (
+              <p className="text-xs text-muted-foreground">
+                У интервью нет привязанной вакансии — сообщение кандидату не отправляется.
+              </p>
+            )}
           </div>
           <div className="flex items-center justify-between gap-2 pt-2">
             {cancelSendMessage && cancelMessageText.trim() && (
@@ -1442,7 +1482,7 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                 size="sm"
                 className={cn("gap-1.5", cancelTab === "reject" && "bg-destructive hover:bg-destructive/90")}
                 onClick={submitCancelDialog}
-                disabled={cancelSubmitting}
+                disabled={cancelSubmitting || cancelPreview.loading}
               >
                 {cancelSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                 {cancelTab === "reschedule" ? "Отменить интервью" : "Отказать"}
