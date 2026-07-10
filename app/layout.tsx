@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import localFont from 'next/font/local'
 import { Providers } from '@/components/providers'
 import { Toaster } from '@/components/ui/sonner'
 import { StaleDeploymentReload } from '@/components/stale-deployment-reload'
@@ -15,7 +15,20 @@ import {
 } from '@/lib/platform/settings'
 import './globals.css'
 
-const inter = Inter({ subsets: ['latin', 'cyrillic'], variable: '--font-inter' })
+// Локальный self-hosted Inter вместо next/font/google — Google Fonts периодически
+// недоступен/медленный при сборке на серверах в РФ. InterVariable.woff2 —
+// официальный variable-файл с github.com/rsms/inter (латиница+кириллица+доп.
+// скрипты, вес 100-900), покрывает те же символы, что и прежние Google-сабсеты
+// latin+cyrillic. declarations форсирует font-family: Inter (без него
+// next/font сгенерировал бы другое имя) — сохраняет совместимость с
+// --font-sans: 'Inter', 'Inter Fallback', ... в globals.css без правок там.
+const inter = localFont({
+  src: './fonts/inter/InterVariable.woff2',
+  weight: '100 900',
+  style: 'normal',
+  variable: '--font-inter',
+  declarations: [{ prop: 'font-family', value: 'Inter' }],
+})
 
 // generateMetadata в root layout поддерживается Next.js App Router.
 // try/catch гарантирует, что при любой ошибке БД layout не падает —
