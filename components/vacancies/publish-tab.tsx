@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { getBrand, type BrandConfig } from "@/lib/branding"
+import { inCityRu } from "@/lib/city-case-ru"
 import {
   Copy, Check, Eye, Code2, FileText,
   Plus, X, Save, Sparkles,
@@ -131,6 +132,8 @@ function htmlHasContent(html: string): boolean {
 
 // Дефолтные блоки (если HR ничего не задал) — часть динамическая (доход×1.5 от
 // нижней вилки, город). Возвращаем как rich-html (эмодзи inline).
+// #падеж: город склоняется в предложный падеж (inCityRu) — «в Москве», а не
+// «в Москва» (баг из landing-publish-tab-backlog.md, п.1).
 function defaultBlocks(v: { city?: string; salaryFrom?: number }): LandingBlock[] {
   const lines = [
     v.salaryFrom
@@ -138,7 +141,7 @@ function defaultBlocks(v: { city?: string; salaryFrom?: number }): LandingBlock[
       : "💰 Доход выше среднего по рынку через 3 месяца",
     "🎓 Обучение и наставник с первого дня",
     "📈 Карьерный рост до руководителя за 6-12 мес.",
-    `📍 Современный офис${v.city ? " в " + v.city : ""}`,
+    `📍 Современный офис${v.city ? " " + inCityRu(v.city) : ""}`,
   ]
   return [{ html: lines.map(l => `<div>${escHtml(l)}</div>`).join("") }]
 }
